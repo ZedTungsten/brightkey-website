@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Create Account — BrightKey</title>
+  <link rel="preconnect" href="https://fonts.bunny.net" />
+  <link href="https://fonts.bunny.net/css?family=inter:400,500,600,700,800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg" />
+  <style>
+    body { background: var(--bg-base); display: flex; flex-direction: column; min-height: 100vh; }
+    .auth-wrap {
+      flex: 1;
+      display: grid;
+      place-items: center;
+      padding: var(--space-xl);
+    }
+    .auth-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 2.5rem;
+      width: 100%;
+      max-width: 420px;
+    }
+    .auth-logo { display: block; font-size: 1.3rem; font-weight: 800; color: var(--text-primary); letter-spacing: -0.04em; margin-bottom: 2rem; }
+    .auth-logo span { color: var(--blue); }
+    .auth-title { font-size: 1.4rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.4rem; }
+    .auth-sub   { font-size: 0.875rem; color: var(--text-muted); margin-bottom: 2rem; }
+    .auth-footer { margin-top: 1.5rem; text-align: center; font-size: 0.82rem; color: var(--text-muted); }
+    .auth-footer a { color: var(--blue-light); }
+    .auth-footer a:hover { color: var(--cyan-light); }
+    .success-state { display: none; text-align: center; padding: 1rem 0; }
+    .success-state .success-icon { font-size: 3rem; margin-bottom: 1rem; }
+  </style>
+</head>
+<body>
+  <div class="auth-wrap">
+    <div class="auth-card">
+      <a href="index.html" class="auth-logo">Bright<span>Key</span></a>
+
+      <div id="form-state">
+        <h1 class="auth-title">Create Account</h1>
+        <p class="auth-sub">Register as a BrightKey employee</p>
+
+        <div id="auth-alert" class="alert alert--hidden" role="alert" style="margin-bottom:1.25rem;"></div>
+
+        <form id="register-form" novalidate>
+          <div class="form-group" style="margin-bottom:1rem;">
+            <label class="form-label" for="fullname">Full name</label>
+            <input type="text" id="fullname" class="form-input" placeholder="Juan dela Cruz"
+              required minlength="2" autocomplete="name" />
+            <span class="form-error" aria-live="polite"></span>
+          </div>
+
+          <div class="form-group" style="margin-bottom:1rem;">
+            <label class="form-label" for="email">Work email</label>
+            <input type="email" id="email" class="form-input" placeholder="juan@company.com"
+              required autocomplete="email" />
+            <span class="form-error" aria-live="polite"></span>
+          </div>
+
+          <div class="form-group" style="margin-bottom:1rem;">
+            <label class="form-label" for="password">Password</label>
+            <input type="password" id="password" class="form-input" placeholder="Min. 8 characters"
+              required minlength="8" autocomplete="new-password" />
+            <span class="form-error" aria-live="polite"></span>
+          </div>
+
+          <div class="form-group" style="margin-bottom:1.5rem;">
+            <label class="form-label" for="confirm-password">Confirm password</label>
+            <input type="password" id="confirm-password" class="form-input" placeholder="Re-enter password"
+              required autocomplete="new-password" />
+            <span class="form-error" aria-live="polite"></span>
+          </div>
+
+          <button type="submit" class="btn btn-primary btn-lg" id="submit-btn" style="width:100%;">
+            Create Account
+          </button>
+
+          <p style="font-size:0.75rem; color:var(--text-muted); text-align:center; margin-top:0.75rem; line-height:1.6;">
+            By registering you agree to our <a href="privacy-policy.html" style="color:var(--text-muted); text-decoration:underline;">Privacy Policy</a>.
+          </p>
+        </form>
+
+        <div class="auth-footer">
+          Already have an account? <a href="login.html">Sign in</a>
+        </div>
+      </div>
+
+      <!-- Success state -->
+      <div class="success-state" id="success-state">
+        <div class="success-icon">✉️</div>
+        <h2 style="font-size:1.2rem; margin-bottom:0.75rem; color:var(--text-primary);">Check your email</h2>
+        <p style="font-size:0.875rem; color:var(--text-secondary); line-height:1.7;">
+          We sent a confirmation link to <strong id="confirm-email" style="color:var(--text-primary);"></strong>.
+          Click the link to activate your account, then sign in.
+        </p>
+        <a href="login.html" class="btn btn-primary" style="margin-top:1.5rem; width:100%;">Go to Sign In</a>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="js/auth.js"></script>
+  <script>
+    'use strict';
+
+    BKAuth.redirectIfAuth('dashboard.html');
+
+    const form    = document.getElementById('register-form');
+    const btn     = document.getElementById('submit-btn');
+    const alertEl = document.getElementById('auth-alert');
+
+    function showAlert(type, msg) {
+      alertEl.className = `alert alert-${type}`;
+      alertEl.textContent = msg;
+    }
+
+    form.addEventListener('submit', async e => {
+      e.preventDefault();
+
+      const fullName = document.getElementById('fullname').value.trim();
+      const email    = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value;
+      const confirm  = document.getElementById('confirm-password').value;
+
+      // Basic validation
+      if (!fullName || !email || !password || !confirm) {
+        showAlert('error', 'Please fill in all fields.');
+        return;
+      }
+      if (password.length < 8) {
+        showAlert('error', 'Password must be at least 8 characters.');
+        return;
+      }
+      if (password !== confirm) {
+        showAlert('error', 'Passwords do not match.');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Creating account…';
+      alertEl.className = 'alert alert--hidden';
+
+      try {
+        await BKAuth.signUp(email, password, fullName);
+
+        // Show success state
+        document.getElementById('form-state').style.display = 'none';
+        document.getElementById('confirm-email').textContent = email;
+        document.getElementById('success-state').style.display = 'block';
+      } catch (err) {
+        showAlert('error', err.message || 'Registration failed. Please try again.');
+        btn.disabled = false;
+        btn.textContent = 'Create Account';
+      }
+    });
+  </script>
+</body>
+</html>
