@@ -15,7 +15,7 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
  * Protect a page. Redirects to login if no active session.
  * Returns the user object if authenticated.
  */
-async function requireAuth(redirectTo = 'login.html') {
+async function requireAuth(redirectTo = 'admin.html') {
   const { data: { session } } = await sb.auth.getSession();
   if (!session) {
     window.location.href = redirectTo;
@@ -61,7 +61,7 @@ async function signUp(email, password, fullName) {
 async function signOut() {
   const { error } = await sb.auth.signOut();
   if (error) throw error;
-  window.location.href = 'login.html';
+  window.location.href = 'admin.html';
 }
 
 /**
