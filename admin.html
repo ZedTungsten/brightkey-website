@@ -6,184 +6,597 @@
   <title>Employee Portal — BrightKey</title>
   <link rel="preconnect" href="https://fonts.bunny.net" />
   <link href="https://fonts.bunny.net/css?family=inter:400,500,600,700,800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/style.css" />
   <link rel="icon" type="image/svg+xml" href="assets/favicon.svg" />
   <style>
-    body { background: var(--bg-base); display: flex; flex-direction: column; min-height: 100vh; }
-    .auth-wrap {
-      flex: 1;
-      display: grid;
-      place-items: center;
-      padding: var(--space-xl);
-    }
-    .auth-card {
-      background: var(--bg-surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-lg);
-      padding: 2.5rem;
-      width: 100%;
-      max-width: 420px;
-    }
-    .auth-logo { display: block; font-size: 1.3rem; font-weight: 800; color: var(--text-primary); letter-spacing: -0.04em; margin-bottom: 2rem; }
-    .auth-logo span { color: var(--blue); }
-    .auth-title { font-size: 1.4rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.4rem; }
-    .auth-sub   { font-size: 0.875rem; color: var(--text-muted); margin-bottom: 2rem; }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-    /* State panels */
-    .auth-state { display: none; }
-    .auth-state.active { display: block; }
-
-    /* Back link */
-    .auth-back {
-      display: inline-flex; align-items: center; gap: 0.35rem;
-      font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1.5rem;
-      cursor: pointer; background: none; border: none; padding: 0;
+    body {
+      font-family: 'Inter', sans-serif;
+      background: #000;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      position: relative;
     }
-    .auth-back:hover { color: var(--text-secondary); }
 
-    /* Email display in sign-in step */
-    .auth-email-pill {
-      display: inline-block;
-      background: var(--bg-elevated);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-md);
-      padding: 0.3rem 0.75rem;
-      font-size: 0.85rem;
-      color: var(--text-secondary);
+    /* ── Background layers ── */
+    .bg-gradient {
+      position: fixed; inset: 0; z-index: 0;
+      background: linear-gradient(to bottom, rgba(37,99,235,0.35) 0%, rgba(29,78,216,0.25) 40%, #000 100%);
+    }
+    .bg-glow-top {
+      position: fixed; top: 0; left: 50%; transform: translateX(-50%);
+      width: 120vw; height: 55vh;
+      border-radius: 0 0 50% 50%;
+      background: radial-gradient(ellipse at center top, rgba(59,130,246,0.25) 0%, transparent 70%);
+      filter: blur(40px);
+      z-index: 0;
+      animation: glow-pulse 8s ease-in-out infinite;
+    }
+    .bg-glow-bottom {
+      position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
+      width: 100vw; height: 70vh;
+      border-radius: 50% 50% 0 0;
+      background: radial-gradient(ellipse at center bottom, rgba(37,99,235,0.2) 0%, transparent 70%);
+      filter: blur(40px);
+      z-index: 0;
+      animation: glow-pulse 6s ease-in-out 1s infinite;
+    }
+    .bg-spot-l {
+      position: fixed; left: 20%; top: 25%;
+      width: 320px; height: 320px;
+      background: rgba(255,255,255,0.04);
+      border-radius: 50%; filter: blur(80px);
+      z-index: 0;
+      animation: spot-pulse 7s ease-in-out infinite;
+    }
+    .bg-spot-r {
+      position: fixed; right: 20%; bottom: 25%;
+      width: 320px; height: 320px;
+      background: rgba(255,255,255,0.04);
+      border-radius: 50%; filter: blur(80px);
+      z-index: 0;
+      animation: spot-pulse 7s ease-in-out 1.5s infinite;
+    }
+    @keyframes glow-pulse {
+      0%,100% { opacity: 0.6; transform: translateX(-50%) scale(1); }
+      50%      { opacity: 1;   transform: translateX(-50%) scale(1.04); }
+    }
+    @keyframes spot-pulse {
+      0%,100% { opacity: 0.4; }
+      50%      { opacity: 0.8; }
+    }
+
+    /* ── Card wrapper (3D perspective) ── */
+    .card-perspective {
+      position: relative; z-index: 10;
+      perspective: 1200px;
+      width: 100%; max-width: 380px;
+      padding: 1rem;
+    }
+    .card-tilt {
+      transform-style: preserve-3d;
+      transition: transform 0.15s ease-out;
+    }
+
+    /* ── Card ── */
+    .card {
+      position: relative;
+      background: rgba(0,0,0,0.5);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 1.125rem;
+      padding: 1.75rem;
+      overflow: hidden;
+      /* entry animation */
+      animation: card-in 0.7s cubic-bezier(0.22,1,0.36,1) both;
+    }
+    @keyframes card-in {
+      from { opacity: 0; transform: translateY(24px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* inner grid texture */
+    .card::before {
+      content: '';
+      position: absolute; inset: 0;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+      background-size: 32px 32px;
+      pointer-events: none;
+    }
+
+    /* ── Traveling light beams ── */
+    .beams { position: absolute; inset: 0; border-radius: 1.125rem; overflow: hidden; pointer-events: none; }
+    .beam {
+      position: absolute;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.7), transparent);
+      filter: blur(1.5px);
+    }
+    /* top */
+    .beam-top    { top: 0; left: -50%; height: 2px; width: 50%; animation: beam-top 2.5s ease-in-out 0s infinite; }
+    /* right */
+    .beam-right  { top: -50%; right: 0; width: 2px; height: 50%;
+                   background: linear-gradient(180deg, transparent, rgba(255,255,255,0.7), transparent);
+                   animation: beam-right 2.5s ease-in-out 0.65s infinite; }
+    /* bottom */
+    .beam-bottom { bottom: 0; right: -50%; height: 2px; width: 50%; animation: beam-bottom 2.5s ease-in-out 1.3s infinite; }
+    /* left */
+    .beam-left   { bottom: -50%; left: 0; width: 2px; height: 50%;
+                   background: linear-gradient(180deg, transparent, rgba(255,255,255,0.7), transparent);
+                   animation: beam-left 2.5s ease-in-out 1.95s infinite; }
+
+    @keyframes beam-top    { 0%{left:-50%} 100%{left:100%} }
+    @keyframes beam-right  { 0%{top:-50%}  100%{top:100%} }
+    @keyframes beam-bottom { 0%{right:-50%}100%{right:100%} }
+    @keyframes beam-left   { 0%{bottom:-50%}100%{bottom:100%} }
+
+    /* corner dots */
+    .corner { position: absolute; border-radius: 50%; animation: corner-blink 2s ease-in-out infinite; }
+    .corner-tl { top:0; left:0;  width:5px; height:5px; background:rgba(255,255,255,0.35); }
+    .corner-tr { top:0; right:0; width:8px; height:8px; background:rgba(255,255,255,0.5);  animation-delay:.5s; }
+    .corner-br { bottom:0; right:0; width:8px; height:8px; background:rgba(255,255,255,0.5); animation-delay:1s; }
+    .corner-bl { bottom:0; left:0; width:5px; height:5px; background:rgba(255,255,255,0.35); animation-delay:1.5s; }
+    @keyframes corner-blink { 0%,100%{opacity:.2} 50%{opacity:.55} }
+
+    /* ── Card header ── */
+    .card-logo {
+      display: flex; align-items: center; justify-content: center;
+      width: 40px; height: 40px;
+      border-radius: 50%;
+      border: 1px solid rgba(255,255,255,0.1);
+      background: linear-gradient(135deg, rgba(59,130,246,0.2), rgba(0,0,0,0.6));
+      margin: 0 auto 0.75rem;
+      position: relative;
+      overflow: hidden;
+    }
+    .card-logo::after {
+      content: '';
+      position: absolute; inset: 0;
+      background: linear-gradient(135deg, rgba(255,255,255,0.12), transparent);
+    }
+    .card-logo span {
+      font-size: 1.05rem; font-weight: 800;
+      background: linear-gradient(to bottom, #fff, rgba(255,255,255,0.75));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .card-title {
+      text-align: center;
+      font-size: 1.2rem; font-weight: 700;
+      background: linear-gradient(to bottom, #fff, rgba(255,255,255,0.8));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 0.3rem;
+    }
+    .card-sub {
+      text-align: center;
+      font-size: 0.75rem; color: rgba(255,255,255,0.5);
       margin-bottom: 1.5rem;
     }
 
-    /* Success/check state */
-    .success-state { text-align: center; padding: 1rem 0; }
-    .success-icon { font-size: 3rem; margin-bottom: 1rem; }
+    /* ── Alert ── */
+    .alert {
+      border-radius: 0.5rem;
+      padding: 0.65rem 0.85rem;
+      font-size: 0.8rem;
+      margin-bottom: 1rem;
+      line-height: 1.5;
+    }
+    .alert--hidden { display: none; }
+    .alert-error   { background: rgba(239,68,68,0.12); border: 1px solid rgba(239,68,68,0.3); color: #fca5a5; }
+    .alert-success { background: rgba(34,197,94,0.12); border: 1px solid rgba(34,197,94,0.3); color: #86efac; }
+
+    /* ── Form ── */
+    .form-label {
+      display: block;
+      font-size: 0.7rem; font-weight: 500;
+      color: rgba(255,255,255,0.45);
+      margin-bottom: 0.35rem;
+      letter-spacing: 0.04em; text-transform: uppercase;
+    }
+    .input-wrap {
+      position: relative;
+      margin-bottom: 0.85rem;
+    }
+    .input-icon {
+      position: absolute; left: 0.75rem; top: 50%; transform: translateY(-50%);
+      color: rgba(255,255,255,0.3);
+      pointer-events: none;
+      transition: color 0.2s;
+      display: flex; align-items: center;
+    }
+    .input-icon svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .form-input {
+      width: 100%;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid transparent;
+      border-radius: 0.5rem;
+      padding: 0.6rem 0.75rem 0.6rem 2.35rem;
+      font-family: inherit; font-size: 0.85rem;
+      color: #fff;
+      outline: none;
+      transition: background 0.2s, border-color 0.2s, box-shadow 0.2s;
+    }
+    .form-input::placeholder { color: rgba(255,255,255,0.25); }
+    .form-input:focus {
+      background: rgba(255,255,255,0.09);
+      border-color: rgba(255,255,255,0.2);
+      box-shadow: 0 0 0 3px rgba(59,130,246,0.15);
+    }
+    .form-input:focus + .input-icon,
+    .input-wrap:focus-within .input-icon { color: rgba(255,255,255,0.85); }
+    .input-right {
+      position: absolute; right: 0.75rem; top: 50%; transform: translateY(-50%);
+      background: none; border: none; padding: 0; cursor: pointer;
+      color: rgba(255,255,255,0.35); display: flex; align-items: center;
+      transition: color 0.2s;
+    }
+    .input-right:hover { color: rgba(255,255,255,0.85); }
+    .input-right svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    /* for password field, extend right padding */
+    .input-has-right { padding-right: 2.35rem; }
+
+    /* row: label + inline link */
+    .label-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem; }
+    .link-sm {
+      font-size: 0.72rem; color: rgba(255,255,255,0.45);
+      background: none; border: none; padding: 0; cursor: pointer;
+      transition: color 0.2s;
+    }
+    .link-sm:hover { color: rgba(255,255,255,0.85); }
+
+    /* ── Buttons ── */
+    .btn-primary-dark {
+      width: 100%; position: relative;
+      background: #fff; color: #000;
+      border: none; border-radius: 0.5rem;
+      padding: 0.65rem 1rem;
+      font-family: inherit; font-size: 0.85rem; font-weight: 600;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 0.3rem;
+      transition: transform 0.15s, box-shadow 0.2s;
+      overflow: hidden;
+      margin-top: 0.5rem;
+    }
+    .btn-primary-dark:hover { transform: scale(1.02); box-shadow: 0 0 20px rgba(255,255,255,0.15); }
+    .btn-primary-dark:active { transform: scale(0.98); }
+    .btn-primary-dark:disabled { opacity: 0.7; cursor: not-allowed; transform: none; }
+    /* shimmer on loading */
+    .btn-primary-dark .btn-shimmer {
+      position: absolute; inset: 0;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+      transform: translateX(-100%);
+      display: none;
+    }
+    .btn-primary-dark.loading .btn-shimmer {
+      display: block;
+      animation: btn-shimmer 1.4s ease-in-out infinite;
+    }
+    @keyframes btn-shimmer { to { transform: translateX(200%); } }
+    .btn-spinner {
+      width: 16px; height: 16px;
+      border: 2px solid rgba(0,0,0,0.25); border-top-color: #000;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .btn-arrow { display: inline-flex; transition: transform 0.2s; }
+    .btn-primary-dark:hover .btn-arrow { transform: translateX(3px); }
+
+    .btn-ghost {
+      width: 100%; position: relative;
+      background: rgba(255,255,255,0.05);
+      color: rgba(255,255,255,0.75);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 0.5rem;
+      padding: 0.6rem 1rem;
+      font-family: inherit; font-size: 0.8rem; font-weight: 500;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+      transition: background 0.2s, border-color 0.2s, color 0.2s, transform 0.15s;
+      overflow: hidden;
+    }
+    .btn-ghost:hover { background: rgba(255,255,255,0.09); border-color: rgba(255,255,255,0.2); color: #fff; transform: scale(1.01); }
+
+    /* ── Divider ── */
+    .divider {
+      display: flex; align-items: center; gap: 0.75rem;
+      margin: 1rem 0;
+    }
+    .divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: rgba(255,255,255,0.06); }
+    .divider span { font-size: 0.7rem; color: rgba(255,255,255,0.35); }
+
+    /* ── Back button ── */
+    .btn-back {
+      display: inline-flex; align-items: center; gap: 0.35rem;
+      font-size: 0.75rem; color: rgba(255,255,255,0.45);
+      background: none; border: none; padding: 0; cursor: pointer;
+      margin-bottom: 1.25rem;
+      transition: color 0.2s;
+    }
+    .btn-back:hover { color: rgba(255,255,255,0.85); }
+    .btn-back svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+    /* ── Footer text ── */
+    .card-footer-text {
+      text-align: center; font-size: 0.75rem;
+      color: rgba(255,255,255,0.45);
+      margin-top: 1rem;
+    }
+    .card-footer-text button {
+      background: none; border: none; padding: 0;
+      color: rgba(255,255,255,0.85); font-weight: 600; font-size: inherit;
+      cursor: pointer; position: relative;
+      transition: color 0.2s;
+    }
+    .card-footer-text button::after {
+      content: ''; position: absolute; bottom: -1px; left: 0; right: 0;
+      height: 1px; background: currentColor;
+      transform: scaleX(0); transform-origin: left;
+      transition: transform 0.25s;
+    }
+    .card-footer-text button:hover::after { transform: scaleX(1); }
+
+    /* ── States ── */
+    .auth-state { display: none; animation: state-in 0.3s ease both; }
+    .auth-state.active { display: block; }
+    @keyframes state-in {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ── Check email / success state ── */
+    .success-box { text-align: center; padding: 0.75rem 0; }
+    .success-icon { font-size: 2.8rem; margin-bottom: 0.85rem; }
+    .success-title { font-size: 1.1rem; font-weight: 700; color: #fff; margin-bottom: 0.6rem; }
+    .success-body  { font-size: 0.8rem; color: rgba(255,255,255,0.55); line-height: 1.7; }
+    .success-body strong { color: rgba(255,255,255,0.9); }
+
+    /* ── Privacy note ── */
+    .privacy-note {
+      font-size: 0.7rem; color: rgba(255,255,255,0.3);
+      text-align: center; margin-top: 0.6rem; line-height: 1.6;
+    }
+    .privacy-note a { color: rgba(255,255,255,0.35); text-decoration: underline; }
   </style>
 </head>
 <body>
-  <div class="auth-wrap">
-    <div class="auth-card">
-      <a href="index.html" class="auth-logo">Bright<span>Key</span></a>
 
-      <div id="auth-alert" class="alert alert--hidden" role="alert" style="margin-bottom:1.25rem;"></div>
+  <!-- Background -->
+  <div class="bg-gradient"></div>
+  <div class="bg-glow-top"></div>
+  <div class="bg-glow-bottom"></div>
+  <div class="bg-spot-l"></div>
+  <div class="bg-spot-r"></div>
 
-      <!-- ── STATE 1: Sign In (default) ── -->
-      <div class="auth-state active" id="state-signin">
-        <h1 class="auth-title">Employee Portal</h1>
-        <p class="auth-sub">Sign in to your BrightKey account</p>
-        <form id="signin-form" novalidate>
-          <div class="form-group" style="margin-bottom:1rem;">
-            <label class="form-label" for="input-email">Work email</label>
-            <input type="email" id="input-email" class="form-input" placeholder="you@company.com"
-              required autocomplete="email" />
-            <span class="form-error" aria-live="polite"></span>
-          </div>
-          <div class="form-group" style="margin-bottom:1.5rem;">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-              <label class="form-label" for="input-password">Password</label>
-              <button type="button" class="auth-back" id="btn-forgot" style="margin-bottom:0;">Forgot password?</button>
+  <!-- Card -->
+  <div class="card-perspective">
+    <div class="card-tilt" id="card-tilt">
+      <div class="card">
+
+        <!-- light beams -->
+        <div class="beams">
+          <div class="beam beam-top"></div>
+          <div class="beam beam-right"></div>
+          <div class="beam beam-bottom"></div>
+          <div class="beam beam-left"></div>
+          <div class="corner corner-tl"></div>
+          <div class="corner corner-tr"></div>
+          <div class="corner corner-br"></div>
+          <div class="corner corner-bl"></div>
+        </div>
+
+        <!-- logo -->
+        <div class="card-logo"><span>B</span></div>
+
+        <!-- alert -->
+        <div id="auth-alert" class="alert alert--hidden" role="alert"></div>
+
+        <!-- ── STATE 1: Sign In ── -->
+        <div class="auth-state active" id="state-signin">
+          <h1 class="card-title">Welcome back</h1>
+          <p class="card-sub">Sign in to your BrightKey account</p>
+
+          <form id="signin-form" novalidate>
+            <div class="input-wrap">
+              <label class="form-label" for="input-email">Email address</label>
+              <input type="email" id="input-email" class="form-input" placeholder="you@company.com"
+                required autocomplete="email" />
+              <span class="input-icon">
+                <svg viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+              </span>
             </div>
-            <input type="password" id="input-password" class="form-input" placeholder="••••••••"
-              required autocomplete="current-password" />
-            <span class="form-error" aria-live="polite"></span>
-          </div>
-          <button type="submit" class="btn btn-primary btn-lg" id="btn-signin" style="width:100%;">
-            Sign In
-          </button>
-        </form>
-        <p style="text-align:center; font-size:0.82rem; color:var(--text-muted); margin-top:1.25rem;">
-          No account yet? <button type="button" class="auth-back" id="go-to-register" style="display:inline; margin-bottom:0; color:var(--blue-light);">Create one</button>
-        </p>
-      </div>
 
-      <!-- ── STATE 2: Register (new user) ── -->
-      <div class="auth-state" id="state-register">
-        <button class="auth-back" id="back-from-register">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M5 12l7 7M5 12l7-7"/></svg>
-          Back to Sign In
-        </button>
-        <h1 class="auth-title">Create Account</h1>
-        <p class="auth-sub">Register as a BrightKey employee</p>
-        <form id="register-form" novalidate>
-          <div class="form-group" style="margin-bottom:1rem;">
-            <label class="form-label" for="input-fullname">Full name</label>
-            <input type="text" id="input-fullname" class="form-input" placeholder="Juan dela Cruz"
-              required minlength="2" autocomplete="name" />
-            <span class="form-error" aria-live="polite"></span>
-          </div>
-          <div class="form-group" style="margin-bottom:1rem;">
-            <label class="form-label" for="input-reg-email">Work email</label>
-            <input type="email" id="input-reg-email" class="form-input" placeholder="you@company.com"
-              required autocomplete="email" />
-            <span class="form-error" aria-live="polite"></span>
-          </div>
-          <div class="form-group" style="margin-bottom:1rem;">
-            <label class="form-label" for="input-reg-password">Password</label>
-            <input type="password" id="input-reg-password" class="form-input" placeholder="Min. 8 characters"
-              required minlength="8" autocomplete="new-password" />
-            <span class="form-error" aria-live="polite"></span>
-          </div>
-          <div class="form-group" style="margin-bottom:1.5rem;">
-            <label class="form-label" for="input-confirm-password">Confirm password</label>
-            <input type="password" id="input-confirm-password" class="form-input" placeholder="Re-enter password"
-              required autocomplete="new-password" />
-            <span class="form-error" aria-live="polite"></span>
-          </div>
-          <button type="submit" class="btn btn-primary btn-lg" id="btn-register" style="width:100%;">
-            Create Account
-          </button>
-          <p style="font-size:0.75rem; color:var(--text-muted); text-align:center; margin-top:0.75rem; line-height:1.6;">
-            By registering you agree to our <a href="privacy-policy.html" style="color:var(--text-muted); text-decoration:underline;">Privacy Policy</a>.
-          </p>
-        </form>
-      </div>
+            <div class="input-wrap">
+              <div class="label-row">
+                <label class="form-label" for="input-password" style="margin-bottom:0;">Password</label>
+                <button type="button" class="link-sm" id="btn-forgot">Forgot password?</button>
+              </div>
+              <input type="password" id="input-password" class="form-input input-has-right" placeholder="••••••••"
+                required autocomplete="current-password" />
+              <span class="input-icon">
+                <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              </span>
+              <button type="button" class="input-right" id="toggle-password" aria-label="Show password">
+                <svg id="eye-icon" viewBox="0 0 24 24"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
+              </button>
+            </div>
 
-      <!-- ── STATE 4: Check email (after register) ── -->
-      <div class="auth-state" id="state-check-email">
-        <div class="success-state">
-          <div class="success-icon">✉️</div>
-          <h2 style="font-size:1.2rem; margin-bottom:0.75rem; color:var(--text-primary);">Check your email</h2>
-          <p style="font-size:0.875rem; color:var(--text-secondary); line-height:1.7;">
-            We sent a confirmation link to <strong id="confirm-email-display" style="color:var(--text-primary);"></strong>.
-            Click the link to confirm, then come back to sign in.
+            <button type="submit" class="btn-primary-dark" id="btn-signin">
+              <span class="btn-shimmer"></span>
+              <span id="btn-signin-content" style="display:flex;align-items:center;gap:0.3rem;">
+                Sign In
+                <span class="btn-arrow">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                </span>
+              </span>
+              <span id="btn-signin-spinner" style="display:none;"><div class="btn-spinner"></div></span>
+            </button>
+          </form>
+
+          <p class="card-footer-text" style="margin-top:1.1rem;">
+            No account yet? <button type="button" id="go-to-register">Create one</button>
           </p>
-          <button class="btn btn-primary" id="btn-back-to-start" style="margin-top:1.5rem; width:100%;">
+        </div>
+
+        <!-- ── STATE 2: Register ── -->
+        <div class="auth-state" id="state-register">
+          <button class="btn-back" id="back-from-register">
+            <svg viewBox="0 0 24 24"><path d="M19 12H5M5 12l7 7M5 12l7-7"/></svg>
             Back to Sign In
           </button>
+          <h1 class="card-title">Create Account</h1>
+          <p class="card-sub">Register as a BrightKey employee</p>
+
+          <form id="register-form" novalidate>
+            <div class="input-wrap">
+              <label class="form-label" for="input-fullname">Full name</label>
+              <input type="text" id="input-fullname" class="form-input" placeholder="Juan dela Cruz"
+                required minlength="2" autocomplete="name" />
+              <span class="input-icon">
+                <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              </span>
+            </div>
+
+            <div class="input-wrap">
+              <label class="form-label" for="input-reg-email">Work email</label>
+              <input type="email" id="input-reg-email" class="form-input" placeholder="you@company.com"
+                required autocomplete="email" />
+              <span class="input-icon">
+                <svg viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+              </span>
+            </div>
+
+            <div class="input-wrap">
+              <label class="form-label" for="input-reg-password">Password</label>
+              <input type="password" id="input-reg-password" class="form-input" placeholder="Min. 8 characters"
+                required minlength="8" autocomplete="new-password" />
+              <span class="input-icon">
+                <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              </span>
+            </div>
+
+            <div class="input-wrap">
+              <label class="form-label" for="input-confirm-password">Confirm password</label>
+              <input type="password" id="input-confirm-password" class="form-input" placeholder="Re-enter password"
+                required autocomplete="new-password" />
+              <span class="input-icon">
+                <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              </span>
+            </div>
+
+            <button type="submit" class="btn-primary-dark" id="btn-register">
+              <span class="btn-shimmer"></span>
+              <span id="btn-register-content" style="display:flex;align-items:center;gap:0.3rem;">
+                Create Account
+                <span class="btn-arrow">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                </span>
+              </span>
+              <span id="btn-register-spinner" style="display:none;"><div class="btn-spinner"></div></span>
+            </button>
+            <p class="privacy-note">
+              By registering you agree to our <a href="privacy-policy.html">Privacy Policy</a>.
+            </p>
+          </form>
         </div>
-      </div>
 
-      <!-- ── STATE 5: Set password (from confirmation email link) ── -->
-      <div class="auth-state" id="state-set-password">
-        <h1 class="auth-title">Set your password</h1>
-        <p class="auth-sub">Choose a password for your account</p>
-        <form id="setpass-form" novalidate>
-          <div class="form-group" style="margin-bottom:1rem;">
-            <label class="form-label" for="input-new-password">New password</label>
-            <input type="password" id="input-new-password" class="form-input" placeholder="Min. 8 characters"
-              required minlength="8" autocomplete="new-password" />
-            <span class="form-error" aria-live="polite"></span>
+        <!-- ── STATE 3: Check email ── -->
+        <div class="auth-state" id="state-check-email">
+          <div class="success-box">
+            <div class="success-icon">✉️</div>
+            <p class="success-title">Check your email</p>
+            <p class="success-body">
+              We sent a confirmation link to <strong id="confirm-email-display"></strong>.
+              Click the link to confirm your account, then come back to sign in.
+            </p>
+            <button class="btn-primary-dark" id="btn-back-to-start" style="margin-top:1.5rem;">
+              <span class="btn-shimmer"></span>
+              Back to Sign In
+            </button>
           </div>
-          <div class="form-group" style="margin-bottom:1.5rem;">
-            <label class="form-label" for="input-new-confirm">Confirm password</label>
-            <input type="password" id="input-new-confirm" class="form-input" placeholder="Re-enter password"
-              required autocomplete="new-password" />
-            <span class="form-error" aria-live="polite"></span>
-          </div>
-          <button type="submit" class="btn btn-primary btn-lg" id="btn-setpass" style="width:100%;">
-            Set Password & Sign In
-          </button>
-        </form>
-      </div>
+        </div>
 
-    </div>
-  </div>
+        <!-- ── STATE 4: Set password (from email link) ── -->
+        <div class="auth-state" id="state-set-password">
+          <h1 class="card-title">Set your password</h1>
+          <p class="card-sub">Choose a password to activate your account</p>
+
+          <form id="setpass-form" novalidate>
+            <div class="input-wrap">
+              <label class="form-label" for="input-new-password">New password</label>
+              <input type="password" id="input-new-password" class="form-input" placeholder="Min. 8 characters"
+                required minlength="8" autocomplete="new-password" />
+              <span class="input-icon">
+                <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              </span>
+            </div>
+
+            <div class="input-wrap">
+              <label class="form-label" for="input-new-confirm">Confirm password</label>
+              <input type="password" id="input-new-confirm" class="form-input" placeholder="Re-enter password"
+                required autocomplete="new-password" />
+              <span class="input-icon">
+                <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              </span>
+            </div>
+
+            <button type="submit" class="btn-primary-dark" id="btn-setpass">
+              <span class="btn-shimmer"></span>
+              <span id="btn-setpass-content" style="display:flex;align-items:center;gap:0.3rem;">
+                Set Password &amp; Sign In
+                <span class="btn-arrow">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap: round; stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                </span>
+              </span>
+              <span id="btn-setpass-spinner" style="display:none;"><div class="btn-spinner"></div></span>
+            </button>
+          </form>
+        </div>
+
+      </div><!-- /.card -->
+    </div><!-- /.card-tilt -->
+  </div><!-- /.card-perspective -->
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <script src="js/auth.js"></script>
   <script>
     'use strict';
 
-    const alertEl = document.getElementById('auth-alert');
+    /* ── 3D tilt ── */
+    const tilt = document.getElementById('card-tilt');
+    tilt.addEventListener('mousemove', e => {
+      const r = tilt.getBoundingClientRect();
+      const x = e.clientX - r.left - r.width  / 2;
+      const y = e.clientY - r.top  - r.height / 2;
+      tilt.style.transform = `perspective(1200px) rotateX(${-y / 30}deg) rotateY(${x / 30}deg)`;
+    });
+    tilt.addEventListener('mouseleave', () => {
+      tilt.style.transition = 'transform 0.5s ease';
+      tilt.style.transform  = 'perspective(1200px) rotateX(0) rotateY(0)';
+      setTimeout(() => tilt.style.transition = '', 500);
+    });
 
+    /* ── Password toggle ── */
+    document.getElementById('toggle-password').addEventListener('click', function() {
+      const inp = document.getElementById('input-password');
+      const icon = document.getElementById('eye-icon');
+      if (inp.type === 'password') {
+        inp.type = 'text';
+        icon.innerHTML = '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>';
+      } else {
+        inp.type = 'password';
+        icon.innerHTML = '<path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>';
+      }
+    });
+
+    /* ── Alert ── */
+    const alertEl = document.getElementById('auth-alert');
     function showAlert(type, msg) {
       alertEl.className = `alert alert-${type}`;
       alertEl.textContent = msg;
@@ -193,13 +606,23 @@
       alertEl.textContent = '';
     }
 
+    /* ── State switcher ── */
     function showState(id) {
       document.querySelectorAll('.auth-state').forEach(el => el.classList.remove('active'));
       document.getElementById(id).classList.add('active');
       hideAlert();
     }
 
-    // ── Check for confirmation / recovery link in URL hash ──────────────────
+    /* ── Spinner helpers ── */
+    function setLoading(btnId, contentId, spinnerId, loading) {
+      const btn = document.getElementById(btnId);
+      btn.disabled = loading;
+      btn.classList.toggle('loading', loading);
+      document.getElementById(contentId).style.display = loading ? 'none' : 'flex';
+      document.getElementById(spinnerId).style.display  = loading ? 'block' : 'none';
+    }
+
+    /* ── Check confirmation / recovery link in hash ── */
     (async function checkHash() {
       const hash = window.location.hash;
       if (!hash) {
@@ -207,10 +630,8 @@
         if (session) window.location.href = 'dashboard.html';
         return;
       }
-
       const params = new URLSearchParams(hash.slice(1));
-      const type = params.get('type');
-
+      const type   = params.get('type');
       if (type === 'signup' || type === 'recovery') {
         const accessToken  = params.get('access_token');
         const refreshToken = params.get('refresh_token');
@@ -222,9 +643,8 @@
       }
     })();
 
-    // ── STATE 1: Sign In ─────────────────────────────────────────────────────
+    /* ── STATE 1: Sign In ── */
     document.getElementById('go-to-register').addEventListener('click', () => {
-      // Pre-fill email if already typed
       const email = document.getElementById('input-email').value.trim();
       if (email) document.getElementById('input-reg-email').value = email;
       showState('state-register');
@@ -233,15 +653,15 @@
 
     document.getElementById('btn-forgot').addEventListener('click', async () => {
       const email = document.getElementById('input-email').value.trim();
-      if (!email) { showAlert('error', 'Enter your email address above first.'); return; }
+      if (!email) { showAlert('error', 'Enter your email address first.'); return; }
       const btn = document.getElementById('btn-forgot');
       btn.textContent = 'Sending…';
       try {
         const { error } = await BKAuth.sb.auth.resetPasswordForEmail(email, {
-          redirectTo: window.location.origin + '/admin',
+          redirectTo: 'https://brightkeysolutions.com/admin',
         });
         if (error) throw error;
-        showAlert('success', `Password reset email sent to ${email}.`);
+        showAlert('success', `Reset link sent to ${email}.`);
       } catch (err) {
         showAlert('error', err.message || 'Failed to send reset email.');
       } finally {
@@ -254,23 +674,18 @@
       const email    = document.getElementById('input-email').value.trim();
       const password = document.getElementById('input-password').value;
       if (!email || !password) { showAlert('error', 'Please fill in all fields.'); return; }
-
-      const btn = document.getElementById('btn-signin');
-      btn.disabled = true;
-      btn.textContent = 'Signing in…';
+      setLoading('btn-signin', 'btn-signin-content', 'btn-signin-spinner', true);
       hideAlert();
-
       try {
         await BKAuth.signIn(email, password);
         window.location.href = 'dashboard.html';
       } catch (err) {
         showAlert('error', err.message || 'Incorrect email or password.');
-        btn.disabled = false;
-        btn.textContent = 'Sign In';
+        setLoading('btn-signin', 'btn-signin-content', 'btn-signin-spinner', false);
       }
     });
 
-    // ── STATE 2: Register ────────────────────────────────────────────────────
+    /* ── STATE 2: Register ── */
     document.getElementById('back-from-register').addEventListener('click', () => {
       showState('state-signin');
       document.getElementById('input-email').focus();
@@ -282,56 +697,44 @@
       const email    = document.getElementById('input-reg-email').value.trim();
       const password = document.getElementById('input-reg-password').value;
       const confirm  = document.getElementById('input-confirm-password').value;
-
-      if (!fullName)            { showAlert('error', 'Please enter your full name.'); return; }
-      if (!email)               { showAlert('error', 'Please enter your email.'); return; }
-      if (password.length < 8)  { showAlert('error', 'Password must be at least 8 characters.'); return; }
-      if (password !== confirm)  { showAlert('error', 'Passwords do not match.'); return; }
-
-      const btn = document.getElementById('btn-register');
-      btn.disabled = true;
-      btn.textContent = 'Creating account…';
+      if (!fullName)           { showAlert('error', 'Please enter your full name.'); return; }
+      if (!email)              { showAlert('error', 'Please enter your email.'); return; }
+      if (password.length < 8) { showAlert('error', 'Password must be at least 8 characters.'); return; }
+      if (password !== confirm) { showAlert('error', 'Passwords do not match.'); return; }
+      setLoading('btn-register', 'btn-register-content', 'btn-register-spinner', true);
       hideAlert();
-
       try {
         await BKAuth.signUp(email, password, fullName);
         document.getElementById('confirm-email-display').textContent = email;
         showState('state-check-email');
       } catch (err) {
         showAlert('error', err.message || 'Registration failed. Please try again.');
-        btn.disabled = false;
-        btn.textContent = 'Create Account';
+        setLoading('btn-register', 'btn-register-content', 'btn-register-spinner', false);
       }
     });
 
-    // ── STATE 3: Check email — back to sign in ───────────────────────────────
+    /* ── STATE 3: Back to start ── */
     document.getElementById('btn-back-to-start').addEventListener('click', () => {
       showState('state-signin');
       document.getElementById('input-email').focus();
     });
 
-    // ── STATE 4: Set password (from confirmation email link) ─────────────────
+    /* ── STATE 4: Set password ── */
     document.getElementById('setpass-form').addEventListener('submit', async e => {
       e.preventDefault();
       const password = document.getElementById('input-new-password').value;
       const confirm  = document.getElementById('input-new-confirm').value;
-
-      if (password.length < 8)  { showAlert('error', 'Password must be at least 8 characters.'); return; }
-      if (password !== confirm)  { showAlert('error', 'Passwords do not match.'); return; }
-
-      const btn = document.getElementById('btn-setpass');
-      btn.disabled = true;
-      btn.textContent = 'Saving…';
+      if (password.length < 8) { showAlert('error', 'Password must be at least 8 characters.'); return; }
+      if (password !== confirm) { showAlert('error', 'Passwords do not match.'); return; }
+      setLoading('btn-setpass', 'btn-setpass-content', 'btn-setpass-spinner', true);
       hideAlert();
-
       try {
         const { error } = await BKAuth.sb.auth.updateUser({ password });
         if (error) throw error;
         window.location.href = 'dashboard.html';
       } catch (err) {
         showAlert('error', err.message || 'Failed to set password. Please try again.');
-        btn.disabled = false;
-        btn.textContent = 'Set Password & Sign In';
+        setLoading('btn-setpass', 'btn-setpass-content', 'btn-setpass-spinner', false);
       }
     });
   </script>
