@@ -155,16 +155,14 @@ document.querySelectorAll('a[href^="#"]').forEach(anchor => {
   });
 });
 
-// ── Sticky nav shadow on scroll ─────────────────────────────
+// ── Floating pill nav on scroll ──────────────────────────────
 (function navScrollEffect() {
   const nav = document.querySelector('.nav');
   if (!nav) return;
-
-  window.addEventListener('scroll', () => {
-    nav.style.borderBottomColor = window.scrollY > 10
-      ? 'rgba(42,42,61,0.8)'
-      : 'var(--border)';
-  }, { passive: true });
+  const threshold = 10;
+  const onScroll = () => nav.classList.toggle('scrolled', window.scrollY > threshold);
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll(); // run on load in case page is already scrolled
 })();
 
 // ── Supabase client factory ─────────────────────────────────
