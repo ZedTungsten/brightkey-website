@@ -65,34 +65,18 @@
 
       <div id="auth-alert" class="alert alert--hidden" role="alert" style="margin-bottom:1.25rem;"></div>
 
-      <!-- ── STATE 1: Email entry ── -->
-      <div class="auth-state active" id="state-email">
+      <!-- ── STATE 1: Sign In (default) ── -->
+      <div class="auth-state active" id="state-signin">
         <h1 class="auth-title">Employee Portal</h1>
-        <p class="auth-sub">Enter your work email to continue</p>
-        <form id="email-form" novalidate>
-          <div class="form-group" style="margin-bottom:1.25rem;">
+        <p class="auth-sub">Sign in to your BrightKey account</p>
+        <form id="signin-form" novalidate>
+          <div class="form-group" style="margin-bottom:1rem;">
             <label class="form-label" for="input-email">Work email</label>
             <input type="email" id="input-email" class="form-input" placeholder="you@company.com"
               required autocomplete="email" />
             <span class="form-error" aria-live="polite"></span>
           </div>
-          <button type="submit" class="btn btn-primary btn-lg" id="btn-email" style="width:100%;">
-            Continue
-          </button>
-        </form>
-      </div>
-
-      <!-- ── STATE 2: Sign In (existing user) ── -->
-      <div class="auth-state" id="state-signin">
-        <button class="auth-back" id="back-from-signin">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M5 12l7 7M5 12l7-7"/></svg>
-          Back
-        </button>
-        <h1 class="auth-title">Welcome back</h1>
-        <p class="auth-sub">Sign in to your BrightKey account</p>
-        <div class="auth-email-pill" id="signin-email-display"></div>
-        <form id="signin-form" novalidate>
-          <div class="form-group" style="margin-bottom:1rem;">
+          <div class="form-group" style="margin-bottom:1.5rem;">
             <div style="display:flex; justify-content:space-between; align-items:center;">
               <label class="form-label" for="input-password">Password</label>
               <button type="button" class="auth-back" id="btn-forgot" style="margin-bottom:0;">Forgot password?</button>
@@ -105,22 +89,30 @@
             Sign In
           </button>
         </form>
+        <p style="text-align:center; font-size:0.82rem; color:var(--text-muted); margin-top:1.25rem;">
+          No account yet? <button type="button" class="auth-back" id="go-to-register" style="display:inline; margin-bottom:0; color:var(--blue-light);">Create one</button>
+        </p>
       </div>
 
-      <!-- ── STATE 3: Register (new user) ── -->
+      <!-- ── STATE 2: Register (new user) ── -->
       <div class="auth-state" id="state-register">
         <button class="auth-back" id="back-from-register">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M5 12l7 7M5 12l7-7"/></svg>
-          Back
+          Back to Sign In
         </button>
         <h1 class="auth-title">Create Account</h1>
         <p class="auth-sub">Register as a BrightKey employee</p>
-        <div class="auth-email-pill" id="register-email-display"></div>
         <form id="register-form" novalidate>
           <div class="form-group" style="margin-bottom:1rem;">
             <label class="form-label" for="input-fullname">Full name</label>
             <input type="text" id="input-fullname" class="form-input" placeholder="Juan dela Cruz"
               required minlength="2" autocomplete="name" />
+            <span class="form-error" aria-live="polite"></span>
+          </div>
+          <div class="form-group" style="margin-bottom:1rem;">
+            <label class="form-label" for="input-reg-email">Work email</label>
+            <input type="email" id="input-reg-email" class="form-input" placeholder="you@company.com"
+              required autocomplete="email" />
             <span class="form-error" aria-live="polite"></span>
           </div>
           <div class="form-group" style="margin-bottom:1rem;">
@@ -191,7 +183,6 @@
     'use strict';
 
     const alertEl = document.getElementById('auth-alert');
-    let currentEmail = '';
 
     function showAlert(type, msg) {
       alertEl.className = `alert alert-${type}`;
@@ -212,7 +203,6 @@
     (async function checkHash() {
       const hash = window.location.hash;
       if (!hash) {
-        // If already logged in, go to dashboard
         const { data: { session } } = await BKAuth.sb.auth.getSession();
         if (session) window.location.href = 'dashboard.html';
         return;
@@ -222,85 +212,36 @@
       const type = params.get('type');
 
       if (type === 'signup' || type === 'recovery') {
-        // Supabase has set the session from the hash automatically
-        // Exchange the tokens so the session is active
         const accessToken  = params.get('access_token');
         const refreshToken = params.get('refresh_token');
-
         if (accessToken && refreshToken) {
           await BKAuth.sb.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
         }
-
-        // Show set-password state
         showState('state-set-password');
-        // Clean the URL
         history.replaceState(null, '', window.location.pathname);
       }
     })();
 
-    // ── STATE 1: Email form ──────────────────────────────────────────────────
-    document.getElementById('email-form').addEventListener('submit', async e => {
-      e.preventDefault();
+    // ── STATE 1: Sign In ─────────────────────────────────────────────────────
+    document.getElementById('go-to-register').addEventListener('click', () => {
+      // Pre-fill email if already typed
       const email = document.getElementById('input-email').value.trim();
-      if (!email) { showAlert('error', 'Please enter your email.'); return; }
-
-      const btn = document.getElementById('btn-email');
-      btn.disabled = true;
-      btn.textContent = 'Checking…';
-      hideAlert();
-
-      try {
-        // Attempt sign-up to check if user exists.
-        // Supabase: if email already registered, identities[] will be empty.
-        const { data, error } = await BKAuth.sb.auth.signUp({
-          email,
-          password: crypto.randomUUID(), // throwaway — we just need the identities check
-        });
-
-        if (error) throw error;
-
-        currentEmail = email;
-
-        const isExisting = data.user && data.user.identities && data.user.identities.length === 0;
-
-        if (isExisting) {
-          // Existing user → show sign-in form
-          document.getElementById('signin-email-display').textContent = email;
-          showState('state-signin');
-          document.getElementById('input-password').focus();
-        } else {
-          // New user — sign-up was triggered (confirmation email sent)
-          // We need to delete this partial sign-up and let them register properly.
-          // Sign out the temporary session and show register form instead.
-          await BKAuth.sb.auth.signOut();
-          document.getElementById('register-email-display').textContent = email;
-          showState('state-register');
-          document.getElementById('input-fullname').focus();
-        }
-      } catch (err) {
-        showAlert('error', err.message || 'Something went wrong. Please try again.');
-      } finally {
-        btn.disabled = false;
-        btn.textContent = 'Continue';
-      }
-    });
-
-    // ── STATE 2: Sign In ─────────────────────────────────────────────────────
-    document.getElementById('back-from-signin').addEventListener('click', () => {
-      showState('state-email');
-      document.getElementById('input-email').focus();
+      if (email) document.getElementById('input-reg-email').value = email;
+      showState('state-register');
+      document.getElementById('input-fullname').focus();
     });
 
     document.getElementById('btn-forgot').addEventListener('click', async () => {
-      if (!currentEmail) { showAlert('error', 'No email address found.'); return; }
+      const email = document.getElementById('input-email').value.trim();
+      if (!email) { showAlert('error', 'Enter your email address above first.'); return; }
       const btn = document.getElementById('btn-forgot');
       btn.textContent = 'Sending…';
       try {
-        const { error } = await BKAuth.sb.auth.resetPasswordForEmail(currentEmail, {
+        const { error } = await BKAuth.sb.auth.resetPasswordForEmail(email, {
           redirectTo: window.location.origin + '/admin',
         });
         if (error) throw error;
-        showAlert('success', `Password reset email sent to ${currentEmail}.`);
+        showAlert('success', `Password reset email sent to ${email}.`);
       } catch (err) {
         showAlert('error', err.message || 'Failed to send reset email.');
       } finally {
@@ -310,8 +251,9 @@
 
     document.getElementById('signin-form').addEventListener('submit', async e => {
       e.preventDefault();
+      const email    = document.getElementById('input-email').value.trim();
       const password = document.getElementById('input-password').value;
-      if (!password) { showAlert('error', 'Please enter your password.'); return; }
+      if (!email || !password) { showAlert('error', 'Please fill in all fields.'); return; }
 
       const btn = document.getElementById('btn-signin');
       btn.disabled = true;
@@ -319,28 +261,30 @@
       hideAlert();
 
       try {
-        await BKAuth.signIn(currentEmail, password);
+        await BKAuth.signIn(email, password);
         window.location.href = 'dashboard.html';
       } catch (err) {
-        showAlert('error', err.message || 'Incorrect password. Please try again.');
+        showAlert('error', err.message || 'Incorrect email or password.');
         btn.disabled = false;
         btn.textContent = 'Sign In';
       }
     });
 
-    // ── STATE 3: Register ────────────────────────────────────────────────────
+    // ── STATE 2: Register ────────────────────────────────────────────────────
     document.getElementById('back-from-register').addEventListener('click', () => {
-      showState('state-email');
+      showState('state-signin');
       document.getElementById('input-email').focus();
     });
 
     document.getElementById('register-form').addEventListener('submit', async e => {
       e.preventDefault();
       const fullName = document.getElementById('input-fullname').value.trim();
+      const email    = document.getElementById('input-reg-email').value.trim();
       const password = document.getElementById('input-reg-password').value;
       const confirm  = document.getElementById('input-confirm-password').value;
 
       if (!fullName)            { showAlert('error', 'Please enter your full name.'); return; }
+      if (!email)               { showAlert('error', 'Please enter your email.'); return; }
       if (password.length < 8)  { showAlert('error', 'Password must be at least 8 characters.'); return; }
       if (password !== confirm)  { showAlert('error', 'Passwords do not match.'); return; }
 
@@ -350,8 +294,8 @@
       hideAlert();
 
       try {
-        await BKAuth.signUp(currentEmail, password, fullName);
-        document.getElementById('confirm-email-display').textContent = currentEmail;
+        await BKAuth.signUp(email, password, fullName);
+        document.getElementById('confirm-email-display').textContent = email;
         showState('state-check-email');
       } catch (err) {
         showAlert('error', err.message || 'Registration failed. Please try again.');
@@ -360,15 +304,13 @@
       }
     });
 
-    // ── STATE 4: Back to start ───────────────────────────────────────────────
+    // ── STATE 3: Check email — back to sign in ───────────────────────────────
     document.getElementById('btn-back-to-start').addEventListener('click', () => {
-      currentEmail = '';
-      document.getElementById('input-email').value = '';
-      showState('state-email');
+      showState('state-signin');
       document.getElementById('input-email').focus();
     });
 
-    // ── STATE 5: Set password ────────────────────────────────────────────────
+    // ── STATE 4: Set password (from confirmation email link) ─────────────────
     document.getElementById('setpass-form').addEventListener('submit', async e => {
       e.preventDefault();
       const password = document.getElementById('input-new-password').value;
