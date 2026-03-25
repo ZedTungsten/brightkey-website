@@ -49,7 +49,10 @@ async function signUp(email, password, fullName) {
   const { data, error } = await sb.auth.signUp({
     email,
     password,
-    options: { data: { full_name: fullName } },
+    options: {
+      data: { full_name: fullName },
+      emailRedirectTo: 'https://brightkeysolutions.com/admin',
+    },
   });
   if (error) throw error;
   return data;
