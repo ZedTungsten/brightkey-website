@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>404 — Page Not Found | BrightKey</title>
+  <link rel="preconnect" href="https://fonts.bunny.net" />
+  <link href="https://fonts.bunny.net/css?family=inter:400,500,600,700,800&display=swap" rel="stylesheet" />
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: #050816;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* background glows */
+    .bg-glow {
+      position: fixed; pointer-events: none;
+      border-radius: 50%; filter: blur(90px); z-index: 0;
+    }
+    .bg-glow-1 {
+      width: 500px; height: 500px;
+      background: rgba(37,99,235,0.12);
+      top: -120px; left: 50%; transform: translateX(-50%);
+      animation: glow-drift 10s ease-in-out infinite;
+    }
+    .bg-glow-2 {
+      width: 360px; height: 360px;
+      background: rgba(99,102,241,0.09);
+      bottom: -80px; right: 10%;
+      animation: glow-drift 13s ease-in-out 2s infinite reverse;
+    }
+    .bg-glow-3 {
+      width: 280px; height: 280px;
+      background: rgba(59,130,246,0.07);
+      top: 40%; left: 5%;
+      animation: glow-drift 9s ease-in-out 1s infinite;
+    }
+    @keyframes glow-drift {
+      0%,100% { transform: translateY(0) scale(1); }
+      50%      { transform: translateY(-24px) scale(1.06); }
+    }
+    .bg-glow-1 { animation: glow-drift-center 10s ease-in-out infinite; }
+    @keyframes glow-drift-center {
+      0%,100% { transform: translateX(-50%) translateY(0) scale(1); }
+      50%      { transform: translateX(-50%) translateY(-20px) scale(1.05); }
+    }
+
+    /* dot grid */
+    .bg-grid {
+      position: fixed; inset: 0; z-index: 0;
+      background-image: radial-gradient(circle, rgba(255,255,255,0.04) 1px, transparent 1px);
+      background-size: 32px 32px;
+      mask-image: radial-gradient(ellipse 80% 80% at 50% 50%, black 40%, transparent 100%);
+    }
+
+    /* content */
+    .content {
+      position: relative; z-index: 10;
+      display: flex; flex-direction: column;
+      align-items: center; text-align: center;
+      padding: 2rem;
+      gap: 0;
+    }
+
+    canvas {
+      display: block;
+      max-width: 100%;
+      cursor: default;
+    }
+
+    .canvas-404 { margin-bottom: -0.25rem; }
+
+    .divider-line {
+      width: 48px; height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(99,102,241,0.6), transparent);
+      margin: 1.25rem auto;
+    }
+
+    .subtitle {
+      font-size: 0.875rem;
+      color: rgba(255,255,255,0.38);
+      margin-top: 0.25rem;
+      margin-bottom: 2.5rem;
+      line-height: 1.6;
+      max-width: 320px;
+    }
+
+    .btn-home {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      background: #2563eb; color: #fff;
+      border: none; border-radius: 0.6rem;
+      padding: 0.75rem 1.75rem;
+      font-family: inherit; font-size: 0.875rem; font-weight: 600;
+      cursor: pointer; text-decoration: none;
+      transition: background 0.2s, transform 0.15s, box-shadow 0.2s;
+      box-shadow: 0 4px 20px rgba(37,99,235,0.35);
+    }
+    .btn-home:hover {
+      background: #1d4ed8;
+      transform: translateY(-2px);
+      box-shadow: 0 8px 28px rgba(37,99,235,0.45);
+    }
+    .btn-home:active { transform: translateY(0); }
+    .btn-home svg {
+      width: 15px; height: 15px;
+      transition: transform 0.2s;
+    }
+    .btn-home:hover svg { transform: translateX(-2px); }
+
+    .brand-link {
+      position: fixed; top: 1.5rem; left: 50%; transform: translateX(-50%);
+      font-size: 1.1rem; font-weight: 800; letter-spacing: -0.04em;
+      color: rgba(255,255,255,0.85); text-decoration: none;
+      z-index: 20;
+    }
+    .brand-link span { color: #3b82f6; }
+  </style>
+</head>
+<body>
+
+  <div class="bg-glow bg-glow-1"></div>
+  <div class="bg-glow bg-glow-2"></div>
+  <div class="bg-glow bg-glow-3"></div>
+  <div class="bg-grid"></div>
+
+  <a href="index.html" class="brand-link">Bright<span>Key</span></a>
+
+  <div class="content">
+    <canvas id="canvas-404"  class="canvas-404"></canvas>
+    <canvas id="canvas-pnf"  class="canvas-pnf"></canvas>
+
+    <div class="divider-line"></div>
+
+    <p class="subtitle">
+      The page you're looking for doesn't exist or has been moved.
+    </p>
+
+    <a href="index.html" class="btn-home">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M19 12H5M5 12l7 7M5 12l7-7"/>
+      </svg>
+      Back to Homepage
+    </a>
+  </div>
+
+  <script>
+    'use strict';
+
+    /**
+     * FuzzyText — vanilla canvas implementation
+     * Inspired by ReactBits FuzzyText (reactbits.dev/text-animations/fuzzy-text)
+     *
+     * Renders text with animated noise displacement on each scanline,
+     * intensifies on hover.
+     */
+    class FuzzyText {
+      constructor(canvas, text, {
+        fontSize       = 100,
+        fontWeight     = '800',
+        color          = '#ffffff',
+        baseIntensity  = 0.12,
+        hoverIntensity = 0.45,
+        animSpeed      = 1,
+      } = {}) {
+        this.canvas        = canvas;
+        this.ctx           = canvas.getContext('2d');
+        this.text          = text;
+        this.fontSize      = fontSize;
+        this.fontWeight    = fontWeight;
+        this.color         = color;
+        this.baseIntensity = baseIntensity;
+        this.hoverIntensity= hoverIntensity;
+        this.animSpeed     = animSpeed;
+        this.hover         = false;
+        this.raf           = null;
+
+        this._setup();
+
+        canvas.addEventListener('mouseenter', () => this.hover = true);
+        canvas.addEventListener('mouseleave', () => this.hover = false);
+
+        this._loop();
+      }
+
+      _font() {
+        return `${this.fontWeight} ${this.fontSize}px "Inter", system-ui, sans-serif`;
+      }
+
+      _setup() {
+        const { ctx, fontSize, text } = this;
+        ctx.font = this._font();
+        const m   = ctx.measureText(text);
+        const pad = fontSize * 0.35;
+        this.w    = this.canvas.width  = Math.ceil(m.width + pad * 2);
+        this.h    = this.canvas.height = Math.ceil(fontSize * 1.55);
+        this.padX = pad;
+      }
+
+      _draw() {
+        const { ctx, w, h, fontSize, text, color, hover, baseIntensity, hoverIntensity, padX } = this;
+        const intensity = hover ? hoverIntensity : baseIntensity;
+        const maxShift  = fontSize * intensity * 0.6;
+
+        ctx.clearRect(0, 0, w, h);
+
+        // ── Offscreen: clean text ──────────────────────────────────────────
+        const off  = document.createElement('canvas');
+        off.width  = w;
+        off.height = h;
+        const octx = off.getContext('2d');
+        octx.font        = this._font();
+        octx.fillStyle   = color;
+        octx.textBaseline= 'middle';
+        ctx.textBaseline = 'middle';
+        octx.fillText(text, padX, h / 2);
+
+        // ── Scanline displacement ──────────────────────────────────────────
+        // Copy the offscreen image row-by-row with random X offsets
+        const rowH = Math.max(1, Math.ceil(fontSize * 0.065));
+
+        for (let y = 0; y < h; y += rowH) {
+          const shift  = (Math.random() - 0.5) * maxShift;
+          const srcH   = Math.min(rowH, h - y);
+          ctx.drawImage(off, 0, y, w, srcH, shift, y, w, srcH);
+        }
+
+        // ── Soft chromatic ghost (adds depth) ─────────────────────────────
+        const ghostCount = Math.round(4 + intensity * 12);
+        for (let i = 0; i < ghostCount; i++) {
+          ctx.globalAlpha = 0.04 + Math.random() * 0.05;
+          const ox = (Math.random() - 0.5) * maxShift * 1.4;
+          const oy = (Math.random() - 0.5) * fontSize * 0.06;
+          ctx.drawImage(off, ox, oy);
+        }
+        ctx.globalAlpha = 1;
+      }
+
+      _loop() {
+        this._draw();
+        this.raf = requestAnimationFrame(() => this._loop());
+      }
+
+      destroy() {
+        cancelAnimationFrame(this.raf);
+      }
+    }
+
+    // ── Responsive font sizes ──────────────────────────────────────────────
+    const vw = window.innerWidth;
+    const size404 = Math.min(Math.max(vw * 0.22, 80), 200);
+    const sizePNF = Math.min(Math.max(vw * 0.055, 22), 46);
+
+    new FuzzyText(document.getElementById('canvas-404'), '404', {
+      fontSize:       size404,
+      color:          '#ffffff',
+      baseIntensity:  0.14,
+      hoverIntensity: 0.55,
+    });
+
+    new FuzzyText(document.getElementById('canvas-pnf'), 'Page Not Found', {
+      fontSize:       sizePNF,
+      fontWeight:     '600',
+      color:          'rgba(148,163,184,1)',
+      baseIntensity:  0.09,
+      hoverIntensity: 0.38,
+    });
+  </script>
+</body>
+</html>
