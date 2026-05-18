@@ -1033,11 +1033,16 @@
       /* ── Year filter (from DB) ── */
       async loadYears() {
         try {
-          const rows = await sbGet('general_journal?select=year&order=year.desc');
-          const years = [...new Set(rows.map(r => r.year).filter(Boolean))];
-          const cur = new Date().getFullYear();
-          if (!years.includes(cur)) years.unshift(cur);
-          years.sort((a, b) => b - a);
+          // Use min+max queries to avoid Supabase 1000-row default limit
+          const [minRow] = await sbGet('general_journal?select=year&order=year.asc&limit=1');
+          const [maxRow] = await sbGet('general_journal?select=year&order=year.desc&limit=1');
+          const minY = parseInt(minRow?.year, 10) || new Date().getFullYear();
+          const maxY = parseInt(maxRow?.year, 10) || new Date().getFullYear();
+
+          // Build every year in range (e.g. 2025, 2026)
+          const years = [];
+          for (let y = maxY; y >= minY; y--) years.push(y);
+
           const sel  = document.getElementById('f-year');
           const prev = sel.value;
           sel.innerHTML = '<option value="">All years</option>';
