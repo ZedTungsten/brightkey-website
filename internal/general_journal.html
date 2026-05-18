@@ -374,8 +374,12 @@
             </select>
           </div>
           <div class="form-group">
-            <label class="form-label">Date</label>
-            <input type="date" id="f-filter-date" class="form-input" />
+            <label class="form-label">From</label>
+            <input type="date" id="f-date-from" class="form-input" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">To</label>
+            <input type="date" id="f-date-to" class="form-input" />
           </div>
           <div class="form-group">
             <label class="form-label">Account</label>
@@ -792,7 +796,8 @@
         const apply = () => { this.page = 1; this.loadEntries(); };
         ['f-year','f-month','f-filter-account'].forEach(id =>
           document.getElementById(id).addEventListener('change', apply));
-        document.getElementById('f-filter-date').addEventListener('change', apply);
+        ['f-date-from','f-date-to'].forEach(id =>
+          document.getElementById(id).addEventListener('change', apply));
 
         let timer;
         document.getElementById('f-search').addEventListener('input', () => {
@@ -800,18 +805,19 @@
         });
         document.getElementById('clear-filters-btn').addEventListener('click', () => {
           ['f-year','f-month','f-filter-account'].forEach(id => document.getElementById(id).value = '');
-          ['f-filter-date','f-search'].forEach(id => document.getElementById(id).value = '');
+          ['f-date-from','f-date-to','f-search'].forEach(id => document.getElementById(id).value = '');
           apply();
         });
       },
 
       getFilters() {
         return {
-          year:    document.getElementById('f-year').value,
-          month:   document.getElementById('f-month').value,
-          date:    document.getElementById('f-filter-date').value,
-          account: document.getElementById('f-filter-account').value,
-          search:  document.getElementById('f-search').value.trim(),
+          year:     document.getElementById('f-year').value,
+          month:    document.getElementById('f-month').value,
+          dateFrom: document.getElementById('f-date-from').value,
+          dateTo:   document.getElementById('f-date-to').value,
+          account:  document.getElementById('f-filter-account').value,
+          search:   document.getElementById('f-search').value.trim(),
         };
       },
 
@@ -819,11 +825,12 @@
         const p = new URLSearchParams();
         if (opts.select) p.set('select', opts.select); else p.set('select', '*');
         p.set('order', 'entry_number.asc,id.asc');
-        if (f.year)    p.set('year',    `eq.${f.year}`);
-        if (f.month)   p.set('month',   `eq.${f.month}`);
-        if (f.date)    p.set('date',    `eq.${f.date}`);
-        if (f.account) p.set('account', `eq.${f.account}`);
-        if (f.search)  p.set('or',      `(account.ilike.*${f.search}*,description_1.ilike.*${f.search}*,description_2.ilike.*${f.search}*)`);
+        if (f.year)     p.set('year',    `eq.${f.year}`);
+        if (f.month)    p.set('month',   `eq.${f.month}`);
+        if (f.dateFrom) p.append('date', `gte.${f.dateFrom}`);
+        if (f.dateTo)   p.append('date', `lte.${f.dateTo}`);
+        if (f.account)  p.set('account', `eq.${f.account}`);
+        if (f.search)   p.set('or',      `(account.ilike.*${f.search}*,description_1.ilike.*${f.search}*,description_2.ilike.*${f.search}*)`);
         if (opts.limit  !== undefined) p.set('limit',  opts.limit);
         if (opts.offset !== undefined) p.set('offset', opts.offset);
         return p.toString();
