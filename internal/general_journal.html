@@ -1403,16 +1403,27 @@
         const start = (this.page - 1) * this.pageSize + 1;
         const end   = Math.min(this.page * this.pageSize, total);
 
-        // Build page number windows with ellipsis
+        // Always show a window of 8 consecutive pages around current page
+        const WINDOW = 8;
         const pageNums = [];
-        if (pages <= 7) {
+        if (pages <= WINDOW + 2) {
+          // Few enough pages — just show all of them
           for (let i = 1; i <= pages; i++) pageNums.push(i);
         } else {
-          pageNums.push(1);
-          if (this.page > 3)             pageNums.push('...');
-          for (let i = Math.max(2, this.page - 1); i <= Math.min(pages - 1, this.page + 1); i++) pageNums.push(i);
-          if (this.page < pages - 2)     pageNums.push('...');
-          pageNums.push(pages);
+          // Slide a window of WINDOW pages centred around current page
+          let start = Math.max(1, this.page - Math.floor(WINDOW / 2));
+          let end   = start + WINDOW - 1;
+          if (end > pages) { end = pages; start = Math.max(1, end - WINDOW + 1); }
+
+          if (start > 1) {
+            pageNums.push(1);
+            if (start > 2) pageNums.push('...');
+          }
+          for (let i = start; i <= end; i++) pageNums.push(i);
+          if (end < pages) {
+            if (end < pages - 1) pageNums.push('...');
+            pageNums.push(pages);
+          }
         }
 
         const pageButtons = pageNums.map(n =>
