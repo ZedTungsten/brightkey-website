@@ -1157,8 +1157,10 @@
       buildQS(f, opts = {}) {
         const p = new URLSearchParams();
         if (opts.select) p.set('select', opts.select); else p.set('select', '*');
-        const dir = this.sortDir === 'asc' ? 'asc' : 'desc';
-        p.set('order', `entry_number.${dir},id.${dir}`);
+        if (!opts.noOrder) {
+          const dir = this.sortDir === 'asc' ? 'asc' : 'desc';
+          p.set('order', `entry_number.${dir},id.${dir}`);
+        }
         if (f.year)     p.set('year',  `eq.${f.year}`);
         if (f.month)    p.set('month', `eq.${f.month}`);
         if (f.dateFrom) p.append('date', `gte.${f.dateFrom}`);
@@ -1179,8 +1181,8 @@
         const f = this.getFilters();
         const offset = (this.page - 1) * this.pageSize;
         try {
-          /* totals: all matching rows */
-          const all = await sbGet(`general_journal?${this.buildQS(f, { select: 'debit,credit' })}`);
+          /* totals: no sort, high limit so all rows are summed regardless of sort direction */
+          const all = await sbGet(`general_journal?${this.buildQS(f, { select: 'debit,credit', noOrder: true, limit: 50000 })}`);
           let sumD = 0, sumC = 0;
           all.forEach(r => { sumD += parseFloat(r.debit || 0); sumC += parseFloat(r.credit || 0); });
           this.totalCount = all.length;
