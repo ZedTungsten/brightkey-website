@@ -2,6 +2,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { createClient } from '@supabase/supabase-js';
 import * as dotenv from 'dotenv';
+import * as cheerio from 'cheerio';
 
 dotenv.config();
 
@@ -20,7 +21,7 @@ function formatPHP(centavos) {
 }
 
 async function buildProducts() {
-  console.log('Fetching products from Supabase for SSG...');
+  console.log('Fetching products from Supabase for visual SSG...');
   
   const { data: products, error } = await supabase
     .from('products')
@@ -41,12 +42,15 @@ async function buildProducts() {
   const outDir = path.resolve('./products');
   await fs.mkdir(outDir, { recursive: true });
 
-  // Read template
-  const templatePath = path.resolve('./product-template.html');
+  // Read visual template
+  const templatePath = path.resolve('./product-preview.html');
   const templateHtml = await fs.readFile(templatePath, 'utf8');
 
   for (const p of products) {
     console.log(`Building static page for: ${p.slug}`);
+
+    // Load template into Cheerio
+    const $ = cheerio.load(templateHtml);
 
     // Inventory calculations
     let available = 0;
@@ -54,23 +58,6 @@ async function buildProducts() {
     if (p.inventory && p.inventory.length > 0) {
       available = p.inventory[0].available;
       ordered = p.inventory[0].ordered_past_month;
-    }
-
-    let statusText = 'Out of Stock';
-    let statusColor = 'badge-muted';
-    let inventoryText = 'Currently out of stock. Please contact us for restock dates.';
-    let btnDisabled = 'disabled="true"';
-    let btnText = 'Out of Stock';
-
-    if (available > 0) {
-      statusText = 'In Stock';
-      statusColor = 'badge-cyan';
-      inventoryText = `<strong style="color:var(--text-primary);">${available} available</strong> in our local warehouse.`;
-      if (ordered > 0) {
-        inventoryText += ` <span style="color:#f59e0b;">🔥 ${ordered} ordered in the last 30 days.</span>`;
-      }
-      btnDisabled = '';
-      btnText = 'Add to Cart';
     }
 
     // Images
@@ -90,23 +77,40 @@ async function buildProducts() {
       }
     }
 
-    // Price formatting
     const priceStr = formatPHP(p.price);
-    const comparePriceStr = p.compare_at_price ? formatPHP(p.compare_at_price) : '';
-    const comparePriceDisplay = (p.compare_at_price && p.compare_at_price > p.price) ? 'display:inline;' : 'display:none;';
+    const descStr = p.description || '';
+    const descShort = p.description ? p.description.substring(0, 160) : '';
 
-    // JSON-LD Generation
+    // Fix relative paths for the subfolder
+    $('link[href^="css/"]').attr('href', (i, val) => '../' + val);
+    $('link[href^="assets/"]').attr('href', (i, val) => '../' + val);
+    $('script[src^="js/"]').attr('src', (i, val) => '../' + val);
+    $('a[href="index.html"]').attr('href', '../index.html');
+    $('a[href="about.html"]').attr('href', '../about.html');
+    $('a[href="products.html"]').attr('href', '../products.html');
+    $('a[href="contact.html"]').attr('href', '../contact.html');
+    $('a[href="cart.html"]').attr('href', '../cart.html');
+    $('a[href="privacy-policy.html"]').attr('href', '../privacy-policy.html');
+    $('a[href="terms-of-use.html"]').attr('href', '../terms-of-use.html');
+    $('img[src^="assets/"]').not('[data-template="main-image"]').attr('src', (i, val) => '../' + val);
+
+    // Apply Meta Tags
+    $('[data-template="meta-desc"]').attr('content', descShort);
+    $('[data-template="meta-title"]').text(`${p.title} — BrightKey`);
+    $('[data-template="og-url"]').attr('content', `https://brightkeysolutions.com/products/${p.slug}`);
+    $('[data-template="og-title"]').attr('content', `${p.title} — BrightKey`);
+    $('[data-template="og-desc"]').attr('content', descShort);
+    $('[data-template="og-image"]').attr('content', mainImgUrl);
+
+    // Apply JSON-LD
     const jsonLd = {
       "@context": "https://schema.org/",
       "@type": "Product",
       "name": p.title,
       "image": [mainImgUrl],
-      "description": p.description || "",
+      "description": descStr,
       "sku": p.sku || p.id,
-      "brand": {
-        "@type": "Brand",
-        "name": "BrightKey"
-      },
+      "brand": { "@type": "Brand", "name": "BrightKey" },
       "offers": {
         "@type": "Offer",
         "url": `https://brightkeysolutions.com/products/${p.slug}`,
@@ -116,41 +120,57 @@ async function buildProducts() {
         "itemCondition": "https://schema.org/NewCondition"
       }
     };
+    $('[data-template="json-ld"]').replaceWith(`<script type="application/ld+json">${JSON.stringify(jsonLd)}</script>`);
 
-    const jsonLdScript = `<script type="application/ld+json">${JSON.stringify(jsonLd)}</script>`;
+    // Apply DOM Content
+    $('[data-template="breadcrumb-title"]').text(p.title);
+    $('[data-template="main-image"]').attr('src', mainImgUrl);
+    $('[data-template="thumbnails-container"]').html(thumbnailsHtml);
+    $('[data-template="category"]').text(p.category);
+    $('[data-template="sku"]').text(p.sku ? `SKU: ${p.sku}` : '');
+    $('[data-template="title"]').text(p.title);
+    $('[data-template="price"]').text(priceStr);
+    $('[data-template="description"]').text(descStr);
 
-    // Build the page
-    let pageHtml = templateHtml
-      .replace(/{{META_TITLE}}/g, `${p.title} — BrightKey`)
-      .replace(/{{META_DESC}}/g, p.description ? p.description.substring(0, 160) : '')
-      .replace(/{{OG_URL}}/g, `https://brightkeysolutions.com/products/${p.slug}`)
-      .replace(/{{OG_IMAGE}}/g, mainImgUrl)
-      .replace(/{{JSON_LD}}/g, jsonLdScript)
-      
-      .replace(/{{BREADCRUMB_TITLE}}/g, p.title)
-      .replace(/{{TITLE}}/g, p.title)
-      .replace(/{{MAIN_IMAGE}}/g, mainImgUrl)
-      .replace(/{{THUMBNAILS_HTML}}/g, thumbnailsHtml)
-      .replace(/{{CATEGORY}}/g, p.category)
-      .replace(/{{STATUS_COLOR}}/g, statusColor)
-      .replace(/{{STATUS_TEXT}}/g, statusText)
-      .replace(/{{SKU_TEXT}}/g, p.sku ? `SKU: ${p.sku}` : '')
-      .replace(/{{PRICE}}/g, priceStr)
-      .replace(/{{COMPARE_PRICE_DISPLAY}}/g, comparePriceDisplay)
-      .replace(/{{COMPARE_PRICE}}/g, comparePriceStr)
-      .replace(/{{DESCRIPTION}}/g, p.description || '')
-      .replace(/{{INVENTORY_TEXT}}/g, inventoryText)
-      .replace(/{{BTN_DISABLED}}/g, btnDisabled)
-      .replace(/{{BTN_TEXT}}/g, btnText)
-      
-      .replace(/{{PRODUCT_ID}}/g, p.id)
-      .replace(/{{SLUG}}/g, p.slug)
-      .replace(/{{RAW_PRICE}}/g, p.price)
-      .replace(/{{SUPABASE_URL}}/g, SUPABASE_URL)
-      .replace(/{{SUPABASE_ANON}}/g, SUPABASE_ANON_KEY);
+    if (p.compare_at_price && p.compare_at_price > p.price) {
+      $('[data-template="compare-price"]').text(formatPHP(p.compare_at_price)).show();
+    } else {
+      $('[data-template="compare-price"]').hide();
+    }
 
+    let inventoryText = 'Currently out of stock. Please contact us for restock dates.';
+    if (available > 0) {
+      $('[data-template="status-badge"]').text('In Stock').attr('class', 'badge badge-cyan');
+      inventoryText = `<strong style="color:var(--text-primary);">${available} available</strong> in our local warehouse.`;
+      if (ordered > 0) {
+        inventoryText += ` <span style="color:#f59e0b;">🔥 ${ordered} ordered in the last 30 days.</span>`;
+      }
+      $('[data-template="btn-add-to-cart"]').text('Add to Cart').removeAttr('disabled');
+    } else {
+      $('[data-template="status-badge"]').text('Out of Stock').attr('class', 'badge badge-muted');
+      $('[data-template="btn-add-to-cart"]').text('Out of Stock').attr('disabled', 'true');
+    }
+    $('[data-template="inventory-text"]').html(inventoryText);
+
+    // Inject JS Data
+    const jsInjection = `
+      <script>
+        window.SUPABASE_URL = "${SUPABASE_URL}";
+        window.SUPABASE_ANON = "${SUPABASE_ANON_KEY}";
+        CURRENT_PRODUCT = {
+          id: "${p.id}",
+          title: \`${p.title}\`,
+          slug: "${p.slug}",
+          price: ${p.price},
+          image: "${mainImgUrl}"
+        };
+      </script>
+    `;
+    $('[data-template="js-product-data"]').replaceWith(jsInjection);
+
+    // Write final HTML
     const outFilePath = path.join(outDir, `${p.slug}.html`);
-    await fs.writeFile(outFilePath, pageHtml, 'utf8');
+    await fs.writeFile(outFilePath, $.html(), 'utf8');
   }
 
   console.log(`Successfully built ${products.length} static product pages.`);
