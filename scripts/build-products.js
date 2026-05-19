@@ -25,7 +25,7 @@ async function buildProducts() {
   
   const { data: products, error } = await supabase
     .from('products')
-    .select('*, inventory(available, ordered_past_month), product_images(*)')
+    .select('*, inventory(available, ordered_past_month), product_images(*), reviews(*)')
     .eq('status', 'published');
 
   if (error) {
@@ -101,6 +101,23 @@ async function buildProducts() {
     $('[data-template="og-title"]').attr('content', `${p.title} — BrightKey`);
     $('[data-template="og-desc"]').attr('content', descShort);
     $('[data-template="og-image"]').attr('content', mainImgUrl);
+    
+    // Reviews Calculation
+    const approvedReviews = p.reviews ? p.reviews.filter(r => r.is_approved) : [];
+    let avgRating = 0;
+    if (approvedReviews.length > 0) {
+      const total = approvedReviews.reduce((sum, r) => sum + r.rating, 0);
+      avgRating = (total / approvedReviews.length).toFixed(1);
+    }
+    
+    // Update Review Summary DOM Statically
+    if (approvedReviews.length > 0) {
+      $('#avg-rating-display').text(avgRating);
+      $('#total-reviews-display').text(approvedReviews.length);
+    } else {
+      $('#avg-rating-display').text('0.0');
+      $('#total-reviews-display').text('0');
+    }
 
     // Apply JSON-LD
     const jsonLd = {
@@ -120,6 +137,15 @@ async function buildProducts() {
         "itemCondition": "https://schema.org/NewCondition"
       }
     };
+    
+    if (approvedReviews.length > 0) {
+      jsonLd.aggregateRating = {
+        "@type": "AggregateRating",
+        "ratingValue": avgRating,
+        "reviewCount": approvedReviews.length
+      };
+    }
+    
     $('[data-template="json-ld"]').replaceWith(`<script type="application/ld+json">${JSON.stringify(jsonLd)}</script>`);
 
     // Apply DOM Content
