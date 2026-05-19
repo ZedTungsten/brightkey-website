@@ -730,8 +730,8 @@
     /* ── Supabase REST helpers ── */
     const H = { 'Content-Type': 'application/json', 'apikey': SB_ANON, 'Authorization': `Bearer ${SB_ANON}` };
 
-    async function sbGet(path) {
-      const r = await fetch(`${SB_URL}/rest/v1/${path}`, { headers: { ...H, 'Prefer': 'return=representation' } });
+    async function sbGet(path, extraHeaders = {}) {
+      const r = await fetch(`${SB_URL}/rest/v1/${path}`, { headers: { ...H, 'Prefer': 'return=representation', ...extraHeaders } });
       if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.message || `Supabase ${r.status}`); }
       return r.json();
     }
@@ -1202,12 +1202,15 @@
         const f = this.getFilters();
         const offset = (this.page - 1) * this.pageSize;
         try {
-          /* totals: PostgREST aggregate — DB computes SUM+COUNT in 1 row, bypasses row-limit cap */
+          /* totals: Range header overrides Supabase's 1000-row server cap */
           const filterQS = this.buildFilterQS(f);
-          const [agg] = await sbGet(`general_journal?select=ds:debit.sum(),cs:credit.sum(),n:count()&${filterQS}`);
-          const sumD = parseFloat(agg?.ds || 0);
-          const sumC = parseFloat(agg?.cs || 0);
-          const rowCount = parseInt(agg?.n || 0, 10);
+          const all = await sbGet(
+            `general_journal?select=debit,credit&${filterQS}`,
+            { 'Range': '0-49999', 'Range-Unit': 'items' }
+          );
+          let sumD = 0, sumC = 0;
+          all.forEach(r => { sumD += parseFloat(r.debit || 0); sumC += parseFloat(r.credit || 0); });
+          const rowCount = all.length;
           this.totalCount = rowCount;
           document.getElementById('total-debit').textContent  = php(sumD);
           document.getElementById('total-credit').textContent = php(sumC);
