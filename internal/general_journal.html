@@ -314,6 +314,50 @@
     .log-diff-inline s   { color: var(--danger); text-decoration-color: rgba(239,68,68,0.4); font-size:0.72rem; }
     .log-diff-inline ins { color: var(--success); text-decoration: none; font-size:0.72rem; }
     .log-empty { text-align: center; color: var(--text-muted); padding: 3rem 0; font-size: 0.85rem; }
+
+    /* ── Account multi-checkbox filter ── */
+    .acct-filter-wrap { position: relative; }
+    .acct-filter-btn {
+      width: 100%; text-align: left; cursor: pointer; appearance: none;
+      background: var(--bg-surface); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); padding: 0.55rem 2rem 0.55rem 0.85rem;
+      font-size: 0.82rem; color: var(--text-primary); font-family: inherit;
+      display: flex; align-items: center; justify-content: space-between;
+      transition: border-color 0.15s;
+    }
+    .acct-filter-btn:hover { border-color: var(--border-hover); }
+    .acct-filter-btn.has-selection { border-color: var(--cyan); color: var(--cyan); font-weight: 600; }
+    .acct-filter-btn svg { flex-shrink: 0; opacity: 0.5; }
+    .acct-filter-panel {
+      display: none; position: absolute; top: calc(100% + 4px); left: 0;
+      width: 260px; background: var(--bg-surface);
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.12); z-index: 200;
+      flex-direction: column; overflow: hidden;
+    }
+    .acct-filter-panel.open { display: flex; }
+    .acct-filter-head {
+      padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
+    }
+    .acct-filter-all {
+      display: flex; align-items: center; gap: 0.4rem;
+      font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); cursor: pointer;
+    }
+    .acct-filter-count { font-size: 0.68rem; color: var(--text-muted); }
+    .acct-filter-list { overflow-y: auto; max-height: 240px; }
+    .acct-filter-group {
+      font-size: 0.6rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.1em; color: var(--text-muted);
+      padding: 0.5rem 0.75rem 0.2rem; background: var(--bg-elevated);
+    }
+    .acct-filter-item {
+      display: flex; align-items: center; gap: 0.5rem;
+      padding: 0.32rem 0.75rem; font-size: 0.78rem; color: var(--text-secondary);
+      cursor: pointer; user-select: none;
+    }
+    .acct-filter-item:hover { background: var(--bg-elevated); color: var(--text-primary); }
+    .acct-filter-item input[type=checkbox] { accent-color: var(--cyan); flex-shrink: 0; }
   </style>
 </head>
 <body>
@@ -493,9 +537,22 @@
           </div>
           <div class="form-group">
             <label class="form-label">Account</label>
-            <select id="f-filter-account" class="form-select">
-              <option value="">All accounts</option>
-            </select>
+            <div class="acct-filter-wrap" id="acct-filter-wrap">
+              <button class="acct-filter-btn" id="acct-filter-btn" type="button">
+                <span id="acct-filter-label">All accounts</span>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+              </button>
+              <div class="acct-filter-panel" id="acct-filter-panel">
+                <div class="acct-filter-head">
+                  <label class="acct-filter-all">
+                    <input type="checkbox" id="acct-sel-all" checked />
+                    All accounts
+                  </label>
+                  <span class="acct-filter-count" id="acct-filter-count"></span>
+                </div>
+                <div class="acct-filter-list" id="acct-filter-list"></div>
+              </div>
+            </div>
           </div>
           <div class="form-group wide">
             <label class="form-label">Search</label>
@@ -775,16 +832,8 @@
         fillGrouped('f-credit-acct', 'Select account…');
         fillGrouped('f-debit-acct',  'Select account…');
 
-        /* flat filter dropdown */
-        const fSel = document.getElementById('f-filter-account');
-        const prevF = fSel.value;
-        fSel.innerHTML = '<option value="">All accounts</option>';
-        this.accounts.forEach(a => {
-          const o = document.createElement('option');
-          o.value = o.textContent = a.name;
-          fSel.appendChild(o);
-        });
-        if (prevF) fSel.value = prevF;
+        /* flat filter checkbox list */
+        this.renderAccountFilter();
 
         /* orphan reassign dropdown */
         const oSel = document.getElementById('orphan-reassign-sel');
@@ -959,7 +1008,7 @@
       /* ── Filters ── */
       bindFilters() {
         const apply = () => { this.page = 1; this.loadEntries(); };
-        ['f-year','f-month','f-filter-account'].forEach(id =>
+        ['f-year','f-month'].forEach(id =>
           document.getElementById(id).addEventListener('change', apply));
         ['f-date-from','f-date-to'].forEach(id =>
           document.getElementById(id).addEventListener('change', apply));
@@ -969,20 +1018,109 @@
           clearTimeout(timer); timer = setTimeout(apply, 350);
         });
         document.getElementById('clear-filters-btn').addEventListener('click', () => {
-          ['f-year','f-month','f-filter-account'].forEach(id => document.getElementById(id).value = '');
+          ['f-year','f-month'].forEach(id => document.getElementById(id).value = '');
           ['f-date-from','f-date-to','f-search'].forEach(id => document.getElementById(id).value = '');
+          this.selectedAccounts.clear();
+          this.updateAccountFilterBtn();
+          this.renderAccountFilter();
+          apply();
+        });
+        this.bindAccountFilter();
+      },
+
+      /* ── Multi-checkbox account filter ── */
+      bindAccountFilter() {
+        const btn   = document.getElementById('acct-filter-btn');
+        const panel = document.getElementById('acct-filter-panel');
+        const apply = () => { this.page = 1; this.loadEntries(); };
+
+        btn.addEventListener('click', e => {
+          e.stopPropagation();
+          panel.classList.toggle('open');
+        });
+        document.addEventListener('click', e => {
+          if (!document.getElementById('acct-filter-wrap').contains(e.target)) {
+            panel.classList.remove('open');
+          }
+        });
+        document.getElementById('acct-sel-all').addEventListener('change', e => {
+          if (e.target.checked) {
+            this.selectedAccounts.clear();
+          } else {
+            // check all
+            this.accounts.forEach(a => this.selectedAccounts.add(a.name));
+          }
+          this.renderAccountFilter();
+          this.updateAccountFilterBtn();
           apply();
         });
       },
 
+      renderAccountFilter() {
+        const list = document.getElementById('acct-filter-list');
+        if (!list) return;
+        const apply = () => { this.page = 1; this.loadEntries(); };
+        // Group by category
+        const groups = {};
+        this.accounts.forEach(a => {
+          if (!groups[a.category]) groups[a.category] = [];
+          groups[a.category].push(a);
+        });
+        list.innerHTML = Object.entries(groups).map(([cat, accts]) => `
+          <div class="acct-filter-group">${esc(cat)}</div>
+          ${accts.map(a => `
+            <label class="acct-filter-item">
+              <input type="checkbox" data-acct="${esc(a.name)}"
+                ${this.selectedAccounts.size === 0 || this.selectedAccounts.has(a.name) ? 'checked' : ''} />
+              ${esc(a.name)}
+            </label>`).join('')}`).join('');
+
+        // Bind individual checkboxes
+        list.querySelectorAll('input[data-acct]').forEach(cb => {
+          cb.addEventListener('change', () => {
+            const all = [...list.querySelectorAll('input[data-acct]')];
+            const checked = all.filter(c => c.checked).map(c => c.dataset.acct);
+            const unchecked = all.filter(c => !c.checked).map(c => c.dataset.acct);
+
+            if (unchecked.length === 0) {
+              // All checked = no filter
+              this.selectedAccounts.clear();
+            } else {
+              this.selectedAccounts = new Set(checked);
+            }
+            this.updateAccountFilterBtn();
+            apply();
+          });
+        });
+
+        // Sync "All" master checkbox
+        const selAll = document.getElementById('acct-sel-all');
+        if (selAll) selAll.checked = this.selectedAccounts.size === 0;
+        const count = document.getElementById('acct-filter-count');
+        if (count) count.textContent = this.selectedAccounts.size > 0 ? `${this.selectedAccounts.size} selected` : '';
+      },
+
+      updateAccountFilterBtn() {
+        const btn   = document.getElementById('acct-filter-btn');
+        const label = document.getElementById('acct-filter-label');
+        if (!btn || !label) return;
+        if (this.selectedAccounts.size === 0) {
+          label.textContent = 'All accounts';
+          btn.classList.remove('has-selection');
+        } else {
+          label.textContent = `${this.selectedAccounts.size} account${this.selectedAccounts.size > 1 ? 's' : ''}`;
+          btn.classList.add('has-selection');
+        }
+      },
+
       getFilters() {
         return {
-          year:     document.getElementById('f-year').value,
-          month:    document.getElementById('f-month').value,
-          dateFrom: document.getElementById('f-date-from').value,
-          dateTo:   document.getElementById('f-date-to').value,
-          account:  document.getElementById('f-filter-account').value,
-          search:   document.getElementById('f-search').value.trim(),
+          year:             document.getElementById('f-year').value,
+          month:            document.getElementById('f-month').value,
+          dateFrom:         document.getElementById('f-date-from').value,
+          dateTo:           document.getElementById('f-date-to').value,
+          selectedAccounts: this.selectedAccounts,
+          search:           document.getElementById('f-search').value.trim(),
         };
       },
 
@@ -990,12 +1128,14 @@
         const p = new URLSearchParams();
         if (opts.select) p.set('select', opts.select); else p.set('select', '*');
         p.set('order', 'entry_number.asc,id.asc');
-        if (f.year)     p.set('year',    `eq.${f.year}`);
-        if (f.month)    p.set('month',   `eq.${f.month}`);
+        if (f.year)     p.set('year',  `eq.${f.year}`);
+        if (f.month)    p.set('month', `eq.${f.month}`);
         if (f.dateFrom) p.append('date', `gte.${f.dateFrom}`);
         if (f.dateTo)   p.append('date', `lte.${f.dateTo}`);
-        if (f.account)  p.set('account', `eq.${f.account}`);
-        if (f.search)   p.set('or',      `(account.ilike.*${f.search}*,description_1.ilike.*${f.search}*,description_2.ilike.*${f.search}*)`);
+        if (f.selectedAccounts && f.selectedAccounts.size > 0) {
+          p.set('account', `in.(${[...f.selectedAccounts].join(',')})`);
+        }
+        if (f.search) p.set('or', `(account.ilike.*${f.search}*,description_1.ilike.*${f.search}*,description_2.ilike.*${f.search}*)`);
         if (opts.limit  !== undefined) p.set('limit',  opts.limit);
         if (opts.offset !== undefined) p.set('offset', opts.offset);
         return p.toString();
