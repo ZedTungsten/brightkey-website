@@ -528,24 +528,6 @@
         <!-- Filters -->
         <div class="filters-bar">
           <div class="form-group">
-            <label class="form-label">Year</label>
-            <select id="f-year" class="form-select">
-              <option value="">All years</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Month</label>
-            <select id="f-month" class="form-select">
-              <option value="">All months</option>
-              <option value="1">January</option><option value="2">February</option>
-              <option value="3">March</option><option value="4">April</option>
-              <option value="5">May</option><option value="6">June</option>
-              <option value="7">July</option><option value="8">August</option>
-              <option value="9">September</option><option value="10">October</option>
-              <option value="11">November</option><option value="12">December</option>
-            </select>
-          </div>
-          <div class="form-group">
             <label class="form-label">From</label>
             <input type="date" id="f-date-from" class="form-input" />
           </div>
@@ -1037,18 +1019,64 @@
       /* ── Filters ── */
       bindFilters() {
         const apply = () => { this.page = 1; this.loadEntries(); };
-        ['f-year','f-month'].forEach(id =>
-          document.getElementById(id).addEventListener('change', apply));
-        ['f-date-from','f-date-to'].forEach(id =>
-          document.getElementById(id).addEventListener('change', apply));
+        const today = new Date().toISOString().slice(0, 10);
+        const addDays = (dateStr, n) => {
+          const d = new Date(dateStr); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10);
+        };
+        const MAX_DAYS = 45;
+
+        const fromEl = document.getElementById('f-date-from');
+        const toEl   = document.getElementById('f-date-to');
+
+        // Both inputs max out at today
+        fromEl.setAttribute('max', today);
+        toEl.setAttribute('max', today);
+
+        fromEl.addEventListener('change', () => {
+          const from = fromEl.value;
+          if (from) {
+            // TO must be >= FROM and <= FROM + 45 days (also never beyond today)
+            const maxTo = addDays(from, MAX_DAYS);
+            toEl.setAttribute('min', from);
+            toEl.setAttribute('max', maxTo < today ? maxTo : today);
+            // Clamp existing TO value if it violates the new constraints
+            if (toEl.value && (toEl.value < from || toEl.value > (maxTo < today ? maxTo : today))) {
+              toEl.value = '';
+            }
+          } else {
+            toEl.removeAttribute('min');
+            toEl.setAttribute('max', today);
+          }
+          apply();
+        });
+
+        toEl.addEventListener('change', () => {
+          const to = toEl.value;
+          if (to) {
+            // FROM must be <= TO and >= TO - 45 days
+            const minFrom = addDays(to, -MAX_DAYS);
+            fromEl.setAttribute('min', minFrom);
+            fromEl.setAttribute('max', to);
+            // Clamp existing FROM value if out of range
+            if (fromEl.value && (fromEl.value > to || fromEl.value < minFrom)) {
+              fromEl.value = '';
+            }
+          } else {
+            fromEl.removeAttribute('min');
+            fromEl.setAttribute('max', today);
+          }
+          apply();
+        });
 
         let timer;
         document.getElementById('f-search').addEventListener('input', () => {
           clearTimeout(timer); timer = setTimeout(apply, 350);
         });
         document.getElementById('clear-filters-btn').addEventListener('click', () => {
-          ['f-year','f-month'].forEach(id => document.getElementById(id).value = '');
-          ['f-date-from','f-date-to','f-search'].forEach(id => document.getElementById(id).value = '');
+          fromEl.value = ''; toEl.value = '';
+          fromEl.setAttribute('max', today); toEl.setAttribute('max', today);
+          fromEl.removeAttribute('min');    toEl.removeAttribute('min');
+          document.getElementById('f-search').value = '';
           this.selectedAccounts.clear();
           this.updateAccountFilterBtn();
           this.renderAccountFilter();
@@ -1145,8 +1173,8 @@
 
       getFilters() {
         return {
-          year:             document.getElementById('f-year').value,
-          month:            document.getElementById('f-month').value,
+          year:             '',
+          month:            '',
           dateFrom:         document.getElementById('f-date-from').value,
           dateTo:           document.getElementById('f-date-to').value,
           selectedAccounts: this.selectedAccounts,
@@ -1490,29 +1518,7 @@
       },
 
       /* ── Year filter (from DB) ── */
-      async loadYears() {
-        try {
-          // Use min+max queries to avoid Supabase 1000-row default limit
-          const [minRow] = await sbGet('general_journal?select=year&order=year.asc&limit=1');
-          const [maxRow] = await sbGet('general_journal?select=year&order=year.desc&limit=1');
-          const minY = parseInt(minRow?.year, 10) || new Date().getFullYear();
-          const maxY = parseInt(maxRow?.year, 10) || new Date().getFullYear();
-
-          // Build every year in range (e.g. 2025, 2026)
-          const years = [];
-          for (let y = maxY; y >= minY; y--) years.push(y);
-
-          const sel  = document.getElementById('f-year');
-          const prev = sel.value;
-          sel.innerHTML = '<option value="">All years</option>';
-          years.forEach(y => {
-            const o = document.createElement('option');
-            o.value = o.textContent = y;
-            sel.appendChild(o);
-          });
-          if (prev) sel.value = prev;
-        } catch(_) {}
-      },
+      async loadYears() { /* removed — year/month dropdowns no longer used */ },
 
       /* ── User detection (IP + browser) ── */
       async detectUser() {
