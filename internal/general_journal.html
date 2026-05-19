@@ -358,10 +358,14 @@
       padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border);
       display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
     }
-    .acct-filter-all {
-      display: flex; align-items: center; gap: 0.4rem;
-      font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); cursor: pointer;
+    .acct-filter-actions {
+      display: flex; gap: 0.75rem; align-items: center;
     }
+    .acct-filter-actions button {
+      background: none; border: none; padding: 0; color: var(--cyan);
+      font-size: 0.7rem; font-weight: 600; cursor: pointer;
+    }
+    .acct-filter-actions button:hover { text-decoration: underline; }
     .acct-filter-count { font-size: 0.68rem; color: var(--text-muted); }
     .acct-filter-list { overflow-y: auto; max-height: 240px; }
     .acct-filter-group {
@@ -544,10 +548,10 @@
               </button>
               <div class="acct-filter-panel" id="acct-filter-panel">
                 <div class="acct-filter-head">
-                  <label class="acct-filter-all">
-                    <input type="checkbox" id="acct-sel-all" checked />
-                    All accounts
-                  </label>
+                  <div class="acct-filter-actions">
+                    <button type="button" id="acct-sel-all">Select All</button>
+                    <button type="button" id="acct-clear-all">Clear All</button>
+                  </div>
                   <span class="acct-filter-count" id="acct-filter-count"></span>
                 </div>
                 <div class="acct-filter-list" id="acct-filter-list"></div>
@@ -1107,13 +1111,16 @@
             panel.classList.remove('open');
           }
         });
-        document.getElementById('acct-sel-all').addEventListener('change', e => {
-          if (e.target.checked) {
-            this.selectedAccounts.clear();
-          } else {
-            // check all
-            this.accounts.forEach(a => this.selectedAccounts.add(a.name));
-          }
+        document.getElementById('acct-sel-all').addEventListener('click', e => {
+          e.stopPropagation();
+          this.selectedAccounts.clear();
+          this.renderAccountFilter();
+          this.updateAccountFilterBtn();
+          apply();
+        });
+        document.getElementById('acct-clear-all').addEventListener('click', e => {
+          e.stopPropagation();
+          this.selectedAccounts = new Set(['__NONE__']);
           this.renderAccountFilter();
           this.updateAccountFilterBtn();
           apply();
@@ -1132,11 +1139,14 @@
           groups[a.category].push(a);
         });
         list.innerHTML = Object.entries(groups).map(([cat, accts]) => `
-          <div class="acct-filter-group">${esc(cat)}</div>
+          <label class="acct-filter-group" style="display:flex; align-items:center; gap:0.5rem; cursor:pointer;">
+            <input type="checkbox" class="group-cb" data-group="${esc(cat)}" />
+            ${esc(cat)}
+          </label>
           ${accts.map(a => `
             <label class="acct-filter-item">
-              <input type="checkbox" data-acct="${esc(a.name)}"
-                ${this.selectedAccounts.size === 0 || this.selectedAccounts.has(a.name) ? 'checked' : ''} />
+              <input type="checkbox" data-acct="${esc(a.name)}" data-group="${esc(cat)}"
+                ${this.selectedAccounts.size === 0 || (this.selectedAccounts.has(a.name) && !this.selectedAccounts.has('__NONE__')) ? 'checked' : ''} />
               ${esc(a.name)}
             </label>`).join('')}`).join('');
 
@@ -1148,21 +1158,74 @@
             const unchecked = all.filter(c => !c.checked).map(c => c.dataset.acct);
 
             if (unchecked.length === 0) {
-              // All checked = no filter
-              this.selectedAccounts.clear();
+              this.selectedAccounts.clear(); // All checked = no filter
+            } else if (checked.length === 0) {
+              this.selectedAccounts = new Set(['__NONE__']); // None checked
             } else {
               this.selectedAccounts = new Set(checked);
             }
             this.updateAccountFilterBtn();
+            this.updateGroupCheckboxes();
             apply();
           });
         });
 
-        // Sync "All" master checkbox
-        const selAll = document.getElementById('acct-sel-all');
-        if (selAll) selAll.checked = this.selectedAccounts.size === 0;
+        // Bind group checkboxes
+        list.querySelectorAll('input.group-cb').forEach(gcb => {
+          gcb.addEventListener('change', (e) => {
+            const cat = gcb.dataset.group;
+            const items = list.querySelectorAll(`input[data-acct][data-group="${esc(cat)}"]`);
+            const shouldCheck = e.target.checked;
+            items.forEach(cb => cb.checked = shouldCheck);
+            
+            // Re-evaluate total selection
+            const all = [...list.querySelectorAll('input[data-acct]')];
+            const checked = all.filter(c => c.checked).map(c => c.dataset.acct);
+            const unchecked = all.filter(c => !c.checked).map(c => c.dataset.acct);
+
+            if (unchecked.length === 0) {
+              this.selectedAccounts.clear();
+            } else if (checked.length === 0) {
+              this.selectedAccounts = new Set(['__NONE__']);
+            } else {
+              this.selectedAccounts = new Set(checked);
+            }
+            this.updateAccountFilterBtn();
+            this.updateGroupCheckboxes();
+            apply();
+          });
+        });
+
+        this.updateGroupCheckboxes();
+
         const count = document.getElementById('acct-filter-count');
-        if (count) count.textContent = this.selectedAccounts.size > 0 ? `${this.selectedAccounts.size} selected` : '';
+        if (count) {
+          if (this.selectedAccounts.size === 0) count.textContent = '';
+          else if (this.selectedAccounts.has('__NONE__')) count.textContent = '0 selected';
+          else count.textContent = `${this.selectedAccounts.size} selected`;
+        }
+      },
+
+      updateGroupCheckboxes() {
+        const list = document.getElementById('acct-filter-list');
+        if (!list) return;
+        list.querySelectorAll('input.group-cb').forEach(gcb => {
+          const cat = gcb.dataset.group;
+          const items = [...list.querySelectorAll(`input[data-acct][data-group="${esc(cat)}"]`)];
+          if (!items.length) return;
+          const checkedCount = items.filter(i => i.checked).length;
+          
+          if (checkedCount === 0) {
+            gcb.checked = false;
+            gcb.indeterminate = false;
+          } else if (checkedCount === items.length) {
+            gcb.checked = true;
+            gcb.indeterminate = false;
+          } else {
+            gcb.checked = false;
+            gcb.indeterminate = true;
+          }
+        });
       },
 
       updateAccountFilterBtn() {
@@ -1172,6 +1235,9 @@
         if (this.selectedAccounts.size === 0) {
           label.textContent = 'All accounts';
           btn.classList.remove('has-selection');
+        } else if (this.selectedAccounts.has('__NONE__')) {
+          label.textContent = '0 accounts';
+          btn.classList.add('has-selection');
         } else {
           label.textContent = `${this.selectedAccounts.size} account${this.selectedAccounts.size > 1 ? 's' : ''}`;
           btn.classList.add('has-selection');
