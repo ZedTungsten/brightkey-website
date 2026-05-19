@@ -132,6 +132,61 @@ async function buildProducts() {
     $('[data-template="price"]').text(priceStr);
     $('[data-template="description"]').text(descStr);
 
+    // Features Processing
+    if (p.features && Object.keys(p.features).length > 0) {
+      let featuresHtml = '';
+      for (const [key, value] of Object.entries(p.features)) {
+        if (value) {
+          // Format key: "pin_unlock" -> "PIN Unlock"
+          let displayKey = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+          if (displayKey.toLowerCase() === 'pin unlock') displayKey = 'PIN Unlock';
+          if (displayKey.toLowerCase() === 'rfid unlock') displayKey = 'RFID Unlock';
+          
+          let displayText = displayKey;
+          if (value !== 'X' && value !== true && value !== 'true') {
+            displayText += ` (${value})`;
+          }
+
+          featuresHtml += `
+            <li style="display:flex; align-items:center; gap:0.5rem; font-size:0.95rem; color:var(--text-secondary);">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--cyan)" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>
+              ${displayText}
+            </li>
+          `;
+        }
+      }
+      if (featuresHtml) {
+        $('[data-template="features-list"]').html(featuresHtml);
+      } else {
+        $('[data-template="features-wrapper"]').hide();
+      }
+    } else {
+      $('[data-template="features-wrapper"]').hide();
+    }
+
+    // Resources Processing
+    if (p.resources && Object.keys(p.resources).length > 0) {
+      let resourcesHtml = '';
+      for (const [key, url] of Object.entries(p.resources)) {
+        if (url) {
+          let displayKey = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+          resourcesHtml += `
+            <a href="${url}" target="_blank" rel="noopener noreferrer" class="btn btn-outline btn-sm" style="display:inline-flex; align-items:center; gap:0.5rem;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              ${displayKey}
+            </a>
+          `;
+        }
+      }
+      if (resourcesHtml) {
+        $('[data-template="resources-list"]').html(resourcesHtml);
+      } else {
+        $('[data-template="resources-wrapper"]').hide();
+      }
+    } else {
+      $('[data-template="resources-wrapper"]').hide();
+    }
+
     if (p.compare_at_price && p.compare_at_price > p.price) {
       $('[data-template="compare-price"]').text(formatPHP(p.compare_at_price)).show();
     } else {
