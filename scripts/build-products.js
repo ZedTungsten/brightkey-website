@@ -46,7 +46,10 @@ async function buildProducts() {
   const templatePath = path.resolve('./product-preview.html');
   const templateHtml = await fs.readFile(templatePath, 'utf8');
 
-  for (const p of products) {
+  const baseProducts = products.filter(p => !p.parent_sku);
+  const childProducts = products.filter(p => p.parent_sku);
+
+  for (const p of baseProducts) {
     console.log(`Building static page for: ${p.slug}`);
 
     // Load template into Cheerio
@@ -158,6 +161,55 @@ async function buildProducts() {
     $('[data-template="price"]').text(priceStr);
     $('[data-template="description"]').text(descStr);
 
+    // Variants Processing
+    const variants = childProducts.filter(v => v.parent_sku === p.sku);
+    let variantJsData = 'null';
+    if (variants.length > 0) {
+      const allOptions = [];
+      if (p.variant_value) allOptions.push(p);
+      allOptions.push(...variants);
+      
+      const variantName = p.variant_name || variants[0].variant_name || 'Option';
+      let optionsHtml = '';
+      
+      const variantMap = {};
+      allOptions.forEach((opt, idx) => {
+        let optAvailable = 0;
+        if (opt.inventory && opt.inventory.length > 0) optAvailable = opt.inventory[0].available;
+        const disabled = optAvailable <= 0 ? 'disabled' : '';
+        const checked = idx === 0 ? 'checked' : '';
+        const priceStrOpt = formatPHP(opt.price);
+        
+        optionsHtml += `
+          <label style="display:flex; align-items:center; gap:0.5rem; cursor:${disabled ? 'not-allowed' : 'pointer'}; opacity:${disabled ? '0.5' : '1'}; padding: 0.5rem 1rem; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-surface);">
+            <input type="radio" name="product-variant" value="${opt.sku}" ${checked} ${disabled} onchange="window.selectVariant('${opt.sku}')" />
+            <span style="font-weight:500; color:var(--text-primary);">${opt.variant_value}</span>
+          </label>
+        `;
+
+        variantMap[opt.sku] = {
+          priceStr: priceStrOpt,
+          price: opt.price,
+          compareStr: opt.compare_at_price > opt.price ? formatPHP(opt.compare_at_price) : null,
+          available: optAvailable,
+          title: opt.title,
+          slug: opt.slug,
+          image: (opt.product_images && opt.product_images.length > 0) ? opt.product_images[0].cdn_url : mainImgUrl
+        };
+      });
+
+      const variantHtml = `
+        <h4 style="font-size:0.9rem; margin-bottom:0.75rem; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.05em;">Select ${variantName}</h4>
+        <div style="display:flex; flex-wrap:wrap; gap:1rem;">
+          ${optionsHtml}
+        </div>
+      `;
+      $('[data-template="variant-selector"]').html(variantHtml).show();
+      variantJsData = JSON.stringify(variantMap);
+    } else {
+      $('[data-template="variant-selector"]').hide();
+    }
+
     // Features Processing
     if (p.features && Object.keys(p.features).length > 0) {
       let featuresHtml = '';
@@ -238,12 +290,58 @@ async function buildProducts() {
       <script>
         window.SUPABASE_URL = "${SUPABASE_URL}";
         window.SUPABASE_ANON = "${SUPABASE_ANON_KEY}";
+        window.VARIANTS_MAP = ${variantJsData};
+        
         CURRENT_PRODUCT = {
           id: "${p.id}",
           title: \`${p.title}\`,
           slug: "${p.slug}",
           price: ${p.price},
-          image: "${mainImgUrl}"
+          image: "${mainImgUrl}",
+          sku: "${p.sku}"
+        };
+
+        window.selectVariant = function(sku) {
+          if (!window.VARIANTS_MAP || !window.VARIANTS_MAP[sku]) return;
+          const v = window.VARIANTS_MAP[sku];
+          
+          // Update DOM Elements dynamically
+          document.querySelector('[data-template="price"]').innerText = v.priceStr;
+          
+          const compareEl = document.querySelector('[data-template="compare-price"]');
+          if (v.compareStr) {
+            compareEl.innerText = v.compareStr;
+            compareEl.style.display = 'inline';
+          } else {
+            compareEl.style.display = 'none';
+          }
+          
+          document.querySelector('[data-template="sku"]').innerText = 'SKU: ' + sku;
+          document.querySelector('[data-template="main-image"]').src = v.image;
+          
+          const badgeEl = document.querySelector('[data-template="status-badge"]');
+          const btnCartEl = document.querySelector('[data-template="btn-add-to-cart"]');
+          const invTextEl = document.querySelector('[data-template="inventory-text"]');
+          
+          if (v.available > 0) {
+            badgeEl.innerText = 'In Stock';
+            badgeEl.className = 'badge badge-cyan';
+            invTextEl.innerHTML = '<strong style="color:var(--text-primary);">' + v.available + ' available</strong> in our local warehouse.';
+            btnCartEl.innerText = 'Add to Cart';
+            btnCartEl.disabled = false;
+          } else {
+            badgeEl.innerText = 'Out of Stock';
+            badgeEl.className = 'badge badge-muted';
+            invTextEl.innerText = 'Currently out of stock. Please contact us for restock dates.';
+            btnCartEl.innerText = 'Out of Stock';
+            btnCartEl.disabled = true;
+          }
+
+          // Update CURRENT_PRODUCT so cart gets the correct variant details
+          CURRENT_PRODUCT.sku = sku;
+          CURRENT_PRODUCT.price = v.price;
+          CURRENT_PRODUCT.image = v.image;
+          CURRENT_PRODUCT.slug = v.slug;
         };
       </script>
     `;
@@ -254,7 +352,7 @@ async function buildProducts() {
     await fs.writeFile(outFilePath, $.html(), 'utf8');
   }
 
-  console.log(`Successfully built ${products.length} static product pages.`);
+  console.log(`Successfully built ${baseProducts.length} static parent product pages.`);
 }
 
 buildProducts();
