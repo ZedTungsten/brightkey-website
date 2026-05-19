@@ -132,11 +132,15 @@
       btnUpload.innerText = 'Uploading...';
       log('Starting upload process...');
 
+      const csvSkus = [];
+
       for (const row of parsedData) {
         if (!row.sku || !row.title) {
           log(`Skipping empty/invalid row.`);
           continue;
         }
+
+        csvSkus.push(row.sku);
 
         try {
           // 1. Prepare Core Product Data
@@ -269,8 +273,28 @@
         }
       }
 
+      // Check for missing products and mark as draft
+      try {
+        log('Checking for existing products missing from the CSV...');
+        const { data: allProducts, error: allErr } = await sb.from('products').select('id, sku, status');
+        if (allErr) throw allErr;
+        
+        const productsToDraft = allProducts.filter(p => !csvSkus.includes(p.sku) && p.status === 'published');
+        
+        if (productsToDraft.length > 0) {
+          const idsToDraft = productsToDraft.map(p => p.id);
+          const { error: draftErr } = await sb.from('products').update({ status: 'draft' }).in('id', idsToDraft);
+          if (draftErr) throw draftErr;
+          log(`<span style="color:#f59e0b">Changed ${productsToDraft.length} missing products to draft status.</span>`);
+        } else {
+          log('All existing published products are accounted for in the CSV.');
+        }
+      } catch (e) {
+        log(`<span style="color:#ef4444">Error drafting missing products: ${e.message}</span>`);
+      }
+
       btnUpload.innerText = 'Upload Complete';
-      log('<span style="color:#10b981; font-weight:bold;">All rows processed successfully!</span>');
+      log('<span style="color:#10b981; font-weight:bold;">All operations completed!</span>');
     });
 
     document.getElementById('btn-publish').addEventListener('click', async () => {
