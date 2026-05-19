@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Secure Checkout — BrightKey." />
+  <title>Checkout — BrightKey</title>
+
+  <link rel="preconnect" href="https://fonts.bunny.net" />
+  <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg?v=2" />
+  
+  <style>
+    .form-group { margin-bottom: 1.25rem; }
+    .form-group label { display: block; margin-bottom: 0.5rem; font-size: 0.9rem; font-weight: 500; color: var(--text-primary); }
+    .form-control { width: 100%; padding: 0.75rem 1rem; border: 1px solid var(--border); border-radius: var(--radius-sm); font-family: inherit; font-size: 1rem; background: var(--bg-surface); color: var(--text-primary); outline: none; transition: border-color 0.2s; }
+    .form-control:focus { border-color: var(--cyan); }
+    .checkout-grid { display: grid; grid-template-columns: 1.5fr 1fr; gap: 3rem; align-items: start; }
+    @media(max-width: 900px) { .checkout-grid { grid-template-columns: 1fr; } }
+  </style>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+</head>
+<body>
+
+  <!-- ── Navigation ─────────────────────────────────────── -->
+  <nav class="nav" role="navigation">
+    <div class="container">
+      <div class="nav__inner">
+        <a href="index.html" class="nav__logo"><img src="assets/logo.svg?v=2" alt="BrightKey" /></a>
+        <div style="font-weight: 600; font-size: 1.1rem;">Secure Checkout</div>
+        <a href="cart.html" class="btn btn-outline btn-sm">Return to Cart</a>
+      </div>
+    </div>
+  </nav>
+
+  <main>
+    <section class="section" style="padding-top: 100px; min-height: 80vh;">
+      <div class="container" id="checkout-container">
+        
+        <div class="checkout-grid">
+          
+          <!-- Left Column: Forms -->
+          <div>
+            <div style="margin-bottom: 2rem;">
+              <h2 style="font-size: 1.5rem; margin-bottom: 1rem;">Contact Information</h2>
+              <div class="grid-2" style="gap: 1rem;">
+                <div class="form-group">
+                  <label for="c_name">Full Name</label>
+                  <input type="text" id="c_name" class="form-control" placeholder="Juan Dela Cruz" required />
+                </div>
+                <div class="form-group">
+                  <label for="c_email">Email Address</label>
+                  <input type="email" id="c_email" class="form-control" placeholder="juan@example.com" required />
+                </div>
+              </div>
+              <div class="form-group">
+                <label for="c_phone">Phone Number</label>
+                <input type="tel" id="c_phone" class="form-control" placeholder="0917 123 4567" required />
+              </div>
+            </div>
+
+            <div style="margin-bottom: 2rem;">
+              <h2 style="font-size: 1.5rem; margin-bottom: 1rem;">Shipping Details</h2>
+              <div class="form-group">
+                <label for="c_address">Complete Address (Street, Barangay)</label>
+                <input type="text" id="c_address" class="form-control" placeholder="123 Example St., Brgy. San Jose" required />
+              </div>
+              <div class="form-group">
+                <label for="c_city">City / Municipality</label>
+                <select id="c_city" class="form-control" required onchange="calculateShipping()">
+                  <option value="">Select a city...</option>
+                  <!-- Populated dynamically -->
+                </select>
+                <small id="shipping-msg" style="display:block; margin-top:0.5rem; color:var(--text-secondary);"></small>
+              </div>
+            </div>
+
+            <div style="margin-bottom: 2rem;" id="payment-section">
+              <h2 style="font-size: 1.5rem; margin-bottom: 1rem;">Payment</h2>
+              
+              <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.5rem; margin-bottom: 1rem;">
+                <h4 style="margin-bottom: 1rem;">Pay via Credit/Debit Card</h4>
+                <div class="form-group">
+                  <label>Card Number</label>
+                  <input type="text" id="card_number" class="form-control" placeholder="0000 0000 0000 0000" data-card-number />
+                </div>
+                <div class="grid-2" style="gap: 1rem;">
+                  <div class="form-group">
+                    <label>Expiry (MM/YY)</label>
+                    <input type="text" id="card_expiry" class="form-control" placeholder="MM/YY" data-card-expiry />
+                  </div>
+                  <div class="form-group">
+                    <label>CVC</label>
+                    <input type="text" id="card_cvc" class="form-control" placeholder="123" data-card-cvc />
+                  </div>
+                </div>
+                <button id="btn-pay-card" class="btn btn-cyan" style="width: 100%; margin-top:0.5rem;" onclick="processCardPayment()">Pay with Card</button>
+              </div>
+
+              <div style="display:flex; align-items:center; gap:1rem; margin-bottom:1rem;">
+                <hr style="flex:1; border:none; border-top:1px solid var(--border);" />
+                <span style="color:var(--text-secondary); font-size:0.9rem;">OR E-WALLET</span>
+                <hr style="flex:1; border:none; border-top:1px solid var(--border);" />
+              </div>
+
+              <div class="grid-2" style="gap: 1rem;">
+                <button class="btn btn-outline" onclick="processWallet('gcash')">Pay with GCash</button>
+                <button class="btn btn-outline" onclick="processWallet('paymaya')">Pay with Maya</button>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Right Column: Summary -->
+          <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 2rem; position: sticky; top: 100px;">
+            <h2 style="font-size: 1.25rem; margin-bottom: 1.5rem;">Order Summary</h2>
+            
+            <div id="summary-items" style="display:flex; flex-direction:column; gap:1rem; margin-bottom:1.5rem; border-bottom:1px solid var(--border); padding-bottom:1.5rem; max-height: 300px; overflow-y:auto;">
+              <!-- Items injected here -->
+            </div>
+
+            <div style="display:flex; justify-content:space-between; margin-bottom:0.5rem; color:var(--text-secondary);">
+              <span>Subtotal</span>
+              <span id="sum-subtotal">₱0.00</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; margin-bottom:1.5rem; color:var(--text-secondary);">
+              <span>Shipping</span>
+              <span id="sum-shipping">Select city</span>
+            </div>
+            
+            <div style="display:flex; justify-content:space-between; align-items:flex-end; border-top:1px solid var(--border); padding-top:1.5rem;">
+              <span style="font-weight:600; font-size:1.1rem;">Total</span>
+              <span id="sum-total" style="font-weight:700; font-size:1.75rem;">₱0.00</span>
+            </div>
+          </div>
+
+        </div>
+
+        <div id="success-screen" style="display:none; text-align:center; padding: 5rem 0;">
+          <div style="width:64px; height:64px; border-radius:50%; background:#10b981; color:#fff; display:flex; align-items:center; justify-content:center; margin: 0 auto 1.5rem;">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          </div>
+          <h1 style="margin-bottom: 1rem;">Payment Successful!</h1>
+          <p style="color:var(--text-secondary); font-size:1.1rem; margin-bottom: 2rem;">Thank you for your order. We have received your payment.</p>
+          <a href="index.html" class="btn btn-outline">Return to Home</a>
+        </div>
+
+      </div>
+    </section>
+  </main>
+
+  <div id="toast-container" aria-live="polite"></div>
+
+  <script src="js/main.js"></script>
+  <script src="js/cart.js"></script>
+  <script src="js/payment.js"></script>
+  <script>
+    'use strict';
+
+    let cartData = [];
+    let subtotalCents = 0;
+    let shippingCents = 0;
+    let totalCents = 0;
+    let shippingRatesMap = {};
+
+    async function initCheckout() {
+      cartData = getCart();
+      if (cartData.length === 0 && !window.location.search.includes('payment=')) {
+        window.location.href = 'products.html';
+        return;
+      }
+
+      renderSummary();
+      await loadShippingRates();
+
+      // Check if returning from a wallet payment
+      if (window.location.search.includes('payment=success')) {
+        completeOrder('wallet_payment_success');
+      }
+    }
+
+    function renderSummary() {
+      const container = document.getElementById('summary-items');
+      container.innerHTML = '';
+      subtotalCents = 0;
+
+      cartData.forEach(item => {
+        const itemTotal = item.price * item.quantity;
+        subtotalCents += itemTotal;
+        container.innerHTML += `
+          <div style="display:flex; gap:1rem; align-items:center;">
+            <div style="width:48px; height:48px; background:#fff; border:1px solid var(--border); border-radius:var(--radius-sm); padding:0.25rem; position:relative;">
+              <img src="${item.image}" style="width:100%; height:100%; object-fit:contain;" />
+              <span style="position:absolute; top:-8px; right:-8px; background:var(--text-primary); color:var(--bg-base); font-size:0.7rem; font-weight:700; width:18px; height:18px; border-radius:50%; display:flex; align-items:center; justify-content:center;">${item.quantity}</span>
+            </div>
+            <div style="flex:1; font-size:0.9rem; font-weight:500;">${item.title}</div>
+            <div style="font-size:0.9rem;">₱${(itemTotal/100).toLocaleString('en-PH', {minimumFractionDigits:2})}</div>
+          </div>
+        `;
+      });
+
+      document.getElementById('sum-subtotal').innerText = `₱${(subtotalCents/100).toLocaleString('en-PH', {minimumFractionDigits:2})}`;
+      updateTotal();
+    }
+
+    async function loadShippingRates() {
+      try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/shipping_rates?select=*`, {
+          headers: { 'apikey': SUPABASE_ANON, 'Authorization': `Bearer ${SUPABASE_ANON}` }
+        });
+        if (!res.ok) throw new Error();
+        const rates = await res.json();
+        
+        const citySelect = document.getElementById('c_city');
+        rates.forEach(r => {
+          shippingRatesMap[r.city] = r.fee;
+          citySelect.innerHTML += `<option value="${r.city}">${r.city}</option>`;
+        });
+      } catch (err) {
+        console.error('Failed to load shipping rates');
+      }
+    }
+
+    function calculateShipping() {
+      const city = document.getElementById('c_city').value;
+      const msg = document.getElementById('shipping-msg');
+      
+      if (!city) {
+        shippingCents = 0;
+        document.getElementById('sum-shipping').innerText = 'Select city';
+        msg.innerText = '';
+        document.getElementById('payment-section').style.opacity = '1';
+        document.getElementById('payment-section').style.pointerEvents = 'auto';
+        updateTotal();
+        return;
+      }
+
+      const fee = shippingRatesMap[city];
+      
+      if (fee === null || fee === undefined) {
+        // N/A - Unserviceable
+        shippingCents = 0;
+        document.getElementById('sum-shipping').innerText = 'N/A';
+        msg.innerText = 'Sorry, we do not ship to this city currently. Please contact support.';
+        msg.style.color = '#ef4444'; // Red
+        document.getElementById('payment-section').style.opacity = '0.5';
+        document.getElementById('payment-section').style.pointerEvents = 'none';
+      } else if (fee === 0) {
+        shippingCents = 0;
+        document.getElementById('sum-shipping').innerText = 'Free';
+        msg.innerText = 'Free shipping available for this city!';
+        msg.style.color = '#10b981'; // Green
+        document.getElementById('payment-section').style.opacity = '1';
+        document.getElementById('payment-section').style.pointerEvents = 'auto';
+      } else {
+        shippingCents = fee;
+        document.getElementById('sum-shipping').innerText = `₱${(fee/100).toLocaleString('en-PH', {minimumFractionDigits:2})}`;
+        msg.innerText = '';
+        msg.style.color = 'var(--text-secondary)';
+        document.getElementById('payment-section').style.opacity = '1';
+        document.getElementById('payment-section').style.pointerEvents = 'auto';
+      }
+
+      updateTotal();
+    }
+
+    function updateTotal() {
+      totalCents = subtotalCents + shippingCents;
+      document.getElementById('sum-total').innerText = `₱${(totalCents/100).toLocaleString('en-PH', {minimumFractionDigits:2})}`;
+    }
+
+    function validateForm() {
+      const name = document.getElementById('c_name').value.trim();
+      const email = document.getElementById('c_email').value.trim();
+      const phone = document.getElementById('c_phone').value.trim();
+      const address = document.getElementById('c_address').value.trim();
+      const city = document.getElementById('c_city').value;
+
+      if (!name || !email || !phone || !address || !city) {
+        alert('Please fill out all contact and shipping details.');
+        return false;
+      }
+      
+      if (shippingRatesMap[city] === null) {
+        alert('Shipping is not available for the selected city.');
+        return false;
+      }
+
+      // Save to sessionStorage in case of redirect (Wallet/3DS)
+      sessionStorage.setItem('bk_order_info', JSON.stringify({ name, email, phone, address, city }));
+      return true;
+    }
+
+    // ── Payment Processing ─────────────────────────────────────
+    
+    async function processCardPayment() {
+      if (!validateForm()) return;
+
+      const num = document.getElementById('card_number').value.replace(/\s/g, '');
+      const exp = document.getElementById('card_expiry').value.split('/');
+      const cvc = document.getElementById('card_cvc').value;
+
+      if (!num || exp.length !== 2 || !cvc) {
+        alert('Please complete credit card details.');
+        return;
+      }
+
+      const btn = document.getElementById('btn-pay-card');
+      btn.disabled = true;
+      btn.innerText = 'Processing...';
+
+      const info = JSON.parse(sessionStorage.getItem('bk_order_info'));
+
+      await startCardCheckout({
+        amountCents: totalCents,
+        card: { number: num, exp_month: exp[0], exp_year: '20'+exp[1], cvc },
+        billing: { name: info.name, email: info.email, phone: info.phone },
+        onSuccess: (intent) => {
+          completeOrder(intent.id);
+        },
+        onError: (err) => {
+          alert('Payment Failed: ' + err.message);
+          btn.disabled = false;
+          btn.innerText = 'Pay with Card';
+        }
+      });
+    }
+
+    async function processWallet(type) {
+      if (!validateForm()) return;
+      
+      startWalletCheckout({
+        amountCents: totalCents,
+        type: type,
+        onError: (err) => alert('Payment Initialization Failed: ' + err.message)
+      });
+    }
+
+    // Handle return from 3DS or Wallet (dispatched by payment.js)
+    window.addEventListener('paymongo:success', (e) => {
+      const intentId = e.detail?.id || 'wallet_payment_success';
+      completeOrder(intentId);
+    });
+
+    window.addEventListener('paymongo:failed', () => {
+      alert('Payment authorization failed or was cancelled.');
+    });
+
+    // ── Finalise Order to DB ──────────────────────────────────
+    async function completeOrder(paymentIntentId) {
+      let infoStr = sessionStorage.getItem('bk_order_info');
+      let info = infoStr ? JSON.parse(infoStr) : { name:'Guest', email:'', phone:'', address:'', city:'' };
+
+      try {
+        // Insert into orders table
+        const orderRes = await fetch(`${SUPABASE_URL}/rest/v1/orders`, {
+          method: 'POST',
+          headers: {
+            'apikey': SUPABASE_ANON,
+            'Authorization': `Bearer ${SUPABASE_ANON}`,
+            'Content-Type': 'application/json',
+            'Prefer': 'return=representation'
+          },
+          body: JSON.stringify({
+            customer_name: info.name,
+            customer_email: info.email,
+            customer_phone: info.phone,
+            shipping_city: info.city,
+            shipping_address: info.address,
+            total_amount: totalCents,
+            shipping_fee: shippingCents,
+            payment_intent_id: paymentIntentId,
+            status: 'paid'
+          })
+        });
+
+        if (!orderRes.ok) throw new Error('Order creation failed');
+        const orderData = await orderRes.json();
+        const orderId = orderData[0].id;
+
+        // Insert items
+        const itemsToInsert = cartData.map(item => ({
+          order_id: orderId,
+          product_id: item.id,
+          quantity: item.quantity,
+          price_at_purchase: item.price
+        }));
+
+        await fetch(`${SUPABASE_URL}/rest/v1/order_items`, {
+          method: 'POST',
+          headers: {
+            'apikey': SUPABASE_ANON,
+            'Authorization': `Bearer ${SUPABASE_ANON}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(itemsToInsert)
+        });
+
+      } catch (e) {
+        console.error('Database log failed, but payment succeeded:', e);
+        // We do not block the user if DB log fails, they paid already.
+      }
+
+      // Cleanup & Show Success
+      clearCart();
+      sessionStorage.removeItem('bk_order_info');
+      document.querySelector('.checkout-grid').style.display = 'none';
+      document.getElementById('success-screen').style.display = 'block';
+    }
+
+    document.addEventListener('DOMContentLoaded', initCheckout);
+  </script>
+</body>
+</html>

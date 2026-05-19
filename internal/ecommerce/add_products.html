@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bulk Upload Products — BrightKey Internal</title>
+  
+  <link rel="preconnect" href="https://fonts.bunny.net" />
+  <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../../css/style.css" />
+  
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+</head>
+<body style="background: var(--bg-base);">
+
+  <nav class="nav" role="navigation">
+    <div class="container">
+      <div class="nav__inner">
+        <a href="../../admin.html" class="nav__logo" style="font-weight: 700; color:var(--text-primary);">BrightKey <span style="color:var(--cyan);">Admin</span></a>
+        <div style="font-weight: 600; font-size: 1.1rem;">Bulk Upload Products</div>
+        <a href="../../admin.html" class="btn btn-outline btn-sm">Back to Dashboard</a>
+      </div>
+    </div>
+  </nav>
+
+  <main style="padding-top: 100px; min-height: 80vh;">
+    <div class="container" style="max-width: 800px;">
+      
+      <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 2rem; margin-bottom: 2rem;">
+        <h2 style="margin-bottom: 1rem;">1. Download the Template</h2>
+        <p style="color: var(--text-secondary); margin-bottom: 1.5rem; line-height: 1.6;">
+          To ensure all 55+ columns map correctly to the database, please use this exact CSV format. Do not change the header names.
+        </p>
+        <button id="btn-download" class="btn btn-outline">Download CSV Template</button>
+      </div>
+
+      <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 2rem;">
+        <h2 style="margin-bottom: 1rem;">2. Upload Products CSV</h2>
+        <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">
+          Select your completed CSV file. This tool will automatically parse the data, calculate prices, extract metadata, and insert the records into Supabase.
+        </p>
+
+        <div style="border: 2px dashed var(--border); border-radius: var(--radius-md); padding: 3rem 2rem; text-align: center; margin-bottom: 2rem; background: var(--bg-base);">
+          <input type="file" id="csv-file" accept=".csv" style="display:none;" />
+          <button class="btn btn-cyan" onclick="document.getElementById('csv-file').click()">Select CSV File</button>
+          <p id="file-name" style="margin-top: 1rem; color: var(--text-secondary); font-size: 0.9rem;">No file selected.</p>
+        </div>
+
+        <button id="btn-upload" class="btn btn-cyan btn-lg" style="width:100%; display:none;">Start Upload to Database</button>
+
+        <div id="log-container" style="display:none; margin-top: 2rem; background: var(--bg-base); padding: 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border); font-family: monospace; font-size: 0.85rem; max-height: 300px; overflow-y:auto; color: var(--text-secondary);">
+          <!-- Logs injected here -->
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <script src="../../js/auth.js"></script>
+  <script src="../../js/main.js"></script>
+  <script>
+    'use strict';
+
+    // Verify authentication
+    sb.auth.getSession().then(({ data }) => {
+      if (!data.session) {
+        window.location.href = '../../login.html';
+      }
+    });
+
+    const expectedHeaders = [
+      'sku', 'title', 'slug', 'status', 'available_inventory', 'image_link', 'category', 'description',
+      'srp', 'dealer_price', 'unit_actual_price', 'unit_promo_price', 'unit_before_price', 'reseller_price', 'install_price',
+      'warranty', 'tech_support', 'material', 'voltage', 'dimension',
+      'pin_unlock', 'rfid_unlock', 'fingerprint_unlock', '3d_facial_recognition', 'palm_vein_unlock', 'mechanical_key_unlock', 'emergency_usb_power_unlock', 'app_control', 'bluetooth_connect', 'wifi_connect', 'temporary_pin', 'built_in_doorbell', 'active_intercom', 'active_monitoring', 'dual_camera', 'waterproof', 'fireproof', 'scratchproof', 'sunproof', 'moisture_proof', 'splash_proof',
+      'video_1', 'video_2', 'picture_1', 'picture_2', 'picture_3', 'picture_4', 'picture_5', 'picture_6',
+      'printed_manuals_link', 'resource_link_2', 'resource_link_3', 'resource_link_4', 'resource_link_5'
+    ];
+
+    document.getElementById('btn-download').addEventListener('click', () => {
+      const csv = Papa.unparse([expectedHeaders]);
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = "brightkey_products_template.csv";
+      link.click();
+    });
+
+    const fileInput = document.getElementById('csv-file');
+    const fileName = document.getElementById('file-name');
+    const btnUpload = document.getElementById('btn-upload');
+    const logContainer = document.getElementById('log-container');
+    let parsedData = [];
+
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        fileName.innerText = file.name;
+        Papa.parse(file, {
+          header: true,
+          skipEmptyLines: true,
+          complete: function(results) {
+            parsedData = results.data;
+            btnUpload.style.display = 'block';
+            log(`Loaded ${parsedData.length} rows from CSV.`);
+          }
+        });
+      }
+    });
+
+    function log(msg) {
+      logContainer.style.display = 'block';
+      logContainer.innerHTML += `<div>[${new Date().toLocaleTimeString()}] ${msg}</div>`;
+      logContainer.scrollTop = logContainer.scrollHeight;
+    }
+
+    function parsePrice(val) {
+      if (!val) return null;
+      let clean = val.replace(/[^0-9.]/g, '');
+      if (!clean) return null;
+      return Math.round(parseFloat(clean) * 100); // Convert to centavos
+    }
+
+    btnUpload.addEventListener('click', async () => {
+      btnUpload.disabled = true;
+      btnUpload.innerText = 'Uploading...';
+      log('Starting upload process...');
+
+      for (const row of parsedData) {
+        if (!row.sku || !row.title) {
+          log(`Skipping empty/invalid row.`);
+          continue;
+        }
+
+        try {
+          // 1. Prepare Core Product Data
+          const promoPrice = parsePrice(row.unit_promo_price);
+          const actualPrice = parsePrice(row.unit_actual_price);
+          const finalPrice = promoPrice || actualPrice || 0;
+          const comparePrice = parsePrice(row.unit_before_price) || actualPrice; // If no slashes price, maybe compare to actual if promo was used
+
+          const pricingTiers = {
+            srp: parsePrice(row.srp),
+            dealer_price: parsePrice(row.dealer_price),
+            reseller_price: parsePrice(row.reseller_price),
+            install_price: parsePrice(row.install_price)
+          };
+
+          const specifications = {
+            warranty: row.warranty,
+            tech_support: row.tech_support,
+            material: row.material,
+            voltage: row.voltage,
+            dimension: row.dimension
+          };
+
+          const features = {
+            pin_unlock: row.pin_unlock,
+            rfid_unlock: row.rfid_unlock,
+            fingerprint_unlock: row.fingerprint_unlock,
+            '3d_facial_recognition': row['3d_facial_recognition'],
+            palm_vein_unlock: row.palm_vein_unlock,
+            mechanical_key_unlock: row.mechanical_key_unlock,
+            emergency_usb_power_unlock: row.emergency_usb_power_unlock,
+            app_control: row.app_control,
+            bluetooth_connect: row.bluetooth_connect,
+            wifi_connect: row.wifi_connect,
+            temporary_pin: row.temporary_pin,
+            built_in_doorbell: row.built_in_doorbell,
+            active_intercom: row.active_intercom,
+            active_monitoring: row.active_monitoring,
+            dual_camera: row.dual_camera,
+            waterproof: row.waterproof,
+            fireproof: row.fireproof,
+            scratchproof: row.scratchproof,
+            sunproof: row.sunproof,
+            moisture_proof: row.moisture_proof,
+            splash_proof: row.splash_proof
+          };
+
+          const resources = {
+            printed_manuals_link: row.printed_manuals_link,
+            resource_link_2: row.resource_link_2,
+            resource_link_3: row.resource_link_3,
+            resource_link_4: row.resource_link_4,
+            resource_link_5: row.resource_link_5
+          };
+
+          const videos = {
+            video_1: row.video_1,
+            video_2: row.video_2
+          };
+
+          const productPayload = {
+            title: row.title,
+            slug: row.slug || row.title.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+            description: row.description,
+            price: finalPrice,
+            compare_at_price: comparePrice,
+            sku: row.sku,
+            category: row.category || 'hardware',
+            status: row.status === 'published' ? 'published' : 'draft',
+            pricing_tiers: pricingTiers,
+            specifications: specifications,
+            features: features,
+            resources: resources,
+            videos: videos
+          };
+
+          // Check if product exists via SKU
+          const { data: existingData, error: findErr } = await sb.from('products').select('id').eq('sku', row.sku);
+          if (findErr) throw findErr;
+
+          let productId;
+
+          if (existingData && existingData.length > 0) {
+            // Update
+            productId = existingData[0].id;
+            const { error: updErr } = await sb.from('products').update(productPayload).eq('id', productId);
+            if (updErr) throw updErr;
+            log(`Updated product: ${row.sku}`);
+          } else {
+            // Insert
+            const { data: insData, error: insErr } = await sb.from('products').insert([productPayload]).select('id');
+            if (insErr) throw insErr;
+            productId = insData[0].id;
+            log(`Created product: ${row.sku}`);
+          }
+
+          // 2. Inventory
+          const invPayload = {
+            product_id: productId,
+            available: parseInt(row.available_inventory) || 0,
+            ordered_past_month: 0
+          };
+          
+          const { data: existingInv } = await sb.from('inventory').select('product_id').eq('product_id', productId);
+          if (existingInv && existingInv.length > 0) {
+            await sb.from('inventory').update(invPayload).eq('product_id', productId);
+          } else {
+            await sb.from('inventory').insert([invPayload]);
+          }
+
+          // 3. Images (Primary + Pics 1-6)
+          // We will delete existing images and re-insert to avoid duplicates/mess
+          await sb.from('product_images').delete().eq('product_id', productId);
+          
+          let imagesToInsert = [];
+          if (row.image_link) imagesToInsert.push({ product_id: productId, cdn_url: row.image_link, sort_order: 0 });
+          if (row.picture_1) imagesToInsert.push({ product_id: productId, cdn_url: row.picture_1, sort_order: 1 });
+          if (row.picture_2) imagesToInsert.push({ product_id: productId, cdn_url: row.picture_2, sort_order: 2 });
+          if (row.picture_3) imagesToInsert.push({ product_id: productId, cdn_url: row.picture_3, sort_order: 3 });
+          if (row.picture_4) imagesToInsert.push({ product_id: productId, cdn_url: row.picture_4, sort_order: 4 });
+          if (row.picture_5) imagesToInsert.push({ product_id: productId, cdn_url: row.picture_5, sort_order: 5 });
+          if (row.picture_6) imagesToInsert.push({ product_id: productId, cdn_url: row.picture_6, sort_order: 6 });
+
+          if (imagesToInsert.length > 0) {
+            await sb.from('product_images').insert(imagesToInsert);
+          }
+
+        } catch (e) {
+          log(`<span style="color:#ef4444">Error processing ${row.sku}: ${e.message}</span>`);
+        }
+      }
+
+      btnUpload.innerText = 'Upload Complete';
+      log('<span style="color:#10b981; font-weight:bold;">All rows processed successfully!</span>');
+    });
+
+  </script>
+</body>
+</html>
