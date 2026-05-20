@@ -7,6 +7,7 @@
   
   <link rel="preconnect" href="https://fonts.bunny.net" />
   <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <link rel="stylesheet" href="../../css/style.css" />
   
   <style>
@@ -1123,7 +1124,7 @@
       const receiptNo = 'ORD-' + new Date().toISOString().slice(0,10).replace(/-/g,'') + '-' + Date.now().toString().slice(-3);
       const receiptDate = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 
-      printWindow.document.write(`
+      const receiptHtml = `
         <!DOCTYPE html>
         <html lang="en">
         <head>
@@ -1562,8 +1563,44 @@
           </div>
         </body>
         </html>
-      `);
+      `;
+
+      printWindow.document.write(receiptHtml);
       printWindow.document.close();
+
+      // Background PDF Generation and Bunny.net Upload
+      const tempPdfEl = document.createElement('div');
+      tempPdfEl.innerHTML = receiptHtml;
+      tempPdfEl.style.position = 'absolute';
+      tempPdfEl.style.left = '-9999px';
+      tempPdfEl.style.top = '-9999px';
+      document.body.appendChild(tempPdfEl);
+
+      const opt = {
+        margin:       0,
+        filename:     `${receiptNo}.pdf`,
+        image:        { type: 'jpeg', quality: 0.98 },
+        html2canvas:  { scale: 2, useCORS: true, logging: false },
+        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      };
+
+      html2pdf().set(opt).from(tempPdfEl).outputPdf('datauristring').then(async (pdfDataUri) => {
+        tempPdfEl.remove();
+        try {
+          const uploadedPdfUrl = await uploadFileToBunny(pdfDataUri, `${receiptNo}.pdf`, 'installations', receiptNo, 'receipt');
+          console.log('Receipt PDF uploaded successfully to Bunny.net:', uploadedPdfUrl);
+          
+          // Save the receipt PDF URL in localstorage order details so the mobile app or admins can reference it!
+          const savedOrder = JSON.parse(localStorage.getItem('latest_installation_order') || '{}');
+          savedOrder.receiptPdfUrl = uploadedPdfUrl;
+          localStorage.setItem('latest_installation_order', JSON.stringify(savedOrder));
+        } catch (uploadErr) {
+          console.error('Failed to upload receipt PDF to Bunny.net:', uploadErr);
+        }
+      }).catch((pdfErr) => {
+        console.error('Error generating receipt PDF:', pdfErr);
+        if (tempPdfEl) tempPdfEl.remove();
+      });
     }
 
     // --- Booking Calendar Control ---

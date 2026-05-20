@@ -42,6 +42,8 @@ export default async function handler(req, res) {
         folderPath = `installations/${safeRefId}/doors`;
       } else if (type === 'proof') {
         folderPath = `installations/${safeRefId}/proof`;
+      } else if (type === 'receipt') {
+        folderPath = `installations/${safeRefId}/receipt`;
       } else {
         folderPath = `installations/${safeRefId}`;
       }
