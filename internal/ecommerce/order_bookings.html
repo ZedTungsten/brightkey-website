@@ -385,6 +385,13 @@
                   <option value="Afternoon">Afternoon (PM Slot - 1:00 PM - 5:00 PM)</option>
                 </select>
               </div>
+              <div class="form-group">
+                <label class="form-label">Assign Installer (Optional)</label>
+                <select class="form-input" id="sched-installer" style="height:auto; padding:0.75rem;">
+                  <option value="">-- Select Installer --</option>
+                  <!-- Dynamically populated -->
+                </select>
+              </div>
             </div>
             <div style="margin-top: 0.5rem;">
               <button type="button" class="btn btn-outline btn-sm" onclick="openCalendarModal()" style="display: inline-flex; align-items: center; gap: 0.5rem;">
@@ -466,13 +473,34 @@
       { sku: 'BK-LOCK-03', name: 'Glass Door Smart Lock (BK-LOCK-03)', name: 'Glass Door Smart Lock (BK-LOCK-03)', price: 1200000, salePrice: 1099900, available: 5, img: '../../assets/og-image.png' }
     ];
 
+    const MOCK_EMPLOYEES = [
+      { id: 'emp-1', employee_number: 'EMP-2026-001', first_name: 'Juan', last_name: 'dela Cruz', title: 'Installer', department: 'Operations' },
+      { id: 'emp-2', employee_number: 'EMP-2026-002', first_name: 'Pedro', last_name: 'Penduko', title: 'Installer', department: 'Operations' },
+      { id: 'emp-3', employee_number: 'EMP-2026-003', first_name: 'Carlos', last_name: 'Yulo', title: 'Installer', department: 'Operations' },
+      { id: 'emp-4', employee_number: 'EMP-2026-004', first_name: 'Maria', last_name: 'Makiling', title: 'Operations Manager', department: 'Operations' }
+    ];
+
     let doorCount = 0;
 
     // Initialize Page
     document.addEventListener("DOMContentLoaded", () => {
       addProductRow();
       adjustDoors(1); // Start with 1 door card
+      populateInstallerDropdown();
     });
+
+    function populateInstallerDropdown() {
+      const select = document.getElementById('sched-installer');
+      if (!select) return;
+      
+      const installers = MOCK_EMPLOYEES.filter(emp => emp.title === 'Installer');
+      installers.forEach(inst => {
+        const opt = document.createElement('option');
+        opt.value = inst.id;
+        opt.innerText = `${inst.first_name} ${inst.last_name} (${inst.employee_number})`;
+        select.appendChild(opt);
+      });
+    }
 
     // --- Dynamic Product Rows ---
     function addProductRow() {
@@ -812,6 +840,10 @@
       const mapB64 = mapWrapper ? mapWrapper.getAttribute('data-base64') : null;
       const frontageB64 = frontageWrapper ? frontageWrapper.getAttribute('data-base64') : null;
 
+      const installerSelect = document.getElementById('sched-installer');
+      const installerId = installerSelect ? installerSelect.value : '';
+      const installerName = installerSelect && installerSelect.selectedIndex > 0 ? installerSelect.options[installerSelect.selectedIndex].text : '';
+
       // Save order info to localStorage for the installer page to retrieve dynamically!
       const orderData = {
         name,
@@ -824,7 +856,9 @@
         doors: doors,
         products: products,
         mapImage: mapB64,
-        frontageImage: frontageB64
+        frontageImage: frontageB64,
+        installerId,
+        installerName
       };
       
       localStorage.setItem('latest_installation_order', JSON.stringify(orderData));
