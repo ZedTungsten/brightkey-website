@@ -24,7 +24,7 @@ export default async function handler(req, res) {
     }
 
     // Clean up base64 prefix
-    const base64Data = fileBase64.replace(/^data:image\/\w+;base64,/, '').replace(/^data:application\/\w+;base64,/, '');
+    const base64Data = fileBase64.includes(';base64,') ? fileBase64.split(';base64,').pop() : fileBase64;
     const buffer = Buffer.from(base64Data, 'base64');
 
     // Clean file name to prevent directory traversal
