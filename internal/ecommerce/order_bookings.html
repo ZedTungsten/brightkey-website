@@ -1902,12 +1902,8 @@
     }
 
     async function saveModalAsPdf() {
-      const container = document.getElementById('receipt-hidden-container');
-      if (!container) return;
-
-      const element = container.querySelector('.receipt-page');
-      if (!element) {
-        showNotification("Could not locate receipt content.", "error");
+      if (!window.latestReceiptHtml) {
+        showNotification("No receipt content available.", "error");
         return;
       }
 
@@ -1924,24 +1920,45 @@
         margin:       0,
         filename:     `${receiptNo}.pdf`,
         image:        { type: 'jpeg', quality: 0.98 },
-        html2canvas:  { scale: 2, useCORS: true },
+        html2canvas:  { scale: 2, useCORS: true, logging: false },
         jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
       };
 
       try {
-        // Run single worker chain to generate PDF and save it locally without DOM collision race conditions
-        const worker = html2pdf().set(opt).from(element);
-        const pdfDataUri = await worker.toPdf().output('datauristring');
-        await worker.save();
-        
+        // Use the raw HTML string as source — html2pdf renders it in its own hidden container
+        // so all <style> blocks inside the receipt template are correctly applied.
+        // Generate PDF blob once, then use it for both local download and CDN upload.
+        const pdfBlob = await html2pdf()
+          .set(opt)
+          .from(window.latestReceiptHtml, 'string')
+          .toPdf()
+          .output('blob');
+
+        // Trigger local file download from the blob
+        const blobUrl = URL.createObjectURL(pdfBlob);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = `${receiptNo}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(blobUrl);
+
+        // Convert blob to base64 for CDN upload
         saveBtn.innerHTML = '☁️ Uploading to CDN...';
+        const arrayBuffer = await pdfBlob.arrayBuffer();
+        const uint8 = new Uint8Array(arrayBuffer);
+        let binary = '';
+        for (let i = 0; i < uint8.length; i++) {
+          binary += String.fromCharCode(uint8[i]);
+        }
+        const base64Pdf = 'data:application/pdf;base64,' + btoa(binary);
+
         const res = await fetch(`${window.location.origin}/api/upload`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            fileBase64: pdfDataUri,
+            fileBase64: base64Pdf,
             fileName: `${receiptNo}.pdf`,
             category: 'installations',
             refId: folderRefId,
@@ -1954,15 +1971,15 @@
           console.log('Successfully uploaded receipt to Bunny.net:', data.url);
           savedOrder.receiptPdfUrl = data.url;
           localStorage.setItem('latest_installation_order', JSON.stringify(savedOrder));
-          showNotification('Receipt PDF successfully uploaded and saved!', 'success');
+          showNotification('Receipt PDF saved & uploaded!', 'success');
         } else {
-          const errData = await res.json();
+          const errData = await res.json().catch(() => ({}));
           console.warn('API error during upload:', errData.error);
           showNotification(`Upload failed: ${errData.error || 'unknown error'}`, 'error');
         }
       } catch (err) {
         console.error('Error compiling/uploading PDF:', err);
-        showNotification("Failed to upload receipt to CDN.", "error");
+        showNotification("PDF generation failed: " + (err.message || err), "error");
       } finally {
         saveBtn.innerHTML = '✅ Saved & Uploaded';
         setTimeout(() => {
