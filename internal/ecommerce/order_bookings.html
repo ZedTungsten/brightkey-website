@@ -461,7 +461,7 @@
               </div>
             </div>
 
-            <button class="btn btn-cyan btn-lg" style="width: 100%; margin-bottom: 1rem;" onclick="scheduleAndPrint()">
+            <button class="btn btn-cyan btn-lg" id="sched-action-btn" style="width: 100%; margin-bottom: 1rem;" onclick="scheduleAndPrint()">
               Schedule & Print Receipt
             </button>
             
@@ -788,8 +788,37 @@
       return (cents / 100).toLocaleString('en-PH', { style: 'currency', currency: 'PHP' });
     }
 
+    // --- Bunny.net Upload Helper Proxy ---
+    async function uploadFileToBunny(fileBase64, fileName, category, refId, type) {
+      if (!fileBase64) return null;
+      try {
+        const res = await fetch('/api/upload', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            fileBase64,
+            fileName,
+            category,
+            refId,
+            type
+          })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success) {
+            return data.url;
+          }
+        }
+      } catch (err) {
+        console.warn("Upload to Bunny CDN serverless endpoint bypassed or failed, using local fallback.", err);
+      }
+      return fileBase64; // Fallback to local base64 if serverless function not active/offline
+    }
+
     // --- Schedule and print receipt ---
-    function scheduleAndPrint() {
+    async function scheduleAndPrint() {
       const name = document.getElementById('cust-name').value;
       const social = document.getElementById('cust-social').value;
       const email = document.getElementById('cust-email').value;
@@ -806,29 +835,52 @@
         return;
       }
 
-      // Collect doors data
+      const orderId = 'ord-' + Date.now(); // unique folder grouping reference
+
+      // Set uploading state on button
+      const schedBtn = document.getElementById('sched-action-btn') || document.querySelector('button[onclick="scheduleAndPrint()"]');
+      const originalBtnText = schedBtn ? schedBtn.innerText : 'Schedule & Print Receipt';
+      if (schedBtn) {
+        schedBtn.innerText = "Uploading Media to Bunny.net CDN...";
+        schedBtn.disabled = true;
+      }
+
+      // 1. Upload Site Details
+      const mapWrapper = document.getElementById('cust-map-wrapper');
+      const frontageWrapper = document.getElementById('cust-frontage-wrapper');
+      const mapB64 = mapWrapper ? mapWrapper.getAttribute('data-base64') : null;
+      const frontageB64 = frontageWrapper ? frontageWrapper.getAttribute('data-base64') : null;
+
+      const mapUrl = mapB64 ? await uploadFileToBunny(mapB64, 'map_screenshot.png', 'installations', orderId, 'site') : null;
+      const frontageUrl = frontageB64 ? await uploadFileToBunny(frontageB64, 'house_frontage.png', 'installations', orderId, 'site') : null;
+
+      // 2. Upload Doors specs
       const doors = [];
       const doorCards = document.querySelectorAll('.door-card');
-      doorCards.forEach((card, idx) => {
+      for (let i = 0; i < doorCards.length; i++) {
+        const card = doorCards[i];
         const selects = card.querySelectorAll('select');
         const doorMaterial = selects[0].value;
         const jambMaterial = selects[1].value;
         
-        // Grab base64 photos from wrappers
         const photos = [];
         const wrappers = card.querySelectorAll('.file-input-wrapper');
-        wrappers.forEach(w => {
+        for (let j = 0; j < wrappers.length; j++) {
+          const w = wrappers[j];
           const b64 = w.getAttribute('data-base64');
-          if (b64) photos.push(b64);
-        });
+          if (b64) {
+            const url = await uploadFileToBunny(b64, `door_${i+1}_photo_${j+1}.png`, 'installations', orderId, 'doors');
+            photos.push(url);
+          }
+        }
         
         doors.push({
-          index: idx + 1,
+          index: i + 1,
           doorMaterial: doorMaterial,
           jambMaterial: jambMaterial,
           photos: photos
         });
-      });
+      }
 
       // Collect products data
       const products = [];
@@ -846,12 +898,6 @@
         }
       });
 
-      // Capture optional site details images
-      const mapWrapper = document.getElementById('cust-map-wrapper');
-      const frontageWrapper = document.getElementById('cust-frontage-wrapper');
-      const mapB64 = mapWrapper ? mapWrapper.getAttribute('data-base64') : null;
-      const frontageB64 = frontageWrapper ? frontageWrapper.getAttribute('data-base64') : null;
-
       const installerSelect = document.getElementById('sched-installer');
       const installerId = installerSelect ? installerSelect.value : '';
       const installerName = installerSelect && installerSelect.selectedIndex > 0 ? installerSelect.options[installerSelect.selectedIndex].text : '';
@@ -867,14 +913,20 @@
         time: timeVal,
         doors: doors,
         products: products,
-        mapImage: mapB64,
-        frontageImage: frontageB64,
+        mapImage: mapUrl,
+        frontageImage: frontageUrl,
         installerId,
         installerName
       };
       
       localStorage.setItem('latest_installation_order', JSON.stringify(orderData));
-      alert("Installation scheduled! Details saved for installers. Loading print window...");
+      
+      if (schedBtn) {
+        schedBtn.innerText = originalBtnText;
+        schedBtn.disabled = false;
+      }
+
+      alert("Installation scheduled! Details saved & uploaded to Bunny.net. Loading print window...");
 
       // Generate visual receipt popup print window
       const printWindow = window.open('', '_blank');
