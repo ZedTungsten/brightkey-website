@@ -886,7 +886,7 @@
         return;
       }
 
-      const orderId = 'ord-' + Date.now(); // unique folder grouping reference
+      const receiptNo = 'ORD-' + new Date().toISOString().slice(0,10).replace(/-/g,'') + '-' + Date.now().toString().slice(-3);
 
       // Set uploading state on button
       const schedBtn = document.getElementById('sched-action-btn') || document.querySelector('button[onclick="scheduleAndPrint()"]');
@@ -902,8 +902,8 @@
       const mapB64 = mapWrapper ? mapWrapper.getAttribute('data-base64') : null;
       const frontageB64 = frontageWrapper ? frontageWrapper.getAttribute('data-base64') : null;
 
-      const mapUrl = mapB64 ? await uploadFileToBunny(mapB64, 'map_screenshot.png', 'installations', orderId, 'site') : null;
-      const frontageUrl = frontageB64 ? await uploadFileToBunny(frontageB64, 'house_frontage.png', 'installations', orderId, 'site') : null;
+      const mapUrl = mapB64 ? await uploadFileToBunny(mapB64, 'map_screenshot.png', 'installations', receiptNo, 'site') : null;
+      const frontageUrl = frontageB64 ? await uploadFileToBunny(frontageB64, 'house_frontage.png', 'installations', receiptNo, 'site') : null;
 
       // 2. Upload Doors specs
       const doors = [];
@@ -920,7 +920,7 @@
           const w = wrappers[j];
           const b64 = w.getAttribute('data-base64');
           if (b64) {
-            const url = await uploadFileToBunny(b64, `door_${i+1}_photo_${j+1}.png`, 'installations', orderId, 'doors');
+            const url = await uploadFileToBunny(b64, `door_${i+1}_photo_${j+1}.png`, 'installations', receiptNo, 'doors');
             photos.push(url);
           }
         }
@@ -973,14 +973,9 @@
       localStorage.setItem('latest_installation_order', JSON.stringify(orderData));
       
       if (schedBtn) {
-        schedBtn.innerText = originalBtnText;
-        schedBtn.disabled = false;
+        schedBtn.innerText = "Generating PDF Receipt...";
+        schedBtn.disabled = true;
       }
-
-      showNotification("Installation scheduled! Details saved & uploaded to Bunny.net. Printing...", 'success');
-
-      // Generate visual receipt popup print window
-      const printWindow = window.open('', '_blank');
       
       // Calculate products list
       let particularsHtml = [];
@@ -1121,7 +1116,6 @@
 
       const itemSubtotalFormatted = document.getElementById('summary-prod-subtotal').innerText;
       const grandTotalFormatted = document.getElementById('summary-grand-total').innerText;
-      const receiptNo = 'ORD-' + new Date().toISOString().slice(0,10).replace(/-/g,'') + '-' + Date.now().toString().slice(-3);
       const receiptDate = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 
       const receiptHtml = `
@@ -1565,9 +1559,6 @@
         </html>
       `;
 
-      printWindow.document.write(receiptHtml);
-      printWindow.document.close();
-
       // Background PDF Generation and Bunny.net Upload
       const tempPdfEl = document.createElement('div');
       tempPdfEl.innerHTML = receiptHtml;
@@ -1584,6 +1575,10 @@
         jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
       };
 
+      if (schedBtn) {
+        schedBtn.innerText = "Uploading PDF Receipt to CDN...";
+      }
+
       html2pdf().set(opt).from(tempPdfEl).outputPdf('datauristring').then(async (pdfDataUri) => {
         tempPdfEl.remove();
         try {
@@ -1594,12 +1589,31 @@
           const savedOrder = JSON.parse(localStorage.getItem('latest_installation_order') || '{}');
           savedOrder.receiptPdfUrl = uploadedPdfUrl;
           localStorage.setItem('latest_installation_order', JSON.stringify(savedOrder));
+
+          // Clean up button state
+          if (schedBtn) {
+            schedBtn.innerText = originalBtnText;
+            schedBtn.disabled = false;
+          }
+
+          showNotification("Installation scheduled & PDF receipt uploaded!", 'success');
+          toggleReceiptModal(true, uploadedPdfUrl);
         } catch (uploadErr) {
           console.error('Failed to upload receipt PDF to Bunny.net:', uploadErr);
+          showNotification("Failed to upload receipt PDF to Bunny.net.", 'error');
+          if (schedBtn) {
+            schedBtn.innerText = originalBtnText;
+            schedBtn.disabled = false;
+          }
         }
       }).catch((pdfErr) => {
         console.error('Error generating receipt PDF:', pdfErr);
         if (tempPdfEl) tempPdfEl.remove();
+        showNotification("Error generating PDF receipt.", 'error');
+        if (schedBtn) {
+          schedBtn.innerText = originalBtnText;
+          schedBtn.disabled = false;
+        }
       });
     }
 
@@ -1636,6 +1650,19 @@
     function closeCalendarModal(e) {
       if (e.target.id === 'calendar-modal') {
         toggleCalendarModal(false);
+      }
+    }
+
+    function toggleReceiptModal(show, pdfUrl = '#') {
+      const modal = document.getElementById('receipt-modal');
+      const viewBtn = document.getElementById('receipt-modal-view-btn');
+      if (viewBtn && pdfUrl) {
+        viewBtn.href = pdfUrl;
+      }
+      if (show) {
+        modal.classList.add('active');
+      } else {
+        modal.classList.remove('active');
       }
     }
 
@@ -1769,6 +1796,25 @@
         <div class="calendar-grid-cells" id="calendar-cells" style="display:contents;">
           <!-- Cells populating dynamically -->
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Receipt Notification Modal -->
+  <div class="modal-backdrop" id="receipt-modal">
+    <div class="modal-content" style="max-width: 450px; text-align: center; padding: 2.5rem 2rem;">
+      <div style="font-size: 3.5rem; margin-bottom: 1rem; color: var(--accent-primary);">📄</div>
+      <h3 style="margin-bottom: 0.5rem; font-weight: 700;">Receipt Ready</h3>
+      <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 2rem; line-height: 1.5;">
+        The acknowledgment receipt for this booking has been compiled and saved to Bunny.net storage.
+      </p>
+      <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+        <a id="receipt-modal-view-btn" href="#" target="_blank" class="btn btn-primary" style="display: block; text-decoration: none; text-align: center; font-weight: 600;">
+          View Receipt PDF
+        </a>
+        <button class="btn btn-outline" onclick="toggleReceiptModal(false)">
+          Close
+        </button>
       </div>
     </div>
   </div>
