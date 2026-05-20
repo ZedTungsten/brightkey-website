@@ -43,7 +43,7 @@ export default async function handler(req, res) {
       } else if (type === 'proof') {
         folderPath = `installations/${safeRefId}/proof`;
       } else if (type === 'receipt') {
-        folderPath = `installations/${safeRefId}`;
+        folderPath = `installations/${safeRefId}/receipt`;
       } else {
         folderPath = `installations/${safeRefId}`;
       }
