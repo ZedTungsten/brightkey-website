@@ -44,7 +44,7 @@ CREATE POLICY "Public read employees." ON public.employees FOR SELECT USING (tru
 INSERT INTO public.employees (
   employee_number, type, department, title, date_hired, first_name, last_name, date_of_birth, address, contact_number, emergency_contact_number, email
 ) VALUES 
-('EMP-2026-001', 'Full-time', 'Operations', 'Installer', '2026-01-15', 'Juan', 'dela Cruz', '1995-05-10', '123 Rizal St, Pasig', '09171234567', '09177654321', 'juan.dc@brightkey.com'),
-('EMP-2026-002', 'Full-time', 'Operations', 'Installer', '2026-02-01', 'Pedro', 'Penduko', '1998-08-20', '456 Bonifacio St, Manila', '09181234567', '09187654321', 'pedro.p@brightkey.com'),
-('EMP-2026-003', 'Contractor', 'Operations', 'Installer', '2026-03-10', 'Carlos', 'Yulo', '2000-02-12', '789 Olympic Ave, Quezon City', '09191234567', '09197654321', 'carlos.y@brightkey.com')
+('BK-0001', 'Full-time', 'Operations', 'Installer', '2026-01-15', 'Juan', 'dela Cruz', '1995-05-10', '123 Rizal St, Pasig', '09171234567', '09177654321', 'juan.dc@brightkey.com'),
+('BK-0002', 'Full-time', 'Operations', 'Installer', '2026-02-01', 'Pedro', 'Penduko', '1998-08-20', '456 Bonifacio St, Manila', '09181234567', '09187654321', 'pedro.p@brightkey.com'),
+('BK-0003', 'Contractor', 'Operations', 'Installer', '2026-03-10', 'Carlos', 'Yulo', '2000-02-12', '789 Olympic Ave, Quezon City', '09191234567', '09197654321', 'carlos.y@brightkey.com')
 ON CONFLICT (employee_number) DO NOTHING;
