@@ -10,7 +10,7 @@
   <link rel="stylesheet" href="../../css/style.css" />
   
   <style>
-    body { background-color: var(--bg-elevated); padding-top: 60px; }
+    body { background-color: var(--bg-elevated); padding-top: 60px; color: var(--text-primary); }
     .job-card {
       background: var(--bg-surface);
       border: 1px solid var(--border);
@@ -58,62 +58,144 @@
         <p style="color:var(--text-secondary); font-size:0.9rem;">Your assigned lock installation jobs for today.</p>
       </div>
 
-      <!-- Job 1 -->
-      <div class="job-card" id="job-1">
-        <div class="flex justify-between items-center" style="margin-bottom: 0.5rem;">
-          <span class="badge badge-warning" id="job-status-1">Assigned</span>
-          <span style="font-size: 0.85rem; color: var(--text-muted); font-weight: 600;">Today • 2:00 PM</span>
-        </div>
-        <h3 style="margin-bottom: 0.25rem;">Maria Clara</h3>
-        <p style="color:var(--text-secondary); font-size: 0.9rem; margin-bottom: 1rem;">123 Rizal Street, Barangay Pag-asa, Pasig City</p>
-        
-        <a href="https://maps.google.com" target="_blank" class="btn btn-outline btn-sm" style="display:inline-flex; align-items:center; gap:0.5rem; width:100%; justify-content:center; margin-bottom: 1rem;">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--cyan)" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-          Open Location in Google Maps
-        </a>
-
-        <div class="spec-grid">
-          <div>
-            <span style="display:block; font-size:0.75rem; color:var(--text-muted);">LOCK MODEL</span>
-            <strong>BK-LOCK-01</strong>
-          </div>
-          <div>
-            <span style="display:block; font-size:0.75rem; color:var(--text-muted);">DOOR MATERIAL</span>
-            <strong>Solid Wood</strong>
-          </div>
-        </div>
-
-        <div style="margin-bottom: 1.5rem;">
-          <span style="display:block; font-size:0.75rem; color:var(--text-muted); margin-bottom:0.5rem;">DOOR ASSESSMENT IMAGE</span>
-          <img src="../../assets/og-image.png" style="width:100%; height:120px; object-fit:cover; border-radius:var(--radius-sm); border:1px solid var(--border);" onclick="alert('Door preview popup.')" />
-        </div>
-
-        <div style="border-top: 1px solid var(--border); padding-top: 1.5rem;">
-          <label class="form-label" style="margin-bottom:0.5rem;">Upload Installation Proof (Lock mounted + working)</label>
-          <div class="proof-upload" id="proof-zone-1">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--cyan)" stroke-width="2" style="margin-bottom: 0.5rem;"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-            <p style="font-size:0.85rem; font-weight:600; color:var(--text-primary);">Take photo / Upload proof</p>
-            <input type="file" id="file-proof-1" style="display:none;" accept="image/*" />
-          </div>
-          <div id="proof-preview-container-1" style="margin-top:1rem; display:none;"></div>
-          
-          <button class="btn btn-cyan btn-lg" style="width:100%; margin-top:1rem;" id="btn-complete-1" onclick="completeJob(1)" disabled>Complete Installation Job</button>
-        </div>
+      <div id="jobs-list">
+        <!-- Dynamically loaded from localStorage or fallback mock job -->
       </div>
 
     </div>
   </main>
 
   <script>
-    const proofZone = document.getElementById('proof-zone-1');
-    const fileProof = document.getElementById('file-proof-1');
-    const btnComplete = document.getElementById('btn-complete-1');
-    const previewContainer = document.getElementById('proof-preview-container-1');
+    document.addEventListener("DOMContentLoaded", () => {
+      const savedOrder = localStorage.getItem('latest_installation_order');
+      const container = document.getElementById('jobs-list');
 
-    proofZone.addEventListener('click', () => fileProof.click());
+      if (savedOrder) {
+        const order = JSON.parse(savedOrder);
+        
+        // Build products display
+        const prodNames = order.products.map(p => `${p.qty}x ${p.name}`).join(', ');
+        
+        // Build doors display
+        let doorsHtml = '';
+        order.doors.forEach((door) => {
+          let photoListHtml = '';
+          door.photos.forEach((ph, pIdx) => {
+            photoListHtml += `<img src="${ph}" style="width:64px; height:64px; object-fit:cover; border-radius:var(--radius-xs); border:1px solid var(--border); cursor:pointer;" onclick="window.viewImage('${ph}')" />`;
+          });
+          
+          doorsHtml += `
+            <div style="margin-top: 1rem; border-top:1px dashed var(--border); padding-top:1rem;">
+              <h4 style="margin-bottom:0.5rem; font-size:0.9rem; color:var(--text-primary);">Door ${door.index} Specs</h4>
+              <div class="spec-grid" style="margin:0.5rem 0;">
+                <div>
+                  <span style="display:block; font-size:0.75rem; color:var(--text-muted);">DOOR MATERIAL</span>
+                  <strong style="text-transform: capitalize;">${door.doorMaterial}</strong>
+                </div>
+                <div>
+                  <span style="display:block; font-size:0.75rem; color:var(--text-muted);">JAMB MATERIAL</span>
+                  <strong style="text-transform: capitalize;">${door.jambMaterial}</strong>
+                </div>
+              </div>
+              
+              <span style="display:block; font-size:0.75rem; color:var(--text-muted); margin-bottom:0.5rem;">DOOR ASSESSMENT IMAGES (CLICK TO VIEW)</span>
+              <div style="display:flex; flex-wrap:wrap; gap:0.5rem;">
+                ${photoListHtml || '<span style="font-size:0.8rem; color:var(--text-muted);">No images uploaded</span>'}
+              </div>
+            </div>
+          `;
+        });
 
-    fileProof.addEventListener('change', (e) => {
-      const file = e.target.files[0];
+        const jobHtml = `
+          <div class="job-card" id="job-1">
+            <div class="flex justify-between items-center" style="margin-bottom: 0.5rem;">
+              <span class="badge badge-warning" id="job-status-1">Assigned</span>
+              <span style="font-size: 0.85rem; color: var(--text-muted); font-weight: 600;">${order.date} • ${order.time}</span>
+            </div>
+            <h3 style="margin-bottom: 0.25rem;">${order.name}</h3>
+            <p style="color:var(--text-muted); font-size:0.85rem; margin-bottom: 0.25rem;">Social Media: <strong>${order.social}</strong></p>
+            <p style="color:var(--text-secondary); font-size: 0.9rem; margin-bottom: 1rem;">${order.address}</p>
+            
+            <a href="https://maps.google.com" target="_blank" class="btn btn-outline btn-sm" style="display:inline-flex; align-items:center; gap:0.5rem; width:100%; justify-content:center; margin-bottom: 1rem;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--cyan)" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+              Open Location in Google Maps
+            </a>
+
+            <div class="spec-grid" style="margin-bottom: 1rem;">
+              <div style="grid-column: span 2;">
+                <span style="display:block; font-size:0.75rem; color:var(--text-muted);">PRODUCTS TO INSTALL</span>
+                <strong>${prodNames || 'None'}</strong>
+              </div>
+            </div>
+
+            ${doorsHtml}
+
+            <div style="border-top: 1px solid var(--border); padding-top: 1.5rem; margin-top:1.5rem;">
+              <label class="form-label" style="margin-bottom:0.5rem;">Upload Installation Proof (Lock mounted + working)</label>
+              <div class="proof-upload" id="proof-zone-1" onclick="document.getElementById('file-proof-1').click()">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--cyan)" stroke-width="2" style="margin-bottom: 0.5rem;"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                <p style="font-size:0.85rem; font-weight:600; color:var(--text-primary);">Take photo / Upload proof</p>
+                <input type="file" id="file-proof-1" style="display:none;" accept="image/*" onchange="previewProof(this)" />
+              </div>
+              <div id="proof-preview-container-1" style="margin-top:1rem; display:none;"></div>
+              
+              <button class="btn btn-cyan btn-lg" style="width:100%; margin-top:1rem;" id="btn-complete-1" onclick="completeJob(1)" disabled>Complete Installation Job</button>
+            </div>
+          </div>
+        `;
+        container.innerHTML = jobHtml;
+      } else {
+        // Fallback default
+        container.innerHTML = `
+          <div class="job-card" id="job-1">
+            <div class="flex justify-between items-center" style="margin-bottom: 0.5rem;">
+              <span class="badge badge-warning" id="job-status-1">Assigned</span>
+              <span style="font-size: 0.85rem; color: var(--text-muted); font-weight: 600;">Today • 2:00 PM</span>
+            </div>
+            <h3 style="margin-bottom: 0.25rem;">Maria Clara</h3>
+            <p style="color:var(--text-secondary); font-size: 0.9rem; margin-bottom: 1rem;">123 Rizal Street, Barangay Pag-asa, Pasig City</p>
+            
+            <a href="https://maps.google.com" target="_blank" class="btn btn-outline btn-sm" style="display:inline-flex; align-items:center; gap:0.5rem; width:100%; justify-content:center; margin-bottom: 1rem;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--cyan)" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+              Open Location in Google Maps
+            </a>
+
+            <div class="spec-grid">
+              <div>
+                <span style="display:block; font-size:0.75rem; color:var(--text-muted);">LOCK MODEL</span>
+                <strong>BK-LOCK-01</strong>
+              </div>
+              <div>
+                <span style="display:block; font-size:0.75rem; color:var(--text-muted);">DOOR MATERIAL</span>
+                <strong>Solid Wood</strong>
+              </div>
+            </div>
+
+            <div style="margin-bottom: 1.5rem;">
+              <span style="display:block; font-size:0.75rem; color:var(--text-muted); margin-bottom:0.5rem;">DOOR ASSESSMENT IMAGE</span>
+              <img src="../../assets/og-image.png" style="width:100%; height:120px; object-fit:cover; border-radius:var(--radius-sm); border:1px solid var(--border);" />
+            </div>
+
+            <div style="border-top: 1px solid var(--border); padding-top: 1.5rem;">
+              <label class="form-label" style="margin-bottom:0.5rem;">Upload Installation Proof (Lock mounted + working)</label>
+              <div class="proof-upload" id="proof-zone-1" onclick="document.getElementById('file-proof-1').click()">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--cyan)" stroke-width="2" style="margin-bottom: 0.5rem;"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                <p style="font-size:0.85rem; font-weight:600; color:var(--text-primary);">Take photo / Upload proof</p>
+                <input type="file" id="file-proof-1" style="display:none;" accept="image/*" onchange="previewProof(this)" />
+              </div>
+              <div id="proof-preview-container-1" style="margin-top:1rem; display:none;"></div>
+              
+              <button class="btn btn-cyan btn-lg" style="width:100%; margin-top:1rem;" id="btn-complete-1" onclick="completeJob(1)" disabled>Complete Installation Job</button>
+            </div>
+          </div>
+        `;
+      }
+    });
+
+    function previewProof(input) {
+      const file = input.files[0];
+      const previewContainer = document.getElementById('proof-preview-container-1');
+      const btnComplete = document.getElementById('btn-complete-1');
       if (file) {
         const reader = new FileReader();
         reader.onload = function(evt) {
@@ -123,7 +205,7 @@
         };
         reader.readAsDataURL(file);
       }
-    });
+    }
 
     function completeJob(id) {
       document.getElementById('job-status-' + id).innerText = 'Completed';
@@ -131,6 +213,12 @@
       document.getElementById('btn-complete-' + id).disabled = true;
       document.getElementById('btn-complete-' + id).innerText = 'Job Completed Successfully';
       alert('Job marked as completed. Proof picture uploaded to Supabase Storage!');
+    }
+
+    window.viewImage = function(src) {
+      const w = window.open();
+      w.document.write(`<img src="${src}" style="max-width:100%; max-height:100%; display:block; margin:auto;" />`);
+      w.document.close();
     }
   </script>
 </body>

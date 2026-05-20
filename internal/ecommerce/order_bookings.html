@@ -183,12 +183,12 @@
 
           <!-- Product Selection -->
           <div class="panel">
-            <div class="panel-title">
-              <span>Products Purchased</span>
-              <button class="btn btn-outline btn-sm" onclick="addProductRow()">+ Add Product</button>
-            </div>
+            <div class="panel-title">Products Purchased</div>
             <div id="products-container">
               <!-- Dynamically populated rows -->
+            </div>
+            <div style="margin-top: 1rem; border-top: 1px dashed var(--border); padding-top: 1rem; text-align: right;">
+              <button class="btn btn-outline btn-sm" onclick="addProductRow()">+ Add Product</button>
             </div>
           </div>
 
@@ -420,8 +420,21 @@
       if (file) {
         const reader = new FileReader();
         reader.onload = function(e) {
-          // Clean placeholder text
-          parent.innerHTML = `<img src="${e.target.result}" style="width:100%; height:100%; object-fit:cover;" /><input type="file" accept="image/*" onchange="previewFile(this)" />`;
+          // Check if img already exists
+          let img = parent.querySelector('img');
+          if (!img) {
+            img = document.createElement('img');
+            img.style.position = 'absolute';
+            img.style.top = '0';
+            img.style.left = '0';
+            img.style.width = '100%';
+            img.style.height = '100%';
+            img.style.objectFit = 'cover';
+            img.style.zIndex = '1';
+            parent.appendChild(img);
+          }
+          img.src = e.target.result;
+          parent.setAttribute('data-base64', e.target.result);
         }
         reader.readAsDataURL(file);
       }
@@ -551,6 +564,13 @@
     // --- Schedule and print receipt ---
     function scheduleAndPrint() {
       const name = document.getElementById('cust-name').value;
+      const social = document.getElementById('cust-social').value;
+      const email = document.getElementById('cust-email').value;
+      const phone = document.getElementById('cust-phone').value;
+      const address = document.getElementById('cust-address').value;
+      const city = document.getElementById('cust-city').value;
+      const province = document.getElementById('cust-province').value;
+      const zip = document.getElementById('cust-zip').value;
       const dateVal = document.getElementById('sched-date').value;
       const timeVal = document.getElementById('sched-time').value;
 
@@ -559,20 +579,69 @@
         return;
       }
 
-      // Generate visual receipt popup print window
-      const printWindow = window.open('', '_blank');
-      
-      // Calculate final receipt lines
-      let itemsHtml = '';
+      // Collect doors data
+      const doors = [];
+      const doorCards = document.querySelectorAll('.door-card');
+      doorCards.forEach((card, idx) => {
+        const selects = card.querySelectorAll('select');
+        const doorMaterial = selects[0].value;
+        const jambMaterial = selects[1].value;
+        
+        // Grab base64 photos from wrappers
+        const photos = [];
+        const wrappers = card.querySelectorAll('.file-input-wrapper');
+        wrappers.forEach(w => {
+          const b64 = w.getAttribute('data-base64');
+          if (b64) photos.push(b64);
+        });
+        
+        doors.push({
+          index: idx + 1,
+          doorMaterial: doorMaterial,
+          jambMaterial: jambMaterial,
+          photos: photos
+        });
+      });
+
+      // Collect products data
+      const products = [];
       const prodRows = document.querySelectorAll('.product-row');
       prodRows.forEach(row => {
         const select = row.querySelector('select');
         const qtyInput = row.querySelector('input[type="number"]');
         const selectedOption = select.options[select.selectedIndex];
         if (selectedOption && selectedOption.value) {
-          const qty = qtyInput.value;
-          itemsHtml += `<tr><td>${selectedOption.text}</td><td>x${qty}</td></tr>`;
+          products.push({
+            sku: selectedOption.value,
+            name: selectedOption.text.split(' - ')[0],
+            qty: parseInt(qtyInput.value) || 1
+          });
         }
+      });
+
+      // Save order info to localStorage for the installer page to retrieve dynamically!
+      const orderData = {
+        name,
+        social,
+        email,
+        phone,
+        address: `${address}, ${city}, ${province} ${zip}`,
+        date: dateVal,
+        time: timeVal,
+        doors: doors,
+        products: products
+      };
+      
+      localStorage.setItem('latest_installation_order', JSON.stringify(orderData));
+      alert("Installation scheduled! Details saved for installers. Loading print window...");
+
+      // Generate visual receipt popup print window
+      const printWindow = window.open('', '_blank');
+      
+      // Calculate final receipt lines
+      let itemsHtml = '';
+      products.forEach(p => {
+        itemsHtml += `<tr><td>${p.name}</td><td>x${p.qty}</td></tr>`;
       });
 
       printWindow.document.write(`
