@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="../../css/style.css" />
   
   <style>
+    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
     body { background-color: var(--bg-elevated); color: var(--text-primary); }
     .booking-grid {
       display: grid;
@@ -892,19 +893,21 @@
 
     // --- Progress Bar Helpers ---
     function setProgress(pct, label) {
-      const container = document.getElementById('upload-progress-container');
+      const overlay = document.getElementById('upload-progress-overlay');
       const bar = document.getElementById('upload-progress-bar');
       const pctEl = document.getElementById('upload-progress-pct');
       const labelEl = document.getElementById('upload-progress-label');
-      if (container) container.style.display = 'block';
-      if (bar) bar.style.width = pct + '%';
-      if (pctEl) pctEl.textContent = Math.round(pct) + '%';
+      if (overlay) overlay.style.display = 'flex';
+      if (pct !== null && pct !== undefined) {
+        if (bar) bar.style.width = pct + '%';
+        if (pctEl) pctEl.textContent = Math.round(pct) + '%';
+      }
       if (labelEl && label) labelEl.textContent = label;
     }
 
     function hideProgress() {
-      const container = document.getElementById('upload-progress-container');
-      if (container) container.style.display = 'none';
+      const overlay = document.getElementById('upload-progress-overlay');
+      if (overlay) overlay.style.display = 'none';
     }
 
     // --- Bunny.net Upload Helper Proxy ---
@@ -959,61 +962,6 @@
       // Extract surname (last word of full name, uppercased)
       const surname = (name.trim().split(' ').pop() || 'CUSTOMER').toUpperCase().replace(/[^A-Z0-9]/g, '');
       const folderRefId = `${surname}-${receiptNo}`;
-
-      // Open the print/receipt tab immediately to prevent popup blocking
-      const receiptWindow = window.open('', '_blank');
-      if (receiptWindow) {
-        receiptWindow.document.write(`
-          <!DOCTYPE html>
-          <html lang="en">
-          <head>
-            <meta charset="UTF-8">
-            <title>Preparing Receipt - ${receiptNo}</title>
-            <style>
-              body {
-                display: flex;
-                flex-direction: column;
-                justify-content: center;
-                align-items: center;
-                height: 100vh;
-                margin: 0;
-                font-family: system-ui, -apple-system, sans-serif;
-                background: #f3f4f6;
-                color: #4b5563;
-              }
-              .spinner {
-                border: 4px solid rgba(0, 0, 0, 0.1);
-                width: 48px;
-                height: 48px;
-                border-radius: 50%;
-                border-left-color: #2563eb;
-                animation: spin 1s linear infinite;
-                margin-bottom: 16px;
-              }
-              @keyframes spin {
-                0% { transform: rotate(0deg); }
-                100% { transform: rotate(360deg); }
-              }
-              h2 {
-                margin: 0 0 8px 0;
-                font-size: 1.25rem;
-                color: #1f2937;
-              }
-              p {
-                margin: 0;
-                font-size: 0.875rem;
-              }
-            </style>
-          </head>
-          <body>
-            <div class="spinner"></div>
-            <h2>Processing Booking...</h2>
-            <p>Please do not close this window while we save your schedule and generate your receipt.</p>
-          </body>
-          </html>
-        `);
-        receiptWindow.document.close();
-      }
 
       // Set uploading state on button and show progress bar
       const schedBtn = document.getElementById('sched-action-btn') || document.querySelector('button[onclick="scheduleAndPrint()"]');
@@ -2073,6 +2021,56 @@
         <button class="btn btn-outline" onclick="toggleReceiptModal(false)">
           Close
         </button>
+      </div>
+    </div>
+  </div>
+  <!-- Fullscreen Upload Progress Overlay -->
+  <div id="upload-progress-overlay" style="
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(6px);
+    z-index: 99999;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+  ">
+    <div style="
+      background: var(--bg-card, #1e2235);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 16px;
+      padding: 2.5rem 2rem;
+      width: 90%;
+      max-width: 420px;
+      text-align: center;
+      box-shadow: 0 24px 64px rgba(0,0,0,0.5);
+    ">
+      <!-- Spinner -->
+      <div style="
+        width: 56px; height: 56px;
+        border-radius: 50%;
+        border: 4px solid rgba(255,255,255,0.1);
+        border-top-color: #0ea5e9;
+        animation: spin 0.9s linear infinite;
+        margin: 0 auto 1.25rem auto;
+      "></div>
+      <h3 style="margin: 0 0 0.35rem 0; font-size: 1.15rem; font-weight: 700; color: var(--text-primary, #fff);">Processing Booking</h3>
+      <p style="margin: 0 0 1.5rem 0; font-size: 0.82rem; color: var(--text-secondary, #94a3b8);">Please do not close this window.</p>
+      <!-- Step label + percentage -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+        <span id="upload-progress-label" style="font-size: 0.8rem; font-weight: 600; color: var(--text-secondary, #94a3b8);">Starting...</span>
+        <span id="upload-progress-pct" style="font-size: 0.85rem; font-weight: 700; color: #0ea5e9;">0%</span>
+      </div>
+      <!-- Bar track -->
+      <div style="background: rgba(255,255,255,0.1); border-radius: 999px; height: 10px; overflow: hidden;">
+        <div id="upload-progress-bar" style="
+          height: 100%; width: 0%;
+          background: linear-gradient(90deg, #0ea5e9, #6366f1);
+          border-radius: 999px;
+          transition: width 0.35s ease;
+        "></div>
       </div>
     </div>
   </div>
