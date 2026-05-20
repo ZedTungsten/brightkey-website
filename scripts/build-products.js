@@ -10,8 +10,8 @@ const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_ANON;
 
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-  console.error('Error: SUPABASE_URL and SUPABASE_ANON_KEY must be provided in environment variables.');
-  process.exit(1);
+  console.warn('Warning: SUPABASE_URL / SUPABASE_ANON_KEY not set — skipping products SSG. Static files will still deploy.');
+  process.exit(0);
 }
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -29,8 +29,8 @@ async function buildProducts() {
     .eq('status', 'published');
 
   if (error) {
-    console.error('Failed to fetch products:', error);
-    process.exit(1);
+    console.warn('Warning: Failed to fetch products from Supabase:', error.message, '— skipping SSG.');
+    return;
   }
 
   if (!products || products.length === 0) {
