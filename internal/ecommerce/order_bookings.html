@@ -982,35 +982,48 @@
       const printWindow = window.open('', '_blank');
       
       // Calculate products list
-      let itemsHtml = '';
+      let particularsHtml = [];
+      let pricesHtml = [];
+      let qtysHtml = [];
+      let totalsHtml = [];
+      
       products.forEach(p => {
         const prodMatch = MOCK_PRODUCTS.find(mp => mp.sku === p.sku);
         const unitPrice = prodMatch ? (prodMatch.salePrice || prodMatch.price) : 0;
         const totalLinePrice = unitPrice * p.qty;
         
-        itemsHtml += `
+        particularsHtml.push(p.name);
+        pricesHtml.push(`₱ ${(unitPrice / 100).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`);
+        qtysHtml.push(p.qty);
+        totalsHtml.push(`₱ ${(totalLinePrice / 100).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`);
+      });
+
+      let itemsHtml = '';
+      if (products.length > 0) {
+        itemsHtml = `
           <tr>
             <td>
-              ${p.name}
+              ${particularsHtml.join('<br>')}
             </td>
             <td align="right">
-              ₱ ${(unitPrice / 100).toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+              ${pricesHtml.join('<br>')}
             </td>
             <td align="center">
-              ${p.qty}
+              ${qtysHtml.join('<br>')}
             </td>
             <td align="right">
-              ₱ ${(totalLinePrice / 100).toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+              ${totalsHtml.join('<br>')}
             </td>
           </tr>
         `;
-      });
+      }
 
       // Calculate charges (Others)
-      let chargesHtml = '';
-      const chargeRows = document.querySelectorAll('#charges-container .charge-row');
+      let chargeLabels = [];
+      let chargeVals = [];
       let totalC = 0;
-      chargeRows.forEach((row, idx) => {
+      const chargeRows = document.querySelectorAll('#charges-container .charge-row');
+      chargeRows.forEach(row => {
         const sel = row.querySelector('select');
         const customNameInput = row.querySelector('input[type="text"]');
         const valInput = row.querySelector('input[type="number"]');
@@ -1019,22 +1032,27 @@
         const label = sel.value === 'custom' ? (customNameInput?.value || 'Custom Fee') : sel.options[sel.selectedIndex].text;
         if (val > 0) {
           totalC += val;
-          chargesHtml += `
-            <tr class="others-row">
-              <td align="right" class="summary-label move-right">
-                ${idx === 0 ? 'OTHERS:' : ''}
-              </td>
-              <td class="summary-middle">
-                ${label}
-              </td>
-              <td align="right" class="summary-value">
-                ₱ ${val.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
-              </td>
-            </tr>
-          `;
+          chargeLabels.push(label);
+          chargeVals.push(`₱ ${val.toLocaleString('en-PH', { minimumFractionDigits: 2 })}`);
         }
       });
-      if (totalC === 0) {
+
+      let chargesHtml = '';
+      if (totalC > 0) {
+        chargesHtml = `
+          <tr class="others-row">
+            <td align="right" class="summary-label move-right">
+              OTHERS:
+            </td>
+            <td class="summary-middle">
+              ${chargeLabels.join('<br>')}
+            </td>
+            <td align="right" class="summary-value">
+              ${chargeVals.join('<br>')}
+            </td>
+          </tr>
+        `;
+      } else {
         chargesHtml = `
           <tr class="others-row">
             <td align="right" class="summary-label move-right">
@@ -1051,10 +1069,11 @@
       }
 
       // Calculate deductions (Less)
-      let deductionsHtml = '';
-      const deductionRows = document.querySelectorAll('#deductions-container .deduction-row');
+      let deductionLabels = [];
+      let deductionVals = [];
       let totalD = 0;
-      deductionRows.forEach((row, idx) => {
+      const deductionRows = document.querySelectorAll('#deductions-container .deduction-row');
+      deductionRows.forEach(row => {
         const sel = row.querySelector('select');
         const customNameInput = row.querySelector('input[type="text"]');
         const valInput = row.querySelector('input[type="number"]');
@@ -1063,22 +1082,27 @@
         const label = sel.value === 'custom' ? (customNameInput?.value || 'Custom Deduction') : sel.options[sel.selectedIndex].text;
         if (val > 0) {
           totalD += val;
-          deductionsHtml += `
-            <tr class="less-row">
-              <td align="right" class="summary-label move-right">
-                ${idx === 0 ? 'LESS:' : ''}
-              </td>
-              <td class="summary-middle">
-                ${label}
-              </td>
-              <td align="right" class="summary-value">
-                ₱ ${val.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
-              </td>
-            </tr>
-          `;
+          deductionLabels.push(label);
+          deductionVals.push(`₱ ${val.toLocaleString('en-PH', { minimumFractionDigits: 2 })}`);
         }
       });
-      if (totalD === 0) {
+
+      let deductionsHtml = '';
+      if (totalD > 0) {
+        deductionsHtml = `
+          <tr class="less-row">
+            <td align="right" class="summary-label move-right">
+              LESS:
+            </td>
+            <td class="summary-middle">
+              ${deductionLabels.join('<br>')}
+            </td>
+            <td align="right" class="summary-value">
+              ${deductionVals.join('<br>')}
+            </td>
+          </tr>
+        `;
+      } else {
         deductionsHtml = `
           <tr class="less-row">
             <td align="right" class="summary-label move-right">
