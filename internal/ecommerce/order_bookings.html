@@ -178,7 +178,7 @@
     }
     .calendar-cell {
       background: var(--bg-surface);
-      min-height: 90px;
+      min-height: 110px;
       padding: 0;
       display: flex;
       flex-direction: column;
@@ -212,7 +212,7 @@
       flex-direction: column;
       justify-content: center;
       padding: 3px;
-      min-height: 32px;
+      min-height: 40px;
     }
     .calendar-half.am {
       background: rgba(245, 158, 11, 0.02);
@@ -223,23 +223,35 @@
     }
     .calendar-slot {
       font-size: 0.55rem;
-      padding: 1px 3px;
+      padding: 2px 4px;
       border-radius: 2px;
       margin-bottom: 1px;
       font-weight: 600;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 2px;
+      line-height: 1.2;
     }
     .calendar-slot.am {
-      background: rgba(245, 158, 11, 0.15);
+      background: rgba(245, 158, 11, 0.12);
       color: #b45309;
       border-left: 2px solid #f59e0b;
     }
     .calendar-slot.pm {
-      background: rgba(59, 130, 246, 0.15);
+      background: rgba(59, 130, 246, 0.12);
       color: #1d4ed8;
       border-left: 2px solid #3b82f6;
+    }
+    .calendar-inst-badge {
+      background: #10b981;
+      color: #ffffff;
+      font-size: 0.48rem;
+      padding: 1px 4px;
+      border-radius: 10px;
+      font-weight: 700;
+      display: inline-block;
+      text-transform: uppercase;
     }
     
     @media (max-width: 992px) {
@@ -922,10 +934,10 @@
     ];
 
     const MOCK_BOOKINGS = [
-      { date: '2026-05-18', time: 'Morning', name: 'Juan D.', city: 'Pasig' },
-      { date: '2026-05-19', time: 'Afternoon', name: 'Clara M.', city: 'Manila' },
-      { date: '2026-05-20', time: 'Morning', name: 'Jose R.', city: 'QC' },
-      { date: '2026-05-25', time: 'Afternoon', name: 'Ramon V.', city: 'Makati' }
+      { date: '2026-05-18', time: 'Morning', name: 'Juan D.', city: 'Pasig', installer: 'Juan d.C.' },
+      { date: '2026-05-19', time: 'Afternoon', name: 'Clara M.', city: 'Manila', installer: 'Pedro P.' },
+      { date: '2026-05-20', time: 'Morning', name: 'Jose R.', city: 'QC', installer: 'Carlos Y.' },
+      { date: '2026-05-25', time: 'Afternoon', name: 'Ramon V.', city: 'Makati', installer: 'Juan d.C.' }
     ];
 
     function openCalendarModal() {
@@ -971,13 +983,20 @@
         const nameAbbrev = order.name.split(' ')[0];
         const city = order.address.split(',')[1]?.trim() || 'Pasig';
         
+        let instName = '';
+        if (order.installerName) {
+          const parts = order.installerName.split(' (')[0].split(' ');
+          instName = parts[0] + (parts[1] ? ' ' + parts[1][0] + '.' : '');
+        }
+
         // Add to view if not already exists in list
         if (!bookings.some(b => b.date === order.date && b.time === order.time && b.name.startsWith(nameAbbrev))) {
           bookings.push({
             date: order.date,
             time: order.time,
             name: nameAbbrev,
-            city: city
+            city: city,
+            installer: instName
           });
         }
       }
@@ -1005,10 +1024,22 @@
 
         dayBookings.forEach(b => {
           const displayText = `${b.name} (${b.city})`;
+          const badgeHtml = b.installer ? `<span class="calendar-inst-badge">${b.installer}</span>` : '';
+          
           if (b.time === 'Morning' || b.time === 'AM') {
-            amHtml += `<div class="calendar-slot am" title="${displayText}">${displayText}</div>`;
+            amHtml += `
+              <div class="calendar-slot am" title="${displayText}">
+                <div>${displayText}</div>
+                ${badgeHtml}
+              </div>
+            `;
           } else {
-            pmHtml += `<div class="calendar-slot pm" title="${displayText}">${displayText}</div>`;
+            pmHtml += `
+              <div class="calendar-slot pm" title="${displayText}">
+                <div>${displayText}</div>
+                ${badgeHtml}
+              </div>
+            `;
           }
         });
 
