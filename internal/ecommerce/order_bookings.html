@@ -150,6 +150,14 @@
         font-size: 1.3rem;
       }
     }
+    #receipt-hidden-container {
+      position: absolute;
+      left: -9999px;
+      top: -9999px;
+      width: 794px;
+      background: white;
+      z-index: -1000;
+    }
     .price-summary {
       font-size: 0.95rem;
       margin-bottom: 1.5rem;
@@ -1027,18 +1035,60 @@
         schedBtn.disabled = true;
       }
 
-      // 1. Upload Site Details
+      // 1. Calculate total upload tasks for progress bar tracking
+      let totalTasks = 0;
       const mapWrapper = document.getElementById('cust-map-wrapper');
       const frontageWrapper = document.getElementById('cust-frontage-wrapper');
       const mapB64 = mapWrapper ? mapWrapper.getAttribute('data-base64') : null;
       const frontageB64 = frontageWrapper ? frontageWrapper.getAttribute('data-base64') : null;
 
-      const mapUrl = mapB64 ? await uploadFileToBunny(mapB64, 'map_screenshot.png', 'installations', folderRefId, 'site') : null;
-      const frontageUrl = frontageB64 ? await uploadFileToBunny(frontageB64, 'house_frontage.png', 'installations', folderRefId, 'site') : null;
+      if (mapB64) totalTasks++;
+      if (frontageB64) totalTasks++;
 
-      // 2. Upload Doors specs
-      const doors = [];
       const doorCards = document.querySelectorAll('.door-card');
+      let totalDoorPhotos = 0;
+      for (let i = 0; i < doorCards.length; i++) {
+        const card = doorCards[i];
+        const wrappers = card.querySelectorAll('.file-input-wrapper');
+        for (let j = 0; j < wrappers.length; j++) {
+          const w = wrappers[j];
+          const b64 = w.getAttribute('data-base64');
+          if (b64) {
+            totalDoorPhotos++;
+          }
+        }
+      }
+      totalTasks += totalDoorPhotos;
+      totalTasks += 1; // Database local save & receipt template compile task
+
+      let completedTasks = 0;
+      function setProgressStatus(pct, msg) {
+        const fill = document.getElementById('processing-progress-fill');
+        const status = document.getElementById('processing-status');
+        if (fill) fill.style.width = `${pct}%`;
+        if (status) status.innerText = `[${pct}%] ${msg}`;
+      }
+
+      setProgressStatus(0, "Starting uploads...");
+
+      // Upload map
+      let mapUrl = null;
+      if (mapB64) {
+        setProgressStatus(Math.round((completedTasks / totalTasks) * 100), "Uploading Google Map screenshot...");
+        mapUrl = await uploadFileToBunny(mapB64, 'map_screenshot.png', 'installations', folderRefId, 'site');
+        completedTasks++;
+      }
+
+      // Upload frontage
+      let frontageUrl = null;
+      if (frontageB64) {
+        setProgressStatus(Math.round((completedTasks / totalTasks) * 100), "Uploading frontage photo...");
+        frontageUrl = await uploadFileToBunny(frontageB64, 'house_frontage.png', 'installations', folderRefId, 'site');
+        completedTasks++;
+      }
+
+      // Upload doors specs & photos
+      const doors = [];
       for (let i = 0; i < doorCards.length; i++) {
         const card = doorCards[i];
         const selects = card.querySelectorAll('select');
@@ -1051,8 +1101,13 @@
           const w = wrappers[j];
           const b64 = w.getAttribute('data-base64');
           if (b64) {
+            setProgressStatus(
+              Math.round((completedTasks / totalTasks) * 100), 
+              `Uploading Door ${i+1} Photo ${j+1}...`
+            );
             const url = await uploadFileToBunny(b64, `door_${i+1}_photo_${j+1}.png`, 'installations', folderRefId, 'doors');
             photos.push(url);
+            completedTasks++;
           }
         }
         
@@ -1063,6 +1118,8 @@
           photos: photos
         });
       }
+
+      setProgressStatus(Math.round((completedTasks / totalTasks) * 100), "Compiling booking details...");
 
       // Collect products data
       const products = [];
@@ -1747,6 +1804,12 @@
         </html>
       `;
 
+      // Write to hidden offscreen rendering container
+      const hiddenContainer = document.getElementById('receipt-hidden-container');
+      if (hiddenContainer) {
+        hiddenContainer.innerHTML = receiptHtml;
+      }
+
       // Hide the processing overlay loading screen
       if (overlay) {
         overlay.style.display = 'none';
@@ -1756,6 +1819,18 @@
       window.latestReceiptHtml = receiptHtml;
       window.latestReceiptNo = receiptNo;
       window.latestFolderRefId = folderRefId;
+
+      // Populate Modal Summary Card
+      const summaryCard = document.getElementById('modal-booking-summary');
+      if (summaryCard) {
+        summaryCard.innerHTML = `
+          <div style="display:flex; justify-content:space-between; margin-bottom:4px; border-bottom: 1px dashed var(--border); padding-bottom: 4px;"><strong>Order ID:</strong> <span>${receiptNo}</span></div>
+          <div style="display:flex; justify-content:space-between; margin-bottom:4px; border-bottom: 1px dashed var(--border); padding-bottom: 4px;"><strong>Customer:</strong> <span>${name}</span></div>
+          <div style="display:flex; justify-content:space-between; margin-bottom:4px; border-bottom: 1px dashed var(--border); padding-bottom: 4px;"><strong>Schedule:</strong> <span>${dateVal} (${timeVal})</span></div>
+          <div style="display:flex; justify-content:space-between; margin-bottom:4px; border-bottom: 1px dashed var(--border); padding-bottom: 4px;"><strong>Installer:</strong> <span>${installerName || 'Unassigned'}</span></div>
+          <div style="display:flex; justify-content:space-between; padding-top: 4px;"><strong>Grand Total:</strong> <strong style="color:var(--accent-cyan); font-size:1rem;">${grandTotalFormatted}</strong></div>
+        `;
+      }
 
       // Clean up button state
       if (schedBtn) {
@@ -1805,26 +1880,18 @@
 
     function toggleReceiptModal(show) {
       const modal = document.getElementById('receipt-modal');
-      const iframe = document.getElementById('receipt-iframe');
       if (show) {
         modal.classList.add('active');
-        if (iframe && window.latestReceiptHtml) {
-          const doc = iframe.contentWindow.document;
-          doc.open();
-          doc.write(window.latestReceiptHtml);
-          doc.close();
-        }
       } else {
         modal.classList.remove('active');
       }
     }
 
     async function saveModalAsPdf() {
-      const iframe = document.getElementById('receipt-iframe');
-      if (!iframe || !iframe.contentWindow) return;
+      const container = document.getElementById('receipt-hidden-container');
+      if (!container) return;
 
-      const doc = iframe.contentWindow.document;
-      const element = doc.querySelector('.receipt-page');
+      const element = container.querySelector('.receipt-page');
       if (!element) {
         showNotification("Could not locate receipt content.", "error");
         return;
@@ -1848,7 +1915,7 @@
       };
 
       try {
-        // Download locally using the html2pdf instance on the main window targeting the iframe element
+        // Download locally using the html2pdf instance on the main window targeting the hidden container element
         await html2pdf().set(opt).from(element).save();
 
         // Generate pdf as data URI and upload in the background
@@ -1893,13 +1960,33 @@
     }
 
     function printModalReceipt() {
-      const iframe = document.getElementById('receipt-iframe');
-      if (iframe && iframe.contentWindow) {
+      if (!window.latestReceiptHtml) {
+        showNotification("No receipt content available.", "error");
+        return;
+      }
+
+      // Find or create print iframe
+      let iframe = document.getElementById('receipt-print-iframe');
+      if (!iframe) {
+        iframe = document.createElement('iframe');
+        iframe.id = 'receipt-print-iframe';
+        iframe.style.position = 'absolute';
+        iframe.style.width = '0px';
+        iframe.style.height = '0px';
+        iframe.style.border = 'none';
+        iframe.style.left = '-9999px';
+        document.body.appendChild(iframe);
+      }
+      
+      const doc = iframe.contentWindow.document;
+      doc.open();
+      doc.write(window.latestReceiptHtml);
+      doc.close();
+      
+      setTimeout(() => {
         iframe.contentWindow.focus();
         iframe.contentWindow.print();
-      } else {
-        showNotification("Could not open print window.", "error");
-      }
+      }, 500);
     }
 
     function changeMonth(direction) {
@@ -2036,32 +2123,46 @@
     </div>
   </div>
 
+  <!-- Hidden Receipt Rendering Container (offscreen for rendering/saving PDF safely) -->
+  <div id="receipt-hidden-container"></div>
+
   <!-- Processing Booking Loading Overlay -->
   <div id="processing-overlay" style="display: none;" class="processing-overlay">
     <div class="spinner"></div>
-    <h2>Processing Booking...</h2>
-    <p>Please do not close this window while we save your schedule and compile your receipt.</p>
+    <h2 id="processing-title">Processing Booking...</h2>
+    <p id="processing-subtitle">Uploading booking details and site media. Please do not close this window.</p>
+    
+    <!-- Progress Bar -->
+    <div style="width: 100%; max-width: 400px; background: rgba(255,255,255,0.1); height: 8px; border-radius: 4px; overflow: hidden; margin-top: 20px; margin-bottom: 12px;">
+      <div id="processing-progress-fill" style="height: 100%; width: 0%; background: var(--accent-cyan); border-radius: 4px; transition: width 0.3s ease;"></div>
+    </div>
+    
+    <!-- Status Text -->
+    <div id="processing-status" style="font-size: 0.9rem; color: #94a3b8; font-weight: 500; font-family: monospace;">Initializing...</div>
   </div>
 
   <!-- Receipt View Modal -->
   <div class="modal-backdrop" id="receipt-modal">
-    <div class="modal-content" style="max-width: 850px; width: 95%; padding: 1.5rem; max-height: 95vh; display: flex; flex-direction: column;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; border-bottom: 1px solid var(--border); padding-bottom: 0.75rem;">
-        <h3 style="margin: 0; font-weight: 700; font-size: 1.25rem;">Acknowledgment Receipt</h3>
-        <button onclick="toggleReceiptModal(false)" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--text-secondary); line-height: 1;">✕</button>
+    <div class="modal-content" style="max-width: 480px; width: 90%; padding: 2rem; text-align: center;">
+      <div style="font-size: 3rem; margin-bottom: 1rem;">🎉</div>
+      <h3 style="margin-bottom: 0.5rem; font-weight: 700; font-size: 1.4rem; color: var(--text-primary);">Installation Scheduled!</h3>
+      <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 1.5rem; line-height: 1.5;">
+        Booking record and media files successfully saved.
+      </p>
+      
+      <!-- Clean Booking Summary Card -->
+      <div id="modal-booking-summary" style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 1rem; margin-bottom: 1.75rem; text-align: left; font-size: 0.85rem; line-height: 1.6;">
+        <!-- Filled dynamically -->
       </div>
       
-      <!-- Seamless Embedded Receipt IFrame -->
-      <iframe id="receipt-iframe" style="width: 100%; height: 60vh; border: 1px solid var(--border); border-radius: 8px; background: #f9fafb;"></iframe>
-      
-      <div style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1rem;">
-        <button id="modal-save-pdf-btn" onclick="saveModalAsPdf()" class="btn btn-primary" style="font-weight: 600; display: inline-flex; align-items: center; gap: 8px;">
+      <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+        <button id="modal-save-pdf-btn" onclick="saveModalAsPdf()" class="btn btn-primary" style="font-weight: 600; display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: 100%;">
           📄 Save as PDF
         </button>
-        <button onclick="printModalReceipt()" class="btn btn-outline" style="font-weight: 600; display: inline-flex; align-items: center; gap: 8px;">
+        <button onclick="printModalReceipt()" class="btn btn-outline" style="font-weight: 600; display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: 100%;">
           🖨️ Print Receipt
         </button>
-        <button class="btn btn-outline" onclick="toggleReceiptModal(false)">
+        <button class="btn btn-outline" onclick="toggleReceiptModal(false)" style="width: 100%;">
           Close
         </button>
       </div>
