@@ -57,6 +57,7 @@
       padding: 1.5rem;
       margin-bottom: 1rem;
       background: var(--bg-base);
+      position: relative;
     }
     .custom-label-input {
       display: none;
@@ -84,9 +85,13 @@
       top: 0; left: 0; width: 100%; height: 100%;
       opacity: 0;
       cursor: pointer;
+      z-index: 10;
     }
     .file-input-wrapper img {
+      position: absolute;
+      top: 0; left: 0;
       width: 100%; height: 100%; object-fit: cover;
+      z-index: 1;
     }
     .sticky-panel {
       position: sticky;
@@ -108,9 +113,123 @@
       border-bottom: none;
       padding-top: 1rem;
     }
+    
+    /* Modal Styles */
+    .modal-backdrop {
+      position: fixed;
+      top: 0; left: 0; width: 100vw; height: 100vh;
+      background: rgba(0,0,0,0.4);
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease-in-out;
+    }
+    .modal-backdrop.active {
+      opacity: 1;
+      pointer-events: all;
+    }
+    .modal-content {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      width: 90%;
+      max-width: 650px;
+      max-height: 90vh;
+      overflow-y: auto;
+      padding: 1.5rem;
+      box-shadow: var(--shadow-md);
+      position: relative;
+    }
+    .modal-close {
+      position: absolute;
+      top: 1rem; right: 1rem;
+      background: none; border: none;
+      font-size: 1.5rem; color: var(--text-secondary);
+      cursor: pointer;
+    }
+    
+    /* Calendar Grid */
+    .calendar-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+    .calendar-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 2px;
+      background: var(--border);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+    }
+    .calendar-day-label {
+      background: var(--bg-elevated);
+      font-weight: 700;
+      text-align: center;
+      padding: 0.5rem 0;
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+    }
+    .calendar-cell {
+      background: var(--bg-surface);
+      min-height: 75px;
+      padding: 4px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    .calendar-cell-num {
+      font-weight: 700;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-bottom: 2px;
+    }
+    .calendar-cell.today {
+      background: rgba(6, 182, 212, 0.05);
+    }
+    .calendar-cell.today .calendar-cell-num {
+      color: var(--cyan);
+    }
+    .calendar-slot {
+      font-size: 0.6rem;
+      padding: 2px 4px;
+      border-radius: 2px;
+      margin-bottom: 2px;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .calendar-slot.am {
+      background: rgba(59, 130, 246, 0.1);
+      color: #1d4ed8;
+      border-left: 2px solid #3b82f6;
+    }
+    .calendar-slot.pm {
+      background: rgba(16, 185, 129, 0.1);
+      color: #047857;
+      border-left: 2px solid #10b981;
+    }
+    
     @media (max-width: 992px) {
       .booking-grid { grid-template-columns: 1fr; }
       .sticky-panel { position: static; }
+    }
+    @media (max-width: 480px) {
+      .calendar-cell {
+        min-height: 55px;
+        padding: 2px;
+      }
+      .calendar-slot {
+        font-size: 0.5rem;
+        padding: 1px;
+      }
     }
   </style>
 </head>
@@ -192,6 +311,17 @@
             </div>
           </div>
 
+          <!-- Door Details -->
+          <div class="panel">
+            <div class="panel-title">Door Specifications</div>
+            <div id="doors-container">
+              <!-- Dynamic doors -->
+            </div>
+            <div style="margin-top: 1rem; border-top: 1px dashed var(--border); padding-top: 1rem; text-align: right;">
+              <button class="btn btn-outline btn-sm" onclick="adjustDoors(1)">+ Add Door</button>
+            </div>
+          </div>
+
           <!-- Installation Schedule -->
           <div class="panel">
             <div class="panel-title">Installation Schedule</div>
@@ -208,19 +338,11 @@
                 </select>
               </div>
             </div>
-          </div>
-
-          <!-- Door Details -->
-          <div class="panel">
-            <div class="panel-title">
-              <span>Door Specifications</span>
-              <div style="display:flex; gap:0.5rem;">
-                <button class="btn btn-outline btn-sm" onclick="adjustDoors(-1)">- Remove Door</button>
-                <button class="btn btn-outline btn-sm" onclick="adjustDoors(1)">+ Add Door</button>
-              </div>
-            </div>
-            <div id="doors-container">
-              <!-- Dynamic doors -->
+            <div style="margin-top: 0.5rem;">
+              <button type="button" class="btn btn-outline btn-sm" onclick="openCalendarModal()" style="display: inline-flex; align-items: center; gap: 0.5rem;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--cyan)" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                View Booking Calendar
+              </button>
             </div>
           </div>
 
@@ -358,7 +480,7 @@
       
       if (change === 1) {
         doorCount++;
-        const doorId = 'door-' + doorCount;
+        const doorId = 'door-' + Date.now(); // use timestamp to avoid deletion collisions
         
         let fileInputs = '';
         for (let i = 1; i <= 5; i++) {
@@ -372,7 +494,10 @@
 
         const html = `
           <div class="door-card" id="${doorId}">
-            <h4 style="margin-bottom:1rem; border-bottom:1px dashed var(--border); padding-bottom:0.25rem;">Door ${doorCount}</h4>
+            <div style="display:flex; justify-content:between; align-items:center; border-bottom:1px dashed var(--border); padding-bottom:0.5rem; margin-bottom:1rem;">
+              <h4 style="margin:0;">Door</h4>
+              <button type="button" style="background:none; border:none; color:#ef4444; font-size:1.2rem; cursor:pointer; font-weight:700;" onclick="removeDoorCard('${doorId}')">✕</button>
+            </div>
             <div class="form-row">
               <div class="form-group">
                 <label class="form-label">Door Material</label>
@@ -405,13 +530,27 @@
           </div>
         `;
         container.insertAdjacentHTML('beforeend', html);
-      } else if (change === -1 && doorCount > 0) {
-        const lastDoor = document.getElementById('door-' + doorCount);
-        if (lastDoor) {
-          lastDoor.remove();
-          doorCount--;
-        }
+        reindexDoors();
       }
+    }
+
+    function removeDoorCard(id) {
+      const el = document.getElementById(id);
+      if (el) {
+        el.remove();
+        reindexDoors();
+      }
+    }
+
+    function reindexDoors() {
+      const cards = document.querySelectorAll('.door-card');
+      cards.forEach((card, idx) => {
+        const h4 = card.querySelector('h4');
+        if (h4) {
+          h4.innerText = 'Door ' + (idx + 1);
+        }
+      });
+      doorCount = cards.length;
     }
 
     function previewFile(input) {
@@ -682,6 +821,126 @@
       `);
       printWindow.document.close();
     }
+
+    // --- Booking Calendar Control ---
+    const MOCK_BOOKINGS = [
+      { date: '2026-05-18', time: 'Morning', name: 'Juan D.', city: 'Pasig' },
+      { date: '2026-05-19', time: 'Afternoon', name: 'Clara M.', city: 'Manila' },
+      { date: '2026-05-20', time: 'Morning', name: 'Jose R.', city: 'QC' },
+      { date: '2026-05-25', time: 'Afternoon', name: 'Ramon V.', city: 'Makati' }
+    ];
+
+    function openCalendarModal() {
+      drawCalendar();
+      toggleCalendarModal(true);
+    }
+
+    function toggleCalendarModal(show) {
+      const modal = document.getElementById('calendar-modal');
+      if (show) {
+        modal.classList.add('active');
+      } else {
+        modal.classList.remove('active');
+      }
+    }
+
+    function closeCalendarModal(e) {
+      if (e.target.id === 'calendar-modal') {
+        toggleCalendarModal(false);
+      }
+    }
+
+    function drawCalendar() {
+      const cellsContainer = document.getElementById('calendar-cells');
+      cellsContainer.innerHTML = '';
+      
+      const bookings = [...MOCK_BOOKINGS];
+      const saved = localStorage.getItem('latest_installation_order');
+      if (saved) {
+        const order = JSON.parse(saved);
+        const nameAbbrev = order.name.split(' ')[0];
+        const city = order.address.split(',')[1]?.trim() || 'Pasig';
+        
+        // Add to view if not already exists in list
+        if (!bookings.some(b => b.date === order.date && b.time === order.time && b.name.startsWith(nameAbbrev))) {
+          bookings.push({
+            date: order.date,
+            time: order.time,
+            name: nameAbbrev,
+            city: city
+          });
+        }
+      }
+
+      // May 2026: 1st is Friday (index 5)
+      const firstDayIndex = 5;
+      const totalDays = 31;
+
+      // Filler cells
+      for (let i = 0; i < firstDayIndex; i++) {
+        cellsContainer.insertAdjacentHTML('beforeend', `<div class="calendar-cell" style="background:#f9fafb; opacity:0.3;"><span class="calendar-cell-num"></span></div>`);
+      }
+
+      // Populate days
+      for (let day = 1; day <= totalDays; day++) {
+        const dateStr = `2026-05-${day.toString().padStart(2, '0')}`;
+        const dayBookings = bookings.filter(b => b.date === dateStr);
+
+        let amHtml = '';
+        let pmHtml = '';
+
+        dayBookings.forEach(b => {
+          const displayText = `${b.name} (${b.city})`;
+          if (b.time === 'Morning' || b.time === 'AM') {
+            amHtml += `<div class="calendar-slot am" title="${displayText}">${displayText}</div>`;
+          } else {
+            pmHtml += `<div class="calendar-slot pm" title="${displayText}">${displayText}</div>`;
+          }
+        });
+
+        const isToday = (day === 20); // May 20, 2026
+        const cellClass = isToday ? 'calendar-cell today' : 'calendar-cell';
+
+        const cellHtml = `
+          <div class="${cellClass}">
+            <span class="calendar-cell-num">${day}</span>
+            <div style="display:flex; flex-direction:column; justify-content:flex-end; flex:1;">
+              ${amHtml}
+              ${pmHtml}
+            </div>
+          </div>
+        `;
+        cellsContainer.insertAdjacentHTML('beforeend', cellHtml);
+      }
+    }
   </script>
+
+  <!-- Booking Calendar Modal -->
+  <div class="modal-backdrop" id="calendar-modal" onclick="closeCalendarModal(event)">
+    <div class="modal-content" onclick="event.stopPropagation()">
+      <button class="modal-close" onclick="toggleCalendarModal(false)">✕</button>
+      <h3 style="margin-bottom:0.25rem;">Installation Calendar</h3>
+      <p style="color:var(--text-secondary); font-size:0.85rem; margin-bottom:1.5rem;">
+        AM slots (Blue) & PM slots (Green) view. May 2026.
+      </p>
+      
+      <div class="calendar-header">
+        <h4 style="margin:0; font-weight:700;">May 2026</h4>
+      </div>
+      
+      <div class="calendar-grid">
+        <div class="calendar-day-label">Su</div>
+        <div class="calendar-day-label">Mo</div>
+        <div class="calendar-day-label">Tu</div>
+        <div class="calendar-day-label">We</div>
+        <div class="calendar-day-label">Th</div>
+        <div class="calendar-day-label">Fr</div>
+        <div class="calendar-day-label">Sa</div>
+        <div class="calendar-grid-cells" id="calendar-cells" style="display:contents;">
+          <!-- Cells populating dynamically -->
+        </div>
+      </div>
+    </div>
+  </div>
 </body>
 </html>
