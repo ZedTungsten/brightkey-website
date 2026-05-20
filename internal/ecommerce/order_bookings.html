@@ -178,43 +178,68 @@
     }
     .calendar-cell {
       background: var(--bg-surface);
-      min-height: 75px;
-      padding: 4px;
+      min-height: 90px;
+      padding: 0;
       display: flex;
       flex-direction: column;
+      border: 1px solid transparent;
+    }
+    .calendar-cell-header {
+      display: flex;
       justify-content: space-between;
+      align-items: center;
+      padding: 4px 6px;
+      background: var(--bg-elevated);
+      border-bottom: 1px solid var(--border);
     }
     .calendar-cell-num {
       font-weight: 700;
       font-size: 0.8rem;
       color: var(--text-muted);
-      margin-bottom: 2px;
     }
     .calendar-cell.today {
-      background: rgba(6, 182, 212, 0.05);
+      border-color: var(--cyan);
+    }
+    .calendar-cell.today .calendar-cell-header {
+      background: rgba(6, 182, 212, 0.08);
     }
     .calendar-cell.today .calendar-cell-num {
       color: var(--cyan);
     }
+    .calendar-half {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 3px;
+      min-height: 32px;
+    }
+    .calendar-half.am {
+      background: rgba(245, 158, 11, 0.02);
+      border-bottom: 1px dashed var(--border);
+    }
+    .calendar-half.pm {
+      background: rgba(59, 130, 246, 0.02);
+    }
     .calendar-slot {
-      font-size: 0.6rem;
-      padding: 2px 4px;
+      font-size: 0.55rem;
+      padding: 1px 3px;
       border-radius: 2px;
-      margin-bottom: 2px;
+      margin-bottom: 1px;
       font-weight: 600;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }
     .calendar-slot.am {
-      background: rgba(59, 130, 246, 0.1);
-      color: #1d4ed8;
-      border-left: 2px solid #3b82f6;
+      background: rgba(245, 158, 11, 0.15);
+      color: #b45309;
+      border-left: 2px solid #f59e0b;
     }
     .calendar-slot.pm {
-      background: rgba(16, 185, 129, 0.1);
-      color: #047857;
-      border-left: 2px solid #10b981;
+      background: rgba(59, 130, 246, 0.15);
+      color: #1d4ed8;
+      border-left: 2px solid #3b82f6;
     }
     
     @media (max-width: 992px) {
@@ -223,12 +248,15 @@
     }
     @media (max-width: 480px) {
       .calendar-cell {
-        min-height: 55px;
-        padding: 2px;
+        min-height: 65px;
+      }
+      .calendar-half {
+        min-height: 22px;
+        padding: 1px;
       }
       .calendar-slot {
-        font-size: 0.5rem;
-        padding: 1px;
+        font-size: 0.45rem;
+        padding: 0;
       }
     }
   </style>
@@ -494,9 +522,9 @@
 
         const html = `
           <div class="door-card" id="${doorId}">
-            <div style="display:flex; justify-content:between; align-items:center; border-bottom:1px dashed var(--border); padding-bottom:0.5rem; margin-bottom:1rem;">
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px dashed var(--border); padding-bottom:0.5rem; margin-bottom:1rem;">
               <h4 style="margin:0;">Door</h4>
-              <button type="button" style="background:none; border:none; color:#ef4444; font-size:1.2rem; cursor:pointer; font-weight:700;" onclick="removeDoorCard('${doorId}')">✕</button>
+              <button type="button" class="btn btn-outline btn-sm" style="color:#ef4444; border-color:#ef4444; padding: 0.25rem 0.5rem;" onclick="removeDoorCard('${doorId}')">✕</button>
             </div>
             <div class="form-row">
               <div class="form-group">
@@ -823,6 +851,14 @@
     }
 
     // --- Booking Calendar Control ---
+    let currentYear = 2026;
+    let currentMonth = 4; // May (0-indexed)
+    
+    const MONTH_NAMES = [
+      "January", "February", "March", "April", "May", "June", 
+      "July", "August", "September", "October", "November", "December"
+    ];
+
     const MOCK_BOOKINGS = [
       { date: '2026-05-18', time: 'Morning', name: 'Juan D.', city: 'Pasig' },
       { date: '2026-05-19', time: 'Afternoon', name: 'Clara M.', city: 'Manila' },
@@ -850,6 +886,18 @@
       }
     }
 
+    function changeMonth(direction) {
+      currentMonth += direction;
+      if (currentMonth < 0) {
+        currentMonth = 11;
+        currentYear--;
+      } else if (currentMonth > 11) {
+        currentMonth = 0;
+        currentYear++;
+      }
+      drawCalendar();
+    }
+
     function drawCalendar() {
       const cellsContainer = document.getElementById('calendar-cells');
       cellsContainer.innerHTML = '';
@@ -872,18 +920,22 @@
         }
       }
 
-      // May 2026: 1st is Friday (index 5)
-      const firstDayIndex = 5;
-      const totalDays = 31;
+      // Dynamic date offsets for any month
+      const firstDayDate = new Date(currentYear, currentMonth, 1);
+      const firstDayIndex = firstDayDate.getDay();
+      const totalDays = new Date(currentYear, currentMonth + 1, 0).getDate();
+
+      // Update header
+      document.getElementById('calendar-month-year').innerText = `${MONTH_NAMES[currentMonth]} ${currentYear}`;
 
       // Filler cells
       for (let i = 0; i < firstDayIndex; i++) {
-        cellsContainer.insertAdjacentHTML('beforeend', `<div class="calendar-cell" style="background:#f9fafb; opacity:0.3;"><span class="calendar-cell-num"></span></div>`);
+        cellsContainer.insertAdjacentHTML('beforeend', `<div class="calendar-cell" style="background:#f9fafb; opacity:0.3;"><div class="calendar-cell-header"><span class="calendar-cell-num"></span></div><div class="calendar-half am"></div><div class="calendar-half pm"></div></div>`);
       }
 
       // Populate days
       for (let day = 1; day <= totalDays; day++) {
-        const dateStr = `2026-05-${day.toString().padStart(2, '0')}`;
+        const dateStr = `${currentYear}-${(currentMonth + 1).toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
         const dayBookings = bookings.filter(b => b.date === dateStr);
 
         let amHtml = '';
@@ -898,14 +950,18 @@
           }
         });
 
-        const isToday = (day === 20); // May 20, 2026
+        const isToday = (currentYear === 2026 && currentMonth === 4 && day === 20); // May 20, 2026
         const cellClass = isToday ? 'calendar-cell today' : 'calendar-cell';
 
         const cellHtml = `
           <div class="${cellClass}">
-            <span class="calendar-cell-num">${day}</span>
-            <div style="display:flex; flex-direction:column; justify-content:flex-end; flex:1;">
+            <div class="calendar-cell-header">
+              <span class="calendar-cell-num">${day}</span>
+            </div>
+            <div class="calendar-half am">
               ${amHtml}
+            </div>
+            <div class="calendar-half pm">
               ${pmHtml}
             </div>
           </div>
@@ -921,11 +977,13 @@
       <button class="modal-close" onclick="toggleCalendarModal(false)">✕</button>
       <h3 style="margin-bottom:0.25rem;">Installation Calendar</h3>
       <p style="color:var(--text-secondary); font-size:0.85rem; margin-bottom:1.5rem;">
-        AM slots (Blue) & PM slots (Green) view. May 2026.
+        Day slots divided: top half for AM (Orange), bottom half for PM (Blue).
       </p>
       
-      <div class="calendar-header">
-        <h4 style="margin:0; font-weight:700;">May 2026</h4>
+      <div class="calendar-header" style="justify-content: center; gap: 2rem;">
+        <button class="btn btn-outline btn-sm" onclick="changeMonth(-1)">◀</button>
+        <h4 id="calendar-month-year" style="margin:0; font-weight:700; min-width: 120px; text-align: center;">May 2026</h4>
+        <button class="btn btn-outline btn-sm" onclick="changeMonth(1)">▶</button>
       </div>
       
       <div class="calendar-grid">
