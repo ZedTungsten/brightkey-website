@@ -1109,6 +1109,53 @@
       const deductionsRaw= document.getElementById('summary-deductions')?.innerText?.replace(/[^0-9.]/g, '') || '0';
       const grandTotalRaw= document.getElementById('summary-grand-total')?.innerText?.replace(/[^0-9.]/g, '') || '0';
 
+      // Build pipe-separated product columns for receipt reproduction
+      const prodSkus       = [];
+      const prodNames      = [];
+      const prodQtys       = [];
+      const prodUnitPrices = [];
+      const prodTotals     = [];
+      products.forEach(p => {
+        const prodMatch = MOCK_PRODUCTS.find(mp => mp.sku === p.sku);
+        const unitPrice = prodMatch ? (prodMatch.salePrice || prodMatch.price) : 0;
+        const totalPrice = unitPrice * p.qty;
+        prodSkus.push(p.sku);
+        prodNames.push(p.name);
+        prodQtys.push(String(p.qty));
+        prodUnitPrices.push((unitPrice / 100).toFixed(2));
+        prodTotals.push((totalPrice / 100).toFixed(2));
+      });
+
+      // Build pipe-separated charge and deduction columns
+      const cLabels = [], cValues = [];
+      document.querySelectorAll('#charges-container .charge-row').forEach(row => {
+        const sel = row.querySelector('select');
+        const customInput = row.querySelector('input[type="text"]');
+        const valInput = row.querySelector('input[type="number"]');
+        const val = parseFloat(valInput.value) || 0;
+        if (val > 0) {
+          const label = sel.value === 'custom' ? (customInput?.value || 'Custom Fee') : sel.options[sel.selectedIndex].text;
+          cLabels.push(label);
+          cValues.push(val.toFixed(2));
+        }
+      });
+
+      const dLabels = [], dValues = [];
+      document.querySelectorAll('#deductions-container .deduction-row').forEach(row => {
+        const sel = row.querySelector('select');
+        const customInput = row.querySelector('input[type="text"]');
+        const valInput = row.querySelector('input[type="number"]');
+        const val = parseFloat(valInput.value) || 0;
+        if (val > 0) {
+          const label = sel.value === 'custom' ? (customInput?.value || 'Custom Deduction') : sel.options[sel.selectedIndex].text;
+          dLabels.push(label);
+          dValues.push(val.toFixed(2));
+        }
+      });
+
+      // Collect all door photo CDN URLs as flat pipe-separated string
+      const allDoorPhotoUrls = doors.flatMap(d => d.photos || []).filter(Boolean);
+
       const supabasePayload = {
         folder_ref_id:      folderRefId,
         order_no:           receiptNo,
@@ -1121,10 +1168,26 @@
         scheduled_time:     timeVal || null,
         installer_id:       installerId || null,
         installer_name:     installerName || null,
+        // Pipe-separated product columns
+        product_skus:         prodSkus.join(' | ') || null,
+        product_names:        prodNames.join(' | ') || null,
+        product_qtys:         prodQtys.join(' | ') || null,
+        product_unit_prices:  prodUnitPrices.join(' | ') || null,
+        product_totals:       prodTotals.join(' | ') || null,
+        // Full product JSONB for programmatic access
         products:           products,
+        // Pipe-separated charges/deductions
+        charge_labels:      cLabels.join(' | ') || null,
+        charge_values:      cValues.join(' | ') || null,
+        deduction_labels:   dLabels.join(' | ') || null,
+        deduction_values:   dValues.join(' | ') || null,
+        // Full door specs JSONB
         doors:              doors.map(d => ({ index: d.index, doorMaterial: d.doorMaterial, jambMaterial: d.jambMaterial, photos: d.photos })),
+        // All CDN image URLs
         map_image_url:      mapUrl || null,
         frontage_image_url: frontageUrl || null,
+        door_photo_urls:    allDoorPhotoUrls.join(' | ') || null,
+        // Financials
         subtotal:           parseFloat(subtotalRaw) || null,
         charges:            parseFloat(chargesRaw) || null,
         deductions:         parseFloat(deductionsRaw) || null,

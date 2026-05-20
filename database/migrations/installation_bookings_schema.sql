@@ -26,16 +26,41 @@ CREATE TABLE IF NOT EXISTS public.installation_bookings (
   installer_id      text,
   installer_name    text,
 
-  -- Products (JSON array of { sku, name, qty })
+  -- Products (pipe-separated strings for easy receipt re-rendering)
+  -- Example: product_skus = "B11 | A04"
+  --          product_names = "Smart Lock Pro | Deadbolt Set"
+  --          product_qtys  = "1 | 2"
+  --          product_unit_prices = "2499.00 | 5499.00"
+  --          product_totals      = "2499.00 | 10998.00"
+  product_skus        text,
+  product_names       text,
+  product_qtys        text,
+  product_unit_prices text,
+  product_totals      text,
+
+  -- Full product data (JSON for programmatic access)
   products          jsonb DEFAULT '[]'::jsonb,
+
+  -- Charges / Others (pipe-separated)
+  -- Example: charge_labels = "Credit card fee | Shipping fee"
+  --          charge_values  = "900.00 | 1850.00"
+  charge_labels     text,
+  charge_values     text,
+
+  -- Deductions / Less (pipe-separated)
+  -- Example: deduction_labels = "Senior discount | Promo"
+  --          deduction_values  = "500.00 | 250.00"
+  deduction_labels  text,
+  deduction_values  text,
 
   -- Door Specs (JSON array of { index, doorMaterial, jambMaterial, photos[] })
   doors             jsonb DEFAULT '[]'::jsonb,
 
-  -- Media CDN URLs
-  map_image_url     text,
-  frontage_image_url text,
-  receipt_pdf_url   text,
+  -- All uploaded image CDN URLs (Bunny.net)
+  map_image_url       text,
+  frontage_image_url  text,
+  door_photo_urls     text,   -- pipe-separated: "https://cdn.../d1p1.jpg | https://cdn.../d1p2.jpg | ..."
+  receipt_pdf_url     text,
 
   -- Financials snapshot
   subtotal          numeric(10,2),
@@ -69,6 +94,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS set_installation_bookings_updated_at ON public.installation_bookings;
 CREATE TRIGGER set_installation_bookings_updated_at
   BEFORE UPDATE ON public.installation_bookings
   FOR EACH ROW EXECUTE FUNCTION public.touch_updated_at();
