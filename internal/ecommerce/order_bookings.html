@@ -931,44 +931,324 @@
       // Generate visual receipt popup print window
       const printWindow = window.open('', '_blank');
       
-      // Calculate final receipt lines
+      // Calculate products list
       let itemsHtml = '';
       products.forEach(p => {
-        itemsHtml += `<tr><td>${p.name}</td><td>x${p.qty}</td></tr>`;
+        const prodMatch = MOCK_PRODUCTS.find(mp => mp.sku === p.sku);
+        const unitPrice = prodMatch ? (prodMatch.salePrice || prodMatch.price) : 0;
+        const totalLinePrice = unitPrice * p.qty;
+        
+        itemsHtml += `
+          <tr>
+            <td style="padding: 10px 0; border-bottom: 1px solid #e2e8f0; text-align: left; font-weight: 500; color: #2d3748;">
+              ${p.name}
+            </td>
+            <td style="padding: 10px 0; border-bottom: 1px solid #e2e8f0; text-align: right; color: #4a5568;">
+              ₱ ${(unitPrice / 100).toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+            </td>
+            <td style="padding: 10px 0; border-bottom: 1px solid #e2e8f0; text-align: center; color: #4a5568;">
+              ${p.qty}
+            </td>
+            <td style="padding: 10px 0; border-bottom: 1px solid #e2e8f0; text-align: right; font-weight: 600; color: #2d3748;">
+              ₱ ${(totalLinePrice / 100).toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+            </td>
+          </tr>
+        `;
       });
+
+      // Calculate charges (Others)
+      let chargesHtml = '';
+      const chargeRows = document.querySelectorAll('#charges-container .form-row');
+      let totalC = 0;
+      chargeRows.forEach(row => {
+        const sel = row.querySelector('select');
+        const customNameInput = row.querySelector('input[type="text"]');
+        const valInput = row.querySelector('input[type="number"]');
+        const val = parseFloat(valInput.value) || 0;
+        
+        const label = sel.value === 'custom' ? (customNameInput?.value || 'Custom Fee') : sel.options[sel.selectedIndex].text;
+        if (val > 0) {
+          totalC += val;
+          chargesHtml += `
+            <tr style="font-size: 0.85rem; color: #4a5568;">
+              <td colspan="3" style="padding: 8px 0; text-align: right; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">${label}:</td>
+              <td style="padding: 8px 0; text-align: right; font-weight: 600;">₱ ${val.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</td>
+            </tr>
+          `;
+        }
+      });
+      if (totalC === 0) {
+        chargesHtml = `
+          <tr style="font-size: 0.85rem; color: #718096;">
+            <td colspan="3" style="padding: 8px 0; text-align: right; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">OTHERS:</td>
+            <td style="padding: 8px 0; text-align: right;">n/a</td>
+          </tr>
+        `;
+      }
+
+      // Calculate deductions (Less)
+      let deductionsHtml = '';
+      const deductionRows = document.querySelectorAll('#deductions-container .form-row');
+      let totalD = 0;
+      deductionRows.forEach(row => {
+        const sel = row.querySelector('select');
+        const customNameInput = row.querySelector('input[type="text"]');
+        const valInput = row.querySelector('input[type="number"]');
+        const val = parseFloat(valInput.value) || 0;
+        
+        const label = sel.value === 'custom' ? (customNameInput?.value || 'Custom Deduction') : sel.options[sel.selectedIndex].text;
+        if (val > 0) {
+          totalD += val;
+          deductionsHtml += `
+            <tr style="font-size: 0.85rem; color: #4a5568;">
+              <td colspan="3" style="padding: 8px 0; text-align: right; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">LESS (${label}):</td>
+              <td style="padding: 8px 0; text-align: right; font-weight: 600; color: #ef4444;">₱ ${val.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</td>
+            </tr>
+          `;
+        }
+      });
+      if (totalD === 0) {
+        deductionsHtml = `
+          <tr style="font-size: 0.85rem; color: #718096;">
+            <td colspan="3" style="padding: 8px 0; text-align: right; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">LESS:</td>
+            <td style="padding: 8px 0; text-align: right;">n/a</td>
+          </tr>
+        `;
+      }
+
+      const itemSubtotalFormatted = document.getElementById('summary-prod-subtotal').innerText;
+      const grandTotalFormatted = document.getElementById('summary-grand-total').innerText;
+      const receiptNo = 'ORD-' + new Date().toISOString().slice(0,10).replace(/-/g,'') + '-' + Date.now().toString().slice(-3);
+      const receiptDate = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 
       printWindow.document.write(`
         <html>
         <head>
-          <title>Installation Receipt - BrightKey</title>
+          <title>Acknowledgment Receipt - ${receiptNo}</title>
           <style>
-            body { font-family: 'Courier New', monospace; padding: 20px; max-width: 400px; margin: auto; }
-            .header { text-align: center; margin-bottom: 20px; border-bottom: 2px dashed #000; padding-bottom: 10px; }
-            table { width: 100%; border-collapse: collapse; margin: 15px 0; }
-            td { padding: 5px 0; }
-            .totals { border-top: 1px dashed #000; padding-top: 10px; font-weight: bold; }
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+            body { 
+              font-family: 'Inter', sans-serif; 
+              margin: 0; 
+              padding: 0; 
+              color: #2d3748;
+              background-color: #ffffff;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
+            }
+            .receipt-container {
+              max-width: 700px;
+              margin: 0 auto;
+              padding: 0;
+            }
+            .header-bar {
+              background-color: #262626;
+              color: #ffffff;
+              padding: 24px 32px;
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+            }
+            .logo-text {
+              font-size: 2rem;
+              font-weight: 800;
+              letter-spacing: -1px;
+            }
+            .logo-sub {
+              font-size: 0.8rem;
+              color: #10b981;
+              font-weight: 600;
+              margin-left: 4px;
+            }
+            .store-info {
+              text-align: right;
+              font-size: 0.8rem;
+              line-height: 1.5;
+              color: #d4d4d4;
+            }
+            .receipt-body {
+              padding: 32px;
+            }
+            .title-row {
+              display: flex;
+              justify-content: space-between;
+              align-items: baseline;
+              border-bottom: 2px solid #e2e8f0;
+              padding-bottom: 12px;
+              margin-bottom: 24px;
+            }
+            .title-text {
+              font-size: 1.5rem;
+              font-weight: 700;
+              color: #1a202c;
+              letter-spacing: -0.5px;
+            }
+            .date-text {
+              font-size: 0.95rem;
+              font-weight: 600;
+              color: #718096;
+            }
+            .metadata-grid {
+              display: grid;
+              grid-template-columns: 100px 1fr;
+              row-gap: 8px;
+              margin-bottom: 32px;
+              font-size: 0.9rem;
+              line-height: 1.6;
+            }
+            .meta-label {
+              font-weight: 600;
+              color: #4a5568;
+            }
+            .meta-value {
+              color: #1a202c;
+            }
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              margin-bottom: 24px;
+            }
+            th {
+              padding: 10px 0;
+              border-bottom: 2px solid #2d3748;
+              font-size: 0.75rem;
+              font-weight: 700;
+              text-transform: uppercase;
+              letter-spacing: 1px;
+              color: #4a5568;
+            }
+            .summary-table {
+              width: 100%;
+              margin-top: 16px;
+              border-top: 2px solid #e2e8f0;
+              padding-top: 12px;
+            }
+            .grand-total-row {
+              font-size: 1.25rem;
+              font-weight: 700;
+              color: #1a202c;
+            }
+            .terms-section {
+              margin-top: 40px;
+              border-top: 1px solid #e2e8f0;
+              padding-top: 20px;
+              font-size: 0.75rem;
+              color: #718096;
+              line-height: 1.6;
+            }
+            .terms-title {
+              font-weight: 700;
+              color: #4a5568;
+              margin-bottom: 8px;
+              text-transform: uppercase;
+              letter-spacing: 0.5px;
+            }
+            .thank-you {
+              margin-top: 40px;
+              text-align: center;
+              font-weight: 700;
+              font-size: 0.9rem;
+              color: #4a5568;
+              letter-spacing: 1px;
+            }
+            @media print {
+              body {
+                background-color: #ffffff;
+                color: #000000;
+              }
+              .header-bar {
+                background-color: #262626 !important;
+                color: #ffffff !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+              }
+            }
           </style>
         </head>
         <body onload="window.print(); window.close();">
-          <div class="header">
-            <h2>BRIGHTKEY</h2>
-            <p>LOCKSMITH & INSTALLATION SERVICE</p>
-            <p>Customer: ${name}</p>
-            <p>Schedule: ${dateVal} (${timeVal})</p>
-          </div>
-          <table>
-            <thead>
-              <tr><th align="left">Item</th><th align="left">Qty</th></tr>
-            </thead>
-            <tbody>
-              ${itemsHtml}
-            </tbody>
-          </table>
-          <div class="totals">
-            <div>Product Subtotal: ${document.getElementById('summary-prod-subtotal').innerText}</div>
-            <div>Additional Charges: ${document.getElementById('summary-charges').innerText}</div>
-            <div>Deductions: ${document.getElementById('summary-deductions').innerText}</div>
-            <div style="font-size: 1.2rem; margin-top: 10px;">Grand Total: ${document.getElementById('summary-grand-total').innerText}</div>
+          <div class="receipt-container">
+            <div class="header-bar">
+              <div>
+                <span class="logo-text">LOOCK</span>
+                <span class="logo-sub">Cavite</span>
+              </div>
+              <div class="store-info">
+                <strong>LOOCK CAVITE</strong><br/>
+                B2 L2, Baes St., Perpetual 7<br/>
+                Bacoor, Cavite 4102<br/>
+                info@opmmi.ph
+              </div>
+            </div>
+            
+            <div class="receipt-body">
+              <div class="title-row">
+                <span class="title-text">ACKNOWLEDGMENT RECEIPT</span>
+                <span class="date-text">${receiptDate}</span>
+              </div>
+              
+              <div class="metadata-grid">
+                <span class="meta-label">Order No.</span>
+                <span class="meta-value" style="font-weight: 600; color: #1a202c;">${receiptNo}</span>
+                
+                <span class="meta-label">Name</span>
+                <span class="meta-value">${name}</span>
+                
+                <span class="meta-label">Contact</span>
+                <span class="meta-value">${phone}</span>
+                
+                <span class="meta-label">Email</span>
+                <span class="meta-value">${email || 'n/a'}</span>
+                
+                <span class="meta-label">Address</span>
+                <span class="meta-value">${address}, ${city}, ${province} ${zip}</span>
+              </div>
+              
+              <table>
+                <thead>
+                  <tr>
+                    <th align="left" style="width: 50%;">PARTICULARS</th>
+                    <th align="right">PRICE</th>
+                    <th align="center" style="width: 10%;">QTY</th>
+                    <th align="right">TOTAL</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${itemsHtml}
+                </tbody>
+              </table>
+
+              <table class="summary-table">
+                <tbody>
+                  <tr style="font-size: 0.9rem; font-weight: 600; color: #2d3748;">
+                    <td colspan="3" style="padding: 8px 0; text-align: right; letter-spacing: 0.5px;">ITEM TOTAL:</td>
+                    <td style="padding: 8px 0; text-align: right; width: 25%; font-weight: 700;">${itemSubtotalFormatted}</td>
+                  </tr>
+                  
+                  ${chargesHtml}
+                  ${deductionsHtml}
+                  
+                  <tr class="grand-total-row">
+                    <td colspan="3" style="padding: 16px 0 8px 0; text-align: right; border-top: 2px solid #2d3748; letter-spacing: 0.5px;">GRAND TOTAL:</td>
+                    <td style="padding: 16px 0 8px 0; text-align: right; border-top: 2px solid #2d3748; font-size: 1.3rem;">${grandTotalFormatted}</td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <div class="terms-section">
+                <div class="terms-title">Terms & Conditions</div>
+                <div style="margin-bottom: 6px;"><strong>Non-refundable deposit:</strong> The deposit is non-refundable and secures your device and installation schedule.</div>
+                <div style="margin-bottom: 6px;"><strong>Payment application and forfeiture:</strong> The deposit will be deducted from the total cost. If the order is cancelled or does not proceed, the deposit will be forfeited.</div>
+                <div style="margin-bottom: 6px;"><strong>Full payment:</strong> The remaining balance must be paid in full upon installation. Payment of the deposit confirms your agreement to these terms.</div>
+                <div style="margin-bottom: 6px;"><strong>Delivery and installation:</strong> Please allow up to one (1) week for delivery and installation based on your preferred date and time.</div>
+                <div style="margin-bottom: 6px;"><strong>Rescheduling policy:</strong> One (1) reschedule is allowed free of charge. Any succeeding reschedule will incur a ₱300 fee, as installer availability is reserved in advance.</div>
+                <div style="margin-bottom: 6px;"><strong>Warranty and support:</strong> All products come with at least a one-year warranty and technical support.</div>
+                <div><strong>Shipping:</strong> Shipping fees are calculated based on the delivery location.</div>
+              </div>
+
+              <div class="thank-you">
+                THANK YOU FOR YOUR BUSINESS!
+              </div>
+            </div>
           </div>
         </body>
         </html>
