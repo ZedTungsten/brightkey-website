@@ -98,6 +98,58 @@
       position: sticky;
       top: 140px;
     }
+    .processing-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.85);
+      backdrop-filter: blur(10px);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 20000;
+      color: white;
+      font-family: 'Inter', sans-serif;
+      padding: 24px;
+      text-align: center;
+    }
+    .processing-overlay .spinner {
+      border: 6px solid rgba(255, 255, 255, 0.1);
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      border-left-color: var(--accent-cyan);
+      animation: spin 1s linear infinite;
+      margin-bottom: 24px;
+    }
+    .processing-overlay h2 {
+      font-size: 1.8rem;
+      margin: 0 0 12px 0;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    .processing-overlay p {
+      font-size: 1rem;
+      color: #cbd5e1;
+      max-width: 480px;
+      margin: 0;
+      line-height: 1.5;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    @media (max-width: 768px) {
+      .processing-overlay h2 {
+        font-size: 2.2rem;
+      }
+      .processing-overlay p {
+        font-size: 1.3rem;
+      }
+    }
     .price-summary {
       font-size: 0.95rem;
       margin-bottom: 1.5rem;
@@ -642,13 +694,58 @@
       doorCount = cards.length;
     }
 
-    function previewFile(input) {
+    function compressImage(file, maxWidth = 1200, maxHeight = 1200, quality = 0.8) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          const img = new Image();
+          img.onload = function() {
+            const canvas = document.createElement('canvas');
+            let width = img.width;
+            let height = img.height;
+
+            if (width > height) {
+              if (width > maxWidth) {
+                height = Math.round((height * maxWidth) / width);
+                width = maxWidth;
+              }
+            } else {
+              if (height > maxHeight) {
+                width = Math.round((width * maxHeight) / height);
+                height = maxHeight;
+              }
+            }
+
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+            
+            const compressedBase64 = canvas.toDataURL('image/jpeg', quality);
+            resolve(compressedBase64);
+          };
+          img.onerror = reject;
+          img.src = e.target.result;
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
+
+    async function previewFile(input) {
       const file = input.files[0];
       const parent = input.parentElement;
       if (file) {
-        const reader = new FileReader();
-        reader.onload = function(e) {
-          // Check if img already exists
+        const originalSpan = parent.querySelector('span');
+        const prevText = originalSpan ? originalSpan.innerText : '';
+        if (originalSpan) {
+          originalSpan.innerText = "Compressing...";
+          originalSpan.style.zIndex = "2";
+        }
+        try {
+          // Compress on client-side to prevent Vercel 4.5MB payload limits
+          const compressedBase64 = await compressImage(file);
+          
           let img = parent.querySelector('img');
           if (!img) {
             img = document.createElement('img');
@@ -661,10 +758,36 @@
             img.style.zIndex = '1';
             parent.appendChild(img);
           }
-          img.src = e.target.result;
-          parent.setAttribute('data-base64', e.target.result);
+          img.src = compressedBase64;
+          parent.setAttribute('data-base64', compressedBase64);
+        } catch (err) {
+          console.error("Compression failed:", err);
+          showNotification("Image compression failed. Using raw upload.", 'error');
+          // Fallback to raw upload if compression fails
+          const reader = new FileReader();
+          reader.onload = function(e) {
+            let img = parent.querySelector('img');
+            if (!img) {
+              img = document.createElement('img');
+              img.style.position = 'absolute';
+              img.style.top = '0';
+              img.style.left = '0';
+              img.style.width = '100%';
+              img.style.height = '100%';
+              img.style.objectFit = 'cover';
+              img.style.zIndex = '1';
+              parent.appendChild(img);
+            }
+            img.src = e.target.result;
+            parent.setAttribute('data-base64', e.target.result);
+          }
+          reader.readAsDataURL(file);
+        } finally {
+          if (originalSpan) {
+            originalSpan.innerText = prevText;
+            originalSpan.style.zIndex = "";
+          }
         }
-        reader.readAsDataURL(file);
       }
     }
 
@@ -890,66 +1013,17 @@
       const surname = name.trim().split(' ').pop().replace(/[^a-zA-Z0-9]/g, '').toUpperCase() || 'CUSTOMER';
       const folderRefId = `${surname}-${receiptNo}`;
 
-      // Open the print/receipt tab immediately to prevent popup blocking
-      const receiptWindow = window.open('', '_blank');
-      if (receiptWindow) {
-        receiptWindow.document.write(`
-          <!DOCTYPE html>
-          <html lang="en">
-          <head>
-            <meta charset="UTF-8">
-            <title>Preparing Receipt - ${receiptNo}</title>
-            <style>
-              body {
-                display: flex;
-                flex-direction: column;
-                justify-content: center;
-                align-items: center;
-                height: 100vh;
-                margin: 0;
-                font-family: system-ui, -apple-system, sans-serif;
-                background: #f3f4f6;
-                color: #4b5563;
-              }
-              .spinner {
-                border: 4px solid rgba(0, 0, 0, 0.1);
-                width: 48px;
-                height: 48px;
-                border-radius: 50%;
-                border-left-color: #2563eb;
-                animation: spin 1s linear infinite;
-                margin-bottom: 16px;
-              }
-              @keyframes spin {
-                0% { transform: rotate(0deg); }
-                100% { transform: rotate(360deg); }
-              }
-              h2 {
-                margin: 0 0 8px 0;
-                font-size: 1.25rem;
-                color: #1f2937;
-              }
-              p {
-                margin: 0;
-                font-size: 0.875rem;
-              }
-            </style>
-          </head>
-          <body>
-            <div class="spinner"></div>
-            <h2>Processing Booking...</h2>
-            <p>Please do not close this window while we save your schedule and generate your receipt.</p>
-          </body>
-          </html>
-        `);
-        receiptWindow.document.close();
+      // Show the processing overlay loading screen
+      const overlay = document.getElementById('processing-overlay');
+      if (overlay) {
+        overlay.style.display = 'flex';
       }
 
       // Set uploading state on button
       const schedBtn = document.getElementById('sched-action-btn') || document.querySelector('button[onclick="scheduleAndPrint()"]');
       const originalBtnText = schedBtn ? schedBtn.innerText : 'Schedule & Print Receipt';
       if (schedBtn) {
-        schedBtn.innerText = "Uploading Media to Bunny.net CDN...";
+        schedBtn.innerText = "Processing booking...";
         schedBtn.disabled = true;
       }
 
@@ -1668,85 +1742,20 @@
             </div>
           </div>
 
-          <!-- Floating action bar inside new tab -->
-          <div class="receipt-actions">
-            <button class="action-btn btn-save" onclick="saveAsPdf()">
-              📄 Save as PDF
-            </button>
-            <button class="action-btn btn-print" onclick="window.print()">
-              🖨️ Print Receipt
-            </button>
           </div>
-
-          <script>
-            async function saveAsPdf() {
-              const element = document.querySelector('.receipt-page');
-              const opt = {
-                margin:       0,
-                filename:     '${receiptNo}.pdf',
-                image:        { type: 'jpeg', quality: 0.98 },
-                html2canvas:  { scale: 2, useCORS: true },
-                jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
-              };
-              
-              const saveBtn = document.querySelector('.btn-save');
-              const originalText = saveBtn.innerHTML;
-              saveBtn.innerHTML = '⌛ Compiling PDF...';
-              saveBtn.disabled = true;
-
-              try {
-                // Download locally
-                html2pdf().set(opt).from(element).save();
-
-                // Generate pdf as data URI and upload in the background
-                const pdfDataUri = await html2pdf().set(opt).from(element).toPdf().output('datauristring');
-                
-                saveBtn.innerHTML = '☁️ Uploading to CDN...';
-                const res = await fetch('${window.location.origin}/api/upload', {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json'
-                  },
-                  body: JSON.stringify({
-                    fileBase64: pdfDataUri,
-                    fileName: '${receiptNo}.pdf',
-                    category: 'installations',
-                    refId: '${folderRefId}',
-                    type: 'receipt'
-                  })
-                });
-
-                if (res.ok) {
-                  const data = await res.json();
-                  console.log('Successfully uploaded to Bunny.net:', data.url);
-                  if (window.opener) {
-                    window.opener.postMessage({ type: 'RECEIPT_UPLOADED', url: data.url, receiptNo: '${receiptNo}' }, '*');
-                  }
-                }
-              } catch (err) {
-                console.error('Error during saving/uploading:', err);
-              } finally {
-                saveBtn.innerHTML = '✅ Saved & Uploaded';
-                setTimeout(() => {
-                  saveBtn.innerHTML = originalText;
-                  saveBtn.disabled = false;
-                }, 3000);
-              }
-            }
-          <\/script>
         </body>
         </html>
       `;
 
-      // Store in global scope so openReceiptTab() can reference it
-      window.latestReceiptHtml = receiptHtml;
-
-      // Write compiled receipt directly into open tab, triggering onload="window.print()"
-      if (receiptWindow) {
-        receiptWindow.document.open();
-        receiptWindow.document.write(receiptHtml);
-        receiptWindow.document.close();
+      // Hide the processing overlay loading screen
+      if (overlay) {
+        overlay.style.display = 'none';
       }
+
+      // Store in global scope so modal functions can reference it
+      window.latestReceiptHtml = receiptHtml;
+      window.latestReceiptNo = receiptNo;
+      window.latestFolderRefId = folderRefId;
 
       // Clean up button state
       if (schedBtn) {
@@ -1796,37 +1805,102 @@
 
     function toggleReceiptModal(show) {
       const modal = document.getElementById('receipt-modal');
+      const iframe = document.getElementById('receipt-iframe');
       if (show) {
         modal.classList.add('active');
+        if (iframe && window.latestReceiptHtml) {
+          const doc = iframe.contentWindow.document;
+          doc.open();
+          doc.write(window.latestReceiptHtml);
+          doc.close();
+        }
       } else {
         modal.classList.remove('active');
       }
     }
 
-    function openReceiptTab() {
-      if (!window.latestReceiptHtml) {
-        showNotification("No receipt markup available.", 'error');
+    async function saveModalAsPdf() {
+      const iframe = document.getElementById('receipt-iframe');
+      if (!iframe || !iframe.contentWindow) return;
+
+      const doc = iframe.contentWindow.document;
+      const element = doc.querySelector('.receipt-page');
+      if (!element) {
+        showNotification("Could not locate receipt content.", "error");
         return;
       }
-      const printWindow = window.open('', '_blank');
-      if (printWindow) {
-        printWindow.document.write(window.latestReceiptHtml);
-        printWindow.document.close();
-        toggleReceiptModal(false);
-      } else {
-        showNotification("Could not open receipt tab. Please allow popups.", 'error');
+
+      const saveBtn = document.getElementById('modal-save-pdf-btn');
+      const originalText = saveBtn.innerHTML;
+      saveBtn.innerHTML = '⌛ Compiling PDF...';
+      saveBtn.disabled = true;
+
+      const savedOrder = JSON.parse(localStorage.getItem('latest_installation_order') || '{}');
+      const receiptNo = window.latestReceiptNo || 'ORD-RECEIPT';
+      const folderRefId = window.latestFolderRefId || 'RECEIPT';
+
+      const opt = {
+        margin:       0,
+        filename:     `${receiptNo}.pdf`,
+        image:        { type: 'jpeg', quality: 0.98 },
+        html2canvas:  { scale: 2, useCORS: true },
+        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      };
+
+      try {
+        // Download locally using the html2pdf instance on the main window targeting the iframe element
+        await html2pdf().set(opt).from(element).save();
+
+        // Generate pdf as data URI and upload in the background
+        const pdfDataUri = await html2pdf().set(opt).from(element).toPdf().output('datauristring');
+        
+        saveBtn.innerHTML = '☁️ Uploading to CDN...';
+        const res = await fetch(`${window.location.origin}/api/upload`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            fileBase64: pdfDataUri,
+            fileName: `${receiptNo}.pdf`,
+            category: 'installations',
+            refId: folderRefId,
+            type: 'receipt'
+          })
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          console.log('Successfully uploaded receipt to Bunny.net:', data.url);
+          savedOrder.receiptPdfUrl = data.url;
+          localStorage.setItem('latest_installation_order', JSON.stringify(savedOrder));
+          showNotification('Receipt PDF successfully uploaded and saved!', 'success');
+        } else {
+          const errData = await res.json();
+          console.warn('API error during upload:', errData.error);
+          showNotification(`Upload failed: ${errData.error || 'unknown error'}`, 'error');
+        }
+      } catch (err) {
+        console.error('Error compiling/uploading PDF:', err);
+        showNotification("Failed to upload receipt to CDN.", "error");
+      } finally {
+        saveBtn.innerHTML = '✅ Saved & Uploaded';
+        setTimeout(() => {
+          saveBtn.innerHTML = originalText;
+          saveBtn.disabled = false;
+        }, 3000);
       }
     }
 
-    // Listen for background receipt uploads from receipt tab
-    window.addEventListener('message', (event) => {
-      if (event.data && event.data.type === 'RECEIPT_UPLOADED') {
-        const savedOrder = JSON.parse(localStorage.getItem('latest_installation_order') || '{}');
-        savedOrder.receiptPdfUrl = event.data.url;
-        localStorage.setItem('latest_installation_order', JSON.stringify(savedOrder));
-        showNotification(`Receipt PDF saved & uploaded to CDN!`, 'success');
+    function printModalReceipt() {
+      const iframe = document.getElementById('receipt-iframe');
+      if (iframe && iframe.contentWindow) {
+        iframe.contentWindow.focus();
+        iframe.contentWindow.print();
+      } else {
+        showNotification("Could not open print window.", "error");
       }
-    });
+    }
 
     function changeMonth(direction) {
       currentMonth += direction;
@@ -1962,17 +2036,30 @@
     </div>
   </div>
 
-  <!-- Receipt Notification Modal -->
+  <!-- Processing Booking Loading Overlay -->
+  <div id="processing-overlay" style="display: none;" class="processing-overlay">
+    <div class="spinner"></div>
+    <h2>Processing Booking...</h2>
+    <p>Please do not close this window while we save your schedule and compile your receipt.</p>
+  </div>
+
+  <!-- Receipt View Modal -->
   <div class="modal-backdrop" id="receipt-modal">
-    <div class="modal-content" style="max-width: 450px; text-align: center; padding: 2.5rem 2rem;">
-      <div style="font-size: 3.5rem; margin-bottom: 1rem; color: var(--accent-primary);">📄</div>
-      <h3 style="margin-bottom: 0.5rem; font-weight: 700;">Installation Scheduled!</h3>
-      <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 2rem; line-height: 1.5;">
-        Your booking details are successfully saved. Click below to open the receipt tab, where you can print or save it to your local device.
-      </p>
-      <div style="display: flex; flex-direction: column; gap: 0.75rem;">
-        <button onclick="openReceiptTab()" class="btn btn-primary" style="display: block; font-weight: 600; width: 100%;">
-          Open Receipt Page
+    <div class="modal-content" style="max-width: 850px; width: 95%; padding: 1.5rem; max-height: 95vh; display: flex; flex-direction: column;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; border-bottom: 1px solid var(--border); padding-bottom: 0.75rem;">
+        <h3 style="margin: 0; font-weight: 700; font-size: 1.25rem;">Acknowledgment Receipt</h3>
+        <button onclick="toggleReceiptModal(false)" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--text-secondary); line-height: 1;">✕</button>
+      </div>
+      
+      <!-- Seamless Embedded Receipt IFrame -->
+      <iframe id="receipt-iframe" style="width: 100%; height: 60vh; border: 1px solid var(--border); border-radius: 8px; background: #f9fafb;"></iframe>
+      
+      <div style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1rem;">
+        <button id="modal-save-pdf-btn" onclick="saveModalAsPdf()" class="btn btn-primary" style="font-weight: 600; display: inline-flex; align-items: center; gap: 8px;">
+          📄 Save as PDF
+        </button>
+        <button onclick="printModalReceipt()" class="btn btn-outline" style="font-weight: 600; display: inline-flex; align-items: center; gap: 8px;">
+          🖨️ Print Receipt
         </button>
         <button class="btn btn-outline" onclick="toggleReceiptModal(false)">
           Close
