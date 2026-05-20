@@ -1170,6 +1170,7 @@
       pageSize: 30,
       editMode: false,
       dirty: {},        // { id: { field: newVal, ... } }
+      pendingDeletes: new Set(),
       sortCol: 'employee_number',
       sortDir: 'asc',
       pendingDeleteId: null,
@@ -1208,6 +1209,7 @@
           );
           this.allEmployees = data;
           this.dirty = {};
+          this.pendingDeletes.clear();
           this.updateDeptFilter();
           this.applyFilters();
           this.updateStats();
@@ -1238,6 +1240,7 @@
         const status = document.getElementById('filter-status').value;
 
         this.filtered = this.allEmployees.filter(emp => {
+          if (this.pendingDeletes.has(emp.id)) return false;
           if (dept && emp.department !== dept) return false;
           if (status && (emp.employment_status || 'Active') !== status) return false;
           if (q) {
@@ -1490,7 +1493,9 @@
       /* ── Save all dirty rows ── */
       async saveAll() {
         const ids = Object.keys(this.dirty);
-        if (ids.length === 0) {
+        const deletes = Array.from(this.pendingDeletes);
+
+        if (ids.length === 0 && deletes.length === 0) {
           toast('No changes to save.', 'info');
           this.editMode = false;
           const bar = document.getElementById('edit-mode-bar');
@@ -1503,6 +1508,21 @@
 
         toast('Saving changes...', 'info');
         let saved = 0, failed = 0;
+
+        // 1. Process pending deletes
+        for (const id of deletes) {
+          try {
+            await sbDelete(id);
+            this.allEmployees = this.allEmployees.filter(e => e.id !== id);
+            this.pendingDeletes.delete(id);
+            saved++;
+          } catch (err) {
+            failed++;
+            console.error('Delete failed for ID:', id, err);
+          }
+        }
+
+        // 2. Process updates and inserts
         for (const id of ids) {
           try {
             const changes = this.dirty[id];
@@ -1563,7 +1583,7 @@
         this.applyFilters();
 
         if (failed === 0) {
-          toast(`Saved ${saved} record${saved !== 1 ? 's' : ''} successfully.`, 'success');
+          toast(`Saved ${saved} change${saved !== 1 ? 's' : ''} successfully.`, 'success');
           this.editMode = false;
           const bar = document.getElementById('edit-mode-bar');
           if (bar) bar.classList.remove('active');
@@ -1571,12 +1591,12 @@
           if (toggleBtn) toggleBtn.classList.remove('btn-edit-active');
           this.render();
         } else {
-          toast(`Saved ${saved} record${saved !== 1 ? 's' : ''}, failed to save ${failed} record${failed !== 1 ? 's' : ''}.`, 'error');
+          toast(`Saved ${saved} change${saved !== 1 ? 's' : ''}, failed on ${failed} change${failed !== 1 ? 's' : ''}.`, 'error');
         }
       },
 
       updateDirtyInfo() {
-        const n = Object.keys(this.dirty).length;
+        const n = Object.keys(this.dirty).length + this.pendingDeletes.size;
         const el = document.getElementById('edit-dirty-info');
         if (el) {
           if (n > 0) {
@@ -1593,21 +1613,23 @@
         document.getElementById('confirm-emp-label').textContent = name;
         document.getElementById('confirm-overlay').classList.add('open');
       },
-      async confirmDelete() {
+      confirmDelete() {
         const id = this.pendingDeleteId;
         if (!id) return;
         document.getElementById('confirm-overlay').classList.remove('open');
-        try {
-          await sbDelete(id);
+        
+        if (String(id).startsWith('new_')) {
           this.allEmployees = this.allEmployees.filter(e => e.id !== id);
           delete this.dirty[id];
-          this.updateDirtyInfo();
-          this.applyFilters();
-          this.updateStats();
-          toast('Employee record deleted.', 'success');
-        } catch (err) {
-          toast('Delete failed: ' + err.message, 'error');
+        } else {
+          this.pendingDeletes.add(id);
+          delete this.dirty[id];
         }
+
+        this.updateDirtyInfo();
+        this.applyFilters();
+        this.updateStats();
+        toast('Employee marked for deletion. Click Save Changes to apply.', 'info');
         this.pendingDeleteId = null;
       },
       bindDeleteConfirm() {
@@ -1762,7 +1784,6 @@
         }
       },
 
-      /* ── Edit mode toggle ── */
       bindEditMode() {
         const bar = document.getElementById('edit-mode-bar');
         const toggleBtn = document.getElementById('btn-edit-toggle');
@@ -1773,8 +1794,8 @@
           toggleBtn.classList.toggle('btn-edit-active', this.editMode);
           if (this.editMode) this.updateDirtyInfo();
           else {
-            // Confirm discard if dirty
-            if (Object.keys(this.dirty).length > 0) {
+            // Confirm discard if dirty or has pending deletes
+            if (Object.keys(this.dirty).length > 0 || this.pendingDeletes.size > 0) {
               if (!confirm('Discard all unsaved changes?')) {
                 this.editMode = true;
                 bar.classList.add('active');
@@ -1782,6 +1803,7 @@
                 return;
               }
               this.dirty = {};
+              this.pendingDeletes.clear();
             }
           }
           this.render();
@@ -1790,8 +1812,9 @@
         document.getElementById('btn-save-edit').addEventListener('click', () => this.saveAll());
 
         document.getElementById('btn-cancel-edit').addEventListener('click', () => {
-          if (Object.keys(this.dirty).length > 0 && !confirm('Discard all unsaved changes?')) return;
+          if ((Object.keys(this.dirty).length > 0 || this.pendingDeletes.size > 0) && !confirm('Discard all unsaved changes?')) return;
           this.dirty = {};
+          this.pendingDeletes.clear();
           this.editMode = false;
           bar.classList.remove('active');
           document.getElementById('btn-edit-toggle').classList.remove('btn-edit-active');
