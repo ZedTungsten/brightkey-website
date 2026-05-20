@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Inventory & Fulfillment Manager — BrightKey Admin</title>
+  
+  <link rel="preconnect" href="https://fonts.bunny.net" />
+  <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../../css/style.css" />
+  
+  <style>
+    body { background-color: var(--bg-elevated); }
+    .manager-grid {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 2rem;
+      margin-top: 2rem;
+    }
+    .panel {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 1.5rem;
+      box-shadow: var(--shadow-sm);
+      margin-bottom: 2rem;
+    }
+    .inv-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1rem;
+      font-size: 0.9rem;
+    }
+    .inv-table th, .inv-table td {
+      padding: 0.75rem 1rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+    .inv-table th {
+      font-weight: 700;
+      color: var(--text-secondary);
+      background: var(--bg-elevated);
+      text-transform: uppercase;
+      font-size: 0.75rem;
+      letter-spacing: 0.05em;
+    }
+    .inv-table tr:hover { background: rgba(0,0,0,0.01); }
+    
+    .action-btn-group {
+      display: flex;
+      gap: 0.5rem;
+    }
+  </style>
+</head>
+<body>
+
+  <nav class="nav" role="navigation" style="position: sticky; top:0; background:var(--bg-surface); border-bottom:1px solid var(--border); z-index:100;">
+    <div class="container">
+      <div class="nav__inner">
+        <a href="../../admin.html" class="nav__logo" style="font-weight: 700; color:var(--text-primary);">BrightKey <span style="color:var(--cyan);">Admin</span></a>
+        <div style="font-weight: 600; font-size: 1.1rem;">Inventory & Fulfillment</div>
+        <a href="../../admin.html" class="btn btn-outline btn-sm">Dashboard</a>
+      </div>
+    </div>
+  </nav>
+
+  <main style="padding-top: 120px; padding-bottom: 60px;">
+    <div class="container" style="max-width: 1200px;">
+      
+      <div>
+        <h1>Inventory & Fulfillment Manager</h1>
+        <p style="color:var(--text-secondary);">Manage incoming supplier shipments, log stock, and update customer dispatch states.</p>
+      </div>
+
+      <div class="manager-grid">
+        
+        <!-- Left: Inventory Snapshot & Fulfillment Queue -->
+        <div>
+          <!-- Snapshots -->
+          <div class="panel">
+            <h3 style="border-bottom:1px solid var(--border); padding-bottom:0.5rem;">Stock Snapshot (Pre-calculated Summary)</h3>
+            <table class="inv-table">
+              <thead>
+                <tr>
+                  <th>SKU</th>
+                  <th>Product Title</th>
+                  <th style="color: var(--cyan);">Available</th>
+                  <th style="color: #3b82f6;">Incoming</th>
+                  <th style="color: #f59e0b;">Reserved</th>
+                  <th>Dispatched</th>
+                  <th>Returned</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="snapshot-body">
+                <tr>
+                  <td><strong>BK-LOCK-01</strong></td>
+                  <td>Premium Smart Lock</td>
+                  <td style="color: var(--cyan); font-weight:600;">22</td>
+                  <td style="color: #3b82f6;">50</td>
+                  <td style="color: #f59e0b;">4</td>
+                  <td>142</td>
+                  <td>2</td>
+                  <td>
+                    <button class="btn btn-outline btn-sm" onclick="receiveSupplierOrder('BK-LOCK-01', 50)">Receive Incoming</button>
+                  </td>
+                </tr>
+                <tr>
+                  <td><strong>BK-LOCK-02</strong></td>
+                  <td>Minimalist Smart Deadbolt</td>
+                  <td style="color: #ef4444; font-weight:600;">-3 <span style="font-size:0.75rem; color:var(--text-secondary);">(Backorder)</span></td>
+                  <td style="color: #3b82f6;">30</td>
+                  <td style="color: #f59e0b;">3</td>
+                  <td>89</td>
+                  <td>0</td>
+                  <td>
+                    <button class="btn btn-outline btn-sm" onclick="receiveSupplierOrder('BK-LOCK-02', 30)">Receive Incoming</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Fulfillment Queue -->
+          <div class="panel">
+            <h3 style="border-bottom:1px solid var(--border); padding-bottom:0.5rem;">Fulfillment Queue (Order Processing)</h3>
+            <table class="inv-table">
+              <thead>
+                <tr>
+                  <th>Order ID</th>
+                  <th>Customer Name</th>
+                  <th>Items / SKU</th>
+                  <th>Fulfillment Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="fulfillment-body">
+                <tr id="order-row-1">
+                  <td>#BK-1025</td>
+                  <td>Jane Doe</td>
+                  <td>1x Premium Smart Lock (BK-LOCK-01)</td>
+                  <td><span class="badge badge-warning" id="status-badge-1">Reserved</span></td>
+                  <td>
+                    <div class="action-btn-group" id="action-group-1">
+                      <button class="btn btn-cyan btn-sm" onclick="packOrder(1)">Mark Packed</button>
+                    </div>
+                  </td>
+                </tr>
+                <tr id="order-row-2">
+                  <td>#BK-1026</td>
+                  <td>Bob Smith</td>
+                  <td>1x Minimalist Smart Deadbolt (BK-LOCK-02)</td>
+                  <td><span class="badge badge-warning" id="status-badge-2">Reserved</span></td>
+                  <td>
+                    <div class="action-btn-group" id="action-group-2">
+                      <button class="btn btn-cyan btn-sm" onclick="packOrder(2)">Mark Packed</button>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Right: Supplier Order Panel & Logs -->
+        <div>
+          <!-- Log Supplier PO -->
+          <div class="panel">
+            <h3 style="border-bottom:1px solid var(--border); padding-bottom:0.5rem; margin-bottom:1rem;">Order from Supplier</h3>
+            <form onsubmit="event.preventDefault(); addSupplierOrder();">
+              <div class="form-group" style="margin-bottom:1rem;">
+                <label class="form-label">Select SKU</label>
+                <select class="form-input" id="supplier-sku" style="height:auto; padding:0.75rem;" required>
+                  <option value="BK-LOCK-01">Premium Smart Lock (BK-LOCK-01)</option>
+                  <option value="BK-LOCK-02">Minimalist Smart Deadbolt (BK-LOCK-02)</option>
+                </select>
+              </div>
+              <div class="form-group" style="margin-bottom:1.5rem;">
+                <label class="form-label">Quantity Ordered</label>
+                <input type="number" class="form-input" id="supplier-qty" min="1" value="20" required />
+              </div>
+              <button type="submit" class="btn btn-cyan" style="width:100%;">Create Supplier PO (+Incoming)</button>
+            </form>
+          </div>
+
+          <!-- Transaction Logs Feed -->
+          <div class="panel">
+            <h3 style="border-bottom:1px solid var(--border); padding-bottom:0.5rem; margin-bottom:1rem;">Live Ledger Logs</h3>
+            <div style="font-family: monospace; font-size: 0.8rem; line-height: 1.6; color: var(--text-secondary); max-height: 250px; overflow-y: auto;" id="ledger-logs">
+              <div>[09:34:01 AM] order_reserved: 1x BK-LOCK-02 for Order #BK-1026 (-1 Available, +1 Reserved)</div>
+              <div>[09:22:15 AM] order_reserved: 1x BK-LOCK-01 for Order #BK-1025 (-1 Available, +1 Reserved)</div>
+              <div>[Yesterday] received: 50x BK-LOCK-01 replenished (+50 Available)</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </main>
+
+  <script>
+    function addSupplierOrder() {
+      const sku = document.getElementById('supplier-sku').value;
+      const qty = parseInt(document.getElementById('supplier-qty').value);
+      alert(`Supplier order logged for ${qty}x ${sku}. 'Incoming' snapshot increased.`);
+      
+      const logDiv = document.getElementById('ledger-logs');
+      logDiv.innerHTML = `<div>[Just Now] supplier_ordered: ${qty}x ${sku} (+${qty} Incoming)</div>` + logDiv.innerHTML;
+    }
+
+    function receiveSupplierOrder(sku, qty) {
+      alert(`Marked shipment for ${qty}x ${sku} as Received. 'Incoming' stock cleared, 'Available' increased.`);
+      const logDiv = document.getElementById('ledger-logs');
+      logDiv.innerHTML = `<div>[Just Now] received: ${qty}x ${sku} (-${qty} Incoming, +${qty} Available)</div>` + logDiv.innerHTML;
+    }
+
+    function packOrder(id) {
+      const badge = document.getElementById('status-badge-1');
+      const action = document.getElementById('action-group-' + id);
+      
+      document.getElementById('status-badge-' + id).innerText = 'Packed';
+      document.getElementById('status-badge-' + id).className = 'badge badge-success';
+      
+      action.innerHTML = `<button class="btn btn-outline-cyan btn-sm" onclick="dispatchOrder(${id})">Mark Dispatched</button>`;
+      
+      const logDiv = document.getElementById('ledger-logs');
+      logDiv.innerHTML = `<div>[Just Now] packed: Order #BK-102${id + 4} ready for dispatch.</div>` + logDiv.innerHTML;
+    }
+
+    function dispatchOrder(id) {
+      document.getElementById('status-badge-' + id).innerText = 'Dispatched';
+      document.getElementById('status-badge-' + id).className = 'badge badge-neutral';
+      document.getElementById('action-group-' + id).innerHTML = `<span style="font-size:0.85rem; color:var(--text-muted);">Shipped</span>`;
+      
+      const logDiv = document.getElementById('ledger-logs');
+      const sku = id === 1 ? 'BK-LOCK-01' : 'BK-LOCK-02';
+      logDiv.innerHTML = `<div>[Just Now] dispatch: 1x ${sku} shipped out for #BK-102${id + 4} (-1 Reserved, +1 Dispatched)</div>` + logDiv.innerHTML;
+    }
+  </script>
+</body>
+</html>

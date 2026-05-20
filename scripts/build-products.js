@@ -271,17 +271,18 @@ async function buildProducts() {
       $('[data-template="compare-price"]').hide();
     }
 
-    let inventoryText = 'Currently out of stock. Please contact us for restock dates.';
+    let inventoryText = '';
     if (available > 0) {
       $('[data-template="status-badge"]').text('In Stock').attr('class', 'badge badge-cyan');
-      inventoryText = `<strong style="color:var(--text-primary);">${available} available</strong> in our local warehouse.`;
+      inventoryText = `<strong style="color:var(--text-primary);">${available} available</strong> in our local warehouse. Ready to ship (delivered in 2-3 days).`;
       if (ordered > 0) {
         inventoryText += ` <span style="color:#f59e0b;">🔥 ${ordered} ordered in the last 30 days.</span>`;
       }
       $('[data-template="btn-add-to-cart"]').text('Add to Cart').removeAttr('disabled');
     } else {
-      $('[data-template="status-badge"]').text('Out of Stock').attr('class', 'badge badge-muted');
-      $('[data-template="btn-add-to-cart"]').text('Out of Stock').attr('disabled', 'true');
+      $('[data-template="status-badge"]').text('Backorder').attr('class', 'badge badge-warning');
+      inventoryText = `<span style="color:#f59e0b; font-weight:600;">Backorder</span>: Temporarily out of local stock. Fulfillment takes 3-4 weeks.`;
+      $('[data-template="btn-add-to-cart"]').text('Add to Cart (Backorder)').removeAttr('disabled');
     }
     $('[data-template="inventory-text"]').html(inventoryText);
 
@@ -326,15 +327,15 @@ async function buildProducts() {
           if (v.available > 0) {
             badgeEl.innerText = 'In Stock';
             badgeEl.className = 'badge badge-cyan';
-            invTextEl.innerHTML = '<strong style="color:var(--text-primary);">' + v.available + ' available</strong> in our local warehouse.';
+            invTextEl.innerHTML = '<strong style="color:var(--text-primary);">' + v.available + ' available</strong> in our local warehouse. Ready to ship (delivered in 2-3 days).';
             btnCartEl.innerText = 'Add to Cart';
             btnCartEl.disabled = false;
           } else {
-            badgeEl.innerText = 'Out of Stock';
-            badgeEl.className = 'badge badge-muted';
-            invTextEl.innerText = 'Currently out of stock. Please contact us for restock dates.';
-            btnCartEl.innerText = 'Out of Stock';
-            btnCartEl.disabled = true;
+            badgeEl.innerText = 'Backorder';
+            badgeEl.className = 'badge badge-warning';
+            invTextEl.innerHTML = '<span style="color:#f59e0b; font-weight:600;">Backorder</span>: Temporarily out of local stock. Fulfillment takes 3-4 weeks.';
+            btnCartEl.innerText = 'Add to Cart (Backorder)';
+            btnCartEl.disabled = false;
           }
 
           // Update CURRENT_PRODUCT so cart gets the correct variant details
