@@ -53,7 +53,7 @@ export default async function handler(req, res) {
       folderPath = `uploads/general`;
     }
 
-    const bunnyUrl = `https://storage.bunnycdn.com/${BUNNY_STORAGE_ZONE}/${folderPath}/${safeFileName}`;
+    const bunnyUrl = `https://sg.storage.bunnycdn.com/${BUNNY_STORAGE_ZONE}/${folderPath}/${safeFileName}`;
 
     const response = await fetch(bunnyUrl, {
       method: 'PUT',
