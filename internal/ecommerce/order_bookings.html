@@ -8,6 +8,7 @@
   <link rel="preconnect" href="https://fonts.bunny.net" />
   <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <link rel="stylesheet" href="../../css/style.css" />
   
   <style>
@@ -839,6 +840,35 @@
       }, 4000);
     }
 
+    // --- Supabase Configuration ---
+    const SUPABASE_URL  = 'https://ymjlosnxuhsybkzkoofq.supabase.co';
+    const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inltamxvc254dWhzeWJremtvb2ZxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ0MDY1MzYsImV4cCI6MjA4OTk4MjUzNn0.srhk9SVvFuZRcfeRGbVDGPr5pYrFhs8vzcOiMK3A91w';
+
+    async function saveBookingToSupabase(payload) {
+      try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/installation_bookings`, {
+          method: 'POST',
+          headers: {
+            'apikey': SUPABASE_ANON,
+            'Authorization': `Bearer ${SUPABASE_ANON}`,
+            'Content-Type': 'application/json',
+            'Prefer': 'return=representation'
+          },
+          body: JSON.stringify(payload)
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          console.warn('Supabase insert failed:', err);
+          return null;
+        }
+        const data = await res.json();
+        return data[0] || data;
+      } catch (err) {
+        console.warn('Could not save booking to Supabase:', err);
+        return null;
+      }
+    }
+
     // --- Bunny.net Upload Helper Proxy ---
     // Compress a base64 image to target ~200KB before uploading
     async function compressImage(base64String, targetSizeKB = 200) {
@@ -1072,7 +1102,44 @@
       };
       
       localStorage.setItem('latest_installation_order', JSON.stringify(orderData));
-      
+
+      // Save booking to Supabase
+      const subtotalRaw  = document.getElementById('summary-prod-subtotal')?.innerText?.replace(/[^0-9.]/g, '') || '0';
+      const chargesRaw   = document.getElementById('summary-charges')?.innerText?.replace(/[^0-9.]/g, '') || '0';
+      const deductionsRaw= document.getElementById('summary-deductions')?.innerText?.replace(/[^0-9.]/g, '') || '0';
+      const grandTotalRaw= document.getElementById('summary-grand-total')?.innerText?.replace(/[^0-9.]/g, '') || '0';
+
+      const supabasePayload = {
+        folder_ref_id:      folderRefId,
+        order_no:           receiptNo,
+        customer_name:      name,
+        customer_social:    social || null,
+        customer_email:     email || null,
+        customer_phone:     phone || null,
+        customer_address:   `${address}, ${city}, ${province} ${zip}`.trim(),
+        scheduled_date:     dateVal || null,
+        scheduled_time:     timeVal || null,
+        installer_id:       installerId || null,
+        installer_name:     installerName || null,
+        products:           products,
+        doors:              doors.map(d => ({ index: d.index, doorMaterial: d.doorMaterial, jambMaterial: d.jambMaterial, photos: d.photos })),
+        map_image_url:      mapUrl || null,
+        frontage_image_url: frontageUrl || null,
+        subtotal:           parseFloat(subtotalRaw) || null,
+        charges:            parseFloat(chargesRaw) || null,
+        deductions:         parseFloat(deductionsRaw) || null,
+        grand_total:        parseFloat(grandTotalRaw) || null,
+        status:             'scheduled'
+      };
+
+      const savedBooking = await saveBookingToSupabase(supabasePayload);
+      if (savedBooking) {
+        console.log('Booking saved to Supabase:', savedBooking.id);
+        // Store the Supabase row ID in localStorage for future updates (e.g., receipt PDF URL)
+        orderData.supabaseId = savedBooking.id;
+        localStorage.setItem('latest_installation_order', JSON.stringify(orderData));
+      }
+
       if (schedBtn) {
         schedBtn.innerText = "Generating PDF Receipt...";
         schedBtn.disabled = true;
@@ -1863,12 +1930,30 @@
     }
 
     // Listen for background receipt uploads from receipt tab
-    window.addEventListener('message', (event) => {
+    window.addEventListener('message', async (event) => {
       if (event.data && event.data.type === 'RECEIPT_UPLOADED') {
         const savedOrder = JSON.parse(localStorage.getItem('latest_installation_order') || '{}');
         savedOrder.receiptPdfUrl = event.data.url;
         localStorage.setItem('latest_installation_order', JSON.stringify(savedOrder));
         showNotification(`Receipt PDF saved & uploaded to CDN!`, 'success');
+
+        // Also patch the Supabase record with the receipt PDF URL
+        if (savedOrder.supabaseId) {
+          try {
+            await fetch(`${SUPABASE_URL}/rest/v1/installation_bookings?id=eq.${savedOrder.supabaseId}`, {
+              method: 'PATCH',
+              headers: {
+                'apikey': SUPABASE_ANON,
+                'Authorization': `Bearer ${SUPABASE_ANON}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({ receipt_pdf_url: event.data.url })
+            });
+            console.log('Receipt PDF URL updated in Supabase.');
+          } catch (err) {
+            console.warn('Could not update receipt PDF URL in Supabase:', err);
+          }
+        }
       }
     });
 
