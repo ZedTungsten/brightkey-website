@@ -1541,11 +1541,12 @@
       // Background PDF Generation and Bunny.net Upload
       const tempPdfEl = document.createElement('div');
       tempPdfEl.innerHTML = receiptHtml;
-      tempPdfEl.style.position = 'absolute';
-      tempPdfEl.style.left = '-9999px';
+      tempPdfEl.style.position = 'fixed';
+      tempPdfEl.style.left = '0';
       tempPdfEl.style.top = '0';
       tempPdfEl.style.width = '794px';
       tempPdfEl.style.height = '1123px';
+      tempPdfEl.style.zIndex = '-99999';
       document.body.appendChild(tempPdfEl);
 
       const opt = {
@@ -1557,10 +1558,15 @@
       };
 
       if (schedBtn) {
-        schedBtn.innerText = "Uploading PDF Receipt to CDN...";
+        schedBtn.innerText = "Compiling PDF Receipt...";
       }
 
-      html2pdf().set(opt).from(tempPdfEl).toPdf().output('datauristring').then(async (pdfDataUri) => {
+      // Wait for browser style calculation and paint cycle before generating PDF
+      setTimeout(() => {
+        if (schedBtn) {
+          schedBtn.innerText = "Uploading PDF Receipt to CDN...";
+        }
+        html2pdf().set(opt).from(tempPdfEl).toPdf().output('datauristring').then(async (pdfDataUri) => {
         tempPdfEl.remove();
         try {
           const uploadedPdfUrl = await uploadFileToBunny(pdfDataUri, `${receiptNo}.pdf`, 'installations', receiptNo, 'receipt');
@@ -1596,7 +1602,8 @@
           schedBtn.disabled = false;
         }
       });
-    }
+    }, 300);
+  }
 
     // --- Booking Calendar Control ---
     let currentYear = 2026;
