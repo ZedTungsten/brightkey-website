@@ -151,12 +151,14 @@
       }
     }
     #receipt-hidden-container {
-      position: absolute;
-      left: -9999px;
-      top: -9999px;
+      position: fixed;
+      top: 0;
+      left: 0;
       width: 794px;
       background: white;
-      z-index: -1000;
+      z-index: 100;
+      pointer-events: none;
+      display: none;
     }
     .price-summary {
       font-size: 0.95rem;
@@ -1035,7 +1037,8 @@
         schedBtn.disabled = true;
       }
 
-      // 1. Calculate total upload tasks for progress bar tracking
+      try {
+        // 1. Calculate total upload tasks for progress bar tracking
       let totalTasks = 0;
       const mapWrapper = document.getElementById('cust-map-wrapper');
       const frontageWrapper = document.getElementById('cust-frontage-wrapper');
@@ -1810,11 +1813,6 @@
         hiddenContainer.innerHTML = receiptHtml;
       }
 
-      // Hide the processing overlay loading screen
-      if (overlay) {
-        overlay.style.display = 'none';
-      }
-
       // Store in global scope so modal functions can reference it
       window.latestReceiptHtml = receiptHtml;
       window.latestReceiptNo = receiptNo;
@@ -1832,14 +1830,22 @@
         `;
       }
 
-      // Clean up button state
-      if (schedBtn) {
-        schedBtn.innerText = originalBtnText;
-        schedBtn.disabled = false;
-      }
-
       showNotification("Installation scheduled successfully!", 'success');
       toggleReceiptModal(true);
+      } catch (err) {
+        console.error("Booking error:", err);
+        showNotification("Booking failed: " + (err.message || err), 'error');
+      } finally {
+        // Hide the processing overlay loading screen
+        if (overlay) {
+          overlay.style.display = 'none';
+        }
+        // Clean up button state
+        if (schedBtn) {
+          schedBtn.innerText = originalBtnText;
+          schedBtn.disabled = false;
+        }
+      }
     }
 
     // --- Booking Calendar Control ---
@@ -1880,10 +1886,18 @@
 
     function toggleReceiptModal(show) {
       const modal = document.getElementById('receipt-modal');
+      const container = document.getElementById('receipt-hidden-container');
       if (show) {
         modal.classList.add('active');
+        if (container) {
+          container.style.display = 'block';
+        }
       } else {
         modal.classList.remove('active');
+        if (container) {
+          container.style.display = 'none';
+          container.innerHTML = '';
+        }
       }
     }
 
@@ -1915,11 +1929,10 @@
       };
 
       try {
-        // Download locally using the html2pdf instance on the main window targeting the hidden container element
-        await html2pdf().set(opt).from(element).save();
-
-        // Generate pdf as data URI and upload in the background
-        const pdfDataUri = await html2pdf().set(opt).from(element).toPdf().output('datauristring');
+        // Run single worker chain to generate PDF and save it locally without DOM collision race conditions
+        const worker = html2pdf().set(opt).from(element);
+        const pdfDataUri = await worker.toPdf().output('datauristring');
+        await worker.save();
         
         saveBtn.innerHTML = '☁️ Uploading to CDN...';
         const res = await fetch(`${window.location.origin}/api/upload`, {
