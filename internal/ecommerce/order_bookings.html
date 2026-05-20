@@ -465,6 +465,17 @@
             <button class="btn btn-cyan btn-lg" id="sched-action-btn" style="width: 100%; margin-bottom: 1rem;" onclick="scheduleAndPrint()">
               Schedule & Print Receipt
             </button>
+
+            <!-- Progress bar shown during upload -->
+            <div id="upload-progress-container" style="display: none; margin-bottom: 1rem;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <span id="upload-progress-label" style="font-size: 0.8rem; font-weight: 600; color: var(--text-primary);">Uploading...</span>
+                <span id="upload-progress-pct" style="font-size: 0.8rem; font-weight: 700; color: var(--accent-primary);">0%</span>
+              </div>
+              <div style="background: var(--border-color, #e5e7eb); border-radius: 999px; height: 8px; overflow: hidden;">
+                <div id="upload-progress-bar" style="height: 100%; width: 0%; background: linear-gradient(90deg, #0ea5e9, #6366f1); border-radius: 999px; transition: width 0.3s ease;"></div>
+              </div>
+            </div>
             
             <div style="font-size: 0.8rem; color: var(--text-secondary); line-height: 1.6;">
               <p>✓ Creates a database entry mapped to <strong>Installation</strong> channel.</p>
@@ -839,6 +850,63 @@
       }, 4000);
     }
 
+    // --- Image Compression Helper ---
+    // Compresses a base64 image to approximately targetKB kilobytes using canvas
+    async function compressImageBase64(base64Str, targetKB = 200) {
+      return new Promise((resolve) => {
+        // If not an image data URI, pass through unchanged
+        if (!base64Str || !base64Str.startsWith('data:image')) {
+          resolve(base64Str);
+          return;
+        }
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          // Downscale if image is very large to help hit target size
+          const maxDim = 1600;
+          let w = img.width;
+          let h = img.height;
+          if (w > maxDim || h > maxDim) {
+            if (w > h) { h = Math.round(h * maxDim / w); w = maxDim; }
+            else { w = Math.round(w * maxDim / h); h = maxDim; }
+          }
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, w, h);
+          // Binary search for quality that hits ~targetKB
+          let lo = 0.1, hi = 0.92, quality = 0.75;
+          for (let i = 0; i < 8; i++) {
+            const candidate = canvas.toDataURL('image/jpeg', quality);
+            const sizeKB = Math.round(candidate.length * 0.75 / 1024);
+            if (sizeKB > targetKB) hi = quality;
+            else lo = quality;
+            quality = (lo + hi) / 2;
+          }
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        };
+        img.onerror = () => resolve(base64Str); // Fallback on error
+        img.src = base64Str;
+      });
+    }
+
+    // --- Progress Bar Helpers ---
+    function setProgress(pct, label) {
+      const container = document.getElementById('upload-progress-container');
+      const bar = document.getElementById('upload-progress-bar');
+      const pctEl = document.getElementById('upload-progress-pct');
+      const labelEl = document.getElementById('upload-progress-label');
+      if (container) container.style.display = 'block';
+      if (bar) bar.style.width = pct + '%';
+      if (pctEl) pctEl.textContent = Math.round(pct) + '%';
+      if (labelEl && label) labelEl.textContent = label;
+    }
+
+    function hideProgress() {
+      const container = document.getElementById('upload-progress-container');
+      if (container) container.style.display = 'none';
+    }
+
     // --- Bunny.net Upload Helper Proxy ---
     async function uploadFileToBunny(fileBase64, fileName, category, refId, type) {
       if (!fileBase64) return null;
@@ -886,7 +954,11 @@
         return;
       }
 
+      // Build receipt no and folder id: SURNAME-ORD-YYYYMMDD-XXX
       const receiptNo = 'ORD-' + new Date().toISOString().slice(0,10).replace(/-/g,'') + '-' + Date.now().toString().slice(-3);
+      // Extract surname (last word of full name, uppercased)
+      const surname = (name.trim().split(' ').pop() || 'CUSTOMER').toUpperCase().replace(/[^A-Z0-9]/g, '');
+      const folderRefId = `${surname}-${receiptNo}`;
 
       // Open the print/receipt tab immediately to prevent popup blocking
       const receiptWindow = window.open('', '_blank');
@@ -943,26 +1015,46 @@
         receiptWindow.document.close();
       }
 
-      // Set uploading state on button
+      // Set uploading state on button and show progress bar
       const schedBtn = document.getElementById('sched-action-btn') || document.querySelector('button[onclick="scheduleAndPrint()"]');
       const originalBtnText = schedBtn ? schedBtn.innerText : 'Schedule & Print Receipt';
       if (schedBtn) {
-        schedBtn.innerText = "Uploading Media to Bunny.net CDN...";
+        schedBtn.innerText = "Processing...";
         schedBtn.disabled = true;
       }
+      setProgress(2, 'Starting upload...');
 
-      // 1. Upload Site Details
+      // Count total upload tasks for accurate progress tracking
       const mapWrapper = document.getElementById('cust-map-wrapper');
       const frontageWrapper = document.getElementById('cust-frontage-wrapper');
-      const mapB64 = mapWrapper ? mapWrapper.getAttribute('data-base64') : null;
-      const frontageB64 = frontageWrapper ? frontageWrapper.getAttribute('data-base64') : null;
-
-      const mapUrl = mapB64 ? await uploadFileToBunny(mapB64, 'map_screenshot.png', 'installations', receiptNo, 'site') : null;
-      const frontageUrl = frontageB64 ? await uploadFileToBunny(frontageB64, 'house_frontage.png', 'installations', receiptNo, 'site') : null;
-
-      // 2. Upload Doors specs
-      const doors = [];
+      const mapB64Raw = mapWrapper ? mapWrapper.getAttribute('data-base64') : null;
+      const frontageB64Raw = frontageWrapper ? frontageWrapper.getAttribute('data-base64') : null;
       const doorCards = document.querySelectorAll('.door-card');
+      let totalDoorPhotos = 0;
+      doorCards.forEach(card => { totalDoorPhotos += [...card.querySelectorAll('.file-input-wrapper')].filter(w => w.getAttribute('data-base64')).length; });
+      const totalTasks = (mapB64Raw ? 1 : 0) + (frontageB64Raw ? 1 : 0) + totalDoorPhotos + 1; // +1 for receipt
+      let completedTasks = 0;
+
+      function advanceProgress(label) {
+        completedTasks++;
+        const pct = Math.min(95, Math.round((completedTasks / totalTasks) * 90) + 5);
+        setProgress(pct, label);
+      }
+
+      // 1. Upload Site Details (with compression)
+      setProgress(5, 'Compressing site images...');
+      const mapB64 = mapB64Raw ? await compressImageBase64(mapB64Raw, 200) : null;
+      const frontageB64 = frontageB64Raw ? await compressImageBase64(frontageB64Raw, 200) : null;
+
+      setProgress(8, 'Uploading map screenshot...');
+      const mapUrl = mapB64 ? await uploadFileToBunny(mapB64, 'map_screenshot.jpg', 'installations', folderRefId, 'site') : null;
+      if (mapB64) advanceProgress('Uploading house frontage...');
+
+      const frontageUrl = frontageB64 ? await uploadFileToBunny(frontageB64, 'house_frontage.jpg', 'installations', folderRefId, 'site') : null;
+      if (frontageB64) advanceProgress('Uploading door photos...');
+
+      // 2. Upload Doors specs (with compression)
+      const doors = [];
       for (let i = 0; i < doorCards.length; i++) {
         const card = doorCards[i];
         const selects = card.querySelectorAll('select');
@@ -973,10 +1065,13 @@
         const wrappers = card.querySelectorAll('.file-input-wrapper');
         for (let j = 0; j < wrappers.length; j++) {
           const w = wrappers[j];
-          const b64 = w.getAttribute('data-base64');
-          if (b64) {
-            const url = await uploadFileToBunny(b64, `door_${i+1}_photo_${j+1}.png`, 'installations', receiptNo, 'doors');
+          const b64Raw = w.getAttribute('data-base64');
+          if (b64Raw) {
+            setProgress(null, `Compressing door ${i+1} photo ${j+1}...`);
+            const b64 = await compressImageBase64(b64Raw, 200);
+            const url = await uploadFileToBunny(b64, `door_${i+1}_photo_${j+1}.jpg`, 'installations', folderRefId, 'doors');
             photos.push(url);
+            advanceProgress(`Uploaded door ${i+1} photo ${j+1}`);
           }
         }
         
@@ -1028,10 +1123,10 @@
       localStorage.setItem('latest_installation_order', JSON.stringify(orderData));
       
       if (schedBtn) {
-        schedBtn.innerText = "Generating PDF Receipt...";
+        schedBtn.innerText = "Generating Receipt...";
         schedBtn.disabled = true;
       }
-      
+      setProgress(92, 'Building receipt...');
       // Calculate products list
       let particularsHtml = [];
       let pricesHtml = [];
@@ -1751,6 +1846,9 @@
         schedBtn.innerText = originalBtnText;
         schedBtn.disabled = false;
       }
+
+      setProgress(100, 'Done!');
+      setTimeout(() => hideProgress(), 1500);
 
       showNotification("Installation scheduled successfully!", 'success');
       toggleReceiptModal(true);
