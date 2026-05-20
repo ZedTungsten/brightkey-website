@@ -1,0 +1,1038 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Employee Directory — BrightKey Internal</title>
+  <link rel="preconnect" href="https://fonts.bunny.net" />
+  <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg?v=2" />
+  <style>
+    /* ── Layout ── */
+    .int-wrap { max-width: 1400px; margin: 0 auto; padding: 2rem 1.5rem 5rem; }
+
+    .int-header {
+      display: flex; align-items: flex-start; justify-content: space-between;
+      flex-wrap: wrap; gap: 1rem; margin-bottom: 1.75rem;
+    }
+    .int-title {
+      font-size: 1.55rem; font-weight: 800; color: var(--text-primary);
+      letter-spacing: -0.04em; line-height: 1.1; margin-top: 0.3rem;
+    }
+
+    /* ── Stats strip ── */
+    .stats-strip {
+      display: flex; gap: 1px; margin-bottom: 1.5rem;
+      background: var(--border); border: 1px solid var(--border);
+      border-radius: var(--radius-md); overflow: hidden;
+    }
+    .stat-cell {
+      flex: 1; padding: 0.8rem 1.1rem;
+      background: var(--bg-surface);
+      display: flex; flex-direction: column; gap: 0.1rem;
+      min-width: 0;
+    }
+    .stat-cell__val {
+      font-size: 1.35rem; font-weight: 800; color: var(--text-primary);
+      letter-spacing: -0.04em; line-height: 1; font-variant-numeric: tabular-nums;
+    }
+    .stat-cell__lbl {
+      font-size: 0.62rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.08em; color: var(--text-muted);
+    }
+
+    /* ── Toolbar ── */
+    .toolbar {
+      display: flex; gap: 0.65rem; align-items: center;
+      flex-wrap: wrap; margin-bottom: 0.75rem;
+    }
+    .toolbar .search-wrap {
+      position: relative; flex: 1; min-width: 200px;
+    }
+    .toolbar .search-icon {
+      position: absolute; left: 0.75rem; top: 50%; transform: translateY(-50%);
+      color: var(--text-muted); pointer-events: none;
+    }
+    .toolbar .search-icon svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; }
+    .toolbar .search-input {
+      width: 100%; padding: 0.52rem 0.8rem 0.52rem 2.2rem;
+      background: var(--bg-surface); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); font-family: var(--font-sans);
+      font-size: 0.82rem; color: var(--text-primary); outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .toolbar .search-input:focus {
+      border-color: var(--cyan-border);
+      box-shadow: 0 0 0 3px rgba(6,182,212,0.09);
+    }
+    .toolbar .search-input::placeholder { color: var(--text-muted); }
+
+    .toolbar .form-select {
+      padding: 0.52rem 2rem 0.52rem 0.75rem;
+      font-size: 0.82rem; min-width: 130px;
+    }
+
+    /* ── Edit mode bar ── */
+    .edit-mode-bar {
+      display: none; align-items: center; gap: 0.75rem; flex-wrap: wrap;
+      padding: 0.7rem 1rem; margin-bottom: 0.75rem;
+      background: var(--bg-surface); border: 1px solid var(--cyan-border);
+      border-radius: var(--radius-sm); box-shadow: var(--shadow-sm);
+    }
+    .edit-mode-bar.active { display: flex; }
+    .edit-mode-bar__label {
+      font-size: 0.72rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.1em; color: var(--cyan);
+      display: flex; align-items: center; gap: 0.4rem;
+    }
+    .edit-mode-bar__label::before {
+      content: ''; width: 6px; height: 6px; border-radius: 50%;
+      background: var(--cyan); animation: pulse-dot 1.5s ease-in-out infinite;
+    }
+    @keyframes pulse-dot {
+      0%,100% { opacity: 1; transform: scale(1); }
+      50%      { opacity: 0.35; transform: scale(0.7); }
+    }
+    .edit-mode-bar__info { font-size: 0.75rem; color: var(--text-muted); }
+    .edit-mode-bar .spacer { flex: 1; }
+
+    /* ── Table container ── */
+    .table-card {
+      background: var(--bg-surface); border: 1px solid var(--border);
+      border-radius: var(--radius-md); overflow: hidden;
+      box-shadow: var(--shadow-sm);
+    }
+    .table-wrap { overflow-x: auto; }
+
+    /* ── Directory table ── */
+    .dir-table {
+      width: 100%; border-collapse: collapse;
+      font-size: 0.8rem; white-space: nowrap;
+    }
+
+    /* Sticky first 2 cols */
+    .dir-table th, .dir-table td { position: relative; }
+    .dir-table .col-num,
+    .dir-table .col-name {
+      position: sticky; background: var(--bg-elevated); z-index: 2;
+    }
+    .dir-table .col-num  { left: 0; min-width: 100px; }
+    .dir-table .col-name { left: 100px; min-width: 180px; border-right: 1px solid var(--border); }
+    .dir-table thead .col-num,
+    .dir-table thead .col-name { background: var(--bg-elevated); z-index: 3; }
+    .dir-table tbody tr:hover .col-num,
+    .dir-table tbody tr:hover .col-name { background: #f0f9ff; }
+
+    .dir-table th {
+      padding: 0.55rem 0.85rem; text-align: left;
+      font-size: 0.6rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.08em; color: var(--text-muted);
+      background: var(--bg-elevated);
+      border-bottom: 1px solid var(--border);
+      user-select: none;
+    }
+    .dir-table th.sortable { cursor: pointer; }
+    .dir-table th.sortable:hover { color: var(--cyan); }
+    .dir-table th .sort-arrow { margin-left: 3px; opacity: 0.4; }
+    .dir-table th.sort-asc .sort-arrow,
+    .dir-table th.sort-desc .sort-arrow { opacity: 1; color: var(--cyan); }
+
+    .dir-table td {
+      padding: 0.55rem 0.85rem;
+      border-bottom: 1px solid var(--border);
+      color: var(--text-secondary);
+      vertical-align: middle;
+      max-width: 220px; overflow: hidden; text-overflow: ellipsis;
+    }
+    .dir-table tbody tr:last-child td { border-bottom: none; }
+    .dir-table tbody tr:hover td { background: rgba(6,182,212,0.03); }
+
+    /* Edit mode: row highlight */
+    .dir-table tbody tr.row-editing td { background: rgba(6,182,212,0.04) !important; }
+    .dir-table tbody tr.row-dirty td   { background: rgba(251,191,36,0.06) !important; }
+    .dir-table tbody tr.row-dirty td:first-child { border-left: 3px solid rgba(251,191,36,0.6); }
+
+    /* Cell types */
+    .dir-table td.cell-emp-num {
+      font-family: var(--font-mono, monospace);
+      font-size: 0.78rem; font-weight: 700; color: var(--cyan-light);
+    }
+    .dir-table td.cell-name { font-weight: 600; color: var(--text-primary); }
+    .dir-table td.cell-num  { font-variant-numeric: tabular-nums; }
+    .dir-table td.cell-link a {
+      color: var(--cyan-light); text-decoration: none; font-size: 0.72rem;
+    }
+    .dir-table td.cell-link a:hover { text-decoration: underline; }
+    .dir-table td.cell-empty { color: var(--text-muted); font-style: italic; }
+
+    /* Status badge */
+    .status-badge {
+      display: inline-flex; align-items: center; gap: 0.25rem;
+      padding: 0.15rem 0.55rem; border-radius: 99px;
+      font-size: 0.6rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+    }
+    .status-badge::before { content: ''; width: 5px; height: 5px; border-radius: 50%; }
+    .status-active   { background: rgba(16,185,129,0.08); color: #065F46; border: 1px solid rgba(16,185,129,0.25); }
+    .status-active::before   { background: #10B981; }
+    .status-inactive { background: var(--bg-elevated); color: var(--text-muted); border: 1px solid var(--border); }
+    .status-inactive::before { background: var(--text-muted); }
+    .status-resigned { background: rgba(245,158,11,0.08); color: #92400E; border: 1px solid rgba(245,158,11,0.25); }
+    .status-resigned::before { background: #F59E0B; }
+    .status-terminated { background: rgba(239,68,68,0.08); color: #991B1B; border: 1px solid rgba(239,68,68,0.25); }
+    .status-terminated::before { background: #EF4444; }
+
+    /* ── Actions column ── */
+    .col-actions { width: 116px; text-align: right; position: sticky; right: 0; background: var(--bg-surface); z-index: 2; border-left: 1px solid var(--border); }
+    .dir-table tbody tr:hover .col-actions { background: rgba(6,182,212,0.03); }
+    .dir-table tbody tr.row-dirty .col-actions { background: rgba(251,191,36,0.06); }
+    .dir-table thead .col-actions { background: var(--bg-elevated); }
+
+    .row-actions { display: flex; gap: 0.3rem; justify-content: flex-end; padding: 0.1rem 0; }
+    .btn-row {
+      display: inline-flex; align-items: center; gap: 0.25rem;
+      padding: 0.3rem 0.6rem; border-radius: 6px;
+      font-family: var(--font-sans); font-size: 0.72rem; font-weight: 600;
+      cursor: pointer; border: 1px solid transparent; line-height: 1;
+      transition: all 0.14s; white-space: nowrap;
+    }
+    .btn-row svg { width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .btn-edit    { background: var(--bg-elevated); color: var(--text-secondary); border-color: var(--border); }
+    .btn-edit:hover { border-color: var(--cyan-border); color: var(--cyan); background: var(--cyan-dim); }
+    .btn-save    { background: var(--cyan); color: #fff; border-color: var(--cyan); }
+    .btn-save:hover { background: var(--cyan-light); }
+    .btn-discard { background: var(--bg-elevated); color: var(--text-muted); border-color: var(--border); }
+    .btn-discard:hover { color: var(--danger); border-color: rgba(239,68,68,0.3); }
+
+    /* ── Inline edit inputs ── */
+    .cell-input {
+      width: 100%; min-width: 90px; max-width: 220px;
+      padding: 0.22rem 0.45rem;
+      border: 1px solid var(--cyan-border);
+      border-radius: 4px; font-family: var(--font-sans); font-size: 0.8rem;
+      background: var(--bg-surface); color: var(--text-primary); outline: none;
+      box-shadow: 0 0 0 2px rgba(6,182,212,0.10);
+    }
+    .cell-input:focus { border-color: var(--cyan); box-shadow: 0 0 0 2px rgba(6,182,212,0.18); }
+    .cell-select {
+      min-width: 100px;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2371717A' stroke-width='1.4' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat; background-position: right 0.45rem center;
+      padding-right: 1.5rem; -webkit-appearance: none;
+    }
+
+    /* ── Table footer ── */
+    .table-footer {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0.7rem 1rem; border-top: 1px solid var(--border);
+      flex-wrap: wrap; gap: 0.5rem;
+    }
+    .table-footer__info { font-size: 0.72rem; color: var(--text-muted); }
+
+    /* Pagination */
+    .pagination { display: flex; align-items: center; gap: 0.25rem; }
+    .page-btn {
+      min-width: 28px; height: 28px; padding: 0 5px;
+      display: inline-flex; align-items: center; justify-content: center;
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      font-size: 0.72rem; color: var(--text-secondary); cursor: pointer;
+      background: var(--bg-surface); transition: all 0.12s; font-family: var(--font-sans);
+    }
+    .page-btn:hover:not(:disabled):not(.active) { border-color: var(--cyan); color: var(--cyan); }
+    .page-btn.active { background: var(--cyan); border-color: var(--cyan); color: #fff; font-weight: 700; }
+    .page-btn:disabled { opacity: 0.35; cursor: default; }
+    .page-btn svg { width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+
+    /* ── States ── */
+    .tbl-state { text-align: center; padding: 3rem 1rem; color: var(--text-muted); font-size: 0.875rem; }
+    .tbl-state.error { color: var(--danger); }
+
+    /* ── Toast ── */
+    #toast-container { position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 999; display: flex; flex-direction: column; gap: 0.5rem; }
+    .toast {
+      padding: 0.75rem 1.1rem; border-radius: var(--radius-sm);
+      font-size: 0.82rem; font-weight: 600; font-family: var(--font-sans);
+      box-shadow: var(--shadow-lg); min-width: 220px;
+      animation: slide-in 0.25s cubic-bezier(0.16,1,0.3,1) both;
+      display: flex; align-items: center; gap: 0.5rem;
+    }
+    .toast svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 2.5; stroke-linecap: round; flex-shrink: 0; }
+    @keyframes slide-in { from { opacity: 0; transform: translateX(20px); } }
+    .toast-success { background: var(--success); color: #fff; }
+    .toast-error   { background: var(--danger);  color: #fff; }
+    .toast-info    { background: var(--cyan);     color: #fff; }
+
+    /* ── Column group headers ── */
+    .dir-table thead tr.col-groups th {
+      padding: 0.3rem 0.85rem; font-size: 0.58rem;
+      background: #f9f9fb; border-bottom: none;
+      color: var(--text-muted); letter-spacing: 0.1em;
+    }
+    .dir-table thead tr.col-groups th.grp-personal { border-left: 2px solid rgba(6,182,212,0.25); }
+    .dir-table thead tr.col-groups th.grp-hr       { border-left: 2px solid rgba(16,185,129,0.3); }
+    .dir-table thead tr.col-groups th.grp-gov      { border-left: 2px solid rgba(245,158,11,0.3); }
+    .dir-table thead tr.col-groups th.grp-docs     { border-left: 2px solid rgba(99,102,241,0.3); }
+    .dir-table thead tr.col-groups th.grp-leave    { border-left: 2px solid rgba(239,68,68,0.3); }
+
+    .dir-table th.grp-personal { border-left: 2px solid rgba(6,182,212,0.20); }
+    .dir-table th.grp-hr       { border-left: 2px solid rgba(16,185,129,0.25); }
+    .dir-table th.grp-gov      { border-left: 2px solid rgba(245,158,11,0.25); }
+    .dir-table th.grp-docs     { border-left: 2px solid rgba(99,102,241,0.25); }
+    .dir-table th.grp-leave    { border-left: 2px solid rgba(239,68,68,0.25); }
+    .dir-table td.grp-personal { border-left: 2px solid rgba(6,182,212,0.08); }
+    .dir-table td.grp-hr       { border-left: 2px solid rgba(16,185,129,0.08); }
+    .dir-table td.grp-gov      { border-left: 2px solid rgba(245,158,11,0.08); }
+    .dir-table td.grp-docs     { border-left: 2px solid rgba(99,102,241,0.08); }
+    .dir-table td.grp-leave    { border-left: 2px solid rgba(239,68,68,0.08); }
+
+    /* ── Avatar thumbnail ── */
+    .emp-avatar {
+      width: 28px; height: 28px; border-radius: 50%;
+      object-fit: cover; border: 1px solid var(--border);
+      background: var(--bg-elevated); flex-shrink: 0;
+      display: inline-block; vertical-align: middle; margin-right: 0.45rem;
+    }
+    .emp-avatar-placeholder {
+      width: 28px; height: 28px; border-radius: 50%;
+      background: var(--cyan-dim); border: 1px solid var(--cyan-border);
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 0.6rem; font-weight: 800; color: var(--cyan-light);
+      flex-shrink: 0; vertical-align: middle; margin-right: 0.45rem;
+    }
+
+    @media (max-width: 768px) {
+      .stats-strip { flex-wrap: wrap; }
+      .stat-cell   { min-width: 50%; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Navigation -->
+  <nav class="nav" role="navigation" aria-label="Main navigation">
+    <div class="container">
+      <div class="nav__inner">
+        <a href="../index.html" class="nav__logo">
+          <img src="../assets/logo.svg?v=2" alt="BrightKey" />
+        </a>
+        <ul class="nav__links" id="nav-links">
+          <li><a href="../index.html"    class="nav__link">Home</a></li>
+          <li><a href="../about.html"    class="nav__link">About</a></li>
+          <li><a href="../products.html" class="nav__link">Products</a></li>
+          <li><a href="../contact.html"  class="nav__link">Contact</a></li>
+        </ul>
+        <div class="nav__cta" id="nav-cta">
+          <a href="../contact.html"  class="btn btn-outline btn-sm">Get a Quote</a>
+          <a href="../products.html" class="btn btn-cyan btn-sm">View Products</a>
+        </div>
+        <button class="nav__toggle" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false">
+          <svg class="nav__hamburger" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path class="nav__ham-path" d="M27 10 13 10C10.8 10 9 8.2 9 6 9 3.5 10.8 2 13 2 15.2 2 17 3.8 17 6L17 26C17 28.2 18.8 30 21 30 23.2 30 25 28.2 25 26 25 23.8 23.2 22 21 22L7 22"/>
+            <path d="M7 16 27 16"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <main>
+    <div class="int-wrap">
+
+      <!-- Breadcrumb -->
+      <nav class="breadcrumb" aria-label="Breadcrumb">
+        <span>Internal</span>
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M3 1l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span>Employee Directory</span>
+      </nav>
+
+      <!-- Page header -->
+      <div class="int-header">
+        <div>
+          <div class="section-eyebrow" style="margin-bottom:0.35rem;">Internal · Human Resources</div>
+          <h1 class="int-title">Employee Directory</h1>
+        </div>
+        <div style="display:flex;gap:0.6rem;align-items:center;flex-wrap:wrap;">
+          <a href="../employee_registration.html" class="btn btn-outline btn-sm" target="_blank">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+            New Employee
+          </a>
+          <button class="btn btn-cyan btn-sm" id="btn-export" type="button">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Export CSV
+          </button>
+        </div>
+      </div>
+
+      <!-- Stats strip -->
+      <div class="stats-strip" id="stats-strip">
+        <div class="stat-cell">
+          <span class="stat-cell__val" id="stat-total">—</span>
+          <span class="stat-cell__lbl">Total Employees</span>
+        </div>
+        <div class="stat-cell">
+          <span class="stat-cell__val" id="stat-active">—</span>
+          <span class="stat-cell__lbl">Active</span>
+        </div>
+        <div class="stat-cell">
+          <span class="stat-cell__val" id="stat-inactive">—</span>
+          <span class="stat-cell__lbl">Inactive / Resigned</span>
+        </div>
+        <div class="stat-cell">
+          <span class="stat-cell__val" id="stat-showing">—</span>
+          <span class="stat-cell__lbl">Showing</span>
+        </div>
+      </div>
+
+      <!-- Toolbar -->
+      <div class="toolbar">
+        <div class="search-wrap">
+          <span class="search-icon"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></span>
+          <input type="search" id="search-input" class="search-input" placeholder="Search name, employee #, department, email…" />
+        </div>
+        <select id="filter-dept" class="form-select">
+          <option value="">All Departments</option>
+        </select>
+        <select id="filter-status" class="form-select">
+          <option value="">All Status</option>
+          <option value="Active">Active</option>
+          <option value="Inactive">Inactive</option>
+          <option value="Resigned">Resigned</option>
+          <option value="Terminated">Terminated</option>
+        </select>
+        <button class="btn btn-outline btn-sm" id="btn-refresh" type="button" title="Refresh">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+          Refresh
+        </button>
+        <button class="btn btn-outline btn-sm" id="btn-edit-toggle" type="button">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          Edit Fields
+        </button>
+      </div>
+
+      <!-- Edit mode bar -->
+      <div class="edit-mode-bar" id="edit-mode-bar">
+        <span class="edit-mode-bar__label">Edit Mode</span>
+        <span class="edit-mode-bar__info" id="edit-dirty-info"></span>
+        <span class="spacer"></span>
+        <button class="btn btn-ghost btn-sm" id="btn-save-all" type="button" style="display:none;">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+          Save All
+        </button>
+        <button class="btn btn-ghost btn-sm" id="btn-discard-all" type="button">
+          ✕ Exit Edit Mode
+        </button>
+      </div>
+
+      <!-- Table card -->
+      <div class="table-card">
+        <div class="table-wrap">
+          <table class="dir-table" id="dir-table">
+            <thead>
+              <!-- Column group labels -->
+              <tr class="col-groups">
+                <th colspan="2"><!-- sticky --></th>
+                <th colspan="8" class="grp-hr">HR / Employment</th>
+                <th colspan="8" class="grp-personal">Personal Information</th>
+                <th colspan="4" class="grp-gov">Gov't Numbers</th>
+                <th colspan="3" class="grp-docs">Documents</th>
+                <th colspan="2" class="grp-leave">Leave</th>
+                <th><!-- actions --></th>
+              </tr>
+              <tr>
+                <!-- Sticky -->
+                <th class="col-num">Emp #</th>
+                <th class="col-name">Full Name</th>
+                <!-- HR -->
+                <th class="grp-hr">Department</th>
+                <th class="grp-hr">Title / Position</th>
+                <th class="grp-hr">Reporting To</th>
+                <th class="grp-hr">Level</th>
+                <th class="grp-hr">Job Description</th>
+                <th class="grp-hr">Date Hired</th>
+                <th class="grp-hr">Status</th>
+                <th class="grp-hr">Salary</th>
+                <!-- Personal -->
+                <th class="grp-personal">First Name</th>
+                <th class="grp-personal">Middle Name</th>
+                <th class="grp-personal">Last Name</th>
+                <th class="grp-personal">Date of Birth</th>
+                <th class="grp-personal">Address</th>
+                <th class="grp-personal">Contact #</th>
+                <th class="grp-personal">Emergency Contact</th>
+                <th class="grp-personal">Email</th>
+                <!-- Gov't -->
+                <th class="grp-gov">TIN</th>
+                <th class="grp-gov">SSS</th>
+                <th class="grp-gov">PAG-IBIG</th>
+                <th class="grp-gov">PhilHealth</th>
+                <!-- Docs -->
+                <th class="grp-docs">Picture</th>
+                <th class="grp-docs">Gov't ID</th>
+                <th class="grp-docs">CV</th>
+                <!-- Leave -->
+                <th class="grp-leave">VL Load</th>
+                <th class="grp-leave">SL Load</th>
+                <!-- Actions -->
+                <th class="col-actions"></th>
+              </tr>
+            </thead>
+            <tbody id="dir-tbody">
+              <tr><td colspan="28" class="tbl-state">Loading employees…</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Footer / pagination -->
+        <div class="table-footer">
+          <span class="table-footer__info" id="footer-info"></span>
+          <div class="pagination" id="pagination"></div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <div id="toast-container" aria-live="polite"></div>
+
+  <script src="../js/main.js"></script>
+  <script>
+    'use strict';
+
+    /* ── Supabase ── */
+    const SB_URL  = (typeof SUPABASE_URL  !== 'undefined') ? SUPABASE_URL  : 'https://ymjlosnxuhsybkzkoofq.supabase.co';
+    const SB_ANON = (typeof SUPABASE_ANON !== 'undefined') ? SUPABASE_ANON : 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inltamxvc254dWhzeWJremtvb2ZxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ0MDY1MzYsImV4cCI6MjA4OTk4MjUzNn0.srhk9SVvFuZRcfeRGbVDGPr5pYrFhs8vzcOiMK3A91w';
+    const H = {
+      'Content-Type': 'application/json',
+      'apikey': SB_ANON,
+      'Authorization': `Bearer ${SB_ANON}`,
+    };
+
+    async function sbGet(path, extra = {}) {
+      const r = await fetch(`${SB_URL}/rest/v1/${path}`, { headers: { ...H, ...extra } });
+      if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.message || `HTTP ${r.status}`); }
+      return r.json();
+    }
+    async function sbPatch(id, body) {
+      const r = await fetch(`${SB_URL}/rest/v1/employees?id=eq.${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        headers: { ...H, 'Prefer': 'return=minimal' },
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.message || `Update failed ${r.status}`); }
+    }
+
+    /* ── Helpers ── */
+    function esc(s) {
+      return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+    function fmt(v) { return (v === null || v === undefined || v === '') ? '' : v; }
+    function fmtDate(v) { return v ? v.slice(0, 10) : ''; }
+    function fmtPHP(v) {
+      if (v === null || v === undefined || v === '') return '';
+      return '₱' + Number(v).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    function fullName(emp) {
+      return [emp.first_name, emp.middle_name, emp.last_name].filter(Boolean).join(' ');
+    }
+    function initials(emp) {
+      const f = (emp.first_name || '').charAt(0).toUpperCase();
+      const l = (emp.last_name  || '').charAt(0).toUpperCase();
+      return f + l;
+    }
+
+    /* ── Toast ── */
+    function toast(msg, type = 'success') {
+      const icons = {
+        success: '<svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>',
+        error:   '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>',
+        info:    '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>',
+      };
+      const el = document.createElement('div');
+      el.className = `toast toast-${type}`;
+      el.innerHTML = (icons[type] || '') + esc(msg);
+      document.getElementById('toast-container').appendChild(el);
+      setTimeout(() => el.remove(), 3500);
+    }
+
+    /* ══════════════════════════════════════════════════
+       DirectoryApp
+    ══════════════════════════════════════════════════ */
+    const App = {
+      allEmployees: [],
+      filtered: [],
+      page: 1,
+      pageSize: 30,
+      editMode: false,
+      dirty: {},        // { id: { field: newVal, ... } }
+      sortCol: 'employee_number',
+      sortDir: 'asc',
+
+      /* ── Boot ── */
+      async init() {
+        this.bindToolbar();
+        this.bindEditMode();
+        this.bindExport();
+        await this.load();
+      },
+
+      /* ── Load from Supabase ── */
+      async load() {
+        document.getElementById('dir-tbody').innerHTML = '<tr><td colspan="28" class="tbl-state">Loading employees…</td></tr>';
+        try {
+          const data = await sbGet(
+            'employees?select=*&order=employee_number.asc',
+            { 'Prefer': 'count=exact' }
+          );
+          this.allEmployees = data;
+          this.dirty = {};
+          this.updateDeptFilter();
+          this.applyFilters();
+          this.updateStats();
+        } catch (err) {
+          document.getElementById('dir-tbody').innerHTML = `<tr><td colspan="28" class="tbl-state error">Failed to load: ${esc(err.message)}</td></tr>`;
+          toast('Failed to load employees: ' + err.message, 'error');
+        }
+      },
+
+      /* ── Department filter options ── */
+      updateDeptFilter() {
+        const sel = document.getElementById('filter-dept');
+        const current = sel.value;
+        const depts = [...new Set(this.allEmployees.map(e => e.department).filter(Boolean))].sort();
+        sel.innerHTML = '<option value="">All Departments</option>';
+        depts.forEach(d => {
+          const o = document.createElement('option');
+          o.value = o.textContent = d;
+          sel.appendChild(o);
+        });
+        sel.value = current;
+      },
+
+      /* ── Filter + sort ── */
+      applyFilters() {
+        const q      = document.getElementById('search-input').value.trim().toLowerCase();
+        const dept   = document.getElementById('filter-dept').value;
+        const status = document.getElementById('filter-status').value;
+
+        this.filtered = this.allEmployees.filter(emp => {
+          if (dept   && emp.department        !== dept)   return false;
+          if (status && emp.employment_status !== status) return false;
+          if (q) {
+            const hay = [
+              emp.employee_number, emp.first_name, emp.middle_name, emp.last_name,
+              emp.department, emp.position, emp.email_address, emp.contact_number,
+            ].join(' ').toLowerCase();
+            if (!hay.includes(q)) return false;
+          }
+          return true;
+        });
+
+        // Sort
+        this.filtered.sort((a, b) => {
+          let av = a[this.sortCol] ?? '';
+          let bv = b[this.sortCol] ?? '';
+          if (typeof av === 'string') av = av.toLowerCase();
+          if (typeof bv === 'string') bv = bv.toLowerCase();
+          if (av < bv) return this.sortDir === 'asc' ? -1 : 1;
+          if (av > bv) return this.sortDir === 'asc' ? 1 : -1;
+          return 0;
+        });
+
+        this.page = 1;
+        this.render();
+        this.updateStats();
+      },
+
+      /* ── Stats ── */
+      updateStats() {
+        const total    = this.allEmployees.length;
+        const active   = this.allEmployees.filter(e => e.employment_status === 'Active').length;
+        const inactive = this.allEmployees.filter(e => ['Inactive','Resigned','Terminated'].includes(e.employment_status)).length;
+        document.getElementById('stat-total').textContent   = total;
+        document.getElementById('stat-active').textContent  = active;
+        document.getElementById('stat-inactive').textContent = inactive;
+        document.getElementById('stat-showing').textContent = this.filtered.length;
+      },
+
+      /* ── Render table ── */
+      render() {
+        const start  = (this.page - 1) * this.pageSize;
+        const slice  = this.filtered.slice(start, start + this.pageSize);
+        const tbody  = document.getElementById('dir-tbody');
+
+        if (slice.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="28" class="tbl-state">No employees found.</td></tr>';
+          document.getElementById('footer-info').textContent = 'No results';
+          document.getElementById('pagination').innerHTML = '';
+          return;
+        }
+
+        tbody.innerHTML = slice.map(emp => this.renderRow(emp)).join('');
+        this.bindRowButtons();
+
+        // Footer
+        const total = this.filtered.length;
+        const end   = Math.min(start + this.pageSize, total);
+        document.getElementById('footer-info').textContent = `Showing ${start + 1}–${end} of ${total} employees`;
+        this.renderPagination(total);
+      },
+
+      /* ── Render single row ── */
+      renderRow(emp) {
+        const id       = emp.id;
+        const isDirty  = !!this.dirty[id];
+        const isEdit   = this.editMode;
+        const statusCls = {
+          'Active': 'status-active', 'Inactive': 'status-inactive',
+          'Resigned': 'status-resigned', 'Terminated': 'status-terminated',
+        }[emp.employment_status] || 'status-inactive';
+
+        const avatarHtml = emp.profile_picture_url
+          ? `<img class="emp-avatar" src="${esc(emp.profile_picture_url)}" alt="" loading="lazy" onerror="this.style.display='none'">`
+          : `<span class="emp-avatar-placeholder">${esc(initials(emp))}</span>`;
+
+        // Cell helper: plain or editable
+        const cell = (val, field, type = 'text', opts = null) => {
+          const raw = fmt(val);
+          if (!isEdit) {
+            return raw
+              ? `<td>${esc(raw)}</td>`
+              : `<td class="cell-empty">—</td>`;
+          }
+          // editable
+          if (type === 'select' && opts) {
+            const options = opts.map(o =>
+              `<option value="${esc(o)}" ${raw === o ? 'selected' : ''}>${esc(o)}</option>`
+            ).join('');
+            return `<td><select class="cell-input cell-select" data-id="${esc(id)}" data-field="${esc(field)}">${options}</select></td>`;
+          }
+          if (type === 'date') {
+            return `<td><input type="date" class="cell-input" data-id="${esc(id)}" data-field="${esc(field)}" value="${esc(fmtDate(raw))}"></td>`;
+          }
+          if (type === 'number') {
+            return `<td><input type="number" step="0.01" class="cell-input" data-id="${esc(id)}" data-field="${esc(field)}" value="${esc(raw)}" style="max-width:100px;"></td>`;
+          }
+          return `<td><input type="text" class="cell-input" data-id="${esc(id)}" data-field="${esc(field)}" value="${esc(raw)}"></td>`;
+        };
+
+        const cellLink = (url, label, field) => {
+          if (!isEdit) {
+            return url
+              ? `<td class="cell-link"><a href="${esc(url)}" target="_blank">${esc(label)}</a></td>`
+              : `<td class="cell-empty">—</td>`;
+          }
+          return `<td><input type="url" class="cell-input" data-id="${esc(id)}" data-field="${esc(field)}" value="${esc(fmt(url))}" style="min-width:150px;"></td>`;
+        };
+
+        const salaryCell = () => {
+          if (!isEdit) {
+            return emp.salary != null
+              ? `<td class="cell-num">${esc(fmtPHP(emp.salary))}</td>`
+              : `<td class="cell-empty">—</td>`;
+          }
+          return `<td><input type="number" step="0.01" class="cell-input" data-id="${esc(id)}" data-field="salary" value="${esc(emp.salary ?? '')}" style="max-width:110px;"></td>`;
+        };
+
+        const statusCell = () => {
+          if (!isEdit) {
+            return `<td><span class="status-badge ${statusCls}">${esc(emp.employment_status || 'Active')}</span></td>`;
+          }
+          return `<td><select class="cell-input cell-select" data-id="${esc(id)}" data-field="employment_status">
+            ${['Active','Inactive','Resigned','Terminated'].map(s =>
+              `<option ${emp.employment_status === s ? 'selected' : ''}>${s}</option>`
+            ).join('')}
+          </select></td>`;
+        };
+
+        const actionBtns = isEdit
+          ? `<div class="row-actions">
+              <button class="btn-row btn-save"    data-id="${esc(id)}" title="Save this row">
+                <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>Save
+              </button>
+              <button class="btn-row btn-discard" data-id="${esc(id)}" title="Discard changes">
+                <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>`
+          : `<div class="row-actions">
+              <button class="btn-row btn-edit" data-id="${esc(id)}" title="Edit row">
+                <svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                Edit
+              </button>
+            </div>`;
+
+        return `<tr data-id="${esc(id)}" class="${isDirty ? 'row-dirty' : ''}">
+          <td class="col-num cell-emp-num">${esc(emp.employee_number)}</td>
+          <td class="col-name cell-name" style="display:flex;align-items:center;">
+            ${avatarHtml}
+            <span>${esc(fullName(emp))}</span>
+          </td>
+          ${cell(emp.department, 'department').replace('<td>', '<td class="grp-hr">')}
+          ${cell(emp.position, 'position')}
+          ${cell(emp.reporting_to, 'reporting_to')}
+          ${cell(emp.level, 'level')}
+          ${cell(emp.job_description, 'job_description')}
+          ${cell(fmtDate(emp.date_hired), 'date_hired', 'date')}
+          ${statusCell()}
+          ${salaryCell()}
+          ${cell(emp.first_name, 'first_name').replace('<td>', '<td class="grp-personal">')}
+          ${cell(emp.middle_name, 'middle_name')}
+          ${cell(emp.last_name, 'last_name')}
+          ${cell(fmtDate(emp.date_of_birth), 'date_of_birth', 'date')}
+          ${cell(emp.address, 'address')}
+          ${cell(emp.contact_number, 'contact_number')}
+          ${cell(emp.emergency_contact, 'emergency_contact')}
+          ${cell(emp.email_address, 'email_address')}
+          ${cell(emp.tin_number, 'tin_number').replace('<td>', '<td class="grp-gov">')}
+          ${cell(emp.sss_number, 'sss_number')}
+          ${cell(emp.pagibig_number, 'pagibig_number')}
+          ${cell(emp.philhealth_number, 'philhealth_number')}
+          ${cellLink(emp.profile_picture_url, 'View Photo', 'profile_picture_url').replace('<td', '<td class="grp-docs"')}
+          ${cellLink(emp.government_id_url, 'View ID', 'government_id_url')}
+          ${cellLink(emp.cv_url, 'View CV', 'cv_url')}
+          ${cell(emp.vl_load ?? 0, 'vl_load', 'number').replace('<td>', '<td class="grp-leave cell-num">')}
+          ${cell(emp.sl_load ?? 0, 'sl_load', 'number').replace('<td>', '<td class="cell-num">')}
+          <td class="col-actions">${actionBtns}</td>
+        </tr>`;
+      },
+
+      /* ── Bind row-level save/discard buttons (not edit mode) ── */
+      bindRowButtons() {
+        // Edit buttons (non-edit-mode: open row-level edit)
+        document.querySelectorAll('.btn-edit').forEach(btn => {
+          btn.addEventListener('click', () => {
+            // Turn on edit mode then re-render
+            this.editMode = true;
+            document.getElementById('edit-mode-bar').classList.add('active');
+            document.getElementById('btn-edit-toggle').classList.add('btn-edit-active');
+            this.render();
+            // Scroll the row into view
+            const row = document.querySelector(`tr[data-id="${btn.dataset.id}"]`);
+            if (row) row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          });
+        });
+
+        // Save buttons (per-row)
+        document.querySelectorAll('.btn-save').forEach(btn => {
+          btn.addEventListener('click', () => this.saveRow(btn.dataset.id));
+        });
+
+        // Discard buttons (per-row)
+        document.querySelectorAll('.btn-discard').forEach(btn => {
+          btn.addEventListener('click', () => this.discardRow(btn.dataset.id));
+        });
+
+        // Track changes on cell inputs
+        document.querySelectorAll('.cell-input').forEach(inp => {
+          inp.addEventListener('input', () => {
+            const id    = inp.dataset.id;
+            const field = inp.dataset.field;
+            if (!this.dirty[id]) this.dirty[id] = {};
+            this.dirty[id][field] = inp.value;
+            const row = document.querySelector(`tr[data-id="${id}"]`);
+            if (row) row.classList.add('row-dirty');
+            this.updateDirtyInfo();
+          });
+          inp.addEventListener('change', () => {
+            const id    = inp.dataset.id;
+            const field = inp.dataset.field;
+            if (!this.dirty[id]) this.dirty[id] = {};
+            this.dirty[id][field] = inp.value;
+            const row = document.querySelector(`tr[data-id="${id}"]`);
+            if (row) row.classList.add('row-dirty');
+            this.updateDirtyInfo();
+          });
+        });
+      },
+
+      /* ── Save single row ── */
+      async saveRow(id) {
+        const changes = this.dirty[id];
+        if (!changes || Object.keys(changes).length === 0) {
+          toast('No changes to save.', 'info');
+          return;
+        }
+        // Optimistically update local data
+        const emp = this.allEmployees.find(e => e.id === id);
+        if (!emp) return;
+        const origCopy = { ...emp };
+        Object.assign(emp, changes);
+
+        try {
+          await sbPatch(id, changes);
+          delete this.dirty[id];
+          this.updateDirtyInfo();
+          this.applyFilters();
+          toast('Saved successfully.', 'success');
+        } catch (err) {
+          // Revert
+          Object.assign(emp, origCopy);
+          toast('Save failed: ' + err.message, 'error');
+        }
+      },
+
+      /* ── Discard single row ── */
+      discardRow(id) {
+        delete this.dirty[id];
+        this.updateDirtyInfo();
+        this.render();
+      },
+
+      /* ── Save all dirty rows ── */
+      async saveAll() {
+        const ids = Object.keys(this.dirty);
+        if (ids.length === 0) { toast('Nothing to save.', 'info'); return; }
+        let saved = 0, failed = 0;
+        for (const id of ids) {
+          try {
+            const changes = this.dirty[id];
+            const emp = this.allEmployees.find(e => e.id === id);
+            if (emp) Object.assign(emp, changes);
+            await sbPatch(id, changes);
+            delete this.dirty[id];
+            saved++;
+          } catch (err) {
+            failed++;
+            console.error('Save failed for', id, err);
+          }
+        }
+        this.updateDirtyInfo();
+        this.applyFilters();
+        if (failed === 0) toast(`Saved ${saved} record${saved !== 1 ? 's' : ''}.`, 'success');
+        else toast(`Saved ${saved}, failed ${failed}.`, 'error');
+      },
+
+      updateDirtyInfo() {
+        const n = Object.keys(this.dirty).length;
+        const el = document.getElementById('edit-dirty-info');
+        const saveAllBtn = document.getElementById('btn-save-all');
+        if (n > 0) {
+          el.textContent = `${n} unsaved row${n !== 1 ? 's' : ''}`;
+          saveAllBtn.style.display = '';
+        } else {
+          el.textContent = 'Click Save on any row to commit changes';
+          saveAllBtn.style.display = 'none';
+        }
+      },
+
+      /* ── Pagination ── */
+      renderPagination(total) {
+        const pages = Math.ceil(total / this.pageSize);
+        if (pages <= 1) { document.getElementById('pagination').innerHTML = ''; return; }
+
+        let html = `<button class="page-btn" id="pg-prev" ${this.page === 1 ? 'disabled' : ''}>
+          <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>`;
+
+        for (let i = 1; i <= pages; i++) {
+          if (pages > 7 && Math.abs(i - this.page) > 2 && i !== 1 && i !== pages) {
+            if (i === 2 || i === pages - 1) html += `<span class="page-btn" style="cursor:default;border:none;color:var(--text-muted)">…</span>`;
+            continue;
+          }
+          html += `<button class="page-btn${i === this.page ? ' active' : ''}" data-page="${i}">${i}</button>`;
+        }
+
+        html += `<button class="page-btn" id="pg-next" ${this.page === pages ? 'disabled' : ''}>
+          <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>`;
+
+        const el = document.getElementById('pagination');
+        el.innerHTML = html;
+
+        el.querySelectorAll('[data-page]').forEach(btn => {
+          btn.addEventListener('click', () => { this.page = +btn.dataset.page; this.render(); });
+        });
+        const prev = document.getElementById('pg-prev');
+        const next = document.getElementById('pg-next');
+        if (prev) prev.addEventListener('click', () => { if (this.page > 1)     { this.page--; this.render(); } });
+        if (next) next.addEventListener('click', () => { if (this.page < pages) { this.page++; this.render(); } });
+      },
+
+      /* ── Toolbar bindings ── */
+      bindToolbar() {
+        ['search-input','filter-dept','filter-status'].forEach(id => {
+          document.getElementById(id)?.addEventListener('input',  () => this.applyFilters());
+          document.getElementById(id)?.addEventListener('change', () => this.applyFilters());
+        });
+        document.getElementById('btn-refresh').addEventListener('click', () => this.load());
+      },
+
+      /* ── Edit mode toggle ── */
+      bindEditMode() {
+        const bar = document.getElementById('edit-mode-bar');
+        const toggleBtn = document.getElementById('btn-edit-toggle');
+
+        toggleBtn.addEventListener('click', () => {
+          this.editMode = !this.editMode;
+          bar.classList.toggle('active', this.editMode);
+          toggleBtn.classList.toggle('btn-edit-active', this.editMode);
+          if (this.editMode) this.updateDirtyInfo();
+          else {
+            // Confirm discard if dirty
+            if (Object.keys(this.dirty).length > 0) {
+              if (!confirm('Discard all unsaved changes?')) {
+                this.editMode = true;
+                bar.classList.add('active');
+                toggleBtn.classList.add('btn-edit-active');
+                return;
+              }
+              this.dirty = {};
+            }
+          }
+          this.render();
+        });
+
+        document.getElementById('btn-save-all').addEventListener('click', () => this.saveAll());
+
+        document.getElementById('btn-discard-all').addEventListener('click', () => {
+          if (Object.keys(this.dirty).length > 0 && !confirm('Discard all unsaved changes?')) return;
+          this.dirty = {};
+          this.editMode = false;
+          bar.classList.remove('active');
+          document.getElementById('btn-edit-toggle').classList.remove('btn-edit-active');
+          this.render();
+        });
+      },
+
+      /* ── Export CSV ── */
+      bindExport() {
+        document.getElementById('btn-export').addEventListener('click', () => {
+          const cols = [
+            ['employee_number','Emp #'],['department','Department'],['position','Title'],
+            ['reporting_to','Reporting To'],['level','Level'],['job_description','Job Description'],
+            ['date_hired','Date Hired'],['employment_status','Status'],['salary','Salary'],
+            ['first_name','First Name'],['middle_name','Middle Name'],['last_name','Last Name'],
+            ['date_of_birth','Date of Birth'],['address','Address'],
+            ['contact_number','Contact #'],['emergency_contact','Emergency Contact'],
+            ['email_address','Email'],['tin_number','TIN'],['sss_number','SSS'],
+            ['pagibig_number','PAG-IBIG'],['philhealth_number','PhilHealth'],
+            ['profile_picture_url','Picture Link'],['government_id_url','ID Link'],['cv_url','CV Link'],
+            ['vl_load','VL Load'],['sl_load','SL Load'],
+          ];
+          const header = cols.map(c => `"${c[1]}"`).join(',');
+          const rows = this.filtered.map(emp =>
+            cols.map(([k]) => {
+              const v = emp[k] ?? '';
+              return `"${String(v).replace(/"/g, '""')}"`;
+            }).join(',')
+          );
+          const csv = [header, ...rows].join('\n');
+          const blob = new Blob([csv], { type: 'text/csv' });
+          const url  = URL.createObjectURL(blob);
+          const a    = document.createElement('a');
+          a.href = url; a.download = `employee-directory-${new Date().toISOString().slice(0,10)}.csv`;
+          a.click(); URL.revokeObjectURL(url);
+          toast('CSV exported.', 'success');
+        });
+      },
+    };
+
+    /* ── Boot ── */
+    App.init();
+
+    /* ── Nav (from main.js) ── */
+    if (typeof initNav === 'function') initNav();
+  </script>
+
+  <script defer src="/_vercel/speed-insights/script.js"></script>
+</body>
+</html>
