@@ -1224,6 +1224,15 @@
 
     // Glass Surface dynamic SVG filter support and initialization
     document.addEventListener('DOMContentLoaded', () => {
+      // Debounce helper to prevent performance bottlenecks on resize transitions
+      function debounce(func, wait) {
+        let timeout;
+        return function(...args) {
+          clearTimeout(timeout);
+          timeout = setTimeout(() => func.apply(this, args), wait);
+        };
+      }
+
       function supportsSVGFilters(filterId) {
         if (typeof window === 'undefined' || typeof document === 'undefined') {
           return false;
@@ -1344,9 +1353,10 @@
             feImage.setAttribute('href', `data:image/svg+xml,${encodeURIComponent(svgContent)}`);
           };
           
-          // Observe resize changes to dynamically recalculate displacement map sizing
+          // Observe resize changes to dynamically recalculate displacement map sizing with debounce
+          const debouncedUpdateMap = debounce(updateMap, 150);
           const resizeObserver = new ResizeObserver(() => {
-            setTimeout(updateMap, 0);
+            debouncedUpdateMap();
           });
           resizeObserver.observe(el);
           
