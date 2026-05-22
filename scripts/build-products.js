@@ -214,15 +214,24 @@ async function buildProducts() {
     if (p.features && Object.keys(p.features).length > 0) {
       let featuresHtml = '';
       for (const [key, value] of Object.entries(p.features)) {
-        if (value) {
+        if (value !== null && value !== undefined) {
+          const valStr = String(value).trim();
+          if (valStr === '' || valStr.toLowerCase() === 'false') {
+            continue;
+          }
+          
           // Format key: "pin_unlock" -> "PIN Unlock"
           let displayKey = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-          if (displayKey.toLowerCase() === 'pin unlock') displayKey = 'PIN Unlock';
-          if (displayKey.toLowerCase() === 'rfid unlock') displayKey = 'RFID Unlock';
+          displayKey = displayKey
+            .replace(/\bPin\b/gi, 'PIN')
+            .replace(/\bRfid\b/gi, 'RFID')
+            .replace(/\bUsb\b/gi, 'USB')
+            .replace(/\b3d\b/gi, '3D')
+            .replace(/\bWifi\b/gi, 'WiFi');
           
           let displayText = displayKey;
-          if (value !== 'X' && value !== true && value !== 'true') {
-            displayText += ` (${value})`;
+          if (valStr.toLowerCase() !== 'x' && valStr.toLowerCase() !== 'true') {
+            displayText += ` (${valStr})`;
           }
 
           featuresHtml += `
