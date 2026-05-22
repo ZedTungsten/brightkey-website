@@ -1,0 +1,1307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Products Dashboard — BrightKey Admin</title>
+  
+  <link rel="preconnect" href="https://fonts.bunny.net" />
+  <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../../css/style.css" />
+  <link rel="icon" type="image/svg+xml" href="../../assets/favicon.svg?v=2" />
+
+  <style>
+    /* Dark glassmorphic overrides for modern administrative styling */
+    :root {
+      --bg-base: #090d16;
+      --bg-surface: #111726;
+      --bg-elevated: #1b2336;
+      --bg-card: #111726;
+      --border: #242f47;
+      --border-hover: #324366;
+      --text-primary: #f1f5f9;
+      --text-secondary: #cbd5e1;
+      --text-muted: #64748b;
+      --cyan: #06b6d4;
+      --cyan-light: #22d3ee;
+      --cyan-dim: rgba(6, 182, 212, 0.08);
+      --cyan-border: rgba(6, 182, 212, 0.25);
+    }
+
+    body {
+      background-color: var(--bg-base);
+      color: var(--text-secondary);
+    }
+
+    .int-wrap {
+      max-width: 1600px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem 5rem;
+    }
+
+    .int-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 1.5rem;
+      margin-bottom: 2rem;
+    }
+
+    .int-title {
+      font-size: 1.75rem;
+      font-weight: 800;
+      color: var(--text-primary);
+      letter-spacing: -0.04em;
+      line-height: 1.1;
+    }
+
+    /* ── Stats strip ── */
+    .stats-strip {
+      display: flex;
+      gap: 1px;
+      margin-bottom: 1.5rem;
+      background: var(--border);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      max-width: 480px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .stat-cell {
+      flex: 1;
+      padding: 1rem 1.25rem;
+      background: var(--bg-surface);
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
+      min-width: 0;
+    }
+
+    .stat-cell__val {
+      font-size: 1.5rem;
+      font-weight: 800;
+      color: var(--text-primary);
+      letter-spacing: -0.04em;
+      line-height: 1;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .stat-cell__lbl {
+      font-size: 0.65rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+    }
+
+    /* ── Toolbar ── */
+    .toolbar {
+      display: flex;
+      gap: 0.75rem;
+      align-items: center;
+      flex-wrap: nowrap;
+      margin-bottom: 1rem;
+      width: 100%;
+    }
+
+    .toolbar .search-wrap {
+      position: relative;
+      flex: 1;
+      min-width: 250px;
+    }
+
+    .toolbar .search-icon {
+      position: absolute;
+      left: 0.85rem;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-muted);
+      pointer-events: none;
+      display: flex;
+      align-items: center;
+    }
+
+    .toolbar .search-icon svg {
+      width: 14px;
+      height: 14px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 2.5;
+      stroke-linecap: round;
+    }
+
+    .toolbar .search-input {
+      width: 100%;
+      padding: 0.6rem 0.8rem 0.6rem 2.3rem;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-family: var(--font-sans);
+      font-size: 0.85rem;
+      color: var(--text-primary);
+      outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+
+    .toolbar .search-input:focus {
+      border-color: var(--cyan-border);
+      box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.15);
+    }
+
+    .toolbar .form-select {
+      padding: 0.6rem 2rem 0.6rem 0.8rem;
+      font-size: 0.85rem;
+      min-width: 150px;
+      width: auto;
+      flex-shrink: 0;
+      background-color: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text-primary);
+      outline: none;
+      cursor: pointer;
+    }
+
+    .toolbar .form-select:focus {
+      border-color: var(--cyan-border);
+    }
+
+    .toolbar .btn {
+      flex-shrink: 0;
+      padding: 0.6rem 1.2rem;
+      font-size: 0.85rem;
+      font-weight: 600;
+      height: 38px;
+    }
+
+    /* ── Edit mode bar ── */
+    .edit-mode-bar {
+      display: none;
+      align-items: center;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      padding: 0.8rem 1.25rem;
+      margin-bottom: 1rem;
+      background: var(--bg-surface);
+      border: 1px solid var(--cyan-border);
+      border-radius: var(--radius-sm);
+      box-shadow: 0 4px 20px rgba(6, 182, 212, 0.08);
+    }
+
+    .edit-mode-bar.active {
+      display: flex;
+    }
+
+    .edit-mode-bar__label {
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--cyan-light);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .edit-mode-bar__label::before {
+      content: '';
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--cyan-light);
+      animation: pulse-dot 1.5s ease-in-out infinite;
+    }
+
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.35; transform: scale(0.7); }
+    }
+
+    .edit-mode-bar__info {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+    }
+
+    .edit-mode-bar .spacer {
+      flex: 1;
+    }
+
+    /* ── Table container ── */
+    .table-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+    }
+
+    /* ── Products table ── */
+    .dir-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+      white-space: nowrap;
+    }
+
+    .dir-table th {
+      padding: 0.75rem 1rem;
+      text-align: left;
+      font-size: 0.65rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      background: var(--bg-elevated);
+      border-bottom: 1px solid var(--border);
+      user-select: none;
+    }
+
+    .dir-table td {
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid var(--border);
+      color: var(--text-secondary);
+      vertical-align: middle;
+    }
+
+    .dir-table tbody tr:last-child td {
+      border-bottom: none;
+    }
+
+    .dir-table tbody tr:hover td {
+      background: rgba(6, 182, 212, 0.02);
+    }
+
+    /* Row Hierarchy visual distinction */
+    .dir-table tr.row-child td {
+      background: rgba(255, 255, 255, 0.01);
+    }
+
+    .dir-table tr.row-child td.cell-sku {
+      padding-left: 2rem;
+      position: relative;
+    }
+
+    .dir-table tr.row-child td.cell-sku::before {
+      content: '└─';
+      position: absolute;
+      left: 0.75rem;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      font-weight: normal;
+    }
+
+    /* Edit mode row dirty highlight */
+    .dir-table tbody tr.row-dirty td {
+      background: rgba(245, 158, 11, 0.03) !important;
+    }
+    
+    .dir-table tbody tr.row-dirty td:first-child {
+      border-left: 3px solid var(--warning);
+    }
+
+    /* Deleted row styling */
+    .dir-table tbody tr.row-deleted td {
+      opacity: 0.4;
+      text-decoration: line-through;
+      background: rgba(239, 68, 68, 0.02) !important;
+    }
+
+    .dir-table tbody tr.row-deleted td:first-child {
+      border-left: 3px solid var(--danger);
+    }
+
+    /* Input inside cell */
+    .cell-input {
+      width: 100%;
+      padding: 0.4rem 0.6rem;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      font-size: 0.82rem;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    .cell-input:focus {
+      border-color: var(--cyan-border);
+    }
+
+    .cell-input[type="number"] {
+      max-width: 90px;
+      font-variant-numeric: tabular-nums;
+      text-align: right;
+    }
+
+    .cell-input.cell-select {
+      cursor: pointer;
+      padding-right: 1.5rem;
+    }
+
+    /* Specific badge styling */
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      padding: 0.2rem 0.6rem;
+      border-radius: 99px;
+      font-size: 0.65rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .status-badge::before {
+      content: '';
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    .status-published {
+      background: rgba(16, 185, 129, 0.1);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.2);
+    }
+
+    .status-published::before {
+      background: #10b981;
+    }
+
+    .status-draft {
+      background: rgba(100, 116, 139, 0.1);
+      color: #94a3b8;
+      border: 1px solid rgba(100, 116, 139, 0.2);
+    }
+
+    .status-draft::before {
+      background: #64748b;
+    }
+
+    .sku-badge {
+      font-family: var(--font-mono);
+      font-weight: 700;
+      color: var(--cyan-light);
+      background: var(--cyan-dim);
+      padding: 0.15rem 0.4rem;
+      border-radius: 4px;
+      font-size: 0.78rem;
+      border: 1px solid var(--cyan-border);
+    }
+
+    /* Button overrides */
+    .btn-edit-toggle {
+      border: 1px solid var(--border);
+      background: var(--bg-surface);
+      color: var(--text-primary);
+      transition: all var(--transition);
+    }
+
+    .btn-edit-toggle:hover {
+      border-color: var(--cyan-border);
+      background: var(--cyan-dim);
+    }
+
+    .btn-edit-toggle.btn-edit-active {
+      background: var(--cyan);
+      color: #000;
+      border-color: var(--cyan);
+    }
+
+    .btn-row {
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 0.25rem;
+      color: var(--text-muted);
+      border-radius: var(--radius-sm);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: all var(--transition);
+    }
+
+    .btn-row:hover {
+      background: var(--bg-elevated);
+      color: var(--text-primary);
+    }
+
+    .btn-row.btn-delete:hover {
+      color: var(--danger);
+      background: rgba(239, 68, 68, 0.1);
+    }
+
+    .btn-row.btn-restore:hover {
+      color: var(--success);
+      background: rgba(16, 185, 129, 0.1);
+    }
+
+    .btn-row.btn-add-var:hover {
+      color: var(--cyan-light);
+      background: var(--cyan-dim);
+    }
+
+    .btn-row svg {
+      width: 14px;
+      height: 14px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+    }
+
+    /* Action box for Vercel rebuild */
+    .publish-banner {
+      background: linear-gradient(135deg, rgba(6, 182, 212, 0.05) 0%, rgba(16, 185, 129, 0.03) 100%);
+      border: 1px solid var(--cyan-border);
+      border-radius: var(--radius-lg);
+      padding: 1.5rem 2rem;
+      margin-bottom: 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1.5rem;
+      flex-wrap: wrap;
+    }
+
+    .publish-banner__info h3 {
+      font-size: 1.1rem;
+      color: var(--text-primary);
+      margin-bottom: 0.25rem;
+    }
+
+    .publish-banner__info p {
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+    }
+
+    /* Custom Toast Container */
+    #toast-container {
+      position: fixed;
+      bottom: 2rem;
+      right: 2rem;
+      z-index: 10000;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .toast {
+      padding: 0.75rem 1.25rem;
+      border-radius: var(--radius-sm);
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #fff;
+      box-shadow: var(--shadow-md);
+      animation: slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      max-width: 320px;
+    }
+
+    .toast-success {
+      background: var(--success);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+
+    .toast-error {
+      background: var(--danger);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+
+    .toast-info {
+      background: var(--cyan);
+      color: #000;
+      border: 1px solid rgba(6, 182, 212, 0.3);
+    }
+
+    @keyframes slideIn {
+      from { transform: translateY(1rem); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+
+    @keyframes fadeOut {
+      to { opacity: 0; transform: scale(0.95); }
+    }
+  </style>
+</head>
+<body>
+
+  <nav class="nav" role="navigation" style="position: sticky; top:0; background:var(--bg-surface); border-bottom:1px solid var(--border); z-index:100;">
+    <div class="container">
+      <div class="nav__inner">
+        <a href="../../admin.html" class="nav__logo" style="font-weight: 700; color:var(--text-primary);">BrightKey <span style="color:var(--cyan);">Admin</span></a>
+        <div style="font-weight: 600; font-size: 1.1rem;">Products Dashboard</div>
+        <div style="display:flex; gap:0.5rem;">
+          <a href="add_products.html" class="btn btn-outline btn-sm">Bulk Upload (CSV)</a>
+          <a href="../../admin.html" class="btn btn-outline btn-sm">Back to Dashboard</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main style="padding-top: 100px; min-height: 80vh;">
+    <div class="int-wrap">
+      
+      <!-- Rebuild Banner -->
+      <div class="publish-banner">
+        <div class="publish-banner__info">
+          <h3>Publish Changes to Live Website</h3>
+          <p>After saving products to the database, trigger Vercel to rebuild and generate static product pages.</p>
+        </div>
+        <div>
+          <button id="btn-publish" class="btn btn-cyan">Publish &amp; Rebuild Site</button>
+        </div>
+      </div>
+
+      <!-- Stats Strip -->
+      <div class="stats-strip">
+        <div class="stat-cell">
+          <div class="stat-cell__val" id="stat-total">0</div>
+          <div class="stat-cell__lbl">Total Products</div>
+        </div>
+        <div class="stat-cell">
+          <div class="stat-cell__val" id="stat-published" style="color: #34d399;">0</div>
+          <div class="stat-cell__lbl">Published</div>
+        </div>
+        <div class="stat-cell">
+          <div class="stat-cell__val" id="stat-draft" style="color: #94a3b8;">0</div>
+          <div class="stat-cell__lbl">Draft</div>
+        </div>
+      </div>
+
+      <!-- Toolbar -->
+      <div class="toolbar">
+        <div class="search-wrap">
+          <span class="search-icon">
+            <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          </span>
+          <input type="text" class="search-input" id="search-input" placeholder="Search by Title, SKU, Slug, or Category..." />
+        </div>
+        <select class="form-select" id="filter-status">
+          <option value="all">All Statuses</option>
+          <option value="published">Published</option>
+          <option value="draft">Draft</option>
+        </select>
+        <select class="form-select" id="filter-category">
+          <option value="all">All Categories</option>
+        </select>
+        
+        <button class="btn btn-edit-toggle" id="btn-edit-toggle">Edit Mode</button>
+        <button class="btn btn-cyan" id="btn-create-parent">+ Create Parent Product</button>
+      </div>
+
+      <!-- Unsaved changes warning bar -->
+      <div class="edit-mode-bar" id="edit-mode-bar">
+        <span class="edit-mode-bar__label">Unsaved Changes</span>
+        <span class="edit-mode-bar__info" id="edit-dirty-info">You have 0 unsaved changes.</span>
+        <div class="spacer"></div>
+        <button class="btn btn-outline btn-sm" id="btn-discard" style="border-color: var(--danger); color: var(--danger);">Discard Changes</button>
+        <button class="btn btn-cyan btn-sm" id="btn-save">Save Changes</button>
+      </div>
+
+      <!-- Grid Table -->
+      <div class="table-card">
+        <div class="table-wrap">
+          <table class="dir-table" id="products-table">
+            <thead>
+              <tr>
+                <th>SKU</th>
+                <th>Title</th>
+                <th>Slug</th>
+                <th>Category</th>
+                <th>Status</th>
+                <th style="text-align:right;">Price</th>
+                <th style="text-align:right;">Compare At</th>
+                <th>Parent SKU</th>
+                <th>Var Name</th>
+                <th>Var Value</th>
+                <th style="width: 100px; text-align: center;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="products-body">
+              <tr>
+                <td colspan="11" style="padding:3rem; text-align:center; color:var(--text-muted);">
+                  Loading products from database...
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <div id="toast-container" aria-live="polite"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="../../js/auth.js"></script>
+  <script src="../../js/main.js"></script>
+  <script>
+    'use strict';
+
+    const sb = window.BKAuth.sb;
+
+    // Application state
+    const App = {
+      allProducts: [],          // Raw products fetched from DB
+      filtered: [],             // Products after filters applied
+      dirty: {},                // { id: { field: value } }
+      pendingDeletes: new Set(), // Set of product IDs to delete
+      editMode: false,
+      categories: new Set(),
+
+      async init() {
+        // Authenticate
+        const user = await window.BKAuth.requireAuth('../../admin.html');
+        if (!user) return;
+
+        // Fetch products
+        await this.fetchProducts();
+
+        // Bind DOM events
+        this.bindEvents();
+      },
+
+      async fetchProducts() {
+        const tbody = document.getElementById('products-body');
+        try {
+          const { data, error } = await sb.from('products').select('*');
+          if (error) throw error;
+
+          this.allProducts = data || [];
+          
+          // Re-populate categories filter options
+          this.categories.clear();
+          this.allProducts.forEach(p => {
+            if (p.category) this.categories.add(p.category);
+          });
+          this.updateCategoryDropdown();
+
+          // Render stats and apply filters
+          this.updateStats();
+          this.applyFilters();
+        } catch (err) {
+          console.error(err);
+          tbody.innerHTML = `<tr><td colspan="11" style="padding:3rem; text-align:center; color:var(--danger);">Error loading products: ${err.message}</td></tr>`;
+          this.toast(`Failed to load products: ${err.message}`, 'error');
+        }
+      },
+
+      updateCategoryDropdown() {
+        const select = document.getElementById('filter-category');
+        const currentVal = select.value;
+        select.innerHTML = '<option value="all">All Categories</option>';
+        Array.from(this.categories).sort().forEach(cat => {
+          select.innerHTML += `<option value="${this.esc(cat)}">${this.esc(cat)}</option>`;
+        });
+        if (this.categories.has(currentVal)) {
+          select.value = currentVal;
+        } else {
+          select.value = 'all';
+        }
+      },
+
+      updateStats() {
+        const total = this.allProducts.length;
+        const published = this.allProducts.filter(p => p.status === 'published').length;
+        const draft = this.allProducts.filter(p => p.status === 'draft').length;
+
+        document.getElementById('stat-total').textContent = total;
+        document.getElementById('stat-published').textContent = published;
+        document.getElementById('stat-draft').textContent = draft;
+      },
+
+      applyFilters() {
+        const query = document.getElementById('search-input').value.toLowerCase().trim();
+        const status = document.getElementById('filter-status').value;
+        const category = document.getElementById('filter-category').value;
+
+        // 1. Separate parents and children
+        const parents = this.allProducts.filter(p => !p.parent_sku);
+        const children = this.allProducts.filter(p => p.parent_sku);
+
+        // Sort parents by SKU
+        parents.sort((a, b) => (a.sku || '').localeCompare(b.sku || ''));
+
+        // Group children under parents
+        const sortedHierarchy = [];
+        parents.forEach(p => {
+          sortedHierarchy.push(p);
+          const variants = children.filter(v => v.parent_sku === p.sku);
+          // Sort variants by SKU
+          variants.sort((a, b) => (a.sku || '').localeCompare(b.sku || ''));
+          sortedHierarchy.push(...variants);
+        });
+
+        // Append orphan children
+        const orphanChildren = children.filter(v => !parents.some(p => p.sku === v.parent_sku));
+        orphanChildren.sort((a, b) => (a.sku || '').localeCompare(b.sku || ''));
+        sortedHierarchy.push(...orphanChildren);
+
+        // 2. Apply filters to this hierarchical list
+        this.filtered = sortedHierarchy.filter(p => {
+          // Status filter
+          if (status !== 'all' && p.status !== status) return false;
+          // Category filter
+          if (category !== 'all' && p.category !== category) return false;
+
+          // Search query
+          if (query) {
+            const matchesTitle = (p.title || '').toLowerCase().includes(query);
+            const matchesSku = (p.sku || '').toLowerCase().includes(query);
+            const matchesSlug = (p.slug || '').toLowerCase().includes(query);
+            const matchesCategory = (p.category || '').toLowerCase().includes(query);
+            const matchesParentSku = (p.parent_sku || '').toLowerCase().includes(query);
+            return matchesTitle || matchesSku || matchesSlug || matchesCategory || matchesParentSku;
+          }
+
+          return true;
+        });
+
+        this.renderTable();
+      },
+
+      renderTable() {
+        const tbody = document.getElementById('products-body');
+        if (this.filtered.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="11" style="padding:3rem; text-align:center; color:var(--text-muted);">No products found matching filters.</td></tr>`;
+          return;
+        }
+
+        tbody.innerHTML = this.filtered.map(p => this.renderRow(p)).join('');
+        this.bindRowEvents();
+      },
+
+      renderRow(p) {
+        const id = p.id;
+        const isDirty = !!this.dirty[id];
+        const isDeleted = this.pendingDeletes.has(id);
+        const isEdit = this.editMode;
+        const isChild = !!p.parent_sku;
+
+        // Render helper for text fields
+        const cell = (val, field, grpClass = '') => {
+          const raw = val || '';
+          if (!isEdit) {
+            return raw 
+              ? `<td class="${grpClass}">${this.esc(raw)}</td>` 
+              : `<td class="${grpClass} cell-empty">—</td>`;
+          }
+          return `<td class="${grpClass}"><input type="text" class="cell-input" data-id="${this.esc(id)}" data-field="${this.esc(field)}" value="${this.esc(raw)}"></td>`;
+        };
+
+        // SKU cell
+        const skuCell = () => {
+          const raw = p.sku || '';
+          if (!isEdit) {
+            return `<td class="cell-sku"><span class="sku-badge">${this.esc(raw || 'NO-SKU')}</span></td>`;
+          }
+          return `<td class="cell-sku"><input type="text" class="cell-input" data-id="${this.esc(id)}" data-field="sku" value="${this.esc(raw)}" style="font-family:var(--font-mono);font-weight:700;min-width:110px;"></td>`;
+        };
+
+        // Price cell
+        const priceCell = (field) => {
+          const cents = p[field];
+          const val = this.fmtPriceInput(cents);
+          if (!isEdit) {
+            return `<td style="text-align:right; font-variant-numeric: tabular-nums;">${this.esc(this.fmtPHP(cents))}</td>`;
+          }
+          return `<td><input type="number" step="0.01" class="cell-input" data-id="${this.esc(id)}" data-field="${this.esc(field)}" value="${this.esc(val)}" style="text-align:right; max-width:100px;"></td>`;
+        };
+
+        // Status cell
+        const statusCell = () => {
+          const statusVal = p.status || 'draft';
+          if (!isEdit) {
+            const badgeCls = statusVal === 'published' ? 'status-published' : 'status-draft';
+            return `<td><span class="status-badge ${badgeCls}">${this.esc(statusVal)}</span></td>`;
+          }
+          return `<td>
+            <select class="cell-input cell-select" data-id="${this.esc(id)}" data-field="status" style="min-width:110px;">
+              <option value="draft" ${statusVal === 'draft' ? 'selected' : ''}>Draft</option>
+              <option value="published" ${statusVal === 'published' ? 'selected' : ''}>Published</option>
+            </select>
+          </td>`;
+        };
+
+        // Slug cell with view link
+        const slugCell = () => {
+          const slugVal = p.slug || '';
+          if (!isEdit) {
+            if (slugVal) {
+              const hrefVal = `../../products/${slugVal}.html`;
+              return `<td><a href="${this.esc(hrefVal)}" target="_blank" style="text-decoration:underline;color:var(--cyan-light);">${this.esc(slugVal)}</a></td>`;
+            }
+            return `<td class="cell-empty">—</td>`;
+          }
+          return `<td><input type="text" class="cell-input" data-id="${this.esc(id)}" data-field="slug" value="${this.esc(slugVal)}"></td>`;
+        };
+
+        // Actions
+        let actionsHtml = '';
+        if (isEdit) {
+          // Edit mode actions: delete button
+          let deleteBtn = `<button class="btn-row btn-delete" data-id="${this.esc(id)}" data-title="${this.esc(p.title || p.sku)}" title="Delete product">
+            <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+          </button>`;
+          
+          if (isDeleted) {
+            // Restore button
+            deleteBtn = `<button class="btn-row btn-restore" data-id="${this.esc(id)}" title="Restore product" style="color:var(--success);">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+            </button>`;
+          }
+
+          // Add variant button only for base products
+          let addVarBtn = '';
+          if (!isChild && p.sku) {
+            addVarBtn = `<button class="btn-row btn-add-var" data-parent-sku="${this.esc(p.sku)}" title="Add child variant">
+              <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            </button>`;
+          }
+
+          actionsHtml = `<div style="display:flex; justify-content:center; gap:0.25rem;">${addVarBtn}${deleteBtn}</div>`;
+        } else {
+          // View mode actions: View page link
+          if (p.slug) {
+            const targetPage = `../../products/${p.slug}.html`;
+            actionsHtml = `<a href="${this.esc(targetPage)}" target="_blank" class="btn btn-outline btn-xs" style="padding:0.2rem 0.5rem;font-size:0.75rem;">View Page</a>`;
+          } else {
+            actionsHtml = `<span style="color:var(--text-muted);font-size:0.75rem;">No Link</span>`;
+          }
+        }
+
+        const rowCls = [
+          isChild ? 'row-child' : 'row-parent',
+          isDirty ? 'row-dirty' : '',
+          isDeleted ? 'row-deleted' : ''
+        ].filter(Boolean).join(' ');
+
+        return `<tr data-id="${this.esc(id)}" class="${rowCls}">
+          ${skuCell()}
+          ${cell(p.title, 'title')}
+          ${slugCell()}
+          ${cell(p.category, 'category')}
+          ${statusCell()}
+          ${priceCell('price')}
+          ${priceCell('compare_at_price')}
+          ${cell(p.parent_sku, 'parent_sku')}
+          ${cell(p.variant_name, 'variant_name')}
+          ${cell(p.variant_value, 'variant_value')}
+          <td style="text-align:center;">${actionsHtml}</td>
+        </tr>`;
+      },
+
+      bindRowEvents() {
+        // Track changes on cell inputs
+        document.querySelectorAll('.cell-input').forEach(inp => {
+          const track = () => {
+            const id = inp.dataset.id;
+            const field = inp.dataset.field;
+            let val = inp.value;
+
+            // Find matching product in state
+            const prod = this.allProducts.find(x => x.id === id);
+            if (!prod) return;
+
+            // Initialize dirty map for this product if needed
+            if (!this.dirty[id]) {
+              this.dirty[id] = {};
+            }
+
+            // Save original SKU if this is SKU field of a parent, so we can link variants
+            const isParentSkuField = field === 'sku' && !prod.parent_sku;
+            const oldSku = prod.sku;
+
+            this.dirty[id][field] = val;
+
+            // Visual feedback: add dirty class
+            const row = document.querySelector(`tr[data-id="${id}"]`);
+            if (row) row.classList.add('row-dirty');
+
+            // UX trick: If parent SKU changes, automatically update variant child rows local parent_sku and mark them dirty too!
+            if (isParentSkuField && oldSku && val !== oldSku) {
+              this.allProducts.forEach(child => {
+                if (child.parent_sku === oldSku) {
+                  child.parent_sku = val;
+                  if (!this.dirty[child.id]) this.dirty[child.id] = {};
+                  this.dirty[child.id].parent_sku = val;
+                  const childRow = document.querySelector(`tr[data-id="${child.id}"]`);
+                  if (childRow) {
+                    childRow.classList.add('row-dirty');
+                    const parentSkuInput = childRow.querySelector(`input[data-field="parent_sku"]`);
+                    if (parentSkuInput) parentSkuInput.value = val;
+                  }
+                }
+              });
+            }
+
+            this.updateDirtyInfo();
+          };
+
+          inp.addEventListener('input', track);
+          if (inp.tagName === 'SELECT') {
+            inp.addEventListener('change', track);
+          }
+        });
+
+        // Delete button handlers
+        document.querySelectorAll('.btn-delete').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const id = btn.dataset.id;
+            this.pendingDeletes.add(id);
+            const row = document.querySelector(`tr[data-id="${id}"]`);
+            if (row) row.classList.add('row-deleted');
+            this.updateDirtyInfo();
+          });
+        });
+
+        // Restore button handlers
+        document.querySelectorAll('.btn-restore').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const id = btn.dataset.id;
+            this.pendingDeletes.delete(id);
+            const row = document.querySelector(`tr[data-id="${id}"]`);
+            if (row) row.classList.remove('row-deleted');
+            this.updateDirtyInfo();
+          });
+        });
+
+        // Add child variant handlers
+        document.querySelectorAll('.btn-add-var').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const parentSku = btn.dataset.parent_sku;
+            const parent = this.allProducts.find(p => p.sku === parentSku);
+            this.addChildVariant(parent);
+          });
+        });
+      },
+
+      createParentProduct() {
+        const tempId = `temp-${Date.now()}`;
+        const newProduct = {
+          id: tempId,
+          sku: '',
+          title: '',
+          slug: '',
+          category: 'hardware',
+          status: 'draft',
+          price: 0,
+          compare_at_price: null,
+          parent_sku: null,
+          variant_name: null,
+          variant_value: null,
+          isNew: true
+        };
+
+        // Prepend to top of list
+        this.allProducts.unshift(newProduct);
+        this.dirty[tempId] = { ...newProduct };
+        
+        // Enter edit mode
+        this.enableEditMode();
+        this.applyFilters();
+
+        // Focus the input in the new row
+        setTimeout(() => {
+          const row = document.querySelector(`tr[data-id="${tempId}"]`);
+          if (row) {
+            row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            const input = row.querySelector('.cell-input');
+            if (input) input.focus();
+          }
+        }, 100);
+
+        this.toast('New parent product row created. Enter details.', 'info');
+      },
+
+      addChildVariant(parent) {
+        if (!parent) return;
+        const tempId = `temp-${Date.now()}`;
+        
+        // Inherit title, category, status from parent
+        const newVariant = {
+          id: tempId,
+          sku: '',
+          title: parent.title ? `${parent.title} - Variant` : '',
+          slug: parent.slug ? `${parent.slug}-var-${tempId.substring(5, 9)}` : '',
+          category: parent.category || 'hardware',
+          status: parent.status || 'draft',
+          price: parent.price || 0,
+          compare_at_price: parent.compare_at_price || null,
+          parent_sku: parent.sku,
+          variant_name: parent.variant_name || 'Color',
+          variant_value: '',
+          isNew: true
+        };
+
+        // Add child immediately below the parent in allProducts array
+        const parentIdx = this.allProducts.findIndex(p => p.id === parent.id);
+        if (parentIdx !== -1) {
+          this.allProducts.splice(parentIdx + 1, 0, newVariant);
+        } else {
+          this.allProducts.push(newVariant);
+        }
+
+        this.dirty[tempId] = { ...newVariant };
+
+        this.enableEditMode();
+        this.applyFilters();
+
+        // Focus the variant value input or SKU input in the new row
+        setTimeout(() => {
+          const row = document.querySelector(`tr[data-id="${tempId}"]`);
+          if (row) {
+            row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            const input = row.querySelector('input[data-field="sku"]') || row.querySelector('.cell-input');
+            if (input) input.focus();
+          }
+        }, 100);
+
+        this.toast(`New variant created under parent ${parent.sku}.`, 'info');
+      },
+
+      enableEditMode() {
+        this.editMode = true;
+        document.getElementById('btn-edit-toggle').classList.add('btn-edit-active');
+        document.getElementById('btn-edit-toggle').textContent = 'Exit Edit Mode';
+        document.getElementById('edit-mode-bar').classList.add('active');
+        this.updateDirtyInfo();
+      },
+
+      disableEditMode() {
+        this.editMode = false;
+        document.getElementById('btn-edit-toggle').classList.remove('btn-edit-active');
+        document.getElementById('btn-edit-toggle').textContent = 'Edit Mode';
+        document.getElementById('edit-mode-bar').classList.remove('active');
+      },
+
+      updateDirtyInfo() {
+        const changesCount = Object.keys(this.dirty).length;
+        const deletesCount = this.pendingDeletes.size;
+        const total = changesCount + deletesCount;
+
+        const infoEl = document.getElementById('edit-dirty-info');
+        if (total === 0) {
+          infoEl.textContent = 'No unsaved changes.';
+        } else {
+          infoEl.textContent = `You have ${changesCount} rows edited/added and ${deletesCount} rows marked for deletion.`;
+        }
+      },
+
+      confirmDiscard() {
+        if (Object.keys(this.dirty).length > 0 || this.pendingDeletes.size > 0) {
+          if (!confirm('Are you sure you want to discard all unsaved changes?')) {
+            return;
+          }
+        }
+        this.dirty = {};
+        this.pendingDeletes.clear();
+        this.disableEditMode();
+        this.fetchProducts();
+        this.toast('All unsaved changes discarded.', 'info');
+      },
+
+      async saveChanges() {
+        const btnSave = document.getElementById('btn-save');
+        btnSave.disabled = true;
+        btnSave.textContent = 'Saving...';
+
+        try {
+          // 1. Process Deletions
+          if (this.pendingDeletes.size > 0) {
+            const realIdsToDelete = Array.from(this.pendingDeletes).filter(id => !id.startsWith('temp-'));
+            if (realIdsToDelete.length > 0) {
+              const { error } = await sb.from('products').delete().in('id', realIdsToDelete);
+              if (error) throw error;
+            }
+          }
+
+          // 2. Process Inserts (new rows) and Updates (edited rows)
+          const upserts = [];
+          for (const [id, changes] of Object.entries(this.dirty)) {
+            // If it's in pendingDeletes, skip inserting/updating it
+            if (this.pendingDeletes.has(id)) continue;
+
+            const original = this.allProducts.find(p => p.id === id);
+            
+            // Build the product payload
+            const payload = {
+              title: changes.title !== undefined ? changes.title : (original?.title || ''),
+              sku: changes.sku !== undefined ? changes.sku : (original?.sku || ''),
+              slug: changes.slug !== undefined ? changes.slug : (original?.slug || ''),
+              category: changes.category !== undefined ? changes.category : (original?.category || 'hardware'),
+              status: changes.status !== undefined ? changes.status : (original?.status || 'draft'),
+              parent_sku: changes.parent_sku !== undefined ? (changes.parent_sku || null) : (original?.parent_sku || null),
+              variant_name: changes.variant_name !== undefined ? (changes.variant_name || null) : (original?.variant_name || null),
+              variant_value: changes.variant_value !== undefined ? (changes.variant_value || null) : (original?.variant_value || null)
+            };
+
+            // Parse prices (input strings like '4999.00' to centavos)
+            const priceVal = changes.price !== undefined ? changes.price : original?.price;
+            payload.price = this.parsePrice(priceVal) || 0;
+
+            const compareVal = changes.compare_at_price !== undefined ? changes.compare_at_price : original?.compare_at_price;
+            payload.compare_at_price = this.parsePrice(compareVal);
+
+            // If it is a real row, include the ID to update
+            if (!id.startsWith('temp-')) {
+              payload.id = id;
+            }
+
+            // Validation: SKU and Title are required
+            if (!payload.sku) {
+              throw new Error(`SKU is required for product "${payload.title || 'Untitled'}"`);
+            }
+            if (!payload.title) {
+              throw new Error(`Title is required for product SKU "${payload.sku}"`);
+            }
+            if (!payload.slug) {
+              payload.slug = payload.title.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+            }
+
+            upserts.push(payload);
+          }
+
+          if (upserts.length > 0) {
+            const { error } = await sb.from('products').upsert(upserts);
+            if (error) throw error;
+          }
+
+          // Clear local tracking state
+          this.dirty = {};
+          this.pendingDeletes.clear();
+          this.disableEditMode();
+
+          // Refresh the page data
+          await this.fetchProducts();
+
+          this.toast('All changes saved successfully!', 'success');
+        } catch (err) {
+          console.error(err);
+          this.toast(`Failed to save changes: ${err.message}`, 'error');
+        } finally {
+          btnSave.disabled = false;
+          btnSave.textContent = 'Save Changes';
+        }
+      },
+
+      async rebuildSite() {
+        const btn = document.getElementById('btn-publish');
+        const originalText = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = 'Publishing...';
+
+        try {
+          const res = await fetch('https://api.vercel.com/v1/integrations/deploy/prj_8BUBIA4U1128hH2VISQHDhxxTnB3/zAWKAQArmf', {
+            method: 'POST'
+          });
+          if (res.ok) {
+            this.toast('Build triggered successfully! Pages will be live in 1-2 minutes.', 'success');
+          } else {
+            throw new Error(`Failed to trigger build. Status: ${res.status}`);
+          }
+        } catch (err) {
+          console.error(err);
+          this.toast(`Error triggering Vercel build: ${err.message}`, 'error');
+        } finally {
+          btn.disabled = false;
+          btn.textContent = originalText;
+        }
+      },
+
+      bindEvents() {
+        // Edit mode toggle button
+        document.getElementById('btn-edit-toggle').addEventListener('click', () => {
+          if (this.editMode) {
+            // Check if there are changes before disabling
+            if (Object.keys(this.dirty).length > 0 || this.pendingDeletes.size > 0) {
+              if (!confirm('Discard all unsaved changes and exit edit mode?')) {
+                return;
+              }
+            }
+            this.dirty = {};
+            this.pendingDeletes.clear();
+            this.disableEditMode();
+            this.fetchProducts();
+          } else {
+            this.enableEditMode();
+            this.applyFilters();
+          }
+        });
+
+        // Search inputs
+        document.getElementById('search-input').addEventListener('input', () => this.applyFilters());
+        document.getElementById('filter-status').addEventListener('change', () => this.applyFilters());
+        document.getElementById('filter-category').addEventListener('change', () => this.applyFilters());
+
+        // Top-level action buttons
+        document.getElementById('btn-create-parent').addEventListener('click', () => this.createParentProduct());
+        document.getElementById('btn-discard').addEventListener('click', () => this.confirmDiscard());
+        document.getElementById('btn-save').addEventListener('click', () => this.saveChanges());
+        document.getElementById('btn-publish').addEventListener('click', () => this.rebuildSite());
+
+        // Warn before leaving page with unsaved changes
+        window.addEventListener('beforeunload', e => {
+          if (Object.keys(this.dirty).length > 0 || this.pendingDeletes.size > 0) {
+            e.preventDefault();
+            e.returnValue = 'You have unsaved changes. Are you sure you want to leave?';
+          }
+        });
+      },
+
+      fmtPHP(centavos) {
+        if (centavos === null || centavos === undefined) return '—';
+        return new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(centavos / 100);
+      },
+
+      fmtPriceInput(centavos) {
+        if (centavos === null || centavos === undefined) return '';
+        return (centavos / 100).toFixed(2);
+      },
+
+      parsePrice(val) {
+        if (val === null || val === undefined || val === '') return null;
+        let clean = String(val).replace(/[^0-9.]/g, '');
+        if (!clean) return null;
+        return Math.round(parseFloat(clean) * 100);
+      },
+
+      esc(str) {
+        if (str === null || str === undefined) return '';
+        return String(str)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#039;');
+      },
+
+      toast(msg, type = 'success') {
+        const container = document.getElementById('toast-container');
+        const el = document.createElement('div');
+        el.className = `toast toast-${type}`;
+        el.textContent = msg;
+        container.appendChild(el);
+
+        setTimeout(() => {
+          el.style.animation = 'fadeOut 0.3s ease forwards';
+          setTimeout(() => el.remove(), 300);
+        }, 4000);
+      }
+    };
+
+    // Initialize application on load
+    window.addEventListener('DOMContentLoaded', () => {
+      App.init();
+    });
+  </script>
+</body>
+</html>

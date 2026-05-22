@@ -193,7 +193,11 @@
       </a>
 
       <span class="dash-nav-label">Admin</span>
-      <a href="#" class="dash-nav-item">
+      <a href="internal/ecommerce/products_dashboard.html" class="dash-nav-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
+        Products Catalog
+      </a>
+      <a href="internal/ecommerce/support_inbox.html" class="dash-nav-item">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
         Inquiries
       </a>
@@ -231,7 +235,7 @@
           </div>
           <div class="metric-card">
             <div class="metric-label">Active Products</div>
-            <div class="metric-value">7</div>
+            <div class="metric-value" id="metric-products">—</div>
             <div class="metric-sub">Software + Hardware</div>
           </div>
           <div class="metric-card">
@@ -281,14 +285,23 @@
             <span class="badge badge-muted app-card__badge">Coming soon</span>
           </div>
 
-          <div class="app-card" id="inquiries-app">
+          <a href="internal/ecommerce/products_dashboard.html" class="app-card" id="products-dashboard-app">
+            <div class="app-card__icon icon-box icon-box--cyan">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
+            </div>
+            <div class="app-card__name">Products Catalog</div>
+            <div class="app-card__desc">Manage base products, variants, status, and Vercel builds</div>
+            <span class="badge badge-cyan app-card__badge" id="products-catalog-count">Loading…</span>
+          </a>
+
+          <a href="internal/ecommerce/support_inbox.html" class="app-card" id="inquiries-app">
             <div class="app-card__icon icon-box icon-box--blue">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
             </div>
             <div class="app-card__name">Contact Inquiries</div>
             <div class="app-card__desc">View all form submissions</div>
             <span class="badge badge-cyan app-card__badge" id="inquiries-count">Loading…</span>
-          </div>
+          </a>
 
         </div>
 
@@ -343,6 +356,24 @@
       document.getElementById('user-name').textContent    = name;
       document.getElementById('user-email').textContent   = user.email;
       document.getElementById('topbar-greeting').textContent = `${greeting}, ${name.split(' ')[0]}`;
+
+      // Fetch products count
+      try {
+        const resProducts = await fetch(`${SUPABASE_URL}/rest/v1/products?select=id`, {
+          headers: {
+            'apikey': SUPABASE_ANON,
+            'Authorization': `Bearer ${BKAuth.sb.auth.session()?.access_token || SUPABASE_ANON}`,
+          },
+        });
+        const productsList = await resProducts.json();
+        if (Array.isArray(productsList)) {
+          document.getElementById('metric-products').textContent = productsList.length;
+          document.getElementById('products-catalog-count').textContent = `${productsList.length} items`;
+        }
+      } catch (err) {
+        console.error('Failed to fetch products count:', err);
+        document.getElementById('products-catalog-count').textContent = 'Error';
+      }
 
       // Fetch inquiries
       try {
