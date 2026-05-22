@@ -204,10 +204,10 @@ async function buildProducts() {
           ${optionsHtml}
         </div>
       `;
-      $('[data-template="variant-selector"]').html(variantHtml).show();
+      $('[data-template="variant-selector"]').html(variantHtml).css('display', 'block');
       variantJsData = JSON.stringify(variantMap);
     } else {
-      $('[data-template="variant-selector"]').hide();
+      $('[data-template="variant-selector"]').css('display', 'none');
     }
 
     // Features Processing
@@ -236,10 +236,10 @@ async function buildProducts() {
       if (featuresHtml) {
         $('[data-template="features-list"]').html(featuresHtml);
       } else {
-        $('[data-template="features-wrapper"]').hide();
+        $('[data-template="features-wrapper"]').css('display', 'none');
       }
     } else {
-      $('[data-template="features-wrapper"]').hide();
+      $('[data-template="features-wrapper"]').css('display', 'none');
     }
 
     // Resources Processing
@@ -259,16 +259,16 @@ async function buildProducts() {
       if (resourcesHtml) {
         $('[data-template="resources-list"]').html(resourcesHtml);
       } else {
-        $('[data-template="resources-wrapper"]').hide();
+        $('[data-template="resources-wrapper"]').css('display', 'none');
       }
     } else {
-      $('[data-template="resources-wrapper"]').hide();
+      $('[data-template="resources-wrapper"]').css('display', 'none');
     }
 
     if (p.compare_at_price && p.compare_at_price > p.price) {
-      $('[data-template="compare-price"]').text(formatPHP(p.compare_at_price)).show();
+      $('[data-template="compare-price"]').text(formatPHP(p.compare_at_price)).css('display', 'inline-block');
     } else {
-      $('[data-template="compare-price"]').hide();
+      $('[data-template="compare-price"]').css('display', 'none');
     }
 
     let inventoryText = '';
