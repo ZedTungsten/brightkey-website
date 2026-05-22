@@ -4,10 +4,10 @@
    ============================================================ */
 
 'use strict';
-
-const SUPABASE_URL  = 'https://ymjlosnxuhsybkzkoofq.supabase.co';
-const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inltamxvc254dWhzeWJremtvb2ZxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ0MDY1MzYsImV4cCI6MjA4OTk4MjUzNn0.srhk9SVvFuZRcfeRGbVDGPr5pYrFhs8vzcOiMK3A91w';
-
+var SUPABASE_URL  = window.SUPABASE_URL || 'https://ymjlosnxuhsybkzkoofq.supabase.co';
+var SUPABASE_ANON = window.SUPABASE_ANON || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inltamxvc254dWhzeWJremtvb2ZxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ0MDY1MzYsImV4cCI6MjA4OTk4MjUzNn0.srhk9SVvFuZRcfeRGbVDGPr5pYrFhs8vzcOiMK3A91w';
+window.SUPABASE_URL = SUPABASE_URL;
+window.SUPABASE_ANON = SUPABASE_ANON;
 // Initialise official Supabase client (loaded from CDN before this script)
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 

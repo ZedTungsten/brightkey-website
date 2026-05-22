@@ -165,10 +165,10 @@ document.querySelectorAll('a[href^="#"]').forEach(anchor => {
   onScroll(); // run on load in case page is already scrolled
 })();
 
-// ── Supabase client factory ─────────────────────────────────
-// Replace with your real project URL and anon key.
-const SUPABASE_URL    = 'https://ymjlosnxuhsybkzkoofq.supabase.co';
-const SUPABASE_ANON   = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inltamxvc254dWhzeWJremtvb2ZxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ0MDY1MzYsImV4cCI6MjA4OTk4MjUzNn0.srhk9SVvFuZRcfeRGbVDGPr5pYrFhs8vzcOiMK3A91w';
+var SUPABASE_URL    = window.SUPABASE_URL || 'https://ymjlosnxuhsybkzkoofq.supabase.co';
+var SUPABASE_ANON   = window.SUPABASE_ANON || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inltamxvc254dWhzeWJremtvb2ZxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ0MDY1MzYsImV4cCI6MjA4OTk4MjUzNn0.srhk9SVvFuZRcfeRGbVDGPr5pYrFhs8vzcOiMK3A91w';
+window.SUPABASE_URL = SUPABASE_URL;
+window.SUPABASE_ANON = SUPABASE_ANON;
 
 /**
  * Returns a lightweight Supabase REST helper.
