@@ -295,8 +295,12 @@
         if (reviews && reviews.length > 0) {
           document.getElementById('reviews-section').style.display = 'block';
           const container = document.getElementById('reviews-container');
+          container.innerHTML = '';
           
-          reviews.forEach(r => {
+          const parentReviews = reviews.filter(r => !r.parent_id);
+          const replies = reviews.filter(r => r.parent_id);
+          
+          parentReviews.forEach(r => {
             let stars = '';
             for(let i=0; i<5; i++) {
               stars += i < r.rating ? '<span style="color:#f59e0b;">★</span>' : '<span style="color:var(--border);">★</span>';
@@ -304,14 +308,32 @@
             
             const date = new Date(r.created_at).toLocaleDateString('en-PH', { month:'short', day:'numeric', year:'numeric'});
             
+            // Nested replies HTML
+            const reviewReplies = replies.filter(rep => rep.parent_id === r.id);
+            const repliesHtml = reviewReplies.map(rep => `
+              <div style="background: var(--bg-base); border-left: 3px solid var(--cyan); padding: 1rem; border-radius: 0 var(--radius-sm) var(--radius-sm) 0; margin-top: 1rem;">
+                <div style="font-size: 0.85rem; font-weight: 600; color: var(--text-primary); margin-bottom: 0.25rem;">Response from ${rep.reviewer_name || 'BrightKey'}:</div>
+                <p style="font-size: 0.9rem; color: var(--text-secondary); line-height: 1.5;">${rep.comment || ''}</p>
+              </div>
+            `).join('');
+
+            const legacyReplyHtml = r.admin_reply ? `
+              <div style="background: var(--bg-base); border-left: 3px solid var(--cyan); padding: 1rem; border-radius: 0 var(--radius-sm) var(--radius-sm) 0; margin-top: 1rem;">
+                <div style="font-size: 0.85rem; font-weight: 600; color: var(--text-primary); margin-bottom: 0.25rem;">Response from BrightKey:</div>
+                <p style="font-size: 0.9rem; color: var(--text-secondary); line-height: 1.5;">${r.admin_reply}</p>
+              </div>
+            ` : '';
+            
             container.innerHTML += `
-              <div style="border-bottom: 1px solid var(--border); padding-bottom: 1rem;">
+              <div style="border-bottom: 1px solid var(--border); padding-bottom: 1rem; margin-bottom: 1rem;">
                 <div class="flex gap-sm" style="justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
                   <div style="font-weight:600; color:var(--text-primary);">${r.reviewer_name}</div>
                   <div style="font-size:0.85rem; color:var(--text-secondary);">${date}</div>
                 </div>
                 <div style="margin-bottom:0.5rem; font-size:1.1rem;">${stars}</div>
                 <p style="font-size:0.95rem; color:var(--text-secondary); line-height:1.6;">${r.comment || ''}</p>
+                ${legacyReplyHtml}
+                ${repliesHtml}
               </div>
             `;
           });

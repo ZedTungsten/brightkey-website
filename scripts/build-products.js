@@ -106,21 +106,79 @@ async function buildProducts() {
     $('[data-template="og-image"]').attr('content', mainImgUrl);
     
     // Reviews Calculation
-    const approvedReviews = p.reviews ? p.reviews.filter(r => r.is_approved) : [];
+    const approvedReviews = p.reviews ? p.reviews.filter(r => r.is_approved && !r.parent_id) : [];
+    const approvedReplies = p.reviews ? p.reviews.filter(r => r.is_approved && r.parent_id) : [];
     let avgRating = 0;
+    let countForRating = 0;
     if (approvedReviews.length > 0) {
-      const total = approvedReviews.reduce((sum, r) => sum + r.rating, 0);
-      avgRating = (total / approvedReviews.length).toFixed(1);
+      const total = approvedReviews.reduce((sum, r) => {
+        if (r.rating) {
+          countForRating++;
+          return sum + r.rating;
+        }
+        return sum;
+      }, 0);
+      avgRating = countForRating > 0 ? (total / countForRating).toFixed(1) : '0.0';
     }
     
     // Update Review Summary DOM Statically
+    $('#avg-rating-display').text(avgRating);
+    $('#total-reviews-display').text(approvedReviews.length);
+
+    // Build Reviews HTML Statically
+    let reviewsHtml = '';
     if (approvedReviews.length > 0) {
-      $('#avg-rating-display').text(avgRating);
-      $('#total-reviews-display').text(approvedReviews.length);
+      approvedReviews.forEach(r => {
+        let stars = '';
+        for (let i = 0; i < 5; i++) {
+          stars += i < r.rating ? '<span style="color:#f59e0b;">★</span>' : '<span style="color:var(--border);">★</span>';
+        }
+        const date = new Date(r.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        const imgHtml = r.image_url ? `
+          <div style="display:flex; gap: 0.5rem; margin-bottom: 1rem;">
+            <img src="${r.image_url}" class="review-img-clickable" style="width: 100px; height: 100px; object-fit: cover; border-radius: var(--radius-sm); border: 1px solid var(--border); cursor: pointer;" alt="Review image" onclick="openLightbox(this)" />
+          </div>
+        ` : '';
+
+        const legacyReplyHtml = r.admin_reply ? `
+          <div style="background: var(--bg-base); border-left: 3px solid var(--cyan); padding: 1rem; border-radius: 0 var(--radius-sm) var(--radius-sm) 0; margin-top: 1rem;">
+            <div style="font-size: 0.85rem; font-weight: 600; color: var(--text-primary); margin-bottom: 0.25rem;">Response from BrightKey:</div>
+            <p style="font-size: 0.9rem; color: var(--text-secondary); line-height: 1.5;">${r.admin_reply}</p>
+          </div>
+        ` : '';
+
+        const reviewReplies = approvedReplies.filter(rep => rep.parent_id === r.id);
+        const repliesHtml = reviewReplies.map(rep => `
+          <div style="background: var(--bg-base); border-left: 3px solid var(--cyan); padding: 1rem; border-radius: 0 var(--radius-sm) var(--radius-sm) 0; margin-top: 1rem;">
+            <div style="font-size: 0.85rem; font-weight: 600; color: var(--text-primary); margin-bottom: 0.25rem;">Response from ${rep.reviewer_name || 'BrightKey'}:</div>
+            <p style="font-size: 0.9rem; color: var(--text-secondary); line-height: 1.5;">${rep.comment || ''}</p>
+          </div>
+        `).join('');
+
+        const initials = r.reviewer_name ? r.reviewer_name.substring(0, 2).toUpperCase() : 'C';
+
+        reviewsHtml += `
+          <div class="review-card" style="border-bottom: 1px solid var(--border); padding-bottom: 1.5rem;">
+            <div class="flex gap-sm" style="align-items:center; margin-bottom:0.5rem;">
+              <div style="width: 32px; height: 32px; background: var(--border); border-radius: 50%; display:flex; align-items:center; justify-content:center; font-weight:bold; color:var(--text-secondary); font-size:0.8rem;">${initials}</div>
+              <div style="font-weight:600; color:var(--text-primary);">${r.reviewer_name}</div>
+              <span class="badge badge-cyan" style="font-size: 0.7rem; padding: 0.1rem 0.4rem;">Verified</span>
+            </div>
+            <div style="display:flex; align-items:center; gap: 0.5rem; margin-bottom: 0.5rem;">
+              <div style="font-size:1.1rem; letter-spacing:1px;">${stars}</div>
+            </div>
+            <div style="font-size:0.85rem; color:var(--text-secondary); margin-bottom: 1rem;">Reviewed on ${date}</div>
+            <p style="font-size:0.95rem; color:var(--text-secondary); line-height:1.6; margin-bottom: 1rem;">${r.comment || ''}</p>
+            ${imgHtml}
+            ${legacyReplyHtml}
+            ${repliesHtml}
+          </div>
+        `;
+      });
     } else {
-      $('#avg-rating-display').text('0.0');
-      $('#total-reviews-display').text('0');
+      reviewsHtml = '<p style="color:var(--text-secondary);">No reviews yet. Be the first to review this product!</p>';
     }
+    $('#reviews-container').html(reviewsHtml);
 
     // Apply JSON-LD
     const jsonLd = {

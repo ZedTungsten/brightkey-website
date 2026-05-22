@@ -1,0 +1,1209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Customer Reviews Dashboard — BrightKey Admin</title>
+  
+  <link rel="preconnect" href="https://fonts.bunny.net" />
+  <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../../css/style.css" />
+  <link rel="icon" type="image/svg+xml" href="../../assets/favicon.svg?v=2" />
+
+  <style>
+    :root {
+      --bg-base: #FAFAFA;
+      --bg-surface: #FFFFFF;
+      --bg-elevated: #F4F4F5;
+      --bg-card: #FFFFFF;
+      --border: #E4E4E7;
+      --border-hover: #D4D4D8;
+      --text-primary: #09090B;
+      --text-secondary: #52525B;
+      --text-muted: #A1A1AA;
+      --cyan: #06B6D4;
+      --cyan-light: #0891B2;
+      --cyan-dim: rgba(6, 182, 212, 0.15);
+      --cyan-border: rgba(6, 182, 212, 0.22);
+    }
+
+    body {
+      background-color: var(--bg-base);
+      color: var(--text-secondary);
+    }
+
+    .int-wrap {
+      max-width: 1600px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem 5rem;
+    }
+
+    .int-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 1.5rem;
+      margin-bottom: 2rem;
+    }
+
+    .int-title {
+      font-size: 1.75rem;
+      font-weight: 800;
+      color: var(--text-primary);
+      letter-spacing: -0.04em;
+      line-height: 1.1;
+    }
+
+    /* Stats strip */
+    .stats-strip {
+      display: flex;
+      gap: 1px;
+      margin-bottom: 1.5rem;
+      background: var(--border);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      max-width: 540px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .stat-cell {
+      flex: 1;
+      padding: 1rem 1.25rem;
+      background: var(--bg-surface);
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
+      min-width: 0;
+    }
+
+    .stat-cell__val {
+      font-size: 1.5rem;
+      font-weight: 800;
+      color: var(--text-primary);
+      letter-spacing: -0.04em;
+      line-height: 1;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .stat-cell__lbl {
+      font-size: 0.65rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+    }
+
+    /* Toolbar */
+    .toolbar {
+      display: flex;
+      gap: 0.75rem;
+      align-items: center;
+      flex-wrap: nowrap;
+      margin-bottom: 1rem;
+      width: 100%;
+    }
+
+    .toolbar .search-wrap {
+      position: relative;
+      flex: 1;
+      min-width: 250px;
+    }
+
+    .toolbar .search-icon {
+      position: absolute;
+      left: 0.85rem;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-muted);
+      pointer-events: none;
+      display: flex;
+      align-items: center;
+    }
+
+    .toolbar .search-icon svg {
+      width: 14px;
+      height: 14px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 2.5;
+      stroke-linecap: round;
+    }
+
+    .toolbar .search-input {
+      width: 100%;
+      padding: 0.6rem 0.8rem 0.6rem 2.3rem;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-family: var(--font-sans);
+      font-size: 0.85rem;
+      color: var(--text-primary);
+      outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+
+    .toolbar .search-input:focus {
+      border-color: var(--cyan-border);
+      box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.15);
+    }
+
+    .toolbar .form-select {
+      padding: 0.6rem 2rem 0.6rem 0.8rem;
+      font-size: 0.85rem;
+      min-width: 150px;
+      width: auto;
+      flex-shrink: 0;
+      background-color: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text-primary);
+      outline: none;
+      cursor: pointer;
+    }
+
+    .toolbar .form-select:focus {
+      border-color: var(--cyan-border);
+    }
+
+    .toolbar .btn {
+      flex-shrink: 0;
+      padding: 0.6rem 1.2rem;
+      font-size: 0.85rem;
+      font-weight: 600;
+      height: 38px;
+    }
+
+    /* Edit mode bar */
+    .edit-mode-bar {
+      display: none;
+      align-items: center;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      padding: 0.8rem 1.25rem;
+      margin-bottom: 1rem;
+      background: var(--bg-surface);
+      border: 1px solid var(--cyan-border);
+      border-radius: var(--radius-sm);
+      box-shadow: 0 4px 20px rgba(6, 182, 212, 0.08);
+    }
+
+    .edit-mode-bar.active {
+      display: flex;
+    }
+
+    .edit-mode-bar__label {
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--cyan-light);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .edit-mode-bar__label::before {
+      content: '';
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--cyan-light);
+      animation: pulse-dot 1.5s ease-in-out infinite;
+    }
+
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.35; transform: scale(0.7); }
+    }
+
+    .edit-mode-bar__info {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+    }
+
+    .edit-mode-bar .spacer {
+      flex: 1;
+    }
+
+    /* Table container */
+    .table-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+    }
+
+    /* Reviews table */
+    .dir-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+      white-space: normal;
+    }
+
+    .dir-table th {
+      padding: 0.75rem 1rem;
+      text-align: left;
+      font-size: 0.65rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      background: var(--bg-elevated);
+      border-bottom: 1px solid var(--border);
+      user-select: none;
+    }
+
+    .dir-table td {
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid var(--border);
+      color: var(--text-secondary);
+      vertical-align: middle;
+    }
+
+    .dir-table tbody tr:last-child td {
+      border-bottom: none;
+    }
+
+    .dir-table tbody tr:hover td {
+      background: rgba(6, 182, 212, 0.02);
+    }
+
+    /* Row Hierarchy */
+    .dir-table tr.row-child td {
+      background: rgba(9, 9, 11, 0.015);
+    }
+
+    .dir-table tr.row-child td.cell-reviewer {
+      padding-left: 2rem;
+      position: relative;
+    }
+
+    .dir-table tr.row-child td.cell-reviewer::before {
+      content: '└─';
+      position: absolute;
+      left: 0.75rem;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      font-weight: normal;
+    }
+
+    /* Edit mode dirty highlight */
+    .dir-table tbody tr.row-dirty td {
+      background: rgba(245, 158, 11, 0.03) !important;
+    }
+    
+    .dir-table tbody tr.row-dirty td:first-child {
+      border-left: 3px solid var(--warning);
+    }
+
+    /* Deleted row styling */
+    .dir-table tbody tr.row-deleted td {
+      opacity: 0.4;
+      text-decoration: line-through;
+      background: rgba(239, 68, 68, 0.02) !important;
+    }
+
+    .dir-table tbody tr.row-deleted td:first-child {
+      border-left: 3px solid var(--danger);
+    }
+
+    .cell-input {
+      width: 100%;
+      padding: 0.4rem 0.6rem;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      font-size: 0.82rem;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    .cell-input:focus {
+      border-color: var(--cyan-border);
+    }
+
+    .cell-input.cell-select {
+      cursor: pointer;
+      padding-right: 1.5rem;
+    }
+
+    /* Badges */
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      padding: 0.2rem 0.6rem;
+      border-radius: 99px;
+      font-size: 0.65rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .status-badge::before {
+      content: '';
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    .status-published {
+      background: rgba(16, 185, 129, 0.1);
+      color: #10B981;
+      border: 1px solid rgba(16, 185, 129, 0.2);
+    }
+
+    .status-published::before {
+      background: #10b981;
+    }
+
+    .status-draft {
+      background: rgba(100, 116, 139, 0.1);
+      color: #52525B;
+      border: 1px solid rgba(100, 116, 139, 0.2);
+    }
+
+    .status-draft::before {
+      background: #52525B;
+    }
+
+    /* Buttons */
+    .btn-edit-toggle {
+      border: 1px solid var(--border);
+      background: var(--bg-surface);
+      color: var(--text-primary);
+      transition: all var(--transition);
+    }
+
+    .btn-edit-toggle:hover {
+      border-color: var(--cyan-border);
+      background: var(--cyan-dim);
+    }
+
+    .btn-edit-toggle.btn-edit-active {
+      background: var(--cyan);
+      color: #000;
+      border-color: var(--cyan);
+    }
+
+    .btn-row {
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 0.25rem;
+      color: var(--text-muted);
+      border-radius: var(--radius-sm);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: all var(--transition);
+    }
+
+    .btn-row:hover {
+      background: var(--bg-elevated);
+      color: var(--text-primary);
+    }
+
+    .btn-row.btn-delete:hover {
+      color: var(--danger);
+      background: rgba(239, 68, 68, 0.1);
+    }
+
+    .btn-row.btn-restore:hover {
+      color: var(--success);
+      background: rgba(16, 185, 129, 0.1);
+    }
+
+    .btn-row.btn-reply:hover {
+      color: var(--cyan-light);
+      background: var(--cyan-dim);
+    }
+
+    .btn-row svg {
+      width: 14px;
+      height: 14px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+    }
+
+    /* Vercel rebuild action box */
+    .publish-banner {
+      background: linear-gradient(135deg, rgba(6, 182, 212, 0.05) 0%, rgba(16, 185, 129, 0.03) 100%);
+      border: 1px solid var(--cyan-border);
+      border-radius: var(--radius-lg);
+      padding: 1.5rem 2rem;
+      margin-bottom: 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1.5rem;
+      flex-wrap: wrap;
+    }
+
+    .publish-banner__info h3 {
+      font-size: 1.1rem;
+      color: var(--text-primary);
+      margin-bottom: 0.25rem;
+    }
+
+    .publish-banner__info p {
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+    }
+
+    /* Custom Toast Container */
+    #toast-container {
+      position: fixed;
+      bottom: 2rem;
+      right: 2rem;
+      z-index: 10000;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .toast {
+      padding: 0.75rem 1.25rem;
+      border-radius: var(--radius-sm);
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #fff;
+      box-shadow: var(--shadow-md);
+      animation: slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      max-width: 320px;
+    }
+
+    .toast-success {
+      background: var(--success);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+
+    .toast-error {
+      background: var(--danger);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+
+    .toast-info {
+      background: var(--cyan);
+      color: #000;
+      border: 1px solid rgba(6, 182, 212, 0.3);
+    }
+
+    @keyframes slideIn {
+      from { transform: translateY(1rem); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+
+    @keyframes fadeOut {
+      to { opacity: 0; transform: scale(0.95); }
+    }
+
+    /* Modals */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(9, 9, 11, 0.6);
+      backdrop-filter: blur(4px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1100;
+    }
+    
+    .modal-overlay.open {
+      display: flex;
+    }
+
+    .modal {
+      width: 100%;
+      max-width: 500px;
+      padding: 2rem;
+      border-radius: var(--radius-lg);
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow-lg);
+      animation: modalFadeIn 0.2s ease-out;
+    }
+
+    @keyframes modalFadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+
+  <script>
+    window._startupErrors = [];
+    window.addEventListener('error', function(e) {
+      console.error("Global Error Caught:", e);
+      window._startupErrors.push(e);
+      const tbody = document.getElementById('reviews-body');
+      if (tbody) {
+        tbody.innerHTML = `<tr><td colspan="8" style="padding:3rem; text-align:center; color:#EF4444; font-weight:bold;">
+          [JavaScript Error] ${e.message}<br>
+          <span style="font-size:0.85rem; font-weight:normal; color:#6B7280;">at ${e.filename || 'unknown'}:${e.lineno || 0}:${e.colno || 0}</span>
+        </td></tr>`;
+      }
+    });
+  </script>
+</head>
+<body>
+
+  <nav class="nav" role="navigation" style="position: sticky; top:0; background:var(--bg-surface); border-bottom:1px solid var(--border); z-index:100;">
+    <div class="container">
+      <div class="nav__inner">
+        <a href="../../admin.html" class="nav__logo" style="font-weight: 700; color:var(--text-primary);">BrightKey <span style="color:var(--cyan);">Admin</span></a>
+        <div style="font-weight: 600; font-size: 1.1rem;">Customer Reviews Dashboard</div>
+        <div style="display:flex; gap:0.5rem;">
+          <a href="products_dashboard.html" class="btn btn-outline btn-sm">Products Catalog</a>
+          <a href="../../admin.html" class="btn btn-outline btn-sm">Back to Dashboard</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main style="padding-top: 100px; min-height: 80vh;">
+    <div class="int-wrap">
+      
+      <!-- Rebuild Banner -->
+      <div class="publish-banner">
+        <div class="publish-banner__info">
+          <h3>Publish Changes to Live Website</h3>
+          <p>Approved and modified reviews will not show up on static product pages until you rebuild the site.</p>
+        </div>
+        <div>
+          <button id="btn-publish" class="btn btn-cyan">Publish &amp; Rebuild Site</button>
+        </div>
+      </div>
+
+      <!-- Stats Strip -->
+      <div class="stats-strip">
+        <div class="stat-cell">
+          <div class="stat-cell__lbl">Total Reviews</div>
+          <div class="stat-cell__val" id="stat-total">0</div>
+        </div>
+        <div class="stat-cell" style="border-left: 1px solid var(--border); border-right: 1px solid var(--border);">
+          <div class="stat-cell__lbl" style="color: #F59E0B;">Pending Approval</div>
+          <div class="stat-cell__val" id="stat-pending" style="color: #F59E0B;">0</div>
+        </div>
+        <div class="stat-cell">
+          <div class="stat-cell__lbl" style="color: #10B981;">Approved</div>
+          <div class="stat-cell__val" id="stat-approved" style="color: #10B981;">0</div>
+        </div>
+      </div>
+
+      <!-- Toolbar -->
+      <div class="toolbar">
+        <div class="search-wrap">
+          <span class="search-icon">
+            <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+          </span>
+          <input type="text" class="search-input" id="search-input" placeholder="Search by name, email, or review text..." />
+        </div>
+        
+        <select class="form-select" id="filter-status">
+          <option value="all">All Statuses</option>
+          <option value="pending">Pending</option>
+          <option value="approved">Approved</option>
+        </select>
+
+        <select class="form-select" id="filter-product">
+          <option value="all">All Products</option>
+        </select>
+        
+        <button class="btn btn-edit-toggle" id="btn-edit-toggle">Edit Mode</button>
+      </div>
+
+      <!-- Unsaved changes warning bar -->
+      <div class="edit-mode-bar" id="edit-mode-bar">
+        <span class="edit-mode-bar__label">Unsaved Changes</span>
+        <span class="edit-mode-bar__info" id="edit-dirty-info">You have 0 unsaved changes.</span>
+        <div class="spacer"></div>
+        <button class="btn btn-outline btn-sm" id="btn-discard" style="border-color: var(--danger); color: var(--danger);">Discard Changes</button>
+        <button class="btn btn-cyan btn-sm" id="btn-save">Save Changes</button>
+      </div>
+
+      <!-- Grid Table -->
+      <div class="table-card">
+        <div class="table-wrap">
+          <table class="dir-table" id="reviews-table">
+            <thead>
+              <tr>
+                <th style="width: 15%">Product</th>
+                <th style="width: 10%">Date</th>
+                <th style="width: 15%">Reviewer</th>
+                <th style="width: 8%">Rating</th>
+                <th style="width: 25%">Comment</th>
+                <th style="width: 10%">Status</th>
+                <th style="width: 15%">Admin Reply</th>
+                <th style="width: 8%; text-align: center;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="reviews-body">
+              <tr>
+                <td colspan="8" style="padding:3rem; text-align:center; color:var(--text-muted);">
+                  Loading customer reviews from database...
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- Reply Modal -->
+  <div id="reply-modal" class="modal-overlay">
+    <div class="modal">
+      <h3 style="font-size: 1.25rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.5rem;" id="reply-modal-title">Reply to Review</h3>
+      <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1.25rem;">Submit an official response to this customer. Official replies will be approved by default.</p>
+      
+      <form id="reply-form">
+        <div class="form-group" style="margin-bottom: 1.25rem;">
+          <label class="form-label" style="display: block; margin-bottom: 0.5rem; font-weight: 600; color: var(--text-primary);">Response Text *</label>
+          <textarea id="reply-text" class="cell-input" style="width: 100%; min-height: 120px; resize: vertical;" placeholder="Type your reply here..." required></textarea>
+        </div>
+        <div style="display: flex; gap: 1rem; justify-content: flex-end;">
+          <button type="button" class="btn btn-outline" onclick="document.getElementById('reply-modal').classList.remove('open')">Cancel</button>
+          <button type="submit" class="btn btn-cyan" id="reply-submit-btn">Send Response</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="toast-container" aria-live="polite"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="../../js/auth.js"></script>
+  <script src="../../js/main.js"></script>
+  <script>
+    'use strict';
+
+    let supabaseClient;
+    let activeReplyParentId = null;
+    let activeReplyProductId = null;
+
+    const App = {
+      allReviews: [],          // Raw reviews fetched from DB
+      products: [],            // List of products from DB
+      productMap: {},          // id -> title map
+      filtered: [],            // Filtered reviews
+      dirty: {},                // { id: { field: value } }
+      pendingDeletes: new Set(), // Set of review IDs to delete
+      editMode: false,
+
+      async init() {
+        // Protect page
+        const user = await BKAuth.requireAuth('../../admin.html');
+        if (!user) return;
+
+        try {
+          supabaseClient = window.BKAuth?.sb || (window.supabase ? window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON) : null);
+        } catch (e) {
+          console.error("Failed to initialize Supabase client:", e);
+        }
+
+        if (!supabaseClient) {
+          document.getElementById('reviews-body').innerHTML = `<tr><td colspan="8" style="padding:3rem; text-align:center; color:var(--danger); font-weight:bold;">Supabase Error: Database client is not initialized.</td></tr>`;
+          return;
+        }
+
+        // Fetch products and reviews
+        await this.fetchProducts();
+        await this.fetchReviews();
+
+        // Bind events
+        this.bindEvents();
+      },
+
+      async fetchProducts() {
+        try {
+          const { data, error } = await supabaseClient.from('products').select('id, title');
+          if (error) throw error;
+          this.products = data || [];
+          this.productMap = {};
+          this.products.forEach(p => {
+            this.productMap[p.id] = p.title;
+          });
+          
+          // Populate product dropdown
+          const select = document.getElementById('filter-product');
+          select.innerHTML = '<option value="all">All Products</option>';
+          this.products.sort((a,b) => a.title.localeCompare(b.title)).forEach(p => {
+            select.innerHTML += `<option value="${p.id}">${this.esc(p.title)}</option>`;
+          });
+        } catch (err) {
+          console.error("Error fetching products:", err);
+        }
+      },
+
+      async fetchReviews() {
+        const tbody = document.getElementById('reviews-body');
+        try {
+          const { data, error } = await supabaseClient.from('reviews').select('*').order('created_at', { ascending: false });
+          if (error) throw error;
+
+          this.allReviews = data || [];
+          this.updateStats();
+          this.applyFilters();
+        } catch (err) {
+          console.error(err);
+          tbody.innerHTML = `<tr><td colspan="8" style="padding:3rem; text-align:center; color:var(--danger);">Error loading reviews: ${err.message}</td></tr>`;
+          this.toast(`Failed to load reviews: ${err.message}`, 'error');
+        }
+      },
+
+      updateStats() {
+        const total = this.allReviews.length;
+        const pending = this.allReviews.filter(r => !r.is_approved).length;
+        const approved = this.allReviews.filter(r => r.is_approved).length;
+
+        document.getElementById('stat-total').textContent = total;
+        document.getElementById('stat-pending').textContent = pending;
+        document.getElementById('stat-approved').textContent = approved;
+      },
+
+      applyFilters() {
+        const query = document.getElementById('search-input').value.toLowerCase().trim();
+        const status = document.getElementById('filter-status').value;
+        const productId = document.getElementById('filter-product').value;
+
+        // Split root reviews and replies
+        const rootReviews = this.allReviews.filter(r => !r.parent_id);
+        const replies = this.allReviews.filter(r => r.parent_id);
+
+        // Filter root reviews first
+        let filteredRoots = rootReviews.filter(r => {
+          // Status filter
+          if (status === 'pending' && r.is_approved) return false;
+          if (status === 'approved' && !r.is_approved) return false;
+
+          // Product filter
+          if (productId !== 'all' && r.product_id !== productId) return false;
+
+          // Search query
+          if (query) {
+            const name = (r.reviewer_name || '').toLowerCase();
+            const email = (r.reviewer_email || '').toLowerCase();
+            const comment = (r.comment || '').toLowerCase();
+            const prodTitle = (this.productMap[r.product_id] || '').toLowerCase();
+
+            if (!name.includes(query) && !email.includes(query) && !comment.includes(query) && !prodTitle.includes(query)) {
+              return false;
+            }
+          }
+          return true;
+        });
+
+        // We also want to filter replies based on query / status / product.
+        // But to maintain the hierarchy tree, if a parent review matches filters, we show it and its child replies.
+        // If a reply matches query, we should make sure we show it (and maybe its parent too).
+        // Let's implement a simple hierarchy rendering:
+        // We will render filteredRoots, and for each root, we display its replies.
+        this.renderTable(filteredRoots, replies);
+      },
+
+      renderTable(roots, replies) {
+        const tbody = document.getElementById('reviews-body');
+        if (roots.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="8" style="padding:3rem; text-align:center; color:var(--text-muted);">No matching reviews found.</td></tr>`;
+          return;
+        }
+
+        let html = '';
+        roots.forEach(r => {
+          const isDirty = !!this.dirty[r.id];
+          const isDeleted = this.pendingDeletes.has(r.id);
+          
+          const ratingStars = r.rating ? '★'.repeat(r.rating) + '☆'.repeat(5 - r.rating) : '—';
+          const ratingColor = r.rating ? '#F59E0B' : 'var(--text-muted)';
+
+          const prodName = this.productMap[r.product_id] || 'Unknown Product';
+          const dateStr = new Date(r.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+          
+          let rowClass = '';
+          if (isDirty) rowClass += ' row-dirty';
+          if (isDeleted) rowClass += ' row-deleted';
+
+          // Status cell
+          let statusHtml = '';
+          if (this.editMode && !isDeleted) {
+            const currentApproved = this.dirty[r.id]?.is_approved !== undefined ? this.dirty[r.id].is_approved : r.is_approved;
+            statusHtml = `
+              <select class="cell-input cell-select" onchange="App.markDirty('${r.id}', 'is_approved', this.value === 'true')">
+                <option value="true" ${currentApproved ? 'selected' : ''}>Approved</option>
+                <option value="false" ${!currentApproved ? 'selected' : ''}>Pending</option>
+              </select>
+            `;
+          } else {
+            statusHtml = r.is_approved 
+              ? `<span class="status-badge status-published">Approved</span>`
+              : `<span class="status-badge status-draft">Pending</span>`;
+          }
+
+          // Admin Reply cell (legacy column)
+          let adminReplyHtml = '';
+          if (this.editMode && !isDeleted) {
+            const currentReply = this.dirty[r.id]?.admin_reply !== undefined ? this.dirty[r.id].admin_reply : (r.admin_reply || '');
+            adminReplyHtml = `
+              <input type="text" class="cell-input" value="${this.esc(currentReply)}" oninput="App.markDirty('${r.id}', 'admin_reply', this.value)" placeholder="Type response..." />
+            `;
+          } else {
+            adminReplyHtml = r.admin_reply ? `<div style="font-size:0.82rem; font-style:italic; color:var(--text-secondary);">${this.esc(r.admin_reply)}</div>` : '<span style="color:var(--text-muted);">—</span>';
+          }
+
+          // Actions
+          let actionsHtml = '';
+          if (isDeleted) {
+            actionsHtml = `
+              <button class="btn-row btn-restore" title="Restore Review" onclick="App.toggleDelete('${r.id}')">
+                <svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+              </button>
+            `;
+          } else {
+            actionsHtml = `
+              <button class="btn-row btn-reply" title="Reply to Review" onclick="App.openReplyModal('${r.id}', '${r.product_id}')">
+                <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+              </button>
+              <button class="btn-row btn-delete" title="Delete Review" onclick="App.toggleDelete('${r.id}')">
+                <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+              </button>
+            `;
+          }
+
+          html += `
+            <tr class="${rowClass}">
+              <td style="font-weight:600; color:var(--text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:200px;" title="${this.esc(prodName)}">${this.esc(prodName)}</td>
+              <td style="color:var(--text-muted); font-size:0.8rem;">${dateStr}</td>
+              <td>
+                <div style="font-weight:600; color:var(--text-primary);">${this.esc(r.reviewer_name)}</div>
+                <div style="font-size:0.75rem; color:var(--text-muted);">${this.esc(r.reviewer_email || '')}</div>
+              </td>
+              <td style="color:${ratingColor}; font-weight:bold; letter-spacing:1px; white-space:nowrap;">${ratingStars}</td>
+              <td style="white-space:normal; min-width:200px; max-width:400px; line-height:1.4;">${this.esc(r.comment || '')}</td>
+              <td>${statusHtml}</td>
+              <td>${adminReplyHtml}</td>
+              <td style="text-align:center; white-space:nowrap;">${actionsHtml}</td>
+            </tr>
+          `;
+
+          // Render child replies for this root review
+          const childReplies = replies.filter(rep => rep.parent_id === r.id);
+          childReplies.forEach(rep => {
+            const isChildDirty = !!this.dirty[rep.id];
+            const isChildDeleted = this.pendingDeletes.has(rep.id);
+            const replyDateStr = new Date(rep.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+            let childRowClass = 'row-child';
+            if (isChildDirty) childRowClass += ' row-dirty';
+            if (isChildDeleted) childRowClass += ' row-deleted';
+
+            let childStatusHtml = '';
+            if (this.editMode && !isChildDeleted) {
+              const currentChildApproved = this.dirty[rep.id]?.is_approved !== undefined ? this.dirty[rep.id].is_approved : rep.is_approved;
+              childStatusHtml = `
+                <select class="cell-input cell-select" onchange="App.markDirty('${rep.id}', 'is_approved', this.value === 'true')">
+                  <option value="true" ${currentChildApproved ? 'selected' : ''}>Approved</option>
+                  <option value="false" ${!currentChildApproved ? 'selected' : ''}>Pending</option>
+                </select>
+              `;
+            } else {
+              childStatusHtml = rep.is_approved 
+                ? `<span class="status-badge status-published">Approved</span>`
+                : `<span class="status-badge status-draft">Pending</span>`;
+            }
+
+            let childActionsHtml = '';
+            if (isChildDeleted) {
+              childActionsHtml = `
+                <button class="btn-row btn-restore" title="Restore Reply" onclick="App.toggleDelete('${rep.id}')">
+                  <svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+                </button>
+              `;
+            } else {
+              childActionsHtml = `
+                <button class="btn-row btn-delete" title="Delete Reply" onclick="App.toggleDelete('${rep.id}')">
+                  <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                </button>
+              `;
+            }
+
+            html += `
+              <tr class="${childRowClass}">
+                <td style="color:var(--text-muted); font-style:italic;">—</td>
+                <td style="color:var(--text-muted); font-size:0.8rem;">${replyDateStr}</td>
+                <td class="cell-reviewer">
+                  <div style="font-weight:600; color:var(--text-primary);">${this.esc(rep.reviewer_name)}</div>
+                  <div style="font-size:0.75rem; color:var(--text-muted);">${this.esc(rep.reviewer_email || '')}</div>
+                </td>
+                <td style="color:var(--text-muted); font-style:italic;">—</td>
+                <td style="white-space:normal; min-width:200px; max-width:400px; line-height:1.4; font-style:italic;">${this.esc(rep.comment || '')}</td>
+                <td>${childStatusHtml}</td>
+                <td style="color:var(--text-muted); font-style:italic;">—</td>
+                <td style="text-align:center; white-space:nowrap;">${childActionsHtml}</td>
+              </tr>
+            `;
+          });
+        });
+
+        tbody.innerHTML = html;
+      },
+
+      markDirty(id, field, value) {
+        if (!this.dirty[id]) this.dirty[id] = {};
+        this.dirty[id][field] = value;
+        this.updateEditWarningBar();
+
+        // Highlight row
+        const row = document.querySelector(`tr[class*="${id}"]`);
+        // We'll re-render dynamically on edit inputs without complete redraw to prevent focus loss
+        const trs = Array.from(document.getElementById('reviews-body').rows);
+        this.applyFilters();
+      },
+
+      toggleDelete(id) {
+        if (this.pendingDeletes.has(id)) {
+          this.pendingDeletes.delete(id);
+        } else {
+          this.pendingDeletes.add(id);
+        }
+        this.updateEditWarningBar();
+        this.applyFilters();
+      },
+
+      updateEditWarningBar() {
+        const bar = document.getElementById('edit-mode-bar');
+        const info = document.getElementById('edit-dirty-info');
+        const count = Object.keys(this.dirty).length + this.pendingDeletes.size;
+
+        if (count > 0) {
+          bar.classList.add('active');
+          info.textContent = `You have ${count} unsaved changes.`;
+        } else {
+          bar.classList.remove('active');
+        }
+      },
+
+      enableEditMode() {
+        this.editMode = true;
+        const btn = document.getElementById('btn-edit-toggle');
+        btn.classList.add('btn-edit-active');
+        btn.textContent = 'Exit Edit Mode';
+        this.applyFilters();
+      },
+
+      disableEditMode() {
+        this.editMode = false;
+        const btn = document.getElementById('btn-edit-toggle');
+        btn.classList.remove('btn-edit-active');
+        btn.textContent = 'Edit Mode';
+        this.applyFilters();
+      },
+
+      confirmDiscard() {
+        if (confirm("Are you sure you want to discard all unsaved changes?")) {
+          this.dirty = {};
+          this.pendingDeletes.clear();
+          this.updateEditWarningBar();
+          this.disableEditMode();
+          this.fetchReviews();
+          this.toast('All unsaved changes discarded.', 'info');
+        }
+      },
+
+      async saveChanges() {
+        const btnSave = document.getElementById('btn-save');
+        btnSave.disabled = true;
+        btnSave.textContent = 'Saving...';
+
+        try {
+          // 1. Process deletes
+          if (this.pendingDeletes.size > 0) {
+            const deleteIds = Array.from(this.pendingDeletes);
+            const { error: delError } = await supabaseClient
+              .from('reviews')
+              .delete()
+              .in('id', deleteIds);
+            if (delError) throw delError;
+          }
+
+          // 2. Process updates
+          for (const id of Object.keys(this.dirty)) {
+            const updates = this.dirty[id];
+            const { error: updateError } = await supabaseClient
+              .from('reviews')
+              .update(updates)
+              .eq('id', id);
+            if (updateError) throw updateError;
+          }
+
+          this.dirty = {};
+          this.pendingDeletes.clear();
+          this.updateEditWarningBar();
+          this.disableEditMode();
+          await this.fetchReviews();
+          this.toast('All review modifications saved successfully!', 'success');
+        } catch (err) {
+          console.error(err);
+          this.toast(`Failed to save changes: ${err.message}`, 'error');
+        } finally {
+          btnSave.disabled = false;
+          btnSave.textContent = 'Save Changes';
+        }
+      },
+
+      openReplyModal(parentId, productId) {
+        activeReplyParentId = parentId;
+        activeReplyProductId = productId;
+        document.getElementById('reply-text').value = '';
+        
+        // Find review content to show in title
+        const review = this.allReviews.find(r => r.id === parentId);
+        if (review) {
+          document.getElementById('reply-modal-title').textContent = `Reply to ${review.reviewer_name || 'Customer'}'s Review`;
+        } else {
+          document.getElementById('reply-modal-title').textContent = 'Reply to Review';
+        }
+        
+        document.getElementById('reply-modal').classList.add('open');
+      },
+
+      async submitReply(e) {
+        e.preventDefault();
+        const submitBtn = document.getElementById('reply-submit-btn');
+        const replyText = document.getElementById('reply-text').value.trim();
+        
+        if (!replyText) return;
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Sending...';
+
+        try {
+          const { error } = await supabaseClient.from('reviews').insert({
+            product_id: activeReplyProductId,
+            reviewer_name: 'BrightKey Response',
+            reviewer_email: 'support@brightkeysolutions.com',
+            comment: replyText,
+            is_approved: true, // Official replies are pre-approved
+            parent_id: activeReplyParentId
+          });
+
+          if (error) throw error;
+
+          document.getElementById('reply-modal').classList.remove('open');
+          this.toast('Official reply submitted successfully!', 'success');
+          await this.fetchReviews();
+        } catch (err) {
+          console.error("Error submitting reply:", err);
+          this.toast(`Failed to submit reply: ${err.message}`, 'error');
+        } finally {
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Send Response';
+        }
+      },
+
+      async rebuildSite() {
+        const btn = document.getElementById('btn-publish');
+        const originalText = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = 'Publishing...';
+
+        try {
+          const res = await fetch('https://api.vercel.com/v1/integrations/deploy/prj_8BUBIA4U1128hH2VISQHDhxxTnB3/zAWKAQArmf', {
+            method: 'POST'
+          });
+          if (res.ok) {
+            this.toast('Build triggered successfully! Review changes will be live in 1-2 minutes.', 'success');
+          } else {
+            throw new Error(`Failed to trigger build. Status: ${res.status}`);
+          }
+        } catch (err) {
+          console.error(err);
+          this.toast(`Error triggering Vercel build: ${err.message}`, 'error');
+        } finally {
+          btn.disabled = false;
+          btn.textContent = originalText;
+        }
+      },
+
+      bindEvents() {
+        document.getElementById('btn-edit-toggle').addEventListener('click', () => {
+          if (this.editMode) {
+            if (Object.keys(this.dirty).length > 0 || this.pendingDeletes.size > 0) {
+              if (!confirm('Discard all unsaved changes and exit edit mode?')) {
+                return;
+              }
+            }
+            this.dirty = {};
+            this.pendingDeletes.clear();
+            this.updateEditWarningBar();
+            this.disableEditMode();
+            this.fetchReviews();
+          } else {
+            this.enableEditMode();
+          }
+        });
+
+        document.getElementById('search-input').addEventListener('input', () => this.applyFilters());
+        document.getElementById('filter-status').addEventListener('change', () => this.applyFilters());
+        document.getElementById('filter-product').addEventListener('change', () => this.applyFilters());
+
+        document.getElementById('btn-discard').addEventListener('click', () => this.confirmDiscard());
+        document.getElementById('btn-save').addEventListener('click', () => this.saveChanges());
+        document.getElementById('btn-publish').addEventListener('click', () => this.rebuildSite());
+        
+        document.getElementById('reply-form').addEventListener('submit', (e) => this.submitReply(e));
+
+        // Warn before leaving page with unsaved changes
+        window.addEventListener('beforeunload', e => {
+          if (Object.keys(this.dirty).length > 0 || this.pendingDeletes.size > 0) {
+            e.preventDefault();
+            e.returnValue = 'You have unsaved changes. Are you sure you want to leave?';
+          }
+        });
+      },
+
+      esc(str) {
+        if (str === null || str === undefined) return '';
+        return String(str)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#039;');
+      },
+
+      toast(msg, type = 'success') {
+        const container = document.getElementById('toast-container');
+        const el = document.createElement('div');
+        el.className = `toast toast-${type}`;
+        el.textContent = msg;
+        container.appendChild(el);
+
+        setTimeout(() => {
+          el.style.animation = 'fadeOut 0.3s ease forwards';
+          setTimeout(() => el.remove(), 300);
+        }, 4000);
+      }
+    };
+
+    window.addEventListener('DOMContentLoaded', () => {
+      App.init();
+    });
+  </script>
+</body>
+</html>
