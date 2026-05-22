@@ -1180,11 +1180,19 @@
             };
 
             // Parse prices (input strings like '4999.00' to centavos)
-            const priceVal = changes.price !== undefined ? changes.price : original?.price;
-            payload.price = this.parsePrice(priceVal) || 0;
+            // IMPORTANT: Only run parsePrice() on values the user actually edited (strings from <input>).
+            // If the field was untouched, original.price is already in centavos — do NOT re-multiply.
+            if (changes.price !== undefined) {
+              payload.price = this.parsePrice(changes.price) || 0;
+            } else {
+              payload.price = (typeof original?.price === 'number' ? original.price : 0);
+            }
 
-            const compareVal = changes.compare_at_price !== undefined ? changes.compare_at_price : original?.compare_at_price;
-            payload.compare_at_price = this.parsePrice(compareVal);
+            if (changes.compare_at_price !== undefined) {
+              payload.compare_at_price = this.parsePrice(changes.compare_at_price);
+            } else {
+              payload.compare_at_price = (typeof original?.compare_at_price === 'number' ? original.compare_at_price : null);
+            }
 
             // If it is a real row, include the ID to update
             if (!id.startsWith('temp-')) {
@@ -1304,6 +1312,8 @@
 
       parsePrice(val) {
         if (val === null || val === undefined || val === '') return null;
+        // Safety guard: if already an integer (centavos from DB), return as-is
+        if (typeof val === 'number' && Number.isInteger(val)) return val;
         let clean = String(val).replace(/[^0-9.]/g, '');
         if (!clean) return null;
         return Math.round(parseFloat(clean) * 100);
