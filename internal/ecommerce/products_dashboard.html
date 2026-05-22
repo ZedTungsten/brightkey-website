@@ -529,6 +529,21 @@
       to { opacity: 0; transform: scale(0.95); }
     }
   </style>
+  <script>
+    // Global error handler to catch script load or runtime errors and display them in the UI
+    window._startupErrors = [];
+    window.addEventListener('error', function(e) {
+      console.error("Global Error Caught:", e);
+      window._startupErrors.push(e);
+      const tbody = document.getElementById('products-body');
+      if (tbody) {
+        tbody.innerHTML = `<tr><td colspan="11" style="padding:3rem; text-align:center; color:#EF4444; font-weight:bold;">
+          [JavaScript Error] ${e.message}<br>
+          <span style="font-size:0.85rem; font-weight:normal; color:#6B7280;">at ${e.filename || 'unknown'}:${e.lineno || 0}:${e.colno || 0}</span>
+        </td></tr>`;
+      }
+    });
+  </script>
 </head>
 <body>
 
@@ -646,7 +661,7 @@
   <script>
     'use strict';
 
-    const sb = window.BKAuth.sb;
+    let sb;
 
     // Application state
     const App = {
@@ -658,9 +673,12 @@
       categories: new Set(),
 
       async init() {
-        // Authenticate - Bypassed for staging environment
-        // const user = await window.BKAuth.requireAuth('../../admin.html');
-        // if (!user) return;
+        // Safe initialization of Supabase client
+        try {
+          sb = window.BKAuth?.sb || (window.supabase ? window.supabase.createClient('https://ymjlosnxuhsybkzkoofq.supabase.co', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inltamxvc254dWhzeWJremtvb2ZxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ0MDY1MzYsImV4cCI6MjA4OTk4MjUzNn0.srhk9SVvFuZRcfeRGbVDGPr5pYrFhs8vzcOiMK3A91w') : null);
+        } catch (e) {
+          console.error("Failed to initialize Supabase client:", e);
+        }
 
         // Fetch products
         await this.fetchProducts();
@@ -671,6 +689,15 @@
 
       async fetchProducts() {
         const tbody = document.getElementById('products-body');
+        if (!sb) {
+          tbody.innerHTML = `<tr><td colspan="11" style="padding:3rem; text-align:center; color:var(--danger); font-weight:bold;">
+            Supabase Connection Error: Database client is not initialized.<br>
+            <span style="font-size:0.85rem; font-weight:normal; color:var(--text-secondary);">
+              Please make sure that the Supabase CDN and auth scripts loaded successfully without blocks.
+            </span>
+          </td></tr>`;
+          return;
+        }
         try {
           const { data, error } = await sb.from('products').select('*');
           if (error) throw error;
@@ -728,21 +755,21 @@
         const children = this.allProducts.filter(p => p.parent_sku);
 
         // Sort parents by SKU
-        parents.sort((a, b) => (a.sku || '').localeCompare(b.sku || ''));
+        parents.sort((a, b) => String(a.sku || '').localeCompare(String(b.sku || '')));
 
         // Group children under parents
         const sortedHierarchy = [];
         parents.forEach(p => {
           sortedHierarchy.push(p);
-          const variants = children.filter(v => v.parent_sku === p.sku);
+          const variants = children.filter(v => String(v.parent_sku || '') === String(p.sku || ''));
           // Sort variants by SKU
-          variants.sort((a, b) => (a.sku || '').localeCompare(b.sku || ''));
+          variants.sort((a, b) => String(a.sku || '').localeCompare(String(b.sku || '')));
           sortedHierarchy.push(...variants);
         });
 
         // Append orphan children
-        const orphanChildren = children.filter(v => !parents.some(p => p.sku === v.parent_sku));
-        orphanChildren.sort((a, b) => (a.sku || '').localeCompare(b.sku || ''));
+        const orphanChildren = children.filter(v => !parents.some(p => String(p.sku || '') === String(v.parent_sku || '')));
+        orphanChildren.sort((a, b) => String(a.sku || '').localeCompare(String(b.sku || '')));
         sortedHierarchy.push(...orphanChildren);
 
         // 2. Apply filters to this hierarchical list
@@ -1114,6 +1141,13 @@
         btnSave.disabled = true;
         btnSave.textContent = 'Saving...';
 
+        if (!sb) {
+          this.toast('Database client not initialized. Cannot save changes.', 'error');
+          btnSave.disabled = false;
+          btnSave.textContent = 'Save Changes';
+          return;
+        }
+
         try {
           // 1. Process Deletions
           if (this.pendingDeletes.size > 0) {
@@ -1300,6 +1334,17 @@
 
     // Initialize application on load
     window.addEventListener('DOMContentLoaded', () => {
+      if (window._startupErrors && window._startupErrors.length > 0) {
+        const tbody = document.getElementById('products-body');
+        if (tbody) {
+          const e = window._startupErrors[0];
+          tbody.innerHTML = `<tr><td colspan="11" style="padding:3rem; text-align:center; color:var(--danger); font-weight:bold;">
+            [JavaScript Startup Error] ${e.message}<br>
+            <span style="font-size:0.85rem; font-weight:normal; color:var(--text-secondary);">at ${e.filename || 'unknown'}:${e.lineno || 0}:${e.colno || 0}</span>
+          </td></tr>`;
+          return;
+        }
+      }
       App.init();
     });
   </script>
