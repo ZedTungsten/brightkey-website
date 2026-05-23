@@ -295,7 +295,7 @@
     // ── Fetch dynamic products ────────────────────────────────
     async function loadProducts() {
       try {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/products?status=eq.published&select=*,product_images(cdn_url)`, {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/products?status=eq.published&parent_sku=is.null&select=*`, {
           headers: { 'apikey': SUPABASE_ANON, 'Authorization': `Bearer ${SUPABASE_ANON}` }
         });
         if(!res.ok) throw new Error('Failed to fetch catalog');
@@ -311,13 +311,15 @@
         let hasHardware = false;
 
         products.forEach(p => {
-          let imgUrl = p.product_images && p.product_images.length > 0 ? p.product_images[0].cdn_url : '';
+          let imgUrl = p.image_main || '';
           let badgeColor = p.category === 'software' ? 'badge-cyan' : 'badge-muted';
           let badgeText = p.category === 'software' ? 'Subscription' : 'Hardware + Install';
           
-          let priceHTML = p.compare_at_price > p.price 
-            ? `<span style="font-weight:600;">₱${(p.price/100).toLocaleString('en-PH')}</span> <span style="text-decoration:line-through; font-size:0.85rem; color:var(--text-secondary);">₱${(p.compare_at_price/100).toLocaleString('en-PH')}</span>` 
-            : `<span style="font-weight:600;">₱${(p.price/100).toLocaleString('en-PH')}</span>`;
+          const finalPrice = p.discounted_price > 0 ? p.discounted_price : (p.sale_price || 0);
+          const comparePrice = p.before_price;
+          let priceHTML = (comparePrice && comparePrice > finalPrice)
+            ? `<span style="font-weight:600;">₱${(finalPrice/100).toLocaleString('en-PH')}</span> <span style="text-decoration:line-through; font-size:0.85rem; color:var(--text-secondary);">₱${(comparePrice/100).toLocaleString('en-PH')}</span>` 
+            : `<span style="font-weight:600;">₱${(finalPrice/100).toLocaleString('en-PH')}</span>`;
 
           const card = `
             <div class="card product-card card--spotlight reveal" data-category="${p.category}" style="cursor:pointer;" onclick="window.location.href='products/${p.slug}'">

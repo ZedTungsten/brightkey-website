@@ -1,0 +1,1008 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Fulfillment & Inventory Ledger — BrightKey Admin</title>
+  
+  <link rel="preconnect" href="https://fonts.bunny.net" />
+  <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../../css/style.css" />
+  
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+
+  <style>
+    body { background-color: var(--bg-elevated); }
+    
+    .dashboard-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 2rem;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+
+    .tab-nav {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      gap: 0.5rem;
+      margin-bottom: 2rem;
+      overflow-x: auto;
+      padding-bottom: 2px;
+    }
+
+    .tab-btn {
+      padding: 0.75rem 1.25rem;
+      border: none;
+      background: none;
+      font-weight: 600;
+      font-size: 0.9rem;
+      color: var(--text-secondary);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      white-space: nowrap;
+      transition: all 0.2s ease;
+    }
+
+    .tab-btn:hover {
+      color: var(--text-primary);
+    }
+
+    .tab-btn.active {
+      color: var(--cyan);
+      border-bottom-color: var(--cyan);
+    }
+
+    .tab-panel {
+      display: none;
+    }
+
+    .tab-panel.active {
+      display: block;
+    }
+
+    .panel {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 1.5rem;
+      box-shadow: var(--shadow-sm);
+      margin-bottom: 2rem;
+    }
+
+    .panel-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      margin-bottom: 1.25rem;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 0.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .ledger-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+    }
+
+    .ledger-table th, .ledger-table td {
+      padding: 0.75rem 1rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .ledger-table th {
+      font-weight: 700;
+      color: var(--text-secondary);
+      background: var(--bg-elevated);
+      text-transform: uppercase;
+      font-size: 0.75rem;
+      letter-spacing: 0.05em;
+    }
+
+    .ledger-table tr:hover { background: rgba(0,0,0,0.01); }
+
+    .badge-status {
+      display: inline-block;
+      padding: 0.15rem 0.5rem;
+      border-radius: var(--radius-full);
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: capitalize;
+    }
+
+    .badge-ordered     { background: #dbeafe; color: #1e40af; }
+    .badge-received    { background: #d1fae5; color: #065f46; }
+    .badge-reserved    { background: #fef3c7; color: #92400e; }
+    .badge-packed      { background: #e0f2fe; color: #075985; }
+    .badge-dispatched  { background: #f3f4f6; color: #374151; }
+    .badge-returned    { background: #fee2e2; color: #991b1b; }
+    .badge-cancelled   { background: #f1f5f9; color: #475569; }
+
+    .layout-grid {
+      display: grid;
+      grid-template-columns: 3fr 1.2fr;
+      gap: 2rem;
+    }
+
+    @media (max-width: 991px) {
+      .layout-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .log-container {
+      font-family: monospace;
+      font-size: 0.8rem;
+      line-height: 1.6;
+      max-height: 350px;
+      overflow-y: auto;
+      padding: 0.5rem;
+      background: var(--bg-elevated);
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+    }
+
+    .log-entry {
+      border-bottom: 1px solid var(--border);
+      padding: 0.35rem 0;
+      color: var(--text-secondary);
+    }
+
+    .log-entry:last-child {
+      border-bottom: none;
+    }
+  </style>
+</head>
+<body>
+
+  <nav class="nav" role="navigation" style="position: sticky; top:0; background:var(--bg-surface); border-bottom:1px solid var(--border); z-index:100;">
+    <div class="container">
+      <div class="nav__inner">
+        <a href="../../admin.html" class="nav__logo" style="font-weight: 700; color:var(--text-primary);">BrightKey <span style="color:var(--cyan);">Admin</span></a>
+        <div style="font-weight: 600; font-size: 1.1rem;">Fulfillment & Ledger</div>
+        <div style="display:flex; gap:0.5rem;">
+          <a href="products_dashboard.html" class="btn btn-outline btn-sm">Products</a>
+          <a href="order_bookings.html" class="btn btn-outline btn-sm">Bookings</a>
+          <a href="../../admin.html" class="btn btn-outline btn-sm">Dashboard</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main style="padding-top: 120px; padding-bottom: 60px;">
+    <div class="container" style="max-width: 1400px;">
+      
+      <div class="dashboard-header">
+        <div>
+          <h1>Fulfillment & Inventory Ledger</h1>
+          <p style="color:var(--text-secondary); margin-top: 0.25rem;">Real-time stock flow, supplier ordering, and customer dispatch pipeline.</p>
+        </div>
+        <div>
+          <button id="btn-sync" class="btn btn-outline btn-sm" style="border-color: var(--cyan); color: var(--cyan);">
+            🔄 Sync Bookings Now
+          </button>
+        </div>
+      </div>
+
+      <nav class="tab-nav">
+        <button class="tab-btn active" onclick="switchTab('inventory')">Inventory Summary</button>
+        <button class="tab-btn" onclick="switchTab('order')">Order (Supplier)</button>
+        <button class="tab-btn" onclick="switchTab('receive')">Receive <span id="badge-count-receive" style="display:none; background:var(--cyan); color:white; font-size:0.75rem; padding:1px 6px; border-radius:10px; margin-left:4px;">0</span></button>
+        <button class="tab-btn" onclick="switchTab('pack')">Pack <span id="badge-count-pack" style="display:none; background:var(--cyan); color:white; font-size:0.75rem; padding:1px 6px; border-radius:10px; margin-left:4px;">0</span></button>
+        <button class="tab-btn" onclick="switchTab('dispatch')">Dispatch <span id="badge-count-dispatch" style="display:none; background:var(--cyan); color:white; font-size:0.75rem; padding:1px 6px; border-radius:10px; margin-left:4px;">0</span></button>
+        <button class="tab-btn" onclick="switchTab('return')">Return</button>
+        <button class="tab-btn" onclick="switchTab('cancel')">Cancel</button>
+      </nav>
+
+      <div class="layout-grid">
+        
+        <!-- Left Column: Active Tab Table -->
+        <div>
+          
+          <!-- Tab: Inventory Summary -->
+          <div class="tab-panel active" id="panel-inventory">
+            <div class="panel">
+              <div class="panel-title">Current Warehouse Tally</div>
+              <div style="overflow-x:auto;">
+                <table class="ledger-table">
+                  <thead>
+                    <tr>
+                      <th>SKU</th>
+                      <th>Product Title</th>
+                      <th>Business</th>
+                      <th style="color:var(--cyan);">Available</th>
+                      <th style="color:#d97706;">Reserved</th>
+                      <th style="color:#2563eb;">Packed</th>
+                      <th>Dispatched</th>
+                      <th style="color:#dc2626;">Returned</th>
+                      <th style="color:#4b5563;">Cancelled</th>
+                    </tr>
+                  </thead>
+                  <tbody id="inventory-list">
+                    <tr><td colspan="9" class="text-center">Loading stock snapshot...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab: Order (Supplier PO) -->
+          <div class="tab-panel" id="panel-order">
+            <div class="panel">
+              <div class="panel-title">Create Supplier Purchase Order</div>
+              <form id="supplier-order-form" onsubmit="handleSupplierOrder(event)" style="max-width: 500px;">
+                <div class="form-group" style="margin-bottom: 1.25rem;">
+                  <label class="form-label">Select Product to Order</label>
+                  <select class="form-input" id="order-sku" style="height:auto; padding: 0.75rem;" required>
+                    <option value="">-- Choose a Product --</option>
+                  </select>
+                </div>
+                <div class="form-group" style="margin-bottom: 1.5rem;">
+                  <label class="form-label">Number of Units</label>
+                  <input type="number" class="form-input" id="order-qty" min="1" placeholder="10" required />
+                </div>
+                <button type="submit" class="btn btn-cyan btn-lg" style="width:100%;">Order Items</button>
+              </form>
+            </div>
+          </div>
+
+          <!-- Tab: Receive -->
+          <div class="tab-panel" id="panel-receive">
+            <div class="panel">
+              <div class="panel-title">Receive Shipments & Returns</div>
+              <div style="overflow-x:auto;">
+                <table class="ledger-table">
+                  <thead>
+                    <tr>
+                      <th>Source / Type</th>
+                      <th>SKU</th>
+                      <th>Product</th>
+                      <th>Quantity</th>
+                      <th>State / Origin</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody id="receive-list">
+                    <tr><td colspan="6" class="text-center">No incoming items to receive.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab: Pack -->
+          <div class="tab-panel" id="panel-pack">
+            <div class="panel">
+              <div class="panel-title">Packing Queue</div>
+              <div style="overflow-x:auto;">
+                <table class="ledger-table">
+                  <thead>
+                    <tr>
+                      <th>Ref Order</th>
+                      <th>Customer</th>
+                      <th>City</th>
+                      <th>SKU</th>
+                      <th>Qty</th>
+                      <th>Reserved Date</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody id="pack-list">
+                    <tr><td colspan="7" class="text-center">No items waiting to be packed.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab: Dispatch -->
+          <div class="tab-panel" id="panel-dispatch">
+            <div class="panel">
+              <div class="panel-title">Dispatched Pipeline</div>
+              <div style="overflow-x:auto;">
+                <table class="ledger-table">
+                  <thead>
+                    <tr>
+                      <th>Ref Order</th>
+                      <th>Customer</th>
+                      <th>City</th>
+                      <th>SKU</th>
+                      <th>Qty</th>
+                      <th>Packed Date</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody id="dispatch-list">
+                    <tr><td colspan="7" class="text-center">No items waiting to be dispatched.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab: Return -->
+          <div class="tab-panel" id="panel-return">
+            <div class="panel">
+              <div class="panel-title">Delivered & Past Orders</div>
+              <div style="overflow-x:auto;">
+                <table class="ledger-table">
+                  <thead>
+                    <tr>
+                      <th>Ref Order</th>
+                      <th>Customer</th>
+                      <th>City</th>
+                      <th>SKU</th>
+                      <th>Qty</th>
+                      <th>Dispatched Date</th>
+                      <th class="text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="return-list">
+                    <tr><td colspan="7" class="text-center">No past dispatched orders found.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab: Cancel -->
+          <div class="tab-panel" id="panel-cancel">
+            <div class="panel">
+              <div class="panel-title">Cancel Pipeline Items</div>
+              <div style="overflow-x:auto;">
+                <table class="ledger-table">
+                  <thead>
+                    <tr>
+                      <th>Ref Order</th>
+                      <th>Customer</th>
+                      <th>City</th>
+                      <th>SKU</th>
+                      <th>Qty</th>
+                      <th>Current Stage</th>
+                      <th class="text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="cancel-list">
+                    <tr><td colspan="7" class="text-center">No active reservation items in queue.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Right Column: Ledger Activity Feed -->
+        <div>
+          <div class="panel" style="position: sticky; top: 120px;">
+            <div class="panel-title">Activity Feed Logs</div>
+            <div class="log-container" id="activity-feed">
+              <div class="log-entry" style="color:var(--text-muted); text-align:center; padding: 2rem 0;">No ledger activity loaded yet.</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </main>
+
+  <script src="../../js/main.js"></script>
+  <script>
+    'use strict';
+
+    const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+
+    let allProducts = [];
+    let allInventory = {};
+    let activeTransactions = [];
+    let bookings = [];
+
+    // Switch between tabs
+    window.switchTab = function(tabId) {
+      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+      document.querySelectorAll('.tab-panel').forEach(panel => panel.classList.remove('active'));
+      
+      const targetBtn = Array.from(document.querySelectorAll('.tab-btn')).find(b => b.getAttribute('onclick').includes(tabId));
+      if (targetBtn) targetBtn.classList.add('active');
+      
+      const panel = document.getElementById(`panel-${tabId}`);
+      if (panel) panel.classList.add('active');
+    };
+
+    // Initialize Page
+    async function init() {
+      showLoadingState();
+      try {
+        await loadCoreData();
+        await runAutoSync();
+        await refreshDashboard();
+      } catch (err) {
+        console.error(err);
+        alert('Error loading fulfillment data: ' + err.message);
+      }
+    }
+
+    function showLoadingState() {
+      const loading = `<tr><td colspan="9" class="text-center">Syncing and loading ledger data...</td></tr>`;
+      document.getElementById('inventory-list').innerHTML = loading;
+    }
+
+    async function loadCoreData() {
+      // 1. Fetch products
+      const { data: pData, error: pErr } = await sb.from('products').select('sku, title, business').order('sku');
+      if (pErr) throw pErr;
+      allProducts = pData || [];
+
+      // Populate supplier order dropdown
+      const select = document.getElementById('order-sku');
+      select.innerHTML = '<option value="">-- Choose a Product --</option>';
+      allProducts.forEach(p => {
+        select.innerHTML += `<option value="${p.sku}">${p.title} (${p.sku})</option>`;
+      });
+    }
+
+    async function refreshDashboard() {
+      // 2. Fetch inventory snapshot
+      const { data: invData, error: invErr } = await sb.from('inventory').select('*');
+      if (invErr) throw invErr;
+      
+      allInventory = {};
+      (invData || []).forEach(row => {
+        allInventory[row.sku] = row;
+      });
+
+      // 3. Fetch transactions
+      const { data: txData, error: txErr } = await sb.from('inventory_transactions').select('*').order('created_at', { ascending: false });
+      if (txErr) throw txErr;
+      activeTransactions = txData || [];
+
+      // Render all tabs
+      renderInventorySummary();
+      renderReceiveTab();
+      renderPackTab();
+      renderDispatchTab();
+      renderReturnTab();
+      renderCancelTab();
+      renderActivityFeed();
+      updateBadgeCounts();
+    }
+
+    // Auto-Sync Bookings logic
+    async function runAutoSync() {
+      console.log('Running auto-sync...');
+      // 1. Fetch bookings
+      const { data: bData, error: bErr } = await sb.from('installation_bookings').select('*');
+      if (bErr) throw bErr;
+      bookings = bData || [];
+
+      // Get existing transaction reference IDs
+      const { data: txRefs, error: refErr } = await sb.from('inventory_transactions').select('reference_id, status').eq('type', 'customer_order');
+      if (refErr) throw refErr;
+
+      const existingRefs = {};
+      (txRefs || []).forEach(tx => {
+        if (!existingRefs[tx.reference_id]) existingRefs[tx.reference_id] = [];
+        existingRefs[tx.reference_id].push(tx.status);
+      });
+
+      for (const booking of bookings) {
+        const orderNo = booking.order_no;
+        const address = booking.customer_address || '';
+        const city = address.split(',')[1]?.trim() || 'Pasig';
+
+        // Check if booking is cancelled
+        if (booking.status === 'cancelled') {
+          // If we have active reserved/packed transactions for this booking, cancel them
+          const txsToCancel = activeTransactions.filter(t => t.reference_id === orderNo && ['reserved', 'packed'].includes(t.status));
+          for (const tx of txsToCancel) {
+            await handleCancellationProcess(tx.id, tx.sku, tx.quantity, tx.status);
+          }
+          continue;
+        }
+
+        // If booking is active but has no transactions logged yet, reserve it
+        if (!existingRefs[orderNo]) {
+          // Parse products from pipe-separated strings or products JSONB
+          let items = [];
+          if (booking.product_skus && booking.product_qtys) {
+            const skus = booking.product_skus.split('|').map(s => s.trim().toUpperCase());
+            const qtys = booking.product_qtys.split('|').map(q => parseInt(q.trim()) || 0);
+            skus.forEach((sku, idx) => {
+              if (sku && qtys[idx] > 0) {
+                items.push({ sku, qty: qtys[idx] });
+              }
+            });
+          }
+
+          for (const item of items) {
+            console.log(`Syncing reserved item: ${item.qty}x ${item.sku} for order ${orderNo}`);
+            
+            // Create transaction record
+            const txPayload = {
+              sku: item.sku,
+              quantity: item.qty,
+              type: 'customer_order',
+              status: 'reserved',
+              reference_id: orderNo,
+              customer_name: booking.customer_name,
+              customer_city: city,
+              timestamp_reserved: booking.created_at || new Date().toISOString()
+            };
+            const { error: insTxErr } = await sb.from('inventory_transactions').insert([txPayload]);
+            if (insTxErr) console.error('Error inserting transaction during sync:', insTxErr);
+
+            // Update inventory totals
+            const { data: invRow } = await sb.from('inventory').select('*').eq('sku', item.sku);
+            if (invRow && invRow.length > 0) {
+              const current = invRow[0];
+              await sb.from('inventory').update({
+                available: current.available - item.qty,
+                reserved: current.reserved + item.qty
+              }).eq('sku', item.sku);
+            } else {
+              // Create default row
+              await sb.from('inventory').insert([{
+                sku: item.sku,
+                available: -item.qty,
+                reserved: item.qty
+              }]);
+            }
+          }
+        }
+      }
+      console.log('Auto-sync complete.');
+    }
+
+    // Render Tab 1: Inventory Summary
+    function renderInventorySummary() {
+      const tbody = document.getElementById('inventory-list');
+      tbody.innerHTML = '';
+
+      if (allProducts.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="9" class="text-center">No products found in database.</td></tr>`;
+        return;
+      }
+
+      allProducts.forEach(p => {
+        const inv = allInventory[p.sku] || { available: 0, reserved: 0, packed: 0, dispatched: 0, returned: 0, cancelled: 0 };
+        tbody.innerHTML += `
+          <tr>
+            <td><strong>${p.sku}</strong></td>
+            <td>${p.title}</td>
+            <td><span class="badge badge-muted" style="text-transform: capitalize;">${p.business.replace(/_/g, ' ')}</span></td>
+            <td style="color:var(--cyan); font-weight:700;">${inv.available}</td>
+            <td style="color:#d97706; font-weight:600;">${inv.reserved}</td>
+            <td style="color:#2563eb; font-weight:600;">${inv.packed}</td>
+            <td style="font-weight:600;">${inv.dispatched}</td>
+            <td style="color:#dc2626;">${inv.returned}</td>
+            <td style="color:#4b5563;">${inv.cancelled}</td>
+          </tr>
+        `;
+      });
+    }
+
+    // Render Tab 3: Receive
+    function renderReceiveTab() {
+      const tbody = document.getElementById('receive-list');
+      tbody.innerHTML = '';
+
+      const pending = activeTransactions.filter(t => ['ordered', 'returned', 'cancelled'].includes(t.status));
+      
+      if (pending.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted" style="padding:2rem 0;">No incoming shipments or returns to receive.</td></tr>`;
+        return;
+      }
+
+      pending.forEach(t => {
+        const p = allProducts.find(prod => prod.sku === t.sku) || { title: 'Unknown Product' };
+        let sourceLabel = '';
+        let badgeClass = '';
+        if (t.status === 'ordered') {
+          sourceLabel = 'Supplier PO';
+          badgeClass = 'badge-ordered';
+        } else if (t.status === 'returned') {
+          sourceLabel = `Return (${t.customer_name || 'Customer'})`;
+          badgeClass = 'badge-returned';
+        } else if (t.status === 'cancelled') {
+          sourceLabel = `Cancellation (${t.customer_name || 'Customer'})`;
+          badgeClass = 'badge-cancelled';
+        }
+
+        tbody.innerHTML += `
+          <tr>
+            <td><strong>${sourceLabel}</strong></td>
+            <td><code>${t.sku}</code></td>
+            <td>${p.title}</td>
+            <td><strong>${t.quantity}</strong></td>
+            <td><span class="badge-status ${badgeClass}">${t.status}</span></td>
+            <td>
+              <button class="btn btn-cyan btn-sm" onclick="receiveItem('${t.id}', '${t.sku}', ${t.quantity}, '${t.status}')">
+                📥 Received
+              </button>
+            </td>
+          </tr>
+        `;
+      });
+    }
+
+    // Render Tab 4: Pack
+    function renderPackTab() {
+      const tbody = document.getElementById('pack-list');
+      tbody.innerHTML = '';
+
+      const packingQueue = activeTransactions.filter(t => t.status === 'reserved' && t.type === 'customer_order');
+
+      if (packingQueue.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted" style="padding:2rem 0;">No orders currently in packing queue.</td></tr>`;
+        return;
+      }
+
+      packingQueue.forEach(t => {
+        const p = allProducts.find(prod => prod.sku === t.sku) || { title: 'Unknown Product' };
+        const date = t.timestamp_reserved ? new Date(t.timestamp_reserved).toLocaleString() : 'N/A';
+        tbody.innerHTML += `
+          <tr>
+            <td><strong>${t.reference_id || 'N/A'}</strong></td>
+            <td>${t.customer_name || 'N/A'}</td>
+            <td>${t.customer_city || 'N/A'}</td>
+            <td><code>${t.sku}</code></td>
+            <td><strong>${t.quantity}</strong></td>
+            <td>${date}</td>
+            <td>
+              <button class="btn btn-cyan btn-sm" onclick="packItem('${t.id}', '${t.sku}', ${t.quantity})">
+                📦 Packed
+              </button>
+            </td>
+          </tr>
+        `;
+      });
+    }
+
+    // Render Tab 5: Dispatch
+    function renderDispatchTab() {
+      const tbody = document.getElementById('dispatch-list');
+      tbody.innerHTML = '';
+
+      const dispatchQueue = activeTransactions.filter(t => t.status === 'packed');
+
+      if (dispatchQueue.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted" style="padding:2rem 0;">No packed items ready to dispatch.</td></tr>`;
+        return;
+      }
+
+      dispatchQueue.forEach(t => {
+        const p = allProducts.find(prod => prod.sku === t.sku) || { title: 'Unknown Product' };
+        const date = t.timestamp_packed ? new Date(t.timestamp_packed).toLocaleString() : 'N/A';
+        tbody.innerHTML += `
+          <tr>
+            <td><strong>${t.reference_id || 'N/A'}</strong></td>
+            <td>${t.customer_name || 'N/A'}</td>
+            <td>${t.customer_city || 'N/A'}</td>
+            <td><code>${t.sku}</code></td>
+            <td><strong>${t.quantity}</strong></td>
+            <td>${date}</td>
+            <td>
+              <button class="btn btn-cyan btn-sm" onclick="dispatchItem('${t.id}', '${t.sku}', ${t.quantity})">
+                🚚 Dispatch
+              </button>
+            </td>
+          </tr>
+        `;
+      });
+    }
+
+    // Render Tab 6: Return
+    function renderReturnTab() {
+      const tbody = document.getElementById('return-list');
+      tbody.innerHTML = '';
+
+      const dispatched = activeTransactions.filter(t => t.status === 'dispatched');
+
+      if (dispatched.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted" style="padding:2rem 0;">No dispatched products in log.</td></tr>`;
+        return;
+      }
+
+      dispatched.forEach(t => {
+        const p = allProducts.find(prod => prod.sku === t.sku) || { title: 'Unknown' };
+        const date = t.timestamp_dispatched ? new Date(t.timestamp_dispatched).toLocaleString() : 'N/A';
+        tbody.innerHTML += `
+          <tr>
+            <td><strong>${t.reference_id || 'N/A'}</strong></td>
+            <td>${t.customer_name || 'N/A'}</td>
+            <td>${t.customer_city || 'N/A'}</td>
+            <td><code>${t.sku}</code></td>
+            <td><strong>${t.quantity}</strong></td>
+            <td>${date}</td>
+            <td class="text-right">
+              <button class="btn btn-outline btn-sm" style="border-color:#ef4444; color:#ef4444;" onclick="returnItem('${t.id}', '${t.sku}', ${t.quantity})">
+                ❌ Cancelled
+              </button>
+            </td>
+          </tr>
+        `;
+      });
+    }
+
+    // Render Tab 7: Cancel
+    function renderCancelTab() {
+      const tbody = document.getElementById('cancel-list');
+      tbody.innerHTML = '';
+
+      const cancellable = activeTransactions.filter(t => ['reserved', 'packed'].includes(t.status) && t.type === 'customer_order');
+
+      if (cancellable.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted" style="padding:2rem 0;">No active queue items to cancel.</td></tr>`;
+        return;
+      }
+
+      cancellable.forEach(t => {
+        const p = allProducts.find(prod => prod.sku === t.sku) || { title: 'Unknown' };
+        tbody.innerHTML += `
+          <tr>
+            <td><strong>${t.reference_id || 'N/A'}</strong></td>
+            <td>${t.customer_name || 'N/A'}</td>
+            <td>${t.customer_city || 'N/A'}</td>
+            <td><code>${t.sku}</code></td>
+            <td><strong>${t.quantity}</strong></td>
+            <td><span class="badge-status ${t.status === 'reserved' ? 'badge-reserved':'badge-packed'}">${t.status}</span></td>
+            <td class="text-right">
+              <button class="btn btn-outline btn-sm" style="border-color:#ef4444; color:#ef4444;" onclick="cancelQueueItem('${t.id}', '${t.sku}', ${t.quantity}, '${t.status}')">
+                Cancel Order
+              </button>
+            </td>
+          </tr>
+        `;
+      });
+    }
+
+    // Render Activity Feed Logs
+    function renderActivityFeed() {
+      const feed = document.getElementById('activity-feed');
+      feed.innerHTML = '';
+
+      const logs = activeTransactions.slice(0, 50); // limit to 50 latest logs
+      
+      if (logs.length === 0) {
+        feed.innerHTML = `<div class="log-entry" style="color:var(--text-muted); text-align:center; padding: 2rem 0;">No ledger activity logged.</div>`;
+        return;
+      }
+
+      logs.forEach(t => {
+        const time = new Date(t.updated_at).toLocaleString();
+        let message = '';
+
+        if (t.status === 'ordered') {
+          message = `ordered supplier replenishment: ${t.quantity}x ${t.sku}`;
+        } else if (t.status === 'received') {
+          message = `warehouse received/re-shelved: ${t.quantity}x ${t.sku} to Available`;
+        } else if (t.status === 'reserved') {
+          message = `order reserved: ${t.quantity}x ${t.sku} for order no. ${t.reference_id || 'N/A'} (${t.customer_name || 'N/A'})`;
+        } else if (t.status === 'packed') {
+          message = `order packed: ${t.quantity}x ${t.sku} for order no. ${t.reference_id || 'N/A'} (${t.customer_name || 'N/A'})`;
+        } else if (t.status === 'dispatched') {
+          message = `order dispatched: ${t.quantity}x ${t.sku} sent to ${t.customer_city || 'N/A'} for order no. ${t.reference_id || 'N/A'}`;
+        } else if (t.status === 'returned') {
+          message = `returned dispatch order: ${t.quantity}x ${t.sku} for order no. ${t.reference_id || 'N/A'} (pending warehouse receive)`;
+        } else if (t.status === 'cancelled') {
+          message = `cancelled queue reservation: ${t.quantity}x ${t.sku} for order no. ${t.reference_id || 'N/A'} (pending warehouse receive)`;
+        }
+
+        feed.innerHTML += `
+          <div class="log-entry">
+            <span style="color:var(--cyan); font-weight:600;">[${time}]</span> ${message}
+          </div>
+        `;
+      });
+    }
+
+    // Badge counts updates
+    function updateBadgeCounts() {
+      const receiveCount = activeTransactions.filter(t => ['ordered', 'returned', 'cancelled'].includes(t.status)).length;
+      const packCount = activeTransactions.filter(t => t.status === 'reserved' && t.type === 'customer_order').length;
+      const dispatchCount = activeTransactions.filter(t => t.status === 'packed').length;
+
+      const badgeRec = document.getElementById('badge-count-receive');
+      const badgePck = document.getElementById('badge-count-pack');
+      const badgeDsp = document.getElementById('badge-count-dispatch');
+
+      if (receiveCount > 0) { badgeRec.innerText = receiveCount; badgeRec.style.display = 'inline-block'; }
+      else badgeRec.style.display = 'none';
+
+      if (packCount > 0) { badgePck.innerText = packCount; badgePck.style.display = 'inline-block'; }
+      else badgePck.style.display = 'none';
+
+      if (dispatchCount > 0) { badgeDsp.innerText = dispatchCount; badgeDsp.style.display = 'inline-block'; }
+      else badgeDsp.style.display = 'none';
+    }
+
+    // ACTION: Create Supplier PO
+    window.handleSupplierOrder = async function(e) {
+      e.preventDefault();
+      const sku = document.getElementById('order-sku').value;
+      const qty = parseInt(document.getElementById('order-qty').value);
+      
+      if (!sku || qty <= 0) return;
+
+      const txPayload = {
+        sku: sku,
+        quantity: qty,
+        type: 'supplier_order',
+        status: 'ordered',
+        timestamp_ordered: new Date().toISOString()
+      };
+
+      const { error } = await sb.from('inventory_transactions').insert([txPayload]);
+      if (error) {
+        alert('Failed to log supplier order: ' + error.message);
+        return;
+      }
+
+      // Sync inventory rows just in case it doesn't exist
+      const { data: invRow } = await sb.from('inventory').select('*').eq('sku', sku);
+      if (!invRow || invRow.length === 0) {
+        await sb.from('inventory').insert([{ sku: sku, available: 0 }]);
+      }
+
+      document.getElementById('supplier-order-form').reset();
+      await refreshDashboard();
+      alert(`Supplier order logged for ${qty}x ${sku}. Check Receive tab!`);
+    };
+
+    // ACTION: Warehouse Confirms Receipt
+    window.receiveItem = async function(id, sku, qty, prevStatus) {
+      const now = new Date().toISOString();
+      
+      // Update transaction status
+      const { error: txErr } = await sb.from('inventory_transactions').update({
+        status: 'received',
+        timestamp_received: now
+      }).eq('id', id);
+      if (txErr) { alert('Error updating transaction: ' + txErr.message); return; }
+
+      // Get current inventory row
+      const { data: invRow, error: invErr } = await sb.from('inventory').select('*').eq('sku', sku);
+      if (invErr || !invRow || invRow.length === 0) {
+        alert('Error fetching inventory item');
+        return;
+      }
+
+      const inv = invRow[0];
+      const updates = { available: inv.available + qty };
+
+      // Deduct from previous state counter in inventory
+      if (prevStatus === 'returned') {
+        updates.returned = Math.max(0, inv.returned - qty);
+      } else if (prevStatus === 'cancelled') {
+        updates.cancelled = Math.max(0, inv.cancelled - qty);
+      }
+
+      const { error: updErr } = await sb.from('inventory').update(updates).eq('sku', sku);
+      if (updErr) { alert('Error updating inventory: ' + updErr.message); return; }
+
+      await refreshDashboard();
+    };
+
+    // ACTION: Mark Packed
+    window.packItem = async function(id, sku, qty) {
+      const now = new Date().toISOString();
+
+      const { error: txErr } = await sb.from('inventory_transactions').update({
+        status: 'packed',
+        timestamp_packed: now
+      }).eq('id', id);
+      if (txErr) { alert('Error updating transaction: ' + txErr.message); return; }
+
+      const { data: invRow } = await sb.from('inventory').select('*').eq('sku', sku);
+      if (invRow && invRow.length > 0) {
+        const inv = invRow[0];
+        await sb.from('inventory').update({
+          reserved: Math.max(0, inv.reserved - qty),
+          packed: inv.packed + qty
+        }).eq('sku', sku);
+      }
+
+      await refreshDashboard();
+    };
+
+    // ACTION: Mark Dispatched
+    window.dispatchItem = async function(id, sku, qty) {
+      const now = new Date().toISOString();
+
+      const { error: txErr } = await sb.from('inventory_transactions').update({
+        status: 'dispatched',
+        timestamp_dispatched: now
+      }).eq('id', id);
+      if (txErr) { alert('Error updating transaction: ' + txErr.message); return; }
+
+      const { data: invRow } = await sb.from('inventory').select('*').eq('sku', sku);
+      if (invRow && invRow.length > 0) {
+        const inv = invRow[0];
+        await sb.from('inventory').update({
+          packed: Math.max(0, inv.packed - qty),
+          dispatched: inv.dispatched + qty
+        }).eq('sku', sku);
+      }
+
+      await refreshDashboard();
+    };
+
+    // ACTION: Return dispatched order (Mark "Cancelled")
+    window.returnItem = async function(id, sku, qty) {
+      const now = new Date().toISOString();
+
+      const { error: txErr } = await sb.from('inventory_transactions').update({
+        status: 'returned',
+        timestamp_returned: now
+      }).eq('id', id);
+      if (txErr) { alert('Error updating transaction: ' + txErr.message); return; }
+
+      const { data: invRow } = await sb.from('inventory').select('*').eq('sku', sku);
+      if (invRow && invRow.length > 0) {
+        const inv = invRow[0];
+        await sb.from('inventory').update({
+          dispatched: Math.max(0, inv.dispatched - qty),
+          returned: inv.returned + qty
+        }).eq('sku', sku);
+      }
+
+      await refreshDashboard();
+      alert('Order marked as Returned. Warehouse must confirm receipt under the Receive tab.');
+    };
+
+    // ACTION: Cancel reserved/packed item
+    window.cancelQueueItem = async function(id, sku, qty, prevStatus) {
+      await handleCancellationProcess(id, sku, qty, prevStatus);
+      await refreshDashboard();
+      alert('Order cancelled. Items sent to Receive tab to be re-shelved.');
+    };
+
+    async function handleCancellationProcess(id, sku, qty, prevStatus) {
+      const now = new Date().toISOString();
+
+      const { error: txErr } = await sb.from('inventory_transactions').update({
+        status: 'cancelled',
+        timestamp_cancelled: now
+      }).eq('id', id);
+      if (txErr) { console.error('Error updating tx cancellation:', txErr); return; }
+
+      const { data: invRow } = await sb.from('inventory').select('*').eq('sku', sku);
+      if (invRow && invRow.length > 0) {
+        const inv = invRow[0];
+        const updates = { cancelled: inv.cancelled + qty };
+        if (prevStatus === 'reserved') {
+          updates.reserved = Math.max(0, inv.reserved - qty);
+        } else if (prevStatus === 'packed') {
+          updates.packed = Math.max(0, inv.packed - qty);
+        }
+        await sb.from('inventory').update(updates).eq('sku', sku);
+      }
+    }
+
+    // Trigger explicit booking sync on demand
+    document.getElementById('btn-sync').addEventListener('click', async () => {
+      document.getElementById('btn-sync').disabled = true;
+      document.getElementById('btn-sync').innerText = '🔄 Syncing Bookings...';
+      try {
+        await runAutoSync();
+        await refreshDashboard();
+        alert('Booking synchronization complete!');
+      } catch (err) {
+        console.error(err);
+        alert('Sync error: ' + err.message);
+      } finally {
+        document.getElementById('btn-sync').disabled = false;
+        document.getElementById('btn-sync').innerText = '🔄 Sync Bookings Now';
+      }
+    });
+
+    // Run Initial Load
+    init();
+  </script>
+</body>
+</html>

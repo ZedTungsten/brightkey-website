@@ -74,17 +74,23 @@
   <script>
     'use strict';
 
-    // Authentication removed for staging environment
-
+    const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 
     const expectedHeaders = [
-      'sku', 'title', 'slug', 'status', 'available_inventory', 'image_link', 'category', 'description',
-      'parent_sku', 'variant_name', 'variant_value',
-      'srp', 'dealer_price', 'unit_actual_price', 'unit_promo_price', 'unit_before_price', 'reseller_price', 'install_price',
-      'warranty', 'tech_support', 'material', 'voltage', 'dimension',
-      'pin_unlock', 'rfid_unlock', 'fingerprint_unlock', '3d_facial_recognition', 'palm_vein_unlock', 'mechanical_key_unlock', 'emergency_usb_power_unlock', 'app_control', 'bluetooth_connect', 'wifi_connect', 'temporary_pin', 'built_in_doorbell', 'active_intercom', 'active_monitoring', 'dual_camera', 'waterproof', 'fireproof', 'scratchproof', 'sunproof', 'moisture_proof', 'splash_proof',
-      'video_1', 'video_2', 'picture_1', 'picture_2', 'picture_3', 'picture_4', 'picture_5', 'picture_6',
-      'printed_manuals_link', 'resource_link_2', 'resource_link_3', 'resource_link_4', 'resource_link_5'
+      'sku', 'title', 'slug', 'status', 'business', 'category', 'description', 
+      'parent_sku', 'variant_name', 'variant_value', 'related_skus',
+      'available_inventory',
+      'sale_price', 'discounted_price', 'before_price', 'installation_price',
+      'image_main', 'image_1', 'image_2', 'image_3', 'image_4', 'video_1', 'video_2',
+      'spec_warranty', 'spec_support', 'spec_material', 'spec_voltage', 'spec_dimension',
+      // Smart Lock
+      'pin_unlock', 'rfid_unlock', 'fingerprint_unlock', 'face_recognition_3d', 'palm_vein_unlock', 'mechanical_key', 'emergency_usb', 'app_control', 'bluetooth', 'wifi', 'temporary_pin', 'doorbell', 'intercom', 'monitoring', 'dual_cameras', 'waterproof', 'fireproof', 'scratchproof', 'sunproof', 'moisture_proof', 'splash_proof',
+      // Solar Power
+      'grid_tie', 'off_grid', 'hybrid', 'mppt_controller', 'monitoring_app', 'battery_backup', 'auto_switching', 'weather_resistant', 'wifi_connect', 'mobile_alerts',
+      // CCTV
+      'night_vision', 'resolution', 'pan_tilt_zoom', 'motion_detection', 'two_way_audio', 'cloud_storage', 'local_storage', 'weatherproof', 'wide_angle', 'ai_detection', 'mobile_app', 'poe_support',
+      // Fire Extinguisher
+      'type_abc', 'type_co2', 'type_dry_chemical', 'type_foam', 'wall_mountable', 'vehicle_mountable', 'refillable', 'pressure_gauge', 'with_bracket', 'with_hose'
     ];
 
     document.getElementById('btn-download').addEventListener('click', () => {
@@ -144,88 +150,53 @@
           continue;
         }
 
-        csvSkus.push(row.sku);
+        const sku = row.sku.trim().toUpperCase();
+        const slug = row.slug ? row.slug.trim().toUpperCase() : row.title.trim().toUpperCase().replace(/[^A-Z0-9]+/g, '-');
+        const parentSku = row.parent_sku ? row.parent_sku.trim().toUpperCase() : null;
+        const relatedSkus = row.related_skus ? row.related_skus.split(',').map(s => s.trim().toUpperCase()).filter(Boolean) : null;
+
+        csvSkus.push(sku);
 
         try {
           // 1. Prepare Core Product Data
-          const promoPrice = parsePrice(row.unit_promo_price);
-          const actualPrice = parsePrice(row.unit_actual_price);
-          const finalPrice = promoPrice || actualPrice || 0;
-          const comparePrice = parsePrice(row.unit_before_price) || actualPrice; // If no slashes price, maybe compare to actual if promo was used
-
-          const pricingTiers = {
-            srp: parsePrice(row.srp),
-            dealer_price: parsePrice(row.dealer_price),
-            reseller_price: parsePrice(row.reseller_price),
-            install_price: parsePrice(row.install_price)
-          };
-
-          const specifications = {
-            warranty: row.warranty,
-            tech_support: row.tech_support,
-            material: row.material,
-            voltage: row.voltage,
-            dimension: row.dimension
-          };
-
-          const features = {
-            pin_unlock: row.pin_unlock,
-            rfid_unlock: row.rfid_unlock,
-            fingerprint_unlock: row.fingerprint_unlock,
-            '3d_facial_recognition': row['3d_facial_recognition'],
-            palm_vein_unlock: row.palm_vein_unlock,
-            mechanical_key_unlock: row.mechanical_key_unlock,
-            emergency_usb_power_unlock: row.emergency_usb_power_unlock,
-            app_control: row.app_control,
-            bluetooth_connect: row.bluetooth_connect,
-            wifi_connect: row.wifi_connect,
-            temporary_pin: row.temporary_pin,
-            built_in_doorbell: row.built_in_doorbell,
-            active_intercom: row.active_intercom,
-            active_monitoring: row.active_monitoring,
-            dual_camera: row.dual_camera,
-            waterproof: row.waterproof,
-            fireproof: row.fireproof,
-            scratchproof: row.scratchproof,
-            sunproof: row.sunproof,
-            moisture_proof: row.moisture_proof,
-            splash_proof: row.splash_proof
-          };
-
-          const resources = {
-            printed_manuals_link: row.printed_manuals_link,
-            resource_link_2: row.resource_link_2,
-            resource_link_3: row.resource_link_3,
-            resource_link_4: row.resource_link_4,
-            resource_link_5: row.resource_link_5
-          };
-
-          const videos = {
-            video_1: row.video_1,
-            video_2: row.video_2
-          };
-
           const productPayload = {
-            title: row.title,
-            slug: row.slug || row.title.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
-            description: row.description,
-            price: finalPrice,
-            compare_at_price: comparePrice,
-            sku: row.sku,
-            parent_sku: row.parent_sku || null,
-            variant_name: row.variant_name || null,
-            variant_value: row.variant_value || null,
-            category: row.category || 'hardware',
-            status: row.status === 'published' ? 'published' : 'draft',
-            pricing_tiers: pricingTiers,
-            specifications: specifications,
-            features: features,
-            resources: resources,
-            videos: videos
+            sku,
+            slug,
+            title: row.title.trim(),
+            description: row.description ? row.description.trim() : null,
+            business: row.business ? row.business.trim().toLowerCase() : 'smart_lock',
+            category: row.category ? row.category.trim() : null,
+            status: row.status && row.status.trim().toLowerCase() === 'published' ? 'published' : 'draft',
+            parent_sku: parentSku,
+            variant_name: row.variant_name ? row.variant_name.trim() : null,
+            variant_value: row.variant_value ? row.variant_value.trim() : null,
+            related_skus: relatedSkus,
+            
+            // Pricing (centavos conversion)
+            sale_price: parsePrice(row.sale_price) || 0,
+            discounted_price: parsePrice(row.discounted_price) || 0,
+            before_price: parsePrice(row.before_price) || null,
+            installation_price: parsePrice(row.installation_price) || null,
+
+            // Specs
+            spec_warranty: row.spec_warranty ? row.spec_warranty.trim() : null,
+            spec_support: row.spec_support ? row.spec_support.trim() : null,
+            spec_material: row.spec_material ? row.spec_material.trim() : null,
+            spec_voltage: row.spec_voltage ? row.spec_voltage.trim() : null,
+            spec_dimension: row.spec_dimension ? row.spec_dimension.trim() : null,
+
+            // Media
+            image_main: row.image_main ? row.image_main.trim() : null,
+            image_1: row.image_1 ? row.image_1.trim() : null,
+            image_2: row.image_2 ? row.image_2.trim() : null,
+            image_3: row.image_3 ? row.image_3.trim() : null,
+            image_4: row.image_4 ? row.image_4.trim() : null,
+            video_1: row.video_1 ? row.video_1.trim() : null,
+            video_2: row.video_2 ? row.video_2.trim() : null
           };
 
           // Check if product exists via SKU
-          const { data: existingData, error: findErr } = await sb.from('products').select('id').eq('sku', row.sku);
+          const { data: existingData, error: findErr } = await sb.from('products').select('id').eq('sku', sku);
           if (findErr) throw findErr;
 
           let productId;
@@ -235,44 +206,108 @@
             productId = existingData[0].id;
             const { error: updErr } = await sb.from('products').update(productPayload).eq('id', productId);
             if (updErr) throw updErr;
-            log(`Updated product: ${row.sku}`);
+            log(`Updated product: ${sku}`);
           } else {
             // Insert
             const { data: insData, error: insErr } = await sb.from('products').insert([productPayload]).select('id');
             if (insErr) throw insErr;
             productId = insData[0].id;
-            log(`Created product: ${row.sku}`);
+            log(`Created product: ${sku}`);
           }
 
-          // 2. Inventory
+          // 2. Inventory (upsert by SKU)
           const invPayload = {
-            product_id: productId,
-            available: parseInt(row.available_inventory) || 0,
-            ordered_past_month: 0
+            sku,
+            available: parseInt(row.available_inventory) || 0
           };
           
-          const { data: existingInv } = await sb.from('inventory').select('product_id').eq('product_id', productId);
+          const { data: existingInv } = await sb.from('inventory').select('sku').eq('sku', sku);
           if (existingInv && existingInv.length > 0) {
-            await sb.from('inventory').update(invPayload).eq('product_id', productId);
+            await sb.from('inventory').update(invPayload).eq('sku', sku);
           } else {
             await sb.from('inventory').insert([invPayload]);
           }
 
-          // 3. Images (Primary + Pics 1-6)
-          // We will delete existing images and re-insert to avoid duplicates/mess
-          await sb.from('product_images').delete().eq('product_id', productId);
-          
-          let imagesToInsert = [];
-          if (row.image_link) imagesToInsert.push({ product_id: productId, cdn_url: row.image_link, sort_order: 0 });
-          if (row.picture_1) imagesToInsert.push({ product_id: productId, cdn_url: row.picture_1, sort_order: 1 });
-          if (row.picture_2) imagesToInsert.push({ product_id: productId, cdn_url: row.picture_2, sort_order: 2 });
-          if (row.picture_3) imagesToInsert.push({ product_id: productId, cdn_url: row.picture_3, sort_order: 3 });
-          if (row.picture_4) imagesToInsert.push({ product_id: productId, cdn_url: row.picture_4, sort_order: 4 });
-          if (row.picture_5) imagesToInsert.push({ product_id: productId, cdn_url: row.picture_5, sort_order: 5 });
-          if (row.picture_6) imagesToInsert.push({ product_id: productId, cdn_url: row.picture_6, sort_order: 6 });
+          // 3. Features (cleared and updated)
+          await sb.from('smartlock_features').delete().eq('product_id', productId);
+          await sb.from('solarpower_features').delete().eq('product_id', productId);
+          await sb.from('cctv_features').delete().eq('product_id', productId);
+          await sb.from('fireextinguisher_features').delete().eq('product_id', productId);
 
-          if (imagesToInsert.length > 0) {
-            await sb.from('product_images').insert(imagesToInsert);
+          const biz = productPayload.business;
+          if (biz === 'smart_lock') {
+            const featPayload = {
+              product_id: productId,
+              pin_unlock: row.pin_unlock ? row.pin_unlock.trim() : null,
+              rfid_unlock: row.rfid_unlock ? row.rfid_unlock.trim() : null,
+              fingerprint_unlock: row.fingerprint_unlock ? row.fingerprint_unlock.trim() : null,
+              face_recognition_3d: row.face_recognition_3d ? row.face_recognition_3d.trim() : null,
+              palm_vein_unlock: row.palm_vein_unlock ? row.palm_vein_unlock.trim() : null,
+              mechanical_key: row.mechanical_key ? row.mechanical_key.trim() : null,
+              emergency_usb: row.emergency_usb ? row.emergency_usb.trim() : null,
+              app_control: row.app_control ? row.app_control.trim() : null,
+              bluetooth: row.bluetooth ? row.bluetooth.trim() : null,
+              wifi: row.wifi ? row.wifi.trim() : null,
+              temporary_pin: row.temporary_pin ? row.temporary_pin.trim() : null,
+              doorbell: row.doorbell ? row.doorbell.trim() : null,
+              intercom: row.intercom ? row.intercom.trim() : null,
+              monitoring: row.monitoring ? row.monitoring.trim() : null,
+              dual_cameras: row.dual_cameras ? row.dual_cameras.trim() : null,
+              waterproof: row.waterproof ? row.waterproof.trim() : null,
+              fireproof: row.fireproof ? row.fireproof.trim() : null,
+              scratchproof: row.scratchproof ? row.scratchproof.trim() : null,
+              sunproof: row.sunproof ? row.sunproof.trim() : null,
+              moisture_proof: row.moisture_proof ? row.moisture_proof.trim() : null,
+              splash_proof: row.splash_proof ? row.splash_proof.trim() : null
+            };
+            await sb.from('smartlock_features').insert([featPayload]);
+          } else if (biz === 'solar_power') {
+            const featPayload = {
+              product_id: productId,
+              grid_tie: row.grid_tie ? row.grid_tie.trim() : null,
+              off_grid: row.off_grid ? row.off_grid.trim() : null,
+              hybrid: row.hybrid ? row.hybrid.trim() : null,
+              mppt_controller: row.mppt_controller ? row.mppt_controller.trim() : null,
+              monitoring_app: row.monitoring_app ? row.monitoring_app.trim() : null,
+              battery_backup: row.battery_backup ? row.battery_backup.trim() : null,
+              auto_switching: row.auto_switching ? row.auto_switching.trim() : null,
+              weather_resistant: row.weather_resistant ? row.weather_resistant.trim() : null,
+              wifi_connect: row.wifi_connect ? row.wifi_connect.trim() : null,
+              mobile_alerts: row.mobile_alerts ? row.mobile_alerts.trim() : null
+            };
+            await sb.from('solarpower_features').insert([featPayload]);
+          } else if (biz === 'cctv') {
+            const featPayload = {
+              product_id: productId,
+              night_vision: row.night_vision ? row.night_vision.trim() : null,
+              resolution: row.resolution ? row.resolution.trim() : null,
+              pan_tilt_zoom: row.pan_tilt_zoom ? row.pan_tilt_zoom.trim() : null,
+              motion_detection: row.motion_detection ? row.motion_detection.trim() : null,
+              two_way_audio: row.two_way_audio ? row.two_way_audio.trim() : null,
+              cloud_storage: row.cloud_storage ? row.cloud_storage.trim() : null,
+              local_storage: row.local_storage ? row.local_storage.trim() : null,
+              weatherproof: row.weatherproof ? row.weatherproof.trim() : null,
+              wide_angle: row.wide_angle ? row.wide_angle.trim() : null,
+              ai_detection: row.ai_detection ? row.ai_detection.trim() : null,
+              mobile_app: row.mobile_app ? row.mobile_app.trim() : null,
+              poe_support: row.poe_support ? row.poe_support.trim() : null
+            };
+            await sb.from('cctv_features').insert([featPayload]);
+          } else if (biz === 'fire_extinguisher') {
+            const featPayload = {
+              product_id: productId,
+              type_abc: row.type_abc ? row.type_abc.trim() : null,
+              type_co2: row.type_co2 ? row.type_co2.trim() : null,
+              type_dry_chemical: row.type_dry_chemical ? row.type_dry_chemical.trim() : null,
+              type_foam: row.type_foam ? row.type_foam.trim() : null,
+              wall_mountable: row.wall_mountable ? row.wall_mountable.trim() : null,
+              vehicle_mountable: row.vehicle_mountable ? row.vehicle_mountable.trim() : null,
+              refillable: row.refillable ? row.refillable.trim() : null,
+              pressure_gauge: row.pressure_gauge ? row.pressure_gauge.trim() : null,
+              with_bracket: row.with_bracket ? row.with_bracket.trim() : null,
+              with_hose: row.with_hose ? row.with_hose.trim() : null
+            };
+            await sb.from('fireextinguisher_features').insert([featPayload]);
           }
 
         } catch (e) {
