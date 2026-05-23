@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Fulfillment & Inventory Ledger — BrightKey Admin</title>
+  <title>Fulfillment & Ledger — BrightKey Admin</title>
   
   <link rel="preconnect" href="https://fonts.bunny.net" />
   <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
@@ -12,50 +12,172 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 
   <style>
-    body { background-color: var(--bg-elevated); }
-    
-    .dashboard-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 2rem;
-      flex-wrap: wrap;
-      gap: 1rem;
+    :root {
+      --bg-base: #FAFAFA;
+      --bg-surface: #FFFFFF;
+      --bg-elevated: #F4F4F5;
+      --bg-card: #FFFFFF;
+      --border: #E4E4E7;
+      --border-hover: #D4D4D8;
+      --text-primary: #09090B;
+      --text-secondary: #52525B;
+      --text-muted: #A1A1AA;
+      --cyan: #06B6D4;
+      --cyan-light: #0891B2;
+      --cyan-dim: rgba(6,182,212,0.12);
+      --cyan-border: rgba(6,182,212,0.25);
+      --success: #16A34A;
+      --danger: #DC2626;
+      --warning: #D97706;
+      --font-mono: 'Courier New', monospace;
     }
 
-    .tab-nav {
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    
+    body {
+      background: var(--bg-base);
+      color: var(--text-secondary);
+      font-family: 'Commissioner', sans-serif;
+      font-size: 0.9rem;
+      min-height: 100vh;
+    }
+
+    /* ── Page Layout ── */
+    .page-wrap {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    .top-bar {
+      flex-shrink: 0;
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      height: 56px;
+    }
+
+    .top-bar-title {
+      font-size: 1rem;
+      font-weight: 800;
+      color: var(--text-primary);
+      letter-spacing: -0.03em;
+    }
+
+    .top-bar-back {
+      font-size: 0.82rem;
+      color: var(--cyan-light);
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-weight: 600;
+    }
+
+    .top-bar-back:hover {
+      text-decoration: underline;
+    }
+
+    .top-bar-sep {
+      color: var(--border);
+    }
+
+    .content-area {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* ── Main Workspace ── */
+    .main-workspace {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      border-right: 1px solid var(--border);
+    }
+
+    /* ── Stats Strip ── */
+    .stats-strip {
+      display: flex;
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      overflow-x: auto;
+    }
+
+    .stat-cell {
+      padding: 0.85rem 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      border-right: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .stat-cell:last-child {
+      border-right: none;
+    }
+
+    .stat-num {
+      font-size: 1.4rem;
+      font-weight: 800;
+      color: var(--text-primary);
+      letter-spacing: -0.04em;
+    }
+
+    .stat-label {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    /* ── Tab Bar ── */
+    .drawer-tabs {
       display: flex;
       border-bottom: 1px solid var(--border);
-      gap: 0.5rem;
-      margin-bottom: 2rem;
+      flex-shrink: 0;
       overflow-x: auto;
-      padding-bottom: 2px;
+      background: var(--bg-surface);
     }
 
     .tab-btn {
-      padding: 0.75rem 1.25rem;
+      padding: 0.9rem 1.25rem;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--text-muted);
       border: none;
       background: none;
-      font-weight: 600;
-      font-size: 0.9rem;
-      color: var(--text-secondary);
       cursor: pointer;
       border-bottom: 2px solid transparent;
       white-space: nowrap;
-      transition: all 0.2s ease;
-    }
-
-    .tab-btn:hover {
-      color: var(--text-primary);
+      transition: all 0.15s;
     }
 
     .tab-btn.active {
-      color: var(--cyan);
+      color: var(--cyan-light);
       border-bottom-color: var(--cyan);
+    }
+
+    .tab-btn:hover:not(.active) {
+      color: var(--text-secondary);
+    }
+
+    /* ── Table & Panels ── */
+    .table-scroll {
+      flex: 1;
+      overflow: auto;
+      padding: 1.5rem;
     }
 
     .tab-panel {
       display: none;
+      height: 100%;
     }
 
     .tab-panel.active {
@@ -65,331 +187,415 @@
     .panel {
       background: var(--bg-surface);
       border: 1px solid var(--border);
-      border-radius: var(--radius-md);
-      padding: 1.5rem;
+      border-radius: 8px;
+      overflow: hidden;
       box-shadow: var(--shadow-sm);
-      margin-bottom: 2rem;
     }
 
-    .panel-title {
-      font-size: 1.1rem;
+    .panel-header {
+      padding: 1rem 1.25rem;
+      font-size: 0.85rem;
       font-weight: 700;
-      margin-bottom: 1.25rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+      background: var(--bg-surface);
       border-bottom: 1px solid var(--border);
-      padding-bottom: 0.5rem;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
     }
 
-    .ledger-table {
+    table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 0.9rem;
+      font-size: 0.82rem;
     }
 
-    .ledger-table th, .ledger-table td {
-      padding: 0.75rem 1rem;
+    thead th {
+      position: sticky;
+      top: 0;
+      background: var(--bg-elevated);
+      color: var(--text-secondary);
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      padding: 0.65rem 1rem;
       text-align: left;
       border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+      z-index: 1;
     }
 
-    .ledger-table th {
-      font-weight: 700;
-      color: var(--text-secondary);
+    tbody tr {
+      border-bottom: 1px solid var(--border);
+      transition: background 0.1s;
+    }
+
+    tbody tr:hover {
       background: var(--bg-elevated);
-      text-transform: uppercase;
-      font-size: 0.75rem;
-      letter-spacing: 0.05em;
     }
 
-    .ledger-table tr:hover { background: rgba(0,0,0,0.01); }
+    tbody td {
+      padding: 0.75rem 1rem;
+      color: var(--text-secondary);
+      vertical-align: middle;
+    }
 
+    /* ── Badges ── */
     .badge-status {
       display: inline-block;
-      padding: 0.15rem 0.5rem;
-      border-radius: var(--radius-full);
-      font-size: 0.75rem;
+      padding: 0.2rem 0.55rem;
+      border-radius: 20px;
+      font-size: 0.72rem;
       font-weight: 600;
       text-transform: capitalize;
     }
 
-    .badge-ordered     { background: #dbeafe; color: #1e40af; }
-    .badge-received    { background: #d1fae5; color: #065f46; }
-    .badge-reserved    { background: #fef3c7; color: #92400e; }
-    .badge-packed      { background: #e0f2fe; color: #075985; }
-    .badge-dispatched  { background: #f3f4f6; color: #374151; }
-    .badge-returned    { background: #fee2e2; color: #991b1b; }
-    .badge-cancelled   { background: #f1f5f9; color: #475569; }
+    .badge-ordered     { background: rgba(37,99,235,0.1); color: #2563eb; }
+    .badge-received    { background: rgba(22,163,74,0.1); color: var(--success); }
+    .badge-reserved    { background: rgba(217,119,6,0.1); color: var(--warning); }
+    .badge-packed      { background: rgba(6,182,212,0.1); color: var(--cyan-light); }
+    .badge-dispatched  { background: var(--bg-elevated); color: var(--text-secondary); border: 1px solid var(--border); }
+    .badge-returned    { background: rgba(220,38,38,0.1); color: var(--danger); }
+    .badge-cancelled   { background: rgba(75,85,99,0.1); color: #4b5563; }
 
-    .layout-grid {
-      display: grid;
-      grid-template-columns: 3fr 1.2fr;
-      gap: 2rem;
+    /* ── Side Workspace (Logs) ── */
+    .side-workspace {
+      width: 360px;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      background: var(--bg-surface);
+      overflow: hidden;
     }
 
-    @media (max-width: 991px) {
-      .layout-grid {
-        grid-template-columns: 1fr;
-      }
+    .side-header {
+      padding: 1.1rem 1.5rem;
+      border-bottom: 1px solid var(--border);
+      font-weight: 700;
+      color: var(--text-primary);
+      font-size: 0.9rem;
+      flex-shrink: 0;
     }
 
     .log-container {
-      font-family: monospace;
-      font-size: 0.8rem;
-      line-height: 1.6;
-      max-height: 350px;
+      flex: 1;
       overflow-y: auto;
-      padding: 0.5rem;
-      background: var(--bg-elevated);
-      border-radius: var(--radius-sm);
-      border: 1px solid var(--border);
+      padding: 1.5rem;
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      line-height: 1.6;
+      background: #FAFAFA;
     }
 
     .log-entry {
       border-bottom: 1px solid var(--border);
-      padding: 0.35rem 0;
+      padding: 0.5rem 0;
       color: var(--text-secondary);
     }
 
     .log-entry:last-child {
       border-bottom: none;
     }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.45rem 1rem;
+      border-radius: 6px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+
+    .btn-primary { background: var(--cyan); color: #fff; border-color: var(--cyan); }
+    .btn-primary:hover { background: var(--cyan-light); border-color: var(--cyan-light); }
+    .btn-outline { background: var(--bg-surface); color: var(--text-secondary); border-color: var(--border); }
+    .btn-outline:hover { border-color: var(--cyan); color: var(--cyan-light); }
+    .btn-danger { background: var(--danger); color: #fff; border-color: var(--danger); }
+    .btn-danger:hover { opacity: 0.9; }
+    .btn-cyan { background: var(--cyan-dim); color: var(--cyan-light); border-color: var(--cyan-border); }
+    .btn-cyan:hover { background: var(--cyan-light); color: white; }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+
+    .form-label {
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .form-input, .form-select {
+      padding: 0.55rem 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 0.85rem;
+      background: var(--bg-base);
+      color: var(--text-primary);
+      outline: none;
+      transition: border 0.15s;
+      width: 100%;
+    }
+
+    .form-input:focus, .form-select:focus {
+      border-color: var(--cyan);
+    }
   </style>
 </head>
 <body>
 
-  <nav class="nav" role="navigation" style="position: sticky; top:0; background:var(--bg-surface); border-bottom:1px solid var(--border); z-index:100;">
-    <div class="container">
-      <div class="nav__inner">
-        <a href="../../admin.html" class="nav__logo" style="font-weight: 700; color:var(--text-primary);">BrightKey <span style="color:var(--cyan);">Admin</span></a>
-        <div style="font-weight: 600; font-size: 1.1rem;">Fulfillment & Ledger</div>
-        <div style="display:flex; gap:0.5rem;">
-          <a href="products_dashboard.html" class="btn btn-outline btn-sm">Products</a>
-          <a href="order_bookings.html" class="btn btn-outline btn-sm">Bookings</a>
-          <a href="../../admin.html" class="btn btn-outline btn-sm">Dashboard</a>
-        </div>
+  <div class="page-wrap">
+    
+    <!-- Top Bar -->
+    <div class="top-bar">
+      <a href="../../admin.html" class="top-bar-back">
+        <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none"><polyline points="15 18 9 12 15 6"/></svg>
+        Admin
+      </a>
+      <span class="top-bar-sep">/</span>
+      <div class="top-bar-title">Fulfillment & Inventory Ledger</div>
+      <div style="flex:1;"></div>
+      <div style="display:flex; gap:0.5rem; align-items:center;">
+        <button id="btn-sync" class="btn btn-primary">
+          🔄 Sync Bookings
+        </button>
+        <a href="products_dashboard.html" class="btn btn-outline">
+          Products Dashboard
+        </a>
       </div>
     </div>
-  </nav>
 
-  <main style="padding-top: 120px; padding-bottom: 60px;">
-    <div class="container" style="max-width: 1400px;">
+    <!-- Content Area -->
+    <div class="content-area">
       
-      <div class="dashboard-header">
-        <div>
-          <h1>Fulfillment & Inventory Ledger</h1>
-          <p style="color:var(--text-secondary); margin-top: 0.25rem;">Real-time stock flow, supplier ordering, and customer dispatch pipeline.</p>
-        </div>
-        <div>
-          <button id="btn-sync" class="btn btn-outline btn-sm" style="border-color: var(--cyan); color: var(--cyan);">
-            🔄 Sync Bookings Now
-          </button>
-        </div>
-      </div>
-
-      <nav class="tab-nav">
-        <button class="tab-btn active" onclick="switchTab('inventory')">Inventory Summary</button>
-        <button class="tab-btn" onclick="switchTab('order')">Order (Supplier)</button>
-        <button class="tab-btn" onclick="switchTab('receive')">Receive <span id="badge-count-receive" style="display:none; background:var(--cyan); color:white; font-size:0.75rem; padding:1px 6px; border-radius:10px; margin-left:4px;">0</span></button>
-        <button class="tab-btn" onclick="switchTab('pack')">Pack <span id="badge-count-pack" style="display:none; background:var(--cyan); color:white; font-size:0.75rem; padding:1px 6px; border-radius:10px; margin-left:4px;">0</span></button>
-        <button class="tab-btn" onclick="switchTab('dispatch')">Dispatch <span id="badge-count-dispatch" style="display:none; background:var(--cyan); color:white; font-size:0.75rem; padding:1px 6px; border-radius:10px; margin-left:4px;">0</span></button>
-        <button class="tab-btn" onclick="switchTab('return')">Return</button>
-        <button class="tab-btn" onclick="switchTab('cancel')">Cancel</button>
-      </nav>
-
-      <div class="layout-grid">
+      <!-- Left Workspace (Tables & Stats) -->
+      <div class="main-workspace">
         
-        <!-- Left Column: Active Tab Table -->
-        <div>
+        <!-- Stats strip -->
+        <div class="stats-strip">
+          <div class="stat-cell">
+            <div class="stat-num" id="stat-available" style="color: var(--success);">0</div>
+            <div class="stat-label">Available</div>
+          </div>
+          <div class="stat-cell">
+            <div class="stat-num" id="stat-reserved" style="color: var(--warning);">0</div>
+            <div class="stat-label">Reserved</div>
+          </div>
+          <div class="stat-cell">
+            <div class="stat-num" id="stat-packed" style="color: var(--cyan-light);">0</div>
+            <div class="stat-label">Packed</div>
+          </div>
+          <div class="stat-cell">
+            <div class="stat-num" id="stat-dispatched">0</div>
+            <div class="stat-label">Dispatched</div>
+          </div>
+          <div class="stat-cell">
+            <div class="stat-num" id="stat-returned" style="color: var(--danger);">0</div>
+            <div class="stat-label">Returned</div>
+          </div>
+          <div class="stat-cell">
+            <div class="stat-num" id="stat-cancelled" style="color: #4b5563;">0</div>
+            <div class="stat-label">Cancelled</div>
+          </div>
+        </div>
+
+        <!-- Tab Bar -->
+        <div class="drawer-tabs">
+          <button class="tab-btn active" onclick="switchTab('inventory')">Inventory Summary</button>
+          <button class="tab-btn" onclick="switchTab('order')">Order Supplier</button>
+          <button class="tab-btn" onclick="switchTab('receive')">Receive <span id="badge-count-receive" style="display:none; background:var(--cyan); color:white; font-size:0.75rem; padding:1px 6px; border-radius:10px; margin-left:4px;">0</span></button>
+          <button class="tab-btn" onclick="switchTab('pack')">Pack <span id="badge-count-pack" style="display:none; background:var(--cyan); color:white; font-size:0.75rem; padding:1px 6px; border-radius:10px; margin-left:4px;">0</span></button>
+          <button class="tab-btn" onclick="switchTab('dispatch')">Dispatch <span id="badge-count-dispatch" style="display:none; background:var(--cyan); color:white; font-size:0.75rem; padding:1px 6px; border-radius:10px; margin-left:4px;">0</span></button>
+          <button class="tab-btn" onclick="switchTab('return')">Return</button>
+          <button class="tab-btn" onclick="switchTab('cancel')">Cancel</button>
+        </div>
+
+        <!-- Table Scroll workspace -->
+        <div class="table-scroll">
           
-          <!-- Tab: Inventory Summary -->
+          <!-- Tab Panel: Inventory -->
           <div class="tab-panel active" id="panel-inventory">
             <div class="panel">
-              <div class="panel-title">Current Warehouse Tally</div>
-              <div style="overflow-x:auto;">
-                <table class="ledger-table">
-                  <thead>
-                    <tr>
-                      <th>SKU</th>
-                      <th>Product Title</th>
-                      <th>Business</th>
-                      <th style="color:var(--cyan);">Available</th>
-                      <th style="color:#d97706;">Reserved</th>
-                      <th style="color:#2563eb;">Packed</th>
-                      <th>Dispatched</th>
-                      <th style="color:#dc2626;">Returned</th>
-                      <th style="color:#4b5563;">Cancelled</th>
-                    </tr>
-                  </thead>
-                  <tbody id="inventory-list">
-                    <tr><td colspan="9" class="text-center">Loading stock snapshot...</td></tr>
-                  </tbody>
-                </table>
-              </div>
+              <div class="panel-header">Warehouse Tally</div>
+              <table class="ledger-table">
+                <thead>
+                  <tr>
+                    <th>SKU</th>
+                    <th>Product Title</th>
+                    <th>Business</th>
+                    <th style="color:var(--success);">Available</th>
+                    <th style="color:var(--warning);">Reserved</th>
+                    <th style="color:var(--cyan-light);">Packed</th>
+                    <th>Dispatched</th>
+                    <th style="color:var(--danger);">Returned</th>
+                    <th style="color:#4b5563;">Cancelled</th>
+                  </tr>
+                </thead>
+                <tbody id="inventory-list">
+                  <tr><td colspan="9" class="text-center">Loading stock snapshot...</td></tr>
+                </tbody>
+              </table>
             </div>
           </div>
 
-          <!-- Tab: Order (Supplier PO) -->
+          <!-- Tab Panel: Order -->
           <div class="tab-panel" id="panel-order">
-            <div class="panel">
-              <div class="panel-title">Create Supplier Purchase Order</div>
-              <form id="supplier-order-form" onsubmit="handleSupplierOrder(event)" style="max-width: 500px;">
+            <div class="panel" style="padding: 1.5rem; max-width: 500px;">
+              <div class="panel-header" style="border:none; padding:0; margin-bottom: 1.25rem;">Order from Supplier</div>
+              <form id="supplier-order-form" onsubmit="handleSupplierOrder(event)">
                 <div class="form-group" style="margin-bottom: 1.25rem;">
-                  <label class="form-label">Select Product to Order</label>
-                  <select class="form-input" id="order-sku" style="height:auto; padding: 0.75rem;" required>
+                  <label class="form-label">Select SKU</label>
+                  <select class="form-select" id="order-sku" required>
                     <option value="">-- Choose a Product --</option>
                   </select>
                 </div>
                 <div class="form-group" style="margin-bottom: 1.5rem;">
-                  <label class="form-label">Number of Units</label>
-                  <input type="number" class="form-input" id="order-qty" min="1" placeholder="10" required />
+                  <label class="form-label">Quantity Ordered</label>
+                  <input type="number" class="form-input" id="order-qty" min="1" placeholder="20" required />
                 </div>
-                <button type="submit" class="btn btn-cyan btn-lg" style="width:100%;">Order Items</button>
+                <button type="submit" class="btn btn-primary" style="width:100%;">Create Supplier PO (+Incoming)</button>
               </form>
             </div>
           </div>
 
-          <!-- Tab: Receive -->
+          <!-- Tab Panel: Receive -->
           <div class="tab-panel" id="panel-receive">
             <div class="panel">
-              <div class="panel-title">Receive Shipments & Returns</div>
-              <div style="overflow-x:auto;">
-                <table class="ledger-table">
-                  <thead>
-                    <tr>
-                      <th>Source / Type</th>
-                      <th>SKU</th>
-                      <th>Product</th>
-                      <th>Quantity</th>
-                      <th>State / Origin</th>
-                      <th>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody id="receive-list">
-                    <tr><td colspan="6" class="text-center">No incoming items to receive.</td></tr>
-                  </tbody>
-                </table>
-              </div>
+              <div class="panel-header">Incoming queue</div>
+              <table class="ledger-table">
+                <thead>
+                  <tr>
+                    <th>Source / Type</th>
+                    <th>SKU</th>
+                    <th>Product</th>
+                    <th>Quantity</th>
+                    <th>State / Origin</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="receive-list">
+                  <tr><td colspan="6" class="text-center text-muted" style="padding:2rem 0;">No incoming items to receive.</td></tr>
+                </tbody>
+              </table>
             </div>
           </div>
 
-          <!-- Tab: Pack -->
+          <!-- Tab Panel: Pack -->
           <div class="tab-panel" id="panel-pack">
             <div class="panel">
-              <div class="panel-title">Packing Queue</div>
-              <div style="overflow-x:auto;">
-                <table class="ledger-table">
-                  <thead>
-                    <tr>
-                      <th>Ref Order</th>
-                      <th>Customer</th>
-                      <th>City</th>
-                      <th>SKU</th>
-                      <th>Qty</th>
-                      <th>Reserved Date</th>
-                      <th>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody id="pack-list">
-                    <tr><td colspan="7" class="text-center">No items waiting to be packed.</td></tr>
-                  </tbody>
-                </table>
-              </div>
+              <div class="panel-header">Orders to Pack</div>
+              <table class="ledger-table">
+                <thead>
+                  <tr>
+                    <th>Ref Order</th>
+                    <th>Customer</th>
+                    <th>City</th>
+                    <th>SKU</th>
+                    <th>Qty</th>
+                    <th>Reserved Date</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="pack-list">
+                  <tr><td colspan="7" class="text-center text-muted" style="padding:2rem 0;">No items waiting to be packed.</td></tr>
+                </tbody>
+              </table>
             </div>
           </div>
 
-          <!-- Tab: Dispatch -->
+          <!-- Tab Panel: Dispatch -->
           <div class="tab-panel" id="panel-dispatch">
             <div class="panel">
-              <div class="panel-title">Dispatched Pipeline</div>
-              <div style="overflow-x:auto;">
-                <table class="ledger-table">
-                  <thead>
-                    <tr>
-                      <th>Ref Order</th>
-                      <th>Customer</th>
-                      <th>City</th>
-                      <th>SKU</th>
-                      <th>Qty</th>
-                      <th>Packed Date</th>
-                      <th>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody id="dispatch-list">
-                    <tr><td colspan="7" class="text-center">No items waiting to be dispatched.</td></tr>
-                  </tbody>
-                </table>
-              </div>
+              <div class="panel-header">Packed & Ready to Dispatch</div>
+              <table class="ledger-table">
+                <thead>
+                  <tr>
+                    <th>Ref Order</th>
+                    <th>Customer</th>
+                    <th>City</th>
+                    <th>SKU</th>
+                    <th>Qty</th>
+                    <th>Packed Date</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="dispatch-list">
+                  <tr><td colspan="7" class="text-center text-muted" style="padding:2rem 0;">No items waiting to be dispatched.</td></tr>
+                </tbody>
+              </table>
             </div>
           </div>
 
-          <!-- Tab: Return -->
+          <!-- Tab Panel: Return -->
           <div class="tab-panel" id="panel-return">
             <div class="panel">
-              <div class="panel-title">Delivered & Past Orders</div>
-              <div style="overflow-x:auto;">
-                <table class="ledger-table">
-                  <thead>
-                    <tr>
-                      <th>Ref Order</th>
-                      <th>Customer</th>
-                      <th>City</th>
-                      <th>SKU</th>
-                      <th>Qty</th>
-                      <th>Dispatched Date</th>
-                      <th class="text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody id="return-list">
-                    <tr><td colspan="7" class="text-center">No past dispatched orders found.</td></tr>
-                  </tbody>
-                </table>
-              </div>
+              <div class="panel-header">Past Dispatched Orders</div>
+              <table class="ledger-table">
+                <thead>
+                  <tr>
+                    <th>Ref Order</th>
+                    <th>Customer</th>
+                    <th>City</th>
+                    <th>SKU</th>
+                    <th>Qty</th>
+                    <th>Dispatched Date</th>
+                    <th style="text-align:right;">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="return-list">
+                  <tr><td colspan="7" class="text-center text-muted" style="padding:2rem 0;">No past dispatched orders found.</td></tr>
+                </tbody>
+              </table>
             </div>
           </div>
 
-          <!-- Tab: Cancel -->
+          <!-- Tab Panel: Cancel -->
           <div class="tab-panel" id="panel-cancel">
             <div class="panel">
-              <div class="panel-title">Cancel Pipeline Items</div>
-              <div style="overflow-x:auto;">
-                <table class="ledger-table">
-                  <thead>
-                    <tr>
-                      <th>Ref Order</th>
-                      <th>Customer</th>
-                      <th>City</th>
-                      <th>SKU</th>
-                      <th>Qty</th>
-                      <th>Current Stage</th>
-                      <th class="text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody id="cancel-list">
-                    <tr><td colspan="7" class="text-center">No active reservation items in queue.</td></tr>
-                  </tbody>
-                </table>
-              </div>
+              <div class="panel-header">Current Reservations</div>
+              <table class="ledger-table">
+                <thead>
+                  <tr>
+                    <th>Ref Order</th>
+                    <th>Customer</th>
+                    <th>City</th>
+                    <th>SKU</th>
+                    <th>Qty</th>
+                    <th>Current Stage</th>
+                    <th style="text-align:right;">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="cancel-list">
+                  <tr><td colspan="7" class="text-center text-muted" style="padding:2rem 0;">No active reservation items in queue.</td></tr>
+                </tbody>
+              </table>
             </div>
           </div>
 
-        </div>
-
-        <!-- Right Column: Ledger Activity Feed -->
-        <div>
-          <div class="panel" style="position: sticky; top: 120px;">
-            <div class="panel-title">Activity Feed Logs</div>
-            <div class="log-container" id="activity-feed">
-              <div class="log-entry" style="color:var(--text-muted); text-align:center; padding: 2rem 0;">No ledger activity loaded yet.</div>
-            </div>
-          </div>
         </div>
 
       </div>
 
+      <!-- Right Workspace (Logs Feed) -->
+      <div class="side-workspace">
+        <div class="side-header">Ledger Activity Feed</div>
+        <div class="log-container" id="activity-feed">
+          <div class="log-entry" style="color:var(--text-muted); text-align:center; padding: 2rem 0;">Loading activity logs...</div>
+        </div>
+      </div>
+
     </div>
-  </main>
+
+  </div>
 
   <script src="../../js/main.js"></script>
   <script>
@@ -469,7 +675,27 @@
       renderReturnTab();
       renderCancelTab();
       renderActivityFeed();
+      renderStatsStrip();
       updateBadgeCounts();
+    }
+
+    // Render Stats Strip
+    function renderStatsStrip() {
+      let available = 0, reserved = 0, packed = 0, dispatched = 0, returned = 0, cancelled = 0;
+      Object.values(allInventory).forEach(inv => {
+        available += inv.available || 0;
+        reserved += inv.reserved || 0;
+        packed += inv.packed || 0;
+        dispatched += inv.dispatched || 0;
+        returned += inv.returned || 0;
+        cancelled += inv.cancelled || 0;
+      });
+      document.getElementById('stat-available').innerText = available;
+      document.getElementById('stat-reserved').innerText = reserved;
+      document.getElementById('stat-packed').innerText = packed;
+      document.getElementById('stat-dispatched').innerText = dispatched;
+      document.getElementById('stat-returned').innerText = returned;
+      document.getElementById('stat-cancelled').innerText = cancelled;
     }
 
     // Auto-Sync Bookings logic
@@ -574,12 +800,12 @@
           <tr>
             <td><strong>${p.sku}</strong></td>
             <td>${p.title}</td>
-            <td><span class="badge badge-muted" style="text-transform: capitalize;">${p.business.replace(/_/g, ' ')}</span></td>
-            <td style="color:var(--cyan); font-weight:700;">${inv.available}</td>
-            <td style="color:#d97706; font-weight:600;">${inv.reserved}</td>
-            <td style="color:#2563eb; font-weight:600;">${inv.packed}</td>
+            <td><span class="badge-status dispatched" style="font-size: 0.72rem; padding: 0.15rem 0.4rem; background: var(--bg-elevated); border: 1px solid var(--border);">${p.business.replace(/_/g, ' ')}</span></td>
+            <td style="color:var(--success); font-weight:700;">${inv.available}</td>
+            <td style="color:var(--warning); font-weight:600;">${inv.reserved}</td>
+            <td style="color:var(--cyan-light); font-weight:600;">${inv.packed}</td>
             <td style="font-weight:600;">${inv.dispatched}</td>
-            <td style="color:#dc2626;">${inv.returned}</td>
+            <td style="color:var(--danger);">${inv.returned}</td>
             <td style="color:#4b5563;">${inv.cancelled}</td>
           </tr>
         `;
@@ -719,7 +945,7 @@
             <td><code>${t.sku}</code></td>
             <td><strong>${t.quantity}</strong></td>
             <td>${date}</td>
-            <td class="text-right">
+            <td style="text-align:right;">
               <button class="btn btn-outline btn-sm" style="border-color:#ef4444; color:#ef4444;" onclick="returnItem('${t.id}', '${t.sku}', ${t.quantity})">
                 ❌ Cancelled
               </button>
@@ -737,7 +963,7 @@
       const cancellable = activeTransactions.filter(t => ['reserved', 'packed'].includes(t.status) && t.type === 'customer_order');
 
       if (cancellable.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted" style="padding:2rem 0;">No active queue items to cancel.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted" style="padding:2rem 0;">No active reservation items in queue.</td></tr>`;
         return;
       }
 
@@ -751,7 +977,7 @@
             <td><code>${t.sku}</code></td>
             <td><strong>${t.quantity}</strong></td>
             <td><span class="badge-status ${t.status === 'reserved' ? 'badge-reserved':'badge-packed'}">${t.status}</span></td>
-            <td class="text-right">
+            <td style="text-align:right;">
               <button class="btn btn-outline btn-sm" style="border-color:#ef4444; color:#ef4444;" onclick="cancelQueueItem('${t.id}', '${t.sku}', ${t.quantity}, '${t.status}')">
                 Cancel Order
               </button>
@@ -774,13 +1000,13 @@
       }
 
       logs.forEach(t => {
-        const time = new Date(t.updated_at).toLocaleString();
+        const time = new Date(t.updated_at).toLocaleTimeString();
         let message = '';
 
         if (t.status === 'ordered') {
           message = `ordered supplier replenishment: ${t.quantity}x ${t.sku}`;
         } else if (t.status === 'received') {
-          message = `warehouse received/re-shelved: ${t.quantity}x ${t.sku} to Available`;
+          message = `received/re-shelved: ${t.quantity}x ${t.sku} to Available`;
         } else if (t.status === 'reserved') {
           message = `order reserved: ${t.quantity}x ${t.sku} for order no. ${t.reference_id || 'N/A'} (${t.customer_name || 'N/A'})`;
         } else if (t.status === 'packed') {
@@ -997,7 +1223,7 @@
         alert('Sync error: ' + err.message);
       } finally {
         document.getElementById('btn-sync').disabled = false;
-        document.getElementById('btn-sync').innerText = '🔄 Sync Bookings Now';
+        document.getElementById('btn-sync').innerText = '🔄 Sync Bookings';
       }
     });
 
