@@ -449,21 +449,77 @@
 
           <!-- Tab Panel: Order -->
           <div class="tab-panel" id="panel-order">
-            <div class="panel" style="padding: 1.5rem; max-width: 500px;">
-              <div class="panel-header" style="border:none; padding:0; margin-bottom: 1.25rem;">Order from Supplier</div>
-              <form id="supplier-order-form" onsubmit="handleSupplierOrder(event)">
-                <div class="form-group" style="margin-bottom: 1.25rem;">
-                  <label class="form-label">Select SKU</label>
-                  <select class="form-select" id="order-sku" required>
-                    <option value="">-- Choose a Product --</option>
-                  </select>
+            <div class="panel" style="margin-bottom: 2rem;">
+              <div class="panel-header">Supplier Order Catalog</div>
+              
+              <!-- Search & Page Stats -->
+              <div style="display: flex; gap: 1rem; align-items: center; justify-content: space-between; padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); flex-wrap: wrap; background: var(--bg-surface);">
+                <div style="display: flex; gap: 0.75rem; align-items: center; flex: 1; min-width: 280px;">
+                  <input type="search" id="supplier-search" placeholder="Search by SKU or title..." oninput="handleSupplierSearch(event)" class="form-input" style="max-width: 380px;" />
+                  <span id="supplier-count-badge" class="badge-status badge-packed" style="background: var(--bg-elevated); color: var(--text-secondary); border: 1px solid var(--border);">0 products</span>
                 </div>
-                <div class="form-group" style="margin-bottom: 1.5rem;">
-                  <label class="form-label">Quantity Ordered</label>
-                  <input type="number" class="form-input" id="order-qty" min="1" placeholder="20" required />
+                <div id="supplier-page-info" style="font-size: 0.8rem; color: var(--text-muted); font-weight: 600;">Page 1 of 1</div>
+              </div>
+              
+              <!-- Pager Row -->
+              <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1.25rem; border-bottom: 1px solid var(--border); background: var(--bg-surface); flex-wrap: wrap; gap: 0.75rem;">
+                <div id="supplier-pager" style="display: flex; gap: 0.35rem; align-items: center;">
+                  <!-- Pagination buttons injected here -->
                 </div>
-                <button type="submit" class="btn btn-primary" style="width:100%;">Create Supplier PO (+Incoming)</button>
-              </form>
+                <div id="supplier-selected-info" style="font-size: 0.8rem; color: var(--text-secondary); font-weight: 600;">No items selected</div>
+              </div>
+
+              <!-- Product Grid Table -->
+              <div style="overflow-x: auto; width: 100%;">
+                <table>
+                  <thead>
+                    <tr>
+                      <th style="width: 100px;">Image</th>
+                      <th style="width: 160px;">Product Code</th>
+                      <th>Product Title</th>
+                      <th style="width: 140px;">Quantity</th>
+                      <th style="width: 160px; text-align: right;">Dealer Price</th>
+                      <th style="width: 160px; text-align: right;">Line Total</th>
+                    </tr>
+                  </thead>
+                  <tbody id="supplier-product-list">
+                    <tr><td colspan="6" class="text-center" style="padding: 2rem 0;">Loading product catalog...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <!-- Tally Summary Section -->
+              <div style="padding: 1.5rem; border-top: 1px solid var(--border); background: var(--bg-elevated);">
+                <div style="font-size: 0.85rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); letter-spacing: 0.05em; margin-bottom: 1rem;">
+                  Tally of Selected Products
+                </div>
+                
+                <!-- Table headers for tally -->
+                <div style="display: flex; align-items: center; gap: 1rem; font-size: 0.75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border);">
+                  <div style="width: 180px;">Unit Code</div>
+                  <div style="width: 90px; text-align: right;">Quantity</div>
+                  <div style="width: 140px; text-align: right;">Price</div>
+                  <div style="margin-left: auto; width: 160px; text-align: right;">Amount</div>
+                </div>
+
+                <div id="supplier-tally-list" style="padding-top: 0.5rem;">
+                  <div style="font-size: 0.82rem; color: var(--text-muted); padding: 0.5rem 0;">No products selected.</div>
+                </div>
+
+                <!-- Tally Total -->
+                <div id="supplier-tally-total" style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border); text-align: right; font-size: 1.05rem; font-weight: 800; color: var(--text-primary); font-family: var(--font-mono);">
+                  Total: ₱0.00
+                </div>
+
+                <!-- Submit Button -->
+                <div style="margin-top: 1.5rem; text-align: right;">
+                  <span style="font-size: 0.75rem; color: var(--text-muted); margin-right: 1.25rem;">Only items with a quantity greater than 0 will be submitted.</span>
+                  <button id="btn-supplier-order-submit" class="btn btn-primary" style="padding: 0.75rem 2rem; font-size: 0.9rem;" onclick="submitSupplierOrder()" disabled>
+                    Request Order
+                  </button>
+                </div>
+              </div>
+
             </div>
           </div>
 
@@ -608,6 +664,19 @@
     let activeTransactions = [];
     let bookings = [];
 
+    // Supplier Order State
+    let supplierOrderSearch = "";
+    let supplierOrderPage = 1;
+    const supplierOrderPageSize = 10;
+    let supplierOrderQuantities = {};
+    let supplierOrderPosting = false;
+
+    // Premium Currency Formatter
+    function formatMoney(cents) {
+      const php = (cents || 0) / 100;
+      return "₱" + php.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
     // Switch between tabs
     window.switchTab = function(tabId) {
       document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
@@ -639,17 +708,10 @@
     }
 
     async function loadCoreData() {
-      // 1. Fetch products
-      const { data: pData, error: pErr } = await sb.from('products').select('sku, title, business').order('sku');
+      // 1. Fetch products (with image_main and dealer_price columns)
+      const { data: pData, error: pErr } = await sb.from('products').select('sku, title, business, image_main, dealer_price').order('sku');
       if (pErr) throw pErr;
       allProducts = pData || [];
-
-      // Populate supplier order dropdown
-      const select = document.getElementById('order-sku');
-      select.innerHTML = '<option value="">-- Choose a Product --</option>';
-      allProducts.forEach(p => {
-        select.innerHTML += `<option value="${p.sku}">${p.title} (${p.sku})</option>`;
-      });
     }
 
     async function refreshDashboard() {
@@ -669,6 +731,7 @@
 
       // Render all tabs
       renderInventorySummary();
+      renderSupplierOrderTab();
       renderReceiveTab();
       renderPackTab();
       renderDispatchTab();
@@ -1047,37 +1110,276 @@
       else badgeDsp.style.display = 'none';
     }
 
-    // ACTION: Create Supplier PO
-    window.handleSupplierOrder = async function(e) {
-      e.preventDefault();
-      const sku = document.getElementById('order-sku').value;
-      const qty = parseInt(document.getElementById('order-qty').value);
-      
-      if (!sku || qty <= 0) return;
+    // Render Tab 2: Supplier Order Catalog
+    window.renderSupplierOrderTab = function() {
+      const tbody = document.getElementById('supplier-product-list');
+      if (!tbody) return;
 
-      const txPayload = {
-        sku: sku,
-        quantity: qty,
-        type: 'supplier_order',
-        status: 'ordered',
-        timestamp_ordered: new Date().toISOString()
-      };
+      // Filter products
+      const query = supplierOrderSearch.toLowerCase().trim();
+      const filtered = allProducts.filter(p => {
+        const sku = (p.sku || '').toLowerCase();
+        const title = (p.title || '').toLowerCase();
+        return !query || sku.includes(query) || title.includes(query);
+      });
 
-      const { error } = await sb.from('inventory_transactions').insert([txPayload]);
-      if (error) {
-        alert('Failed to log supplier order: ' + error.message);
+      // Paginate
+      const total = filtered.length;
+      const pages = Math.max(1, Math.ceil(total / supplierOrderPageSize));
+      if (supplierOrderPage > pages) supplierOrderPage = pages;
+      if (supplierOrderPage < 1) supplierOrderPage = 1;
+
+      const start = (supplierOrderPage - 1) * supplierOrderPageSize;
+      const paginated = filtered.slice(start, start + supplierOrderPageSize);
+
+      // Update counters
+      document.getElementById('supplier-count-badge').innerText = `${total} product${total !== 1 ? 's' : ''}`;
+      document.getElementById('supplier-page-info').innerText = `Page ${supplierOrderPage} of ${pages}`;
+
+      // Render Pager Buttons
+      renderSupplierPager(pages, supplierOrderPage);
+
+      // Render Table Rows
+      tbody.innerHTML = '';
+      if (paginated.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted" style="padding: 2rem 0;">No matching products found.</td></tr>`;
+        renderSupplierTally();
         return;
       }
 
-      // Sync inventory rows just in case it doesn't exist
-      const { data: invRow } = await sb.from('inventory').select('*').eq('sku', sku);
-      if (!invRow || invRow.length === 0) {
-        await sb.from('inventory').insert([{ sku: sku, available: 0 }]);
+      paginated.forEach(p => {
+        const qty = supplierOrderQuantities[p.sku] !== undefined ? supplierOrderQuantities[p.sku] : "";
+        
+        // Image absolute path resolution
+        let imageSrc = p.image_main;
+        if (!imageSrc || !imageSrc.match(/^https?:\/\//)) {
+          imageSrc = '../../assets/og-image.png'; // local default
+        }
+
+        const lineTotalText = qty && qty > 0 
+          ? formatMoney(p.dealer_price * qty) 
+          : "";
+
+        tbody.innerHTML += `
+          <tr data-sku="${p.sku}">
+            <td>
+              <img src="${imageSrc}" alt="${p.sku}" style="width: 80px; height: 50px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-elevated); display: block;" />
+            </td>
+            <td><strong style="font-family: var(--font-mono);">${p.sku}</strong></td>
+            <td>${p.title}</td>
+            <td>
+              <input type="number" class="form-input" min="0" step="1" placeholder="0" value="${qty}" style="width: 90px;" oninput="updateSupplierQty('${p.sku}', this.value)" />
+            </td>
+            <td style="text-align: right; font-family: var(--font-mono);">${formatMoney(p.dealer_price)}</td>
+            <td data-role="line-total" style="text-align: right; font-family: var(--font-mono); font-weight: 700; color: var(--text-primary);">${lineTotalText}</td>
+          </tr>
+        `;
+      });
+
+      renderSupplierTally();
+    };
+
+    function renderSupplierPager(pages, current) {
+      const pagerWrap = document.getElementById('supplier-pager');
+      if (!pagerWrap) return;
+      pagerWrap.innerHTML = '';
+
+      function createButton(label, pageNum, disabled, active) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = active ? 'btn btn-primary btn-sm' : 'btn btn-outline btn-sm';
+        btn.innerText = label;
+        btn.disabled = disabled;
+        btn.style.padding = '0.35rem 0.65rem';
+        btn.style.fontSize = '0.75rem';
+        if (!disabled) {
+          btn.onclick = () => {
+            supplierOrderPage = pageNum;
+            renderSupplierOrderTab();
+          };
+        }
+        return btn;
       }
 
-      document.getElementById('supplier-order-form').reset();
-      await refreshDashboard();
-      alert(`Supplier order logged for ${qty}x ${sku}. Check Receive tab!`);
+      // Prev Button
+      pagerWrap.appendChild(createButton('Prev', current - 1, current <= 1, false));
+
+      // Page numbers (up to 7 buttons, or ellipses)
+      const buildPageButtons = (totPages, curr) => {
+        const btns = [];
+        if (totPages <= 7) {
+          for (let i = 1; i <= totPages; i++) btns.push(i);
+          return btns;
+        }
+        btns.push(1);
+        const left = Math.max(2, curr - 2);
+        const right = Math.min(totPages - 1, curr + 2);
+        if (left > 2) btns.push('...');
+        for (let j = left; j <= right; j++) btns.push(j);
+        if (right < totPages - 1) btns.push('...');
+        btns.push(totPages);
+        return btns;
+      };
+
+      const pagesList = buildPageButtons(pages, current);
+      pagesList.forEach(item => {
+        if (item === '...') {
+          const dots = document.createElement('span');
+          dots.innerText = '...';
+          dots.style.padding = '0 0.25rem';
+          dots.style.fontSize = '0.8rem';
+          dots.style.color = 'var(--text-muted)';
+          pagerWrap.appendChild(dots);
+        } else {
+          pagerWrap.appendChild(createButton(String(item), item, false, item === current));
+        }
+      });
+
+      // Next Button
+      pagerWrap.appendChild(createButton('Next', current + 1, current >= pages, false));
+    }
+
+    window.handleSupplierSearch = function(e) {
+      supplierOrderSearch = e.target.value;
+      supplierOrderPage = 1;
+      renderSupplierOrderTab();
+    };
+
+    window.updateSupplierQty = function(sku, value) {
+      const parsed = parseInt(value);
+      if (isNaN(parsed) || parsed <= 0) {
+        delete supplierOrderQuantities[sku];
+      } else {
+        supplierOrderQuantities[sku] = parsed;
+      }
+
+      // In-place update of the line total column for the changed SKU to preserve cursor focus
+      const row = Array.from(document.querySelectorAll('#supplier-product-list tr')).find(tr => tr.getAttribute('data-sku') === sku);
+      if (row) {
+        const lineTotalCell = row.querySelector('td[data-role="line-total"]');
+        const prod = allProducts.find(p => p.sku === sku);
+        if (lineTotalCell && prod) {
+          const qty = supplierOrderQuantities[sku] || 0;
+          lineTotalCell.innerText = qty > 0 ? formatMoney(prod.dealer_price * qty) : "";
+        }
+      }
+
+      // Update selection info and tally
+      renderSupplierTally();
+    };
+
+    function renderSupplierTally() {
+      const tallyList = document.getElementById('supplier-tally-list');
+      const tallyTotal = document.getElementById('supplier-tally-total');
+      const submitBtn = document.getElementById('btn-supplier-order-submit');
+      const selectedInfo = document.getElementById('supplier-selected-info');
+      if (!tallyList) return;
+
+      tallyList.innerHTML = '';
+      let totalCents = 0;
+      let selectedCount = 0;
+
+      allProducts.forEach(p => {
+        const qty = supplierOrderQuantities[p.sku];
+        if (qty && qty > 0) {
+          selectedCount++;
+          const price = p.dealer_price || 0;
+          const amt = price * qty;
+          totalCents += amt;
+
+          tallyList.innerHTML += `
+            <div style="display: flex; align-items: baseline; gap: 1rem; font-size: 0.82rem; padding: 0.5rem 0; color: var(--text-secondary); border-bottom: 1px solid var(--border);">
+              <div style="width: 180px; font-family: var(--font-mono); font-weight: 700; color: var(--text-primary);">${p.sku}</div>
+              <div style="width: 90px; text-align: right; font-weight: 700; color: var(--text-primary); font-family: var(--font-mono);">${qty}</div>
+              <div style="width: 140px; text-align: right; font-family: var(--font-mono);">${formatMoney(price)}</div>
+              <div style="margin-left: auto; width: 160px; text-align: right; font-weight: 800; color: var(--text-primary); font-family: var(--font-mono);">${formatMoney(amt)}</div>
+            </div>
+          `;
+        }
+      });
+
+      if (selectedCount === 0) {
+        tallyList.innerHTML = `<div style="font-size: 0.82rem; color: var(--text-muted); padding: 0.5rem 0;">No products selected.</div>`;
+        tallyTotal.innerText = 'Total: ₱0.00';
+        selectedInfo.innerText = 'No items selected';
+        submitBtn.disabled = true;
+        submitBtn.innerText = 'Request Order';
+        return;
+      }
+
+      tallyTotal.innerText = `Total: ${formatMoney(totalCents)}`;
+      selectedInfo.innerText = `${selectedCount} item${selectedCount !== 1 ? 's' : ''} selected`;
+      
+      if (!supplierOrderPosting) {
+        submitBtn.disabled = false;
+        submitBtn.innerText = 'Request Order';
+      } else {
+        submitBtn.disabled = true;
+        submitBtn.innerText = 'Requesting...';
+      }
+    }
+
+    window.submitSupplierOrder = async function() {
+      const items = [];
+      allProducts.forEach(p => {
+        const qty = supplierOrderQuantities[p.sku];
+        if (qty && qty > 0) {
+          items.push({ sku: p.sku, qty: qty });
+        }
+      });
+
+      if (items.length === 0) return;
+
+      supplierOrderPosting = true;
+      const submitBtn = document.getElementById('btn-supplier-order-submit');
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.innerText = 'Requesting...';
+      }
+
+      try {
+        const payloads = items.map(item => ({
+          sku: item.sku,
+          quantity: item.qty,
+          type: 'supplier_order',
+          status: 'ordered',
+          timestamp_ordered: new Date().toISOString()
+        }));
+
+        // Bulk insert into Supabase
+        const { error: txErr } = await sb.from('inventory_transactions').insert(payloads);
+        if (txErr) throw txErr;
+
+        // Ensure inventory rows exist for these SKUs in bulk
+        const uniqueSkus = [...new Set(items.map(i => i.sku))];
+        const { data: existingRows, error: checkErr } = await sb.from('inventory').select('sku').in('sku', uniqueSkus);
+        if (checkErr) throw checkErr;
+        
+        const existingSkus = new Set((existingRows || []).map(r => r.sku));
+        const newInventoryRows = uniqueSkus
+          .filter(sku => !existingSkus.has(sku))
+          .map(sku => ({ sku: sku, available: 0 }));
+        
+        if (newInventoryRows.length > 0) {
+          const { error: insErr } = await sb.from('inventory').insert(newInventoryRows);
+          if (insErr) throw insErr;
+        }
+
+        // Reset state
+        supplierOrderQuantities = {};
+        supplierOrderSearch = "";
+        const searchInput = document.getElementById('supplier-search');
+        if (searchInput) searchInput.value = "";
+
+        await refreshDashboard();
+        alert('Supplier order successfully requested!');
+      } catch (err) {
+        console.error(err);
+        alert('Failed to request supplier order: ' + err.message);
+      } finally {
+        supplierOrderPosting = false;
+        renderSupplierOrderTab();
+      }
     };
 
     // ACTION: Warehouse Confirms Receipt
