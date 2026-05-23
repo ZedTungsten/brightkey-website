@@ -360,7 +360,7 @@ async function buildProducts() {
     if (available > 0) {
       $('[data-template="status-badge"]').text('In Stock').attr('class', 'badge badge-cyan');
       let invText = `<strong style="color:var(--text-primary);">${available} available</strong> in our local warehouse. Ready to ship (delivered in 2-3 days).`;
-      if (ordered > 0) invText += ` <span style="color:#f59e0b;">🔥 ${ordered} ordered in the last 30 days.</span>`;
+      if (ordered > 0) invText += ` <span style="color:#f59e0b; font-weight: 500;"><svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: -2px; margin-right: 4px; display: inline-block;"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>${ordered} ordered in the last 30 days.</span>`;
       $('[data-template="inventory-text"]').html(invText);
       $('[data-template="btn-add-to-cart"]').text('Add to Cart').removeAttr('disabled');
     } else {
