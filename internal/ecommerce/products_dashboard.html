@@ -1148,6 +1148,90 @@
     document.getElementById('btn-publish').addEventListener('click', publishSite);
     document.getElementById('drawer-close').addEventListener('click', closeDrawer);
     document.getElementById('drawer-cancel').addEventListener('click', closeDrawer);
+
+    // ─────────────────────────────────────────────────────
+    // Direct Supabase Storage Uploads
+    // ─────────────────────────────────────────────────────
+    const mediaInputs = document.querySelectorAll('#tab-media input[type="url"]');
+    const uploadInput = document.createElement('input');
+    uploadInput.type = 'file';
+    uploadInput.style.display = 'none';
+    document.body.appendChild(uploadInput);
+
+    let currentUploadTarget = null;
+
+    mediaInputs.forEach(input => {
+      const wrapper = document.createElement('div');
+      wrapper.style.display = 'flex';
+      wrapper.style.gap = '0.5rem';
+      
+      input.parentNode.insertBefore(wrapper, input);
+      wrapper.appendChild(input);
+      input.style.flex = '1';
+
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn btn-outline';
+      btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>';
+      btn.title = "Upload to Supabase Storage";
+      btn.style.padding = '0 0.75rem';
+      
+      btn.addEventListener('click', () => {
+        const sku = g('f-sku');
+        if (!sku) {
+          toast("Please enter an SKU first before uploading media.", "warning");
+          return;
+        }
+        currentUploadTarget = input;
+        
+        if (input.id.includes('image')) uploadInput.accept = 'image/*';
+        else if (input.id.includes('video')) uploadInput.accept = 'video/*';
+        else uploadInput.accept = '*/*';
+        
+        uploadInput.click();
+      });
+
+      wrapper.appendChild(btn);
+    });
+
+    uploadInput.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file || !currentUploadTarget) return;
+
+      const sku = g('f-sku').trim().toUpperCase();
+      const btn = currentUploadTarget.nextElementSibling;
+      const originalHtml = btn.innerHTML;
+      
+      try {
+        btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 1s linear infinite"><style>@keyframes spin { 100% { transform:rotate(360deg); } }</style><circle cx="12" cy="12" r="10" stroke-opacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round"/></svg>';
+        btn.disabled = true;
+
+        const cleanName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+        const filePath = `products/${sku}/${Date.now()}_${cleanName}`;
+
+        const { data, error } = await window.BKAuth.sb.storage
+          .from('brightkey-assets')
+          .upload(filePath, file, { upsert: true });
+
+        if (error) throw error;
+
+        const { data: urlData } = window.BKAuth.sb.storage
+          .from('brightkey-assets')
+          .getPublicUrl(filePath);
+
+        currentUploadTarget.value = urlData.publicUrl;
+        currentUploadTarget.dispatchEvent(new Event('input'));
+        
+        toast("File uploaded securely!", "success");
+      } catch (err) {
+        console.error(err);
+        toast("Upload failed: " + err.message, "error");
+      } finally {
+        btn.innerHTML = originalHtml;
+        btn.disabled = false;
+        uploadInput.value = ''; 
+      }
+    });
     document.getElementById('drawer-overlay').addEventListener('click', closeDrawer);
     document.getElementById('drawer-save').addEventListener('click', saveProduct);
 
