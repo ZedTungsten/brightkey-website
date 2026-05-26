@@ -430,8 +430,10 @@ async function buildProducts() {
       `).join('');
       $('[data-template="specs-table"]').html(specsHtml);
       $('[data-template="specs-wrapper"]').css('display', 'block');
+      $('[data-template="specs-tab-btn"]').css('display', 'block');
     } else {
       $('[data-template="specs-wrapper"]').css('display', 'none');
+      $('[data-template="specs-tab-btn"]').css('display', 'none');
     }
 
     // Features
@@ -440,8 +442,10 @@ async function buildProducts() {
     if (featuresHtml) {
       $('[data-template="features-list"]').html(featuresHtml);
       $('[data-template="features-wrapper"]').css('display', 'block');
+      $('[data-template="features-tab-btn"]').css('display', 'block');
     } else {
       $('[data-template="features-wrapper"]').css('display', 'none');
+      $('[data-template="features-tab-btn"]').css('display', 'none');
     }
 
     // Downloads & Resources
