@@ -98,13 +98,13 @@ function renderAPlusContent(blocks) {
         </div>
       `;
       html += `
-        <div style="background:${bg}; display:flex; flex-wrap:wrap; border-top:1px solid var(--border);">
+        <div style="background:${bg}; display:flex; flex-wrap:wrap;">
           ${b.type === 'image_text' ? mediaBlock + textBlock : textBlock + mediaBlock}
         </div>
       `;
     } else if (b.type === 'text_center') {
       html += `
-        <div style="background:${bg}; padding:4rem 2rem; text-align:center; border-top:1px solid var(--border);">
+        <div style="background:${bg}; padding:4rem 2rem; text-align:center;">
           <div style="max-width:800px; margin:0 auto;">
             ${b.header ? `<h2 style="font-size:2.5rem; margin-bottom:1.5rem; color:var(--text-primary);">${b.header}</h2>` : ''}
             ${b.body ? `<p style="font-size:1.1rem; line-height:1.8; color:var(--text-secondary); white-space:pre-wrap;">${b.body}</p>` : ''}
@@ -113,13 +113,13 @@ function renderAPlusContent(blocks) {
       `;
     } else if (b.type === 'image_full') {
       html += `
-        <div style="width:100%; border-top:1px solid var(--border);">
+        <div style="width:100%;">
           ${getMediaHtml(b.mediaUrl)}
         </div>
       `;
     } else if (b.type === 'grid_2x2') {
       html += `
-        <div style="background:${bg}; padding:3rem 2rem; border-top:1px solid var(--border);">
+        <div style="background:${bg}; padding:3rem 2rem;">
           <div style="max-width:1200px; margin:0 auto; display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:1.5rem;">
             ${b.img1 ? `<div style="aspect-ratio:1/1; border-radius:var(--radius-md); overflow:hidden;">${getMediaHtml(b.img1)}</div>` : ''}
             ${b.img2 ? `<div style="aspect-ratio:1/1; border-radius:var(--radius-md); overflow:hidden;">${getMediaHtml(b.img2)}</div>` : ''}
@@ -141,7 +141,7 @@ function renderAPlusContent(blocks) {
       `).join('');
       
       html += `
-        <div style="background:${bg}; padding:4rem 2rem; border-top:1px solid var(--border); overflow:hidden;">
+        <div style="background:${bg}; padding:4rem 2rem; overflow:hidden;">
           <div style="max-width:1200px; margin:0 auto;">
             ${b.header ? `<h2 style="font-size:2.5rem; margin-bottom:0.5rem; text-align:center; color:var(--text-primary);">${b.header}</h2>` : ''}
             ${b.subheader ? `<p style="font-size:1.1rem; color:var(--text-secondary); text-align:center; margin-bottom:3rem;">${b.subheader}</p>` : ''}
