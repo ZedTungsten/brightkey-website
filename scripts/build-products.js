@@ -29,6 +29,74 @@ function displayPrice(p) {
   return (p.discounted_price > 0) ? p.discounted_price : (p.sale_price || 0);
 }
 
+/** Get HTML for promotional badges/tags */
+function getPromoTagsHtml(tags) {
+  if (!tags || !Array.isArray(tags) || tags.length === 0) return '';
+  
+  const map = {
+    'best-seller': `
+      <span class="badge badge-best-seller">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" style="display:inline-block;vertical-align:middle;margin-top:-2px;"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+        Best Seller
+      </span>
+    `,
+    'hot': `
+      <span class="badge badge-hot">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" style="display:inline-block;vertical-align:middle;margin-top:-2px;"><path d="M12 2c0 0-4.5 4.5-4.5 8.5C7.5 14.64 10.86 18 15 18c4.14 0 7.5-3.36 7.5-7.5C22.5 6.5 18 2 18 2zm0 14c-2.21 0-4-1.79-4-4 0-1.66 1.34-3 3-3s3 1.34 3 3c0 2.21-1.79 4-4 4z"/></svg>
+        Hot
+      </span>
+    `,
+    'limited-time': `
+      <span class="badge badge-limited">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;margin-top:-2px;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        Limited Time
+      </span>
+    `,
+    'new': `
+      <span class="badge badge-new-promo">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;margin-top:-2px;"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+        New
+      </span>
+    `
+  };
+
+  return tags.map(t => map[t] || '').filter(Boolean).join('');
+}
+
+/** Get HTML for promotional badges/tags inside cards (smaller size) */
+function getPromoTagsHtmlForCard(tags) {
+  if (!tags || !Array.isArray(tags) || tags.length === 0) return '';
+  
+  const map = {
+    'best-seller': `
+      <span class="badge badge-best-seller" style="font-size: 0.55rem; padding: 0.15rem 0.4rem; box-shadow: 0 2px 4px rgba(0,0,0,0.15);">
+        <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor" style="display:inline-block;vertical-align:middle;margin-top:-1.5px;margin-right:1px;"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+        Best Seller
+      </span>
+    `,
+    'hot': `
+      <span class="badge badge-hot" style="font-size: 0.55rem; padding: 0.15rem 0.4rem; box-shadow: 0 2px 4px rgba(0,0,0,0.15);">
+        <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor" style="display:inline-block;vertical-align:middle;margin-top:-1.5px;margin-right:1px;"><path d="M12 2c0 0-4.5 4.5-4.5 8.5C7.5 14.64 10.86 18 15 18c4.14 0 7.5-3.36 7.5-7.5C22.5 6.5 18 2 18 2zm0 14c-2.21 0-4-1.79-4-4 0-1.66 1.34-3 3-3s3 1.34 3 3c0 2.21-1.79 4-4 4z"/></svg>
+        Hot
+      </span>
+    `,
+    'limited-time': `
+      <span class="badge badge-limited" style="font-size: 0.55rem; padding: 0.15rem 0.4rem; box-shadow: 0 2px 4px rgba(0,0,0,0.15);">
+        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;margin-top:-1.5px;margin-right:1px;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        Limited
+      </span>
+    `,
+    'new': `
+      <span class="badge badge-new-promo" style="font-size: 0.55rem; padding: 0.15rem 0.4rem; box-shadow: 0 2px 4px rgba(0,0,0,0.15);">
+        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;margin-top:-1.5px;margin-right:1px;"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+        New
+      </span>
+    `
+  };
+
+  return tags.map(t => map[t] || '').filter(Boolean).join('');
+}
+
 /** Pretty-print a feature column name: "pin_unlock" → "PIN Unlock" */
 function featureLabel(col) {
   let s = col.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
@@ -412,6 +480,14 @@ async function buildProducts() {
       $('[data-template="promo-badge"]').css('display', 'none');
     }
 
+    // Promo tags/badges (above price)
+    const promoTagsHtml = getPromoTagsHtml(p.promo_tags);
+    if (promoTagsHtml) {
+      $('[data-template="promo-tags"]').html(promoTagsHtml).css('display', 'flex');
+    } else {
+      $('[data-template="promo-tags"]').css('display', 'none');
+    }
+
     // Specs
     const specs = [
       { label: 'Warranty',           val: p.spec_warranty  },
@@ -553,9 +629,11 @@ async function buildProducts() {
           const priceStr = formatPHP(finalPrice);
           const beforeStr = (relProduct.before_price > 0) ? formatPHP(relProduct.before_price) : null;
           const imgUrl = relProduct.image_main || '../assets/og-image.png';
+          const relPromoTagsHtml = getPromoTagsHtmlForCard(relProduct.promo_tags);
 
           relatedHtml += `
-            <a href="${relProduct.slug}.html" class="card product-card card--spotlight" style="text-decoration:none; display:flex; flex-direction:column; padding: 1.25rem; border-radius:var(--radius-md); border:1px solid var(--border); background:var(--bg-surface); transition: transform 0.2s ease;">
+            <a href="${relProduct.slug}.html" class="card product-card card--spotlight" style="position: relative; text-decoration:none; display:flex; flex-direction:column; padding: 1.25rem; border-radius:var(--radius-md); border:1px solid var(--border); background:var(--bg-surface); transition: transform 0.2s ease;">
+              ${relPromoTagsHtml ? `<div style="position: absolute; top: 0.75rem; right: 0.75rem; display: flex; flex-direction: column; gap: 0.25rem; z-index: 10; pointer-events: none;">${relPromoTagsHtml}</div>` : ''}
               <div style="aspect-ratio:1/1; width:100%; border-radius:var(--radius-sm); border:1px solid var(--border); background:#fff; padding:0.5rem; display:flex; align-items:center; justify-content:center; overflow:hidden; margin-bottom:1rem;">
                 <img src="${imgUrl}" alt="${relProduct.title}" style="max-width:100%; max-height:100%; object-fit:contain;" />
               </div>
