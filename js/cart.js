@@ -200,26 +200,26 @@ function injectCartDrawer() {
           <div id="coupon-status" style="font-size:0.75rem; margin-top:0.4rem; display:none; font-weight:600;"></div>
         </div>
 
-        <div class="cart-drawer__summary" style="font-size: 1.1rem;">
+        <div class="cart-drawer__summary" style="font-size:0.95rem;">
           <span class="cart-drawer__subtotal-label">Subtotal</span>
-          <span class="cart-drawer__subtotal-val" id="cart-drawer-subtotal" style="font-size: 1.1rem;">₱0.00</span>
+          <span class="cart-drawer__subtotal-val" id="cart-drawer-subtotal" style="font-size:0.95rem;">₱0.00</span>
         </div>
-        
-        <div class="cart-drawer__summary" id="cart-drawer-discount-row" style="display:none; margin-top: 0.5rem; align-items: flex-start; font-size: 1.1rem;">
+
+        <div class="cart-drawer__summary" id="cart-drawer-discount-row" style="display:none; margin-top:0.5rem; align-items:flex-start; font-size:0.95rem;">
           <span class="cart-drawer__subtotal-label" id="cart-drawer-discount-label" style="display:flex; flex-direction:column; line-height:1.2;">
             <span>Order discount</span>
           </span>
-          <span class="cart-drawer__subtotal-val" id="cart-drawer-discount-val" style="font-weight:normal; color:var(--text-primary); font-size: 1.1rem;">-₱0.00</span>
+          <span class="cart-drawer__subtotal-val" id="cart-drawer-discount-val" style="font-weight:normal; color:var(--text-primary); font-size:0.95rem;">-₱0.00</span>
         </div>
 
-        <div class="cart-drawer__summary" style="margin-top:0.35rem;">
-          <span class="cart-drawer__subtotal-label" style="color:var(--text-secondary); font-weight:normal;">Shipping</span>
-          <span class="cart-drawer__subtotal-val" style="font-weight:normal; color:var(--text-secondary); font-size:0.85rem;">Calculated at next step</span>
+        <div class="cart-drawer__summary" style="margin-top:0.35rem; font-size:0.95rem;">
+          <span class="cart-drawer__subtotal-label" style="font-weight:normal;">Shipping</span>
+          <span class="cart-drawer__subtotal-val" style="font-weight:normal; color:var(--text-secondary); font-size:0.95rem;">Calculated at next step</span>
         </div>
-        
-        <div class="cart-drawer__summary" id="cart-drawer-total-row" style="display:none; margin-top:0.5rem; font-weight:700; border-top:1px solid var(--border); padding-top:0.5rem; font-size: 1.1rem;">
+
+        <div class="cart-drawer__summary" id="cart-drawer-total-row" style="display:none; margin-top:0.5rem; border-top:1px solid var(--border); padding-top:0.5rem; font-size:0.95rem;">
           <span class="cart-drawer__subtotal-label">Total</span>
-          <span class="cart-drawer__subtotal-val" id="cart-drawer-total-val" style="font-size: 1.1rem;">₱0.00</span>
+          <span class="cart-drawer__subtotal-val" id="cart-drawer-total-val" style="font-size:0.95rem;">₱0.00</span>
         </div>
 
         <div id="cart-drawer-savings-row" style="display:none; align-items:center; gap:0.35rem; color:var(--text-primary); font-size:0.8rem; font-weight:700; margin-top:0.05rem; margin-bottom:0.75rem; text-transform:uppercase;">
