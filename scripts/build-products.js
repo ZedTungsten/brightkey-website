@@ -297,6 +297,16 @@ async function buildProducts() {
         ${p.display_bought_month ? `<div style="font-size:0.95rem; color:var(--text-secondary); margin-bottom: 0.25rem;">${p.display_bought_month} bought last month</div>` : ''}
       `;
       $('[data-template="social-proof-bar"]').html(spHtml).css('display', 'block');
+      
+      // Also inject into the Customer Reviews section at the bottom (build-time)
+      $('#avg-rating-display').text(rating.toFixed(1));
+      $('#total-reviews-display').text(parseInt(p.display_reviews_count, 10).toLocaleString());
+      $('#summary-stars-display').html(`
+        <div style="position:relative; display:inline-block; line-height:1; white-space:nowrap;">
+          <span style="color:var(--border);">★★★★★</span>
+          <span style="color:#f59e0b; position:absolute; left:0; top:0; overflow:hidden; width:${pct}%; white-space:nowrap;">★★★★★</span>
+        </div>
+      `);
     }
 
     // Before price (strikethrough)
