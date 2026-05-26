@@ -187,14 +187,14 @@ function injectCartDrawer() {
 
         <div class="cart-drawer__summary" style="font-size: 1.1rem;">
           <span class="cart-drawer__subtotal-label">Subtotal</span>
-          <span class="cart-drawer__subtotal-val" id="cart-drawer-subtotal">₱0.00</span>
+          <span class="cart-drawer__subtotal-val" id="cart-drawer-subtotal" style="font-size: 0.9rem;">₱0.00</span>
         </div>
         
         <div class="cart-drawer__summary" id="cart-drawer-discount-row" style="display:none; margin-top: 0.5rem; align-items: flex-start; font-size: 1.1rem;">
           <span class="cart-drawer__subtotal-label" id="cart-drawer-discount-label" style="display:flex; flex-direction:column; line-height:1.2;">
             <span>Order discount</span>
           </span>
-          <span class="cart-drawer__subtotal-val" id="cart-drawer-discount-val" style="font-weight:normal; color:var(--text-primary);">-₱0.00</span>
+          <span class="cart-drawer__subtotal-val" id="cart-drawer-discount-val" style="font-weight:normal; color:var(--text-primary); font-size: 0.9rem;">-₱0.00</span>
         </div>
 
         <div class="cart-drawer__summary" style="margin-top:0.35rem;">
@@ -204,7 +204,7 @@ function injectCartDrawer() {
         
         <div class="cart-drawer__summary" id="cart-drawer-total-row" style="display:none; margin-top:0.5rem; font-weight:700; border-top:1px solid var(--border); padding-top:0.5rem; font-size: 1.4rem;">
           <span class="cart-drawer__subtotal-label">Total</span>
-          <span class="cart-drawer__subtotal-val" id="cart-drawer-total-val">₱0.00</span>
+          <span class="cart-drawer__subtotal-val" id="cart-drawer-total-val" style="font-size: 1.4rem;">₱0.00</span>
         </div>
 
         <div id="cart-drawer-savings-row" style="display:none; align-items:center; gap:0.35rem; color:var(--text-primary); font-size:0.8rem; font-weight:700; margin-top:0.15rem; text-transform:uppercase;">
