@@ -212,7 +212,6 @@
           <div class="panel">
             <h3>Storewide Free Shipping</h3>
 
-            <!-- Storewide row -->
             <div style="display:flex; align-items:center; gap:0.75rem; padding:0.65rem 0.75rem; background:var(--bg-elevated); border:1px solid var(--border); border-radius:var(--radius-sm); margin-bottom:1rem;">
               <input type="checkbox" id="fs-storewide" style="width:16px; height:16px; cursor:pointer;" />
               <label for="fs-storewide" style="font-weight:600; font-size:0.9rem; flex:1; cursor:pointer;">Storewide</label>
@@ -222,22 +221,26 @@
               </div>
             </div>
 
-            <!-- Per-business rows -->
             <div id="fs-business-rows"></div>
 
-            <button class="btn btn-outline btn-sm" style="margin-top:0.75rem;" onclick="addFsRow()">+ Add Business</button>
+            <div id="fs-add-row" style="display:none; align-items:center; gap:0.5rem; margin-top:0.5rem; padding:0.5rem 0.75rem; border:1px dashed var(--border); border-radius:var(--radius-sm);">
+              <select id="fs-biz-select" class="form-select" style="flex:1;"></select>
+              <button class="btn btn-cyan btn-sm" onclick="confirmAddFsBiz()">Add</button>
+              <button class="btn btn-outline btn-sm" onclick="cancelAddFsBiz()">Cancel</button>
+            </div>
+
+            <button id="fs-add-btn" class="btn btn-outline btn-sm" style="margin-top:0.75rem;" onclick="showFsAddRow()">+ Add Business Override</button>
 
             <div style="margin-top:1.25rem; padding-top:1rem; border-top:1px solid var(--border);">
-              <div class="form-hint" style="margin-bottom:0.75rem;">Set threshold to ₱0 to disable. Business-specific thresholds override the storewide threshold for that business.</div>
+              <div class="form-hint" style="margin-bottom:0.75rem;">Business-specific thresholds override the storewide threshold for that business.</div>
               <button class="btn btn-cyan btn-sm" id="btn-save-shipping" onclick="saveFreeShipping(event)">Save</button>
             </div>
           </div>
-          
+
           <!-- Delivery Lead Time Panel -->
           <div class="panel">
             <h3>Delivery Lead Time</h3>
 
-            <!-- Storewide row -->
             <div style="display:flex; align-items:center; gap:0.75rem; padding:0.65rem 0.75rem; background:var(--bg-elevated); border:1px solid var(--border); border-radius:var(--radius-sm); margin-bottom:1rem; flex-wrap:wrap;">
               <input type="checkbox" id="lt-storewide" style="width:16px; height:16px; cursor:pointer; flex-shrink:0;" />
               <label for="lt-storewide" style="font-weight:600; font-size:0.9rem; flex:1; min-width:60px; cursor:pointer;">Storewide</label>
@@ -255,13 +258,18 @@
               </div>
             </div>
 
-            <!-- Per-business rows -->
             <div id="lt-business-rows"></div>
 
-            <button class="btn btn-outline btn-sm" style="margin-top:0.75rem;" onclick="addLtRow()">+ Add Business</button>
+            <div id="lt-add-row" style="display:none; align-items:center; gap:0.5rem; margin-top:0.5rem; padding:0.5rem 0.75rem; border:1px dashed var(--border); border-radius:var(--radius-sm);">
+              <select id="lt-biz-select" class="form-select" style="flex:1;"></select>
+              <button class="btn btn-cyan btn-sm" onclick="confirmAddLtBiz()">Add</button>
+              <button class="btn btn-outline btn-sm" onclick="cancelAddLtBiz()">Cancel</button>
+            </div>
+
+            <button id="lt-add-btn" class="btn btn-outline btn-sm" style="margin-top:0.75rem;" onclick="showLtAddRow()">+ Add Business Override</button>
 
             <div style="margin-top:1.25rem; padding-top:1rem; border-top:1px solid var(--border);">
-              <div class="form-hint" style="margin-bottom:0.75rem;">Business-specific lead times override the storewide setting. Customers see "Get item in [date range]" on the product page.</div>
+              <div class="form-hint" style="margin-bottom:0.75rem;">Business overrides override the storewide lead time. Customers see "Get item in [date range]" on the product page.</div>
               <button class="btn btn-cyan btn-sm" id="btn-save-lt" onclick="saveLeadTime(event)">Save</button>
             </div>
           </div>
@@ -466,15 +474,20 @@
 
     let activeSkusList = [];
     let previewInterval = null;
-    let fsBusiness = [];
-    let ltBusiness = [];
+    let fsBusiness    = [];
+    let ltBusiness    = [];
+    let allBusinesses = []; // fetched from DB
 
-    const KNOWN_BUSINESSES = [
-      { name: 'smart_lock',        label: 'Smart Locks' },
-      { name: 'solar_power',       label: 'Solar Power' },
-      { name: 'cctv',              label: 'CCTV' },
-      { name: 'fire_extinguisher', label: 'Fire Extinguisher' },
-    ];
+    const KNOWN_BUSINESS_LABELS = {
+      smart_lock:        'Smart Locks',
+      solar_power:       'Solar Power',
+      cctv:              'CCTV',
+      fire_extinguisher: 'Fire Extinguisher',
+    };
+
+    function bizLabel(name) {
+      return KNOWN_BUSINESS_LABELS[name] || name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    }
 
     // --- Dom Load & Setup ---
     document.addEventListener('DOMContentLoaded', () => {
@@ -497,48 +510,28 @@
     // --- Load Data ---
     async function fetchPromoData() {
       try {
-        // Load free shipping config
+        // 1. Fetch distinct businesses from products table
+        const { data: bizData } = await sb.from('products').select('business').not('business', 'is', null);
+        if (bizData) {
+          const unique = [...new Set(bizData.map(p => p.business).filter(Boolean))];
+          allBusinesses = unique.map(name => ({ name, label: bizLabel(name) }));
+        }
+
+        // 2. Load free shipping config
         const { data: shippingData, error: sErr } = await sb
-          .from('global_settings')
-          .select('value')
-          .eq('key', 'free_shipping')
-          .single();
+          .from('global_settings').select('value').eq('key', 'free_shipping').single();
 
         if (!sErr && shippingData) {
           const val = shippingData.value || {};
           document.getElementById('fs-storewide').checked = val.storewide_enabled || false;
           document.getElementById('fs-storewide-threshold').value = ((val.threshold || 0) / 100).toFixed(2);
-
-          // Build business list: start from known businesses, then append any extras
-          const saved = (val.businesses || []);
-          const savedMap = {};
-          saved.forEach(b => { savedMap[b.name] = b; });
-
-          fsBusiness = KNOWN_BUSINESSES.map(kb => {
-            const s = savedMap[kb.name];
-            return { name: kb.name, label: kb.label, custom: false, enabled: s ? s.enabled : false, threshold: s ? s.threshold : 0 };
-          });
-
-          // Append any custom (non-known) saved businesses
-          saved.forEach(b => {
-            if (!KNOWN_BUSINESSES.find(kb => kb.name === b.name)) {
-              fsBusiness.push({ name: b.name, label: b.label || b.name, custom: true, enabled: b.enabled, threshold: b.threshold || 0 });
-            }
-          });
-
-          renderFsRows();
-        } else {
-          // Default: show known businesses unchecked
-          fsBusiness = KNOWN_BUSINESSES.map(kb => ({ ...kb, custom: false, enabled: false, threshold: 0 }));
+          fsBusiness = (val.businesses || []).map(b => ({ name: b.name, label: bizLabel(b.name), enabled: b.enabled, threshold: b.threshold || 0 }));
           renderFsRows();
         }
 
-        // Load announcement banner configurations
+        // 3. Load announcement bar
         const { data: announceData, error: aErr } = await sb
-          .from('global_settings')
-          .select('value')
-          .eq('key', 'announcement_bar')
-          .single();
+          .from('global_settings').select('value').eq('key', 'announcement_bar').single();
 
         if (!aErr && announceData) {
           const config = announceData.value;
@@ -553,12 +546,9 @@
           updateAnnouncePreview();
         }
 
-        // Load delivery lead time
+        // 4. Load delivery lead time
         const { data: ltData, error: ltErr } = await sb
-          .from('global_settings')
-          .select('value')
-          .eq('key', 'delivery_lead_time')
-          .single();
+          .from('global_settings').select('value').eq('key', 'delivery_lead_time').single();
 
         if (!ltErr && ltData) {
           const val = ltData.value || {};
@@ -567,103 +557,16 @@
           document.getElementById('lt-storewide-to-val').value   = val.to_value   ?? 3;
           setSelectVal('lt-storewide-from-unit', val.from_unit || 'days');
           setSelectVal('lt-storewide-to-unit',   val.to_unit   || 'days');
-
-          const saved = val.businesses || [];
-          const savedMap = {};
-          saved.forEach(b => { savedMap[b.name] = b; });
-
-          ltBusiness = KNOWN_BUSINESSES.map(kb => {
-            const s = savedMap[kb.name];
-            return { name: kb.name, label: kb.label, custom: false, enabled: s?.enabled || false, from_value: s?.from_value ?? 2, from_unit: s?.from_unit || 'days', to_value: s?.to_value ?? 3, to_unit: s?.to_unit || 'days' };
-          });
-          saved.forEach(b => {
-            if (!KNOWN_BUSINESSES.find(kb => kb.name === b.name)) {
-              ltBusiness.push({ name: b.name, label: b.label || b.name, custom: true, enabled: b.enabled, from_value: b.from_value ?? 2, from_unit: b.from_unit || 'days', to_value: b.to_value ?? 3, to_unit: b.to_unit || 'days' });
-            }
-          });
-        } else {
-          ltBusiness = KNOWN_BUSINESSES.map(kb => ({ ...kb, custom: false, enabled: false, from_value: 2, from_unit: 'days', to_value: 3, to_unit: 'days' }));
+          ltBusiness = (val.businesses || []).map(b => ({ name: b.name, label: bizLabel(b.name), enabled: b.enabled, from_value: b.from_value ?? 2, from_unit: b.from_unit || 'days', to_value: b.to_value ?? 3, to_unit: b.to_unit || 'days' }));
+          renderLtRows();
         }
-        renderLtRows();
 
-        // Load Coupons
+        // 5. Load Coupons
         fetchCouponsList();
 
       } catch (err) {
         console.error(err);
         showToast('Failed to load settings from database.', true);
-      }
-    }
-
-    // --- Free Shipping Row Rendering ---
-    function renderFsRows() {
-      const container = document.getElementById('fs-business-rows');
-      container.innerHTML = '';
-      fsBusiness.forEach((biz, idx) => {
-        const row = document.createElement('div');
-        row.style.cssText = 'display:flex; align-items:center; gap:0.75rem; padding:0.5rem 0.75rem; border-bottom:1px solid var(--border);';
-        row.innerHTML = `
-          <input type="checkbox" ${biz.enabled ? 'checked' : ''} onchange="fsBusiness[${idx}].enabled = this.checked" style="width:16px; height:16px; cursor:pointer; flex-shrink:0;" />
-          ${biz.custom
-            ? `<input type="text" class="form-input" value="${biz.label}" oninput="fsBusiness[${idx}].label = this.value; fsBusiness[${idx}].name = this.value.toLowerCase().replace(/\\s+/g,'_');" style="flex:1; font-size:0.9rem;" placeholder="Business name" />`
-            : `<span style="flex:1; font-size:0.9rem;">${biz.label}</span>`
-          }
-          <div style="position:relative; display:flex; align-items:center; flex-shrink:0;">
-            <span style="position:absolute; left:0.75rem; font-weight:600; color:var(--text-secondary); pointer-events:none;">₱</span>
-            <input type="number" class="form-input" value="${(biz.threshold / 100).toFixed(2)}" oninput="fsBusiness[${idx}].threshold = Math.round(parseFloat(this.value||0)*100)" style="padding-left:2rem; width:130px;" min="0" step="0.01" />
-          </div>
-          <button onclick="removeFsRow(${idx})" style="background:none; border:none; cursor:pointer; color:var(--text-muted); font-size:1.2rem; line-height:1; padding:0 0.25rem; flex-shrink:0;" title="Remove">&times;</button>
-        `;
-        container.appendChild(row);
-      });
-    }
-
-    window.addFsRow = () => {
-      fsBusiness.push({ name: '', label: '', custom: true, enabled: true, threshold: 0 });
-      renderFsRows();
-      // Focus the new name input
-      const inputs = document.querySelectorAll('#fs-business-rows input[type="text"]');
-      if (inputs.length) inputs[inputs.length - 1].focus();
-    };
-
-    window.removeFsRow = (idx) => {
-      fsBusiness.splice(idx, 1);
-      renderFsRows();
-    };
-
-    // --- Save Free Shipping ---
-    async function saveFreeShipping(e) {
-      e.preventDefault();
-      const storewideEnabled = document.getElementById('fs-storewide').checked;
-      const threshold = Math.round(parseFloat(document.getElementById('fs-storewide-threshold').value || '0') * 100);
-
-      const btn = document.getElementById('btn-save-shipping');
-      btn.disabled = true;
-      btn.innerText = 'Saving...';
-
-      const { error } = await sb
-        .from('global_settings')
-        .upsert({
-          key: 'free_shipping',
-          value: {
-            storewide_enabled: storewideEnabled,
-            threshold: threshold,
-            businesses: fsBusiness.map(b => ({
-              name: b.name,
-              label: b.label,
-              enabled: b.enabled,
-              threshold: b.threshold,
-            }))
-          }
-        });
-
-      btn.disabled = false;
-      btn.innerText = 'Save';
-
-      if (error) {
-        showToast(`Error: ${error.message}`, true);
-      } else {
-        showToast('Free shipping settings saved.');
       }
     }
 
@@ -674,9 +577,74 @@
     }
 
     function unitOptions(selected) {
-      return ['days', 'weeks', 'months'].map(u =>
-        `<option value="${u}"${u === selected ? ' selected' : ''}>${u.charAt(0).toUpperCase() + u.slice(1)}</option>`
+      return ['days','weeks','months'].map(u =>
+        `<option value="${u}"${u === selected ? ' selected' : ''}>${u.charAt(0).toUpperCase()+u.slice(1)}</option>`
       ).join('');
+    }
+
+    function availableForDropdown(existing) {
+      const usedNames = existing.map(b => b.name);
+      return allBusinesses.filter(b => !usedNames.includes(b.name));
+    }
+
+    // --- Free Shipping Rows ---
+    function renderFsRows() {
+      const container = document.getElementById('fs-business-rows');
+      container.innerHTML = '';
+      fsBusiness.forEach((biz, idx) => {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex; align-items:center; gap:0.75rem; padding:0.5rem 0.75rem; border-bottom:1px solid var(--border);';
+        row.innerHTML = `
+          <input type="checkbox" ${biz.enabled ? 'checked' : ''} onchange="fsBusiness[${idx}].enabled=this.checked" style="width:16px;height:16px;cursor:pointer;flex-shrink:0;" />
+          <span style="flex:1;font-size:0.9rem;">${biz.label}</span>
+          <div style="position:relative;display:flex;align-items:center;flex-shrink:0;">
+            <span style="position:absolute;left:0.75rem;font-weight:600;color:var(--text-secondary);pointer-events:none;">₱</span>
+            <input type="number" class="form-input" value="${(biz.threshold/100).toFixed(2)}" oninput="fsBusiness[${idx}].threshold=Math.round(parseFloat(this.value||0)*100)" style="padding-left:2rem;width:130px;" min="0" step="0.01" />
+          </div>
+          <button onclick="removeFsRow(${idx})" style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:1.2rem;line-height:1;padding:0 0.25rem;flex-shrink:0;">&times;</button>
+        `;
+        container.appendChild(row);
+      });
+    }
+
+    window.showFsAddRow = () => {
+      const avail = availableForDropdown(fsBusiness);
+      if (!avail.length) { showToast('All available businesses already added.'); return; }
+      const sel = document.getElementById('fs-biz-select');
+      sel.innerHTML = avail.map(b => `<option value="${b.name}">${b.label}</option>`).join('');
+      document.getElementById('fs-add-row').style.display = 'flex';
+      document.getElementById('fs-add-btn').style.display = 'none';
+    };
+    window.cancelAddFsBiz = () => {
+      document.getElementById('fs-add-row').style.display = 'none';
+      document.getElementById('fs-add-btn').style.display = '';
+    };
+    window.confirmAddFsBiz = () => {
+      const name = document.getElementById('fs-biz-select').value;
+      const biz = allBusinesses.find(b => b.name === name);
+      if (!biz) return;
+      fsBusiness.push({ name: biz.name, label: biz.label, enabled: true, threshold: 0 });
+      renderFsRows();
+      cancelAddFsBiz();
+    };
+    window.removeFsRow = (idx) => { fsBusiness.splice(idx, 1); renderFsRows(); };
+
+    // --- Save Free Shipping ---
+    async function saveFreeShipping(e) {
+      e.preventDefault();
+      const btn = document.getElementById('btn-save-shipping');
+      btn.disabled = true; btn.innerText = 'Saving...';
+      const { error } = await sb.from('global_settings').upsert({
+        key: 'free_shipping',
+        value: {
+          storewide_enabled: document.getElementById('fs-storewide').checked,
+          threshold: Math.round(parseFloat(document.getElementById('fs-storewide-threshold').value||'0')*100),
+          businesses: fsBusiness.map(b => ({ name: b.name, label: b.label, enabled: b.enabled, threshold: b.threshold }))
+        }
+      });
+      btn.disabled = false; btn.innerText = 'Save';
+      if (error) showToast(`Error: ${error.message}`, true);
+      else showToast('Free shipping settings saved.');
     }
 
     // --- Delivery Lead Time Rows ---
@@ -685,57 +653,62 @@
       container.innerHTML = '';
       ltBusiness.forEach((biz, idx) => {
         const row = document.createElement('div');
-        row.style.cssText = 'display:flex; align-items:center; gap:0.6rem; padding:0.5rem 0.75rem; border-bottom:1px solid var(--border); flex-wrap:wrap;';
+        row.style.cssText = 'display:flex;align-items:center;gap:0.6rem;padding:0.5rem 0.75rem;border-bottom:1px solid var(--border);flex-wrap:wrap;';
         row.innerHTML = `
-          <input type="checkbox" ${biz.enabled ? 'checked' : ''} onchange="ltBusiness[${idx}].enabled = this.checked" style="width:16px; height:16px; cursor:pointer; flex-shrink:0;" />
-          ${biz.custom
-            ? `<input type="text" class="form-input" value="${biz.label}" oninput="ltBusiness[${idx}].label = this.value; ltBusiness[${idx}].name = this.value.toLowerCase().replace(/\\s+/g,'_');" style="flex:1; min-width:80px; font-size:0.9rem;" placeholder="Business name" />`
-            : `<span style="flex:1; min-width:80px; font-size:0.9rem;">${biz.label}</span>`
-          }
-          <div style="display:flex; align-items:center; gap:0.4rem; flex-wrap:wrap; flex-shrink:0;">
-            <span style="font-size:0.8rem; color:var(--text-secondary);">From</span>
-            <input type="number" class="form-input" value="${biz.from_value}" oninput="ltBusiness[${idx}].from_value = parseInt(this.value)||0" style="width:52px;" min="0" step="1" />
-            <select class="form-select" onchange="ltBusiness[${idx}].from_unit = this.value" style="width:90px;">${unitOptions(biz.from_unit)}</select>
-            <span style="font-size:0.8rem; color:var(--text-secondary);">To</span>
-            <input type="number" class="form-input" value="${biz.to_value}" oninput="ltBusiness[${idx}].to_value = parseInt(this.value)||0" style="width:52px;" min="0" step="1" />
-            <select class="form-select" onchange="ltBusiness[${idx}].to_unit = this.value" style="width:90px;">${unitOptions(biz.to_unit)}</select>
+          <input type="checkbox" ${biz.enabled ? 'checked' : ''} onchange="ltBusiness[${idx}].enabled=this.checked" style="width:16px;height:16px;cursor:pointer;flex-shrink:0;" />
+          <span style="flex:1;min-width:80px;font-size:0.9rem;">${biz.label}</span>
+          <div style="display:flex;align-items:center;gap:0.4rem;flex-wrap:wrap;flex-shrink:0;">
+            <span style="font-size:0.8rem;color:var(--text-secondary);">From</span>
+            <input type="number" class="form-input" value="${biz.from_value}" oninput="ltBusiness[${idx}].from_value=parseInt(this.value)||0" style="width:52px;" min="0" step="1" />
+            <select class="form-select" onchange="ltBusiness[${idx}].from_unit=this.value" style="width:90px;">${unitOptions(biz.from_unit)}</select>
+            <span style="font-size:0.8rem;color:var(--text-secondary);">To</span>
+            <input type="number" class="form-input" value="${biz.to_value}" oninput="ltBusiness[${idx}].to_value=parseInt(this.value)||0" style="width:52px;" min="0" step="1" />
+            <select class="form-select" onchange="ltBusiness[${idx}].to_unit=this.value" style="width:90px;">${unitOptions(biz.to_unit)}</select>
           </div>
-          <button onclick="removeLtRow(${idx})" style="background:none; border:none; cursor:pointer; color:var(--text-muted); font-size:1.2rem; line-height:1; padding:0 0.25rem; flex-shrink:0;" title="Remove">&times;</button>
+          <button onclick="removeLtRow(${idx})" style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:1.2rem;line-height:1;padding:0 0.25rem;flex-shrink:0;">&times;</button>
         `;
         container.appendChild(row);
       });
     }
 
-    window.addLtRow = () => {
-      ltBusiness.push({ name: '', label: '', custom: true, enabled: true, from_value: 2, from_unit: 'days', to_value: 3, to_unit: 'days' });
-      renderLtRows();
-      const inputs = document.querySelectorAll('#lt-business-rows input[type="text"]');
-      if (inputs.length) inputs[inputs.length - 1].focus();
+    window.showLtAddRow = () => {
+      const avail = availableForDropdown(ltBusiness);
+      if (!avail.length) { showToast('All available businesses already added.'); return; }
+      const sel = document.getElementById('lt-biz-select');
+      sel.innerHTML = avail.map(b => `<option value="${b.name}">${b.label}</option>`).join('');
+      document.getElementById('lt-add-row').style.display = 'flex';
+      document.getElementById('lt-add-btn').style.display = 'none';
     };
-
-    window.removeLtRow = (idx) => {
-      ltBusiness.splice(idx, 1);
-      renderLtRows();
+    window.cancelAddLtBiz = () => {
+      document.getElementById('lt-add-row').style.display = 'none';
+      document.getElementById('lt-add-btn').style.display = '';
     };
+    window.confirmAddLtBiz = () => {
+      const name = document.getElementById('lt-biz-select').value;
+      const biz = allBusinesses.find(b => b.name === name);
+      if (!biz) return;
+      ltBusiness.push({ name: biz.name, label: biz.label, enabled: true, from_value: 2, from_unit: 'days', to_value: 3, to_unit: 'days' });
+      renderLtRows();
+      cancelAddLtBiz();
+    };
+    window.removeLtRow = (idx) => { ltBusiness.splice(idx, 1); renderLtRows(); };
 
     // --- Save Delivery Lead Time ---
     async function saveLeadTime(e) {
       e.preventDefault();
       const btn = document.getElementById('btn-save-lt');
       btn.disabled = true; btn.innerText = 'Saving...';
-
       const { error } = await sb.from('global_settings').upsert({
         key: 'delivery_lead_time',
         value: {
           storewide_enabled: document.getElementById('lt-storewide').checked,
-          from_value:  parseInt(document.getElementById('lt-storewide-from-val').value) || 0,
-          from_unit:   document.getElementById('lt-storewide-from-unit').value,
-          to_value:    parseInt(document.getElementById('lt-storewide-to-val').value) || 0,
-          to_unit:     document.getElementById('lt-storewide-to-unit').value,
-          businesses:  ltBusiness.map(b => ({ name: b.name, label: b.label, enabled: b.enabled, from_value: b.from_value, from_unit: b.from_unit, to_value: b.to_value, to_unit: b.to_unit }))
+          from_value: parseInt(document.getElementById('lt-storewide-from-val').value)||0,
+          from_unit:  document.getElementById('lt-storewide-from-unit').value,
+          to_value:   parseInt(document.getElementById('lt-storewide-to-val').value)||0,
+          to_unit:    document.getElementById('lt-storewide-to-unit').value,
+          businesses: ltBusiness.map(b => ({ name: b.name, label: b.label, enabled: b.enabled, from_value: b.from_value, from_unit: b.from_unit, to_value: b.to_value, to_unit: b.to_unit }))
         }
       });
-
       btn.disabled = false; btn.innerText = 'Save';
       if (error) showToast(`Error: ${error.message}`, true);
       else showToast('Delivery lead time saved.');
