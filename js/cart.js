@@ -438,7 +438,7 @@ async function updateFreeShippingBar() {
   fill.style.width   = `${pct}%`;
 
   if (remaining <= 0) {
-    msg.innerHTML = `<strong style="color:var(--cyan);">You are eligible for free shipping! 🎉</strong>`;
+    msg.innerHTML = `<strong style="color:var(--cyan);">You are eligible for free shipping!</strong>`;
   } else {
     const fmt = remaining.toLocaleString('en-PH', { minimumFractionDigits: 2 });
     msg.textContent = `Add ₱${fmt} more to get free shipping!`;
