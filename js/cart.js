@@ -60,6 +60,7 @@ function updateCartBadge() {
   const badge = document.getElementById('cart-count');
   if (badge) {
     badge.innerText = totalItems;
+    badge.style.display = totalItems > 0 ? 'flex' : 'none';
   }
 }
 
