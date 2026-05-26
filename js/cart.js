@@ -30,7 +30,7 @@ function addToCart(product) {
 
   saveCart(cart);
   openCartDrawer();
-  checkFreeGiftsForItem(product.id); // async: adds any matching free gift
+  checkFreeGiftsForItem(product.id, product.sku); // async: adds any matching free gift
 }
 
 function removeFromCart(productId) {
@@ -474,14 +474,14 @@ async function getFreeGiftsConfig() {
   return _freeGiftsConfig;
 }
 
-async function checkFreeGiftsForItem(triggerId) {
+async function checkFreeGiftsForItem(cartItemId, sku) {
   const rules = await getFreeGiftsConfig();
   if (!rules || !rules.length) return;
   const cart = getCart();
   let changed = false;
   for (const rule of rules) {
-    if (!rule.enabled || rule.trigger_id !== triggerId) continue;
-    const giftCartId = `free-gift-${rule.gift_id}`;
+    if (!rule.enabled || rule.trigger_sku !== sku) continue;
+    const giftCartId = `free-gift-${rule.gift_sku}`;
     if (cart.find(i => i.id === giftCartId)) continue;
     cart.push({
       id: giftCartId,
@@ -491,7 +491,7 @@ async function checkFreeGiftsForItem(triggerId) {
       image: rule.gift_image,
       quantity: 1,
       isFreeGift: true,
-      triggerId: rule.trigger_id
+      triggerId: cartItemId
     });
     changed = true;
   }
