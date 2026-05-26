@@ -58,12 +58,11 @@
       </div>
 
       <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 2rem; margin-bottom: 2rem; text-align:center;">
-        <h2 style="margin-bottom: 1rem;">3. Publish to Live Website</h2>
+        <h2 style="margin-bottom: 1rem;">3. Review & Publish</h2>
         <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">
-          Once the upload to the database is complete, click this button to rebuild the static product pages. Changes will be live in ~1-2 minutes.
+          Go to the Products Dashboard to review your uploaded products. From there, you can publish the changes live to the website.
         </p>
-        <button id="btn-publish" class="btn btn-outline" style="border-color: #10b981; color: #10b981;">Publish to Website (Trigger Vercel Build)</button>
-        <p id="publish-msg" style="margin-top:1rem; font-size:0.9rem; color:var(--text-secondary); display:none;"></p>
+        <a href="products_dashboard.html" class="btn btn-outline" style="border-color: #10b981; color: #10b981;">Go to Products Dashboard</a>
       </div>
 
     </div>
@@ -109,6 +108,9 @@
     const btnUpload = document.getElementById('btn-upload');
     const logContainer = document.getElementById('log-container');
     let parsedData = [];
+
+    // Ensure we can access sb, gracefully fallback to window.BKAuth.sb if available
+    const supabaseClient = (typeof sb !== 'undefined') ? sb : (window.BKAuth ? window.BKAuth.sb : null);
 
     fileInput.addEventListener('change', (e) => {
       const file = e.target.files[0];
@@ -199,7 +201,7 @@
           };
 
           // Check if product exists via SKU
-          const { data: existingData, error: findErr } = await sb.from('products').select('id').eq('sku', sku);
+          const { data: existingData, error: findErr } = await supabaseClient.from('products').select('id').eq('sku', sku);
           if (findErr) throw findErr;
 
           let productId;
@@ -207,12 +209,12 @@
           if (existingData && existingData.length > 0) {
             // Update
             productId = existingData[0].id;
-            const { error: updErr } = await sb.from('products').update(productPayload).eq('id', productId);
+            const { error: updErr } = await supabaseClient.from('products').update(productPayload).eq('id', productId);
             if (updErr) throw updErr;
             log(`Updated product: ${sku}`);
           } else {
             // Insert
-            const { data: insData, error: insErr } = await sb.from('products').insert([productPayload]).select('id');
+            const { data: insData, error: insErr } = await supabaseClient.from('products').insert([productPayload]).select('id');
             if (insErr) throw insErr;
             productId = insData[0].id;
             log(`Created product: ${sku}`);
@@ -224,18 +226,18 @@
             available: parseInt(row.available_inventory) || 0
           };
           
-          const { data: existingInv } = await sb.from('inventory').select('sku').eq('sku', sku);
+          const { data: existingInv } = await supabaseClient.from('inventory').select('sku').eq('sku', sku);
           if (existingInv && existingInv.length > 0) {
-            await sb.from('inventory').update(invPayload).eq('sku', sku);
+            await supabaseClient.from('inventory').update(invPayload).eq('sku', sku);
           } else {
-            await sb.from('inventory').insert([invPayload]);
+            await supabaseClient.from('inventory').insert([invPayload]);
           }
 
-          // 3. Features (cleared and updated)
-          await sb.from('smartlock_features').delete().eq('product_id', productId);
-          await sb.from('solarpower_features').delete().eq('product_id', productId);
-          await sb.from('cctv_features').delete().eq('product_id', productId);
-          await sb.from('fireextinguisher_features').delete().eq('product_id', productId);
+            // 3. Features (cleared and updated)
+          await supabaseClient.from('smartlock_features').delete().eq('product_id', productId);
+          await supabaseClient.from('solarpower_features').delete().eq('product_id', productId);
+          await supabaseClient.from('cctv_features').delete().eq('product_id', productId);
+          await supabaseClient.from('fireextinguisher_features').delete().eq('product_id', productId);
 
           const biz = productPayload.business;
           if (biz === 'smart_lock') {
@@ -263,7 +265,7 @@
               moisture_proof: row.moisture_proof ? row.moisture_proof.trim() : null,
               splash_proof: row.splash_proof ? row.splash_proof.trim() : null
             };
-            await sb.from('smartlock_features').insert([featPayload]);
+            await supabaseClient.from('smartlock_features').insert([featPayload]);
           } else if (biz === 'solar_power') {
             const featPayload = {
               product_id: productId,
@@ -278,7 +280,7 @@
               wifi_connect: row.wifi_connect ? row.wifi_connect.trim() : null,
               mobile_alerts: row.mobile_alerts ? row.mobile_alerts.trim() : null
             };
-            await sb.from('solarpower_features').insert([featPayload]);
+            await supabaseClient.from('solarpower_features').insert([featPayload]);
           } else if (biz === 'cctv') {
             const featPayload = {
               product_id: productId,
@@ -295,7 +297,7 @@
               mobile_app: row.mobile_app ? row.mobile_app.trim() : null,
               poe_support: row.poe_support ? row.poe_support.trim() : null
             };
-            await sb.from('cctv_features').insert([featPayload]);
+            await supabaseClient.from('cctv_features').insert([featPayload]);
           } else if (biz === 'fire_extinguisher') {
             const featPayload = {
               product_id: productId,
@@ -310,7 +312,7 @@
               with_bracket: row.with_bracket ? row.with_bracket.trim() : null,
               with_hose: row.with_hose ? row.with_hose.trim() : null
             };
-            await sb.from('fireextinguisher_features').insert([featPayload]);
+            await supabaseClient.from('fireextinguisher_features').insert([featPayload]);
           }
 
         } catch (e) {
@@ -321,14 +323,14 @@
       // Check for missing products and mark as draft
       try {
         log('Checking for existing products missing from the CSV...');
-        const { data: allProducts, error: allErr } = await sb.from('products').select('id, sku, status');
+        const { data: allProducts, error: allErr } = await supabaseClient.from('products').select('id, sku, status');
         if (allErr) throw allErr;
         
         const productsToDraft = allProducts.filter(p => !csvSkus.includes(p.sku) && p.status === 'published');
         
         if (productsToDraft.length > 0) {
           const idsToDraft = productsToDraft.map(p => p.id);
-          const { error: draftErr } = await sb.from('products').update({ status: 'draft' }).in('id', idsToDraft);
+          const { error: draftErr } = await supabaseClient.from('products').update({ status: 'draft' }).in('id', idsToDraft);
           if (draftErr) throw draftErr;
           log(`<span style="color:#f59e0b">Changed ${productsToDraft.length} missing products to draft status.</span>`);
         } else {
@@ -340,25 +342,6 @@
 
       btnUpload.innerText = 'Upload Complete';
       log('<span style="color:#10b981; font-weight:bold;">All operations completed!</span>');
-    });
-
-    document.getElementById('btn-publish').addEventListener('click', async () => {
-      const msg = document.getElementById('publish-msg');
-      msg.style.display = 'block';
-      msg.innerText = 'Triggering Vercel Build...';
-      
-      try {
-        const res = await fetch('https://api.vercel.com/v1/integrations/deploy/prj_8BUBIA4U1128hH2VISQHDhxxTnB3/zAWKAQArmf', {
-          method: 'POST'
-        });
-        if(res.ok) {
-          msg.innerHTML = '<span style="color:#10b981;">✓ Build triggered successfully! Your static product pages will be live in 1-2 minutes.</span>';
-        } else {
-          msg.innerHTML = '<span style="color:#ef4444;">Failed to trigger build. Check network tab.</span>';
-        }
-      } catch(e) {
-        msg.innerHTML = '<span style="color:#ef4444;">Error triggering build.</span>';
-      }
     });
 
   </script>
