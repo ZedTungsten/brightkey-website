@@ -19,9 +19,9 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatPHP(centavos) {
-  if (!centavos) return '₱0<span style="font-size:0.55em; font-weight:500; vertical-align:top; position:relative; top:0.15em; margin-left:1px;">00</span>';
+  if (!centavos) return '<span style="display:inline-flex; align-items:flex-start; line-height:0.9;"><span>₱0</span><span style="font-size:0.6em; font-weight:500; margin-top:0.05em; margin-left:1px;">00</span></span>';
   const formatted = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(centavos / 100);
-  return formatted.replace(/\.(\d{2})$/, '<span style="font-size:0.55em; font-weight:500; vertical-align:top; position:relative; top:0.15em; margin-left:1px;">$1</span>');
+  return formatted.replace(/(.+)\.(\d{2})$/, '<span style="display:inline-flex; align-items:flex-start; line-height:0.9;"><span>$1</span><span style="font-size:0.6em; font-weight:500; margin-top:0.05em; margin-left:1px;">$2</span></span>');
 }
 
 /** Display price: use discounted_price if > 0, else sale_price */
