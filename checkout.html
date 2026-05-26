@@ -80,34 +80,9 @@
             <div style="margin-bottom: 2rem;" id="payment-section">
               <h2 style="font-size: 1.5rem; margin-bottom: 1rem;">Payment</h2>
               
-              <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.5rem; margin-bottom: 1rem;">
-                <h4 style="margin-bottom: 1rem;">Pay via Credit/Debit Card</h4>
-                <div class="form-group">
-                  <label>Card Number</label>
-                  <input type="text" id="card_number" class="form-control" placeholder="0000 0000 0000 0000" data-card-number />
-                </div>
-                <div class="grid-2" style="gap: 1rem;">
-                  <div class="form-group">
-                    <label>Expiry (MM/YY)</label>
-                    <input type="text" id="card_expiry" class="form-control" placeholder="MM/YY" data-card-expiry />
-                  </div>
-                  <div class="form-group">
-                    <label>CVC</label>
-                    <input type="text" id="card_cvc" class="form-control" placeholder="123" data-card-cvc />
-                  </div>
-                </div>
-                <button id="btn-pay-card" class="btn btn-cyan" style="width: 100%; margin-top:0.5rem;" onclick="processCardPayment()">Pay with Card</button>
-              </div>
-
-              <div style="display:flex; align-items:center; gap:1rem; margin-bottom:1rem;">
-                <hr style="flex:1; border:none; border-top:1px solid var(--border);" />
-                <span style="color:var(--text-secondary); font-size:0.9rem;">OR E-WALLET</span>
-                <hr style="flex:1; border:none; border-top:1px solid var(--border);" />
-              </div>
-
-              <div class="grid-2" style="gap: 1rem;">
-                <button class="btn btn-outline" onclick="processWallet('gcash')">Pay with GCash</button>
-                <button class="btn btn-outline" onclick="processWallet('paymaya')">Pay with Maya</button>
+              <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.5rem;">
+                <p style="font-size:0.9rem; color:var(--text-secondary); margin-bottom:1.25rem;">You will be redirected to PayMongo's secure checkout to complete your payment.</p>
+                <button id="btn-pay-paymongo" class="btn btn-cyan" style="width:100%; font-size:1rem; padding:0.85rem;" onclick="createPayMongoCheckout()">Pay Now via PayMongo</button>
               </div>
             </div>
 
@@ -155,7 +130,6 @@
 
   <script src="js/main.js"></script>
   <script src="js/cart.js"></script>
-  <script src="js/payment.js"></script>
   <script>
     'use strict';
 
@@ -338,59 +312,63 @@
     }
 
     // ── Payment Processing ─────────────────────────────────────
-    
-    async function processCardPayment() {
+
+    const PAYMONGO_SECRET_KEY = 'sk_live_YOUR_SECRET_KEY_HERE'; // Replace with actual key
+
+    async function createPayMongoCheckout() {
       if (!validateForm()) return;
 
-      const num = document.getElementById('card_number').value.replace(/\s/g, '');
-      const exp = document.getElementById('card_expiry').value.split('/');
-      const cvc = document.getElementById('card_cvc').value;
-
-      if (!num || exp.length !== 2 || !cvc) {
-        alert('Please complete credit card details.');
-        return;
-      }
-
-      const btn = document.getElementById('btn-pay-card');
+      const btn = document.getElementById('btn-pay-paymongo');
       btn.disabled = true;
-      btn.innerText = 'Processing...';
+      btn.innerText = 'Redirecting to PayMongo...';
 
       const info = JSON.parse(sessionStorage.getItem('bk_order_info'));
 
-      await startCardCheckout({
-        amountCents: totalCents,
-        card: { number: num, exp_month: exp[0], exp_year: '20'+exp[1], cvc },
-        billing: { name: info.name, email: info.email, phone: info.phone },
-        onSuccess: (intent) => {
-          completeOrder(intent.id);
-        },
-        onError: (err) => {
-          alert('Payment Failed: ' + err.message);
-          btn.disabled = false;
-          btn.innerText = 'Pay with Card';
-        }
-      });
+      const lineItems = cartData
+        .filter(item => !item.isFreeGift)
+        .map(item => ({
+          name: item.title,
+          quantity: item.quantity,
+          amount: item.price,
+          currency: 'PHP'
+        }));
+
+      if (shippingCents > 0) {
+        lineItems.push({ name: 'Shipping', quantity: 1, amount: shippingCents, currency: 'PHP' });
+      }
+
+      const origin = window.location.origin;
+
+      try {
+        const res = await fetch('https://api.paymongo.com/v1/checkout_sessions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Basic ${btoa(PAYMONGO_SECRET_KEY + ':')}`
+          },
+          body: JSON.stringify({
+            data: {
+              attributes: {
+                billing: { name: info.name, email: info.email, phone: info.phone },
+                line_items: lineItems,
+                payment_method_types: ['card', 'gcash', 'paymaya', 'grab_pay'],
+                success_url: `${origin}/checkout.html?payment=success`,
+                cancel_url: `${origin}/checkout.html`,
+                description: 'BrightKey Order'
+              }
+            }
+          })
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data?.errors?.[0]?.detail || 'Failed to create checkout session');
+        window.location.href = data.data.attributes.checkout_url;
+      } catch (err) {
+        alert('Payment initialization failed: ' + err.message);
+        btn.disabled = false;
+        btn.innerText = 'Pay Now via PayMongo';
+      }
     }
-
-    async function processWallet(type) {
-      if (!validateForm()) return;
-      
-      startWalletCheckout({
-        amountCents: totalCents,
-        type: type,
-        onError: (err) => alert('Payment Initialization Failed: ' + err.message)
-      });
-    }
-
-    // Handle return from 3DS or Wallet (dispatched by payment.js)
-    window.addEventListener('paymongo:success', (e) => {
-      const intentId = e.detail?.id || 'wallet_payment_success';
-      completeOrder(intentId);
-    });
-
-    window.addEventListener('paymongo:failed', () => {
-      alert('Payment authorization failed or was cancelled.');
-    });
 
     // ── Finalise Order to DB ──────────────────────────────────
     async function completeOrder(paymentIntentId) {
