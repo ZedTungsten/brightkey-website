@@ -177,7 +177,7 @@ function injectCartDrawer() {
       </div>
       <div class="cart-drawer__footer">
         <!-- Coupon Code Form -->
-        <div style="padding: 0.8rem 0; border-top: 1px solid var(--border); margin-bottom: 0.8rem;">
+        <div style="padding: 0.8rem 0; margin-bottom: 0.8rem;">
           <div style="display:flex; gap:0.5rem;">
             <input type="text" id="coupon-input" placeholder="Coupon Code" style="flex:1; padding:0.45rem 0.75rem; font-size:0.85rem; border:1px solid var(--border); border-radius:var(--radius-sm); background:transparent; color:var(--text-primary); text-transform:uppercase;" />
             <button class="btn btn-cyan btn-sm" id="btn-apply-coupon" onclick="applyCartCoupon(event)" style="padding:0.45rem 1rem; font-size:0.85rem; border-radius:var(--radius-sm);">Apply</button>
