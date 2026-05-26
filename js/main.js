@@ -333,3 +333,22 @@ if (yearEl) yearEl.textContent = new Date().getFullYear();
       console.warn('Could not load Grainient background scripts:', err);
     });
 })();
+
+// ── Dynamically Load cart.js globally ───────────────────────────
+(function loadCartScript() {
+  if (typeof getCart !== 'undefined') return;
+  const pathname = window.location.pathname;
+  let pathPrefix = '';
+  if (pathname.includes('/products/')) {
+    pathPrefix = '../';
+  } else if (pathname.includes('/internal/ecommerce/') || pathname.includes('/internal/web-css/')) {
+    pathPrefix = '../../';
+  } else if (pathname.includes('/internal/')) {
+    pathPrefix = '../';
+  }
+  
+  const script = document.createElement('script');
+  script.src = pathPrefix + 'js/cart.js';
+  document.head.appendChild(script);
+})();
+
