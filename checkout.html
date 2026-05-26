@@ -164,6 +164,7 @@
     let shippingCents = 0;
     let totalCents = 0;
     let shippingRatesMap = {};
+    let isFreeShippingEligible = false;
 
     async function initCheckout() {
       cartData = getCart();
@@ -174,6 +175,7 @@
 
       renderSummary();
       await loadShippingRates();
+      await checkFreeShippingEligibility();
 
       // Check if returning from a wallet payment
       if (window.location.search.includes('payment=success')) {
@@ -223,6 +225,37 @@
       }
     }
 
+    async function checkFreeShippingEligibility() {
+      try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/global_settings?key=eq.free_shipping&select=value`, {
+          headers: { 'apikey': SUPABASE_ANON, 'Authorization': `Bearer ${SUPABASE_ANON}` }
+        });
+        if (!res.ok) return;
+        const rows = await res.json();
+        if (!rows.length) return;
+        const config = rows[0].value;
+        if (!config) return;
+
+        const businesses = [...new Set(cartData.map(i => i.business).filter(Boolean))];
+        let threshold = null;
+
+        for (const biz of businesses) {
+          const bizCfg = (config.businesses || []).find(b => b.name === biz && b.enabled && b.threshold > 0);
+          if (bizCfg) { threshold = bizCfg.threshold; break; }
+        }
+        if (threshold === null && config.storewide_enabled && config.threshold > 0) {
+          threshold = config.threshold;
+        }
+
+        if (threshold !== null && subtotalCents >= threshold) {
+          isFreeShippingEligible = true;
+          calculateShipping(); // recalculate now that eligibility is known
+        }
+      } catch (err) {
+        console.error('Free shipping eligibility check failed:', err);
+      }
+    }
+
     function calculateShipping() {
       const city = document.getElementById('c_city').value;
       const msg = document.getElementById('shipping-msg');
@@ -237,8 +270,19 @@
         return;
       }
 
+      if (isFreeShippingEligible) {
+        shippingCents = 0;
+        document.getElementById('sum-shipping').innerText = 'Free';
+        msg.innerText = 'You are eligible for free shipping!';
+        msg.style.color = '#10b981';
+        document.getElementById('payment-section').style.opacity = '1';
+        document.getElementById('payment-section').style.pointerEvents = 'auto';
+        updateTotal();
+        return;
+      }
+
       const fee = shippingRatesMap[city];
-      
+
       if (fee === null || fee === undefined) {
         // N/A - Unserviceable
         shippingCents = 0;
