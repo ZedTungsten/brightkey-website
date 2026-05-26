@@ -634,7 +634,7 @@ async function buildProducts() {
           relatedHtml += `
             <div class="card product-card card--spotlight" style="position: relative; display:flex; flex-direction:column; padding: 1.25rem; border-radius:var(--radius-md); border:1px solid var(--border); background:var(--bg-surface); transition: transform 0.2s ease;">
               <a href="${relProduct.slug}.html" style="text-decoration:none; display:flex; flex-direction:column; flex:1; color:inherit;">
-                <div style="aspect-ratio:1/1; width:100%; border-radius:var(--radius-sm); border:1px solid var(--border); background:#fff; padding:0.5rem; display:flex; align-items:center; justify-content:center; overflow:hidden; margin-bottom:0.6rem;">
+                <div style="aspect-ratio:1/1; width:100%; border-radius:var(--radius-sm); background:#fff; padding:0.5rem; display:flex; align-items:center; justify-content:center; overflow:hidden; margin-bottom:0.6rem;">
                   <img src="${imgUrl}" alt="${relProduct.title}" style="max-width:100%; max-height:100%; object-fit:contain;" />
                 </div>
                 <h4 style="font-size:0.95rem; font-weight:600; color:var(--text-primary); margin:0 0 0.35rem 0; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; line-height:1.3;">${relProduct.title}</h4>
