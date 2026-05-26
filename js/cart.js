@@ -429,9 +429,10 @@ async function updateFreeShippingBar() {
 
   if (!threshold) { wrap.style.display = 'none'; return; }
 
-  const subtotal  = getCartTotal() / 100;
-  const remaining = Math.max(0, threshold - subtotal);
-  const pct       = Math.min(100, (subtotal / threshold) * 100);
+  // threshold is stored in cents (same convention as product prices)
+  const subtotalCents = getCartTotal();
+  const remaining     = Math.max(0, (threshold - subtotalCents) / 100);
+  const pct           = Math.min(100, (subtotalCents / threshold) * 100);
 
   wrap.style.display = 'block';
   fill.style.width   = `${pct}%`;
