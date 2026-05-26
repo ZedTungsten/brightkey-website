@@ -502,6 +502,14 @@ async function buildProducts() {
       $('[data-template="variant-selector"]').css('display', 'none');
     }
 
+    // A+ Content
+    if (p.aplus_content && Array.isArray(p.aplus_content) && p.aplus_content.length > 0) {
+      const aplusHtml = renderAPlusContent(p.aplus_content);
+      $('[data-template="aplus-content-wrapper"]').html(aplusHtml).css('display', 'block');
+    } else {
+      $('[data-template="aplus-content-wrapper"]').css('display', 'none');
+    }
+
     // Inventory display
     const available = inv.available;
     const ordered   = inv.ordered_past_month;
