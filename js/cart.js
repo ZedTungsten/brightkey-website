@@ -453,7 +453,7 @@ async function applyActiveCouponIfExists() {
       if (status) {
         status.style.display = 'block';
         status.style.color = 'var(--danger, #ef4444)';
-        status.innerText = 'Supabase client failed to load.';
+        status.innerText = 'The promo code is invalid.';
       }
       return;
     }
@@ -470,7 +470,7 @@ async function applyActiveCouponIfExists() {
       if (status) {
         status.style.display = 'block';
         status.style.color = 'var(--danger, #ef4444)';
-        status.innerText = 'Coupon not found or invalid.';
+        status.innerText = 'The promo code is invalid.';
       }
       if (discRow) discRow.style.display = 'none';
       if (totalRow) totalRow.style.display = 'none';
@@ -484,7 +484,7 @@ async function applyActiveCouponIfExists() {
       if (status) {
         status.style.display = 'block';
         status.style.color = 'var(--danger, #ef4444)';
-        status.innerText = 'This coupon is not active yet.';
+        status.innerText = 'The promo code is invalid.';
       }
       return;
     }
@@ -493,7 +493,7 @@ async function applyActiveCouponIfExists() {
       if (status) {
         status.style.display = 'block';
         status.style.color = 'var(--danger, #ef4444)';
-        status.innerText = 'This coupon has expired.';
+        status.innerText = 'The promo code is invalid.';
       }
       return;
     }
@@ -512,7 +512,7 @@ async function applyActiveCouponIfExists() {
       if (status) {
         status.style.display = 'block';
         status.style.color = 'var(--danger, #ef4444)';
-        status.innerText = 'Error validating items with store database.';
+        status.innerText = 'The promo code is invalid.';
       }
       return;
     }
@@ -558,7 +558,7 @@ async function applyActiveCouponIfExists() {
       if (status) {
         status.style.display = 'block';
         status.style.color = 'var(--danger, #ef4444)';
-        status.innerText = 'Coupon is not applicable to any items in your cart.';
+        status.innerText = 'The promo code is invalid.';
       }
       if (discRow) discRow.style.display = 'none';
       if (totalRow) totalRow.style.display = 'none';
