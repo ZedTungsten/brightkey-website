@@ -151,9 +151,11 @@
       await loadShippingRates();
       await checkFreeShippingEligibility();
 
-      // Check if returning from a wallet payment
       if (window.location.search.includes('payment=success')) {
-        completeOrder('wallet_payment_success');
+        clearCart();
+        sessionStorage.removeItem('bk_order_info');
+        document.querySelector('.checkout-grid').style.display = 'none';
+        document.getElementById('success-screen').style.display = 'block';
       }
     }
 
@@ -346,7 +348,17 @@
             line_items: lineItems,
             success_url: `${origin}/checkout?payment=success`,
             cancel_url: `${origin}/checkout`,
-            description: 'BrightKey Order'
+            description: 'BrightKey Order',
+            metadata: {
+              customer_name:    info.name,
+              customer_email:   info.email,
+              customer_phone:   info.phone,
+              shipping_city:    info.city,
+              shipping_address: info.address,
+              shipping_cents:   String(shippingCents),
+              total_cents:      String(totalCents),
+              cart_items:       JSON.stringify(cartData)
+            }
           })
         });
 
@@ -358,68 +370,6 @@
         btn.disabled = false;
         btn.innerText = 'Pay Now via PayMongo';
       }
-    }
-
-    // ── Finalise Order to DB ──────────────────────────────────
-    async function completeOrder(paymentIntentId) {
-      let infoStr = sessionStorage.getItem('bk_order_info');
-      let info = infoStr ? JSON.parse(infoStr) : { name:'Guest', email:'', phone:'', address:'', city:'' };
-
-      try {
-        // Insert into orders table
-        const orderRes = await fetch(`${SUPABASE_URL}/rest/v1/orders`, {
-          method: 'POST',
-          headers: {
-            'apikey': SUPABASE_ANON,
-            'Authorization': `Bearer ${SUPABASE_ANON}`,
-            'Content-Type': 'application/json',
-            'Prefer': 'return=representation'
-          },
-          body: JSON.stringify({
-            customer_name: info.name,
-            customer_email: info.email,
-            customer_phone: info.phone,
-            shipping_city: info.city,
-            shipping_address: info.address,
-            total_amount: totalCents,
-            shipping_fee: shippingCents,
-            payment_intent_id: paymentIntentId,
-            status: 'paid'
-          })
-        });
-
-        if (!orderRes.ok) throw new Error('Order creation failed');
-        const orderData = await orderRes.json();
-        const orderId = orderData[0].id;
-
-        // Insert items
-        const itemsToInsert = cartData.map(item => ({
-          order_id: orderId,
-          product_id: item.id,
-          quantity: item.quantity,
-          price_at_purchase: item.price
-        }));
-
-        await fetch(`${SUPABASE_URL}/rest/v1/order_items`, {
-          method: 'POST',
-          headers: {
-            'apikey': SUPABASE_ANON,
-            'Authorization': `Bearer ${SUPABASE_ANON}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(itemsToInsert)
-        });
-
-      } catch (e) {
-        console.error('Database log failed, but payment succeeded:', e);
-        // We do not block the user if DB log fails, they paid already.
-      }
-
-      // Cleanup & Show Success
-      clearCart();
-      sessionStorage.removeItem('bk_order_info');
-      document.querySelector('.checkout-grid').style.display = 'none';
-      document.getElementById('success-screen').style.display = 'block';
     }
 
     document.addEventListener('DOMContentLoaded', initCheckout);

@@ -11,7 +11,7 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Payment gateway not configured' });
   }
 
-  const { billing, line_items, success_url, cancel_url, description } = req.body;
+  const { billing, line_items, success_url, cancel_url, description, metadata } = req.body;
 
   if (!billing || !line_items?.length || !success_url || !cancel_url) {
     return res.status(400).json({ error: 'Missing required fields' });
@@ -32,7 +32,8 @@ export default async function handler(req, res) {
             payment_method_types: ['card', 'gcash', 'paymaya', 'grab_pay'],
             success_url,
             cancel_url,
-            description: description || 'BrightKey Order'
+            description: description || 'BrightKey Order',
+            ...(metadata && { metadata })
           }
         }
       })
