@@ -147,12 +147,25 @@ async function buildProducts() {
     // Images: main image + thumbnails from fixed columns
     const mainImgUrl = p.image_main || '../assets/og-image.png';
     const supportImages = [p.image_1, p.image_2, p.image_3, p.image_4].filter(Boolean);
+    const videos = [p.video_1, p.video_2].filter(Boolean);
     const allImages = [p.image_main, ...supportImages].filter(Boolean);
+    
+    // Total media items: images + videos
+    const hasMultipleMedia = (allImages.length + videos.length) > 1;
+
     let thumbnailsHtml = '';
-    if (allImages.length > 1) {
-      thumbnailsHtml = allImages.map(url => `
-        <button style="border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg-surface);padding:0.25rem;cursor:pointer;width:64px;height:64px;flex-shrink:0;" onclick="window.switchImage('${url}')">
+    if (hasMultipleMedia) {
+      // Image thumbnails
+      thumbnailsHtml += allImages.map(url => `
+        <button style="border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg-surface);padding:0.25rem;cursor:pointer;width:64px;height:64px;flex-shrink:0;" onclick="window.switchMedia('${url}')">
           <img src="${url}" style="width:100%;height:100%;object-fit:contain;" />
+        </button>
+      `).join('');
+
+      // Video thumbnails (Play button overlay)
+      thumbnailsHtml += videos.map(url => `
+        <button style="border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg-elevated);padding:0.25rem;cursor:pointer;width:64px;height:64px;flex-shrink:0;position:relative;display:flex;align-items:center;justify-content:center;" onclick="window.switchMedia('${url}')">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--cyan)" stroke-width="2" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
         </button>
       `).join('');
     }
@@ -408,7 +421,14 @@ async function buildProducts() {
           if (v.beforeStr) { compareEl.innerText = v.beforeStr; compareEl.style.display='inline'; }
           else compareEl.style.display = 'none';
           document.querySelector('[data-template="sku"]').innerText = 'SKU: ' + sku;
-          document.querySelector('[data-template="main-image"]').src = v.image;
+          
+          // Use switchMedia to reset gallery when variant changes
+          if (window.switchMedia) {
+            window.switchMedia(v.image);
+          } else {
+            document.querySelector('[data-template="main-image"]').src = v.image;
+          }
+
           const badge  = document.querySelector('[data-template="status-badge"]');
           const btn    = document.querySelector('[data-template="btn-add-to-cart"]');
           const invEl  = document.querySelector('[data-template="inventory-text"]');
