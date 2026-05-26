@@ -211,17 +211,26 @@
           <!-- Free Shipping Panel -->
           <div class="panel">
             <h3>Storewide Free Shipping</h3>
-            <form id="shipping-form" onsubmit="saveFreeShipping(event)">
-              <div class="form-group" style="margin-bottom: 1.25rem;">
-                <label class="form-label">Cart Subtotal threshold for Free Shipping (₱)</label>
-                <div style="position:relative; display:flex; align-items:center;">
-                  <span style="position:absolute; left:1rem; font-weight:600; color:var(--text-secondary);">₱</span>
-                  <input type="number" class="form-input" id="shipping-threshold" min="0" step="0.01" style="padding-left:2rem;" placeholder="e.g. 5000.00" required />
-                </div>
-                <div class="form-hint" style="margin-top:0.4rem;">Orders with values below this threshold will apply default shipping rates. Set to 0 to disable free shipping.</div>
+
+            <!-- Storewide row -->
+            <div style="display:flex; align-items:center; gap:0.75rem; padding:0.65rem 0.75rem; background:var(--bg-elevated); border:1px solid var(--border); border-radius:var(--radius-sm); margin-bottom:1rem;">
+              <input type="checkbox" id="fs-storewide" style="width:16px; height:16px; cursor:pointer;" />
+              <label for="fs-storewide" style="font-weight:600; font-size:0.9rem; flex:1; cursor:pointer;">Storewide</label>
+              <div style="position:relative; display:flex; align-items:center;">
+                <span style="position:absolute; left:0.75rem; font-weight:600; color:var(--text-secondary); pointer-events:none;">₱</span>
+                <input type="number" id="fs-storewide-threshold" class="form-input" style="padding-left:2rem; width:140px;" placeholder="0.00" min="0" step="0.01" />
               </div>
-              <button type="submit" class="btn btn-cyan btn-sm" id="btn-save-shipping">Save Threshold</button>
-            </form>
+            </div>
+
+            <!-- Per-business rows -->
+            <div id="fs-business-rows"></div>
+
+            <button class="btn btn-outline btn-sm" style="margin-top:0.75rem;" onclick="addFsRow()">+ Add Business</button>
+
+            <div style="margin-top:1.25rem; padding-top:1rem; border-top:1px solid var(--border);">
+              <div class="form-hint" style="margin-bottom:0.75rem;">Set threshold to ₱0 to disable. Business-specific thresholds override the storewide threshold for that business.</div>
+              <button class="btn btn-cyan btn-sm" id="btn-save-shipping" onclick="saveFreeShipping(event)">Save</button>
+            </div>
           </div>
           
           <!-- Announcement Bar Panel -->
@@ -424,6 +433,14 @@
 
     let activeSkusList = [];
     let previewInterval = null;
+    let fsBusiness = [];
+
+    const KNOWN_BUSINESSES = [
+      { name: 'smart_lock',        label: 'Smart Locks' },
+      { name: 'solar_power',       label: 'Solar Power' },
+      { name: 'cctv',              label: 'CCTV' },
+      { name: 'fire_extinguisher', label: 'Fire Extinguisher' },
+    ];
 
     // --- Dom Load & Setup ---
     document.addEventListener('DOMContentLoaded', () => {
@@ -446,7 +463,7 @@
     // --- Load Data ---
     async function fetchPromoData() {
       try {
-        // Load free shipping threshold
+        // Load free shipping config
         const { data: shippingData, error: sErr } = await sb
           .from('global_settings')
           .select('value')
@@ -454,8 +471,32 @@
           .single();
 
         if (!sErr && shippingData) {
-          const thresholdCentavos = shippingData.value.threshold || 0;
-          document.getElementById('shipping-threshold').value = (thresholdCentavos / 100).toFixed(2);
+          const val = shippingData.value || {};
+          document.getElementById('fs-storewide').checked = val.storewide_enabled || false;
+          document.getElementById('fs-storewide-threshold').value = ((val.threshold || 0) / 100).toFixed(2);
+
+          // Build business list: start from known businesses, then append any extras
+          const saved = (val.businesses || []);
+          const savedMap = {};
+          saved.forEach(b => { savedMap[b.name] = b; });
+
+          fsBusiness = KNOWN_BUSINESSES.map(kb => {
+            const s = savedMap[kb.name];
+            return { name: kb.name, label: kb.label, custom: false, enabled: s ? s.enabled : false, threshold: s ? s.threshold : 0 };
+          });
+
+          // Append any custom (non-known) saved businesses
+          saved.forEach(b => {
+            if (!KNOWN_BUSINESSES.find(kb => kb.name === b.name)) {
+              fsBusiness.push({ name: b.name, label: b.label || b.name, custom: true, enabled: b.enabled, threshold: b.threshold || 0 });
+            }
+          });
+
+          renderFsRows();
+        } else {
+          // Default: show known businesses unchecked
+          fsBusiness = KNOWN_BUSINESSES.map(kb => ({ ...kb, custom: false, enabled: false, threshold: 0 }));
+          renderFsRows();
         }
 
         // Load announcement banner configurations
@@ -487,11 +528,47 @@
       }
     }
 
+    // --- Free Shipping Row Rendering ---
+    function renderFsRows() {
+      const container = document.getElementById('fs-business-rows');
+      container.innerHTML = '';
+      fsBusiness.forEach((biz, idx) => {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex; align-items:center; gap:0.75rem; padding:0.5rem 0.75rem; border-bottom:1px solid var(--border);';
+        row.innerHTML = `
+          <input type="checkbox" ${biz.enabled ? 'checked' : ''} onchange="fsBusiness[${idx}].enabled = this.checked" style="width:16px; height:16px; cursor:pointer; flex-shrink:0;" />
+          ${biz.custom
+            ? `<input type="text" class="form-input" value="${biz.label}" oninput="fsBusiness[${idx}].label = this.value; fsBusiness[${idx}].name = this.value.toLowerCase().replace(/\\s+/g,'_');" style="flex:1; font-size:0.9rem;" placeholder="Business name" />`
+            : `<span style="flex:1; font-size:0.9rem;">${biz.label}</span>`
+          }
+          <div style="position:relative; display:flex; align-items:center; flex-shrink:0;">
+            <span style="position:absolute; left:0.75rem; font-weight:600; color:var(--text-secondary); pointer-events:none;">₱</span>
+            <input type="number" class="form-input" value="${(biz.threshold / 100).toFixed(2)}" oninput="fsBusiness[${idx}].threshold = Math.round(parseFloat(this.value||0)*100)" style="padding-left:2rem; width:130px;" min="0" step="0.01" />
+          </div>
+          <button onclick="removeFsRow(${idx})" style="background:none; border:none; cursor:pointer; color:var(--text-muted); font-size:1.2rem; line-height:1; padding:0 0.25rem; flex-shrink:0;" title="Remove">&times;</button>
+        `;
+        container.appendChild(row);
+      });
+    }
+
+    window.addFsRow = () => {
+      fsBusiness.push({ name: '', label: '', custom: true, enabled: true, threshold: 0 });
+      renderFsRows();
+      // Focus the new name input
+      const inputs = document.querySelectorAll('#fs-business-rows input[type="text"]');
+      if (inputs.length) inputs[inputs.length - 1].focus();
+    };
+
+    window.removeFsRow = (idx) => {
+      fsBusiness.splice(idx, 1);
+      renderFsRows();
+    };
+
     // --- Save Free Shipping ---
     async function saveFreeShipping(e) {
       e.preventDefault();
-      const val = parseFloat(document.getElementById('shipping-threshold').value) || 0;
-      const thresholdCentavos = Math.round(val * 100);
+      const storewideEnabled = document.getElementById('fs-storewide').checked;
+      const threshold = Math.round(parseFloat(document.getElementById('fs-storewide-threshold').value || '0') * 100);
 
       const btn = document.getElementById('btn-save-shipping');
       btn.disabled = true;
@@ -501,16 +578,25 @@
         .from('global_settings')
         .upsert({
           key: 'free_shipping',
-          value: { threshold: thresholdCentavos }
+          value: {
+            storewide_enabled: storewideEnabled,
+            threshold: threshold,
+            businesses: fsBusiness.map(b => ({
+              name: b.name,
+              label: b.label,
+              enabled: b.enabled,
+              threshold: b.threshold,
+            }))
+          }
         });
 
       btn.disabled = false;
-      btn.innerText = 'Save Threshold';
+      btn.innerText = 'Save';
 
       if (error) {
         showToast(`Error: ${error.message}`, true);
       } else {
-        showToast('Free shipping threshold saved successfully.');
+        showToast('Free shipping settings saved.');
       }
     }
 
