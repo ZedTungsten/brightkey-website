@@ -425,17 +425,19 @@
         </nav>
 
         <div class="grid-product">
-          <!-- Left: Image Gallery -->
-          <div class="product-gallery">
+          <div class="product-gallery" style="position:relative;">
             <div id="main-product-wrapper"
               style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 2rem; display:flex; justify-content:center; align-items:center; min-height:400px; margin-bottom: 1rem; overflow:hidden;">
               <img id="main-product-image" src="assets/og-image.png" alt="Product Image"
-                style="max-width:100%; height:auto; max-height:400px; object-fit:contain;" data-template="main-image" />
+                style="max-width:100%; height:auto; max-height:400px; object-fit:contain; cursor:zoom-in;" data-template="main-image" onclick="openProductLightbox()" />
               <iframe id="main-product-iframe" src="" frameborder="0" allow="autoplay; encrypted-media; fullscreen" allowfullscreen
                 style="display:none; width:100%; height:400px; border-radius:var(--radius-sm);"></iframe>
               <video id="main-product-video" src="" controls
                 style="display:none; width:100%; height:400px; object-fit:contain; border-radius:var(--radius-sm);"></video>
             </div>
+            
+            <!-- Amazon-style Zoom Container -->
+            <div id="zoom-container" style="display:none; position:absolute; top:0; left:calc(100% + 1.5rem); width:450px; height:450px; border:1px solid var(--border); border-radius:var(--radius-md); background-color:var(--bg-surface); background-repeat:no-repeat; z-index:100; box-shadow:var(--shadow-lg); pointer-events:none;"></div>
             <div id="product-thumbnails" class="flex gap-sm" style="overflow-x: auto; padding-bottom: 0.5rem;"
               data-template="thumbnails-container">
               <!-- Visual Dummy Thumbnails -->
@@ -793,6 +795,87 @@
         imgEl.src = url;
         imgEl.style.display = 'block';
       }
+    };
+
+    // Hover Zoom Logic
+    const mainImg = document.getElementById('main-product-image');
+    const zoomContainer = document.getElementById('zoom-container');
+    const wrapper = document.getElementById('main-product-wrapper');
+    
+    // Check if device supports hover (not a touch device)
+    const isHoverableDevice = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+
+    if (isHoverableDevice) {
+      wrapper.addEventListener('mouseenter', (e) => {
+        // Only show zoom if image is currently visible (not video/iframe)
+        if (mainImg.style.display !== 'none' && mainImg.src) {
+          zoomContainer.style.display = 'block';
+          zoomContainer.style.backgroundImage = `url(${mainImg.src})`;
+          // Adjust zoom magnitude
+          zoomContainer.style.backgroundSize = '250%';
+        }
+      });
+
+      wrapper.addEventListener('mousemove', (e) => {
+        if (zoomContainer.style.display === 'block') {
+          const rect = wrapper.getBoundingClientRect();
+          // Calculate mouse position as a percentage
+          let xPos = ((e.clientX - rect.left) / rect.width) * 100;
+          let yPos = ((e.clientY - rect.top) / rect.height) * 100;
+          
+          // Clamp values to prevent edge jitter
+          xPos = Math.max(0, Math.min(100, xPos));
+          yPos = Math.max(0, Math.min(100, yPos));
+          
+          zoomContainer.style.backgroundPosition = `${xPos}% ${yPos}%`;
+        }
+      });
+
+      wrapper.addEventListener('mouseleave', () => {
+        zoomContainer.style.display = 'none';
+      });
+    }
+
+    // New Lightbox Logic for Product Gallery
+    window.openProductLightbox = function() {
+      // Only open lightbox if image is showing, not video
+      if (mainImg.style.display === 'none') return;
+
+      // Gather all image URLs from thumbnails, excluding videos
+      const thumbBtns = document.querySelectorAll('#product-thumbnails button');
+      const galleryImages = [];
+      thumbBtns.forEach(btn => {
+        const img = btn.querySelector('img');
+        if (img) {
+          galleryImages.push(img.src);
+        }
+      });
+
+      if (galleryImages.length === 0) return;
+
+      // Populate global lightbox arrays used by existing lightbox code
+      lightboxImages = galleryImages;
+      
+      const thumbContainer = document.getElementById('lightbox-thumbnails');
+      thumbContainer.innerHTML = '';
+      
+      galleryImages.forEach((src, idx) => {
+        const thumb = document.createElement('img');
+        thumb.src = src;
+        thumb.className = 'lightbox-thumb';
+        thumb.onclick = (e) => {
+          e.stopPropagation();
+          changeLightboxImage(idx);
+        };
+        thumbContainer.appendChild(thumb);
+      });
+
+      // Find current index
+      let initialIndex = galleryImages.indexOf(mainImg.src);
+      if (initialIndex === -1) initialIndex = 0;
+
+      document.getElementById('lightbox').classList.add('active');
+      changeLightboxImage(initialIndex);
     };
 
     // Fetch dynamic reviews on page load
