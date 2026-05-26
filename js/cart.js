@@ -190,14 +190,26 @@ function injectCartDrawer() {
           <span class="cart-drawer__subtotal-val" id="cart-drawer-subtotal">₱0.00</span>
         </div>
         
-        <div class="cart-drawer__summary" id="cart-drawer-discount-row" style="display:none; color:var(--success, #10B981); margin-top: 0.35rem;">
-          <span class="cart-drawer__subtotal-label" id="cart-drawer-discount-label">Discount</span>
-          <span class="cart-drawer__subtotal-val" id="cart-drawer-discount-val">-₱0.00</span>
+        <div class="cart-drawer__summary" id="cart-drawer-discount-row" style="display:none; margin-top: 0.5rem; align-items: flex-start;">
+          <span class="cart-drawer__subtotal-label" id="cart-drawer-discount-label" style="display:flex; flex-direction:column; line-height:1.2;">
+            <span>Order discount</span>
+          </span>
+          <span class="cart-drawer__subtotal-val" id="cart-drawer-discount-val" style="font-weight:normal; color:var(--text-primary);">-₱0.00</span>
+        </div>
+
+        <div class="cart-drawer__summary" style="margin-top:0.35rem;">
+          <span class="cart-drawer__subtotal-label" style="color:var(--text-secondary); font-weight:normal;">Shipping</span>
+          <span class="cart-drawer__subtotal-val" style="font-weight:normal; color:var(--text-secondary); font-size:0.85rem;">Calculated at next step</span>
         </div>
         
-        <div class="cart-drawer__summary" id="cart-drawer-total-row" style="display:none; margin-top:0.35rem; font-weight:700; border-top:1px dashed var(--border); padding-top:0.35rem;">
-          <span class="cart-drawer__subtotal-label">Total</span>
-          <span class="cart-drawer__subtotal-val" id="cart-drawer-total-val">₱0.00</span>
+        <div class="cart-drawer__summary" id="cart-drawer-total-row" style="display:none; margin-top:0.5rem; font-weight:700; border-top:1px solid var(--border); padding-top:0.5rem;">
+          <span class="cart-drawer__subtotal-label" style="font-size:1.1rem;">Total</span>
+          <span class="cart-drawer__subtotal-val" id="cart-drawer-total-val" style="font-size:1.1rem;">₱0.00</span>
+        </div>
+
+        <div id="cart-drawer-savings-row" style="display:none; align-items:center; gap:0.35rem; color:var(--text-primary); font-size:0.8rem; font-weight:700; margin-top:0.4rem; text-transform:uppercase;">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line></svg>
+          <span>TOTAL SAVINGS <span id="cart-drawer-savings-val">₱0.00</span></span>
         </div>
 
         <div class="cart-drawer__note">
@@ -422,6 +434,8 @@ window.removeCartCoupon = () => {
   if (discRow) discRow.style.display = 'none';
   const totalRow = document.getElementById('cart-drawer-total-row');
   if (totalRow) totalRow.style.display = 'none';
+  const savingsRow = document.getElementById('cart-drawer-savings-row');
+  if (savingsRow) savingsRow.style.display = 'none';
   
   renderCartDrawer();
 };
@@ -632,15 +646,27 @@ async function applyActiveCouponIfExists() {
     const subtotalCentavos = getCartTotal();
     const finalTotalCentavos = Math.max(0, subtotalCentavos - discountCentavos);
 
-    // Format & Render Display
+    // Format & Render Display (Pill formatting matching mockup)
     if (status) {
       status.style.display = 'block';
-      status.style.color = 'var(--success, #10B981)';
-      status.innerHTML = `Coupon <strong>${code}</strong> active! <a href="#" onclick="removeCartCoupon(); return false;" style="color:var(--danger, #ef4444); text-decoration:underline; margin-left:0.25rem;">[Remove]</a>`;
+      status.style.color = 'var(--text-primary)';
+      status.innerHTML = `
+        <div style="background:var(--bg-base, rgba(120, 120, 120, 0.1)); border:1px solid var(--border); border-radius:4px; padding:0.25rem 0.5rem; display:inline-flex; align-items:center; gap:0.35rem; font-size:0.8rem; font-weight:600; color:var(--text-primary); text-transform:uppercase; margin-top:0.4rem;">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="opacity:0.7;"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line></svg>
+          <span>${code}</span>
+          <button onclick="removeCartCoupon();" style="background:none; border:none; padding:0; cursor:pointer; font-size:14px; font-weight:bold; color:var(--text-secondary); display:inline-flex; align-items:center; justify-content:center; width:14px; height:14px; margin-left:0.2rem;" aria-label="Remove coupon">&times;</button>
+        </div>
+      `;
     }
 
     if (discRow && discLabel && discVal) {
-      discLabel.innerText = `Discount (${code})`;
+      discLabel.innerHTML = `
+        <span>Order discount</span>
+        <span style="font-size:0.75rem; color:var(--text-secondary); font-weight:normal; display:flex; align-items:center; gap:0.25rem; margin-top:0.15rem; text-transform:uppercase;">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line></svg>
+          <span>${code}</span>
+        </span>
+      `;
       discVal.innerText = `-₱${(discountCentavos / 100).toLocaleString('en-PH', {minimumFractionDigits: 2})}`;
       discRow.style.display = 'flex';
     }
@@ -648,6 +674,13 @@ async function applyActiveCouponIfExists() {
     if (totalRow && totalVal) {
       totalVal.innerText = `₱${(finalTotalCentavos / 100).toLocaleString('en-PH', {minimumFractionDigits: 2})}`;
       totalRow.style.display = 'flex';
+    }
+
+    const savingsRow = document.getElementById('cart-drawer-savings-row');
+    const savingsVal = document.getElementById('cart-drawer-savings-val');
+    if (savingsRow && savingsVal) {
+      savingsVal.innerText = `₱${(discountCentavos / 100).toLocaleString('en-PH', {minimumFractionDigits: 2})}`;
+      savingsRow.style.display = 'flex';
     }
 
   } catch (err) {
