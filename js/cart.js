@@ -128,10 +128,12 @@ function renderCart() {
   });
 
   const subtotal = getCartTotal() / 100;
-  const subtotalEl = document.getElementById('cart-subtotal');
+  const subtotalEl = document.getElementById('cart-drawer-subtotal');
   if (subtotalEl) {
     subtotalEl.innerText = `₱${subtotal.toLocaleString('en-PH', {minimumFractionDigits:2})}`;
   }
+
+  applyActiveCouponIfExists();
 }
 
 window.changeQty = (id, delta) => {
@@ -158,6 +160,8 @@ window.renderCart = renderCart;
 let drawerOverlay = null;
 
 function injectCartDrawer() {
+  const path = window.location.pathname;
+  if (path.endsWith('cart.html') || path.endsWith('checkout.html')) return;
   if (document.getElementById('cart-drawer-overlay')) return;
 
   const isProductsPage = window.location.pathname.includes('/products/');
