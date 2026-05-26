@@ -1,6 +1,6 @@
 /**
  * BrightKey - cart.js
- * Handles local storage cart management and flyout cart drawer UI.
+ * Handles local storage cart management, cart page rendering, and flyout cart drawer UI.
  */
 
 'use strict';
@@ -14,11 +14,7 @@ function saveCart(cart) {
   localStorage.setItem('bk_cart', JSON.stringify(cart));
   updateCartBadge();
   renderCartDrawer();
-  
-  // If we are on the main cart page, update its display too
-  if (typeof renderCart === 'function') {
-    renderCart();
-  }
+  renderCart();
 }
 
 function addToCart(product) {
@@ -57,9 +53,7 @@ function clearCart() {
   localStorage.removeItem('bk_cart');
   updateCartBadge();
   renderCartDrawer();
-  if (typeof renderCart === 'function') {
-    renderCart();
-  }
+  renderCart();
 }
 
 function getCartTotal() {
@@ -76,6 +70,88 @@ function updateCartBadge() {
     badge.style.display = totalItems > 0 ? 'flex' : 'none';
   }
 }
+
+// ── Main Cart Page UI Rendering ──────────────────────────────────────────────
+
+function renderCart() {
+  const emptyDiv = document.getElementById('empty-cart');
+  const contentDiv = document.getElementById('cart-content');
+  if (!emptyDiv || !contentDiv) return; // Not on the main cart page
+
+  const cart = getCart();
+  
+  if (cart.length === 0) {
+    emptyDiv.style.display = 'block';
+    contentDiv.style.display = 'none';
+    return;
+  }
+
+  emptyDiv.style.display = 'none';
+  contentDiv.style.display = 'block';
+
+  const itemsContainer = document.getElementById('cart-items');
+  if (!itemsContainer) return;
+  itemsContainer.innerHTML = '';
+
+  const isProductsPage = window.location.pathname.includes('/products/');
+  const pathPrefix = isProductsPage ? '../' : '';
+
+  cart.forEach(item => {
+    const itemTotal = (item.price * item.quantity) / 100;
+    
+    itemsContainer.innerHTML += `
+      <div style="display:flex; padding: 1.5rem; border-bottom: 1px solid var(--border); gap: 1.5rem; align-items:center; flex-wrap:wrap;">
+        <div style="width: 80px; height: 80px; border: 1px solid var(--border); border-radius: var(--radius-sm); padding:0.25rem; background:#fff; flex-shrink:0;">
+          <img src="${item.image}" alt="${item.title}" style="width:100%; height:100%; object-fit:contain;" />
+        </div>
+        
+        <div style="flex: 1; min-width:200px;">
+          <a href="${pathPrefix}products/${item.slug}" style="font-weight:600; font-size:1.1rem; color:var(--text-primary); text-decoration:none;">${item.title}</a>
+          <p style="color:var(--text-secondary); margin-top:0.25rem; font-size:0.9rem;">₱${(item.price/100).toLocaleString('en-PH', {minimumFractionDigits:2})}</p>
+        </div>
+        
+        <div style="display:flex; border: 1px solid var(--border); border-radius: var(--radius-sm); overflow:hidden; height:40px;">
+          <button onclick="changeQty('${item.id}', -1)" style="padding: 0 0.75rem; background: var(--bg-surface); border:none; cursor:pointer; color:var(--text-primary); font-size:1.1rem;">-</button>
+          <input type="number" value="${item.quantity}" readonly style="width: 40px; border:none; border-left:1px solid var(--border); border-right:1px solid var(--border); text-align:center; font-family:inherit; font-size:0.95rem; background:transparent; color:var(--text-primary);" />
+          <button onclick="changeQty('${item.id}', 1)" style="padding: 0 0.75rem; background: var(--bg-surface); border:none; cursor:pointer; color:var(--text-primary); font-size:1.1rem;">+</button>
+        </div>
+        
+        <div style="min-width: 100px; text-align:right;">
+          <p style="font-weight:600; font-size:1.1rem;">₱${itemTotal.toLocaleString('en-PH', {minimumFractionDigits:2})}</p>
+        </div>
+        
+        <button onclick="removeItem('${item.id}')" style="background:transparent; border:none; color:var(--text-secondary); cursor:pointer; padding:0.5rem;" title="Remove Item">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+        </button>
+      </div>
+    `;
+  });
+
+  const subtotal = getCartTotal() / 100;
+  const subtotalEl = document.getElementById('cart-subtotal');
+  if (subtotalEl) {
+    subtotalEl.innerText = `₱${subtotal.toLocaleString('en-PH', {minimumFractionDigits:2})}`;
+  }
+}
+
+window.changeQty = (id, delta) => {
+  const cart = getCart();
+  const item = cart.find(i => i.id === id);
+  if (item) {
+    const newQty = item.quantity + delta;
+    if (newQty > 0) {
+      updateQuantity(id, newQty);
+    } else {
+      removeFromCart(id);
+    }
+  }
+};
+
+window.removeItem = (id) => {
+  removeFromCart(id);
+};
+
+window.renderCart = renderCart;
 
 // ── Cart Drawer UI Injection & Management ─────────────────────────────────────
 
@@ -260,6 +336,7 @@ document.addEventListener('DOMContentLoaded', () => {
   updateCartBadge();
   injectCartDrawer();
   setupCartToggleListener();
+  renderCart();
   
   // Re-run listener setup to catch any late injected buttons
   setTimeout(setupCartToggleListener, 500);
