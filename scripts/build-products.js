@@ -280,6 +280,22 @@ async function buildProducts() {
     $('[data-template="price"]').text(priceStr);
     $('[data-template="description"]').text(descStr);
 
+    // Social Proof Bar
+    if (p.display_rating && p.display_reviews_count) {
+      const rating = parseFloat(p.display_rating);
+      const pct = Math.min(100, Math.max(0, (rating / 5) * 100));
+      const spHtml = `
+        <span style="font-weight:600; color:var(--text-primary); font-size:1.1rem;">${rating.toFixed(1)}</span>
+        <div style="position:relative; display:inline-block; font-size:1.25rem; line-height:1; letter-spacing:1px; white-space:nowrap; margin-left:2px;">
+          <span style="color:var(--border);">★★★★★</span>
+          <span style="color:#f59e0b; position:absolute; left:0; top:0; overflow:hidden; width:${pct}%; white-space:nowrap;">★★★★★</span>
+        </div>
+        <a href="#reviews" style="color:var(--cyan); text-decoration:none; margin-left:0.25rem; margin-right:0.5rem; font-size:0.95rem;">(${parseInt(p.display_reviews_count, 10).toLocaleString()})</a>
+        ${p.display_bought_month ? `<span style="color:var(--border);">|</span><span style="color:var(--text-secondary); margin-left:0.5rem; font-size:0.95rem;">${p.display_bought_month} bought in past month</span>` : ''}
+      `;
+      $('[data-template="social-proof-bar"]').html(spHtml).css('display', 'flex');
+    }
+
     // Before price (strikethrough)
     if (beforeStr) {
       $('[data-template="compare-price"]').text(beforeStr).css('display', 'inline-block');
