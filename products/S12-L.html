@@ -305,6 +305,7 @@
                 <span style="font-weight: 600;">Delivery &amp; Availability</span>
               </div>
               <p style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 0.5rem;" id="p-inventory-text" data-template="inventory-text"><strong style="color:var(--text-primary);">3 available</strong> in our local warehouse. Ready to ship (delivered in 2-3 days).</p>
+              <p id="p-delivery-estimate" style="font-size:0.9rem; color:var(--text-secondary); margin-bottom:0.5rem; display:none;"></p>
               <p style="font-size: 0.9rem; color: var(--text-secondary);">Ships nationwide. Shipping calculated at
                 checkout.</p>
             </div>
@@ -535,6 +536,7 @@
           price: 549900,
           image: "https://opmmi.ph/wp-content/uploads/2025/06/S-12.png",
           sku:   "S12 TT L",
+          business: "smart_lock",
           display_rating: null,
           display_reviews_count: null,
           desc:  `Condo living comes with rules, and the S12 doesn't just meet them - it was made for them. One of the few smart locks in the country to earn SMDC approval, a cer`
@@ -1064,9 +1066,61 @@
       }
     }
 
+    async function initDeliveryEstimate() {
+      try {
+        const supabaseUrl  = window.SUPABASE_URL  || "${SUPABASE_URL}";
+        const supabaseAnon = window.SUPABASE_ANON || "${SUPABASE_ANON_KEY}";
+        let sb = window.supabaseClient;
+        if (!sb && window.supabase) sb = window.supabase.createClient(supabaseUrl, supabaseAnon);
+        if (!sb) return;
+
+        const { data, error } = await sb
+          .from('global_settings').select('value').eq('key', 'delivery_lead_time').single();
+        if (error || !data?.value) return;
+
+        const config  = data.value;
+        const business = (window.CURRENT_PRODUCT && window.CURRENT_PRODUCT.business) || '';
+
+        let fromVal, fromUnit, toVal, toUnit;
+        const bizCfg = (config.businesses || []).find(b => b.name === business && b.enabled);
+        if (bizCfg) {
+          ({ from_value: fromVal, from_unit: fromUnit, to_value: toVal, to_unit: toUnit } = bizCfg);
+        } else if (config.storewide_enabled) {
+          ({ from_value: fromVal, from_unit: fromUnit, to_value: toVal, to_unit: toUnit } = config);
+        } else { return; }
+
+        function addTime(date, value, unit) {
+          const d = new Date(date);
+          if (unit === 'weeks')  d.setDate(d.getDate() + value * 7);
+          else if (unit === 'months') d.setMonth(d.getMonth() + value);
+          else d.setDate(d.getDate() + value);
+          return d;
+        }
+
+        const today    = new Date();
+        const fromDate = addTime(today, fromVal, fromUnit);
+        const toDate   = addTime(today, toVal,   toUnit);
+        const MONTHS   = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        const fMon = MONTHS[fromDate.getMonth()], tMon = MONTHS[toDate.getMonth()];
+        const fDay = fromDate.getDate(), tDay = toDate.getDate();
+
+        let rangeStr;
+        if (fMon === tMon && fDay === tDay) rangeStr = `${fMon} ${fDay}`;
+        else if (fMon === tMon)             rangeStr = `${fMon} ${fDay}–${tDay}`;
+        else                                rangeStr = `${fMon} ${fDay} – ${tMon} ${tDay}`;
+
+        const el = document.getElementById('p-delivery-estimate');
+        if (el) {
+          el.innerHTML = `Get item in <strong style="color:var(--text-primary);">${rangeStr}</strong>`;
+          el.style.display = 'block';
+        }
+      } catch (err) { console.error('Delivery estimate error:', err); }
+    }
+
     document.getElementById('current-year').textContent = new Date().getFullYear();
     document.addEventListener('DOMContentLoaded', () => {
       initAnnouncementBar();
+      initDeliveryEstimate();
       fetchReviews();
     });
 

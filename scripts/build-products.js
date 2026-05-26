@@ -336,9 +336,9 @@ async function buildProducts() {
     const descShort   = descStr.substring(0, 160);
 
     // Fix relative paths for products/ subfolder
-    $('link[href^="css/"]').attr('href', (i, v) => '../' + v);
-    $('link[href^="assets/"]').attr('href', (i, v) => '../' + v);
-    $('script[src^="js/"]').attr('src', (i, v) => '../' + v);
+    $('link[href^="css/"]').attr('href', (_i, v) => '../' + v);
+    $('link[href^="assets/"]').attr('href', (_i, v) => '../' + v);
+    $('script[src^="js/"]').attr('src', (_i, v) => '../' + v);
     $('a[href="index.html"]').attr('href', '../index.html');
     $('a[href="about.html"]').attr('href', '../about.html');
     $('a[href="products.html"]').attr('href', '../products.html');
@@ -346,7 +346,7 @@ async function buildProducts() {
     $('a[href="cart.html"]').attr('href', '../cart.html');
     $('a[href="privacy-policy.html"]').attr('href', '../privacy-policy.html');
     $('a[href="terms-of-use.html"]').attr('href', '../terms-of-use.html');
-    $('img[src^="assets/"]').not('[data-template="main-image"]').attr('src', (i, v) => '../' + v);
+    $('img[src^="assets/"]').not('[data-template="main-image"]').attr('src', (_i, v) => '../' + v);
 
     // Meta tags
     $('[data-template="meta-desc"]').attr('content', descShort);
@@ -676,6 +676,7 @@ async function buildProducts() {
           price: ${mainPrice},
           image: "${mainImgUrl}",
           sku:   "${p.sku}",
+          business: "${p.business || ''}",
           display_rating: ${p.display_rating || null},
           display_reviews_count: ${p.display_reviews_count || null},
           desc:  \`${descShort.replace(/`/g, "\\`")}\`

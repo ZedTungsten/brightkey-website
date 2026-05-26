@@ -233,6 +233,39 @@
             </div>
           </div>
           
+          <!-- Delivery Lead Time Panel -->
+          <div class="panel">
+            <h3>Delivery Lead Time</h3>
+
+            <!-- Storewide row -->
+            <div style="display:flex; align-items:center; gap:0.75rem; padding:0.65rem 0.75rem; background:var(--bg-elevated); border:1px solid var(--border); border-radius:var(--radius-sm); margin-bottom:1rem; flex-wrap:wrap;">
+              <input type="checkbox" id="lt-storewide" style="width:16px; height:16px; cursor:pointer; flex-shrink:0;" />
+              <label for="lt-storewide" style="font-weight:600; font-size:0.9rem; flex:1; min-width:60px; cursor:pointer;">Storewide</label>
+              <div style="display:flex; align-items:center; gap:0.4rem; flex-wrap:wrap;">
+                <span style="font-size:0.8rem; color:var(--text-secondary);">From</span>
+                <input type="number" id="lt-storewide-from-val" class="form-input" style="width:58px;" min="0" step="1" value="2" />
+                <select id="lt-storewide-from-unit" class="form-select" style="width:95px;">
+                  <option value="days">Days</option><option value="weeks">Weeks</option><option value="months">Months</option>
+                </select>
+                <span style="font-size:0.8rem; color:var(--text-secondary);">To</span>
+                <input type="number" id="lt-storewide-to-val" class="form-input" style="width:58px;" min="0" step="1" value="3" />
+                <select id="lt-storewide-to-unit" class="form-select" style="width:95px;">
+                  <option value="days">Days</option><option value="weeks">Weeks</option><option value="months">Months</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Per-business rows -->
+            <div id="lt-business-rows"></div>
+
+            <button class="btn btn-outline btn-sm" style="margin-top:0.75rem;" onclick="addLtRow()">+ Add Business</button>
+
+            <div style="margin-top:1.25rem; padding-top:1rem; border-top:1px solid var(--border);">
+              <div class="form-hint" style="margin-bottom:0.75rem;">Business-specific lead times override the storewide setting. Customers see "Get item in [date range]" on the product page.</div>
+              <button class="btn btn-cyan btn-sm" id="btn-save-lt" onclick="saveLeadTime(event)">Save</button>
+            </div>
+          </div>
+
           <!-- Announcement Bar Panel -->
           <div class="panel">
             <h3>Announcement Bar Configurations</h3>
@@ -434,6 +467,7 @@
     let activeSkusList = [];
     let previewInterval = null;
     let fsBusiness = [];
+    let ltBusiness = [];
 
     const KNOWN_BUSINESSES = [
       { name: 'smart_lock',        label: 'Smart Locks' },
@@ -519,6 +553,39 @@
           updateAnnouncePreview();
         }
 
+        // Load delivery lead time
+        const { data: ltData, error: ltErr } = await sb
+          .from('global_settings')
+          .select('value')
+          .eq('key', 'delivery_lead_time')
+          .single();
+
+        if (!ltErr && ltData) {
+          const val = ltData.value || {};
+          document.getElementById('lt-storewide').checked = val.storewide_enabled || false;
+          document.getElementById('lt-storewide-from-val').value = val.from_value ?? 2;
+          document.getElementById('lt-storewide-to-val').value   = val.to_value   ?? 3;
+          setSelectVal('lt-storewide-from-unit', val.from_unit || 'days');
+          setSelectVal('lt-storewide-to-unit',   val.to_unit   || 'days');
+
+          const saved = val.businesses || [];
+          const savedMap = {};
+          saved.forEach(b => { savedMap[b.name] = b; });
+
+          ltBusiness = KNOWN_BUSINESSES.map(kb => {
+            const s = savedMap[kb.name];
+            return { name: kb.name, label: kb.label, custom: false, enabled: s?.enabled || false, from_value: s?.from_value ?? 2, from_unit: s?.from_unit || 'days', to_value: s?.to_value ?? 3, to_unit: s?.to_unit || 'days' };
+          });
+          saved.forEach(b => {
+            if (!KNOWN_BUSINESSES.find(kb => kb.name === b.name)) {
+              ltBusiness.push({ name: b.name, label: b.label || b.name, custom: true, enabled: b.enabled, from_value: b.from_value ?? 2, from_unit: b.from_unit || 'days', to_value: b.to_value ?? 3, to_unit: b.to_unit || 'days' });
+            }
+          });
+        } else {
+          ltBusiness = KNOWN_BUSINESSES.map(kb => ({ ...kb, custom: false, enabled: false, from_value: 2, from_unit: 'days', to_value: 3, to_unit: 'days' }));
+        }
+        renderLtRows();
+
         // Load Coupons
         fetchCouponsList();
 
@@ -599,6 +666,81 @@
         showToast('Free shipping settings saved.');
       }
     }
+
+    // --- Helpers ---
+    function setSelectVal(id, val) {
+      const el = document.getElementById(id);
+      if (el) el.value = val;
+    }
+
+    function unitOptions(selected) {
+      return ['days', 'weeks', 'months'].map(u =>
+        `<option value="${u}"${u === selected ? ' selected' : ''}>${u.charAt(0).toUpperCase() + u.slice(1)}</option>`
+      ).join('');
+    }
+
+    // --- Delivery Lead Time Rows ---
+    function renderLtRows() {
+      const container = document.getElementById('lt-business-rows');
+      container.innerHTML = '';
+      ltBusiness.forEach((biz, idx) => {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex; align-items:center; gap:0.6rem; padding:0.5rem 0.75rem; border-bottom:1px solid var(--border); flex-wrap:wrap;';
+        row.innerHTML = `
+          <input type="checkbox" ${biz.enabled ? 'checked' : ''} onchange="ltBusiness[${idx}].enabled = this.checked" style="width:16px; height:16px; cursor:pointer; flex-shrink:0;" />
+          ${biz.custom
+            ? `<input type="text" class="form-input" value="${biz.label}" oninput="ltBusiness[${idx}].label = this.value; ltBusiness[${idx}].name = this.value.toLowerCase().replace(/\\s+/g,'_');" style="flex:1; min-width:80px; font-size:0.9rem;" placeholder="Business name" />`
+            : `<span style="flex:1; min-width:80px; font-size:0.9rem;">${biz.label}</span>`
+          }
+          <div style="display:flex; align-items:center; gap:0.4rem; flex-wrap:wrap; flex-shrink:0;">
+            <span style="font-size:0.8rem; color:var(--text-secondary);">From</span>
+            <input type="number" class="form-input" value="${biz.from_value}" oninput="ltBusiness[${idx}].from_value = parseInt(this.value)||0" style="width:52px;" min="0" step="1" />
+            <select class="form-select" onchange="ltBusiness[${idx}].from_unit = this.value" style="width:90px;">${unitOptions(biz.from_unit)}</select>
+            <span style="font-size:0.8rem; color:var(--text-secondary);">To</span>
+            <input type="number" class="form-input" value="${biz.to_value}" oninput="ltBusiness[${idx}].to_value = parseInt(this.value)||0" style="width:52px;" min="0" step="1" />
+            <select class="form-select" onchange="ltBusiness[${idx}].to_unit = this.value" style="width:90px;">${unitOptions(biz.to_unit)}</select>
+          </div>
+          <button onclick="removeLtRow(${idx})" style="background:none; border:none; cursor:pointer; color:var(--text-muted); font-size:1.2rem; line-height:1; padding:0 0.25rem; flex-shrink:0;" title="Remove">&times;</button>
+        `;
+        container.appendChild(row);
+      });
+    }
+
+    window.addLtRow = () => {
+      ltBusiness.push({ name: '', label: '', custom: true, enabled: true, from_value: 2, from_unit: 'days', to_value: 3, to_unit: 'days' });
+      renderLtRows();
+      const inputs = document.querySelectorAll('#lt-business-rows input[type="text"]');
+      if (inputs.length) inputs[inputs.length - 1].focus();
+    };
+
+    window.removeLtRow = (idx) => {
+      ltBusiness.splice(idx, 1);
+      renderLtRows();
+    };
+
+    // --- Save Delivery Lead Time ---
+    async function saveLeadTime(e) {
+      e.preventDefault();
+      const btn = document.getElementById('btn-save-lt');
+      btn.disabled = true; btn.innerText = 'Saving...';
+
+      const { error } = await sb.from('global_settings').upsert({
+        key: 'delivery_lead_time',
+        value: {
+          storewide_enabled: document.getElementById('lt-storewide').checked,
+          from_value:  parseInt(document.getElementById('lt-storewide-from-val').value) || 0,
+          from_unit:   document.getElementById('lt-storewide-from-unit').value,
+          to_value:    parseInt(document.getElementById('lt-storewide-to-val').value) || 0,
+          to_unit:     document.getElementById('lt-storewide-to-unit').value,
+          businesses:  ltBusiness.map(b => ({ name: b.name, label: b.label, enabled: b.enabled, from_value: b.from_value, from_unit: b.from_unit, to_value: b.to_value, to_unit: b.to_unit }))
+        }
+      });
+
+      btn.disabled = false; btn.innerText = 'Save';
+      if (error) showToast(`Error: ${error.message}`, true);
+      else showToast('Delivery lead time saved.');
+    }
+
 
     // --- Live Announcement Preview ---
     function updateAnnouncePreview() {
