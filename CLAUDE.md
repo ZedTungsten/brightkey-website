@@ -7,6 +7,9 @@ Because `auth.js` is included on every page that requires authentication or data
 - **NEVER** redeclare `const sb` in any inline scripts or other JS files included on the same page. Doing so will cause a fatal `SyntaxError: Identifier 'sb' has already been declared`.
 - **ALWAYS** just use the existing `sb` variable directly for all queries (e.g., `await sb.from(...)`).
 
+## Icons & Emoji Rule
+**Always use inline SVG for icons.** Never use emojis as icons or decorative elements anywhere in the UI — not in HTML, JS-generated markup, or template strings.
+
 ## CSS & Styling Modifications Rule
 **Javascript Override Check**: Whenever modifying CSS styles (like `padding`, `margin`, `display` etc.) for a specific element in the HTML or CSS files, **always** double-check if there is any inline Javascript (e.g., event listeners, UI interactions like `switchMedia()`) that aggressively overrides those same styles via `element.style.property`. 
 
