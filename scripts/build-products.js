@@ -247,8 +247,8 @@ async function buildProducts() {
     if (hasMultipleMedia) {
       // Image thumbnails
       thumbnailsHtml += allImages.map(url => `
-        <button style="border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg-surface);padding:0.25rem;cursor:pointer;width:64px;height:64px;flex-shrink:0;" onclick="window.switchMedia('${url}')">
-          <img src="${url}" style="width:100%;height:100%;object-fit:contain;" />
+        <button style="border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg-surface);padding:0;overflow:hidden;cursor:pointer;width:64px;height:64px;flex-shrink:0;" onclick="window.switchMedia('${url}')">
+          <img src="${url}" style="width:100%;height:100%;object-fit:cover;" />
         </button>
       `).join('');
 
