@@ -311,6 +311,7 @@ function renderCartDrawer() {
     if (footer) {
       footer.style.display = 'none';
     }
+    updateFreeShippingBar();
     return;
   }
 
@@ -368,10 +369,12 @@ window.changeDrawerQty = (id, delta) => {
       removeFromCart(id);
     }
   }
+  updateFreeShippingBar();
 };
 
 window.removeDrawerItem = (id) => {
   removeFromCart(id);
+  updateFreeShippingBar();
 };
 
 window.closeCartDrawer = closeCartDrawer;
@@ -421,11 +424,13 @@ async function updateFreeShippingBar() {
   const fill = document.getElementById('fs-bar-fill');
   if (!wrap) return;
 
+  // Read cart state synchronously before any await to avoid stale reads
+  const cart          = getCart();
+  const subtotalCents = getCartTotal();
+  const businesses    = [...new Set(cart.map(i => i.business).filter(Boolean))];
+
   const config = await getFreeShippingConfig();
   if (!config) { wrap.style.display = 'none'; return; }
-
-  const cart = getCart();
-  const businesses = [...new Set(cart.map(i => i.business).filter(Boolean))];
 
   let threshold = null;
 
@@ -443,9 +448,8 @@ async function updateFreeShippingBar() {
   if (!threshold) { wrap.style.display = 'none'; return; }
 
   // threshold is stored in cents (same convention as product prices)
-  const subtotalCents = getCartTotal();
-  const remaining     = Math.max(0, (threshold - subtotalCents) / 100);
-  const pct           = Math.min(100, (subtotalCents / threshold) * 100);
+  const remaining = Math.max(0, (threshold - subtotalCents) / 100);
+  const pct       = Math.min(100, (subtotalCents / threshold) * 100);
 
   wrap.style.display = 'block';
   fill.style.width   = `${pct}%`;
