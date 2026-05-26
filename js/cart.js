@@ -182,7 +182,7 @@ function injectCartDrawer() {
       </div>
       <!-- Free Shipping Progress Bar -->
       <div id="fs-bar-wrap" style="display:none; padding: 0.75rem 1.25rem; border-bottom: 1px solid var(--border);">
-        <p id="fs-bar-msg" style="font-size:0.8rem; color:var(--cyan); font-weight:100; text-align:center; margin:0 0 0.45rem;"></p>
+        <p id="fs-bar-msg" style="font-size:0.8rem; color:var(--cyan); font-weight:600; text-align:center; margin:0 0 0.45rem;"></p>
         <div style="background:var(--border); border-radius:999px; height:6px; overflow:hidden;">
           <div id="fs-bar-fill" style="height:100%; width:0%; background:var(--cyan); border-radius:999px; transition:width 0.4s ease;"></div>
         </div>
