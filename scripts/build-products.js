@@ -19,8 +19,9 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatPHP(centavos) {
-  if (!centavos) return '₱0.00';
-  return new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(centavos / 100);
+  if (!centavos) return '₱0<sup style="font-size:0.65em; top:-0.35em;">00</sup>';
+  const formatted = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(centavos / 100);
+  return formatted.replace(/\.(\d{2})$/, '<sup style="font-size:0.65em; top:-0.35em;">$1</sup>');
 }
 
 /** Display price: use discounted_price if > 0, else sale_price */
@@ -277,7 +278,7 @@ async function buildProducts() {
     $('[data-template="category"]').text(p.category || '');
     $('[data-template="sku"]').text(p.sku ? `SKU: ${p.sku}` : '');
     $('[data-template="title"]').text(p.title);
-    $('[data-template="price"]').text(priceStr);
+    $('[data-template="price"]').html(priceStr);
     $('[data-template="description"]').text(descStr);
 
     // Social Proof Bar
@@ -300,7 +301,7 @@ async function buildProducts() {
 
     // Before price (strikethrough)
     if (beforeStr) {
-      $('[data-template="compare-price"]').text(beforeStr).css('display', 'inline-block');
+      $('[data-template="compare-price"]').html(beforeStr).css('display', 'inline-block');
     } else {
       $('[data-template="compare-price"]').css('display', 'none');
     }
@@ -434,9 +435,9 @@ async function buildProducts() {
         window.selectVariant = function(sku) {
           if (!window.VARIANTS_MAP || !window.VARIANTS_MAP[sku]) return;
           const v = window.VARIANTS_MAP[sku];
-          document.querySelector('[data-template="price"]').innerText = v.priceStr;
+          document.querySelector('[data-template="price"]').innerHTML = v.priceStr;
           const compareEl = document.querySelector('[data-template="compare-price"]');
-          if (v.beforeStr) { compareEl.innerText = v.beforeStr; compareEl.style.display='inline'; }
+          if (v.beforeStr) { compareEl.innerHTML = v.beforeStr; compareEl.style.display='inline-block'; }
           else compareEl.style.display = 'none';
           document.querySelector('[data-template="sku"]').innerText = 'SKU: ' + sku;
           
