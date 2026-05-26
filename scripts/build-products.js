@@ -313,6 +313,23 @@ async function buildProducts() {
       $('[data-template="features-wrapper"]').css('display', 'none');
     }
 
+    // Downloads & Resources
+    if (p.user_manual) {
+      $('[data-template="resources-list"]').html(`
+        <a href="${p.user_manual}" target="_blank" rel="noopener noreferrer" class="btn btn-outline btn-sm" style="display:inline-flex; align-items:center; gap:0.5rem;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="7 10 12 15 17 10" />
+            <line x1="12" y1="15" x2="12" y2="3" />
+          </svg>
+          User Manual
+        </a>
+      `);
+      $('[data-template="resources-wrapper"]').css('display', 'block');
+    } else {
+      $('[data-template="resources-wrapper"]').css('display', 'none');
+    }
+
     // Variants
     const variants = childProducts.filter(v => v.parent_sku === p.sku);
     let variantJsData = 'null';
