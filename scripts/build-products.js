@@ -539,7 +539,8 @@ async function buildProducts() {
           image: "${mainImgUrl}",
           sku:   "${p.sku}",
           display_rating: ${p.display_rating || null},
-          display_reviews_count: ${p.display_reviews_count || null}
+          display_reviews_count: ${p.display_reviews_count || null},
+          desc:  \`${descShort.replace(/`/g, "\\`")}\`
         };
         window.selectVariant = function(sku) {
           if (!window.VARIANTS_MAP || !window.VARIANTS_MAP[sku]) return;
