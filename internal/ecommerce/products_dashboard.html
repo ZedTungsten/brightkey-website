@@ -138,6 +138,65 @@
     .form-textarea { resize: vertical; min-height: 80px; }
     .form-hint { font-size: 0.73rem; color: var(--text-muted); }
 
+    /* Tag Input Styles (YouTube-style tag builder) */
+    .tag-input-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem;
+      padding: 0.35rem 0.5rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--bg-base);
+      min-height: 38px;
+      align-items: center;
+      cursor: text;
+      transition: border 0.15s;
+    }
+    .tag-input-container:focus-within {
+      border-color: var(--cyan);
+      background: var(--bg-surface);
+    }
+    .tag-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      background: var(--bg-elevated);
+      color: var(--text-primary);
+      border: 1px solid var(--border);
+      padding: 0.15rem 0.45rem;
+      border-radius: 4px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      user-select: none;
+    }
+    .tag-badge-close {
+      cursor: pointer;
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      line-height: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: none;
+      background: transparent;
+      padding: 0 1px;
+      transition: color 0.15s;
+    }
+    .tag-badge-close:hover {
+      color: var(--danger);
+    }
+    .tag-text-input {
+      border: none;
+      background: transparent;
+      outline: none;
+      font-family: inherit;
+      font-size: 0.85rem;
+      color: var(--text-primary);
+      flex: 1;
+      min-width: 60px;
+      padding: 2px 0;
+    }
+
     /* Section headers inside drawer */
     .form-section { margin-bottom: 1.5rem; }
     .form-section-title { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 0.75rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border); }
@@ -1362,11 +1421,136 @@
     }
   }
 
+  function initRelatedSkusTagInput() {
+    const originalInput = document.getElementById('f-related');
+    if (!originalInput) return;
+
+    // Create the YouTube-style tag input container
+    const container = document.createElement('div');
+    container.className = 'tag-input-container';
+    
+    const tagsWrapper = document.createElement('span');
+    tagsWrapper.style.display = 'flex';
+    tagsWrapper.style.flexWrap = 'wrap';
+    tagsWrapper.style.gap = '0.35rem';
+    
+    const textInput = document.createElement('input');
+    textInput.type = 'text';
+    textInput.className = 'tag-text-input';
+    textInput.placeholder = originalInput.placeholder || 'Type SKU and press comma...';
+
+    container.appendChild(tagsWrapper);
+    container.appendChild(textInput);
+
+    // Hide original input and insert container before it
+    originalInput.style.display = 'none';
+    originalInput.parentNode.insertBefore(container, originalInput);
+
+    // Click container to focus text input
+    container.addEventListener('click', () => textInput.focus());
+
+    let tags = [];
+
+    function updateTagsUI() {
+      tagsWrapper.innerHTML = '';
+      tags.forEach((tag, idx) => {
+        const pill = document.createElement('span');
+        pill.className = 'tag-badge';
+        pill.textContent = tag;
+
+        const closeBtn = document.createElement('button');
+        closeBtn.type = 'button';
+        closeBtn.className = 'tag-badge-close';
+        closeBtn.innerHTML = '&times;';
+        closeBtn.onclick = (e) => {
+          e.stopPropagation();
+          removeTag(idx);
+        };
+
+        pill.appendChild(closeBtn);
+        tagsWrapper.appendChild(pill);
+      });
+      
+      // Update placeholder
+      if (tags.length > 0) {
+        textInput.placeholder = '';
+      } else {
+        textInput.placeholder = originalInput.placeholder || 'Type SKU and press comma...';
+      }
+    }
+
+    function addTag(value) {
+      const clean = value.trim().toUpperCase().replace(/,/g, '');
+      if (clean && !tags.includes(clean)) {
+        tags.push(clean);
+        updateTagsUI();
+        triggerOriginalChange();
+      }
+    }
+
+    function removeTag(idx) {
+      tags.splice(idx, 1);
+      updateTagsUI();
+      triggerOriginalChange();
+    }
+
+    function triggerOriginalChange() {
+      // Set the hidden input value directly via prototype descriptor to bypass our setter
+      const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+      descriptor.set.call(originalInput, tags.join(', '));
+      // Dispatch events
+      originalInput.dispatchEvent(new Event('input', { bubbles: true }));
+      originalInput.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    // Intercept .value property on the original input
+    Object.defineProperty(originalInput, 'value', {
+      get() {
+        return tags.join(', ');
+      },
+      set(val) {
+        // Parse CSV string and load tags
+        const values = val ? val.split(',').map(s => s.trim().toUpperCase()).filter(Boolean) : [];
+        tags = [...new Set(values)]; // unique tags
+        updateTagsUI();
+      },
+      configurable: true
+    });
+
+    // Listen to key events in inline text input
+    textInput.addEventListener('keydown', (e) => {
+      const val = textInput.value;
+      if (e.key === ',' || e.key === 'Enter') {
+        e.preventDefault();
+        addTag(val);
+        textInput.value = '';
+      } else if (e.key === 'Backspace' && !val && tags.length > 0) {
+        removeTag(tags.length - 1);
+      }
+    });
+
+    // Process on comma or blur
+    textInput.addEventListener('input', (e) => {
+      const val = textInput.value;
+      if (val.includes(',')) {
+        const parts = val.split(',');
+        parts.slice(0, -1).forEach(addTag);
+        textInput.value = parts[parts.length - 1];
+      }
+    });
+
+    textInput.addEventListener('blur', () => {
+      addTag(textInput.value);
+      textInput.value = '';
+    });
+  }
+
   // ─────────────────────────────────────────────────────
   // Event Binding
   // ─────────────────────────────────────────────────────
   document.addEventListener('DOMContentLoaded', () => {
     fetchProducts();
+    initRelatedSkusTagInput();
 
     document.getElementById('btn-add').addEventListener('click', openDrawerAdd);
     document.getElementById('btn-publish').addEventListener('click', publishSite);
