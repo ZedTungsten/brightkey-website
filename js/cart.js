@@ -180,18 +180,17 @@ function injectCartDrawer() {
         <h3 class="cart-drawer__title">Shopping Cart</h3>
         <button class="cart-drawer__close" aria-label="Close cart" onclick="closeCartDrawer()">&times;</button>
       </div>
+      <!-- Free Shipping Progress Bar -->
+      <div id="fs-bar-wrap" style="display:none; padding: 0.75rem 1.25rem; border-bottom: 1px solid var(--border);">
+        <p id="fs-bar-msg" style="font-size:0.8rem; color:var(--text-secondary); margin:0 0 0.45rem;"></p>
+        <div style="background:var(--border); border-radius:999px; height:6px; overflow:hidden;">
+          <div id="fs-bar-fill" style="height:100%; width:0%; background:var(--cyan); border-radius:999px; transition:width 0.4s ease;"></div>
+        </div>
+      </div>
       <div class="cart-drawer__body" id="cart-drawer-items">
         <!-- Rendered items go here -->
       </div>
       <div class="cart-drawer__footer">
-        <!-- Free Shipping Progress Bar -->
-        <div id="fs-bar-wrap" style="display:none; padding: 0.6rem 0 0.9rem;">
-          <p id="fs-bar-msg" style="font-size:0.8rem; color:var(--text-secondary); margin:0 0 0.45rem;"></p>
-          <div style="background:var(--border); border-radius:999px; height:6px; overflow:hidden;">
-            <div id="fs-bar-fill" style="height:100%; width:0%; background:var(--cyan); border-radius:999px; transition:width 0.4s ease;"></div>
-          </div>
-        </div>
-
         <!-- Coupon Code Form -->
         <div style="padding: 0.8rem 0; margin-bottom: 0.8rem;">
           <div style="display:flex; gap:0.5rem;">
