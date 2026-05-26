@@ -184,6 +184,14 @@ function injectCartDrawer() {
         <!-- Rendered items go here -->
       </div>
       <div class="cart-drawer__footer">
+        <!-- Free Shipping Progress Bar -->
+        <div id="fs-bar-wrap" style="display:none; padding: 0.6rem 0 0.9rem;">
+          <p id="fs-bar-msg" style="font-size:0.8rem; color:var(--text-secondary); margin:0 0 0.45rem;"></p>
+          <div style="background:var(--border); border-radius:999px; height:6px; overflow:hidden;">
+            <div id="fs-bar-fill" style="height:100%; width:0%; background:var(--cyan); border-radius:999px; transition:width 0.4s ease;"></div>
+          </div>
+        </div>
+
         <!-- Coupon Code Form -->
         <div style="padding: 0.8rem 0; margin-bottom: 0.8rem;">
           <div style="display:flex; gap:0.5rem;">
@@ -328,10 +336,11 @@ function renderCartDrawer() {
   });
 
   itemsContainer.innerHTML = html;
-  
+
   const subtotal = getCartTotal() / 100;
   subtotalVal.innerText = `₱${subtotal.toLocaleString('en-PH', {minimumFractionDigits:2})}`;
 
+  updateFreeShippingBar();
   applyActiveCouponIfExists();
 }
 
@@ -376,6 +385,64 @@ document.addEventListener('DOMContentLoaded', () => {
   // Re-run listener setup to catch any late injected buttons
   setTimeout(setupCartToggleListener, 500);
 });
+
+// ── Free Shipping Progress Bar ────────────────────────────────────────────────
+
+let _freeShippingConfig = undefined;
+
+async function getFreeShippingConfig() {
+  if (_freeShippingConfig !== undefined) return _freeShippingConfig;
+  try {
+    await ensureSupabase();
+    const sb = getSupabaseClient();
+    if (!sb) { _freeShippingConfig = null; return null; }
+    const { data } = await sb.from('global_settings').select('value').eq('key', 'free_shipping').single();
+    _freeShippingConfig = data?.value || null;
+  } catch { _freeShippingConfig = null; }
+  return _freeShippingConfig;
+}
+
+async function updateFreeShippingBar() {
+  const wrap = document.getElementById('fs-bar-wrap');
+  const msg  = document.getElementById('fs-bar-msg');
+  const fill = document.getElementById('fs-bar-fill');
+  if (!wrap) return;
+
+  const config = await getFreeShippingConfig();
+  if (!config) { wrap.style.display = 'none'; return; }
+
+  const cart = getCart();
+  const businesses = [...new Set(cart.map(i => i.business).filter(Boolean))];
+
+  let threshold = null;
+
+  // Business-specific override takes precedence
+  for (const biz of businesses) {
+    const bizCfg = (config.businesses || []).find(b => b.name === biz && b.enabled && b.threshold > 0);
+    if (bizCfg) { threshold = bizCfg.threshold; break; }
+  }
+
+  // Fall back to storewide
+  if (threshold === null && config.storewide_enabled && config.threshold > 0) {
+    threshold = config.threshold;
+  }
+
+  if (!threshold) { wrap.style.display = 'none'; return; }
+
+  const subtotal  = getCartTotal() / 100;
+  const remaining = Math.max(0, threshold - subtotal);
+  const pct       = Math.min(100, (subtotal / threshold) * 100);
+
+  wrap.style.display = 'block';
+  fill.style.width   = `${pct}%`;
+
+  if (remaining <= 0) {
+    msg.innerHTML = `<strong style="color:var(--cyan);">You are eligible for free shipping! 🎉</strong>`;
+  } else {
+    const fmt = remaining.toLocaleString('en-PH', { minimumFractionDigits: 2 });
+    msg.textContent = `Add ₱${fmt} more to get free shipping!`;
+  }
+}
 
 // ── Coupon Verification & Applicability Logic ─────────────────────────────────
 
