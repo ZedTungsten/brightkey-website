@@ -207,7 +207,7 @@ function injectCartDrawer() {
           <span class="cart-drawer__subtotal-val" id="cart-drawer-total-val" style="font-size: 1.1rem;">₱0.00</span>
         </div>
 
-        <div id="cart-drawer-savings-row" style="display:none; align-items:center; gap:0.35rem; color:var(--text-primary); font-size:0.8rem; font-weight:700; margin-top:0.15rem; text-transform:uppercase;">
+        <div id="cart-drawer-savings-row" style="display:none; align-items:center; gap:0.35rem; color:var(--text-primary); font-size:0.8rem; font-weight:700; margin-top:0.05rem; margin-bottom:0.75rem; text-transform:uppercase;">
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line></svg>
           <span>TOTAL SAVINGS <span id="cart-drawer-savings-val">₱0.00</span></span>
         </div>
