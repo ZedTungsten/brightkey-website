@@ -68,6 +68,95 @@ function renderFeaturesHtml(featuresRow) {
   return html;
 }
 
+// ── A+ Content Renderer ───────────────────────────────────────────────────────
+function renderAPlusContent(blocks) {
+  if (!blocks || !Array.isArray(blocks) || blocks.length === 0) return '';
+  let html = '';
+
+  const getMediaHtml = (url) => {
+    if (!url) return '';
+    if (url.match(/\.(mp4|webm|ogg)$/i) || url.includes('video')) {
+      return `<video src="${url}" autoplay loop muted playsinline style="width:100%; height:100%; object-fit:cover; display:block;"></video>`;
+    }
+    return `<img src="${url}" style="width:100%; height:100%; object-fit:cover; display:block;" alt="A+ Media" />`;
+  };
+
+  blocks.forEach((b, idx) => {
+    const isOdd = idx % 2 !== 0;
+    const bg = isOdd ? 'var(--bg-surface)' : 'var(--bg-base)';
+    
+    if (b.type === 'text_image' || b.type === 'image_text') {
+      const textBlock = `
+        <div style="flex:1; padding:3rem; display:flex; flex-direction:column; justify-content:center;">
+          ${b.header ? `<h2 style="font-size:2rem; margin-bottom:1.5rem; color:var(--text-primary);">${b.header}</h2>` : ''}
+          ${b.body ? `<p style="font-size:1.1rem; line-height:1.8; color:var(--text-secondary); white-space:pre-wrap;">${b.body}</p>` : ''}
+        </div>
+      `;
+      const mediaBlock = `
+        <div style="flex:1; min-height:400px;">
+          ${getMediaHtml(b.mediaUrl)}
+        </div>
+      `;
+      html += `
+        <div style="background:${bg}; display:flex; flex-wrap:wrap; border-top:1px solid var(--border);">
+          ${b.type === 'image_text' ? mediaBlock + textBlock : textBlock + mediaBlock}
+        </div>
+      `;
+    } else if (b.type === 'text_center') {
+      html += `
+        <div style="background:${bg}; padding:4rem 2rem; text-align:center; border-top:1px solid var(--border);">
+          <div style="max-width:800px; margin:0 auto;">
+            ${b.header ? `<h2 style="font-size:2.5rem; margin-bottom:1.5rem; color:var(--text-primary);">${b.header}</h2>` : ''}
+            ${b.body ? `<p style="font-size:1.1rem; line-height:1.8; color:var(--text-secondary); white-space:pre-wrap;">${b.body}</p>` : ''}
+          </div>
+        </div>
+      `;
+    } else if (b.type === 'image_full') {
+      html += `
+        <div style="width:100%; border-top:1px solid var(--border);">
+          ${getMediaHtml(b.mediaUrl)}
+        </div>
+      `;
+    } else if (b.type === 'grid_2x2') {
+      html += `
+        <div style="background:${bg}; padding:3rem 2rem; border-top:1px solid var(--border);">
+          <div style="max-width:1200px; margin:0 auto; display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:1.5rem;">
+            ${b.img1 ? `<div style="aspect-ratio:1/1; border-radius:var(--radius-md); overflow:hidden;">${getMediaHtml(b.img1)}</div>` : ''}
+            ${b.img2 ? `<div style="aspect-ratio:1/1; border-radius:var(--radius-md); overflow:hidden;">${getMediaHtml(b.img2)}</div>` : ''}
+            ${b.img3 ? `<div style="aspect-ratio:1/1; border-radius:var(--radius-md); overflow:hidden;">${getMediaHtml(b.img3)}</div>` : ''}
+            ${b.img4 ? `<div style="aspect-ratio:1/1; border-radius:var(--radius-md); overflow:hidden;">${getMediaHtml(b.img4)}</div>` : ''}
+          </div>
+        </div>
+      `;
+    } else if (b.type === 'carousel') {
+      const items = b.items || [];
+      const slides = items.map(it => `
+        <div style="min-width:300px; max-width:400px; scroll-snap-align:start; background:var(--bg-base); border:1px solid var(--border); border-radius:var(--radius-md); overflow:hidden; flex-shrink:0;">
+          <div style="aspect-ratio:4/3; width:100%; border-bottom:1px solid var(--border);">${getMediaHtml(it.mediaUrl)}</div>
+          <div style="padding:1.5rem;">
+            ${it.title ? `<h4 style="font-size:1.25rem; margin-bottom:0.5rem; color:var(--text-primary);">${it.title}</h4>` : ''}
+            ${it.desc ? `<p style="font-size:0.95rem; color:var(--text-secondary); line-height:1.6;">${it.desc}</p>` : ''}
+          </div>
+        </div>
+      `).join('');
+      
+      html += `
+        <div style="background:${bg}; padding:4rem 2rem; border-top:1px solid var(--border); overflow:hidden;">
+          <div style="max-width:1200px; margin:0 auto;">
+            ${b.header ? `<h2 style="font-size:2.5rem; margin-bottom:0.5rem; text-align:center; color:var(--text-primary);">${b.header}</h2>` : ''}
+            ${b.subheader ? `<p style="font-size:1.1rem; color:var(--text-secondary); text-align:center; margin-bottom:3rem;">${b.subheader}</p>` : ''}
+            <div style="display:flex; gap:1.5rem; overflow-x:auto; scroll-snap-type:x mandatory; padding-bottom:1.5rem; scrollbar-width:thin;">
+              ${slides}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+  });
+
+  return html;
+}
+
 // ── Feature table map ─────────────────────────────────────────────────────────
 const FEATURE_TABLE = {
   smart_lock:         'smartlock_features',
