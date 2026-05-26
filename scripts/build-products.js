@@ -429,7 +429,6 @@ async function buildProducts() {
         </tr>
       `).join('');
       $('[data-template="specs-table"]').html(specsHtml);
-      $('[data-template="specs-wrapper"]').css('display', 'block');
       $('[data-template="specs-tab-btn"]').css('display', 'block');
     } else {
       $('[data-template="specs-wrapper"]').css('display', 'none');
@@ -441,11 +440,21 @@ async function buildProducts() {
     const featuresHtml = renderFeaturesHtml(featuresRow);
     if (featuresHtml) {
       $('[data-template="features-list"]').html(featuresHtml);
-      $('[data-template="features-wrapper"]').css('display', 'block');
       $('[data-template="features-tab-btn"]').css('display', 'block');
     } else {
       $('[data-template="features-wrapper"]').css('display', 'none');
       $('[data-template="features-tab-btn"]').css('display', 'none');
+    }
+
+    // Set Default Active Tab
+    if (featuresHtml) {
+      $('[data-template="features-wrapper"]').css('display', 'block');
+      $('[data-template="specs-wrapper"]').css('display', 'none');
+      $('[data-template="features-tab-btn"]').addClass('active').css({'color': 'var(--text-primary)', 'border-bottom-color': 'var(--cyan)'});
+      $('[data-template="specs-tab-btn"]').removeClass('active').css({'color': 'var(--text-secondary)', 'border-bottom-color': 'transparent'});
+    } else if (specs.length > 0) {
+      $('[data-template="specs-wrapper"]').css('display', 'block');
+      $('[data-template="specs-tab-btn"]').addClass('active').css({'color': 'var(--text-primary)', 'border-bottom-color': 'var(--cyan)'});
     }
 
     // Downloads & Resources
