@@ -274,6 +274,38 @@
             </div>
           </div>
 
+          <!-- Free Gift Panel -->
+          <div class="panel">
+            <h3>Free Gift</h3>
+            <div class="form-hint" style="margin-bottom:1rem;">When a trigger item is added to cart, a free item is automatically included at no charge.</div>
+
+            <div id="fg-rules-rows"></div>
+
+            <div id="fg-add-row" style="display:none; flex-direction:column; gap:0.65rem; margin-top:0.5rem; padding:0.75rem; border:1px dashed var(--border); border-radius:var(--radius-sm);">
+              <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+                <div style="flex:1; min-width:140px;">
+                  <div class="form-hint" style="margin-bottom:0.3rem;">Trigger item (buy this…)</div>
+                  <select id="fg-trigger-select" class="form-select" style="width:100%;"></select>
+                </div>
+                <div style="flex:1; min-width:140px;">
+                  <div class="form-hint" style="margin-bottom:0.3rem;">Free item (…get this free)</div>
+                  <select id="fg-gift-select" class="form-select" style="width:100%;"></select>
+                </div>
+              </div>
+              <div style="display:flex; gap:0.5rem;">
+                <button class="btn btn-cyan btn-sm" onclick="confirmAddFgRule()">Add</button>
+                <button class="btn btn-outline btn-sm" onclick="cancelAddFgRule()">Cancel</button>
+              </div>
+            </div>
+
+            <button id="fg-add-btn" class="btn btn-outline btn-sm" style="margin-top:0.75rem;" onclick="showFgAddRow()">+ Add Rule</button>
+
+            <div style="margin-top:1.25rem; padding-top:1rem; border-top:1px solid var(--border);">
+              <div class="form-hint" style="margin-bottom:0.75rem;">Free items appear in the cart labelled "Free" with no charge.</div>
+              <button class="btn btn-cyan btn-sm" id="btn-save-fg" onclick="saveFreeGifts(event)">Save</button>
+            </div>
+          </div>
+
           <!-- Announcement Bar Panel -->
           <div class="panel">
             <h3>Announcement Bar Configurations</h3>
@@ -476,6 +508,8 @@
     let previewInterval = null;
     let fsBusiness    = [];
     let ltBusiness    = [];
+    let fgRules       = [];
+    let allProducts   = [];
     let allBusinesses = []; // fetched from DB
 
     const KNOWN_BUSINESS_LABELS = {
@@ -565,7 +599,20 @@
           renderLtRows();
         }
 
-        // 5. Load Coupons
+        // 5. Load free gifts config
+        const { data: fgData, error: fgErr } = await sb
+          .from('global_settings').select('value').eq('key', 'free_gifts').single();
+        if (!fgErr && fgData) {
+          fgRules = fgData.value || [];
+          renderFgRows();
+        }
+
+        // 6. Fetch all products for free gift dropdowns
+        const { data: productsData } = await sb
+          .from('products').select('id, title, slug, image').order('title');
+        allProducts = productsData || [];
+
+        // 7. Load Coupons
         fetchCouponsList();
 
       } catch (err) {
@@ -718,6 +765,69 @@
       else showToast('Delivery lead time saved.');
     }
 
+
+    // --- Free Gift Rules ---
+    function renderFgRows() {
+      const container = document.getElementById('fg-rules-rows');
+      container.innerHTML = '';
+      fgRules.forEach((rule, idx) => {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex; align-items:center; gap:0.75rem; padding:0.5rem 0.75rem; border-bottom:1px solid var(--border);';
+        row.innerHTML = `
+          <input type="checkbox" ${rule.enabled ? 'checked' : ''} onchange="fgRules[${idx}].enabled=this.checked" style="width:16px;height:16px;cursor:pointer;flex-shrink:0;" />
+          <span style="flex:1; font-size:0.85rem; line-height:1.4;">
+            <span style="color:var(--text-secondary);">Buy:</span> ${rule.trigger_title}
+            <span style="color:var(--text-muted); margin:0 0.35rem;">→</span>
+            <span style="color:var(--text-secondary);">Free:</span> ${rule.gift_title}
+          </span>
+          <button onclick="removeFgRule(${idx})" style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:1.2rem;line-height:1;padding:0 0.25rem;flex-shrink:0;">&times;</button>
+        `;
+        container.appendChild(row);
+      });
+    }
+
+    window.showFgAddRow = () => {
+      if (!allProducts.length) { showToast('No products loaded yet. Try again in a moment.'); return; }
+      const opts = allProducts.map(p =>
+        `<option value="${p.id}" data-title="${p.title}" data-slug="${p.slug || ''}" data-image="${p.image || ''}">${p.title}</option>`
+      ).join('');
+      document.getElementById('fg-trigger-select').innerHTML = opts;
+      document.getElementById('fg-gift-select').innerHTML = opts;
+      document.getElementById('fg-add-row').style.display = 'flex';
+      document.getElementById('fg-add-btn').style.display = 'none';
+    };
+    window.cancelAddFgRule = () => {
+      document.getElementById('fg-add-row').style.display = 'none';
+      document.getElementById('fg-add-btn').style.display = '';
+    };
+    window.confirmAddFgRule = () => {
+      const ts = document.getElementById('fg-trigger-select');
+      const gs = document.getElementById('fg-gift-select');
+      const tOpt = ts.options[ts.selectedIndex];
+      const gOpt = gs.options[gs.selectedIndex];
+      fgRules.push({
+        trigger_id:    ts.value,
+        trigger_title: tOpt.dataset.title,
+        gift_id:       gs.value,
+        gift_title:    gOpt.dataset.title,
+        gift_slug:     gOpt.dataset.slug,
+        gift_image:    gOpt.dataset.image,
+        enabled:       true
+      });
+      renderFgRows();
+      cancelAddFgRule();
+    };
+    window.removeFgRule = (idx) => { fgRules.splice(idx, 1); renderFgRows(); };
+
+    async function saveFreeGifts(e) {
+      e.preventDefault();
+      const btn = document.getElementById('btn-save-fg');
+      btn.disabled = true; btn.innerText = 'Saving...';
+      const { error } = await sb.from('global_settings').upsert({ key: 'free_gifts', value: fgRules });
+      btn.disabled = false; btn.innerText = 'Save';
+      if (error) showToast(`Error: ${error.message}`, true);
+      else showToast('Free gift rules saved.');
+    }
 
     // --- Live Announcement Preview ---
     function updateAnnouncePreview() {

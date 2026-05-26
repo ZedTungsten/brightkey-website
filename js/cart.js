@@ -21,22 +21,21 @@ function addToCart(product) {
   // product = { id, title, slug, price, image, quantity }
   const cart = getCart();
   const existing = cart.find(item => item.id === product.id);
-  
+
   if (existing) {
     existing.quantity += product.quantity;
   } else {
     cart.push(product);
   }
-  
+
   saveCart(cart);
-  
-  // Automatically open the drawer
   openCartDrawer();
+  checkFreeGiftsForItem(product.id); // async: adds any matching free gift
 }
 
 function removeFromCart(productId) {
   const cart = getCart();
-  const filtered = cart.filter(item => item.id !== productId);
+  const filtered = cart.filter(item => item.id !== productId && item.triggerId !== productId);
   saveCart(filtered);
 }
 
@@ -98,28 +97,37 @@ function renderCart() {
 
   cart.forEach(item => {
     const itemTotal = (item.price * item.quantity) / 100;
-    
+    const priceStr = item.isFreeGift
+      ? `<span style="color:var(--cyan);font-weight:600;font-size:0.9rem;">Free</span>`
+      : `<span>₱${(item.price/100).toLocaleString('en-PH', {minimumFractionDigits:2})}</span>`;
+    const totalStr = item.isFreeGift
+      ? `<span style="color:var(--cyan);font-weight:600;font-size:1.1rem;">Free</span>`
+      : `<p style="font-weight:600; font-size:1.1rem;">₱${itemTotal.toLocaleString('en-PH', {minimumFractionDigits:2})}</p>`;
+    const qtyBlock = item.isFreeGift
+      ? `<span style="font-size:0.85rem;color:var(--text-muted);padding:0 0.5rem;">Free gift</span>`
+      : `<div style="display:flex; border: 1px solid var(--border); border-radius: var(--radius-sm); overflow:hidden; height:40px;">
+           <button onclick="changeQty('${item.id}', -1)" style="padding: 0 0.75rem; background: var(--bg-surface); border:none; cursor:pointer; color:var(--text-primary); font-size:1.1rem;">-</button>
+           <input type="number" value="${item.quantity}" readonly style="width: 40px; border:none; border-left:1px solid var(--border); border-right:1px solid var(--border); text-align:center; font-family:inherit; font-size:0.95rem; background:transparent; color:var(--text-primary);" />
+           <button onclick="changeQty('${item.id}', 1)" style="padding: 0 0.75rem; background: var(--bg-surface); border:none; cursor:pointer; color:var(--text-primary); font-size:1.1rem;">+</button>
+         </div>`;
+
     itemsContainer.innerHTML += `
       <div style="display:flex; padding: 1.5rem; border-bottom: 1px solid var(--border); gap: 1.5rem; align-items:center; flex-wrap:wrap;">
         <div style="width: 80px; height: 80px; border: 1px solid var(--border); border-radius: var(--radius-sm); padding:0.25rem; background:#fff; flex-shrink:0;">
           <img src="${item.image}" alt="${item.title}" style="width:100%; height:100%; object-fit:contain;" />
         </div>
-        
+
         <div style="flex: 1; min-width:200px;">
           <a href="${pathPrefix}products/${item.slug}" style="font-weight:600; font-size:1.1rem; color:var(--text-primary); text-decoration:none;">${item.title}</a>
-          <p style="color:var(--text-secondary); margin-top:0.25rem; font-size:0.9rem;">₱${(item.price/100).toLocaleString('en-PH', {minimumFractionDigits:2})}</p>
+          <p style="color:var(--text-secondary); margin-top:0.25rem; font-size:0.9rem;">${priceStr}</p>
         </div>
-        
-        <div style="display:flex; border: 1px solid var(--border); border-radius: var(--radius-sm); overflow:hidden; height:40px;">
-          <button onclick="changeQty('${item.id}', -1)" style="padding: 0 0.75rem; background: var(--bg-surface); border:none; cursor:pointer; color:var(--text-primary); font-size:1.1rem;">-</button>
-          <input type="number" value="${item.quantity}" readonly style="width: 40px; border:none; border-left:1px solid var(--border); border-right:1px solid var(--border); text-align:center; font-family:inherit; font-size:0.95rem; background:transparent; color:var(--text-primary);" />
-          <button onclick="changeQty('${item.id}', 1)" style="padding: 0 0.75rem; background: var(--bg-surface); border:none; cursor:pointer; color:var(--text-primary); font-size:1.1rem;">+</button>
-        </div>
-        
+
+        ${qtyBlock}
+
         <div style="min-width: 100px; text-align:right;">
-          <p style="font-weight:600; font-size:1.1rem;">₱${itemTotal.toLocaleString('en-PH', {minimumFractionDigits:2})}</p>
+          ${totalStr}
         </div>
-        
+
         <button onclick="removeItem('${item.id}')" style="background:transparent; border:none; color:var(--text-secondary); cursor:pointer; padding:0.5rem;" title="Remove Item">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
         </button>
@@ -315,17 +323,23 @@ function renderCartDrawer() {
   let html = '';
   cart.forEach(item => {
     const itemPrice = item.price / 100;
+    const priceDisplay = item.isFreeGift
+      ? `<span style="color:var(--cyan);font-weight:600;font-size:0.85rem;">Free</span>`
+      : `<p class="cart-drawer__item-price">₱${itemPrice.toLocaleString('en-PH', {minimumFractionDigits:2})}</p>`;
+    const qtyDisplay = item.isFreeGift
+      ? `<span style="font-size:0.75rem;color:var(--text-muted);">Free gift</span>`
+      : `<div class="cart-drawer__item-qty">
+           <button class="cart-drawer__item-qty-btn" onclick="changeDrawerQty('${item.id}', -1)">-</button>
+           <input class="cart-drawer__item-qty-input" type="number" value="${item.quantity}" readonly />
+           <button class="cart-drawer__item-qty-btn" onclick="changeDrawerQty('${item.id}', 1)">+</button>
+         </div>`;
     html += `
       <div class="cart-drawer__item">
         <img class="cart-drawer__item-img" src="${item.image}" alt="${item.title}" />
         <div class="cart-drawer__item-info">
           <a class="cart-drawer__item-title" href="${pathPrefix}products/${item.slug}">${item.title}</a>
-          <p class="cart-drawer__item-price">₱${itemPrice.toLocaleString('en-PH', {minimumFractionDigits:2})}</p>
-          <div class="cart-drawer__item-qty">
-            <button class="cart-drawer__item-qty-btn" onclick="changeDrawerQty('${item.id}', -1)">-</button>
-            <input class="cart-drawer__item-qty-input" type="number" value="${item.quantity}" readonly />
-            <button class="cart-drawer__item-qty-btn" onclick="changeDrawerQty('${item.id}', 1)">+</button>
-          </div>
+          ${priceDisplay}
+          ${qtyDisplay}
         </div>
         <button class="cart-drawer__item-remove" onclick="removeDrawerItem('${item.id}')" title="Remove item">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
@@ -442,6 +456,46 @@ async function updateFreeShippingBar() {
     const fmt = remaining.toLocaleString('en-PH', { minimumFractionDigits: 2 });
     msg.textContent = `Add ₱${fmt} more to get free shipping!`;
   }
+}
+
+// ── Free Gift Logic ───────────────────────────────────────────────────────────
+
+let _freeGiftsConfig = undefined;
+
+async function getFreeGiftsConfig() {
+  if (_freeGiftsConfig !== undefined) return _freeGiftsConfig;
+  try {
+    await ensureSupabase();
+    const sb = getSupabaseClient();
+    if (!sb) { _freeGiftsConfig = null; return null; }
+    const { data } = await sb.from('global_settings').select('value').eq('key', 'free_gifts').single();
+    _freeGiftsConfig = data?.value || null;
+  } catch { _freeGiftsConfig = null; }
+  return _freeGiftsConfig;
+}
+
+async function checkFreeGiftsForItem(triggerId) {
+  const rules = await getFreeGiftsConfig();
+  if (!rules || !rules.length) return;
+  const cart = getCart();
+  let changed = false;
+  for (const rule of rules) {
+    if (!rule.enabled || rule.trigger_id !== triggerId) continue;
+    const giftCartId = `free-gift-${rule.gift_id}`;
+    if (cart.find(i => i.id === giftCartId)) continue;
+    cart.push({
+      id: giftCartId,
+      title: rule.gift_title,
+      slug: rule.gift_slug,
+      price: 0,
+      image: rule.gift_image,
+      quantity: 1,
+      isFreeGift: true,
+      triggerId: rule.trigger_id
+    });
+    changed = true;
+  }
+  if (changed) saveCart(cart);
 }
 
 // ── Coupon Verification & Applicability Logic ─────────────────────────────────
