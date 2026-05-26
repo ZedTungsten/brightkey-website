@@ -574,7 +574,7 @@
               <span id="avg-rating-display"
                 style="font-size: 3rem; font-weight: 700; color: var(--text-primary); line-height: 1;">0.0</span>
               <div>
-                <div style="color: var(--border); font-size: 1.25rem; letter-spacing: 2px;">☆☆☆☆☆</div>
+                <div id="summary-stars-display" style="color: var(--border); font-size: 1.25rem; letter-spacing: 2px;">☆☆☆☆☆</div>
                 <div style="font-size: 0.9rem; color: var(--text-secondary); margin-top: 0.25rem;"><span
                     id="total-reviews-display">0</span> global ratings</div>
               </div>
@@ -959,23 +959,40 @@
               </div>
             `;
           });
-
-          // Update Summary block dynamically
-          if (countForRating > 0) {
-            const avg = (totalRating / countForRating).toFixed(1);
-            document.getElementById('avg-rating-display').innerText = avg;
-            document.getElementById('total-reviews-display').innerText = parentReviews.length;
-          } else {
-            document.getElementById('avg-rating-display').innerText = '0.0';
-            document.getElementById('total-reviews-display').innerText = '0';
-          }
-
+        }
+        
+        // Always render summary, preferring display_rating stats if present
+        if (CURRENT_PRODUCT.display_rating && CURRENT_PRODUCT.display_reviews_count) {
+          const rating = parseFloat(CURRENT_PRODUCT.display_rating);
+          document.getElementById('avg-rating-display').innerText = rating.toFixed(1);
+          document.getElementById('total-reviews-display').innerText = parseInt(CURRENT_PRODUCT.display_reviews_count).toLocaleString();
+          const pct = Math.min(100, Math.max(0, (rating / 5) * 100));
+          document.getElementById('summary-stars-display').innerHTML = `
+            <div style="position:relative; display:inline-block; line-height:1; white-space:nowrap;">
+              <span style="color:var(--border);">★★★★★</span>
+              <span style="color:#f59e0b; position:absolute; left:0; top:0; overflow:hidden; width:${pct}%; white-space:nowrap;">★★★★★</span>
+            </div>
+          `;
+        } else if (reviews && countForRating > 0) {
+          const avg = totalRating / countForRating;
+          document.getElementById('avg-rating-display').innerText = avg.toFixed(1);
+          document.getElementById('total-reviews-display').innerText = countForRating;
+          const pct = Math.min(100, Math.max(0, (avg / 5) * 100));
+          document.getElementById('summary-stars-display').innerHTML = `
+            <div style="position:relative; display:inline-block; line-height:1; white-space:nowrap;">
+              <span style="color:var(--border);">★★★★★</span>
+              <span style="color:#f59e0b; position:absolute; left:0; top:0; overflow:hidden; width:${pct}%; white-space:nowrap;">★★★★★</span>
+            </div>
+          `;
         } else {
-          document.getElementById('reviews-container').innerHTML = '<p style="color:var(--text-secondary);">No reviews yet. Be the first to review this product!</p>';
           document.getElementById('avg-rating-display').innerText = '0.0';
           document.getElementById('total-reviews-display').innerText = '0';
         }
-      } catch (e) { console.error('Failed to load reviews'); }
+
+        if (!reviews || reviews.length === 0) {
+          document.getElementById('reviews-container').innerHTML = '<p style="color:var(--text-secondary);">No reviews yet. Be the first to review this product!</p>';
+        }
+      } catch (e) { console.error('Failed to load reviews', e); }
     }
 
     // Star Selector Interaction

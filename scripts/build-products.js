@@ -430,7 +430,9 @@ async function buildProducts() {
           slug:  "${p.slug}",
           price: ${mainPrice},
           image: "${mainImgUrl}",
-          sku:   "${p.sku}"
+          sku:   "${p.sku}",
+          display_rating: ${p.display_rating || null},
+          display_reviews_count: ${p.display_reviews_count || null}
         };
         window.selectVariant = function(sku) {
           if (!window.VARIANTS_MAP || !window.VARIANTS_MAP[sku]) return;
