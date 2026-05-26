@@ -538,6 +538,46 @@ async function buildProducts() {
       $('[data-template="btn-add-to-cart"]').text('Add to Cart (Backorder)').removeAttr('disabled');
     }
 
+    // Related Products
+    const relatedSkus = p.related_skus || [];
+    let relatedHtml = '';
+    let relCount = 0;
+
+    if (relatedSkus.length > 0) {
+      for (const sku of relatedSkus) {
+        if (relCount >= 10) break;
+        // Find product by SKU in products array
+        const relProduct = products.find(prod => prod.sku === sku);
+        if (relProduct) {
+          const finalPrice = displayPrice(relProduct);
+          const priceStr = formatPHP(finalPrice);
+          const beforeStr = (relProduct.before_price > 0) ? formatPHP(relProduct.before_price) : null;
+          const imgUrl = relProduct.image_main || '../assets/og-image.png';
+
+          relatedHtml += `
+            <a href="${relProduct.slug}.html" class="card product-card card--spotlight" style="text-decoration:none; display:flex; flex-direction:column; padding: 1.25rem; border-radius:var(--radius-md); border:1px solid var(--border); background:var(--bg-surface); transition: transform 0.2s ease;">
+              <div style="aspect-ratio:1/1; width:100%; border-radius:var(--radius-sm); border:1px solid var(--border); background:#fff; padding:0.5rem; display:flex; align-items:center; justify-content:center; overflow:hidden; margin-bottom:1rem;">
+                <img src="${imgUrl}" alt="${relProduct.title}" style="max-width:100%; max-height:100%; object-fit:contain;" />
+              </div>
+              <h4 style="font-size:0.95rem; font-weight:600; color:var(--text-primary); margin:0 0 0.5rem 0; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; min-height:2.6rem; line-height:1.3;">${relProduct.title}</h4>
+              <div style="display:flex; align-items:center; gap:0.5rem; margin-top:auto;">
+                <span style="font-weight:700; color:var(--text-primary); font-size:1rem;">${priceStr}</span>
+                ${beforeStr ? `<span style="text-decoration:line-through; font-size:0.8rem; color:var(--text-secondary);">${beforeStr}</span>` : ''}
+              </div>
+            </a>
+          `;
+          relCount++;
+        }
+      }
+    }
+
+    if (relatedHtml) {
+      $('[data-template="related-products-grid"]').html(relatedHtml);
+      $('[data-template="related-products-wrapper"]').css('display', 'block');
+    } else {
+      $('[data-template="related-products-wrapper"]').css('display', 'none');
+    }
+
     // JS data injection
     const jsInjection = `
       <script>
