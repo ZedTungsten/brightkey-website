@@ -159,9 +159,13 @@ window.renderCart = renderCart;
 
 let drawerOverlay = null;
 
-function injectCartDrawer() {
+function isCartOrCheckoutPage() {
   const path = window.location.pathname;
-  if (path.endsWith('cart.html') || path.endsWith('checkout.html')) return;
+  return /\/(cart|checkout)(\.html)?$/.test(path);
+}
+
+function injectCartDrawer() {
+  if (isCartOrCheckoutPage()) return;
   if (document.getElementById('cart-drawer-overlay')) return;
 
   const isProductsPage = window.location.pathname.includes('/products/');
@@ -245,9 +249,7 @@ function injectCartDrawer() {
 function openCartDrawer(e) {
   if (e) e.preventDefault();
   
-  // Do not show drawer if we are already on cart or checkout pages
-  const path = window.location.pathname;
-  if (path.endsWith('cart.html') || path.endsWith('checkout.html')) {
+  if (isCartOrCheckoutPage()) {
     if (e) window.location.href = e.currentTarget.href;
     return;
   }
@@ -355,10 +357,9 @@ window.openCartDrawer = openCartDrawer;
 
 // Wire up navbar cart toggle button globally
 function setupCartToggleListener() {
-  // Target the cart anchor link in the navbar
+  if (isCartOrCheckoutPage()) return;
   const cartBtn = document.querySelector('a[aria-label="Cart"], a[href$="cart.html"], .cart-toggle-btn');
   if (cartBtn) {
-    // Clone node to clear existing listeners if any
     const newBtn = cartBtn.cloneNode(true);
     cartBtn.parentNode.replaceChild(newBtn, cartBtn);
     newBtn.addEventListener('click', openCartDrawer);
