@@ -709,6 +709,36 @@
       if (st && p.status !== st) return false;
       return true;
     });
+
+    // Group children under parents, preserving original created_at descending sort of families
+    const familyRank = {};
+    let rank = 0;
+    for (const p of filtered) {
+      const family = p.parent_sku || p.sku;
+      if (familyRank[family] === undefined) {
+        familyRank[family] = rank++;
+      }
+    }
+
+    filtered.sort((a, b) => {
+      const familyA = a.parent_sku || a.sku;
+      const familyB = b.parent_sku || b.sku;
+      
+      if (familyRank[familyA] !== familyRank[familyB]) {
+        return familyRank[familyA] - familyRank[familyB];
+      }
+      
+      const isParentA = !a.parent_sku;
+      const isParentB = !b.parent_sku;
+      
+      if (isParentA && !isParentB) return -1;
+      if (!isParentA && isParentB) return 1;
+      
+      if ((a.sku || '') < (b.sku || '')) return -1;
+      if ((a.sku || '') > (b.sku || '')) return 1;
+      return 0;
+    });
+
     renderTable();
   }
 
