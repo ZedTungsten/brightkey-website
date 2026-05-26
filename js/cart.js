@@ -502,11 +502,49 @@ async function applyActiveCouponIfExists() {
     const cart = getCart();
     if (cart.length === 0) return;
 
-    const skus = cart.map(item => item.id);
-    const { data: dbProducts, error: pErr } = await sb
-      .from('products')
-      .select('sku, business, category')
-      .in('sku', skus);
+    const uuids = [];
+    const rawSkus = [];
+    
+    cart.forEach(item => {
+      if (!item.id) return;
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+      const match = item.id.match(uuidRegex);
+      if (match) {
+        uuids.push(match[0]);
+        const suffix = item.id.substring(match[0].length + 1);
+        if (suffix) {
+          rawSkus.push(suffix);
+        }
+      } else {
+        rawSkus.push(item.id);
+      }
+    });
+
+    let dbProducts = [];
+    let pErr = null;
+
+    if (uuids.length > 0 && rawSkus.length > 0) {
+      const { data, error } = await sb
+        .from('products')
+        .select('id, sku, business, category')
+        .or(`id.in.(${uuids.map(id => `"${id}"`).join(',')}),sku.in.(${rawSkus.map(s => `"${s}"`).join(',')})`);
+      dbProducts = data;
+      pErr = error;
+    } else if (uuids.length > 0) {
+      const { data, error } = await sb
+        .from('products')
+        .select('id, sku, business, category')
+        .in('id', uuids);
+      dbProducts = data;
+      pErr = error;
+    } else if (rawSkus.length > 0) {
+      const { data, error } = await sb
+        .from('products')
+        .select('id, sku, business, category')
+        .in('sku', rawSkus);
+      dbProducts = data;
+      pErr = error;
+    }
 
     if (pErr || !dbProducts) {
       if (status) {
@@ -518,33 +556,45 @@ async function applyActiveCouponIfExists() {
     }
 
     const dbProductMap = {};
-    dbProducts.forEach(p => { dbProductMap[p.sku] = p; });
+    dbProducts.forEach(p => { 
+      if (p.id) dbProductMap[p.id.toUpperCase()] = p;
+      if (p.sku) dbProductMap[p.sku.toUpperCase()] = p; 
+      if (p.id && p.sku) dbProductMap[`${p.id.toUpperCase()}-${p.sku.toUpperCase()}`] = p;
+    });
 
     // Validate applicability & calculate discounts
     let totalEligibleSubtotal = 0;
-    const isCouponTargeted = 
-      (coupon.applicable_businesses && coupon.applicable_businesses.length > 0) ||
-      (coupon.applicable_categories && coupon.applicable_categories.length > 0) ||
-      (coupon.applicable_skus && coupon.applicable_skus.length > 0);
+    
+    // Normalized arrays from database
+    const appBiz = (coupon.applicable_businesses || []).map(b => b.trim().toLowerCase());
+    const appCat = (coupon.applicable_categories || []).map(c => c.trim().toLowerCase());
+    const appSkus = (coupon.applicable_skus || []).map(s => s.trim().toUpperCase());
+
+    const isCouponTargeted = appBiz.length > 0 || appCat.length > 0 || appSkus.length > 0;
 
     cart.forEach(item => {
-      const dbProd = dbProductMap[item.id];
-      if (!dbProd) return; // SKU not found in DB
+      const itemSkuUpper = item.id ? item.id.toUpperCase() : '';
+      const dbProd = dbProductMap[itemSkuUpper];
 
       let eligible = false;
       if (!isCouponTargeted) {
-        eligible = true; // Storewide
-      } else {
+        eligible = true; // Storewide (applies to all items)
+      } else if (dbProd) {
         // Business match
-        if (coupon.applicable_businesses && coupon.applicable_businesses.includes(dbProd.business)) {
+        if (dbProd.business && appBiz.includes(dbProd.business.toLowerCase())) {
           eligible = true;
         }
         // Category match
-        if (coupon.applicable_categories && coupon.applicable_categories.includes(dbProd.category)) {
+        if (dbProd.category && appCat.includes(dbProd.category.toLowerCase())) {
           eligible = true;
         }
         // SKU match
-        if (coupon.applicable_skus && coupon.applicable_skus.includes(item.id)) {
+        if (appSkus.includes(itemSkuUpper)) {
+          eligible = true;
+        }
+      } else {
+        // Targeted coupon but item not found in DB - check if SKU matches directly
+        if (appSkus.includes(itemSkuUpper)) {
           eligible = true;
         }
       }

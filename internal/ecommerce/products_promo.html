@@ -724,8 +724,19 @@
       const type = document.getElementById('coupon-type').value;
       const discountVal = parseFloat(document.getElementById('coupon-val').value) || 0;
       
-      const start = document.getElementById('coupon-start').value || null;
-      const end = document.getElementById('coupon-end').value || null;
+      const startVal = document.getElementById('coupon-start').value;
+      const endVal = document.getElementById('coupon-end').value;
+
+      const formatWithManilaOffset = (val) => {
+        if (!val) return null;
+        if (!val.includes('+') && !val.includes('Z')) {
+          return `${val}:00+08:00`;
+        }
+        return val;
+      };
+
+      const start = formatWithManilaOffset(startVal);
+      const end = formatWithManilaOffset(endVal);
 
       // Scopes collection
       const checkedBusinesses = [];
@@ -791,12 +802,14 @@
       document.getElementById('coupon-type').value = c.discount_type;
       document.getElementById('coupon-val').value = c.discount_value;
       
-      // Formatting datetime-local strings
+      // Formatting datetime-local strings to local Manila time (+08:00)
       const formatDateStr = (iso) => {
         if (!iso) return '';
         const d = new Date(iso);
+        // Adjust UTC time returned by new Date(iso) to Manila offset (+8 hours)
+        const manilaTime = new Date(d.getTime() + (8 * 60 * 60 * 1000));
         const pad = (n) => String(n).padStart(2, '0');
-        return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        return `${manilaTime.getUTCFullYear()}-${pad(manilaTime.getUTCMonth()+1)}-${pad(manilaTime.getUTCDate())}T${pad(manilaTime.getUTCHours())}:${pad(manilaTime.getUTCMinutes())}`;
       };
       
       document.getElementById('coupon-start').value = formatDateStr(c.start_date);
