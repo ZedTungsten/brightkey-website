@@ -202,9 +202,9 @@ function injectCartDrawer() {
           <span class="cart-drawer__subtotal-val" style="font-weight:normal; color:var(--text-secondary); font-size:0.85rem;">Calculated at next step</span>
         </div>
         
-        <div class="cart-drawer__summary" id="cart-drawer-total-row" style="display:none; margin-top:0.5rem; font-weight:700; border-top:1px solid var(--border); padding-top:0.5rem; font-size: 1.4rem;">
+        <div class="cart-drawer__summary" id="cart-drawer-total-row" style="display:none; margin-top:0.5rem; font-weight:700; border-top:1px solid var(--border); padding-top:0.5rem; font-size: 1.1rem;">
           <span class="cart-drawer__subtotal-label">Total</span>
-          <span class="cart-drawer__subtotal-val" id="cart-drawer-total-val" style="font-size: 1.4rem;">₱0.00</span>
+          <span class="cart-drawer__subtotal-val" id="cart-drawer-total-val" style="font-size: 1.1rem;">₱0.00</span>
         </div>
 
         <div id="cart-drawer-savings-row" style="display:none; align-items:center; gap:0.35rem; color:var(--text-primary); font-size:0.8rem; font-weight:700; margin-top:0.15rem; text-transform:uppercase;">
