@@ -176,10 +176,30 @@ function injectCartDrawer() {
         <!-- Rendered items go here -->
       </div>
       <div class="cart-drawer__footer">
+        <!-- Coupon Code Form -->
+        <div style="padding: 0.8rem 0; border-top: 1px solid var(--border); margin-bottom: 0.8rem;">
+          <div style="display:flex; gap:0.5rem;">
+            <input type="text" id="coupon-input" placeholder="Coupon Code" style="flex:1; padding:0.45rem 0.75rem; font-size:0.85rem; border:1px solid var(--border); border-radius:var(--radius-sm); background:transparent; color:var(--text-primary); text-transform:uppercase;" />
+            <button class="btn btn-cyan btn-sm" id="btn-apply-coupon" onclick="applyCartCoupon(event)" style="padding:0.45rem 1rem; font-size:0.85rem; border-radius:var(--radius-sm);">Apply</button>
+          </div>
+          <div id="coupon-status" style="font-size:0.75rem; margin-top:0.4rem; display:none; font-weight:600;"></div>
+        </div>
+
         <div class="cart-drawer__summary">
           <span class="cart-drawer__subtotal-label">Subtotal</span>
           <span class="cart-drawer__subtotal-val" id="cart-drawer-subtotal">₱0.00</span>
         </div>
+        
+        <div class="cart-drawer__summary" id="cart-drawer-discount-row" style="display:none; color:var(--success, #10B981); margin-top: 0.35rem;">
+          <span class="cart-drawer__subtotal-label" id="cart-drawer-discount-label">Discount</span>
+          <span class="cart-drawer__subtotal-val" id="cart-drawer-discount-val">-₱0.00</span>
+        </div>
+        
+        <div class="cart-drawer__summary" id="cart-drawer-total-row" style="display:none; margin-top:0.35rem; font-weight:700; border-top:1px dashed var(--border); padding-top:0.35rem;">
+          <span class="cart-drawer__subtotal-label">Total</span>
+          <span class="cart-drawer__subtotal-val" id="cart-drawer-total-val">₱0.00</span>
+        </div>
+
         <div class="cart-drawer__note">
           Shipping & taxes calculated at checkout
         </div>
@@ -297,6 +317,8 @@ function renderCartDrawer() {
   
   const subtotal = getCartTotal() / 100;
   subtotalVal.innerText = `₱${subtotal.toLocaleString('en-PH', {minimumFractionDigits:2})}`;
+
+  applyActiveCouponIfExists();
 }
 
 window.changeDrawerQty = (id, delta) => {
@@ -341,3 +363,249 @@ document.addEventListener('DOMContentLoaded', () => {
   // Re-run listener setup to catch any late injected buttons
   setTimeout(setupCartToggleListener, 500);
 });
+
+// ── Coupon Verification & Applicability Logic ─────────────────────────────────
+
+async function ensureSupabase() {
+  if (window.supabase) return window.supabase;
+  return new Promise((resolve) => {
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js';
+    script.onload = () => resolve(window.supabase);
+    document.head.appendChild(script);
+  });
+}
+
+function getSupabaseClient() {
+  const SUPABASE_URL = 'https://ymjlosnxuhsybkzkoofq.supabase.co';
+  const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inltamxvc254dWhzeWJremtvb2ZxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ0MDY1MzYsImV4cCI6MjA4OTk4MjUzNn0.srhk9SVvFuZRcfeRGbVDGPr5pYrFhs8vzcOiMK3A91w';
+  if (window.supabaseClient) return window.supabaseClient;
+  if (window.supabase) {
+    window.supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+    return window.supabaseClient;
+  }
+  return null;
+}
+
+window.applyCartCoupon = async (e) => {
+  if (e) e.preventDefault();
+  const input = document.getElementById('coupon-input');
+  const status = document.getElementById('coupon-status');
+  if (!input || !status) return;
+
+  const code = input.value.trim().toUpperCase();
+  if (!code) {
+    status.style.display = 'block';
+    status.style.color = 'var(--danger, #ef4444)';
+    status.innerText = 'Please enter a coupon code.';
+    return;
+  }
+
+  status.style.display = 'block';
+  status.style.color = 'var(--text-secondary)';
+  status.innerText = 'Applying...';
+
+  localStorage.setItem('bk_applied_coupon', code);
+  await applyActiveCouponIfExists();
+};
+
+window.removeCartCoupon = () => {
+  localStorage.removeItem('bk_applied_coupon');
+  const input = document.getElementById('coupon-input');
+  if (input) input.value = '';
+  const status = document.getElementById('coupon-status');
+  if (status) {
+    status.style.display = 'none';
+    status.innerText = '';
+  }
+  const discRow = document.getElementById('cart-drawer-discount-row');
+  if (discRow) discRow.style.display = 'none';
+  const totalRow = document.getElementById('cart-drawer-total-row');
+  if (totalRow) totalRow.style.display = 'none';
+  
+  renderCartDrawer();
+};
+
+async function applyActiveCouponIfExists() {
+  const code = localStorage.getItem('bk_applied_coupon');
+  const status = document.getElementById('coupon-status');
+  const discRow = document.getElementById('cart-drawer-discount-row');
+  const discLabel = document.getElementById('cart-drawer-discount-label');
+  const discVal = document.getElementById('cart-drawer-discount-val');
+  const totalRow = document.getElementById('cart-drawer-total-row');
+  const totalVal = document.getElementById('cart-drawer-total-val');
+  const input = document.getElementById('coupon-input');
+
+  if (!code) {
+    if (discRow) discRow.style.display = 'none';
+    if (totalRow) totalRow.style.display = 'none';
+    return;
+  }
+
+  if (input && !input.value) {
+    input.value = code;
+  }
+
+  try {
+    await ensureSupabase();
+    const sb = getSupabaseClient();
+    if (!sb) {
+      if (status) {
+        status.style.display = 'block';
+        status.style.color = 'var(--danger, #ef4444)';
+        status.innerText = 'Supabase client failed to load.';
+      }
+      return;
+    }
+
+    // Fetch coupon details
+    const { data: coupon, error } = await sb
+      .from('coupons')
+      .select('*')
+      .eq('code', code)
+      .single();
+
+    if (error || !coupon) {
+      localStorage.removeItem('bk_applied_coupon');
+      if (status) {
+        status.style.display = 'block';
+        status.style.color = 'var(--danger, #ef4444)';
+        status.innerText = 'Coupon not found or invalid.';
+      }
+      if (discRow) discRow.style.display = 'none';
+      if (totalRow) totalRow.style.display = 'none';
+      return;
+    }
+
+    // Validate validity dates
+    const now = Date.now();
+    if (coupon.start_date && new Date(coupon.start_date).getTime() > now) {
+      localStorage.removeItem('bk_applied_coupon');
+      if (status) {
+        status.style.display = 'block';
+        status.style.color = 'var(--danger, #ef4444)';
+        status.innerText = 'This coupon is not active yet.';
+      }
+      return;
+    }
+    if (coupon.end_date && new Date(coupon.end_date).getTime() < now) {
+      localStorage.removeItem('bk_applied_coupon');
+      if (status) {
+        status.style.display = 'block';
+        status.style.color = 'var(--danger, #ef4444)';
+        status.innerText = 'This coupon has expired.';
+      }
+      return;
+    }
+
+    // Load Cart Items and fetch database info for scope check
+    const cart = getCart();
+    if (cart.length === 0) return;
+
+    const skus = cart.map(item => item.id);
+    const { data: dbProducts, error: pErr } = await sb
+      .from('products')
+      .select('sku, business, category')
+      .in('sku', skus);
+
+    if (pErr || !dbProducts) {
+      if (status) {
+        status.style.display = 'block';
+        status.style.color = 'var(--danger, #ef4444)';
+        status.innerText = 'Error validating items with store database.';
+      }
+      return;
+    }
+
+    const dbProductMap = {};
+    dbProducts.forEach(p => { dbProductMap[p.sku] = p; });
+
+    // Validate applicability & calculate discounts
+    let totalEligibleSubtotal = 0;
+    const isCouponTargeted = 
+      (coupon.applicable_businesses && coupon.applicable_businesses.length > 0) ||
+      (coupon.applicable_categories && coupon.applicable_categories.length > 0) ||
+      (coupon.applicable_skus && coupon.applicable_skus.length > 0);
+
+    cart.forEach(item => {
+      const dbProd = dbProductMap[item.id];
+      if (!dbProd) return; // SKU not found in DB
+
+      let eligible = false;
+      if (!isCouponTargeted) {
+        eligible = true; // Storewide
+      } else {
+        // Business match
+        if (coupon.applicable_businesses && coupon.applicable_businesses.includes(dbProd.business)) {
+          eligible = true;
+        }
+        // Category match
+        if (coupon.applicable_categories && coupon.applicable_categories.includes(dbProd.category)) {
+          eligible = true;
+        }
+        // SKU match
+        if (coupon.applicable_skus && coupon.applicable_skus.includes(item.id)) {
+          eligible = true;
+        }
+      }
+
+      if (eligible) {
+        totalEligibleSubtotal += (item.price * item.quantity);
+      }
+    });
+
+    if (totalEligibleSubtotal === 0) {
+      if (status) {
+        status.style.display = 'block';
+        status.style.color = 'var(--danger, #ef4444)';
+        status.innerText = 'Coupon is not applicable to any items in your cart.';
+      }
+      if (discRow) discRow.style.display = 'none';
+      if (totalRow) totalRow.style.display = 'none';
+      return;
+    }
+
+    // Calculate discount amount in centavos
+    let discountCentavos = 0;
+    const discountValNum = parseFloat(coupon.discount_value);
+
+    if (coupon.discount_type === 'percentage') {
+      discountCentavos = Math.round(totalEligibleSubtotal * (discountValNum / 100));
+    } else {
+      // Fixed discount is converted to centavos (assumed value stored in pesos)
+      discountCentavos = Math.round(discountValNum * 100);
+    }
+
+    // Caps discount at eligible subtotal
+    discountCentavos = Math.min(discountCentavos, totalEligibleSubtotal);
+
+    const subtotalCentavos = getCartTotal();
+    const finalTotalCentavos = Math.max(0, subtotalCentavos - discountCentavos);
+
+    // Format & Render Display
+    if (status) {
+      status.style.display = 'block';
+      status.style.color = 'var(--success, #10B981)';
+      status.innerHTML = `Coupon <strong>${code}</strong> active! <a href="#" onclick="removeCartCoupon(); return false;" style="color:var(--danger, #ef4444); text-decoration:underline; margin-left:0.25rem;">[Remove]</a>`;
+    }
+
+    if (discRow && discLabel && discVal) {
+      discLabel.innerText = `Discount (${code})`;
+      discVal.innerText = `-₱${(discountCentavos / 100).toLocaleString('en-PH', {minimumFractionDigits: 2})}`;
+      discRow.style.display = 'flex';
+    }
+
+    if (totalRow && totalVal) {
+      totalVal.innerText = `₱${(finalTotalCentavos / 100).toLocaleString('en-PH', {minimumFractionDigits: 2})}`;
+      totalRow.style.display = 'flex';
+    }
+
+  } catch (err) {
+    console.error(err);
+    if (status) {
+      status.style.display = 'block';
+      status.style.color = 'var(--danger, #ef4444)';
+      status.innerText = 'An error occurred during verification.';
+    }
+  }
+}
