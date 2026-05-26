@@ -85,6 +85,12 @@
 
 <body>
 
+  <!-- Announcement Bar -->
+  <div id="announcement-bar" style="position: sticky; top: 0; z-index: 1001; display: none; align-items: center; justify-content: center; font-weight: 700; text-align: center; padding: 0.6rem 1.25rem; font-size: 0.85rem; gap: 0.5rem; transition: all 0.2s;">
+    <span id="announcement-bar-text"></span>
+    <span id="announcement-bar-timer" style="font-family: monospace; background: rgba(0,0,0,0.18); padding: 0.15rem 0.4rem; border-radius: 4px; display: none;"></span>
+  </div>
+
   <!-- Navigation -->
   <nav class="nav" role="navigation" aria-label="Main navigation">
     <div class="container">
@@ -900,8 +906,84 @@
       };
     }
 
+    async function initAnnouncementBar() {
+      try {
+        const supabaseUrl = window.SUPABASE_URL || "${SUPABASE_URL}";
+        const supabaseAnon = window.SUPABASE_ANON || "${SUPABASE_ANON_KEY}";
+        
+        let sb = window.supabaseClient;
+        if (!sb && window.supabase) {
+          sb = window.supabase.createClient(supabaseUrl, supabaseAnon);
+        }
+        if (!sb) return;
+
+        const { data, error } = await sb
+          .from('global_settings')
+          .select('value')
+          .eq('key', 'announcement_bar')
+          .single();
+
+        if (error || !data || !data.value) return;
+
+        const config = data.value;
+        if (!config.active) return;
+
+        const bar = document.getElementById('announcement-bar');
+        const textSpan = document.getElementById('announcement-bar-text');
+        const timerSpan = document.getElementById('announcement-bar-timer');
+        const nav = document.querySelector('.nav');
+
+        if (!bar || !textSpan) return;
+
+        bar.style.backgroundColor = config.bg_color || '#dc2626';
+        bar.style.color = config.text_color || '#ffffff';
+        textSpan.innerText = config.text || '';
+        bar.style.display = 'flex';
+
+        if (nav) {
+          nav.style.top = bar.offsetHeight + 'px';
+        }
+
+        const minutes = parseInt(config.countdown_minutes) || 0;
+        const seconds = parseInt(config.countdown_seconds) || 0;
+
+        if (minutes > 0 || seconds > 0) {
+          timerSpan.style.display = 'inline-block';
+          
+          const durationMs = (minutes * 60 + seconds) * 1000;
+          let expiry = localStorage.getItem('bk_announce_expiry');
+          
+          if (!expiry || (parseInt(expiry) - Date.now()) <= 0) {
+            expiry = Date.now() + durationMs;
+            localStorage.setItem('bk_announce_expiry', expiry);
+          } else {
+            expiry = parseInt(expiry);
+          }
+
+          function updateTimer() {
+            const remaining = expiry - Date.now();
+            if (remaining <= 0) {
+              timerSpan.innerText = "00:00";
+              clearInterval(timerInterval);
+              return;
+            }
+            const remSecs = Math.floor(remaining / 1000);
+            const m = Math.floor(remSecs / 60);
+            const s = remSecs % 60;
+            timerSpan.innerText = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+          }
+
+          updateTimer();
+          const timerInterval = setInterval(updateTimer, 1000);
+        }
+      } catch (err) {
+        console.error('Failed to load announcement bar:', err);
+      }
+    }
+
     document.getElementById('current-year').textContent = new Date().getFullYear();
     document.addEventListener('DOMContentLoaded', () => {
+      initAnnouncementBar();
       fetchReviews();
     });
 
