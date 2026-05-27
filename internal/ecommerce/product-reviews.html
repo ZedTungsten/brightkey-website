@@ -1021,10 +1021,7 @@
             <input type="email" class="form-input" id="ar-email" placeholder="email@example.com" />
           </div>
         </div>
-        <div class="form-group">
-          <label class="form-label">Product URL <span>— page the review came from</span></label>
-          <input type="url" class="form-input" id="ar-url" placeholder="https://brightkeysolutions.com/products/…" />
-        </div>
+
         <div class="form-group">
           <label class="form-label">Rating *</label>
           <div class="star-picker" id="ar-star-picker">
@@ -1782,7 +1779,6 @@
         this.arUploader.reset();
         document.getElementById('ar-name').value   = '';
         document.getElementById('ar-email').value  = '';
-        document.getElementById('ar-url').value    = '';
         document.getElementById('ar-body').value   = '';
         document.getElementById('ar-rating').value = '0';
         document.getElementById('ar-status').value = 'false';
@@ -1790,42 +1786,44 @@
         document.querySelectorAll('#ar-star-picker .star-btn').forEach(b => b.classList.remove('lit'));
         openModal('add-review-modal');
       },
-
+ 
       async submitAddReview() {
         const productId = document.getElementById('ar-product').value;
         const name      = document.getElementById('ar-name').value.trim();
         const email     = document.getElementById('ar-email').value.trim();
-        const url       = document.getElementById('ar-url').value.trim();
         const body      = document.getElementById('ar-body').value.trim();
         const rating    = parseInt(document.getElementById('ar-rating').value) || null;
         const approved  = document.getElementById('ar-status').value === 'true';
-
+ 
         if (!productId) { toast('Please select a product', 'error'); return; }
         if (!name)      { toast('Reviewer name is required', 'error'); return; }
         if (!body)      { toast('Review text is required', 'error'); return; }
         if (!rating)    { toast('Please select a star rating', 'error'); return; }
-
+ 
         const btn = document.getElementById('ar-submit-btn');
         btn.disabled = true;
         btn.textContent = 'Uploading…';
-
+ 
         try {
           const folder = `reviews/${productId}`;
           const mediaUrls = await this.arUploader.uploadAll(sb, folder);
-
+ 
           btn.textContent = 'Saving…';
+          const prod = this.productMap[productId];
+          const reviewerUrl = prod ? `https://brightkeysolutions.com/products/${prod.slug}` : null;
+
           const { error } = await sb.from('product_reviews').insert({
             product_id:     productId,
             reviewer_name:  name,
             reviewer_email: email || null,
-            reviewer_url:   url || null,
+            reviewer_url:   reviewerUrl,
             body,
             rating,
             is_approved:    approved,
             media_urls:     mediaUrls.length ? mediaUrls : null
           });
           if (error) throw error;
-
+ 
           closeModal('add-review-modal');
           toast('Review added successfully!', 'success');
           await this.fetchReviews();
