@@ -142,6 +142,7 @@ function renderCart() {
   }
 
   applyActiveCouponIfExists();
+  renderCrossSellRecommendations();
 }
 
 window.changeQty = (id, delta) => {
@@ -199,6 +200,8 @@ function injectCartDrawer() {
         <!-- Rendered items go here -->
       </div>
       <div class="cart-drawer__footer">
+        <!-- Recommended Add-ons -->
+        <div id="cart-drawer-cross-sell" style="margin-bottom: 0.8rem; display: none;"></div>
         <!-- Coupon Code Form -->
         <div style="padding: 0.4rem 0 0.8rem; margin-bottom: 0.8rem;">
           <div style="display:flex; gap:0.5rem;">
@@ -235,7 +238,7 @@ function injectCartDrawer() {
           <span>TOTAL SAVINGS <span id="cart-drawer-savings-val">₱0.00</span></span>
         </div>
         <div class="cart-drawer__actions">
-          <a href="${pathPrefix}checkout.html" class="btn btn-cyan btn-lg text-center" style="width:100%;">Proceed to Checkout</a>
+          <a href="javascript:void(0)" onclick="handleCheckoutClick(event)" class="btn btn-cyan btn-lg text-center" style="width:100%;">Proceed to Checkout</a>
           <a href="${pathPrefix}cart.html" class="btn btn-outline text-center" style="width:100%;">View Full Cart</a>
         </div>
       </div>
@@ -356,6 +359,7 @@ function renderCartDrawer() {
 
   updateFreeShippingBar();
   applyActiveCouponIfExists();
+  renderCrossSellRecommendations();
 }
 
 window.changeDrawerQty = (id, delta) => {
@@ -859,3 +863,444 @@ async function applyActiveCouponIfExists() {
     }
   }
 }
+
+// ── Upsell & Cross-sell Settings & Functions ───────────────────────────────
+
+let _upsellCrossSellConfig = undefined;
+
+async function getUpsellCrossSellConfig() {
+  if (_upsellCrossSellConfig !== undefined) return _upsellCrossSellConfig;
+  try {
+    await ensureSupabase();
+    const sb = getSupabaseClient();
+    if (!sb) { _upsellCrossSellConfig = null; return null; }
+    const { data } = await sb.from('global_settings').select('value').eq('key', 'upsell_cross_sell').single();
+    _upsellCrossSellConfig = data?.value || null;
+  } catch { _upsellCrossSellConfig = null; }
+  return _upsellCrossSellConfig;
+}
+
+function isRuleActive(rule) {
+  if (!rule || !rule.enabled) return false;
+  if (rule.indefinite) return true;
+  const now = Date.now();
+  if (rule.active_from && new Date(rule.active_from).getTime() > now) return false;
+  if (rule.active_to && new Date(rule.active_to).getTime() < now) return false;
+  return true;
+}
+
+async function getCartProductDetails() {
+  const cart = getCart();
+  if (cart.length === 0) return [];
+  const uuids = [];
+  const rawSkus = [];
+  cart.forEach(item => {
+    if (!item.id) return;
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+    const match = item.id.match(uuidRegex);
+    if (match) {
+      uuids.push(match[0]);
+      const suffix = item.id.substring(match[0].length + 1);
+      if (suffix) {
+        rawSkus.push(suffix);
+      }
+    } else {
+      rawSkus.push(item.id);
+    }
+  });
+
+  try {
+    await ensureSupabase();
+    const sb = getSupabaseClient();
+    if (!sb) return [];
+    
+    let dbProducts = [];
+    if (uuids.length > 0 && rawSkus.length > 0) {
+      const { data } = await sb
+        .from('products')
+        .select('id, sku, title, slug, image_main, sale_price, price')
+        .or(`id.in.(${uuids.map(id => `"${id}"`).join(',')}),sku.in.(${rawSkus.map(s => `"${s}"`).join(',')})`);
+      dbProducts = data || [];
+    } else if (uuids.length > 0) {
+      const { data } = await sb
+        .from('products')
+        .select('id, sku, title, slug, image_main, sale_price, price')
+        .in('id', uuids);
+      dbProducts = data || [];
+    } else if (rawSkus.length > 0) {
+      const { data } = await sb
+        .from('products')
+        .select('id, sku, title, slug, image_main, sale_price, price')
+        .in('sku', rawSkus);
+      dbProducts = data || [];
+    }
+    return dbProducts;
+  } catch (err) {
+    console.error('Error fetching cart product details:', err);
+    return [];
+  }
+}
+
+async function renderCrossSellRecommendations() {
+  const drawerContainer = document.getElementById('cart-drawer-cross-sell');
+  const mainContainer = document.getElementById('cross-sell-container');
+  
+  if (!drawerContainer && !mainContainer) return;
+
+  try {
+    const cart = getCart();
+    if (cart.length === 0) {
+      if (drawerContainer) drawerContainer.style.display = 'none';
+      if (mainContainer) mainContainer.style.display = 'none';
+      return;
+    }
+
+    const dbProducts = await getCartProductDetails();
+    const dbProductMap = {};
+    dbProducts.forEach(p => {
+      if (p.id) dbProductMap[p.id.toUpperCase()] = p;
+      if (p.sku) dbProductMap[p.sku.toUpperCase()] = p;
+    });
+
+    const cartSkus = new Set();
+    cart.forEach(item => {
+      const dbProd = dbProductMap[item.id?.toUpperCase()];
+      if (dbProd && dbProd.sku) {
+        cartSkus.add(dbProd.sku.toUpperCase());
+      } else if (item.id) {
+        cartSkus.add(item.id.toUpperCase());
+      }
+    });
+
+    const config = await getUpsellCrossSellConfig();
+    if (!config || !config.crosssell_rules || config.crosssell_rules.length === 0) {
+      if (drawerContainer) drawerContainer.style.display = 'none';
+      if (mainContainer) mainContainer.style.display = 'none';
+      return;
+    }
+
+    const activeRules = config.crosssell_rules.filter(r => isRuleActive(r));
+    const triggeredRules = activeRules.filter(r => cartSkus.has(r.trigger_sku.toUpperCase()));
+
+    const recommendedSkus = [];
+    triggeredRules.forEach(rule => {
+      rule.addon_skus.forEach(sku => {
+        const skuUpper = sku.toUpperCase();
+        if (!cartSkus.has(skuUpper) && !recommendedSkus.includes(skuUpper)) {
+          recommendedSkus.push(skuUpper);
+        }
+      });
+    });
+
+    if (recommendedSkus.length === 0) {
+      if (drawerContainer) drawerContainer.style.display = 'none';
+      if (mainContainer) mainContainer.style.display = 'none';
+      return;
+    }
+
+    await ensureSupabase();
+    const sb = getSupabaseClient();
+    if (!sb) return;
+
+    const { data: addOnProds } = await sb
+      .from('products')
+      .select('id, sku, title, slug, image_main, sale_price, price')
+      .in('sku', recommendedSkus);
+
+    if (!addOnProds || addOnProds.length === 0) {
+      if (drawerContainer) drawerContainer.style.display = 'none';
+      if (mainContainer) mainContainer.style.display = 'none';
+      return;
+    }
+
+    // Render HTML
+    const isProductsPage = window.location.pathname.includes('/products/');
+    const pathPrefix = isProductsPage ? '../' : '';
+
+    let html = `
+      <div style="font-size:0.75rem; font-weight:700; text-transform:uppercase; color:var(--text-secondary); margin-bottom:0.5rem; letter-spacing:0.05em; display:flex; align-items:center; gap:0.25rem;">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+        <span>Recommended Add-ons</span>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:0.5rem;">
+    `;
+
+    addOnProds.forEach(prod => {
+      const price = (prod.sale_price || prod.price) / 100;
+      const formattedPrice = `₱${price.toLocaleString('en-PH', {minimumFractionDigits:2})}`;
+      const imgUrl = prod.image_main || 'assets/og-image.png';
+
+      html += `
+        <div style="display:flex; align-items:center; gap:0.75rem; background:rgba(120,120,120,0.05); border:1px solid var(--border); border-radius:var(--radius-sm); padding:0.5rem;">
+          <img src="${imgUrl}" alt="${prod.title}" style="width:40px; height:40px; object-fit:contain; border-radius:3px; background:#fff; flex-shrink:0;" />
+          <div style="flex:1; min-width:0;">
+            <div style="font-size:0.8rem; font-weight:600; color:var(--text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${prod.title}</div>
+            <div style="font-size:0.8rem; color:var(--cyan); font-weight:600; margin-top:0.1rem;">${formattedPrice}</div>
+          </div>
+          <button class="btn btn-cyan btn-xs" onclick="addCrossSellItemToCart('${prod.sku}')" style="padding:0.25rem 0.5rem; font-size:0.75rem; border-radius:var(--radius-sm); font-weight:600;">Add</button>
+        </div>
+      `;
+    });
+
+    html += `</div>`;
+
+    if (drawerContainer) {
+      drawerContainer.innerHTML = html;
+      drawerContainer.style.display = 'block';
+    }
+    if (mainContainer) {
+      mainContainer.innerHTML = html;
+      mainContainer.style.display = 'block';
+    }
+
+  } catch (err) {
+    console.error('Error rendering cross-sell recommendations:', err);
+  }
+}
+
+window.addCrossSellItemToCart = async (sku) => {
+  try {
+    await ensureSupabase();
+    const sb = getSupabaseClient();
+    if (!sb) return;
+    const { data: prod } = await sb.from('products').select('*').eq('sku', sku).single();
+    if (!prod) return;
+    
+    addToCart({
+      id: prod.id,
+      title: prod.title,
+      slug: prod.slug,
+      price: prod.sale_price || prod.price,
+      image: prod.image_main || 'assets/og-image.png',
+      quantity: 1,
+      sku: prod.sku
+    });
+  } catch (err) {
+    console.error('Error adding cross-sell item to cart:', err);
+  }
+};
+
+window.handleCheckoutClick = async (event) => {
+  if (event) event.preventDefault();
+  
+  const isProductsPage = window.location.pathname.includes('/products/');
+  const pathPrefix = isProductsPage ? '../' : '';
+
+  const cart = getCart();
+  if (cart.length === 0) {
+    window.location.href = pathPrefix + 'checkout.html';
+    return;
+  }
+
+  try {
+    const config = await getUpsellCrossSellConfig();
+    if (!config || !config.upsell_rules || config.upsell_rules.length === 0) {
+      window.location.href = pathPrefix + 'checkout.html';
+      return;
+    }
+
+    const activeRules = config.upsell_rules.filter(r => isRuleActive(r));
+    if (activeRules.length === 0) {
+      window.location.href = pathPrefix + 'checkout.html';
+      return;
+    }
+
+    const dbProducts = await getCartProductDetails();
+    const dbProductMap = {};
+    dbProducts.forEach(p => {
+      if (p.id) dbProductMap[p.id.toUpperCase()] = p;
+      if (p.sku) dbProductMap[p.sku.toUpperCase()] = p;
+    });
+
+    const cartSkus = new Set();
+    cart.forEach(item => {
+      const dbProd = dbProductMap[item.id?.toUpperCase()];
+      if (dbProd && dbProd.sku) {
+        cartSkus.add(dbProd.sku.toUpperCase());
+      } else if (item.id) {
+        cartSkus.add(item.id.toUpperCase());
+      }
+    });
+
+    let matchedRule = null;
+    for (const rule of activeRules) {
+      const triggerUpper = rule.trigger_sku.toUpperCase();
+      const upsellUpper = rule.upsell_sku.toUpperCase();
+      if (cartSkus.has(triggerUpper) && !cartSkus.has(upsellUpper)) {
+        matchedRule = rule;
+        break;
+      }
+    }
+
+    if (!matchedRule) {
+      window.location.href = pathPrefix + 'checkout.html';
+      return;
+    }
+
+    await ensureSupabase();
+    const sb = getSupabaseClient();
+    if (!sb) {
+      window.location.href = pathPrefix + 'checkout.html';
+      return;
+    }
+
+    const { data: products } = await sb
+      .from('products')
+      .select('id, sku, title, slug, image_main, sale_price, price')
+      .in('sku', [matchedRule.trigger_sku, matchedRule.upsell_sku]);
+
+    if (!products || products.length === 0) {
+      window.location.href = pathPrefix + 'checkout.html';
+      return;
+    }
+
+    const triggerProd = products.find(p => p.sku.toUpperCase() === matchedRule.trigger_sku.toUpperCase());
+    const upsellProd = products.find(p => p.sku.toUpperCase() === matchedRule.upsell_sku.toUpperCase());
+
+    if (!triggerProd || !upsellProd) {
+      window.location.href = pathPrefix + 'checkout.html';
+      return;
+    }
+
+    showUpsellUpgradeModal(matchedRule, triggerProd, upsellProd, pathPrefix);
+
+  } catch (err) {
+    console.error('Error in handleCheckoutClick:', err);
+    window.location.href = pathPrefix + 'checkout.html';
+  }
+};
+
+function showUpsellUpgradeModal(rule, prod1, prod2, pathPrefix) {
+  const existing = document.getElementById('upsell-upgrade-modal');
+  if (existing) existing.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'upsell-upgrade-modal';
+  modal.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 999999;
+    padding: 1.5rem;
+  `;
+
+  const prod1Price = (prod1.sale_price || prod1.price) / 100;
+  const prod2PriceBase = (prod2.sale_price || prod2.price) / 100;
+  const prod2PriceAdjusted = prod2PriceBase + (rule.price_adjustment / 100);
+
+  const prod1Formatted = `₱${prod1Price.toLocaleString('en-PH', {minimumFractionDigits:2})}`;
+  const prod2Formatted = `₱${prod2PriceAdjusted.toLocaleString('en-PH', {minimumFractionDigits:2})}`;
+  const prod2Scratched = `₱${prod2PriceBase.toLocaleString('en-PH', {minimumFractionDigits:2})}`;
+
+  const prod1Img = prod1.image_main || 'assets/og-image.png';
+  const prod2Img = prod2.image_main || 'assets/og-image.png';
+
+  modal.innerHTML = `
+    <div style="background: var(--bg-surface, #1e1e1e); border: 1px solid var(--border); border-radius: var(--radius-lg, 8px); max-width: 500px; width: 100%; padding: 2rem; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5); text-align: center; position: relative; font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;">
+      <h3 style="margin-top: 0; margin-bottom: 0.5rem; font-size: 1.5rem; font-weight: 700; color: var(--text-primary);">Upgrade Available</h3>
+      <p style="font-size: 0.95rem; color: var(--text-secondary); margin-bottom: 1.5rem;">${rule.body}</p>
+      
+      <!-- Compare Layout -->
+      <div style="display: flex; align-items: center; justify-content: center; gap: 1.5rem; margin-bottom: 2rem;">
+        <!-- Trigger Product -->
+        <div style="flex: 1; min-width: 0;">
+          <div style="width: 100px; height: 100px; margin: 0 auto 0.75rem; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0.25rem; background: #fff;">
+            <img src="${prod1Img}" alt="${prod1.title}" style="width: 100%; height: 100%; object-fit: contain;" />
+          </div>
+          <div style="font-size: 0.85rem; font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${prod1.title}">${prod1.title}</div>
+          <div style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.2rem;">${prod1Formatted}</div>
+        </div>
+
+        <!-- Arrow -->
+        <div style="font-size: 2rem; color: var(--cyan); line-height: 1;">&rarr;</div>
+
+        <!-- Upgrade Product -->
+        <div style="flex: 1; min-width: 0;">
+          <div style="width: 100px; height: 100px; margin: 0 auto 0.75rem; border: 1px solid var(--cyan); border-radius: var(--radius-sm); padding: 0.25rem; background: #fff;">
+            <img src="${prod2Img}" alt="${prod2.title}" style="width: 100%; height: 100%; object-fit: contain;" />
+          </div>
+          <div style="font-size: 0.85rem; font-weight: 700; color: var(--cyan); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${prod2.title}">${prod2.title}</div>
+          <div style="font-size: 0.85rem; margin-top: 0.2rem; display: flex; align-items: center; justify-content: center; gap: 0.4rem; flex-wrap: wrap;">
+            <span style="text-decoration: line-through; color: var(--text-muted);">${prod2Scratched}</span>
+            <span style="font-weight: 700; color: #10b981;">${prod2Formatted}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div style="display: flex; flex-direction: column; gap: 0.75rem; margin-top: 1.5rem;">
+        <button id="btn-upgrade-now" class="btn btn-cyan btn-lg" style="width: 100%; font-weight: 700;">Upgrade Now</button>
+        <button id="btn-skip-upgrade" class="btn btn-outline btn-lg" style="width: 100%;">Skip to Checkout</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  document.getElementById('btn-skip-upgrade').onclick = () => {
+    modal.remove();
+    window.location.href = pathPrefix + 'checkout.html';
+  };
+
+  document.getElementById('btn-upgrade-now').onclick = () => {
+    try {
+      upgradeCartItem(prod1.sku, prod2, rule.price_adjustment);
+      modal.remove();
+      window.location.href = pathPrefix + 'checkout.html';
+    } catch (err) {
+      console.error(err);
+      window.location.href = pathPrefix + 'checkout.html';
+    }
+  };
+}
+
+function upgradeCartItem(triggerSku, targetProd, adjustmentCentavos) {
+  const cart = getCart();
+  
+  let indexToReplace = -1;
+  for (let i = 0; i < cart.length; i++) {
+    const item = cart[i];
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+    const match = item.id ? item.id.match(uuidRegex) : null;
+    let itemSku = item.id;
+    if (match) {
+      const suffix = item.id.substring(match[0].length + 1);
+      if (suffix) itemSku = suffix;
+    }
+    
+    if (itemSku && itemSku.toUpperCase() === triggerSku.toUpperCase()) {
+      indexToReplace = i;
+      break;
+    }
+  }
+
+  if (indexToReplace !== -1) {
+    const originalItem = cart[indexToReplace];
+    const originalQty = originalItem.quantity;
+    
+    const finalPrice = (targetProd.sale_price || targetProd.price) + adjustmentCentavos;
+    
+    const upgradedItem = {
+      id: targetProd.id,
+      title: targetProd.title,
+      slug: targetProd.slug,
+      price: finalPrice,
+      image: targetProd.image_main || 'assets/og-image.png',
+      quantity: originalQty,
+      sku: targetProd.sku
+    };
+
+    cart[indexToReplace] = upgradedItem;
+
+    checkFreeGiftsForItem(upgradedItem.id, upgradedItem.sku);
+    saveCart(cart);
+  }
+}
+
