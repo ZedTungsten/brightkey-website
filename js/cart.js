@@ -440,7 +440,8 @@ async function triggerConfetti(element) {
         particleCount: 50,
         spread: 45,
         origin: { x, y },
-        colors: ['#06b6d4', '#3b82f6', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6']
+        colors: ['#06b6d4', '#3b82f6', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6'],
+        zIndex: 99999
       });
     }
   } catch (err) {
