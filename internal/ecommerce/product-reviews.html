@@ -1,0 +1,1964 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Product Reviews — BrightKey Admin</title>
+  <meta name="description" content="Manage customer product reviews — approve, hide, reply, pin, and heart reviews." />
+  <link rel="preconnect" href="https://fonts.bunny.net" />
+  <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../../css/style.css" />
+  <link rel="icon" type="image/svg+xml" href="../../assets/favicon.svg?v=2" />
+
+  <style>
+    :root {
+      --bg-base:        #FAFAFA;
+      --bg-surface:     #FFFFFF;
+      --bg-elevated:    #F4F4F5;
+      --bg-card:        #FFFFFF;
+      --border:         #E4E4E7;
+      --border-hover:   #D4D4D8;
+      --text-primary:   #09090B;
+      --text-secondary: #52525B;
+      --text-muted:     #A1A1AA;
+      --cyan:           #06B6D4;
+      --cyan-light:     #0891B2;
+      --cyan-dim:       rgba(6,182,212,0.12);
+      --cyan-border:    rgba(6,182,212,0.25);
+      --success:        #16A34A;
+      --danger:         #DC2626;
+      --warning:        #D97706;
+      --pinned-color:   #7C3AED;
+      --pinned-dim:     rgba(124,58,237,0.08);
+      --pinned-border:  rgba(124,58,237,0.2);
+      --heart-color:    #E11D48;
+      --heart-dim:      rgba(225,29,72,0.1);
+      --font-mono:      'Courier New', monospace;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg-base);
+      color: var(--text-secondary);
+      font-family: 'Commissioner', sans-serif;
+      font-size: 0.9rem;
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Top Bar ── */
+    .top-bar {
+      flex-shrink: 0;
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      height: 56px;
+      z-index: 50;
+    }
+    .top-bar-back {
+      font-size: 0.8rem;
+      color: var(--cyan-light);
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 0.3rem;
+    }
+    .top-bar-back:hover { text-decoration: underline; }
+    .top-bar-sep { color: var(--border); }
+    .top-bar-title { font-size: 1rem; font-weight: 800; color: var(--text-primary); letter-spacing: -0.03em; }
+
+    /* ── Stats Strip ── */
+    .stats-strip {
+      flex-shrink: 0;
+      display: flex;
+      gap: 0;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-surface);
+    }
+    .stat-cell {
+      padding: 0.75rem 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      border-right: 1px solid var(--border);
+    }
+    .stat-cell:last-child { border-right: none; }
+    .stat-num {
+      font-size: 1.3rem;
+      font-weight: 800;
+      color: var(--text-primary);
+      letter-spacing: -0.04em;
+      font-variant-numeric: tabular-nums;
+    }
+    .stat-label {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      font-weight: 600;
+    }
+
+    /* ── Toolbar ── */
+    .toolbar {
+      flex-shrink: 0;
+      padding: 0.6rem 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .search-wrap { position: relative; flex: 1; min-width: 180px; }
+    .search-wrap svg {
+      position: absolute;
+      left: 0.65rem;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 14px; height: 14px;
+      stroke: var(--text-muted);
+      fill: none;
+      stroke-width: 2.5;
+      stroke-linecap: round;
+      pointer-events: none;
+    }
+    .search-input {
+      width: 100%;
+      padding: 0.42rem 0.75rem 0.42rem 2.1rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 0.83rem;
+      background: var(--bg-base);
+      color: var(--text-primary);
+      font-family: inherit;
+      outline: none;
+    }
+    .search-input:focus { border-color: var(--cyan); }
+
+    .filter-select {
+      padding: 0.42rem 1.8rem 0.42rem 0.65rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 0.82rem;
+      background: var(--bg-base);
+      color: var(--text-secondary);
+      font-family: inherit;
+      outline: none;
+      cursor: pointer;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='7' viewBox='0 0 10 7'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23A1A1AA' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 0.55rem center;
+    }
+    .filter-select:focus { border-color: var(--cyan); }
+
+    .toolbar-gap { flex: 1; }
+
+    /* ── Buttons ── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.42rem 0.9rem;
+      border-radius: 6px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: all 0.15s;
+      white-space: nowrap;
+      font-family: inherit;
+    }
+    .btn svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .btn:disabled { opacity: 0.45; cursor: not-allowed; pointer-events: none; }
+
+    .btn-primary { background: var(--cyan); color: #fff; border-color: var(--cyan); }
+    .btn-primary:hover { background: var(--cyan-light); border-color: var(--cyan-light); }
+    .btn-outline { background: var(--bg-surface); color: var(--text-secondary); border-color: var(--border); }
+    .btn-outline:hover { border-color: var(--cyan); color: var(--cyan-light); }
+    .btn-danger { background: var(--danger); color: #fff; }
+    .btn-danger:hover { opacity: 0.88; }
+    .btn-success { background: var(--success); color: #fff; }
+    .btn-ghost { background: none; border-color: transparent; color: var(--text-muted); }
+    .btn-ghost:hover { background: var(--bg-elevated); color: var(--text-primary); }
+
+    /* Publish btn */
+    .btn-publish {
+      background: var(--success);
+      color: #fff;
+      border-color: var(--success);
+    }
+    .btn-publish:hover { opacity: 0.88; }
+
+    /* ── Table area ── */
+    .main-area { flex: 1; overflow: hidden; display: flex; }
+    .table-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+    .table-scroll { flex: 1; overflow: auto; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+    thead th {
+      position: sticky;
+      top: 0;
+      background: var(--bg-elevated);
+      color: var(--text-muted);
+      font-size: 0.68rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      padding: 0.55rem 0.85rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+      user-select: none;
+      z-index: 10;
+    }
+    thead th.sortable { cursor: pointer; }
+    thead th.sortable:hover { color: var(--cyan-light); }
+    thead th .sort-arrow { margin-left: 0.3rem; opacity: 0.4; }
+    thead th.sort-active { color: var(--cyan-light); }
+    thead th.sort-active .sort-arrow { opacity: 1; }
+
+    tbody tr {
+      border-bottom: 1px solid var(--border);
+      transition: background 0.1s;
+    }
+    tbody tr:hover { background: rgba(6,182,212,0.02); }
+    tbody td {
+      padding: 0.65rem 0.85rem;
+      color: var(--text-secondary);
+      vertical-align: middle;
+    }
+
+    /* Pinned row */
+    tbody tr.row-pinned {
+      background: var(--pinned-dim);
+    }
+    tbody tr.row-pinned td:first-child {
+      border-left: 3px solid var(--pinned-color);
+    }
+    tbody tr.row-pinned:hover { background: rgba(124,58,237,0.12); }
+
+    /* Hidden row */
+    tbody tr.row-hidden td { opacity: 0.5; }
+    tbody tr.row-hidden td:first-child { border-left: 3px solid var(--text-muted); }
+
+    /* Reply child row */
+    tbody tr.row-reply {
+      background: rgba(6,182,212,0.025);
+    }
+    tbody tr.row-reply td { padding-top: 0.45rem; padding-bottom: 0.45rem; }
+    tbody tr.row-reply td:first-child { padding-left: 2.5rem; position: relative; }
+    tbody tr.row-reply td:first-child::before {
+      content: '';
+      position: absolute;
+      left: 1rem;
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      background: var(--border);
+      border-radius: 2px;
+    }
+
+    /* ── Cell helpers ── */
+    .cell-product-name {
+      font-weight: 700;
+      color: var(--text-primary);
+      font-size: 0.8rem;
+      max-width: 140px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .cell-url {
+      font-size: 0.72rem;
+      color: var(--cyan-light);
+      text-decoration: none;
+      max-width: 100px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      display: block;
+    }
+    .cell-url:hover { text-decoration: underline; }
+
+    .reviewer-name { font-weight: 600; color: var(--text-primary); font-size: 0.82rem; }
+    .reviewer-email { font-size: 0.72rem; color: var(--text-muted); }
+
+    .stars-display { color: #F59E0B; font-size: 0.85rem; letter-spacing: 1px; white-space: nowrap; }
+    .stars-none { color: var(--text-muted); font-style: italic; font-size: 0.78rem; }
+
+    .review-body {
+      max-width: 320px;
+      overflow: hidden;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      line-height: 1.45;
+      font-size: 0.82rem;
+      color: var(--text-secondary);
+    }
+    .review-body.is-reply { font-style: italic; color: var(--text-muted); }
+
+    .date-str { font-size: 0.75rem; color: var(--text-muted); white-space: nowrap; }
+
+    /* Media thumbnails */
+    .media-thumbs { display: flex; gap: 0.3rem; flex-wrap: wrap; margin-top: 0.35rem; }
+    .media-thumb {
+      width: 36px; height: 36px;
+      border-radius: 4px;
+      object-fit: cover;
+      border: 1px solid var(--border);
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    .media-thumb:hover { opacity: 0.8; }
+    .media-thumb-video {
+      width: 36px; height: 36px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      background: var(--bg-elevated);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: var(--text-muted);
+    }
+    .media-thumb-video svg { width: 16px; height: 16px; fill: currentColor; stroke: none; }
+
+    /* Thumbs-up counter */
+    .thumbsup-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 0.15rem 0.55rem;
+    }
+    .thumbsup-badge svg { width: 11px; height: 11px; fill: none; stroke: currentColor; stroke-width: 2; }
+
+    /* Status badges */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      padding: 0.18rem 0.55rem;
+      border-radius: 999px;
+      font-size: 0.65rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+    .badge::before {
+      content: '';
+      width: 5px; height: 5px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+    .badge-approved { background: rgba(22,163,74,0.1); color: var(--success); border: 1px solid rgba(22,163,74,0.25); }
+    .badge-approved::before { background: var(--success); }
+    .badge-pending { background: rgba(245,158,11,0.1); color: var(--warning); border: 1px solid rgba(245,158,11,0.3); }
+    .badge-pending::before { background: var(--warning); }
+    .badge-hidden { background: var(--bg-elevated); color: var(--text-muted); border: 1px solid var(--border); }
+    .badge-hidden::before { background: var(--text-muted); }
+    .badge-pin { background: var(--pinned-dim); color: var(--pinned-color); border: 1px solid var(--pinned-border); }
+    .badge-replied { background: var(--cyan-dim); color: var(--cyan-light); border: 1px solid var(--cyan-border); }
+    .badge-admin-reply { background: var(--cyan-dim); color: var(--cyan-light); border: 1px solid var(--cyan-border); font-size: 0.65rem; }
+
+    /* ── Action buttons (icon-only) ── */
+    .row-actions { display: flex; gap: 0.2rem; align-items: center; }
+    .btn-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px; height: 28px;
+      border-radius: 6px;
+      border: 1px solid transparent;
+      background: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.15s;
+      flex-shrink: 0;
+    }
+    .btn-icon:hover { background: var(--bg-elevated); color: var(--text-primary); border-color: var(--border); }
+    .btn-icon svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+    /* Active states */
+    .btn-icon.active-approve { color: var(--success); background: rgba(22,163,74,0.08); border-color: rgba(22,163,74,0.2); }
+    .btn-icon.active-approve:hover { background: rgba(22,163,74,0.15); }
+    .btn-icon.active-hide { color: var(--text-muted); background: var(--bg-elevated); border-color: var(--border); }
+    .btn-icon.active-pin { color: var(--pinned-color); background: var(--pinned-dim); border-color: var(--pinned-border); }
+    .btn-icon.active-pin:hover { background: rgba(124,58,237,0.15); }
+    .btn-icon.active-heart { color: var(--heart-color); background: var(--heart-dim); border-color: rgba(225,29,72,0.2); }
+    .btn-icon.active-heart svg { fill: var(--heart-color); stroke: var(--heart-color); }
+    .btn-icon.active-heart:hover { background: rgba(225,29,72,0.15); }
+    .btn-icon.danger:hover { color: var(--danger); background: rgba(220,38,38,0.08); border-color: rgba(220,38,38,0.2); }
+
+    /* ── Modals ── */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.45);
+      backdrop-filter: blur(4px);
+      z-index: 300;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s;
+    }
+    .modal-overlay.open { opacity: 1; pointer-events: auto; }
+
+    .modal-box {
+      background: var(--bg-surface);
+      border-radius: 14px;
+      box-shadow: 0 24px 64px rgba(0,0,0,0.22);
+      border: 1px solid var(--border);
+      width: 100%;
+      animation: modalIn 0.2s cubic-bezier(0.16,1,0.3,1);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      max-height: calc(100vh - 2rem);
+    }
+    @keyframes modalIn {
+      from { opacity: 0; transform: translateY(12px) scale(0.98); }
+      to   { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    .modal-header {
+      padding: 1.25rem 1.5rem 1rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .modal-title { font-size: 1rem; font-weight: 800; color: var(--text-primary); letter-spacing: -0.03em; }
+    .modal-close {
+      width: 30px; height: 30px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-muted);
+      transition: all 0.15s;
+    }
+    .modal-close:hover { background: var(--bg-elevated); color: var(--text-primary); }
+    .modal-close svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2.5; stroke-linecap: round; }
+
+    .modal-body { padding: 1.25rem 1.5rem; overflow-y: auto; flex: 1; }
+    .modal-footer {
+      padding: 1rem 1.5rem;
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      justify-content: flex-end;
+      flex-shrink: 0;
+    }
+
+    /* ── Form elements inside modals ── */
+    .form-group { display: flex; flex-direction: column; gap: 0.35rem; margin-bottom: 1rem; }
+    .form-label { font-size: 0.73rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.06em; }
+    .form-label span { font-weight: 400; color: var(--text-muted); text-transform: none; letter-spacing: 0; }
+    .form-input, .form-select, .form-textarea {
+      padding: 0.5rem 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 0.85rem;
+      background: var(--bg-base);
+      color: var(--text-primary);
+      font-family: inherit;
+      outline: none;
+      transition: border 0.15s;
+      width: 100%;
+    }
+    .form-input:focus, .form-select:focus, .form-textarea:focus { border-color: var(--cyan); }
+    .form-textarea { resize: vertical; min-height: 90px; }
+    .form-hint { font-size: 0.72rem; color: var(--text-muted); line-height: 1.4; }
+    .form-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem; }
+
+    /* Star picker */
+    .star-picker { display: flex; gap: 0.25rem; align-items: center; }
+    .star-btn {
+      font-size: 1.4rem;
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--border);
+      transition: color 0.1s, transform 0.1s;
+      line-height: 1;
+      padding: 0.1rem;
+    }
+    .star-btn.lit { color: #F59E0B; }
+    .star-btn:hover { transform: scale(1.15); }
+
+    /* File upload area */
+    .upload-zone {
+      border: 2px dashed var(--border);
+      border-radius: 8px;
+      padding: 1.1rem;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.15s;
+      background: var(--bg-base);
+    }
+    .upload-zone:hover, .upload-zone.drag-over {
+      border-color: var(--cyan);
+      background: var(--cyan-dim);
+    }
+    .upload-zone input[type="file"] { display: none; }
+    .upload-zone svg { width: 24px; height: 24px; stroke: var(--text-muted); fill: none; stroke-width: 1.5; margin-bottom: 0.5rem; }
+    .upload-zone p { font-size: 0.8rem; color: var(--text-muted); margin: 0; }
+    .upload-zone strong { color: var(--text-primary); }
+
+    .upload-rules { display: flex; gap: 1rem; flex-wrap: wrap; margin-top: 0.5rem; }
+    .upload-rule {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 0.2rem 0.55rem;
+    }
+    .upload-rule svg { width: 11px; height: 11px; stroke: currentColor; fill: none; stroke-width: 2; }
+
+    /* File preview chips */
+    .file-previews { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.65rem; }
+    .file-chip {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.3rem 0.55rem;
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+    }
+    .file-chip-thumb { width: 28px; height: 28px; object-fit: cover; border-radius: 3px; }
+    .file-chip-video {
+      width: 28px; height: 28px;
+      background: var(--bg-base);
+      border-radius: 3px;
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-muted);
+    }
+    .file-chip-video svg { width: 14px; height: 14px; fill: currentColor; stroke: none; }
+    .file-chip-name { max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .file-chip-size { color: var(--text-muted); font-size: 0.7rem; }
+    .file-chip-remove {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      padding: 0;
+      margin-left: 0.1rem;
+    }
+    .file-chip-remove:hover { color: var(--danger); }
+    .file-chip-remove svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2.5; stroke-linecap: round; }
+
+    /* Upload progress */
+    .upload-progress-bar {
+      height: 3px;
+      background: var(--border);
+      border-radius: 2px;
+      margin-top: 0.5rem;
+      overflow: hidden;
+      display: none;
+    }
+    .upload-progress-bar.active { display: block; }
+    .upload-progress-fill {
+      height: 100%;
+      background: var(--cyan);
+      border-radius: 2px;
+      transition: width 0.3s;
+      width: 0%;
+    }
+
+    /* Parent review context (in reply modal) */
+    .review-context {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.85rem 1rem;
+      margin-bottom: 1.1rem;
+    }
+    .review-context-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.4rem; flex-wrap: wrap; }
+    .review-context-name { font-weight: 700; font-size: 0.82rem; color: var(--text-primary); }
+    .review-context-body { font-size: 0.82rem; color: var(--text-secondary); line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+
+    /* ── Settings drawer ── */
+    .settings-panel {
+      position: fixed;
+      top: 0;
+      right: -380px;
+      width: 360px;
+      max-width: 95vw;
+      height: 100vh;
+      background: var(--bg-surface);
+      border-left: 1px solid var(--border);
+      z-index: 200;
+      display: flex;
+      flex-direction: column;
+      transition: right 0.3s cubic-bezier(0.4,0,0.2,1);
+      box-shadow: -8px 0 32px rgba(0,0,0,0.08);
+    }
+    .settings-panel.open { right: 0; }
+    .settings-panel-header {
+      padding: 1.1rem 1.25rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .settings-panel-title { font-weight: 800; color: var(--text-primary); font-size: 0.95rem; }
+    .settings-panel-body { padding: 1.25rem; overflow-y: auto; flex: 1; }
+
+    .settings-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.2);
+      z-index: 199;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s;
+    }
+    .settings-overlay.open { opacity: 1; pointer-events: auto; }
+
+    .setting-row {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 1rem 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .setting-row:last-child { border-bottom: none; }
+    .setting-info { flex: 1; }
+    .setting-label { font-size: 0.85rem; font-weight: 700; color: var(--text-primary); }
+    .setting-desc { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.2rem; line-height: 1.4; }
+
+    /* Toggle switch */
+    .toggle-wrap { flex-shrink: 0; padding-top: 2px; }
+    .toggle {
+      position: relative;
+      width: 40px;
+      height: 22px;
+      cursor: pointer;
+    }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .toggle-track {
+      position: absolute;
+      inset: 0;
+      background: var(--border-hover);
+      border-radius: 999px;
+      transition: background 0.2s;
+    }
+    .toggle input:checked + .toggle-track { background: var(--cyan); }
+    .toggle-thumb {
+      position: absolute;
+      top: 3px; left: 3px;
+      width: 16px; height: 16px;
+      background: #fff;
+      border-radius: 50%;
+      transition: left 0.2s;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    }
+    .toggle input:checked ~ .toggle-thumb { left: 21px; }
+
+    /* ── Media lightbox ── */
+    .lightbox-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.88);
+      z-index: 500;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s;
+    }
+    .lightbox-overlay.open { opacity: 1; pointer-events: auto; }
+    .lightbox-media { max-width: 90vw; max-height: 85vh; border-radius: 8px; }
+    .lightbox-close {
+      position: absolute;
+      top: 1rem; right: 1rem;
+      width: 36px; height: 36px;
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 50%;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+    }
+    .lightbox-close svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2.5; stroke-linecap: round; }
+
+    /* ── Confirm modal ── */
+    .confirm-box { max-width: 400px; }
+    .confirm-title { font-size: 1rem; font-weight: 800; color: var(--text-primary); margin-bottom: 0.5rem; }
+    .confirm-body { font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1.25rem; line-height: 1.5; }
+
+    /* ── Toast ── */
+    #toast-container {
+      position: fixed;
+      bottom: 1.5rem;
+      right: 1.5rem;
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    .toast {
+      padding: 0.75rem 1.1rem;
+      border-radius: 8px;
+      font-size: 0.83rem;
+      font-weight: 600;
+      color: #fff;
+      animation: toastIn 0.25s cubic-bezier(0.16,1,0.3,1);
+      max-width: 320px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+    }
+    .toast-success { background: var(--success); }
+    .toast-error   { background: var(--danger); }
+    .toast-info    { background: var(--cyan-light); }
+    @keyframes toastIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+    @keyframes toastOut { to { opacity:0; transform:translateY(4px); } }
+
+    /* ── Empty state ── */
+    .empty-state {
+      text-align: center;
+      padding: 4rem 2rem;
+      color: var(--text-muted);
+    }
+    .empty-state svg { width: 40px; height: 40px; stroke: var(--border); fill: none; stroke-width: 1.5; margin: 0 auto 1rem; }
+    .empty-state p { font-size: 0.85rem; }
+
+    /* ── Misc ── */
+    .sep { color: var(--border); }
+    .pin-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.2rem;
+      font-size: 0.62rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--pinned-color);
+      background: var(--pinned-dim);
+      border: 1px solid var(--pinned-border);
+      border-radius: 999px;
+      padding: 0.1rem 0.45rem;
+      vertical-align: middle;
+    }
+    .pin-badge svg { width: 9px; height: 9px; fill: var(--pinned-color); stroke: none; }
+  </style>
+</head>
+<body>
+
+  <!-- Top Bar -->
+  <div class="top-bar">
+    <a href="../../admin.html" class="top-bar-back">
+      <svg viewBox="0 0 24 24" style="width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round"><polyline points="15 18 9 12 15 6"/></svg>
+      Dashboard
+    </a>
+    <span class="sep">|</span>
+    <span class="top-bar-title">Product Reviews</span>
+    <div style="flex:1"></div>
+
+    <button class="btn btn-ghost" id="btn-settings" title="Review Settings">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      Settings
+    </button>
+
+    <button class="btn btn-outline" id="btn-add-review">
+      <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Add Review
+    </button>
+
+    <button class="btn btn-publish" id="btn-publish" title="Trigger Vercel rebuild to show review changes live">
+      <svg viewBox="0 0 24 24"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
+      Publish Live
+    </button>
+  </div>
+
+  <!-- Stats Strip -->
+  <div class="stats-strip">
+    <div class="stat-cell">
+      <div>
+        <div class="stat-num" id="stat-total">—</div>
+        <div class="stat-label">Total Reviews</div>
+      </div>
+    </div>
+    <div class="stat-cell">
+      <div>
+        <div class="stat-num" id="stat-pending" style="color:var(--warning)">—</div>
+        <div class="stat-label" style="color:var(--warning)">Pending</div>
+      </div>
+    </div>
+    <div class="stat-cell">
+      <div>
+        <div class="stat-num" id="stat-approved" style="color:var(--success)">—</div>
+        <div class="stat-label" style="color:var(--success)">Approved</div>
+      </div>
+    </div>
+    <div class="stat-cell">
+      <div>
+        <div class="stat-num" id="stat-hidden">—</div>
+        <div class="stat-label">Hidden</div>
+      </div>
+    </div>
+    <div class="stat-cell">
+      <div>
+        <div class="stat-num" id="stat-pinned" style="color:var(--pinned-color)">—</div>
+        <div class="stat-label" style="color:var(--pinned-color)">Pinned</div>
+      </div>
+    </div>
+    <div class="stat-cell">
+      <div>
+        <div class="stat-num" id="stat-hearted" style="color:var(--heart-color)">—</div>
+        <div class="stat-label" style="color:var(--heart-color)">Admin Hearted</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toolbar -->
+  <div class="toolbar">
+    <div class="search-wrap">
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="text" class="search-input" id="search-input" placeholder="Search name, email, review text…" />
+    </div>
+
+    <select class="filter-select" id="filter-sort">
+      <option value="newest">Newest First</option>
+      <option value="oldest">Oldest First</option>
+      <option value="stars-high">Highest Rating</option>
+      <option value="stars-low">Lowest Rating</option>
+      <option value="thumbsup">Most Thumbs Up</option>
+    </select>
+
+    <select class="filter-select" id="filter-status">
+      <option value="all">All Statuses</option>
+      <option value="pending">Pending</option>
+      <option value="approved">Approved</option>
+      <option value="hidden">Hidden</option>
+    </select>
+
+    <select class="filter-select" id="filter-replied">
+      <option value="all">All Reviews</option>
+      <option value="replied">Replied</option>
+      <option value="not-replied">Not Replied</option>
+    </select>
+
+    <select class="filter-select" id="filter-stars">
+      <option value="all">All Ratings</option>
+      <option value="5">5 Stars</option>
+      <option value="4">4 Stars</option>
+      <option value="3">3 Stars</option>
+      <option value="2">2 Stars</option>
+      <option value="1">1 Star</option>
+    </select>
+
+    <select class="filter-select" id="filter-product">
+      <option value="all">All Products</option>
+    </select>
+  </div>
+
+  <!-- Main Area -->
+  <div class="main-area">
+    <div class="table-panel">
+      <div class="table-scroll" id="table-scroll">
+        <table id="reviews-table">
+          <thead>
+            <tr>
+              <th style="width:140px">Product</th>
+              <th style="width:90px">URL</th>
+              <th style="width:150px">Reviewer</th>
+              <th style="width:90px">Stars</th>
+              <th>Review</th>
+              <th style="width:105px" class="sortable" id="th-date">Date <span class="sort-arrow">↓</span></th>
+              <th style="width:70px">Likes</th>
+              <th style="width:90px">Status</th>
+              <th style="width:60px">Replied</th>
+              <th style="width:150px; text-align:center">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="reviews-body">
+            <tr>
+              <td colspan="10" class="empty-state">
+                <p>Loading reviews…</p>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════════
+       REPLY MODAL
+  ════════════════════════════════════════════ -->
+  <div class="modal-overlay" id="reply-modal">
+    <div class="modal-box" style="max-width:560px">
+      <div class="modal-header">
+        <div class="modal-title" id="reply-modal-title">Reply to Review</div>
+        <button class="modal-close" onclick="closeModal('reply-modal')">
+          <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <!-- Parent review context -->
+        <div class="review-context" id="reply-context">
+          <div class="review-context-header">
+            <span class="review-context-name" id="reply-context-name"></span>
+            <span class="stars-display" id="reply-context-stars"></span>
+          </div>
+          <div class="review-context-body" id="reply-context-body"></div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Your Response *</label>
+          <textarea class="form-textarea" id="reply-text" placeholder="Type your official response…" style="min-height:110px"></textarea>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">
+            Attach Media <span>— up to 3 images (5 MB each) · 1 video (50 MB, ≤30 sec)</span>
+          </label>
+          <div class="upload-zone" id="reply-upload-zone" onclick="document.getElementById('reply-file-input').click()">
+            <input type="file" id="reply-file-input" accept="image/jpeg,image/jpg,image/png,image/webp,image/heic,image/heif,video/mp4,video/quicktime,video/webm" multiple />
+            <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <p><strong>Click to upload</strong> or drag & drop</p>
+            <p>JPEG · PNG · WEBP · HEIC · MP4 · MOV · WEBM</p>
+          </div>
+          <div class="upload-rules">
+            <div class="upload-rule">
+              <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+              Max 3 images · 5 MB each
+            </div>
+            <div class="upload-rule">
+              <svg viewBox="0 0 24 24"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+              Max 1 video · 50 MB · 30 sec
+            </div>
+          </div>
+          <div class="file-previews" id="reply-file-previews"></div>
+          <div class="upload-progress-bar" id="reply-progress-bar">
+            <div class="upload-progress-fill" id="reply-progress-fill"></div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal('reply-modal')">Cancel</button>
+        <button class="btn btn-primary" id="reply-submit-btn" onclick="App.submitReply()">
+          <svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+          Send Reply
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════════
+       ADD REVIEW MODAL
+  ════════════════════════════════════════════ -->
+  <div class="modal-overlay" id="add-review-modal">
+    <div class="modal-box" style="max-width:520px">
+      <div class="modal-header">
+        <div class="modal-title">Add Review</div>
+        <button class="modal-close" onclick="closeModal('add-review-modal')">
+          <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="form-grid-2">
+          <div class="form-group">
+            <label class="form-label">Product *</label>
+            <select class="form-select" id="ar-product"></select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Status</label>
+            <select class="form-select" id="ar-status">
+              <option value="false">Pending</option>
+              <option value="true">Approved</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-grid-2">
+          <div class="form-group">
+            <label class="form-label">Reviewer Name *</label>
+            <input type="text" class="form-input" id="ar-name" placeholder="e.g. Maria Santos" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Reviewer Email</label>
+            <input type="email" class="form-input" id="ar-email" placeholder="email@example.com" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Product URL <span>— page the review came from</span></label>
+          <input type="url" class="form-input" id="ar-url" placeholder="https://brightkeysolutions.com/products/…" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Rating *</label>
+          <div class="star-picker" id="ar-star-picker">
+            <button type="button" class="star-btn" data-val="1">★</button>
+            <button type="button" class="star-btn" data-val="2">★</button>
+            <button type="button" class="star-btn" data-val="3">★</button>
+            <button type="button" class="star-btn" data-val="4">★</button>
+            <button type="button" class="star-btn" data-val="5">★</button>
+          </div>
+          <input type="hidden" id="ar-rating" value="0" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Review Text *</label>
+          <textarea class="form-textarea" id="ar-body" placeholder="Customer review content…"></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">
+            Attach Media <span>— up to 3 images (5 MB) · 1 video (50 MB, ≤30 sec)</span>
+          </label>
+          <div class="upload-zone" id="ar-upload-zone" onclick="document.getElementById('ar-file-input').click()">
+            <input type="file" id="ar-file-input" accept="image/jpeg,image/jpg,image/png,image/webp,image/heic,image/heif,video/mp4,video/quicktime,video/webm" multiple />
+            <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <p><strong>Click to upload</strong> or drag & drop</p>
+          </div>
+          <div class="upload-rules">
+            <div class="upload-rule">
+              <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+              Max 3 images · 5 MB each
+            </div>
+            <div class="upload-rule">
+              <svg viewBox="0 0 24 24"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+              Max 1 video · 50 MB · 30 sec
+            </div>
+          </div>
+          <div class="file-previews" id="ar-file-previews"></div>
+          <div class="upload-progress-bar" id="ar-progress-bar">
+            <div class="upload-progress-fill" id="ar-progress-fill"></div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal('add-review-modal')">Cancel</button>
+        <button class="btn btn-primary" id="ar-submit-btn" onclick="App.submitAddReview()">
+          <svg viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+          Save Review
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════════
+       CONFIRM DELETE MODAL
+  ════════════════════════════════════════════ -->
+  <div class="modal-overlay" id="confirm-modal">
+    <div class="modal-box confirm-box">
+      <div class="modal-body" style="padding-top:1.5rem">
+        <div class="confirm-title" id="confirm-title">Delete Review?</div>
+        <div class="confirm-body" id="confirm-body">This will permanently remove the review and all its replies.</div>
+        <div style="display:flex;gap:0.6rem;justify-content:flex-end">
+          <button class="btn btn-ghost" onclick="closeModal('confirm-modal')">Cancel</button>
+          <button class="btn btn-danger" id="confirm-ok-btn">Delete</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════════
+       MEDIA LIGHTBOX
+  ════════════════════════════════════════════ -->
+  <div class="lightbox-overlay" id="lightbox">
+    <button class="lightbox-close" onclick="closeLightbox()">
+      <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+    <img class="lightbox-media" id="lightbox-img" src="" alt="" style="display:none" />
+    <video class="lightbox-media" id="lightbox-video" controls style="display:none"></video>
+  </div>
+
+  <!-- ════════════════════════════════════════════
+       SETTINGS PANEL
+  ════════════════════════════════════════════ -->
+  <div class="settings-overlay" id="settings-overlay" onclick="closeSettings()"></div>
+  <div class="settings-panel" id="settings-panel">
+    <div class="settings-panel-header">
+      <div class="settings-panel-title">Review Settings</div>
+      <button class="modal-close" onclick="closeSettings()">
+        <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="settings-panel-body">
+
+      <div class="setting-row">
+        <div class="setting-info">
+          <div class="setting-label">Require Login for Thumbs-Up</div>
+          <div class="setting-desc">When enabled, customers must be signed in to their account before they can thumbs-up a review on the product page.</div>
+        </div>
+        <div class="toggle-wrap">
+          <label class="toggle">
+            <input type="checkbox" id="setting-thumbsup-login" checked />
+            <span class="toggle-track"></span>
+            <span class="toggle-thumb"></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="setting-row">
+        <div class="setting-info">
+          <div class="setting-label">Auto-Approve Admin Replies</div>
+          <div class="setting-desc">Replies submitted by admins from this page are marked as approved automatically without a pending review.</div>
+        </div>
+        <div class="toggle-wrap">
+          <label class="toggle">
+            <input type="checkbox" id="setting-auto-approve-replies" checked />
+            <span class="toggle-track"></span>
+            <span class="toggle-thumb"></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="setting-row">
+        <div class="setting-info">
+          <div class="setting-label">Show Hidden Reviews in Admin</div>
+          <div class="setting-desc">When off, hidden reviews are completely excluded from the admin table view (they remain in DB).</div>
+        </div>
+        <div class="toggle-wrap">
+          <label class="toggle">
+            <input type="checkbox" id="setting-show-hidden" checked />
+            <span class="toggle-track"></span>
+            <span class="toggle-thumb"></span>
+          </label>
+        </div>
+      </div>
+
+      <div style="margin-top:1.5rem;padding:1rem;background:var(--bg-elevated);border-radius:8px;border:1px solid var(--border)">
+        <div style="font-size:0.75rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:0.5rem">Storage Usage</div>
+        <div style="font-size:0.82rem;color:var(--text-secondary)">Media uploads are stored in Supabase Storage under the <code style="background:var(--bg-base);padding:0.1rem 0.35rem;border-radius:3px;font-size:0.75rem">review-media</code> bucket.</div>
+        <div style="margin-top:0.5rem;font-size:0.75rem;color:var(--text-muted)">Limits: 3 images × 5 MB · 1 video × 50 MB per review</div>
+      </div>
+
+      <div style="margin-top:1rem;padding:1rem;background:var(--cyan-dim);border-radius:8px;border:1px solid var(--cyan-border)">
+        <div style="font-size:0.75rem;font-weight:700;color:var(--cyan-light);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:0.5rem">Publishing</div>
+        <div style="font-size:0.82rem;color:var(--text-secondary)">After approving or hiding reviews, click <strong>Publish Live</strong> in the top bar to trigger a Vercel rebuild so changes appear on the public product pages.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Toast container -->
+  <div id="toast-container" aria-live="polite"></div>
+
+  <!-- ════════════════════════════════════════════
+       SCRIPTS
+  ════════════════════════════════════════════ -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="../../js/auth.js"></script>
+
+  <script>
+    'use strict';
+
+    // ─── Constants ───────────────────────────────────────────────────────────
+    const STORAGE_BUCKET    = 'review-media';
+    const MAX_IMAGE_MB      = 5;
+    const MAX_VIDEO_MB      = 50;
+    const MAX_VIDEO_SECONDS = 30;
+    const MAX_IMAGES        = 3;
+    const MAX_VIDEOS        = 1;
+    const IMAGE_TYPES       = ['image/jpeg','image/jpg','image/png','image/webp','image/heic','image/heif'];
+    const VIDEO_TYPES       = ['video/mp4','video/quicktime','video/webm'];
+
+    // ─── Helpers ─────────────────────────────────────────────────────────────
+    function esc(s) {
+      if (s == null) return '';
+      return String(s)
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+        .replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+    }
+
+    function starsHtml(n) {
+      if (!n) return '<span class="stars-none">No rating</span>';
+      return `<span class="stars-display">${'★'.repeat(n)}${'☆'.repeat(5-n)}</span>`;
+    }
+
+    function fmtDate(d) {
+      if (!d) return '—';
+      return new Date(d).toLocaleDateString('en-PH', {
+        month:'short', day:'numeric', year:'numeric',
+        hour:'2-digit', minute:'2-digit'
+      });
+    }
+
+    function formatBytes(bytes) {
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1024*1024) return (bytes/1024).toFixed(1) + ' KB';
+      return (bytes/(1024*1024)).toFixed(1) + ' MB';
+    }
+
+    function isImage(type) { return IMAGE_TYPES.includes(type); }
+    function isVideo(type) { return VIDEO_TYPES.includes(type); }
+
+    function openModal(id) { document.getElementById(id).classList.add('open'); }
+    function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+    function openLightbox(url, type) {
+      const overlay = document.getElementById('lightbox');
+      const img = document.getElementById('lightbox-img');
+      const vid = document.getElementById('lightbox-video');
+      if (isVideo(type) || url.match(/\.(mp4|mov|webm)(\?|$)/i)) {
+        img.style.display = 'none';
+        vid.src = url;
+        vid.style.display = 'block';
+      } else {
+        vid.style.display = 'none';
+        vid.src = '';
+        img.src = url;
+        img.style.display = 'block';
+      }
+      overlay.classList.add('open');
+    }
+
+    function closeLightbox() {
+      const overlay = document.getElementById('lightbox');
+      overlay.classList.remove('open');
+      document.getElementById('lightbox-video').pause();
+    }
+
+    function openSettings() {
+      document.getElementById('settings-panel').classList.add('open');
+      document.getElementById('settings-overlay').classList.add('open');
+    }
+
+    function closeSettings() {
+      document.getElementById('settings-panel').classList.remove('open');
+      document.getElementById('settings-overlay').classList.remove('open');
+    }
+
+    function toast(msg, type = 'success') {
+      const c = document.getElementById('toast-container');
+      const el = document.createElement('div');
+      el.className = `toast toast-${type}`;
+      el.textContent = msg;
+      c.appendChild(el);
+      setTimeout(() => {
+        el.style.animation = 'toastOut 0.25s ease forwards';
+        setTimeout(() => el.remove(), 250);
+      }, 3500);
+    }
+
+    // ─── Media Upload Manager ─────────────────────────────────────────────────
+    class MediaUploadManager {
+      constructor(zoneId, inputId, previewsId, progressBarId, progressFillId) {
+        this.zone     = document.getElementById(zoneId);
+        this.input    = document.getElementById(inputId);
+        this.previews = document.getElementById(previewsId);
+        this.bar      = document.getElementById(progressBarId);
+        this.fill     = document.getElementById(progressFillId);
+        this.files    = []; // { file, objectUrl, type:'image'|'video' }
+        this._bind();
+      }
+
+      _bind() {
+        this.input.addEventListener('change', () => this._handleFiles(Array.from(this.input.files)));
+        this.zone.addEventListener('dragover', e => { e.preventDefault(); this.zone.classList.add('drag-over'); });
+        this.zone.addEventListener('dragleave', () => this.zone.classList.remove('drag-over'));
+        this.zone.addEventListener('drop', e => {
+          e.preventDefault();
+          this.zone.classList.remove('drag-over');
+          this._handleFiles(Array.from(e.dataTransfer.files));
+        });
+      }
+
+      _handleFiles(incoming) {
+        const errors = [];
+        incoming.forEach(f => {
+          const imgType = isImage(f.type);
+          const vidType = isVideo(f.type);
+          if (!imgType && !vidType) { errors.push(`${f.name}: Unsupported file type`); return; }
+
+          if (imgType) {
+            const existing = this.files.filter(x => x.type === 'image').length;
+            if (existing >= MAX_IMAGES) { errors.push(`Max ${MAX_IMAGES} images allowed`); return; }
+            if (f.size > MAX_IMAGE_MB * 1024 * 1024) { errors.push(`${f.name}: Image must be under ${MAX_IMAGE_MB} MB`); return; }
+            this.files.push({ file: f, objectUrl: URL.createObjectURL(f), type: 'image' });
+          }
+
+          if (vidType) {
+            const existing = this.files.filter(x => x.type === 'video').length;
+            if (existing >= MAX_VIDEOS) { errors.push(`Max ${MAX_VIDEOS} video allowed`); return; }
+            if (f.size > MAX_VIDEO_MB * 1024 * 1024) { errors.push(`${f.name}: Video must be under ${MAX_VIDEO_MB} MB`); return; }
+            // Duration check happens async
+            const url = URL.createObjectURL(f);
+            const vid = document.createElement('video');
+            vid.preload = 'metadata';
+            vid.src = url;
+            vid.onloadedmetadata = () => {
+              if (vid.duration > MAX_VIDEO_SECONDS) {
+                toast(`${f.name}: Video must be ${MAX_VIDEO_SECONDS} seconds or shorter`, 'error');
+                URL.revokeObjectURL(url);
+                // Remove if already added
+                this.files = this.files.filter(x => x.file !== f);
+                this._renderPreviews();
+              }
+            };
+            this.files.push({ file: f, objectUrl: url, type: 'video' });
+          }
+        });
+
+        if (errors.length) toast(errors.join(' · '), 'error');
+        this.input.value = '';
+        this._renderPreviews();
+      }
+
+      _renderPreviews() {
+        this.previews.innerHTML = '';
+        this.files.forEach((item, i) => {
+          const chip = document.createElement('div');
+          chip.className = 'file-chip';
+
+          if (item.type === 'image') {
+            const img = document.createElement('img');
+            img.src = item.objectUrl;
+            img.className = 'file-chip-thumb';
+            chip.appendChild(img);
+          } else {
+            const vdiv = document.createElement('div');
+            vdiv.className = 'file-chip-video';
+            vdiv.innerHTML = `<svg viewBox="0 0 24 24" style="width:14px;height:14px;fill:currentColor;stroke:none"><polygon points="5 3 19 12 5 21 5 3"/></svg>`;
+            chip.appendChild(vdiv);
+          }
+
+          const name = document.createElement('span');
+          name.className = 'file-chip-name';
+          name.textContent = item.file.name;
+          chip.appendChild(name);
+
+          const size = document.createElement('span');
+          size.className = 'file-chip-size';
+          size.textContent = formatBytes(item.file.size);
+          chip.appendChild(size);
+
+          const rm = document.createElement('button');
+          rm.className = 'file-chip-remove';
+          rm.title = 'Remove';
+          rm.innerHTML = `<svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
+          rm.onclick = () => {
+            URL.revokeObjectURL(item.objectUrl);
+            this.files.splice(i, 1);
+            this._renderPreviews();
+          };
+          chip.appendChild(rm);
+          this.previews.appendChild(chip);
+        });
+      }
+
+      async uploadAll(sb, folder) {
+        if (this.files.length === 0) return [];
+        const urls = [];
+        this.bar.classList.add('active');
+        for (let i = 0; i < this.files.length; i++) {
+          const { file, type } = this.files[i];
+          const ext  = file.name.split('.').pop();
+          const path = `${folder}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+          this.fill.style.width = `${Math.round((i / this.files.length) * 80)}%`;
+          const { data, error } = await sb.storage.from(STORAGE_BUCKET).upload(path, file, {
+            cacheControl: '3600',
+            upsert: false
+          });
+          if (error) throw new Error(`Upload failed for ${file.name}: ${error.message}`);
+          const { data: { publicUrl } } = sb.storage.from(STORAGE_BUCKET).getPublicUrl(path);
+          urls.push(publicUrl);
+        }
+        this.fill.style.width = '100%';
+        setTimeout(() => { this.bar.classList.remove('active'); this.fill.style.width = '0%'; }, 600);
+        return urls;
+      }
+
+      reset() {
+        this.files.forEach(f => URL.revokeObjectURL(f.objectUrl));
+        this.files = [];
+        this._renderPreviews();
+        this.input.value = '';
+      }
+    }
+
+    // ─── Main App ─────────────────────────────────────────────────────────────
+    const App = {
+      reviews:    [],
+      products:   [],
+      productMap: {},
+      filtered:   [],
+      childMap:   {},   // parentId -> [child reviews]
+      activeReplyId:      null,
+      activeReplyProductId: null,
+      pendingConfirmFn:   null,
+      replyUploader: null,
+      arUploader:    null,
+
+      async init() {
+        const user = await BKAuth.requireAuth('../../admin.html');
+        if (!user) return;
+
+        // Init uploaders
+        this.replyUploader = new MediaUploadManager(
+          'reply-upload-zone','reply-file-input','reply-file-previews',
+          'reply-progress-bar','reply-progress-fill'
+        );
+        this.arUploader = new MediaUploadManager(
+          'ar-upload-zone','ar-file-input','ar-file-previews',
+          'ar-progress-bar','ar-progress-fill'
+        );
+
+        await this.fetchProducts();
+        await this.fetchReviews();
+        this._bindEvents();
+        this._loadSettings();
+      },
+
+      async fetchProducts() {
+        try {
+          const { data, error } = await sb.from('products').select('id, title, slug').order('title');
+          if (error) throw error;
+          this.products = data || [];
+          this.productMap = {};
+          this.products.forEach(p => { this.productMap[p.id] = p; });
+
+          const sel = document.getElementById('filter-product');
+          const arSel = document.getElementById('ar-product');
+          sel.innerHTML = '<option value="all">All Products</option>';
+          arSel.innerHTML = '<option value="">— Select product —</option>';
+          this.products.forEach(p => {
+            sel.innerHTML += `<option value="${p.id}">${esc(p.title)}</option>`;
+            arSel.innerHTML += `<option value="${p.id}">${esc(p.title)}</option>`;
+          });
+        } catch (err) {
+          console.error('fetchProducts:', err);
+        }
+      },
+
+      async fetchReviews() {
+        try {
+          const { data, error } = await sb.from('product_reviews').select('*').order('created_at', { ascending: false });
+          if (error) throw error;
+          this.reviews = data || [];
+          this._buildChildMap();
+          this._updateStats();
+          this._applyFilters();
+        } catch (err) {
+          console.error('fetchReviews:', err);
+          document.getElementById('reviews-body').innerHTML =
+            `<tr><td colspan="10" style="padding:3rem;text-align:center;color:var(--danger)">Error: ${esc(err.message)}</td></tr>`;
+        }
+      },
+
+      _buildChildMap() {
+        this.childMap = {};
+        this.reviews.forEach(r => {
+          if (r.parent_id) {
+            if (!this.childMap[r.parent_id]) this.childMap[r.parent_id] = [];
+            this.childMap[r.parent_id].push(r);
+          }
+        });
+      },
+
+      _updateStats() {
+        const roots = this.reviews.filter(r => !r.parent_id);
+        document.getElementById('stat-total').textContent    = roots.length;
+        document.getElementById('stat-pending').textContent  = roots.filter(r => !r.is_approved).length;
+        document.getElementById('stat-approved').textContent = roots.filter(r => r.is_approved).length;
+        document.getElementById('stat-hidden').textContent   = roots.filter(r => r.is_hidden).length;
+        document.getElementById('stat-pinned').textContent   = roots.filter(r => r.is_pinned).length;
+        document.getElementById('stat-hearted').textContent  = roots.filter(r => r.admin_hearted).length;
+      },
+
+      _applyFilters() {
+        const q        = document.getElementById('search-input').value.toLowerCase().trim();
+        const status   = document.getElementById('filter-status').value;
+        const replied  = document.getElementById('filter-replied').value;
+        const stars    = document.getElementById('filter-stars').value;
+        const product  = document.getElementById('filter-product').value;
+        const sort     = document.getElementById('filter-sort').value;
+        const showHid  = document.getElementById('setting-show-hidden')?.checked ?? true;
+
+        let roots = this.reviews.filter(r => !r.parent_id);
+
+        // Status filter
+        if (status === 'pending')  roots = roots.filter(r => !r.is_approved && !r.is_hidden);
+        if (status === 'approved') roots = roots.filter(r => r.is_approved && !r.is_hidden);
+        if (status === 'hidden')   roots = roots.filter(r => r.is_hidden);
+        if (!showHid && status === 'all') roots = roots.filter(r => !r.is_hidden);
+
+        // Replied filter
+        if (replied === 'replied')     roots = roots.filter(r => this.childMap[r.id]?.length > 0);
+        if (replied === 'not-replied') roots = roots.filter(r => !this.childMap[r.id]?.length);
+
+        // Stars filter
+        if (stars !== 'all') roots = roots.filter(r => r.rating === parseInt(stars));
+
+        // Product filter
+        if (product !== 'all') roots = roots.filter(r => r.product_id === product);
+
+        // Search
+        if (q) {
+          roots = roots.filter(r => {
+            const prod = (this.productMap[r.product_id]?.title || '').toLowerCase();
+            return (r.reviewer_name||'').toLowerCase().includes(q)
+              || (r.reviewer_email||'').toLowerCase().includes(q)
+              || (r.body||'').toLowerCase().includes(q)
+              || prod.includes(q);
+          });
+        }
+
+        // Sort (pinned always float to top)
+        roots.sort((a, b) => {
+          if (a.is_pinned !== b.is_pinned) return a.is_pinned ? -1 : 1;
+          switch (sort) {
+            case 'oldest':     return new Date(a.created_at) - new Date(b.created_at);
+            case 'stars-high': return (b.rating||0) - (a.rating||0);
+            case 'stars-low':  return (a.rating||0) - (b.rating||0);
+            case 'thumbsup':   return (b.thumbs_up_count||0) - (a.thumbs_up_count||0);
+            default:           return new Date(b.created_at) - new Date(a.created_at);
+          }
+        });
+
+        this.filtered = roots;
+        this._renderTable();
+      },
+
+      _renderTable() {
+        const tbody = document.getElementById('reviews-body');
+        if (this.filtered.length === 0) {
+          tbody.innerHTML = `
+            <tr><td colspan="10">
+              <div class="empty-state">
+                <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                <p>No reviews match your filters.</p>
+              </div>
+            </td></tr>`;
+          return;
+        }
+
+        let html = '';
+        this.filtered.forEach(r => {
+          html += this._rowHtml(r);
+          // Render replies
+          (this.childMap[r.id] || []).forEach(rep => {
+            html += this._replyRowHtml(rep, r);
+          });
+        });
+        tbody.innerHTML = html;
+      },
+
+      _mediaThumbsHtml(mediaUrls) {
+        if (!mediaUrls || mediaUrls.length === 0) return '';
+        let html = '<div class="media-thumbs">';
+        mediaUrls.forEach(url => {
+          const isVid = /\.(mp4|mov|webm)(\?|$)/i.test(url);
+          if (isVid) {
+            html += `<div class="media-thumb-video" onclick="openLightbox('${esc(url)}','video/mp4')" title="Play video">
+              <svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            </div>`;
+          } else {
+            html += `<img class="media-thumb" src="${esc(url)}" loading="lazy" onclick="openLightbox('${esc(url)}','image/jpeg')" title="View image" />`;
+          }
+        });
+        html += '</div>';
+        return html;
+      },
+
+      _rowHtml(r) {
+        const prod     = this.productMap[r.product_id];
+        const prodName = prod ? prod.title : 'Unknown Product';
+        const prodUrl  = r.reviewer_url || (prod ? `https://brightkeysolutions.com/products/${prod.slug}` : '');
+        const replied  = this.childMap[r.id]?.length > 0;
+
+        let rowClass = '';
+        if (r.is_pinned) rowClass += ' row-pinned';
+        if (r.is_hidden) rowClass += ' row-hidden';
+
+        let statusBadge = '';
+        if (r.is_hidden)       statusBadge = `<span class="badge badge-hidden">Hidden</span>`;
+        else if (r.is_approved) statusBadge = `<span class="badge badge-approved">Approved</span>`;
+        else                    statusBadge = `<span class="badge badge-pending">Pending</span>`;
+
+        return `
+          <tr class="${rowClass}" id="row-${r.id}">
+            <td>
+              <div class="cell-product-name" title="${esc(prodName)}">${esc(prodName)}</div>
+              ${r.is_pinned ? `<span class="pin-badge"><svg viewBox="0 0 24 24" style="width:9px;height:9px;fill:var(--pinned-color);stroke:none"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z"/></svg> Pinned</span>` : ''}
+            </td>
+            <td>
+              ${prodUrl ? `<a class="cell-url" href="${esc(prodUrl)}" target="_blank" title="${esc(prodUrl)}">${esc(prodUrl.replace(/^https?:\/\/(www\.)?/,'').substring(0,30))}…</a>` : '<span style="color:var(--text-muted);font-size:0.75rem">—</span>'}
+            </td>
+            <td>
+              <div class="reviewer-name">${esc(r.reviewer_name || '—')}</div>
+              <div class="reviewer-email">${esc(r.reviewer_email || '')}</div>
+            </td>
+            <td>${starsHtml(r.rating)}</td>
+            <td>
+              <div class="review-body" title="${esc(r.body)}">${esc(r.body || '')}</div>
+              ${this._mediaThumbsHtml(r.media_urls)}
+            </td>
+            <td><div class="date-str">${fmtDate(r.created_at)}</div></td>
+            <td>
+              <div class="thumbsup-badge">
+                <svg viewBox="0 0 24 24"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3z"/><path d="M7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/></svg>
+                ${r.thumbs_up_count || 0}
+              </div>
+            </td>
+            <td>${statusBadge}</td>
+            <td>
+              ${replied ? `<span class="badge badge-replied">Replied</span>` : '<span style="color:var(--text-muted);font-size:0.75rem">—</span>'}
+            </td>
+            <td style="text-align:center">
+              <div class="row-actions" style="justify-content:center">
+                <!-- Approve -->
+                <button class="btn-icon ${r.is_approved ? 'active-approve' : ''}" title="${r.is_approved ? 'Unapprove' : 'Approve'}" onclick="App.toggleField('${r.id}','is_approved',${!r.is_approved})">
+                  <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+                </button>
+                <!-- Hide -->
+                <button class="btn-icon ${r.is_hidden ? 'active-hide' : ''}" title="${r.is_hidden ? 'Unhide' : 'Hide'}" onclick="App.toggleField('${r.id}','is_hidden',${!r.is_hidden})">
+                  ${r.is_hidden
+                    ? `<svg viewBox="0 0 24 24"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`
+                    : `<svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`}
+                </button>
+                <!-- Reply -->
+                <button class="btn-icon" title="Reply" onclick="App.openReplyModal('${r.id}','${r.product_id}')">
+                  <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                </button>
+                <!-- Heart -->
+                <button class="btn-icon ${r.admin_hearted ? 'active-heart' : ''}" title="${r.admin_hearted ? 'Remove heart' : 'Heart this review'}" onclick="App.toggleField('${r.id}','admin_hearted',${!r.admin_hearted})">
+                  <svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+                </button>
+                <!-- Pin -->
+                <button class="btn-icon ${r.is_pinned ? 'active-pin' : ''}" title="${r.is_pinned ? 'Unpin' : 'Pin to top'}" onclick="App.toggleField('${r.id}','is_pinned',${!r.is_pinned})">
+                  <svg viewBox="0 0 24 24" style="${r.is_pinned ? 'fill:var(--pinned-color);stroke:none' : 'fill:none'}"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z" stroke="currentColor" stroke-width="${r.is_pinned ? 0 : 2}" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </button>
+                <!-- Delete -->
+                <button class="btn-icon danger" title="Delete review" onclick="App.confirmDelete('${r.id}',false)">
+                  <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                </button>
+              </div>
+            </td>
+          </tr>
+        `;
+      },
+
+      _replyRowHtml(rep, parent) {
+        return `
+          <tr class="row-reply" id="row-${rep.id}">
+            <td>
+              <span class="badge badge-admin-reply">Admin Reply</span>
+            </td>
+            <td>—</td>
+            <td>
+              <div class="reviewer-name" style="color:var(--cyan-light)">${esc(rep.reviewer_name || 'BrightKey')}</div>
+            </td>
+            <td><span class="stars-none">Reply</span></td>
+            <td>
+              <div class="review-body is-reply">${esc(rep.body || '')}</div>
+              ${this._mediaThumbsHtml(rep.media_urls)}
+            </td>
+            <td><div class="date-str">${fmtDate(rep.created_at)}</div></td>
+            <td>—</td>
+            <td>${rep.is_approved ? '<span class="badge badge-approved">Approved</span>' : '<span class="badge badge-pending">Pending</span>'}</td>
+            <td>—</td>
+            <td style="text-align:center">
+              <div class="row-actions" style="justify-content:center">
+                <button class="btn-icon danger" title="Delete reply" onclick="App.confirmDelete('${rep.id}',true)">
+                  <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                </button>
+              </div>
+            </td>
+          </tr>
+        `;
+      },
+
+      async toggleField(id, field, value) {
+        try {
+          const { error } = await sb.from('product_reviews').update({ [field]: value }).eq('id', id);
+          if (error) throw error;
+          // Update local data
+          const r = this.reviews.find(x => x.id === id);
+          if (r) r[field] = value;
+          this._buildChildMap();
+          this._updateStats();
+          this._applyFilters();
+          const labels = {
+            is_approved:  value ? 'Review approved' : 'Review set to pending',
+            is_hidden:    value ? 'Review hidden'   : 'Review unhidden',
+            admin_hearted:value ? 'Review hearted!'  : 'Heart removed',
+            is_pinned:    value ? 'Review pinned to top' : 'Review unpinned'
+          };
+          toast(labels[field] || 'Updated', 'success');
+        } catch (err) {
+          console.error(err);
+          toast(`Failed to update: ${err.message}`, 'error');
+        }
+      },
+
+      // ── Reply Modal ──────────────────────────────────────────────────────────
+      openReplyModal(parentId, productId) {
+        this.activeReplyId        = parentId;
+        this.activeReplyProductId = productId;
+        this.replyUploader.reset();
+        document.getElementById('reply-text').value = '';
+
+        const review = this.reviews.find(r => r.id === parentId);
+        if (review) {
+          document.getElementById('reply-modal-title').textContent = `Reply to ${review.reviewer_name || 'Customer'}`;
+          document.getElementById('reply-context-name').textContent = review.reviewer_name || 'Anonymous';
+          document.getElementById('reply-context-stars').innerHTML = starsHtml(review.rating);
+          document.getElementById('reply-context-body').textContent = review.body || '';
+        }
+        openModal('reply-modal');
+      },
+
+      async submitReply() {
+        const text = document.getElementById('reply-text').value.trim();
+        if (!text) { toast('Reply text is required', 'error'); return; }
+
+        const btn = document.getElementById('reply-submit-btn');
+        btn.disabled = true;
+        btn.textContent = 'Uploading…';
+
+        try {
+          const folder = `replies/${this.activeReplyId}`;
+          const mediaUrls = await this.replyUploader.uploadAll(sb, folder);
+
+          btn.textContent = 'Saving…';
+          const autoApprove = document.getElementById('setting-auto-approve-replies')?.checked ?? true;
+          const { error } = await sb.from('product_reviews').insert({
+            product_id:     this.activeReplyProductId,
+            parent_id:      this.activeReplyId,
+            reviewer_name:  'BrightKey Response',
+            reviewer_email: 'support@brightkeysolutions.com',
+            body:           text,
+            is_approved:    autoApprove,
+            media_urls:     mediaUrls.length ? mediaUrls : null
+          });
+          if (error) throw error;
+
+          closeModal('reply-modal');
+          toast('Reply sent successfully!', 'success');
+          await this.fetchReviews();
+        } catch (err) {
+          console.error(err);
+          toast(`Failed to send reply: ${err.message}`, 'error');
+        } finally {
+          btn.disabled = false;
+          btn.innerHTML = `<svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> Send Reply`;
+        }
+      },
+
+      // ── Add Review Modal ─────────────────────────────────────────────────────
+      openAddReviewModal() {
+        this.arUploader.reset();
+        document.getElementById('ar-name').value   = '';
+        document.getElementById('ar-email').value  = '';
+        document.getElementById('ar-url').value    = '';
+        document.getElementById('ar-body').value   = '';
+        document.getElementById('ar-rating').value = '0';
+        document.getElementById('ar-status').value = 'false';
+        // Reset star picker
+        document.querySelectorAll('#ar-star-picker .star-btn').forEach(b => b.classList.remove('lit'));
+        openModal('add-review-modal');
+      },
+
+      async submitAddReview() {
+        const productId = document.getElementById('ar-product').value;
+        const name      = document.getElementById('ar-name').value.trim();
+        const email     = document.getElementById('ar-email').value.trim();
+        const url       = document.getElementById('ar-url').value.trim();
+        const body      = document.getElementById('ar-body').value.trim();
+        const rating    = parseInt(document.getElementById('ar-rating').value) || null;
+        const approved  = document.getElementById('ar-status').value === 'true';
+
+        if (!productId) { toast('Please select a product', 'error'); return; }
+        if (!name)      { toast('Reviewer name is required', 'error'); return; }
+        if (!body)      { toast('Review text is required', 'error'); return; }
+        if (!rating)    { toast('Please select a star rating', 'error'); return; }
+
+        const btn = document.getElementById('ar-submit-btn');
+        btn.disabled = true;
+        btn.textContent = 'Uploading…';
+
+        try {
+          const folder = `reviews/${productId}`;
+          const mediaUrls = await this.arUploader.uploadAll(sb, folder);
+
+          btn.textContent = 'Saving…';
+          const { error } = await sb.from('product_reviews').insert({
+            product_id:     productId,
+            reviewer_name:  name,
+            reviewer_email: email || null,
+            reviewer_url:   url || null,
+            body,
+            rating,
+            is_approved:    approved,
+            media_urls:     mediaUrls.length ? mediaUrls : null
+          });
+          if (error) throw error;
+
+          closeModal('add-review-modal');
+          toast('Review added successfully!', 'success');
+          await this.fetchReviews();
+        } catch (err) {
+          console.error(err);
+          toast(`Failed to add review: ${err.message}`, 'error');
+        } finally {
+          btn.disabled = false;
+          btn.innerHTML = `<svg viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> Save Review`;
+        }
+      },
+
+      // ── Delete ───────────────────────────────────────────────────────────────
+      confirmDelete(id, isReply) {
+        document.getElementById('confirm-title').textContent = isReply ? 'Delete Reply?' : 'Delete Review?';
+        document.getElementById('confirm-body').textContent  = isReply
+          ? 'This will permanently delete this reply.'
+          : 'This will permanently delete this review and all its replies.';
+        this.pendingConfirmFn = async () => {
+          try {
+            const { error } = await sb.from('product_reviews').delete().eq('id', id);
+            if (error) throw error;
+            this.reviews = this.reviews.filter(r => r.id !== id && r.parent_id !== id);
+            this._buildChildMap();
+            this._updateStats();
+            this._applyFilters();
+            toast('Deleted successfully', 'success');
+          } catch (err) {
+            toast(`Delete failed: ${err.message}`, 'error');
+          }
+          closeModal('confirm-modal');
+        };
+        openModal('confirm-modal');
+      },
+
+      // ── Publish ──────────────────────────────────────────────────────────────
+      async rebuildSite() {
+        const btn = document.getElementById('btn-publish');
+        btn.disabled = true;
+        btn.textContent = 'Publishing…';
+        try {
+          const res = await fetch('https://api.vercel.com/v1/integrations/deploy/prj_8BUBIA4U1128hH2VISQHDhxxTnB3/zAWKAQArmf', { method: 'POST' });
+          if (res.ok) toast('Build triggered! Changes will be live in ~2 minutes.', 'success');
+          else throw new Error(`Status ${res.status}`);
+        } catch (err) {
+          toast(`Build trigger failed: ${err.message}`, 'error');
+        } finally {
+          btn.disabled = false;
+          btn.innerHTML = `<svg viewBox="0 0 24 24"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg> Publish Live`;
+        }
+      },
+
+      // ── Settings ─────────────────────────────────────────────────────────────
+      _loadSettings() {
+        try {
+          const s = JSON.parse(localStorage.getItem('bk-review-settings') || '{}');
+          if (s.thumbsupLogin      !== undefined) document.getElementById('setting-thumbsup-login').checked      = s.thumbsupLogin;
+          if (s.autoApproveReplies !== undefined) document.getElementById('setting-auto-approve-replies').checked = s.autoApproveReplies;
+          if (s.showHidden         !== undefined) document.getElementById('setting-show-hidden').checked          = s.showHidden;
+        } catch {}
+      },
+
+      _saveSettings() {
+        const s = {
+          thumbsupLogin:      document.getElementById('setting-thumbsup-login').checked,
+          autoApproveReplies: document.getElementById('setting-auto-approve-replies').checked,
+          showHidden:         document.getElementById('setting-show-hidden').checked
+        };
+        localStorage.setItem('bk-review-settings', JSON.stringify(s));
+        this._applyFilters();
+      },
+
+      // ── Event binding ─────────────────────────────────────────────────────────
+      _bindEvents() {
+        document.getElementById('search-input').addEventListener('input',  () => this._applyFilters());
+        document.getElementById('filter-sort').addEventListener('change',   () => this._applyFilters());
+        document.getElementById('filter-status').addEventListener('change', () => this._applyFilters());
+        document.getElementById('filter-replied').addEventListener('change',() => this._applyFilters());
+        document.getElementById('filter-stars').addEventListener('change',  () => this._applyFilters());
+        document.getElementById('filter-product').addEventListener('change',() => this._applyFilters());
+
+        document.getElementById('btn-publish').addEventListener('click', () => this.rebuildSite());
+        document.getElementById('btn-settings').addEventListener('click', openSettings);
+        document.getElementById('btn-add-review').addEventListener('click', () => this.openAddReviewModal());
+
+        // Confirm modal ok button
+        document.getElementById('confirm-ok-btn').addEventListener('click', () => {
+          if (this.pendingConfirmFn) this.pendingConfirmFn();
+        });
+
+        // Close modals on overlay click
+        ['reply-modal','add-review-modal','confirm-modal'].forEach(id => {
+          document.getElementById(id).addEventListener('click', e => {
+            if (e.target === e.currentTarget) closeModal(id);
+          });
+        });
+
+        // Lightbox close on overlay click
+        document.getElementById('lightbox').addEventListener('click', e => {
+          if (e.target === e.currentTarget) closeLightbox();
+        });
+
+        // Star picker in add-review modal
+        document.querySelectorAll('#ar-star-picker .star-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const val = parseInt(btn.dataset.val);
+            document.getElementById('ar-rating').value = val;
+            document.querySelectorAll('#ar-star-picker .star-btn').forEach(b => {
+              b.classList.toggle('lit', parseInt(b.dataset.val) <= val);
+            });
+          });
+          btn.addEventListener('mouseenter', () => {
+            const val = parseInt(btn.dataset.val);
+            document.querySelectorAll('#ar-star-picker .star-btn').forEach(b => {
+              b.classList.toggle('lit', parseInt(b.dataset.val) <= val);
+            });
+          });
+          btn.addEventListener('mouseleave', () => {
+            const cur = parseInt(document.getElementById('ar-rating').value) || 0;
+            document.querySelectorAll('#ar-star-picker .star-btn').forEach(b => {
+              b.classList.toggle('lit', parseInt(b.dataset.val) <= cur);
+            });
+          });
+        });
+
+        // Settings toggles
+        ['setting-thumbsup-login','setting-auto-approve-replies','setting-show-hidden'].forEach(id => {
+          document.getElementById(id)?.addEventListener('change', () => this._saveSettings());
+        });
+
+        // Warn on unload (no unsaved state currently tracked but useful to add)
+      }
+    };
+
+    window.addEventListener('DOMContentLoaded', () => App.init());
+  </script>
+</body>
+</html>
