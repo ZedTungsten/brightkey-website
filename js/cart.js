@@ -418,6 +418,36 @@ async function getFreeShippingConfig() {
   return _freeShippingConfig;
 }
 
+async function triggerConfetti(element) {
+  if (!element) return;
+  try {
+    if (!window.confetti) {
+      await new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js';
+        script.onload = () => resolve();
+        script.onerror = () => reject(new Error('Confetti load failed'));
+        document.head.appendChild(script);
+      });
+    }
+    if (window.confetti) {
+      const rect = element.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return; // Only trigger if visible on screen
+      const x = (rect.left + rect.width / 2) / window.innerWidth;
+      const y = (rect.top + rect.height / 2) / window.innerHeight;
+      
+      window.confetti({
+        particleCount: 50,
+        spread: 45,
+        origin: { x, y },
+        colors: ['#06b6d4', '#3b82f6', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6']
+      });
+    }
+  } catch (err) {
+    console.error('Failed to trigger confetti:', err);
+  }
+}
+
 async function updateFreeShippingBar() {
   const wrap = document.getElementById('fs-bar-wrap');
   const msg  = document.getElementById('fs-bar-msg');
@@ -455,7 +485,15 @@ async function updateFreeShippingBar() {
   fill.style.width   = `${pct}%`;
 
   if (remaining <= 0) {
+    const wasEligibleBefore = msg.textContent === `You are eligible for free shipping!`;
     msg.textContent = `You are eligible for free shipping!`;
+    
+    // Trigger confetti if newly eligible and not yet triggered in this session
+    if (!wasEligibleBefore && !sessionStorage.getItem('bk_fs_confetti_triggered')) {
+      sessionStorage.setItem('bk_fs_confetti_triggered', 'true');
+      // Delay slightly to ensure transition is complete and drawer layout has settled
+      setTimeout(() => triggerConfetti(msg), 300);
+    }
   } else {
     const fmt = remaining.toLocaleString('en-PH', { minimumFractionDigits: 2 });
     msg.textContent = `Add ₱${fmt} more to get free shipping!`;
