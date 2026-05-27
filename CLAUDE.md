@@ -19,3 +19,7 @@ Because `auth.js` is included on every page that requires authentication or data
 ## Product Dropdown / Selection Rule
 - **Always use the product SKU** (formatted as `[SKU] Product Title` or sorted/identified by SKU) in any product dropdown or selection list in the UI.
 
+## Image Upload Compression Rule
+- **Always compress images client-side** before uploading them to Supabase Storage.
+- Convert the images to **WebP format at 80% quality** (`image/webp`) and resize them (recommended max width/height of `1200px` for general reviews or appropriate dimensions for specific content layout e.g. `650px x 950px` for portrait promotion popups) to save server space and bandwidth.
+
