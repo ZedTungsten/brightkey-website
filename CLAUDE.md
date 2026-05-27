@@ -15,3 +15,7 @@ Because `auth.js` is included on every page that requires authentication or data
 
 - Many UI state switches in this codebase manually reset inline styles.
 - Failing to check the Javascript logic will result in the CSS modifications seemingly "not working" because they are immediately overwritten by JS at runtime.
+
+## Product Dropdown / Selection Rule
+- **Always use the product SKU** (formatted as `[SKU] Product Title` or sorted/identified by SKU) in any product dropdown or selection list in the UI.
+
