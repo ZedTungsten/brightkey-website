@@ -9,7 +9,8 @@ var SUPABASE_ANON = window.SUPABASE_ANON || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ
 window.SUPABASE_URL = SUPABASE_URL;
 window.SUPABASE_ANON = SUPABASE_ANON;
 // Initialise official Supabase client (loaded from CDN before this script)
-const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+// Using var so this doesn't conflict with const sb declarations in page-level inline scripts
+var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 
 /**
  * Protect a page. Redirects to login if no active session.

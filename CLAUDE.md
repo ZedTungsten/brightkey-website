@@ -1,11 +1,11 @@
 # Project AI Guidelines
 
 ## Supabase Initialization Rule
-**JavaScript Rule**: The Supabase client is globally initialized as `const sb = window.supabase.createClient(...)` inside `js/auth.js`. 
-Because `auth.js` is included on every page that requires authentication or database access, `sb` is globally available. 
+**JavaScript Rule**: The Supabase client is initialized as `var sb = window.supabase.createClient(...)` inside `js/auth.js` (`var` is intentional — it avoids `SyntaxError: Identifier 'sb' already declared` when page-level inline scripts also declare their own `const sb`). `auth.js` is included on every page that requires authentication or database access, making `sb` available globally via `window.BKAuth.sb` and as a plain `sb` variable.
 
-- **NEVER** redeclare `const sb` in any inline scripts or other JS files included on the same page. Doing so will cause a fatal `SyntaxError: Identifier 'sb' has already been declared`.
-- **ALWAYS** just use the existing `sb` variable directly for all queries (e.g., `await sb.from(...)`).
+- **NEVER** redeclare `const sb` in `auth.js` — keep it as `var sb`. If changed to `const`, it will conflict with any page inline script that also has `const sb`, crashing the page with a fatal SyntaxError.
+- Page-level inline scripts MAY declare their own `const sb = window.supabase.createClient(...)` for convenience — this does NOT conflict with `auth.js`'s `var sb` because `var` is reassignable and `const` in a separate script tag occupies a separate lexical scope.
+- **ALWAYS** use the existing `sb` variable for all queries (e.g., `await sb.from(...)`). Do not create unnecessary extra Supabase clients.
 
 ## Icons & Emoji Rule
 **Always use inline SVG for icons.** Never use emojis as icons or decorative elements anywhere in the UI — not in HTML, JS-generated markup, or template strings.
