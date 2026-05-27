@@ -1956,6 +1956,30 @@
           : 'This will permanently delete this review and all its replies.';
         this.pendingConfirmFn = async () => {
           try {
+            // Find all matching reviews/replies that will be deleted to clean up their media
+            const targetReviews = this.reviews.filter(r => r.id === id || (!isReply && r.parent_id === id));
+            const pathsToDelete = [];
+            
+            targetReviews.forEach(r => {
+              const marker = `/${STORAGE_BUCKET}/`;
+              if (r.image_url) {
+                const idx = r.image_url.indexOf(marker);
+                if (idx !== -1) pathsToDelete.push(r.image_url.substring(idx + marker.length));
+              }
+              if (r.media_urls && Array.isArray(r.media_urls)) {
+                r.media_urls.forEach(url => {
+                  const idx = url.indexOf(marker);
+                  if (idx !== -1) pathsToDelete.push(url.substring(idx + marker.length));
+                });
+              }
+            });
+
+            // Delete files from storage if any exist
+            if (pathsToDelete.length > 0) {
+              const { error: storageErr } = await sb.storage.from(STORAGE_BUCKET).remove(pathsToDelete);
+              if (storageErr) console.warn('Failed to delete some storage files:', storageErr.message);
+            }
+
             const { error } = await sb.from('product_reviews').delete().eq('id', id);
             if (error) throw error;
             this.reviews = this.reviews.filter(r => r.id !== id && r.parent_id !== id);
