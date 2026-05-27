@@ -365,10 +365,8 @@ async function buildProducts() {
     let ratedCount = 0;
     if (rootRevs.length > 0) {
       const total = rootRevs.reduce((sum, r) => { if (r.rating) { ratedCount++; return sum + r.rating; } return sum; }, 0);
-      avgRating = ratedCount > 0 ? (total / ratedCount).toFixed(1) : '0.0';
+      avgRating = ratedCount > 0 ? (total / ratedCount) : 0;
     }
-    $('#avg-rating-display').text(avgRating || '0.0');
-    $('#total-reviews-display').text(rootRevs.length);
 
     let reviewsHtml = '';
     if (rootRevs.length > 0) {
@@ -460,32 +458,52 @@ async function buildProducts() {
     $('[data-template="price"]').html(priceStr);
     $('[data-template="description"]').text(descStr);
 
-    // Social Proof Bar
-    if (p.display_rating && p.display_reviews_count) {
-      const rating = parseFloat(p.display_rating);
-      const pct = Math.min(100, Math.max(0, (rating / 5) * 100));
+    // Social Proof Bar & Reviews Summary Block
+    let finalRating = 0;
+    let finalReviewsCount = 0;
+    let hasRating = false;
+
+    if (p.override_rating && p.display_rating && p.display_reviews_count !== null) {
+      finalRating = parseFloat(p.display_rating);
+      finalReviewsCount = parseInt(p.display_reviews_count, 10);
+      hasRating = true;
+    } else {
+      if (rootRevs.length > 0) {
+        finalRating = avgRating;
+        finalReviewsCount = rootRevs.length;
+        hasRating = true;
+      }
+    }
+
+    if (hasRating) {
+      const pct = Math.min(100, Math.max(0, (finalRating / 5) * 100));
       const spHtml = `
         <div style="display:flex; align-items:center; flex-wrap:wrap; gap:0.5rem; margin-bottom: 0.25rem;">
-          <span style="font-weight:600; color:var(--text-primary); font-size:1.1rem;">${rating.toFixed(1)}</span>
+          <span style="font-weight:600; color:var(--text-primary); font-size:1.1rem;">${finalRating.toFixed(1)}</span>
           <div style="position:relative; display:inline-block; font-size:1.25rem; line-height:1; letter-spacing:1px; white-space:nowrap; margin-left:2px;">
             <span style="color:var(--border);">★★★★★</span>
             <span style="color:#f59e0b; position:absolute; left:0; top:0; overflow:hidden; width:${pct}%; white-space:nowrap;">★★★★★</span>
           </div>
-          <a href="#reviews" style="color:var(--cyan); text-decoration:none; margin-left:0.25rem; font-size:0.95rem;">(${parseInt(p.display_reviews_count, 10).toLocaleString()})</a>
+          <a href="#reviews" style="color:var(--cyan); text-decoration:none; margin-left:0.25rem; font-size:0.95rem;">(${finalReviewsCount.toLocaleString()})</a>
         </div>
         ${p.display_bought_month ? `<div style="font-size:0.95rem; color:var(--text-secondary); margin-bottom: 0.25rem;">${p.display_bought_month} bought last month</div>` : ''}
       `;
       $('[data-template="social-proof-bar"]').html(spHtml).css('display', 'block');
       
       // Also inject into the Customer Reviews section at the bottom (build-time)
-      $('#avg-rating-display').text(rating.toFixed(1));
-      $('#total-reviews-display').text(parseInt(p.display_reviews_count, 10).toLocaleString());
+      $('#avg-rating-display').text(finalRating.toFixed(1));
+      $('#total-reviews-display').text(finalReviewsCount.toLocaleString());
       $('#summary-stars-display').html(`
         <div style="position:relative; display:inline-block; line-height:1; white-space:nowrap;">
           <span style="color:var(--border);">★★★★★</span>
           <span style="color:#f59e0b; position:absolute; left:0; top:0; overflow:hidden; width:${pct}%; white-space:nowrap;">★★★★★</span>
         </div>
       `);
+    } else {
+      $('[data-template="social-proof-bar"]').css('display', 'none');
+      $('#avg-rating-display').text('0.0');
+      $('#total-reviews-display').text('0');
+      $('#summary-stars-display').html('<span style="color:var(--border);">★★★★★</span>');
     }
 
     // Before price (strikethrough)
@@ -696,6 +714,7 @@ async function buildProducts() {
           business: "${p.business || ''}",
           display_rating: ${p.display_rating || null},
           display_reviews_count: ${p.display_reviews_count || null},
+          override_rating: ${!!p.override_rating},
           desc:  \`${descShort.replace(/`/g, "\\`")}\`
         };
         window.selectVariant = function(sku) {
