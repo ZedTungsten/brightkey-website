@@ -26,4 +26,8 @@ Because `auth.js` is included on every page that requires authentication or data
 ## Git & Deployment Rule
 - **Always push to git live** immediately after refactoring, coding, or finalizing any changes in local.
 
+## Script Refactoring & Tab Creation Rule
+- **Prevent Duplicate Declarations**: When extending pages (such as adding new tabs, forms, or scripts), **never** duplicate let/const variables or key globals (e.g., `allProducts`, `allBusinesses`, `initialPromoState`). JavaScript throws a fatal compile-time `SyntaxError: Identifier 'x' has already been declared` if these are redeclared in the same scope, which crashes the script engine and renders tabs and elements unclickable. Always check the top of the file for existing variable and function declarations.
+
+
 
