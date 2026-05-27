@@ -195,7 +195,45 @@
       color: #fff;
       border-color: var(--success);
     }
-    .btn-publish:hover { opacity: 0.88; }
+    .btn-publish:hover:not(:disabled) { opacity: 0.88; }
+    .btn-publish:disabled {
+      background: var(--bg-elevated);
+      color: var(--text-muted);
+      border-color: var(--border);
+      cursor: not-allowed;
+      opacity: 0.6;
+    }
+
+    /* Floating Unpublished Banner */
+    .unpublished-banner {
+      position: fixed;
+      bottom: 1.5rem;
+      right: 1.5rem;
+      background: rgba(217, 119, 6, 0.15);
+      border: 1px solid rgba(217, 119, 6, 0.3);
+      color: #FBBF24;
+      padding: 0.65rem 1.1rem;
+      border-radius: 8px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      z-index: 100;
+      box-shadow: var(--shadow-lg);
+      animation: slideInUp 0.3s ease;
+    }
+    .unpublished-banner svg {
+      width: 15px;
+      height: 15px;
+      stroke: #FBBF24;
+      stroke-width: 2.5;
+      fill: none;
+    }
+    @keyframes slideInUp {
+      from { transform: translateY(1.2rem); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
 
     /* ── Table area ── */
     .main-area { flex: 1; overflow: hidden; display: flex; }
@@ -805,7 +843,7 @@
       Add Review
     </button>
 
-    <button class="btn btn-publish" id="btn-publish" title="Trigger Vercel rebuild to show review changes live">
+    <button class="btn btn-publish" id="btn-publish" title="Trigger Vercel rebuild to show review changes live" disabled>
       <svg viewBox="0 0 24 24"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
       Publish Live
     </button>
@@ -1175,6 +1213,12 @@
     </div>
   </div>
 
+  <!-- Floating Publish Pending indicator -->
+  <div class="unpublished-banner" id="unpublished-badge" style="display: none;">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    Changes are unpublished.
+  </div>
+
   <!-- Toast container -->
   <div id="toast-container" aria-live="polite"></div>
 
@@ -1442,6 +1486,7 @@
         await this.fetchReviews();
         this._bindEvents();
         this._loadSettings();
+        this.setUnpublishedChanges(false);
       },
 
       async fetchProducts() {
@@ -1721,6 +1766,7 @@
             is_pinned:    value ? 'Review pinned to top' : 'Review unpinned'
           };
           toast(labels[field] || 'Updated', 'success');
+          this.setUnpublishedChanges(true);
         } catch (err) {
           console.error(err);
           toast(`Failed to update: ${err.message}`, 'error');
@@ -1772,6 +1818,7 @@
           closeModal('reply-modal');
           toast('Reply sent successfully!', 'success');
           await this.fetchReviews();
+          this.setUnpublishedChanges(true);
         } catch (err) {
           console.error(err);
           toast(`Failed to send reply: ${err.message}`, 'error');
@@ -1840,6 +1887,7 @@
           closeModal('add-review-modal');
           toast('Review added successfully!', 'success');
           await this.fetchReviews();
+          this.setUnpublishedChanges(true);
         } catch (err) {
           console.error(err);
           toast(`Failed to add review: ${err.message}`, 'error');
@@ -1864,6 +1912,7 @@
             this._updateStats();
             this._applyFilters();
             toast('Deleted successfully', 'success');
+            this.setUnpublishedChanges(true);
           } catch (err) {
             toast(`Delete failed: ${err.message}`, 'error');
           }
@@ -1873,19 +1922,35 @@
       },
 
       // ── Publish ──────────────────────────────────────────────────────────────
+      setUnpublishedChanges(hasChanges) {
+        this.hasUnpublishedChanges = hasChanges;
+        const btn = document.getElementById('btn-publish');
+        const badge = document.getElementById('unpublished-badge');
+        if (btn) btn.disabled = !hasChanges;
+        if (badge) badge.style.display = hasChanges ? 'flex' : 'none';
+      },
+
       async rebuildSite() {
         const btn = document.getElementById('btn-publish');
-        btn.disabled = true;
-        btn.textContent = 'Publishing…';
+        if (btn) {
+          btn.disabled = true;
+          btn.textContent = 'Publishing…';
+        }
         try {
           const res = await fetch('https://api.vercel.com/v1/integrations/deploy/prj_8BUBIA4U1128hH2VISQHDhxxTnB3/zAWKAQArmf', { method: 'POST' });
-          if (res.ok) toast('Build triggered! Changes will be live in ~2 minutes.', 'success');
-          else throw new Error(`Status ${res.status}`);
+          if (res.ok) {
+            toast('Build triggered! Changes will be live in ~2 minutes.', 'success');
+            this.setUnpublishedChanges(false);
+          } else {
+            throw new Error(`Status ${res.status}`);
+          }
         } catch (err) {
           toast(`Build trigger failed: ${err.message}`, 'error');
+          this.setUnpublishedChanges(true);
         } finally {
-          btn.disabled = false;
-          btn.innerHTML = `<svg viewBox="0 0 24 24"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg> Publish Live`;
+          if (btn) {
+            btn.innerHTML = `<svg viewBox="0 0 24 24"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg> Publish Live`;
+          }
         }
       },
 
