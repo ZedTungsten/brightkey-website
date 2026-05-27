@@ -956,13 +956,10 @@
                 
                 <!-- Like Button -->
                 <div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:1rem;">
-                  <button class="review-like-btn" data-review-id="${r.id}" style="${likeBtnStyle}" onclick="toggleLikeReview('${r.id}', this)">
+                  <button class="review-like-btn" data-review-id="${r.id}" data-db-likes="${r.thumbs_up_count || 0}" style="${likeBtnStyle}" onclick="toggleLikeReview('${r.id}', this)">
                     <svg viewBox="0 0 24 24" style="${likeSvgStyle}"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3z"/><path d="M7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/></svg>
-                    <span>Like</span>
+                    <span>Helpful (<span class="like-count-num">${(r.thumbs_up_count || 0) + (isLiked ? 1 : 0)}</span>)</span>
                   </button>
-                  <span class="review-like-count" data-review-id="${r.id}" data-db-likes="${r.thumbs_up_count || 0}" style="font-size:0.8rem; color:var(--text-secondary); font-weight:500;">
-                    ${getReviewLikesText(r.id, r.thumbs_up_count || 0)}
-                  </span>
                 </div>
 
                 ${legacyReplyHtml}
@@ -992,14 +989,6 @@
       } catch (e) { console.error('Failed to load reviews', e); }
     }
 
-    // Helper to get review likes text
-    window.getReviewLikesText = function(reviewId, dbLikesCount) {
-      const isLiked = localStorage.getItem(`bk_liked_review_${reviewId}`) === 'true';
-      const totalLikes = dbLikesCount + (isLiked ? 1 : 0);
-      if (totalLikes === 0) return '';
-      return `${totalLikes} like${totalLikes === 1 ? '' : 's'}`;
-    };
-
     // Toggle like
     window.toggleLikeReview = function(reviewId, btnEl) {
       const key = `bk_liked_review_${reviewId}`;
@@ -1008,15 +997,12 @@
       localStorage.setItem(key, String(newLikedState));
       
       // Update UI
-      const countEl = document.querySelector(`.review-like-count[data-review-id="${reviewId}"]`);
-      // Find original DB likes count stored in an attribute
-      const dbLikes = parseInt(countEl.getAttribute('data-db-likes') || 0);
+      const dbLikes = parseInt(btnEl.getAttribute('data-db-likes') || 0);
       const totalLikes = dbLikes + (newLikedState ? 1 : 0);
       
-      if (totalLikes > 0) {
-        countEl.textContent = `${totalLikes} like${totalLikes === 1 ? '' : 's'}`;
-      } else {
-        countEl.textContent = '';
+      const countEl = btnEl.querySelector('.like-count-num');
+      if (countEl) {
+        countEl.textContent = totalLikes;
       }
       
       updateLikeBtnStyle(btnEl, newLikedState);
