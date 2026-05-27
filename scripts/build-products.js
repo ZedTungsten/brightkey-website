@@ -378,12 +378,14 @@ async function buildProducts() {
         const date = new Date(r.created_at).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
         const initials = r.reviewer_name ? r.reviewer_name.substring(0,2).toUpperCase() : 'C';
         const revReplies = replies.filter(rep => rep.parent_id === r.id);
-        const repliesHtml = revReplies.map(rep => `
+        const repliesHtml = revReplies.map(rep => {
+          const cleanName = rep.reviewer_name === 'BrightKey Response' ? 'BrightKey' : (rep.reviewer_name || 'BrightKey');
+          return `
           <div style="background:var(--bg-base);border-left:3px solid var(--cyan);padding:1rem;border-radius:0 var(--radius-sm) var(--radius-sm) 0;margin-top:1rem;">
-            <div style="font-size:0.85rem;font-weight:600;color:var(--text-primary);margin-bottom:0.25rem;">Response from ${rep.reviewer_name || 'BrightKey'}:</div>
+            <div style="font-size:0.85rem;font-weight:600;color:var(--text-primary);margin-bottom:0.25rem;">Response from ${cleanName}:</div>
             <p style="font-size:0.9rem;color:var(--text-secondary);line-height:1.5;">${rep.body || ''}</p>
           </div>
-        `).join('');
+        `}).join('');
         let mediaHtml = '';
         const allMedia = [];
         if (r.image_url) allMedia.push({ url: r.image_url, type: 'image' });
