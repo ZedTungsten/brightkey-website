@@ -1148,6 +1148,14 @@
 
             const initials = r.reviewer_name ? r.reviewer_name.substring(0, 2).toUpperCase() : 'C';
 
+            const isLiked = localStorage.getItem(`bk_liked_review_${r.id}`) === 'true';
+            const likeBtnStyle = isLiked 
+              ? `background:none; border:1px solid var(--cyan); padding:0.35rem 0.75rem; border-radius:30px; display:flex; align-items:center; gap:0.35rem; cursor:pointer; font-size:0.8rem; color:var(--cyan); transition:all 0.2s;`
+              : `background:none; border:1px solid var(--border); padding:0.35rem 0.75rem; border-radius:30px; display:flex; align-items:center; gap:0.35rem; cursor:pointer; font-size:0.8rem; color:var(--text-secondary); transition:all 0.2s;`;
+            const likeSvgStyle = isLiked
+              ? `width:14px; height:14px; fill:var(--cyan); stroke:var(--cyan); stroke-width:2; stroke-linecap:round; stroke-linejoin:round;`
+              : `width:14px; height:14px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round;`;
+
             container.innerHTML += `
               <div class="review-card" style="border-bottom: 1px solid var(--border); padding-bottom: 1.5rem;">
                 <div class="flex gap-sm" style="align-items:center; margin-bottom:0.5rem;">
@@ -1161,6 +1169,18 @@
                 <div style="font-size:0.85rem; color:var(--text-secondary); margin-bottom: 1rem;">Reviewed on ${date}</div>
                 <p style="font-size:0.95rem; color:var(--text-secondary); line-height:1.6; margin-bottom: 1rem;">${r.body || r.comment || ''}</p>
                 ${mediaHtml}
+                
+                <!-- Like Button -->
+                <div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:1rem;">
+                  <button class="review-like-btn" data-review-id="${r.id}" style="${likeBtnStyle}" onclick="toggleLikeReview('${r.id}', this)">
+                    <svg viewBox="0 0 24 24" style="${likeSvgStyle}"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3z"/><path d="M7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/></svg>
+                    <span>Like</span>
+                  </button>
+                  <span class="review-like-count" data-review-id="${r.id}" data-db-likes="${r.thumbs_up_count || 0}" style="font-size:0.8rem; color:var(--text-secondary); font-weight:500;">
+                    ${getReviewLikesText(r.id, r.thumbs_up_count || 0)}
+                  </span>
+                </div>
+
                 ${legacyReplyHtml}
                 ${repliesHtml}
               </div>
@@ -1186,6 +1206,51 @@
           document.getElementById('reviews-container').innerHTML = '<p style="color:var(--text-secondary);">No reviews yet. Be the first to review this product!</p>';
         }
       } catch (e) { console.error('Failed to load reviews', e); }
+    }
+
+    // Helper to get review likes text
+    window.getReviewLikesText = function(reviewId, dbLikesCount) {
+      const isLiked = localStorage.getItem(`bk_liked_review_${reviewId}`) === 'true';
+      const totalLikes = dbLikesCount + (isLiked ? 1 : 0);
+      if (totalLikes === 0) return '';
+      return `${totalLikes} like${totalLikes === 1 ? '' : 's'}`;
+    };
+
+    // Toggle like
+    window.toggleLikeReview = function(reviewId, btnEl) {
+      const key = `bk_liked_review_${reviewId}`;
+      const isLiked = localStorage.getItem(key) === 'true';
+      const newLikedState = !isLiked;
+      localStorage.setItem(key, String(newLikedState));
+      
+      // Update UI
+      const countEl = document.querySelector(`.review-like-count[data-review-id="${reviewId}"]`);
+      // Find original DB likes count stored in an attribute
+      const dbLikes = parseInt(countEl.getAttribute('data-db-likes') || 0);
+      const totalLikes = dbLikes + (newLikedState ? 1 : 0);
+      
+      if (totalLikes > 0) {
+        countEl.textContent = `${totalLikes} like${totalLikes === 1 ? '' : 's'}`;
+      } else {
+        countEl.textContent = '';
+      }
+      
+      updateLikeBtnStyle(btnEl, newLikedState);
+    };
+
+    function updateLikeBtnStyle(btnEl, isLiked) {
+      const svg = btnEl.querySelector('svg');
+      if (isLiked) {
+        btnEl.style.borderColor = 'var(--cyan)';
+        btnEl.style.color = 'var(--cyan)';
+        svg.style.fill = 'var(--cyan)';
+        svg.style.stroke = 'var(--cyan)';
+      } else {
+        btnEl.style.borderColor = 'var(--border)';
+        btnEl.style.color = 'var(--text-secondary)';
+        svg.style.fill = 'none';
+        svg.style.stroke = 'currentColor';
+      }
     }
 
     // Star Selector Interaction
