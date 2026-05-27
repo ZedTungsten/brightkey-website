@@ -386,6 +386,27 @@ async function buildProducts() {
             <p style="font-size:0.9rem;color:var(--text-secondary);line-height:1.5;">${rep.body || ''}</p>
           </div>
         `).join('');
+        let mediaHtml = '';
+        const allMedia = [];
+        if (r.image_url) allMedia.push({ url: r.image_url, type: 'image' });
+        if (r.media_urls && Array.isArray(r.media_urls)) {
+          r.media_urls.forEach(url => {
+            const isVid = /\.(mp4|mov|webm)(\?|$)/i.test(url);
+            allMedia.push({ url, type: isVid ? 'video' : 'image' });
+          });
+        }
+        if (allMedia.length > 0) {
+          mediaHtml = '<div style="display:flex; gap:0.75rem; flex-wrap:wrap; margin-bottom:1rem; align-items: flex-start;">';
+          allMedia.forEach(m => {
+            if (m.type === 'video') {
+              mediaHtml += `<video src="${m.url}" controls style="width:260px; height:160px; object-fit:cover; border-radius:6px; border:1px solid var(--border); background:#000;"></video>`;
+            } else {
+              mediaHtml += `<img src="${m.url}" class="review-img-clickable" style="width:90px; height:90px; border-radius:6px; border:1px solid var(--border); object-fit:cover; cursor:pointer;" onclick="openLightbox(this)" alt="Review image" />`;
+            }
+          });
+          mediaHtml += '</div>';
+        }
+
         reviewsHtml += `
           <div class="review-card" style="border-bottom:1px solid var(--border);padding-bottom:1.5rem;">
             <div style="display:flex;align-items:center;gap:0.6rem;margin-bottom:0.5rem;">
@@ -396,6 +417,7 @@ async function buildProducts() {
             <div style="font-size:1.1rem;letter-spacing:1px;margin-bottom:0.5rem;">${stars}</div>
             <div style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:1rem;">Reviewed on ${date}</div>
             <p style="font-size:0.95rem;color:var(--text-secondary);line-height:1.6;margin-bottom:1rem;">${r.body || ''}</p>
+            ${mediaHtml}
             ${repliesHtml}
           </div>
         `;
