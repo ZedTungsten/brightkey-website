@@ -763,15 +763,21 @@
                 <label class="form-label" style="font-size:0.75rem;">Trigger Product (When cart has this...)</label>
                 <select id="crs-trigger-select" class="form-select" style="width:100%;"></select>
               </div>
-              <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.75rem;">
-                <div>
+              <div id="crs-addons-grid" style="display:grid; grid-template-columns:1fr; gap:0.75rem;">
+                <div id="crs-addon1-wrapper">
                   <label class="form-label" style="font-size:0.75rem;">Add-on Item 1</label>
                   <select id="crs-addon1-select" class="form-select" style="width:100%;"></select>
                 </div>
-                <div>
-                  <label class="form-label" style="font-size:0.75rem;">Add-on Item 2</label>
+                <div id="crs-addon2-wrapper" style="display:none;">
+                  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.25rem;">
+                    <label class="form-label" style="font-size:0.75rem; margin:0;">Add-on Item 2</label>
+                    <button type="button" class="btn btn-outline btn-xs" onclick="hideCrsAddon2()" style="color:var(--danger); border-color:rgba(220,38,38,0.2); font-size:0.7rem; padding:0.1rem 0.4rem; height:auto; line-height:1; cursor:pointer;">Remove</button>
+                  </div>
                   <select id="crs-addon2-select" class="form-select" style="width:100%;"></select>
                 </div>
+              </div>
+              <div id="crs-add-addon2-wrapper" style="margin-top:-0.25rem;">
+                <button type="button" id="crs-add-addon2-btn" class="btn btn-outline btn-sm" onclick="showCrsAddon2()" style="font-size:0.75rem; padding:0.25rem 0.5rem; cursor:pointer;">+ Add Cross-sell product</button>
               </div>
 
               <!-- Date inputs -->
@@ -1108,12 +1114,27 @@
     }
 
     // --- Cross-sell Logic ---
+    window.showCrsAddon2 = () => {
+      document.getElementById('crs-addons-grid').style.gridTemplateColumns = '1fr 1fr';
+      document.getElementById('crs-addon2-wrapper').style.display = 'block';
+      document.getElementById('crs-add-addon2-btn').style.display = 'none';
+    };
+
+    window.hideCrsAddon2 = () => {
+      document.getElementById('crs-addons-grid').style.gridTemplateColumns = '1fr';
+      document.getElementById('crs-addon2-wrapper').style.display = 'none';
+      document.getElementById('crs-addon2-select').value = '';
+      document.getElementById('crs-add-addon2-btn').style.display = 'inline-block';
+    };
+
     window.showCrosssellAddForm = () => {
       if (!allProducts.length) { showToast('Products are still loading. Please wait.'); return; }
       const opts = allProducts.map(p => `<option value="${p.sku}">${p.sku} — ${p.title}</option>`).join('');
       document.getElementById('crs-trigger-select').innerHTML = opts;
       document.getElementById('crs-addon1-select').innerHTML = opts;
       document.getElementById('crs-addon2-select').innerHTML = opts;
+      
+      hideCrsAddon2();
       
       document.getElementById('crosssell-add-row').style.display = 'flex';
       document.getElementById('crosssell-add-btn').style.display = 'none';
@@ -1139,14 +1160,28 @@
       const start = document.getElementById('crs-start').value;
       const end = document.getElementById('crs-end').value;
 
-      if (trigger === addon1 || trigger === addon2 || addon1 === addon2) {
-        showToast('All configured SKUs (Trigger, Add-on 1, Add-on 2) must be unique.', true);
-        return;
+      const addon2Visible = document.getElementById('crs-addon2-wrapper').style.display !== 'none';
+
+      if (addon2Visible) {
+        if (trigger === addon1 || trigger === addon2 || addon1 === addon2) {
+          showToast('All configured SKUs (Trigger, Add-on 1, Add-on 2) must be unique.', true);
+          return;
+        }
+      } else {
+        if (trigger === addon1) {
+          showToast('All configured SKUs (Trigger, Add-on 1) must be unique.', true);
+          return;
+        }
+      }
+
+      const addon_skus = [addon1];
+      if (addon2Visible && addon2) {
+        addon_skus.push(addon2);
       }
 
       const payload = {
         trigger_sku: trigger,
-        addon_skus: [addon1, addon2],
+        addon_skus: addon_skus,
         indefinite: indefinite,
         active_from: indefinite ? null : start,
         active_to: indefinite ? null : end
@@ -1173,7 +1208,13 @@
       
       document.getElementById('crs-trigger-select').value = rule.trigger_sku;
       document.getElementById('crs-addon1-select').value = rule.addon_skus[0] || '';
-      document.getElementById('crs-addon2-select').value = rule.addon_skus[1] || '';
+      if (rule.addon_skus[1]) {
+        document.getElementById('crs-addon2-select').value = rule.addon_skus[1];
+        showCrsAddon2();
+      } else {
+        document.getElementById('crs-addon2-select').value = '';
+        hideCrsAddon2();
+      }
       document.getElementById('crs-indefinite').checked = rule.indefinite;
       
       toggleCrsDateVisibility(document.getElementById('crs-indefinite'));
@@ -1218,12 +1259,15 @@
         row.style.cssText = 'display:flex; align-items:center; gap:0.75rem; padding:0.65rem 0.75rem; border-bottom:1px solid var(--border);';
         
         const dateStr = rule.indefinite ? 'Indefinite' : `${new Date(rule.active_from).toLocaleDateString()} - ${new Date(rule.active_to).toLocaleDateString()}`;
-        
+        const addonText = rule.addon_skus[1] 
+          ? `<strong style="color:var(--cyan);">${rule.addon_skus[0]}</strong> & <strong style="color:var(--cyan);">${rule.addon_skus[1]}</strong>`
+          : `<strong style="color:var(--cyan);">${rule.addon_skus[0]}</strong>`;
+
         row.innerHTML = `
           <input type="checkbox" ${rule.enabled ? 'checked' : ''} onchange="toggleCrosssellRuleEnabled(${idx}, this.checked)" style="width:16px;height:16px;cursor:pointer;flex-shrink:0;" />
           <span style="flex:1; font-size:0.85rem; line-height:1.4;">
             When buying <strong style="color:var(--cyan);">${rule.trigger_sku}</strong> offer: 
-            <strong style="color:var(--cyan);">${rule.addon_skus[0]}</strong> & <strong style="color:var(--cyan);">${rule.addon_skus[1]}</strong>
+            ${addonText}
             <div style="font-size:0.7rem; color:var(--text-muted); margin-top:0.15rem;">Validity: ${dateStr}</div>
           </span>
           <div style="display:flex; align-items:center; gap:0.5rem; flex-shrink:0;">
