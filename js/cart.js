@@ -687,6 +687,9 @@ async function applyActiveCouponIfExists() {
     const rawSkus = [];
     
     cart.forEach(item => {
+      if (item.sku) {
+        rawSkus.push(item.sku);
+      }
       if (!item.id || item.id === 'undefined' || item.id === 'null') return;
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
       const match = item.id.match(uuidRegex);
@@ -898,6 +901,9 @@ async function getCartProductDetails() {
   const uuids = [];
   const rawSkus = [];
   cart.forEach(item => {
+    if (item.sku) {
+      rawSkus.push(item.sku);
+    }
     if (!item.id || item.id === 'undefined' || item.id === 'null') return;
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
     const match = item.id.match(uuidRegex);
@@ -1144,6 +1150,9 @@ window.handleCheckoutClick = async (event) => {
 
     const cartSkus = new Set();
     cart.forEach(item => {
+      if (item.sku) {
+        cartSkus.add(item.sku.toUpperCase());
+      }
       if (!item.id || item.id === 'undefined' || item.id === 'null') return;
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
       const match = item.id.match(uuidRegex);
