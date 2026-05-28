@@ -280,6 +280,7 @@ if (yearEl) yearEl.textContent = new Date().getFullYear();
 // ── Dynamically Load cart.js globally ───────────────────────────
 (function loadCartScript() {
   if (typeof getCart !== 'undefined') return;
+  if (document.querySelector('script[src*="cart.js"]')) return;
   const pathname = window.location.pathname;
   let pathPrefix = '';
   if (pathname.includes('/products/')) {

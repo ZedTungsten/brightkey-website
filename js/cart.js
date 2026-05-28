@@ -166,7 +166,7 @@ window.renderCart = renderCart;
 
 // ── Cart Drawer UI Injection & Management ─────────────────────────────────────
 
-let drawerOverlay = null;
+var drawerOverlay = null;
 
 function isCartOrCheckoutPage() {
   const path = window.location.pathname;
@@ -408,7 +408,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ── Free Shipping Progress Bar ────────────────────────────────────────────────
 
-let _freeShippingConfig = undefined;
+var _freeShippingConfig = undefined;
 
 async function getFreeShippingConfig() {
   if (_freeShippingConfig !== undefined) return _freeShippingConfig;
@@ -507,7 +507,7 @@ async function updateFreeShippingBar() {
 
 // ── Free Gift Logic ───────────────────────────────────────────────────────────
 
-let _freeGiftsConfig = undefined;
+var _freeGiftsConfig = undefined;
 
 async function getFreeGiftsConfig() {
   if (_freeGiftsConfig !== undefined) return _freeGiftsConfig;
@@ -687,13 +687,13 @@ async function applyActiveCouponIfExists() {
     const rawSkus = [];
     
     cart.forEach(item => {
-      if (!item.id) return;
+      if (!item.id || item.id === 'undefined' || item.id === 'null') return;
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
       const match = item.id.match(uuidRegex);
       if (match) {
         uuids.push(match[0]);
         const suffix = item.id.substring(match[0].length + 1);
-        if (suffix) {
+        if (suffix && suffix !== 'undefined' && suffix !== 'null') {
           rawSkus.push(suffix);
         }
       } else {
@@ -866,7 +866,7 @@ async function applyActiveCouponIfExists() {
 
 // ── Upsell & Cross-sell Settings & Functions ───────────────────────────────
 
-let _upsellCrossSellConfig = undefined;
+var _upsellCrossSellConfig = undefined;
 
 async function getUpsellCrossSellConfig() {
   if (_upsellCrossSellConfig !== undefined) return _upsellCrossSellConfig;
@@ -898,13 +898,13 @@ async function getCartProductDetails() {
   const uuids = [];
   const rawSkus = [];
   cart.forEach(item => {
-    if (!item.id) return;
+    if (!item.id || item.id === 'undefined' || item.id === 'null') return;
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
     const match = item.id.match(uuidRegex);
     if (match) {
       uuids.push(match[0]);
       const suffix = item.id.substring(match[0].length + 1);
-      if (suffix) {
+      if (suffix && suffix !== 'undefined' && suffix !== 'null') {
         rawSkus.push(suffix);
       }
     } else {
@@ -1099,7 +1099,7 @@ window.addCrossSellItemToCart = async (sku) => {
   }
 };
 
-const redirectCheckout = (reason, pathPrefix) => {
+var redirectCheckout = (reason, pathPrefix) => {
   console.log("Upsell check: Redirecting to checkout. Reason:", reason);
   alert("Upsell check: Redirecting to checkout.\nReason: " + reason);
   window.location.href = pathPrefix + 'checkout.html';
@@ -1144,7 +1144,7 @@ window.handleCheckoutClick = async (event) => {
 
     const cartSkus = new Set();
     cart.forEach(item => {
-      if (!item.id) return;
+      if (!item.id || item.id === 'undefined' || item.id === 'null') return;
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
       const match = item.id.match(uuidRegex);
       
@@ -1155,7 +1155,7 @@ window.handleCheckoutClick = async (event) => {
         if (dbProd && dbProd.sku) {
           cartSkus.add(dbProd.sku.toUpperCase());
         }
-        if (suffixPart) {
+        if (suffixPart && suffixPart !== 'UNDEFINED' && suffixPart !== 'NULL') {
           cartSkus.add(suffixPart);
         }
       } else {
