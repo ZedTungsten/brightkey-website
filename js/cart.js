@@ -1334,12 +1334,15 @@ function upgradeCartItem(triggerSku, targetProd, adjustmentCentavos) {
   let indexToReplace = -1;
   for (let i = 0; i < cart.length; i++) {
     const item = cart[i];
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
-    const match = item.id ? item.id.match(uuidRegex) : null;
-    let itemSku = item.id;
-    if (match) {
-      const suffix = item.id.substring(match[0].length + 1);
-      if (suffix) itemSku = suffix;
+    let itemSku = item.sku;
+    if (!itemSku) {
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+      const match = item.id ? item.id.match(uuidRegex) : null;
+      itemSku = item.id;
+      if (match) {
+        const suffix = item.id.substring(match[0].length + 1);
+        if (suffix) itemSku = suffix;
+      }
     }
     
     if (itemSku && itemSku.toUpperCase() === triggerSku.toUpperCase()) {
