@@ -54,10 +54,21 @@ CREATE TABLE public.marketing_audience (
   id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   email               TEXT UNIQUE NOT NULL,
   source              TEXT NOT NULL DEFAULT 'promo_popup',
+  first_name          TEXT,
+  last_name           TEXT,
+  phone               TEXT,
+  country             TEXT DEFAULT 'Philippines',
+  address             TEXT,
+  city                TEXT,
+  zip_code            TEXT,
+  audience            TEXT DEFAULT 'Customer',
+  value               TEXT,
   created_at          TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- RLS Marketing Audience
 ALTER TABLE public.marketing_audience ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Allow public insert" ON public.marketing_audience FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow public update" ON public.marketing_audience FOR UPDATE USING (true) WITH CHECK (true);
+CREATE POLICY "Allow public select" ON public.marketing_audience FOR SELECT USING (true);
 CREATE POLICY "Allow authenticated read/write" ON public.marketing_audience FOR ALL TO authenticated USING (true) WITH CHECK (true);
