@@ -927,22 +927,23 @@ async function getCartProductDetails() {
     if (uuids.length > 0 && rawSkus.length > 0) {
       const { data } = await sb
         .from('products')
-        .select('id, sku, title, slug, image_main, sale_price, price')
+        .select('id, sku, title, slug, image_main, sale_price, before_price')
         .or(`id.in.(${uuids.map(id => `"${id}"`).join(',')}),sku.in.(${rawSkus.map(s => `"${s}"`).join(',')})`);
       dbProducts = data || [];
     } else if (uuids.length > 0) {
       const { data } = await sb
         .from('products')
-        .select('id, sku, title, slug, image_main, sale_price, price')
+        .select('id, sku, title, slug, image_main, sale_price, before_price')
         .in('id', uuids);
       dbProducts = data || [];
     } else if (rawSkus.length > 0) {
       const { data } = await sb
         .from('products')
-        .select('id, sku, title, slug, image_main, sale_price, price')
+        .select('id, sku, title, slug, image_main, sale_price, before_price')
         .in('sku', rawSkus);
       dbProducts = data || [];
     }
+    dbProducts.forEach(p => { p.price = p.before_price; });
     return dbProducts;
   } catch (err) {
     console.error('Error fetching cart product details:', err);
@@ -1029,7 +1030,7 @@ async function renderCrossSellRecommendations() {
 
     const { data: addOnProds } = await sb
       .from('products')
-      .select('id, sku, title, slug, image_main, sale_price, price')
+      .select('id, sku, title, slug, image_main, sale_price, before_price')
       .in('sku', recommendedSkus);
 
     if (!addOnProds || addOnProds.length === 0) {
@@ -1037,6 +1038,7 @@ async function renderCrossSellRecommendations() {
       if (mainContainer) mainContainer.style.display = 'none';
       return;
     }
+    addOnProds.forEach(p => { p.price = p.before_price; });
 
     // Render HTML
     const isProductsPage = window.location.pathname.includes('/products/');
@@ -1204,9 +1206,13 @@ window.handleCheckoutClick = async (event) => {
 
     const { data: products } = await sb
       .from('products')
-      .select('id, sku, title, slug, image_main, sale_price, price')
+      .select('id, sku, title, slug, image_main, sale_price, before_price')
       .in('sku', [matchedRule.trigger_sku, matchedRule.upsell_sku]);
     console.log("Upsell check: Trigger/Upsell products query result:", products);
+
+    if (products) {
+      products.forEach(p => { p.price = p.before_price; });
+    }
 
     if (!products || products.length === 0) {
       redirectCheckout("Could not fetch product details from DB for trigger/upsell SKU", pathPrefix);
