@@ -1099,6 +1099,12 @@ window.addCrossSellItemToCart = async (sku) => {
   }
 };
 
+const redirectCheckout = (reason, pathPrefix) => {
+  console.log("Upsell check: Redirecting to checkout. Reason:", reason);
+  alert("Upsell check: Redirecting to checkout.\nReason: " + reason);
+  window.location.href = pathPrefix + 'checkout.html';
+};
+
 window.handleCheckoutClick = async (event) => {
   console.log("Upsell check: handleCheckoutClick triggered.");
   if (event) event.preventDefault();
@@ -1109,8 +1115,7 @@ window.handleCheckoutClick = async (event) => {
   const cart = getCart();
   console.log("Upsell check: Cart content:", cart);
   if (cart.length === 0) {
-    console.log("Upsell check: Cart is empty, redirecting to checkout.");
-    window.location.href = pathPrefix + 'checkout.html';
+    redirectCheckout("Cart is empty", pathPrefix);
     return;
   }
 
@@ -1118,16 +1123,14 @@ window.handleCheckoutClick = async (event) => {
     const config = await getUpsellCrossSellConfig();
     console.log("Upsell check: Config loaded:", config);
     if (!config || !config.upsell_rules || config.upsell_rules.length === 0) {
-      console.log("Upsell check: No upsell rules defined in config, redirecting to checkout.");
-      window.location.href = pathPrefix + 'checkout.html';
+      redirectCheckout("No upsell rules defined in config", pathPrefix);
       return;
     }
 
     const activeRules = config.upsell_rules.filter(r => isRuleActive(r));
     console.log("Upsell check: Active Rules:", activeRules);
     if (activeRules.length === 0) {
-      console.log("Upsell check: No active upsell rules for current date/enabled state, redirecting to checkout.");
-      window.location.href = pathPrefix + 'checkout.html';
+      redirectCheckout("No active upsell rules for current date/enabled state", pathPrefix);
       return;
     }
 
@@ -1179,16 +1182,14 @@ window.handleCheckoutClick = async (event) => {
     }
 
     if (!matchedRule) {
-      console.log("Upsell check: No active rules match the SKUs in cart, redirecting to checkout.");
-      window.location.href = pathPrefix + 'checkout.html';
+      redirectCheckout("No active rules match the SKUs in the cart (Cart SKUs: " + Array.from(cartSkus).join(', ') + ")", pathPrefix);
       return;
     }
 
     await ensureSupabase();
     const sb = getSupabaseClient();
     if (!sb) {
-      console.log("Upsell check: Supabase client not available, redirecting to checkout.");
-      window.location.href = pathPrefix + 'checkout.html';
+      redirectCheckout("Supabase client not available", pathPrefix);
       return;
     }
 
@@ -1199,8 +1200,7 @@ window.handleCheckoutClick = async (event) => {
     console.log("Upsell check: Trigger/Upsell products query result:", products);
 
     if (!products || products.length === 0) {
-      console.log("Upsell check: Could not fetch product details from DB for trigger/upsell SKU, redirecting to checkout.");
-      window.location.href = pathPrefix + 'checkout.html';
+      redirectCheckout("Could not fetch product details from DB for trigger/upsell SKU", pathPrefix);
       return;
     }
 
@@ -1209,8 +1209,7 @@ window.handleCheckoutClick = async (event) => {
     console.log("Upsell check: Trigger product:", triggerProd, "Upsell product:", upsellProd);
 
     if (!triggerProd || !upsellProd) {
-      console.log("Upsell check: Trigger or Upsell product details missing, redirecting to checkout.");
-      window.location.href = pathPrefix + 'checkout.html';
+      redirectCheckout("Trigger or Upsell product details missing in DB", pathPrefix);
       return;
     }
 
@@ -1219,7 +1218,7 @@ window.handleCheckoutClick = async (event) => {
 
   } catch (err) {
     console.error('Error in handleCheckoutClick:', err);
-    window.location.href = pathPrefix + 'checkout.html';
+    redirectCheckout("Exception caught: " + err.message, pathPrefix);
   }
 };
 
