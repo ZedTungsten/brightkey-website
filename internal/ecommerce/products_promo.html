@@ -934,6 +934,8 @@
     let allBusinesses = []; // fetched from DB
 
     let initialPromoState = '';
+    let editingUpsellIdx = null;
+    let editingCrosssellIdx = null;
 
     window.toggleUpsDateVisibility = (cb) => {
       document.getElementById('ups-date-inputs').style.display = cb.checked ? 'none' : 'grid';
@@ -942,6 +944,8 @@
     window.toggleCrsDateVisibility = (cb) => {
       document.getElementById('crs-date-inputs').style.display = cb.checked ? 'none' : 'grid';
     };
+
+    const PENCIL_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle;"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>`;
 
     window.showUpsellAddForm = () => {
       if (!allProducts.length) { showToast('Products are still loading. Please wait.'); return; }
@@ -955,6 +959,15 @@
     };
 
     window.cancelAddUpsellRule = () => {
+      editingUpsellIdx = null;
+      document.getElementById('ups-body-input').value = '';
+      document.getElementById('ups-adjust-input').value = '0';
+      document.getElementById('ups-indefinite').checked = true;
+      toggleUpsDateVisibility(document.getElementById('ups-indefinite'));
+      
+      const addBtn = document.querySelector('#upsell-add-row .btn-cyan');
+      if (addBtn) addBtn.innerText = 'Add';
+
       document.getElementById('upsell-add-row').style.display = 'none';
       document.getElementById('upsell-add-btn').style.display = '';
     };
@@ -997,8 +1010,7 @@
         return;
       }
 
-      upsellRules.push({
-        enabled: true,
+      const payload = {
         trigger_sku: trigger,
         upsell_sku: target,
         body: body,
@@ -1006,15 +1018,53 @@
         indefinite: indefinite,
         active_from: indefinite ? null : start,
         active_to: indefinite ? null : end
-      });
+      };
+
+      if (editingUpsellIdx !== null) {
+        payload.enabled = upsellRules[editingUpsellIdx].enabled;
+        upsellRules[editingUpsellIdx] = payload;
+      } else {
+        payload.enabled = true;
+        upsellRules.push(payload);
+      }
 
       renderUpsellRules();
       cancelAddUpsellRule();
       checkDirty();
     };
 
+    window.editUpsellRule = (idx) => {
+      editingUpsellIdx = idx;
+      const rule = upsellRules[idx];
+      
+      showUpsellAddForm();
+      
+      document.getElementById('ups-trigger-select').value = rule.trigger_sku;
+      document.getElementById('ups-target-select').value = rule.upsell_sku;
+      document.getElementById('ups-body-input').value = rule.body;
+      document.getElementById('ups-adjust-input').value = rule.price_adjustment / 100;
+      document.getElementById('ups-indefinite').checked = rule.indefinite;
+      
+      toggleUpsDateVisibility(document.getElementById('ups-indefinite'));
+      
+      if (!rule.indefinite) {
+        document.getElementById('ups-start').value = rule.active_from ? rule.active_from.substring(0, 16) : '';
+        document.getElementById('ups-end').value = rule.active_to ? rule.active_to.substring(0, 16) : '';
+      }
+      
+      updateUpsellComparePrice();
+      
+      const addBtn = document.querySelector('#upsell-add-row .btn-cyan');
+      if (addBtn) addBtn.innerText = 'Update';
+    };
+
     window.removeUpsellRule = (idx) => {
       upsellRules.splice(idx, 1);
+      if (editingUpsellIdx === idx) {
+        cancelAddUpsellRule();
+      } else if (editingUpsellIdx > idx) {
+        editingUpsellIdx--;
+      }
       renderUpsellRules();
       checkDirty();
     };
@@ -1048,7 +1098,10 @@
             <div style="font-size:0.75rem; color:var(--text-secondary); margin-top:0.15rem;">"${rule.body}"</div>
             <div style="font-size:0.7rem; color:var(--text-muted); margin-top:0.1rem;">Validity: ${dateStr}</div>
           </span>
-          <button onclick="removeUpsellRule(${idx})" style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:1.2rem;line-height:1;padding:0 0.25rem;flex-shrink:0;">&times;</button>
+          <div style="display:flex; align-items:center; gap:0.5rem; flex-shrink:0;">
+            <button onclick="editUpsellRule(${idx})" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:0.25rem;display:flex;align-items:center;justify-content:center;" title="Edit Rule">${PENCIL_SVG}</button>
+            <button onclick="removeUpsellRule(${idx})" style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:1.2rem;line-height:1;padding:0.25rem;display:flex;align-items:center;justify-content:center;" title="Delete Rule">&times;</button>
+          </div>
         `;
         container.appendChild(row);
       });
@@ -1067,6 +1120,13 @@
     };
 
     window.cancelAddCrosssellRule = () => {
+      editingCrosssellIdx = null;
+      document.getElementById('crs-indefinite').checked = true;
+      toggleCrsDateVisibility(document.getElementById('crs-indefinite'));
+      
+      const addBtn = document.querySelector('#crosssell-add-row .btn-cyan');
+      if (addBtn) addBtn.innerText = 'Add';
+
       document.getElementById('crosssell-add-row').style.display = 'none';
       document.getElementById('crosssell-add-btn').style.display = '';
     };
@@ -1084,22 +1144,56 @@
         return;
       }
 
-      crosssellRules.push({
-        enabled: true,
+      const payload = {
         trigger_sku: trigger,
         addon_skus: [addon1, addon2],
         indefinite: indefinite,
         active_from: indefinite ? null : start,
         active_to: indefinite ? null : end
-      });
+      };
+
+      if (editingCrosssellIdx !== null) {
+        payload.enabled = crosssellRules[editingCrosssellIdx].enabled;
+        crosssellRules[editingCrosssellIdx] = payload;
+      } else {
+        payload.enabled = true;
+        crosssellRules.push(payload);
+      }
 
       renderCrosssellRules();
       cancelAddCrosssellRule();
       checkDirty();
     };
 
+    window.editCrosssellRule = (idx) => {
+      editingCrosssellIdx = idx;
+      const rule = crosssellRules[idx];
+      
+      showCrosssellAddForm();
+      
+      document.getElementById('crs-trigger-select').value = rule.trigger_sku;
+      document.getElementById('crs-addon1-select').value = rule.addon_skus[0] || '';
+      document.getElementById('crs-addon2-select').value = rule.addon_skus[1] || '';
+      document.getElementById('crs-indefinite').checked = rule.indefinite;
+      
+      toggleCrsDateVisibility(document.getElementById('crs-indefinite'));
+      
+      if (!rule.indefinite) {
+        document.getElementById('crs-start').value = rule.active_from ? rule.active_from.substring(0, 16) : '';
+        document.getElementById('crs-end').value = rule.active_to ? rule.active_to.substring(0, 16) : '';
+      }
+
+      const addBtn = document.querySelector('#crosssell-add-row .btn-cyan');
+      if (addBtn) addBtn.innerText = 'Update';
+    };
+
     window.removeCrosssellRule = (idx) => {
       crosssellRules.splice(idx, 1);
+      if (editingCrosssellIdx === idx) {
+        cancelAddCrosssellRule();
+      } else if (editingCrosssellIdx > idx) {
+        editingCrosssellIdx--;
+      }
       renderCrosssellRules();
       checkDirty();
     };
@@ -1132,7 +1226,10 @@
             <strong style="color:var(--cyan);">${rule.addon_skus[0]}</strong> & <strong style="color:var(--cyan);">${rule.addon_skus[1]}</strong>
             <div style="font-size:0.7rem; color:var(--text-muted); margin-top:0.15rem;">Validity: ${dateStr}</div>
           </span>
-          <button onclick="removeCrosssellRule(${idx})" style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:1.2rem;line-height:1;padding:0 0.25rem;flex-shrink:0;">&times;</button>
+          <div style="display:flex; align-items:center; gap:0.5rem; flex-shrink:0;">
+            <button onclick="editCrosssellRule(${idx})" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:0.25rem;display:flex;align-items:center;justify-content:center;" title="Edit Rule">${PENCIL_SVG}</button>
+            <button onclick="removeCrosssellRule(${idx})" style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:1.2rem;line-height:1;padding:0.25rem;display:flex;align-items:center;justify-content:center;" title="Delete Rule">&times;</button>
+          </div>
         `;
         container.appendChild(row);
       });
