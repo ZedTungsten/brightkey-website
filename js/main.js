@@ -275,64 +275,7 @@ const yearEl = document.getElementById('current-year');
 if (yearEl) yearEl.textContent = new Date().getFullYear();
 
 // ── Grainient Animated Background ───────────────────────────
-(function initGlobalGrainient() {
-  if (typeof window === 'undefined' || typeof document === 'undefined') return;
-
-  // If a grainient container already exists in the markup, bypass dynamic creation
-  const existingContainer = document.getElementById('grainient-container');
-  if (existingContainer) return;
-
-  // Create and append the background container
-  const container = document.createElement('div');
-  container.id = 'grainient-container';
-  document.body.prepend(container);
-
-  // Helper to dynamically load a script returning a Promise
-  function loadScript(src) {
-    return new Promise((resolve, reject) => {
-      const script = document.createElement('script');
-      script.src = src;
-      script.onload = resolve;
-      script.onerror = reject;
-      document.head.appendChild(script);
-    });
-  }
-
-  // Resolve correct path prefix for local vs server environments
-  const isLocalFile = window.location.protocol === 'file:';
-  let pathPrefix = '/';
-  if (isLocalFile) {
-    const pathname = window.location.pathname;
-    if (pathname.includes('/internal/ecommerce/') || pathname.includes('/internal/web-css/')) {
-      pathPrefix = '../../';
-    } else if (pathname.includes('/internal/')) {
-      pathPrefix = '../';
-    } else {
-      pathPrefix = '';
-    }
-  }
-
-  // Load OGL, then Grainient background library, and initialize
-  loadScript('https://cdn.jsdelivr.net/npm/ogl@0.0.116/dist/ogl.umd.js')
-    .then(() => loadScript(pathPrefix + 'js/grainient.js'))
-    .then(() => {
-      if (window.initGrainient) {
-        window.initGrainient('grainient-container', {
-          color1: '#06b6d4',
-          color2: '#3b82f6',
-          color3: '#a855f7',
-          timeSpeed: 0.1,
-          grainAmount: 0.05,
-          grainScale: 1.5,
-          grainAnimated: true,
-          zoom: 1.2
-        });
-      }
-    })
-    .catch(err => {
-      console.warn('Could not load Grainient background scripts:', err);
-    });
-})();
+// Removed as requested to disable grain/gradient effects across the site.
 
 // ── Dynamically Load cart.js globally ───────────────────────────
 (function loadCartScript() {
