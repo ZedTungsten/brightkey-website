@@ -54,9 +54,9 @@
   - Where user/admin visibility is useful, render errors directly in the UI (e.g. inside tables or containers via `.innerHTML` or toast notifications) so problems are obvious and immediately diagnosed.
 
 ## Unified Supabase Access Pattern
-- **Assign from `window.BKAuth.sb` within entry points**: Pages loading `auth.js` should declare `let sb` at the script level and assign `sb = window.BKAuth.sb` inside their entry function (e.g. `App.init()` or `DOMContentLoaded` listener) rather than recreating client instances. Pages that do not load `auth.js` must declare and create `const sb` locally.
+- **Assign from `window.BKAuth.sb` within entry points**: Pages loading `auth.js` should declare `let sb` at the script level and assign `sb = window.BKAuth.sb` inside their entry function (e.g. `App.init()` or `DOMContentLoaded` listener) rather than recreating client instances. Pages that do not load `auth.js` must declare and create `const sb` locally.## Prevent Duplicate Script Loading
+- **Check for existing tags**: If a script is dynamically loaded via JavaScript (e.g. in `main.js`), always check if a script tag targeting that file already exists in the document (`document.querySelector('script[src*="filename.js"]')`) before appending it. This prevents race conditions, duplicate execution, and `SyntaxError` declarations.
 
-
-
-
+## Type-Safe UUID Queries (Supabase/Postgrest)
+- **Sanitize identifiers**: When querying a UUID column (like `id` in the `products` table) using `.in()` or `.or()`, filter out strings like `"undefined"` or `"null"`. Passing non-UUID strings to a UUID column query triggers a database type mismatch (`22P02` error) and returns a `400 (Bad Request)` response.
 
