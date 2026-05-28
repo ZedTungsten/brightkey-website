@@ -45,6 +45,18 @@
 - **`auth.js` is `defer` and declares `const sb`.** Because it runs before `DOMContentLoaded`, `sb` and `window.BKAuth` are available inside any `DOMContentLoaded` handler. Do NOT redeclare `sb` in inline scripts on pages that also load `auth.js`.
 - **When adding new tabs or sections to a page with an existing `DOMContentLoaded` setup**, add initialization calls (renders, data loads) inside the existing listener — never create a second `DOMContentLoaded` listener on the same page. Multiple listeners fire in registration order but are easy to lose track of and cause race conditions.
 
+## HTML Nesting & Tag Closure Rule
+- **Always verify div and tag closures when adding tabs or layout components**: A missing closing tag (e.g. a missing `</div>`) can silently nest subsequent tabs/sections inside the unclosed container. This causes elements to disappear or display incorrectly when the parent element is hidden (`display: none` / active tab toggling).
+
+## Error Logging & Debugging Rule
+- **Always print or log errors**: For any data-fetching, database query, layout parsing, or critical function execution, **always** include comprehensive error catch blocks.
+  - Print descriptive errors in the browser console using `console.error('Context:', error)`.
+  - Where user/admin visibility is useful, render errors directly in the UI (e.g. inside tables or containers via `.innerHTML` or toast notifications) so problems are obvious and immediately diagnosed.
+
+## Unified Supabase Access Pattern
+- **Assign from `window.BKAuth.sb` within entry points**: Pages loading `auth.js` should declare `let sb` at the script level and assign `sb = window.BKAuth.sb` inside their entry function (e.g. `App.init()` or `DOMContentLoaded` listener) rather than recreating client instances. Pages that do not load `auth.js` must declare and create `const sb` locally.
+
+
 
 
 
