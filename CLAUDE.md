@@ -60,3 +60,10 @@
 ## Type-Safe UUID Queries (Supabase/Postgrest)
 - **Sanitize identifiers**: When querying a UUID column (like `id` in the `products` table) using `.in()` or `.or()`, filter out strings like `"undefined"` or `"null"`. Passing non-UUID strings to a UUID column query triggers a database type mismatch (`22P02` error) and returns a `400 (Bad Request)` response.
 
+## Database Schema Columns Selection
+- **Pricing Columns**: The `products` table does NOT have a column named `price`. The database uses `sale_price` (active price in centavos) and `before_price` (struck-through regular price in centavos). Never select `price` in Supabase `.select(...)` statements; use `before_price` instead and map it back on the client (`p.price = p.before_price`) for code compatibility.
+
+## Direct SKU Extraction
+- **Cart SKU Fallback**: When checking for products inside the cart, do not rely solely on matching UUIDs (`id` property) and querying the database to resolve their SKUs. Cart items already hold their SKU on the `sku` property (e.g. `item.sku`). Always attempt to read `item.sku` directly to resolve cart items instantly.
+
+
