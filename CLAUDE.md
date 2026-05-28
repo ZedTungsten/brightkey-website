@@ -62,7 +62,6 @@
 
 ## Database Schema Columns Selection
 - **Verify Column Names**: Always double-check actual database column names (either via schema migration files in `database/migrations/` or by running a quick select query in a test script) before reference declarations or executing query select statements. Do not guess column names (e.g. assuming `price` instead of `before_price` or `sale_price`), as referencing non-existent columns will result in a fatal `400 (Bad Request)` / `42703` column undefined error.
-- **Pricing Columns**: The `products` table does NOT have a column named `price`. The database uses `sale_price` (active price in centavos) and `before_price` (struck-through regular price in centavos). Never select `price` in Supabase `.select(...)` statements; use `before_price` instead and map it back on the client (`p.price = p.before_price`) for code compatibility.
 
 ## Direct SKU Extraction
 - **Cart SKU Fallback**: When checking for products inside the cart, do not rely solely on matching UUIDs (`id` property) and querying the database to resolve their SKUs. Cart items already hold their SKU on the `sku` property (e.g. `item.sku`). Always attempt to read `item.sku` directly to resolve cart items instantly.
