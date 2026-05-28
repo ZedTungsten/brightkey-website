@@ -967,11 +967,27 @@ async function renderCrossSellRecommendations() {
 
     const cartSkus = new Set();
     cart.forEach(item => {
-      const dbProd = dbProductMap[item.id?.toUpperCase()];
-      if (dbProd && dbProd.sku) {
-        cartSkus.add(dbProd.sku.toUpperCase());
-      } else if (item.id) {
-        cartSkus.add(item.id.toUpperCase());
+      if (!item.id) return;
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+      const match = item.id.match(uuidRegex);
+      
+      if (match) {
+        const uuidPart = match[0].toUpperCase();
+        const suffixPart = item.id.substring(match[0].length + 1).toUpperCase();
+        const dbProd = dbProductMap[uuidPart];
+        if (dbProd && dbProd.sku) {
+          cartSkus.add(dbProd.sku.toUpperCase());
+        }
+        if (suffixPart) {
+          cartSkus.add(suffixPart);
+        }
+      } else {
+        const skuUpper = item.id.toUpperCase();
+        cartSkus.add(skuUpper);
+        const dbProd = dbProductMap[skuUpper];
+        if (dbProd && dbProd.sku) {
+          cartSkus.add(dbProd.sku.toUpperCase());
+        }
       }
     });
 
@@ -1125,11 +1141,27 @@ window.handleCheckoutClick = async (event) => {
 
     const cartSkus = new Set();
     cart.forEach(item => {
-      const dbProd = dbProductMap[item.id?.toUpperCase()];
-      if (dbProd && dbProd.sku) {
-        cartSkus.add(dbProd.sku.toUpperCase());
-      } else if (item.id) {
-        cartSkus.add(item.id.toUpperCase());
+      if (!item.id) return;
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+      const match = item.id.match(uuidRegex);
+      
+      if (match) {
+        const uuidPart = match[0].toUpperCase();
+        const suffixPart = item.id.substring(match[0].length + 1).toUpperCase();
+        const dbProd = dbProductMap[uuidPart];
+        if (dbProd && dbProd.sku) {
+          cartSkus.add(dbProd.sku.toUpperCase());
+        }
+        if (suffixPart) {
+          cartSkus.add(suffixPart);
+        }
+      } else {
+        const skuUpper = item.id.toUpperCase();
+        cartSkus.add(skuUpper);
+        const dbProd = dbProductMap[skuUpper];
+        if (dbProd && dbProd.sku) {
+          cartSkus.add(dbProd.sku.toUpperCase());
+        }
       }
     });
     console.log("Upsell check: Cart SKUs Set:", Array.from(cartSkus));
