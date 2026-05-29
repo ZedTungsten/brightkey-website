@@ -79,7 +79,40 @@
     return session?.user ?? null;
   }
 
+  /**
+   * Get the role of the current user in their tenant.
+   */
+  async function getUserRole() {
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) return null;
+    
+    const { data, error } = await sb
+      .from('tenant_members')
+      .select('role, tenant_id')
+      .eq('user_id', session.user.id)
+      .limit(1);
+      
+    if (error || !data || data.length === 0) return null;
+    return { role: data[0].role, tenantId: data[0].tenant_id };
+  }
+
+  /**
+   * Gate access based on allowed roles. Redirects if unauthorized.
+   */
+  async function checkRoleGate(allowedRoles, redirectTo = '../../admin.html') {
+    const user = await requireAuth(redirectTo);
+    if (!user) return null;
+    
+    const roleInfo = await getUserRole();
+    if (!roleInfo || !allowedRoles.includes(roleInfo.role)) {
+      // If the user's role is not in the allowed roles list, redirect them
+      window.location.href = redirectTo;
+      return null;
+    }
+    return { user, role: roleInfo.role, tenantId: roleInfo.tenantId };
+  }
+
   // Export everything through window.BKAuth — the only global this file touches
-  window.BKAuth = { sb, requireAuth, redirectIfAuth, signIn, signUp, signOut, getUser };
+  window.BKAuth = { sb, requireAuth, redirectIfAuth, signIn, signUp, signOut, getUser, getUserRole, checkRoleGate };
 
 }());
