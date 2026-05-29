@@ -399,7 +399,7 @@ function renderComparisonTable(ct, products = [], allReviews = [], currentProduc
     const imgUrl = prod.image_main || '../assets/og-image.png';
 
     return `
-      <th style="padding: 1.5rem 1.25rem; vertical-align: middle; border-bottom: 1px solid var(--border); text-align: center; ${colStyle}">
+      <th style="padding: 1rem 0.75rem; vertical-align: middle; border-bottom: 1px solid var(--border); text-align: center; ${colStyle}">
         <div style="aspect-ratio:1/1; width:160px; margin: 0 auto; border-radius:var(--radius-sm); background:#fff; padding:0.25rem; display:flex; align-items:center; justify-content:center; overflow:hidden; border:1px solid var(--border);">
           <img src="${imgUrl}" alt="${prod.title}" style="max-width:100%; max-height:100%; object-fit:contain;" />
         </div>
@@ -413,7 +413,7 @@ function renderComparisonTable(ct, products = [], allReviews = [], currentProduc
     const linkHref = isCurrent ? '#' : `${prod.slug}.html`;
 
     return `
-      <td style="padding: 1.25rem; border-bottom: 1px solid var(--border); vertical-align: middle; ${colStyle}">
+      <td style="padding: 0.6rem 0.75rem; border-bottom: 1px solid var(--border); vertical-align: middle; ${colStyle}">
         <a href="${linkHref}" style="font-weight:bold; color:var(--cyan); text-decoration:none; font-size:0.95rem; line-height:1.3;">
           ${prod.title}
         </a>
@@ -424,7 +424,7 @@ function renderComparisonTable(ct, products = [], allReviews = [], currentProduc
   const priceTds = finalProducts.map((prod, pIdx) => {
     const colStyle = getColStyle(pIdx, focusIndex, false, false);
     return `
-      <td style="padding: 1.25rem; border-bottom: 1px solid var(--border); vertical-align: middle; ${colStyle}">
+      <td style="padding: 0.6rem 0.75rem; border-bottom: 1px solid var(--border); vertical-align: middle; ${colStyle}">
         ${priceHtml(prod)}
       </td>
     `;
@@ -436,7 +436,7 @@ function renderComparisonTable(ct, products = [], allReviews = [], currentProduc
     const pct = Math.min(100, Math.max(0, (rData.rating / 5) * 100));
 
     return `
-      <td style="padding: 1.25rem; border-bottom: 1px solid var(--border); vertical-align: middle; ${colStyle}">
+      <td style="padding: 0.6rem 0.75rem; border-bottom: 1px solid var(--border); vertical-align: middle; ${colStyle}">
         <div style="display:inline-flex; align-items:center; gap:0.25rem; white-space:nowrap;">
           <span style="font-weight:600; color:var(--text-primary); font-size:0.95rem;">${rData.rating.toFixed(1)}</span>
           <div style="position:relative; display:inline-block; font-size:1rem; line-height:1; letter-spacing:1px; white-space:nowrap;">
@@ -456,7 +456,7 @@ function renderComparisonTable(ct, products = [], allReviews = [], currentProduc
       const featRow = featuresMap[prod.id] || {};
       const val = featRow[feat.col];
       return `
-        <td style="padding: 1.25rem; border-bottom: 1px solid var(--border); vertical-align: middle; ${colStyle}">
+        <td style="padding: 0.6rem 0.75rem; border-bottom: 1px solid var(--border); vertical-align: middle; ${colStyle}">
           ${renderCellContent(val)}
         </td>
       `;
@@ -464,7 +464,7 @@ function renderComparisonTable(ct, products = [], allReviews = [], currentProduc
 
     return `
       <tr>
-        <td style="font-weight:bold; color:var(--text-primary); text-align:left; border-right: 1px solid var(--border); padding: 1.25rem; border-bottom: 1px solid var(--border); vertical-align: middle;">
+        <td style="font-weight:bold; color:var(--text-primary); text-align:left; border-right: 1px solid var(--border); padding: 0.6rem 0.75rem; border-bottom: 1px solid var(--border); vertical-align: middle; font-size: 0.75rem; letter-spacing: 0.03em;">
           ${feat.label.toUpperCase()}
         </td>
         ${tds}
@@ -482,21 +482,21 @@ function renderComparisonTable(ct, products = [], allReviews = [], currentProduc
           <table style="width:100%; border-collapse:collapse; min-width:750px; text-align:left; font-size:0.9rem;">
             <thead>
               <tr>
-                <th style="padding: 1.5rem 1.25rem; width:180px; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); vertical-align: bottom; font-weight:700; color:var(--text-primary); font-size:0.95rem;"></th>
+                <th style="padding: 0.6rem 0.75rem; width:180px; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); vertical-align: bottom; font-weight:700; color:var(--text-primary); font-size:0.75rem;"></th>
                 ${ths}
               </tr>
             </thead>
             <tbody>
               <tr>
-                <td style="font-weight:bold; color:var(--text-primary); text-align:left; border-right: 1px solid var(--border); padding: 1.25rem; border-bottom: 1px solid var(--border); vertical-align: middle;">DEVICE</td>
+                <td style="font-weight:bold; color:var(--text-primary); text-align:left; border-right: 1px solid var(--border); padding: 0.6rem 0.75rem; border-bottom: 1px solid var(--border); vertical-align: middle; font-size: 0.75rem; letter-spacing: 0.03em;">DEVICE</td>
                 ${deviceTds}
               </tr>
               <tr>
-                <td style="font-weight:bold; color:var(--text-primary); text-align:left; border-right: 1px solid var(--border); padding: 1.25rem; border-bottom: 1px solid var(--border); vertical-align: middle;">PRICE</td>
+                <td style="font-weight:bold; color:var(--text-primary); text-align:left; border-right: 1px solid var(--border); padding: 0.6rem 0.75rem; border-bottom: 1px solid var(--border); vertical-align: middle; font-size: 0.75rem; letter-spacing: 0.03em;">PRICE</td>
                 ${priceTds}
               </tr>
               <tr>
-                <td style="font-weight:bold; color:var(--text-primary); text-align:left; border-right: 1px solid var(--border); padding: 1.25rem; border-bottom: 1px solid var(--border); vertical-align: middle;">RATINGS</td>
+                <td style="font-weight:bold; color:var(--text-primary); text-align:left; border-right: 1px solid var(--border); padding: 0.6rem 0.75rem; border-bottom: 1px solid var(--border); vertical-align: middle; font-size: 0.75rem; letter-spacing: 0.03em;">RATINGS</td>
                 ${ratingsTds}
               </tr>
               ${featureRowsHtml}
