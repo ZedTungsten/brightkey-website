@@ -380,6 +380,20 @@ function renderComparisonTable(ct, products = [], allReviews = [], currentProduc
     return `<div style="text-align:left; color:var(--text-secondary); font-size:0.95rem;">${val}</div>`;
   };
 
+  const priceHtml = (prod) => {
+    const curPrice = (prod.discounted_price > 0) ? prod.discounted_price : (prod.sale_price || 0);
+    const hasDiscount = prod.before_price > 0 && prod.before_price > curPrice;
+    if (hasDiscount) {
+      return `
+        <div style="display:flex; flex-direction:column; gap:0.1rem;">
+          <span style="text-decoration:line-through; font-size:0.85em; color:var(--text-secondary);">${formatPHP(prod.before_price)}</span>
+          <span style="font-weight:700; color:var(--text-primary); font-size:1.05rem;">${formatPHP(curPrice)}</span>
+        </div>
+      `;
+    }
+    return `<span style="font-weight:700; color:var(--text-primary); font-size:1.05rem;">${formatPHP(curPrice)}</span>`;
+  };
+
   const ths = finalProducts.map((prod, pIdx) => {
     const colStyle = getColStyle(pIdx, focusIndex, true, false);
     const imgUrl = prod.image_main || '../assets/og-image.png';
@@ -427,20 +441,6 @@ function renderComparisonTable(ct, products = [], allReviews = [], currentProduc
       </td>
     `;
   }).join('');
-
-  const priceHtml = (prod) => {
-    const curPrice = (prod.discounted_price > 0) ? prod.discounted_price : (prod.sale_price || 0);
-    const hasDiscount = prod.before_price > 0 && prod.before_price > curPrice;
-    if (hasDiscount) {
-      return `
-        <div style="display:flex; flex-direction:column; gap:0.1rem;">
-          <span style="text-decoration:line-through; font-size:0.85em; color:var(--text-secondary);">${formatPHP(prod.before_price)}</span>
-          <span style="font-weight:700; color:var(--text-primary); font-size:1.05rem;">${formatPHP(curPrice)}</span>
-        </div>
-      `;
-    }
-    return `<span style="font-weight:700; color:var(--text-primary); font-size:1.05rem;">${formatPHP(curPrice)}</span>`;
-  };
 
   const featureRowsHtml = filteredFeatures.map((feat, fIdx) => {
     const isLastRow = fIdx === filteredFeatures.length - 1;
