@@ -384,10 +384,11 @@ function renderComparisonTable(ct, products = [], allReviews = [], currentProduc
     const curPrice = (prod.discounted_price > 0) ? prod.discounted_price : (prod.sale_price || 0);
     const hasDiscount = prod.before_price > 0 && prod.before_price > curPrice;
     if (hasDiscount) {
+      const formattedBefore = formatPHP(prod.before_price).replace('style="display:inline-flex;', 'style="display:inline-flex; text-decoration:line-through;');
       return `
         <div style="display:flex; flex-direction:column; gap:0.1rem; align-items:center; justify-content:center; text-align:center; width:100%;">
           <span style="font-weight:700; color:var(--text-primary); font-size:1.05rem;">${formatPHP(curPrice)}</span>
-          <span style="text-decoration:line-through; font-size:0.85em; color:var(--text-secondary);">${formatPHP(prod.before_price)}</span>
+          <span style="font-size:0.85em; color:var(--text-secondary); text-decoration:line-through;">${formattedBefore}</span>
         </div>
       `;
     }
@@ -399,7 +400,7 @@ function renderComparisonTable(ct, products = [], allReviews = [], currentProduc
     const imgUrl = prod.image_main || '../assets/og-image.png';
 
     return `
-      <th style="padding: 1rem 0.75rem; vertical-align: middle; border-bottom: 1px solid var(--border); text-align: center; ${colStyle}">
+      <th style="padding: 1rem 0.75rem; width:220px; min-width:220px; max-width:220px; vertical-align: middle; border-bottom: 1px solid var(--border); text-align: center; ${colStyle}">
         <div style="aspect-ratio:1/1; width:160px; margin: 0 auto; border-radius:var(--radius-sm); background:#fff; padding:0.25rem; display:flex; align-items:center; justify-content:center; overflow:hidden; border:1px solid var(--border);">
           <img src="${imgUrl}" alt="${prod.title}" style="max-width:100%; max-height:100%; object-fit:contain;" />
         </div>
@@ -479,10 +480,10 @@ function renderComparisonTable(ct, products = [], allReviews = [], currentProduc
           ${ct.title || 'Product Comparison'}
         </h2>
         <div style="width:100%; overflow-x:auto; border:1px solid var(--border); border-radius:var(--radius-md); background:var(--bg-surface); box-shadow:0 4px 20px rgba(0,0,0,0.05);">
-          <table style="width:100%; border-collapse:collapse; min-width:750px; text-align:center; font-size:0.9rem;">
+          <table style="border-collapse:collapse; text-align:center; font-size:0.9rem; margin: 0 auto; table-layout: fixed; width: max-content; max-width: 100%;">
             <thead>
               <tr>
-                <th style="padding: 0.6rem 0.75rem; width:180px; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); vertical-align: bottom; font-weight:700; color:var(--text-primary); font-size:0.75rem;"></th>
+                <th style="padding: 0.6rem 0.75rem; width:180px; min-width:180px; max-width:180px; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); vertical-align: bottom; font-weight:700; color:var(--text-primary); font-size:0.75rem;"></th>
                 ${ths}
               </tr>
             </thead>
