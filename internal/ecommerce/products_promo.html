@@ -638,7 +638,7 @@
             <div style="border-top: 1px solid var(--border); padding-top: 1.25rem; margin-top: 1.25rem;">
               <h4 style="margin-bottom:0.75rem; font-size:0.85rem; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-secondary);">Target Marketing Audience</h4>
               
-              <div class="form-group" style="margin-bottom:1rem;">
+              <div class="form-group" style="margin-bottom:0;">
                 <label class="form-label">Audience Bucket</label>
                 <div style="display:flex; gap:0.5rem; margin-bottom:0.5rem;">
                   <select id="popup-audience-select" class="form-select" style="flex:1;" onchange="handleAudienceSelectChange()">
@@ -652,16 +652,6 @@
                   <button type="button" class="btn btn-outline btn-sm" onclick="cancelCustomAudienceBucket()">Cancel</button>
                 </div>
                 <div class="form-hint">Select where storefront signups will be grouped. Users who sign up are automatically labeled to receive marketing emails.</div>
-              </div>
-
-              <div style="background:var(--bg-elevated); padding:1rem; border-radius:6px; border:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; margin-top:1rem;">
-                <div>
-                  <div style="font-size:1.15rem; font-weight:700; color:var(--text-primary);">
-                    <span id="popup-audience-count">0</span> Subscribed Users
-                  </div>
-                  <div style="font-size:0.8rem; color:var(--text-secondary); margin-top:0.15rem;">Currently in this bucket</div>
-                </div>
-                <button type="button" class="btn btn-outline btn-sm" onclick="exportCurrentAudienceCsv()">Export CSV</button>
               </div>
             </div>
           </form>
@@ -2383,6 +2373,20 @@
           });
         }
         
+        // Also fetch from the new email_marketing_audiences table to ensure all buckets are listed
+        try {
+          const { data: listData } = await sb
+            .from('email_marketing_audiences')
+            .select('name');
+          if (listData) {
+            listData.forEach(row => {
+              if (row.name) buckets.add(row.name.trim());
+            });
+          }
+        } catch (e) {
+          console.warn('Could not fetch from email_marketing_audiences:', e);
+        }
+        
         const sortedBuckets = Array.from(buckets).sort();
         sortedBuckets.forEach(b => {
           const opt = document.createElement('option');
@@ -2393,28 +2397,8 @@
           }
           select.appendChild(opt);
         });
-
-        // Update counts
-        await window.updateAudienceCount(selectedBucket);
       } catch (err) {
         console.error('Failed to load audience buckets:', err);
-      }
-    };
-
-    // --- Update Audience Count ---
-    window.updateAudienceCount = async (bucket) => {
-      try {
-        const { count, error } = await sb
-          .from('marketing_audience')
-          .select('*', { count: 'exact', head: true })
-          .eq('audience', bucket);
-        
-        const countEl = document.getElementById('popup-audience-count');
-        if (countEl && !error && count !== null) {
-          countEl.innerText = count;
-        }
-      } catch (err) {
-        console.error('Error fetching bucket audience count:', err);
       }
     };
 
@@ -2426,9 +2410,6 @@
       
       customInput.style.display = 'none';
       customInput.value = '';
-      
-      const val = select.value;
-      window.updateAudienceCount(val);
       checkDirty();
     };
 
@@ -2477,9 +2458,6 @@
       // Hide input container
       container.style.display = 'none';
       input.value = '';
-      
-      // Update count & trigger checkDirty
-      window.updateAudienceCount(newBucket);
       checkDirty();
     };
 
@@ -2491,45 +2469,6 @@
       
       container.style.display = 'none';
       input.value = '';
-    };
-
-    // --- Export Bucket CSV ---
-    window.exportCurrentAudienceCsv = async () => {
-      const select = document.getElementById('popup-audience-select');
-      const bucket = select ? select.value : 'Customer';
-
-      try {
-        showToast(`Fetching '${bucket}' audience database...`);
-        const { data: list, error } = await sb
-          .from('marketing_audience')
-          .select('email, source, created_at, first_name, last_name, phone, city')
-          .eq('audience', bucket)
-          .order('created_at', { ascending: false });
-
-        if (error) throw error;
-        if (!list || list.length === 0) {
-          showToast(`Audience list for '${bucket}' is empty.`, true);
-          return;
-        }
-
-        // Generate CSV file locally
-        let csvContent = 'Email,First Name,Last Name,Phone,City,Source,Subscribed At\n';
-        list.forEach(row => {
-          const dateStr = new Date(row.created_at).toLocaleString();
-          csvContent += `"${row.email}","${row.first_name||''}","${row.last_name||''}","${row.phone||''}","${row.city||''}","${row.source}","${dateStr}"\n`;
-        });
-
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement('a');
-        link.href = URL.createObjectURL(blob);
-        link.download = `audience_${bucket.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_${Date.now()}.csv`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        showToast('Audience list exported successfully.');
-      } catch (err) {
-        showToast(`Export failed: ${err.message}`, true);
-      }
     };
 
     // --- Save Promo Popup Configurations ---
@@ -2591,6 +2530,23 @@
         value: payload
       });
 
+      // Ensure the audience bucket exists in the new email_marketing_audiences table
+      try {
+        const { data: existingAud } = await sb
+          .from('email_marketing_audiences')
+          .select('id')
+          .eq('name', audienceBucket);
+        
+        if (!existingAud || existingAud.length === 0) {
+          await sb.from('email_marketing_audiences').insert({
+            name: audienceBucket,
+            description: `Auto-created audience bucket for Promotional Entry Popup.`
+          });
+        }
+      } catch (audErr) {
+        console.error('Failed to register audience bucket in email_marketing_audiences:', audErr);
+      }
+
       btn.disabled = false;
       btn.innerText = 'Save Popup';
 
@@ -2604,10 +2560,7 @@
       }
     };
 
-    // Keep legacy fallback for exportAudienceCsv
-    window.exportAudienceCsv = window.exportCurrentAudienceCsv;
-
-    // --- Load Popup Settings and Audience Count ---
+    // --- Load Popup Settings ---
     const originalFetchPromoData = fetchPromoData;
     fetchPromoData = async function() {
       await originalFetchPromoData();

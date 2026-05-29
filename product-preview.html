@@ -1514,11 +1514,23 @@
           
           try {
             const db = window.createSupabaseClient();
+            // 1. Save to the legacy marketing_audience table
             await db.insert('marketing_audience', { 
               email: emailVal, 
               source: 'promo_popup',
               audience: config.audience_bucket || 'Customer'
             });
+
+            // 2. Save to the new email_marketing_audience_members table
+            const bucketName = config.audience_bucket || 'Customer';
+            const audRows = await db.select('email_marketing_audiences', `name=eq.${encodeURIComponent(bucketName)}`);
+            if (audRows && audRows.length > 0) {
+              await db.insert('email_marketing_audience_members', {
+                audience_id: audRows[0].id,
+                email: emailVal,
+                source: 'promo_popup'
+              });
+            }
           } catch (err) {
             console.warn('Marketing audience insertion error/status:', err);
           }
