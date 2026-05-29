@@ -242,181 +242,188 @@ function renderAPlusContent(blocks, products = [], allReviews = [], currentProdu
           </div>
         </div>
       `;
-    } else if (b.type === 'comparison' && currentProduct) {
-      const comparedProducts = (b.skus || [])
-        .map(sku => products.find(prod => prod.sku === sku))
-        .filter(Boolean);
-
-      const finalProducts = [...comparedProducts];
-      const focusPosIndex = Math.min(Math.max(1, b.focusPosition || 1), finalProducts.length + 1) - 1;
-      finalProducts.splice(focusPosIndex, 0, currentProduct);
-
-      const focusIndex = focusPosIndex;
-
-      const filteredFeatures = (b.features || []).filter(feat => {
-        const checkSku = (skuVal, isSkuSelected) => {
-          return isSkuSelected && skuVal && skuVal.trim() !== '' && skuVal.trim() !== '[cross]';
-        };
-        return checkSku(feat.sku1Val, b.skus[0]) ||
-               checkSku(feat.sku2Val, b.skus[1]) ||
-               checkSku(feat.sku3Val, b.skus[2]);
-      });
-
-      const getColStyle = (prodIndex, focusIndex, isHeader = false, isLastRow = false) => {
-        if (prodIndex !== focusIndex) return '';
-        let style = 'background-color: rgba(6, 182, 212, 0.045); border-left: 2px solid var(--cyan); border-right: 2px solid var(--cyan);';
-        if (isHeader) {
-          style += ' border-top: 2px solid var(--cyan);';
-        }
-        if (isLastRow) {
-          style += ' border-bottom: 2px solid var(--cyan);';
-        }
-        return style;
-      };
-
-      const renderCellContent = (val) => {
-        const trimmed = val ? val.trim() : '';
-        if (trimmed === '[check]') {
-          return `
-            <div style="text-align:center; display:flex; justify-content:center; color:#10b981;">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-            </div>
-          `;
-        }
-        if (trimmed === '[cross]') {
-          return `
-            <div style="text-align:center; display:flex; justify-content:center; color:#ef4444;">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-            </div>
-          `;
-        }
-        return `<div style="text-align:left; color:var(--text-secondary); font-size:0.95rem;">${val}</div>`;
-      };
-
-      const getFeatureValForProduct = (prod, feat) => {
-        if (prod.sku === currentProduct.sku) return feat.focusVal || '';
-        if (b.skus[0] && prod.sku === b.skus[0]) return feat.sku1Val || '';
-        if (b.skus[1] && prod.sku === b.skus[1]) return feat.sku2Val || '';
-        if (b.skus[2] && prod.sku === b.skus[2]) return feat.sku3Val || '';
-        return '';
-      };
-
-      const priceHtml = (prod) => {
-        const curPrice = (prod.discounted_price > 0) ? prod.discounted_price : (prod.sale_price || 0);
-        const hasDiscount = prod.before_price > 0 && prod.before_price > curPrice;
-        if (hasDiscount) {
-          return `
-            <div style="display:flex; flex-direction:column; gap:0.1rem;">
-              <span style="text-decoration:line-through; font-size:0.85em; color:var(--text-secondary);">${formatPHP(prod.before_price)}</span>
-              <span style="font-weight:700; color:var(--text-primary); font-size:1.05rem;">${formatPHP(curPrice)}</span>
-            </div>
-          `;
-        }
-        return `<span style="font-weight:700; color:var(--text-primary); font-size:1.05rem;">${formatPHP(curPrice)}</span>`;
-      };
-
-      const ths = finalProducts.map((prod, pIdx) => {
-        const colStyle = getColStyle(pIdx, focusIndex, true, false);
-        const imgUrl = prod.image_main || '../assets/og-image.png';
-        const isCurrent = prod.sku === currentProduct.sku;
-        const linkHref = isCurrent ? '#' : `${prod.slug}.html`;
-
-        return `
-          <th style="padding: 1.5rem 1.25rem; vertical-align: top; border-bottom: 1px solid var(--border); ${colStyle}">
-            <div style="display:flex; flex-direction:column; align-items:center; gap:0.75rem; text-align:center;">
-              <div style="aspect-ratio:1/1; width:80px; border-radius:var(--radius-sm); background:#fff; padding:0.25rem; display:flex; align-items:center; justify-content:center; overflow:hidden; border:1px solid var(--border);">
-                <img src="${imgUrl}" alt="${prod.title}" style="max-width:100%; max-height:100%; object-fit:contain;" />
-              </div>
-              <a href="${linkHref}" style="font-weight:bold; color:var(--cyan); text-decoration:none; font-size:0.95rem; line-height:1.3; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">
-                ${prod.title}
-              </a>
-            </div>
-          </th>
-        `;
-      }).join('');
-
-      const priceTds = finalProducts.map((prod, pIdx) => {
-        const colStyle = getColStyle(pIdx, focusIndex, false, false);
-        return `
-          <td style="padding: 1.25rem; border-bottom: 1px solid var(--border); vertical-align: middle; ${colStyle}">
-            ${priceHtml(prod)}
-          </td>
-        `;
-      }).join('');
-
-      const ratingsTds = finalProducts.map((prod, pIdx) => {
-        const colStyle = getColStyle(pIdx, focusIndex, false, false);
-        const rData = getProductRatingAndReviewCount(prod, allReviews);
-        const pct = Math.min(100, Math.max(0, (rData.rating / 5) * 100));
-
-        return `
-          <td style="padding: 1.25rem; border-bottom: 1px solid var(--border); vertical-align: middle; ${colStyle}">
-            <div style="display:inline-flex; align-items:center; gap:0.25rem; white-space:nowrap;">
-              <span style="font-weight:600; color:var(--text-primary); font-size:0.95rem;">${rData.rating.toFixed(1)}</span>
-              <div style="position:relative; display:inline-block; font-size:1rem; line-height:1; letter-spacing:1px; white-space:nowrap;">
-                <span style="color:var(--border);">★★★★★</span>
-                <span style="color:#f59e0b; position:absolute; left:0; top:0; overflow:hidden; width:${pct}%; white-space:nowrap;">★★★★★</span>
-              </div>
-              <span style="color:var(--text-secondary); font-size:0.8rem;">(${rData.reviewsCount})</span>
-            </div>
-          </td>
-        `;
-      }).join('');
-
-      const featureRowsHtml = filteredFeatures.map((feat, fIdx) => {
-        const isLastRow = fIdx === filteredFeatures.length - 1;
-        const tds = finalProducts.map((prod, pIdx) => {
-          const colStyle = getColStyle(pIdx, focusIndex, false, isLastRow);
-          const val = getFeatureValForProduct(prod, feat);
-          return `
-            <td style="padding: 1.25rem; border-bottom: 1px solid var(--border); vertical-align: middle; ${colStyle}">
-              ${renderCellContent(val)}
-            </td>
-          `;
-        }).join('');
-
-        return `
-          <tr>
-            <td style="font-weight:bold; color:var(--text-primary); text-align:left; border-right: 1px solid var(--border); padding: 1.25rem; border-bottom: 1px solid var(--border); vertical-align: middle;">
-              ${feat.name}
-            </td>
-            ${tds}
-          </tr>
-        `;
-      }).join('');
-
-      html += `
-        <div style="background:${bg}; padding:5rem 2rem; overflow:hidden;">
-          <div style="max-width:1200px; margin:0 auto;">
-            <h2 style="font-size:2.25rem; font-weight:800; margin-bottom:3rem; text-align:center; color:var(--text-primary); letter-spacing:-0.03em;">Product Comparison</h2>
-            <div style="width:100%; overflow-x:auto; border:1px solid var(--border); border-radius:var(--radius-md); background:var(--bg-surface); box-shadow:0 4px 20px rgba(0,0,0,0.05);">
-              <table style="width:100%; border-collapse:collapse; min-width:750px; text-align:left; font-size:0.9rem;">
-                <thead>
-                  <tr>
-                    <th style="padding: 1.5rem 1.25rem; width:180px; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); vertical-align: bottom; font-weight:700; color:var(--text-primary); font-size:0.95rem;">Features</th>
-                    ${ths}
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td style="font-weight:bold; color:var(--text-primary); text-align:left; border-right: 1px solid var(--border); padding: 1.25rem; border-bottom: 1px solid var(--border); vertical-align: middle;">Price</td>
-                    ${priceTds}
-                  </tr>
-                  <tr>
-                    <td style="font-weight:bold; color:var(--text-primary); text-align:left; border-right: 1px solid var(--border); padding: 1.25rem; border-bottom: 1px solid var(--border); vertical-align: middle;">Ratings</td>
-                    ${ratingsTds}
-                  </tr>
-                  ${featureRowsHtml}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      `;
     }
   });
 
   return html;
+}
+
+// ── Comparison Table Renderer ────────────────────────────────────────────────
+function renderComparisonTable(ct, products = [], allReviews = [], currentProduct = null) {
+  if (!ct || !currentProduct) return '';
+  
+  const comparedProducts = (ct.skus || [])
+    .map(sku => products.find(prod => prod.sku === sku))
+    .filter(Boolean);
+
+  const finalProducts = [...comparedProducts];
+  const focusPosIndex = Math.min(Math.max(1, ct.focusPosition || 1), finalProducts.length + 1) - 1;
+  finalProducts.splice(focusPosIndex, 0, currentProduct);
+
+  const focusIndex = focusPosIndex;
+
+  const filteredFeatures = (ct.features || []).filter(feat => {
+    const checkSku = (skuVal, isSkuSelected) => {
+      return isSkuSelected && skuVal && skuVal.trim() !== '' && skuVal.trim() !== '[cross]';
+    };
+    return checkSku(feat.sku1Val, ct.skus[0]) ||
+           checkSku(feat.sku2Val, ct.skus[1]) ||
+           checkSku(feat.sku3Val, ct.skus[2]);
+  });
+
+  const getColStyle = (prodIndex, focusIndex, isHeader = false, isLastRow = false) => {
+    if (prodIndex !== focusIndex) return '';
+    let style = 'background-color: rgba(6, 182, 212, 0.045); border-left: 2px solid var(--cyan); border-right: 2px solid var(--cyan);';
+    if (isHeader) {
+      style += ' border-top: 2px solid var(--cyan);';
+    }
+    if (isLastRow) {
+      style += ' border-bottom: 2px solid var(--cyan);';
+    }
+    return style;
+  };
+
+  const renderCellContent = (val) => {
+    const trimmed = val ? val.trim() : '';
+    if (trimmed === '[check]') {
+      return `
+        <div style="text-align:center; display:flex; justify-content:center; color:#10b981;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+        </div>
+      `;
+    }
+    if (trimmed === '[cross]') {
+      return `
+        <div style="text-align:center; display:flex; justify-content:center; color:#ef4444;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </div>
+      `;
+    }
+    return `<div style="text-align:left; color:var(--text-secondary); font-size:0.95rem;">${val}</div>`;
+  };
+
+  const getFeatureValForProduct = (prod, feat) => {
+    if (prod.sku === currentProduct.sku) return feat.focusVal || '';
+    if (ct.skus[0] && prod.sku === ct.skus[0]) return feat.sku1Val || '';
+    if (ct.skus[1] && prod.sku === ct.skus[1]) return feat.sku2Val || '';
+    if (ct.skus[2] && prod.sku === ct.skus[2]) return feat.sku3Val || '';
+    return '';
+  };
+
+  const priceHtml = (prod) => {
+    const curPrice = (prod.discounted_price > 0) ? prod.discounted_price : (prod.sale_price || 0);
+    const hasDiscount = prod.before_price > 0 && prod.before_price > curPrice;
+    if (hasDiscount) {
+      return `
+        <div style="display:flex; flex-direction:column; gap:0.1rem;">
+          <span style="text-decoration:line-through; font-size:0.85em; color:var(--text-secondary);">${formatPHP(prod.before_price)}</span>
+          <span style="font-weight:700; color:var(--text-primary); font-size:1.05rem;">${formatPHP(curPrice)}</span>
+        </div>
+      `;
+    }
+    return `<span style="font-weight:700; color:var(--text-primary); font-size:1.05rem;">${formatPHP(curPrice)}</span>`;
+  };
+
+  const ths = finalProducts.map((prod, pIdx) => {
+    const colStyle = getColStyle(pIdx, focusIndex, true, false);
+    const imgUrl = prod.image_main || '../assets/og-image.png';
+    const isCurrent = prod.sku === currentProduct.sku;
+    const linkHref = isCurrent ? '#' : `${prod.slug}.html`;
+
+    return `
+      <th style="padding: 1.5rem 1.25rem; vertical-align: top; border-bottom: 1px solid var(--border); ${colStyle}">
+        <div style="display:flex; flex-direction:column; align-items:center; gap:0.75rem; text-align:center;">
+          <div style="aspect-ratio:1/1; width:80px; border-radius:var(--radius-sm); background:#fff; padding:0.25rem; display:flex; align-items:center; justify-content:center; overflow:hidden; border:1px solid var(--border);">
+            <img src="${imgUrl}" alt="${prod.title}" style="max-width:100%; max-height:100%; object-fit:contain;" />
+          </div>
+          <a href="${linkHref}" style="font-weight:bold; color:var(--cyan); text-decoration:none; font-size:0.95rem; line-height:1.3; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">
+            ${prod.title}
+          </a>
+        </div>
+      </th>
+    `;
+  }).join('');
+
+  const priceTds = finalProducts.map((prod, pIdx) => {
+    const colStyle = getColStyle(pIdx, focusIndex, false, false);
+    return `
+      <td style="padding: 1.25rem; border-bottom: 1px solid var(--border); vertical-align: middle; ${colStyle}">
+        ${priceHtml(prod)}
+      </td>
+    `;
+  }).join('');
+
+  const ratingsTds = finalProducts.map((prod, pIdx) => {
+    const colStyle = getColStyle(pIdx, focusIndex, false, false);
+    const rData = getProductRatingAndReviewCount(prod, allReviews);
+    const pct = Math.min(100, Math.max(0, (rData.rating / 5) * 100));
+
+    return `
+      <td style="padding: 1.25rem; border-bottom: 1px solid var(--border); vertical-align: middle; ${colStyle}">
+        <div style="display:inline-flex; align-items:center; gap:0.25rem; white-space:nowrap;">
+          <span style="font-weight:600; color:var(--text-primary); font-size:0.95rem;">${rData.rating.toFixed(1)}</span>
+          <div style="position:relative; display:inline-block; font-size:1rem; line-height:1; letter-spacing:1px; white-space:nowrap;">
+            <span style="color:var(--border);">★★★★★</span>
+            <span style="color:#f59e0b; position:absolute; left:0; top:0; overflow:hidden; width:${pct}%; white-space:nowrap;">★★★★★</span>
+          </div>
+          <span style="color:var(--text-secondary); font-size:0.8rem;">(${rData.reviewsCount})</span>
+        </div>
+      </td>
+    `;
+  }).join('');
+
+  const featureRowsHtml = filteredFeatures.map((feat, fIdx) => {
+    const isLastRow = fIdx === filteredFeatures.length - 1;
+    const tds = finalProducts.map((prod, pIdx) => {
+      const colStyle = getColStyle(pIdx, focusIndex, false, isLastRow);
+      const val = getFeatureValForProduct(prod, feat);
+      return `
+        <td style="padding: 1.25rem; border-bottom: 1px solid var(--border); vertical-align: middle; ${colStyle}">
+          ${renderCellContent(val)}
+        </td>
+      `;
+    }).join('');
+
+    return `
+      <tr>
+        <td style="font-weight:bold; color:var(--text-primary); text-align:left; border-right: 1px solid var(--border); padding: 1.25rem; border-bottom: 1px solid var(--border); vertical-align: middle;">
+          ${feat.name}
+        </td>
+        ${tds}
+      </tr>
+    `;
+  }).join('');
+
+  return `
+    <div style="background:var(--bg-base); padding:5rem 2rem; overflow:hidden; border-top: 1px solid var(--border);">
+      <div style="max-width:1200px; margin:0 auto;">
+        <h2 style="font-size:2.25rem; font-weight:800; margin-bottom:3rem; text-align:center; color:var(--text-primary); letter-spacing:-0.03em;">
+          ${ct.title || 'Product Comparison'}
+        </h2>
+        <div style="width:100%; overflow-x:auto; border:1px solid var(--border); border-radius:var(--radius-md); background:var(--bg-surface); box-shadow:0 4px 20px rgba(0,0,0,0.05);">
+          <table style="width:100%; border-collapse:collapse; min-width:750px; text-align:left; font-size:0.9rem;">
+            <thead>
+              <tr>
+                <th style="padding: 1.5rem 1.25rem; width:180px; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); vertical-align: bottom; font-weight:700; color:var(--text-primary); font-size:0.95rem;">Features</th>
+                ${ths}
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td style="font-weight:bold; color:var(--text-primary); text-align:left; border-right: 1px solid var(--border); padding: 1.25rem; border-bottom: 1px solid var(--border); vertical-align: middle;">Price</td>
+                ${priceTds}
+              </tr>
+              <tr>
+                <td style="font-weight:bold; color:var(--text-primary); text-align:left; border-right: 1px solid var(--border); padding: 1.25rem; border-bottom: 1px solid var(--border); vertical-align: middle;">Ratings</td>
+                ${ratingsTds}
+              </tr>
+              ${featureRowsHtml}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  `;
 }
 
 // ── Feature table map ─────────────────────────────────────────────────────────
@@ -827,9 +834,16 @@ async function buildProducts() {
       $('[data-template="variant-selector"]').css('display', 'none');
     }
 
-    // A+ Content
+    // A+ Content & Comparison Table
+    let aplusHtml = '';
     if (p.aplus_content && Array.isArray(p.aplus_content) && p.aplus_content.length > 0) {
-      const aplusHtml = renderAPlusContent(p.aplus_content, products, allReviews, p);
+      aplusHtml += renderAPlusContent(p.aplus_content, products, allReviews, p);
+    }
+    if (p.comparison_table) {
+      aplusHtml += renderComparisonTable(p.comparison_table, products, allReviews, p);
+    }
+
+    if (aplusHtml) {
       $('[data-template="aplus-content-wrapper"]').html(aplusHtml).css('display', 'block');
     } else {
       $('[data-template="aplus-content-wrapper"]').css('display', 'none');

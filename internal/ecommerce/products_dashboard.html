@@ -557,9 +557,58 @@
             <option value="image_full">Full Width Image</option>
             <option value="grid_2x2">2x2 Media Grid</option>
             <option value="carousel">Interactive Carousel</option>
-            <option value="comparison">Product Comparison Table</option>
           </select>
           <button type="button" class="btn btn-outline" id="btn-add-aplus-block">+ Add Section</button>
+        </div>
+      </div>
+
+      <div class="form-section" style="margin-top:2rem; border-top:1px solid var(--border); padding-top:2rem;">
+        <h3>Comparison Table</h3>
+        <p style="color:var(--text-secondary); font-size:0.9rem; margin-bottom:1.5rem;">Configure a product comparison table that highlights this product.</p>
+        
+        <div id="comparison-table-editor" class="aplus-block" style="background:var(--bg-surface); border:1px solid var(--border); border-radius:var(--radius-md); padding:1rem;">
+          <div style="display:flex; flex-direction:column; gap:0.5rem; margin-bottom:1rem;">
+            <label class="form-label">Table Title Header</label>
+            <input type="text" id="comp-title-header" class="form-input" placeholder="e.g. Compare with similar items" />
+          </div>
+          
+          <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:1rem; margin-bottom:1rem;">
+            <div>
+              <label class="form-label">Compare SKU 1</label>
+              <select id="comp-sku-1" class="form-input comparison-sku-1" onchange="updateComparisonFields(this.closest('#comparison-table-editor'))">
+                <option value="">(None)</option>
+              </select>
+            </div>
+            <div>
+              <label class="form-label">Compare SKU 2</label>
+              <select id="comp-sku-2" class="form-input comparison-sku-2" onchange="updateComparisonFields(this.closest('#comparison-table-editor'))">
+                <option value="">(None)</option>
+              </select>
+            </div>
+            <div>
+              <label class="form-label">Compare SKU 3</label>
+              <select id="comp-sku-3" class="form-input comparison-sku-3" onchange="updateComparisonFields(this.closest('#comparison-table-editor'))">
+                <option value="">(None)</option>
+              </select>
+            </div>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:0.5rem; margin-bottom:1.5rem; max-width:200px;">
+            <label class="form-label">Focus Product Position</label>
+            <select id="comp-focus-pos" class="form-input comparison-focus-pos">
+              <option value="1">1st</option>
+              <option value="2">2nd</option>
+              <option value="3">3rd</option>
+              <option value="4">4th</option>
+            </select>
+          </div>
+
+          <div style="margin-bottom:1rem;">
+            <div style="font-weight:600; font-size:0.9rem; margin-bottom:0.75rem; display:flex; justify-content:space-between; align-items:center;">
+              <span>Features Table Rows</span>
+              <button type="button" class="btn btn-outline btn-sm" onclick="addComparisonFeatureRow(this)">+ Add Feature Row</button>
+            </div>
+            <div class="comparison-features-container"></div>
+          </div>
         </div>
       </div>
     </div>
@@ -1003,6 +1052,18 @@
     updatePricePreview();
     updateMediaPreviews();
     document.getElementById('aplus-blocks-container').innerHTML = '';
+
+    // Clear Comparison Table
+    document.getElementById('comp-title-header').value = '';
+    document.getElementById('comp-sku-1').value = '';
+    document.getElementById('comp-sku-2').value = '';
+    document.getElementById('comp-sku-3').value = '';
+    const editorEl = document.getElementById('comparison-table-editor');
+    if (editorEl) {
+      updateComparisonFields(editorEl);
+      const container = editorEl.querySelector('.comparison-features-container');
+      if (container) container.innerHTML = '';
+    }
     
     renderFeaturesTab('');
   }
@@ -1060,6 +1121,35 @@
         addAPlusBlock(block.type, block);
       });
     }
+
+    // Fill Comparison Table
+    const pCurrent = allProducts.find(x => x.id === editingId);
+    const currentSku = pCurrent ? pCurrent.sku : '';
+    const skuOptions = `<option value="">(None)</option>` + allProducts
+      .filter(prod => prod.sku && prod.sku !== currentSku)
+      .map(prod => `<option value="${esc(prod.sku)}">${esc(prod.sku)} — ${esc(prod.title)}</option>`)
+      .join('');
+    document.getElementById('comp-sku-1').innerHTML = skuOptions;
+    document.getElementById('comp-sku-2').innerHTML = skuOptions;
+    document.getElementById('comp-sku-3').innerHTML = skuOptions;
+
+    const ct = p.comparison_table || {};
+    document.getElementById('comp-title-header').value = ct.title || '';
+    const skus = ct.skus || ['', '', ''];
+    document.getElementById('comp-sku-1').value = skus[0] || '';
+    document.getElementById('comp-sku-2').value = skus[1] || '';
+    document.getElementById('comp-sku-3').value = skus[2] || '';
+    
+    const editor = document.getElementById('comparison-table-editor');
+    updateComparisonFields(editor);
+    document.getElementById('comp-focus-pos').value = ct.focusPosition || 1;
+    
+    const featuresContainer = editor.querySelector('.comparison-features-container');
+    featuresContainer.innerHTML = '';
+    const features = ct.features || [];
+    features.forEach(feat => {
+      addComparisonFeatureRow(editor.querySelector('.btn-outline'), feat);
+    });
   }
 
   function collectForm() {
@@ -1074,6 +1164,37 @@
     document.querySelectorAll('.promo-tag-checkbox').forEach(cb => {
       if (cb.checked) checkedTags.push(cb.value);
     });
+
+    const editor = document.getElementById('comparison-table-editor');
+    const sku1 = document.getElementById('comp-sku-1')?.value || '';
+    const sku2 = document.getElementById('comp-sku-2')?.value || '';
+    const sku3 = document.getElementById('comp-sku-3')?.value || '';
+    const skus = [sku1, sku2, sku3].filter(Boolean);
+    const title = document.getElementById('comp-title-header')?.value?.trim() || '';
+    const focusPosition = parseInt(document.getElementById('comp-focus-pos')?.value || '1', 10);
+    
+    const features = [];
+    if (editor) {
+      editor.querySelectorAll('.comp-feature-row').forEach(row => {
+        const name = row.querySelector('.comp-feature-name')?.value.trim() || '';
+        if (name) {
+          features.push({
+            name: name,
+            focusVal: row.querySelector('.comp-val-focus')?.value.trim() || '',
+            sku1Val: row.querySelector('.comp-val-sku1')?.value.trim() || '',
+            sku2Val: row.querySelector('.comp-val-sku2')?.value.trim() || '',
+            sku3Val: row.querySelector('.comp-val-sku3')?.value.trim() || ''
+          });
+        }
+      });
+    }
+
+    const comparison_table = skus.length > 0 ? {
+      title: title,
+      skus: skus,
+      focusPosition: focusPosition,
+      features: features
+    } : null;
 
     return {
       sku:               g('f-sku'),
@@ -1109,6 +1230,7 @@
       display_bought_month: g('f-display-bought-month'),
       override_rating:    document.getElementById('f-override-rating').checked,
       aplus_content:     collectAPlusContent(),
+      comparison_table:  comparison_table,
       promo_tags:        checkedTags.length > 0 ? checkedTags : null,
     };
   }
@@ -1445,56 +1567,6 @@
           `).join('')}
         </div>
       `;
-    } else if (type === 'comparison') {
-      const pCurrent = allProducts.find(x => x.id === editingId);
-      const currentSku = pCurrent ? pCurrent.sku : '';
-      const skuOptions = allProducts
-        .filter(prod => prod.sku && prod.sku !== currentSku)
-        .map(prod => `<option value="${esc(prod.sku)}">${esc(prod.sku)} — ${esc(prod.title)}</option>`)
-        .join('');
-
-      inner = `
-        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:1rem; margin-bottom:1rem;">
-          <div>
-            <label class="form-label">Compare SKU 1</label>
-            <select class="form-input comparison-sku-1" onchange="updateComparisonFields(this.closest('.aplus-block'))">
-              <option value="">(None)</option>
-              ${skuOptions}
-            </select>
-          </div>
-          <div>
-            <label class="form-label">Compare SKU 2</label>
-            <select class="form-input comparison-sku-2" onchange="updateComparisonFields(this.closest('.aplus-block'))">
-              <option value="">(None)</option>
-              ${skuOptions}
-            </select>
-          </div>
-          <div>
-            <label class="form-label">Compare SKU 3</label>
-            <select class="form-input comparison-sku-3" onchange="updateComparisonFields(this.closest('.aplus-block'))">
-              <option value="">(None)</option>
-              ${skuOptions}
-            </select>
-          </div>
-        </div>
-        <div style="display:flex; flex-direction:column; gap:0.5rem; margin-bottom:1.5rem; max-width:200px;">
-          <label class="form-label">Focus Product Position</label>
-          <select class="form-input comparison-focus-pos">
-            <option value="1">1st</option>
-            <option value="2">2nd</option>
-            <option value="3">3rd</option>
-            <option value="4">4th</option>
-          </select>
-        </div>
-
-        <div style="margin-bottom:1rem;">
-          <div style="font-weight:600; font-size:0.9rem; margin-bottom:0.75rem; display:flex; justify-content:space-between; align-items:center;">
-            <span>Features Table Rows</span>
-            <button type="button" class="btn btn-outline btn-sm" onclick="addComparisonFeatureRow(this)">+ Add Feature Row</button>
-          </div>
-          <div class="comparison-features-container"></div>
-        </div>
-      `;
     }
 
     const typeLabels = {
@@ -1503,8 +1575,7 @@
       'text_center': 'Text (Center Aligned)',
       'image_full': 'Full Width Image',
       'grid_2x2': '2x2 Media Grid',
-      'carousel': 'Interactive Carousel',
-      'comparison': 'Product Comparison Table'
+      'carousel': 'Interactive Carousel'
     };
 
     return `
@@ -1533,21 +1604,6 @@
     const block = div.firstElementChild;
     block.querySelector('.btn-remove-aplus').addEventListener('click', () => block.remove());
     container.appendChild(block);
-
-    if (type === 'comparison') {
-      const skus = data.skus || ['', '', ''];
-      block.querySelector('.comparison-sku-1').value = skus[0] || '';
-      block.querySelector('.comparison-sku-2').value = skus[1] || '';
-      block.querySelector('.comparison-sku-3').value = skus[2] || '';
-      
-      updateComparisonFields(block);
-      block.querySelector('.comparison-focus-pos').value = data.focusPosition || 1;
-
-      const features = data.features || [];
-      features.forEach(feat => {
-        addComparisonFeatureRow(block.querySelector('.btn-outline'), feat);
-      });
-    }
   }
 
   function collectAPlusContent() {
@@ -1579,27 +1635,6 @@
           if (t || d || m) items.push({ title: t, desc: d, mediaUrl: m });
         });
         data.items = items;
-      } else if (type === 'comparison') {
-        const sku1 = block.querySelector('.comparison-sku-1')?.value || '';
-        const sku2 = block.querySelector('.comparison-sku-2')?.value || '';
-        const sku3 = block.querySelector('.comparison-sku-3')?.value || '';
-        data.skus = [sku1, sku2, sku3].filter(Boolean);
-        data.focusPosition = parseInt(block.querySelector('.comparison-focus-pos')?.value || '1', 10);
-        
-        const features = [];
-        block.querySelectorAll('.comp-feature-row').forEach(row => {
-          const name = row.querySelector('.comp-feature-name')?.value.trim() || '';
-          if (name) {
-            features.push({
-              name: name,
-              focusVal: row.querySelector('.comp-val-focus')?.value.trim() || '',
-              sku1Val: row.querySelector('.comp-val-sku1')?.value.trim() || '',
-              sku2Val: row.querySelector('.comp-val-sku2')?.value.trim() || '',
-              sku3Val: row.querySelector('.comp-val-sku3')?.value.trim() || ''
-            });
-          }
-        });
-        data.features = features;
       }
       blocks.push(data);
     });
