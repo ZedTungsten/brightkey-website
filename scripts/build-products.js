@@ -479,30 +479,32 @@ function renderComparisonTable(ct, products = [], allReviews = [], currentProduc
         <h2 style="font-size:2.25rem; font-weight:800; margin-bottom:3rem; text-align:center; color:var(--text-primary); letter-spacing:-0.03em;">
           ${ct.title || 'Product Comparison'}
         </h2>
-        <div style="width:100%; overflow-x:auto; border:1px solid var(--border); border-radius:var(--radius-md); background:var(--bg-surface); box-shadow:0 4px 20px rgba(0,0,0,0.05);">
-          <table style="border-collapse:collapse; text-align:center; font-size:0.9rem; margin: 0 auto; table-layout: fixed; width: max-content; max-width: 100%;">
-            <thead>
-              <tr>
-                <th style="padding: 0.6rem 0.75rem; width:180px; min-width:180px; max-width:180px; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); vertical-align: bottom; font-weight:700; color:var(--text-primary); font-size:0.75rem;"></th>
-                ${ths}
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td style="font-weight:bold; color:var(--text-primary); text-align:center; border-right: 1px solid var(--border); padding: 0.6rem 0.75rem; border-bottom: 1px solid var(--border); vertical-align: middle; font-size: 0.75rem; letter-spacing: 0.03em;">DEVICE</td>
-                ${deviceTds}
-              </tr>
-              <tr>
-                <td style="font-weight:bold; color:var(--text-primary); text-align:center; border-right: 1px solid var(--border); padding: 0.6rem 0.75rem; border-bottom: 1px solid var(--border); vertical-align: middle; font-size: 0.75rem; letter-spacing: 0.03em;">PRICE</td>
-                ${priceTds}
-              </tr>
-              <tr>
-                <td style="font-weight:bold; color:var(--text-primary); text-align:center; border-right: 1px solid var(--border); padding: 0.6rem 0.75rem; border-bottom: 1px solid var(--border); vertical-align: middle; font-size: 0.75rem; letter-spacing: 0.03em;">RATINGS</td>
-                ${ratingsTds}
-              </tr>
-              ${featureRowsHtml}
-            </tbody>
-          </table>
+        <div style="margin: 0 auto; border:1px solid var(--border); border-radius:var(--radius-md); background:var(--bg-surface); box-shadow:0 4px 20px rgba(0,0,0,0.05); width: max-content; max-width: 100%; overflow: hidden;">
+          <div style="width:100%; overflow-x:auto;">
+            <table style="border-collapse:collapse; text-align:center; font-size:0.9rem; table-layout: fixed; width: max-content;">
+              <thead>
+                <tr>
+                  <th style="padding: 0.6rem 0.75rem; width:180px; min-width:180px; max-width:180px; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); vertical-align: bottom; font-weight:700; color:var(--text-primary); font-size:0.75rem;"></th>
+                  ${ths}
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td style="font-weight:bold; color:var(--text-primary); text-align:center; border-right: 1px solid var(--border); padding: 0.6rem 0.75rem; border-bottom: 1px solid var(--border); vertical-align: middle; font-size: 0.75rem; letter-spacing: 0.03em;">DEVICE</td>
+                  ${deviceTds}
+                </tr>
+                <tr>
+                  <td style="font-weight:bold; color:var(--text-primary); text-align:center; border-right: 1px solid var(--border); padding: 0.6rem 0.75rem; border-bottom: 1px solid var(--border); vertical-align: middle; font-size: 0.75rem; letter-spacing: 0.03em;">PRICE</td>
+                  ${priceTds}
+                </tr>
+                <tr>
+                  <td style="font-weight:bold; color:var(--text-primary); text-align:center; border-right: 1px solid var(--border); padding: 0.6rem 0.75rem; border-bottom: 1px solid var(--border); vertical-align: middle; font-size: 0.75rem; letter-spacing: 0.03em;">RATINGS</td>
+                  ${ratingsTds}
+                </tr>
+                ${featureRowsHtml}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>
