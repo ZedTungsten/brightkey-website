@@ -8,12 +8,14 @@ ALTER TABLE public.tenant_members
   CHECK (role IN ('owner', 'admin', 'customer_service', 'operations', 'marketing', 'accounting', 'hr', 'logistics'));
 
 ALTER TABLE public.tenant_members ADD COLUMN IF NOT EXISTS user_email TEXT;
+ALTER TABLE public.tenant_members ADD COLUMN IF NOT EXISTS full_name TEXT;
 
 -- 2. Create Company Invitations Table
 CREATE TABLE IF NOT EXISTS public.company_invitations (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id   UUID REFERENCES public.tenants(id) ON DELETE CASCADE NOT NULL,
   email       TEXT NOT NULL,
+  full_name   TEXT,
   role        TEXT NOT NULL CHECK (role IN ('admin', 'customer_service', 'operations', 'marketing', 'accounting', 'hr', 'logistics')),
   invited_by  UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   created_at  TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
