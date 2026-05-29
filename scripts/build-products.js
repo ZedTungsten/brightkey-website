@@ -397,20 +397,27 @@ function renderComparisonTable(ct, products = [], allReviews = [], currentProduc
   const ths = finalProducts.map((prod, pIdx) => {
     const colStyle = getColStyle(pIdx, focusIndex, true, false);
     const imgUrl = prod.image_main || '../assets/og-image.png';
+
+    return `
+      <th style="padding: 1.5rem 1.25rem; vertical-align: middle; border-bottom: 1px solid var(--border); text-align: center; ${colStyle}">
+        <div style="aspect-ratio:1/1; width:160px; margin: 0 auto; border-radius:var(--radius-sm); background:#fff; padding:0.25rem; display:flex; align-items:center; justify-content:center; overflow:hidden; border:1px solid var(--border);">
+          <img src="${imgUrl}" alt="${prod.title}" style="max-width:100%; max-height:100%; object-fit:contain;" />
+        </div>
+      </th>
+    `;
+  }).join('');
+
+  const deviceTds = finalProducts.map((prod, pIdx) => {
+    const colStyle = getColStyle(pIdx, focusIndex, false, false);
     const isCurrent = prod.sku === currentProduct.sku;
     const linkHref = isCurrent ? '#' : `${prod.slug}.html`;
 
     return `
-      <th style="padding: 1.5rem 1.25rem; vertical-align: top; border-bottom: 1px solid var(--border); ${colStyle}">
-        <div style="display:flex; flex-direction:column; align-items:center; gap:0.75rem; text-align:center;">
-          <div style="aspect-ratio:1/1; width:80px; border-radius:var(--radius-sm); background:#fff; padding:0.25rem; display:flex; align-items:center; justify-content:center; overflow:hidden; border:1px solid var(--border);">
-            <img src="${imgUrl}" alt="${prod.title}" style="max-width:100%; max-height:100%; object-fit:contain;" />
-          </div>
-          <a href="${linkHref}" style="font-weight:bold; color:var(--cyan); text-decoration:none; font-size:0.95rem; line-height:1.3; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">
-            ${prod.title}
-          </a>
-        </div>
-      </th>
+      <td style="padding: 1.25rem; border-bottom: 1px solid var(--border); vertical-align: middle; ${colStyle}">
+        <a href="${linkHref}" style="font-weight:bold; color:var(--cyan); text-decoration:none; font-size:0.95rem; line-height:1.3;">
+          ${prod.title}
+        </a>
+      </td>
     `;
   }).join('');
 
@@ -458,7 +465,7 @@ function renderComparisonTable(ct, products = [], allReviews = [], currentProduc
     return `
       <tr>
         <td style="font-weight:bold; color:var(--text-primary); text-align:left; border-right: 1px solid var(--border); padding: 1.25rem; border-bottom: 1px solid var(--border); vertical-align: middle;">
-          ${feat.label}
+          ${feat.label.toUpperCase()}
         </td>
         ${tds}
       </tr>
@@ -475,17 +482,21 @@ function renderComparisonTable(ct, products = [], allReviews = [], currentProduc
           <table style="width:100%; border-collapse:collapse; min-width:750px; text-align:left; font-size:0.9rem;">
             <thead>
               <tr>
-                <th style="padding: 1.5rem 1.25rem; width:180px; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); vertical-align: bottom; font-weight:700; color:var(--text-primary); font-size:0.95rem;">Features</th>
+                <th style="padding: 1.5rem 1.25rem; width:180px; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); vertical-align: bottom; font-weight:700; color:var(--text-primary); font-size:0.95rem;"></th>
                 ${ths}
               </tr>
             </thead>
             <tbody>
               <tr>
-                <td style="font-weight:bold; color:var(--text-primary); text-align:left; border-right: 1px solid var(--border); padding: 1.25rem; border-bottom: 1px solid var(--border); vertical-align: middle;">Price</td>
+                <td style="font-weight:bold; color:var(--text-primary); text-align:left; border-right: 1px solid var(--border); padding: 1.25rem; border-bottom: 1px solid var(--border); vertical-align: middle;">DEVICE</td>
+                ${deviceTds}
+              </tr>
+              <tr>
+                <td style="font-weight:bold; color:var(--text-primary); text-align:left; border-right: 1px solid var(--border); padding: 1.25rem; border-bottom: 1px solid var(--border); vertical-align: middle;">PRICE</td>
                 ${priceTds}
               </tr>
               <tr>
-                <td style="font-weight:bold; color:var(--text-primary); text-align:left; border-right: 1px solid var(--border); padding: 1.25rem; border-bottom: 1px solid var(--border); vertical-align: middle;">Ratings</td>
+                <td style="font-weight:bold; color:var(--text-primary); text-align:left; border-right: 1px solid var(--border); padding: 1.25rem; border-bottom: 1px solid var(--border); vertical-align: middle;">RATINGS</td>
                 ${ratingsTds}
               </tr>
               ${featureRowsHtml}
