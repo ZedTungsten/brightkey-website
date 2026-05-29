@@ -644,9 +644,13 @@
                   <select id="popup-audience-select" class="form-select" style="flex:1;" onchange="handleAudienceSelectChange()">
                     <!-- Unique audiences will be dynamically populated -->
                   </select>
-                  <button type="button" class="btn btn-outline btn-sm" onclick="toggleCustomAudienceInput()">Custom Bucket</button>
+                  <button type="button" class="btn btn-outline btn-sm" style="white-space:nowrap;" onclick="toggleCustomAudienceInput()">+ Create New Audience</button>
                 </div>
-                <input type="text" id="popup-audience-custom" class="form-input" placeholder="Enter new bucket name..." style="display:none; width:100%;" oninput="checkDirty()" />
+                <div id="popup-audience-custom-container" style="display:none; gap:0.5rem; margin-top:0.5rem; margin-bottom:0.5rem;">
+                  <input type="text" id="popup-audience-custom" class="form-input" placeholder="Enter new bucket name..." style="flex:1;" />
+                  <button type="button" class="btn btn-cyan btn-sm" onclick="saveCustomAudienceBucket()">Save</button>
+                  <button type="button" class="btn btn-outline btn-sm" onclick="cancelCustomAudienceBucket()">Cancel</button>
+                </div>
                 <div class="form-hint">Select where storefront signups will be grouped. Users who sign up are automatically labeled to receive marketing emails.</div>
               </div>
 
@@ -2430,29 +2434,69 @@
 
     // --- Toggle Custom Input ---
     window.toggleCustomAudienceInput = () => {
-      const customInput = document.getElementById('popup-audience-custom');
-      if (!customInput) return;
-      const isHidden = customInput.style.display === 'none';
+      const container = document.getElementById('popup-audience-custom-container');
+      const input = document.getElementById('popup-audience-custom');
+      if (!container || !input) return;
       
-      if (isHidden) {
-        customInput.style.display = 'block';
-        customInput.focus();
-        document.getElementById('popup-audience-count').innerText = '0';
-      } else {
-        customInput.style.display = 'none';
-        customInput.value = '';
-        window.handleAudienceSelectChange();
+      container.style.display = 'flex';
+      input.value = '';
+      input.focus();
+    };
+
+    // --- Save Custom Audience Bucket ---
+    window.saveCustomAudienceBucket = () => {
+      const input = document.getElementById('popup-audience-custom');
+      const select = document.getElementById('popup-audience-select');
+      const container = document.getElementById('popup-audience-custom-container');
+      if (!input || !select || !container) return;
+      
+      const newBucket = input.value.trim();
+      if (!newBucket) {
+        showToast('Please enter a valid audience bucket name.', true);
+        return;
       }
+      
+      // Check if it already exists in the select options
+      let exists = false;
+      Array.from(select.options).forEach(opt => {
+        if (opt.value.toLowerCase() === newBucket.toLowerCase()) {
+          exists = true;
+          opt.selected = true; // select the existing option
+        }
+      });
+      
+      if (!exists) {
+        // Create new option
+        const opt = document.createElement('option');
+        opt.value = newBucket;
+        opt.textContent = newBucket;
+        opt.selected = true;
+        select.appendChild(opt);
+      }
+      
+      // Hide input container
+      container.style.display = 'none';
+      input.value = '';
+      
+      // Update count & trigger checkDirty
+      window.updateAudienceCount(newBucket);
       checkDirty();
+    };
+
+    // --- Cancel Custom Audience Bucket ---
+    window.cancelCustomAudienceBucket = () => {
+      const container = document.getElementById('popup-audience-custom-container');
+      const input = document.getElementById('popup-audience-custom');
+      if (!container || !input) return;
+      
+      container.style.display = 'none';
+      input.value = '';
     };
 
     // --- Export Bucket CSV ---
     window.exportCurrentAudienceCsv = async () => {
       const select = document.getElementById('popup-audience-select');
-      const customInput = document.getElementById('popup-audience-custom');
-      const bucket = (customInput && customInput.style.display !== 'none' && customInput.value.trim()) 
-        ? customInput.value.trim() 
-        : (select ? select.value : 'Customer');
+      const bucket = select ? select.value : 'Customer';
 
       try {
         showToast(`Fetching '${bucket}' audience database...`);
@@ -2520,9 +2564,7 @@
       const categoriesRaw = document.getElementById('popup-categories').value;
       const categoriesArr = categoriesRaw ? categoriesRaw.split(',').map(c => c.trim()).filter(Boolean) : [];
 
-      const customAudienceVal = document.getElementById('popup-audience-custom').value.trim();
-      const selectedAudienceVal = document.getElementById('popup-audience-select').value;
-      const audienceBucket = customAudienceVal || selectedAudienceVal || 'Customer';
+      const audienceBucket = document.getElementById('popup-audience-select').value || 'Customer';
 
       const payload = {
         active,
@@ -2558,7 +2600,7 @@
         showToast('Promo popup settings saved successfully.');
         await window.loadAudienceBuckets(audienceBucket);
         document.getElementById('popup-audience-custom').value = '';
-        document.getElementById('popup-audience-custom').style.display = 'none';
+        document.getElementById('popup-audience-custom-container').style.display = 'none';
       }
     };
 
