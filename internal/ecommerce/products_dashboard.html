@@ -557,6 +557,7 @@
             <option value="image_full">Full Width Image</option>
             <option value="grid_2x2">2x2 Media Grid</option>
             <option value="carousel">Interactive Carousel</option>
+            <option value="comparison">Product Comparison Table</option>
           </select>
           <button type="button" class="btn btn-outline" id="btn-add-aplus-block">+ Add Section</button>
         </div>
@@ -1229,6 +1230,141 @@
   // A+ Content Builder
   // ─────────────────────────────────────────────────────
   
+  window.insertSymbol = (btn, symbol) => {
+    const input = btn.parentElement.querySelector('input');
+    if (input) {
+      input.value = symbol;
+    }
+  };
+
+  window.updateComparisonFields = (blockEl) => {
+    const sku1 = blockEl.querySelector('.comparison-sku-1').value;
+    const sku2 = blockEl.querySelector('.comparison-sku-2').value;
+    const sku3 = blockEl.querySelector('.comparison-sku-3').value;
+
+    let enabledSkusCount = 0;
+    if (sku1) enabledSkusCount++;
+    if (sku2) enabledSkusCount++;
+    if (sku3) enabledSkusCount++;
+
+    const focusSelect = blockEl.querySelector('.comparison-focus-pos');
+    const prevVal = focusSelect.value;
+    focusSelect.innerHTML = '';
+    const totalPositions = enabledSkusCount + 1;
+    const suffixes = ['st', 'nd', 'rd', 'th'];
+    for (let i = 1; i <= totalPositions; i++) {
+      const opt = document.createElement('option');
+      opt.value = i;
+      opt.textContent = `${i}${suffixes[i-1] || 'th'}`;
+      focusSelect.appendChild(opt);
+    }
+    if (parseInt(prevVal, 10) <= totalPositions) {
+      focusSelect.value = prevVal;
+    } else {
+      focusSelect.value = '1';
+    }
+
+    blockEl.querySelectorAll('.comp-feature-row').forEach(row => {
+      const wrapper1 = row.querySelector('.comp-sku-field-1-wrapper');
+      const wrapper2 = row.querySelector('.comp-sku-field-2-wrapper');
+      const wrapper3 = row.querySelector('.comp-sku-field-3-wrapper');
+      const container = row.querySelector('.comp-sku-fields-container');
+
+      let visibleCols = 0;
+      if (sku1) {
+        wrapper1.style.display = 'block';
+        row.querySelector('.label-sku-1').textContent = `${sku1} Value`;
+        visibleCols++;
+      } else {
+        wrapper1.style.display = 'none';
+        row.querySelector('.comp-val-sku1').value = '';
+      }
+
+      if (sku2) {
+        wrapper2.style.display = 'block';
+        row.querySelector('.label-sku-2').textContent = `${sku2} Value`;
+        visibleCols++;
+      } else {
+        wrapper2.style.display = 'none';
+        row.querySelector('.comp-val-sku2').value = '';
+      }
+
+      if (sku3) {
+        wrapper3.style.display = 'block';
+        row.querySelector('.label-sku-3').textContent = `${sku3} Value`;
+        visibleCols++;
+      } else {
+        wrapper3.style.display = 'none';
+        row.querySelector('.comp-val-sku3').value = '';
+      }
+
+      if (visibleCols > 0) {
+        container.style.display = 'grid';
+        container.style.gridTemplateColumns = `repeat(${visibleCols}, 1fr)`;
+      } else {
+        container.style.display = 'none';
+      }
+    });
+  };
+
+  window.addComparisonFeatureRow = (btn, data = {}) => {
+    const blockEl = btn.closest('.aplus-block');
+    const container = blockEl.querySelector('.comparison-features-container');
+    const div = document.createElement('div');
+    const escVal = v => v ? esc(String(v)) : '';
+    div.innerHTML = `
+      <div class="comp-feature-row" style="background:var(--bg-base); border:1px solid var(--border); padding:0.75rem; border-radius:var(--radius-sm); margin-bottom:0.75rem; display:flex; flex-direction:column; gap:0.5rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <span style="font-weight:600; font-size:0.85rem;">Feature Row</span>
+          <button type="button" class="btn-remove-feature-row" style="background:none; border:none; color:var(--danger); cursor:pointer; font-size:0.8rem;" onclick="this.closest('.comp-feature-row').remove()">Remove Row</button>
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem;">
+          <div>
+            <label class="form-label" style="font-size:0.75rem;">Feature Name</label>
+            <input type="text" class="form-input comp-feature-name" value="${escVal(data.name)}" placeholder="e.g. Battery Life" />
+          </div>
+          <div>
+            <label class="form-label" style="font-size:0.75rem;">Focus Product Value</label>
+            <div style="display:flex; gap:0.25rem;">
+              <input type="text" class="form-input comp-val-focus" value="${escVal(data.focusVal)}" placeholder="Value" style="flex:1;" />
+              <button type="button" class="btn btn-outline btn-xs" onclick="insertSymbol(this, '[check]')" style="padding:0.25rem 0.4rem; color:#10b981; border-color:rgba(16,185,129,0.2);">✓</button>
+              <button type="button" class="btn btn-outline btn-xs" onclick="insertSymbol(this, '[cross]')" style="padding:0.25rem 0.4rem; color:var(--danger); border-color:rgba(220,38,38,0.2);">✗</button>
+            </div>
+          </div>
+        </div>
+        <div class="comp-sku-fields-container" style="display:grid; grid-template-columns:1fr; gap:0.5rem;">
+          <div class="comp-sku-field-1-wrapper" style="display:none;">
+            <label class="form-label label-sku-1" style="font-size:0.75rem;">SKU 1 Value</label>
+            <div style="display:flex; gap:0.25rem;">
+              <input type="text" class="form-input comp-val-sku1" value="${escVal(data.sku1Val)}" placeholder="Value" style="flex:1;" />
+              <button type="button" class="btn btn-outline btn-xs" onclick="insertSymbol(this, '[check]')" style="padding:0.25rem 0.4rem; color:#10b981; border-color:rgba(16,185,129,0.2);">✓</button>
+              <button type="button" class="btn btn-outline btn-xs" onclick="insertSymbol(this, '[cross]')" style="padding:0.25rem 0.4rem; color:var(--danger); border-color:rgba(220,38,38,0.2);">✗</button>
+            </div>
+          </div>
+          <div class="comp-sku-field-2-wrapper" style="display:none;">
+            <label class="form-label label-sku-2" style="font-size:0.75rem;">SKU 2 Value</label>
+            <div style="display:flex; gap:0.25rem;">
+              <input type="text" class="form-input comp-val-sku2" value="${escVal(data.sku2Val)}" placeholder="Value" style="flex:1;" />
+              <button type="button" class="btn btn-outline btn-xs" onclick="insertSymbol(this, '[check]')" style="padding:0.25rem 0.4rem; color:#10b981; border-color:rgba(16,185,129,0.2);">✓</button>
+              <button type="button" class="btn btn-outline btn-xs" onclick="insertSymbol(this, '[cross]')" style="padding:0.25rem 0.4rem; color:var(--danger); border-color:rgba(220,38,38,0.2);">✗</button>
+            </div>
+          </div>
+          <div class="comp-sku-field-3-wrapper" style="display:none;">
+            <label class="form-label label-sku-3" style="font-size:0.75rem;">SKU 3 Value</label>
+            <div style="display:flex; gap:0.25rem;">
+              <input type="text" class="form-input comp-val-sku3" value="${escVal(data.sku3Val)}" placeholder="Value" style="flex:1;" />
+              <button type="button" class="btn btn-outline btn-xs" onclick="insertSymbol(this, '[check]')" style="padding:0.25rem 0.4rem; color:#10b981; border-color:rgba(16,185,129,0.2);">✓</button>
+              <button type="button" class="btn btn-outline btn-xs" onclick="insertSymbol(this, '[cross]')" style="padding:0.25rem 0.4rem; color:var(--danger); border-color:rgba(220,38,38,0.2);">✗</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    const child = div.firstElementChild;
+    container.appendChild(child);
+    updateComparisonFields(blockEl);
+  };
+
   function getAPlusTemplate(type, data = {}) {
     const escVal = v => v ? esc(String(v)) : '';
     let inner = '';
@@ -1309,6 +1445,56 @@
           `).join('')}
         </div>
       `;
+    } else if (type === 'comparison') {
+      const pCurrent = allProducts.find(x => x.id === editingId);
+      const currentSku = pCurrent ? pCurrent.sku : '';
+      const skuOptions = allProducts
+        .filter(prod => prod.sku && prod.sku !== currentSku)
+        .map(prod => `<option value="${esc(prod.sku)}">${esc(prod.sku)} — ${esc(prod.title)}</option>`)
+        .join('');
+
+      inner = `
+        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:1rem; margin-bottom:1rem;">
+          <div>
+            <label class="form-label">Compare SKU 1</label>
+            <select class="form-input comparison-sku-1" onchange="updateComparisonFields(this.closest('.aplus-block'))">
+              <option value="">(None)</option>
+              ${skuOptions}
+            </select>
+          </div>
+          <div>
+            <label class="form-label">Compare SKU 2</label>
+            <select class="form-input comparison-sku-2" onchange="updateComparisonFields(this.closest('.aplus-block'))">
+              <option value="">(None)</option>
+              ${skuOptions}
+            </select>
+          </div>
+          <div>
+            <label class="form-label">Compare SKU 3</label>
+            <select class="form-input comparison-sku-3" onchange="updateComparisonFields(this.closest('.aplus-block'))">
+              <option value="">(None)</option>
+              ${skuOptions}
+            </select>
+          </div>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:0.5rem; margin-bottom:1.5rem; max-width:200px;">
+          <label class="form-label">Focus Product Position</label>
+          <select class="form-input comparison-focus-pos">
+            <option value="1">1st</option>
+            <option value="2">2nd</option>
+            <option value="3">3rd</option>
+            <option value="4">4th</option>
+          </select>
+        </div>
+
+        <div style="margin-bottom:1rem;">
+          <div style="font-weight:600; font-size:0.9rem; margin-bottom:0.75rem; display:flex; justify-content:space-between; align-items:center;">
+            <span>Features Table Rows</span>
+            <button type="button" class="btn btn-outline btn-sm" onclick="addComparisonFeatureRow(this)">+ Add Feature Row</button>
+          </div>
+          <div class="comparison-features-container"></div>
+        </div>
+      `;
     }
 
     const typeLabels = {
@@ -1317,7 +1503,8 @@
       'text_center': 'Text (Center Aligned)',
       'image_full': 'Full Width Image',
       'grid_2x2': '2x2 Media Grid',
-      'carousel': 'Interactive Carousel'
+      'carousel': 'Interactive Carousel',
+      'comparison': 'Product Comparison Table'
     };
 
     return `
@@ -1346,6 +1533,21 @@
     const block = div.firstElementChild;
     block.querySelector('.btn-remove-aplus').addEventListener('click', () => block.remove());
     container.appendChild(block);
+
+    if (type === 'comparison') {
+      const skus = data.skus || ['', '', ''];
+      block.querySelector('.comparison-sku-1').value = skus[0] || '';
+      block.querySelector('.comparison-sku-2').value = skus[1] || '';
+      block.querySelector('.comparison-sku-3').value = skus[2] || '';
+      
+      updateComparisonFields(block);
+      block.querySelector('.comparison-focus-pos').value = data.focusPosition || 1;
+
+      const features = data.features || [];
+      features.forEach(feat => {
+        addComparisonFeatureRow(block.querySelector('.btn-outline'), feat);
+      });
+    }
   }
 
   function collectAPlusContent() {
@@ -1377,6 +1579,27 @@
           if (t || d || m) items.push({ title: t, desc: d, mediaUrl: m });
         });
         data.items = items;
+      } else if (type === 'comparison') {
+        const sku1 = block.querySelector('.comparison-sku-1')?.value || '';
+        const sku2 = block.querySelector('.comparison-sku-2')?.value || '';
+        const sku3 = block.querySelector('.comparison-sku-3')?.value || '';
+        data.skus = [sku1, sku2, sku3].filter(Boolean);
+        data.focusPosition = parseInt(block.querySelector('.comparison-focus-pos')?.value || '1', 10);
+        
+        const features = [];
+        block.querySelectorAll('.comp-feature-row').forEach(row => {
+          const name = row.querySelector('.comp-feature-name')?.value.trim() || '';
+          if (name) {
+            features.push({
+              name: name,
+              focusVal: row.querySelector('.comp-val-focus')?.value.trim() || '',
+              sku1Val: row.querySelector('.comp-val-sku1')?.value.trim() || '',
+              sku2Val: row.querySelector('.comp-val-sku2')?.value.trim() || '',
+              sku3Val: row.querySelector('.comp-val-sku3')?.value.trim() || ''
+            });
+          }
+        });
+        data.features = features;
       }
       blocks.push(data);
     });
