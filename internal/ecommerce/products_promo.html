@@ -2440,7 +2440,7 @@
     };
 
     // --- Save Custom Audience Bucket ---
-    window.saveCustomAudienceBucket = () => {
+    window.saveCustomAudienceBucket = async () => {
       const input = document.getElementById('popup-audience-custom');
       const select = document.getElementById('popup-audience-select');
       const container = document.getElementById('popup-audience-custom-container');
@@ -2464,18 +2464,55 @@
         showToast(`Audience bucket '${newBucket}' already exists.`, true);
         return; // Block saving duplicate
       }
+
+      const saveBtn = container.querySelector('button[onclick="saveCustomAudienceBucket()"]');
+      if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.innerText = 'Saving...';
+      }
       
-      // Create new option
-      const opt = document.createElement('option');
-      opt.value = newBucket;
-      opt.textContent = newBucket;
-      opt.selected = true;
-      select.appendChild(opt);
-      
-      // Hide input container
-      container.style.display = 'none';
-      input.value = '';
-      checkDirty();
+      try {
+        if (!sb) {
+          showToast('Database connection not ready. Please try again.', true);
+          return;
+        }
+
+        const { error } = await sb.from('email_marketing_audiences').insert({
+          name: newBucket,
+          description: 'Created from promotions manager.'
+        });
+
+        if (error) {
+          if (error.code === '23505') {
+            showToast(`Audience bucket '${newBucket}' already exists in database.`, true);
+          } else {
+            showToast(`Failed to save audience: ${error.message}`, true);
+          }
+          return;
+        }
+
+        showToast(`Audience bucket '${newBucket}' saved to database.`);
+
+        // Create new option
+        const opt = document.createElement('option');
+        opt.value = newBucket;
+        opt.textContent = newBucket;
+        opt.selected = true;
+        select.appendChild(opt);
+        
+        // Hide input container
+        container.style.display = 'none';
+        input.value = '';
+        checkDirty();
+      } catch (err) {
+        console.error('Error saving custom audience bucket:', err);
+        showToast('Failed to save audience bucket due to system error.', true);
+      } finally {
+        if (saveBtn) {
+          saveBtn.disabled = false;
+          saveBtn.innerText = 'Save';
+        }
+      }
     };
 
     // --- Cancel Custom Audience Bucket ---
