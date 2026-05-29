@@ -249,7 +249,81 @@ function renderAPlusContent(blocks, products = [], allReviews = [], currentProdu
 }
 
 // ── Comparison Table Renderer ────────────────────────────────────────────────
-function renderComparisonTable(ct, products = [], allReviews = [], currentProduct = null) {
+// ── Feature Definitions Schema ────────────────────────────────────────────────
+const FEATURE_DEFS = {
+  smart_lock: {
+    features: [
+      { col: 'pin_unlock',          label: 'PIN Unlock' },
+      { col: 'rfid_unlock',         label: 'RFID Unlock' },
+      { col: 'fingerprint_unlock',  label: 'Fingerprint Unlock' },
+      { col: 'face_recognition_3d', label: '3D Facial Recognition' },
+      { col: 'palm_vein_unlock',    label: 'Palm Vein Unlock' },
+      { col: 'mechanical_key',      label: 'Mechanical Key Unlock' },
+      { col: 'emergency_usb',       label: 'Emergency USB Power Port' },
+      { col: 'app_control',         label: 'App Control' },
+      { col: 'bluetooth',           label: 'Bluetooth Connect' },
+      { col: 'wifi',                label: 'WiFi Connect' },
+      { col: 'temporary_pin',       label: 'Temporary PIN' },
+      { col: 'doorbell',            label: 'Built-in Doorbell' },
+      { col: 'intercom',            label: 'Active Intercom' },
+      { col: 'monitoring',          label: 'Active Monitoring' },
+      { col: 'dual_cameras',        label: 'Dual Cameras' },
+      { col: 'waterproof',          label: 'Waterproof' },
+      { col: 'fireproof',           label: 'Fireproof' },
+      { col: 'scratchproof',        label: 'Scratchproof' },
+      { col: 'sunproof',            label: 'Sunproof' },
+      { col: 'moisture_proof',      label: 'Moisture Proof' },
+      { col: 'splash_proof',        label: 'Splash Proof' },
+    ]
+  },
+  solar_power: {
+    features: [
+      { col: 'grid_tie',          label: 'Grid Tie' },
+      { col: 'off_grid',          label: 'Off Grid' },
+      { col: 'hybrid',            label: 'Hybrid' },
+      { col: 'mppt_controller',   label: 'MPPT Controller' },
+      { col: 'monitoring_app',    label: 'Monitoring App' },
+      { col: 'battery_backup',    label: 'Battery Backup' },
+      { col: 'auto_switching',    label: 'Auto Switching' },
+      { col: 'weather_resistant', label: 'Weather Resistant' },
+      { col: 'wifi_connect',      label: 'WiFi Connect' },
+      { col: 'mobile_alerts',     label: 'Mobile Alerts' },
+    ]
+  },
+  cctv: {
+    features: [
+      { col: 'night_vision',     label: 'Night Vision' },
+      { col: 'resolution',       label: 'Resolution' },
+      { col: 'pan_tilt_zoom',    label: 'Pan / Tilt / Zoom' },
+      { col: 'motion_detection', label: 'Motion Detection' },
+      { col: 'two_way_audio',    label: 'Two-Way Audio' },
+      { col: 'cloud_storage',    label: 'Cloud Storage' },
+      { col: 'local_storage',    label: 'Local Storage' },
+      { col: 'weatherproof',     label: 'Weatherproof' },
+      { col: 'wide_angle',       label: 'Wide Angle' },
+      { col: 'ai_detection',     label: 'AI Detection' },
+      { col: 'mobile_app',       label: 'Mobile App' },
+      { col: 'poe_support',      label: 'PoE Support' },
+    ]
+  },
+  fire_extinguisher: {
+    features: [
+      { col: 'type_abc',          label: 'Type ABC' },
+      { col: 'type_co2',          label: 'Type CO2' },
+      { col: 'type_dry_chemical', label: 'Type Dry Chemical' },
+      { col: 'type_foam',         label: 'Type Foam' },
+      { col: 'wall_mountable',    label: 'Wall Mountable' },
+      { col: 'vehicle_mountable', label: 'Vehicle Mountable' },
+      { col: 'refillable',        label: 'Refillable' },
+      { col: 'pressure_gauge',    label: 'Pressure Gauge' },
+      { col: 'with_bracket',      label: 'With Bracket' },
+      { col: 'with_hose',         label: 'With Hose' },
+    ]
+  }
+};
+
+// ── Comparison Table Renderer ────────────────────────────────────────────────
+function renderComparisonTable(ct, products = [], allReviews = [], currentProduct = null, featuresMap = {}) {
   if (!ct || !currentProduct) return '';
   
   const comparedProducts = (ct.skus || [])
@@ -262,13 +336,17 @@ function renderComparisonTable(ct, products = [], allReviews = [], currentProduc
 
   const focusIndex = focusPosIndex;
 
-  const filteredFeatures = (ct.features || []).filter(feat => {
-    const checkSku = (skuVal, isSkuSelected) => {
-      return isSkuSelected && skuVal && skuVal.trim() !== '' && skuVal.trim() !== '[cross]';
-    };
-    return checkSku(feat.sku1Val, ct.skus[0]) ||
-           checkSku(feat.sku2Val, ct.skus[1]) ||
-           checkSku(feat.sku3Val, ct.skus[2]);
+  const business = currentProduct.business;
+  const def = FEATURE_DEFS[business];
+  if (!def) return '';
+
+  const filteredFeatures = def.features.filter(feat => {
+    return finalProducts.some(prod => {
+      const featRow = featuresMap[prod.id];
+      if (!featRow) return false;
+      const val = featRow[feat.col];
+      return val !== null && val !== undefined && String(val).trim() !== '';
+    });
   });
 
   const getColStyle = (prodIndex, focusIndex, isHeader = false, isLastRow = false) => {
@@ -284,15 +362,15 @@ function renderComparisonTable(ct, products = [], allReviews = [], currentProduc
   };
 
   const renderCellContent = (val) => {
-    const trimmed = val ? val.trim() : '';
-    if (trimmed === '[check]') {
+    const trimmed = val ? String(val).trim() : '';
+    if (trimmed.toLowerCase() === 'x' || trimmed === '[check]') {
       return `
         <div style="text-align:center; display:flex; justify-content:center; color:#10b981;">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
         </div>
       `;
     }
-    if (trimmed === '[cross]') {
+    if (trimmed === '' || trimmed.toLowerCase() === 'no' || trimmed === '[cross]') {
       return `
         <div style="text-align:center; display:flex; justify-content:center; color:#ef4444;">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
@@ -300,28 +378,6 @@ function renderComparisonTable(ct, products = [], allReviews = [], currentProduc
       `;
     }
     return `<div style="text-align:left; color:var(--text-secondary); font-size:0.95rem;">${val}</div>`;
-  };
-
-  const getFeatureValForProduct = (prod, feat) => {
-    if (prod.sku === currentProduct.sku) return feat.focusVal || '';
-    if (ct.skus[0] && prod.sku === ct.skus[0]) return feat.sku1Val || '';
-    if (ct.skus[1] && prod.sku === ct.skus[1]) return feat.sku2Val || '';
-    if (ct.skus[2] && prod.sku === ct.skus[2]) return feat.sku3Val || '';
-    return '';
-  };
-
-  const priceHtml = (prod) => {
-    const curPrice = (prod.discounted_price > 0) ? prod.discounted_price : (prod.sale_price || 0);
-    const hasDiscount = prod.before_price > 0 && prod.before_price > curPrice;
-    if (hasDiscount) {
-      return `
-        <div style="display:flex; flex-direction:column; gap:0.1rem;">
-          <span style="text-decoration:line-through; font-size:0.85em; color:var(--text-secondary);">${formatPHP(prod.before_price)}</span>
-          <span style="font-weight:700; color:var(--text-primary); font-size:1.05rem;">${formatPHP(curPrice)}</span>
-        </div>
-      `;
-    }
-    return `<span style="font-weight:700; color:var(--text-primary); font-size:1.05rem;">${formatPHP(curPrice)}</span>`;
   };
 
   const ths = finalProducts.map((prod, pIdx) => {
@@ -372,11 +428,26 @@ function renderComparisonTable(ct, products = [], allReviews = [], currentProduc
     `;
   }).join('');
 
+  const priceHtml = (prod) => {
+    const curPrice = (prod.discounted_price > 0) ? prod.discounted_price : (prod.sale_price || 0);
+    const hasDiscount = prod.before_price > 0 && prod.before_price > curPrice;
+    if (hasDiscount) {
+      return `
+        <div style="display:flex; flex-direction:column; gap:0.1rem;">
+          <span style="text-decoration:line-through; font-size:0.85em; color:var(--text-secondary);">${formatPHP(prod.before_price)}</span>
+          <span style="font-weight:700; color:var(--text-primary); font-size:1.05rem;">${formatPHP(curPrice)}</span>
+        </div>
+      `;
+    }
+    return `<span style="font-weight:700; color:var(--text-primary); font-size:1.05rem;">${formatPHP(curPrice)}</span>`;
+  };
+
   const featureRowsHtml = filteredFeatures.map((feat, fIdx) => {
     const isLastRow = fIdx === filteredFeatures.length - 1;
     const tds = finalProducts.map((prod, pIdx) => {
       const colStyle = getColStyle(pIdx, focusIndex, false, isLastRow);
-      const val = getFeatureValForProduct(prod, feat);
+      const featRow = featuresMap[prod.id] || {};
+      const val = featRow[feat.col];
       return `
         <td style="padding: 1.25rem; border-bottom: 1px solid var(--border); vertical-align: middle; ${colStyle}">
           ${renderCellContent(val)}
@@ -387,7 +458,7 @@ function renderComparisonTable(ct, products = [], allReviews = [], currentProduc
     return `
       <tr>
         <td style="font-weight:bold; color:var(--text-primary); text-align:left; border-right: 1px solid var(--border); padding: 1.25rem; border-bottom: 1px solid var(--border); vertical-align: middle;">
-          ${feat.name}
+          ${feat.label}
         </td>
         ${tds}
       </tr>
@@ -840,7 +911,7 @@ async function buildProducts() {
       aplusHtml += renderAPlusContent(p.aplus_content, products, allReviews, p);
     }
     if (p.comparison_table) {
-      aplusHtml += renderComparisonTable(p.comparison_table, products, allReviews, p);
+      aplusHtml += renderComparisonTable(p.comparison_table, products, allReviews, p, featuresMap);
     }
 
     if (aplusHtml) {
