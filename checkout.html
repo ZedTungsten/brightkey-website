@@ -395,6 +395,7 @@
         }
 
         try {
+          // 1. Insert into legacy marketing_audience table
           await fetch(`${SUPABASE_URL}/rest/v1/marketing_audience`, {
             method: 'POST',
             headers: {
@@ -412,11 +413,45 @@
               address: info.address,
               city: info.city,
               zip_code: info.zipCode,
-              audience: 'Customer',
+              audience: 'Checkout Signups',
               value: marketingValue,
               source: 'checkout'
             })
           });
+
+          // 2. Insert into the new email_marketing_audience_members table
+          // Fetch the Checkout Signups audience id first
+          const audRes = await fetch(`${SUPABASE_URL}/rest/v1/email_marketing_audiences?name=eq.${encodeURIComponent('Checkout Signups')}`, {
+            headers: {
+              'apikey': SUPABASE_ANON,
+              'Authorization': `Bearer ${SUPABASE_ANON}`
+            }
+          });
+          const auds = await audRes.json();
+          if (auds && auds.length > 0) {
+            const audId = auds[0].id;
+            await fetch(`${SUPABASE_URL}/rest/v1/email_marketing_audience_members`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'apikey': SUPABASE_ANON,
+                'Authorization': `Bearer ${SUPABASE_ANON}`,
+                'Prefer': 'resolution=merge-duplicates'
+              },
+              body: JSON.stringify({
+                audience_id: audId,
+                email: info.email.toLowerCase(),
+                first_name: info.firstName,
+                last_name: info.lastName,
+                phone: info.phone,
+                country: info.country,
+                address: info.address,
+                city: info.city,
+                zip_code: info.zipCode,
+                source: 'checkout'
+              })
+            });
+          }
         } catch (audErr) {
           console.error('Error inserting marketing audience:', audErr);
         }

@@ -40,3 +40,9 @@ DROP POLICY IF EXISTS "Allow public select on members" ON public.email_marketing
 CREATE POLICY "Allow public insert on members" ON public.email_marketing_audience_members FOR INSERT WITH CHECK (true);
 CREATE POLICY "Allow public update on members" ON public.email_marketing_audience_members FOR UPDATE USING (true) WITH CHECK (true);
 CREATE POLICY "Allow public select on members" ON public.email_marketing_audience_members FOR SELECT USING (true);
+
+-- Seed default settings
+INSERT INTO public.email_marketing_audiences (name, description) VALUES
+('Customer', 'Default general contact audience.'),
+('Checkout Signups', 'Customers who subscribed to marketing emails during checkout.')
+ON CONFLICT (name) DO NOTHING;
