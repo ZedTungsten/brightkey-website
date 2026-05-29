@@ -247,6 +247,7 @@
     let sb;
     let currentTenantId;
     let currentUser;
+    let currentCompanyId = '';
 
     const ROLE_LABELS = {
       owner: 'Owner',
@@ -267,6 +268,14 @@
       sb = BKAuth.sb;
       currentUser = authInfo.user;
       currentTenantId = authInfo.tenantId;
+
+      // Load first company associated with tenant
+      try {
+        const { data: companyData } = await sb.from('companies').select('id').eq('tenant_id', currentTenantId).limit(1);
+        currentCompanyId = companyData?.[0]?.id || '';
+      } catch (err) {
+        console.error('Error fetching company:', err);
+      }
 
       loadAllMembers();
     });
@@ -371,7 +380,8 @@
               <td><span class="badge badge-gray">${ROLE_LABELS[row.role] || row.role}</span></td>
               <td><span class="badge badge-orange">Invited</span></td>
               <td style="text-align: center;">
-                <button class="btn btn-danger" onclick="cancelInvitation('${row.id}')">Cancel Send Invitation</button>
+                <button class="btn btn-outline" style="padding: 0.25rem 0.5rem; font-size: 0.8rem; margin-right: 0.25rem;" onclick="copyInviteLink('${row.email}', '${row.role}')">Copy Link</button>
+                <button class="btn btn-danger" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="cancelInvitation('${row.id}')">Cancel Send Invitation</button>
               </td>
             `;
             tbody.appendChild(tr);
@@ -427,6 +437,28 @@
       } finally {
         btn.disabled = false;
         btn.innerText = 'Send Invitation';
+      }
+    }
+
+    async function generateSignature(tenant, company, role, email) {
+      const msg = `${tenant}:${company}:${role}:${email}:brightkey_invite_salt`;
+      const encoder = new TextEncoder();
+      const data = encoder.encode(msg);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+      return hashHex;
+    }
+
+    async function copyInviteLink(email, role) {
+      try {
+        const sig = await generateSignature(currentTenantId, currentCompanyId, role, email);
+        const link = `${window.location.origin}/employee-registration?tenant=${encodeURIComponent(currentTenantId)}&company=${encodeURIComponent(currentCompanyId)}&role=${encodeURIComponent(role)}&email=${encodeURIComponent(email)}&sig=${sig}`;
+        await navigator.clipboard.writeText(link);
+        showToast('Invite link copied to clipboard!');
+      } catch (err) {
+        console.error(err);
+        showToast('Failed to copy invite link', true);
       }
     }
 

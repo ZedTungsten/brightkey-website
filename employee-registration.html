@@ -481,7 +481,19 @@
     <span class="topbar__badge">Employee Registration</span>
   </header>
 
-  <div class="page">
+  <!-- Access Denied State (Hidden by default) -->
+  <div id="access-denied-state" class="container text-center" style="display:none; padding: 4rem 2rem; max-width: 600px; margin: 50px auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-md); text-align: center;">
+    <div style="width: 64px; height: 64px; margin: 0 auto 1.5rem; border-radius: 50%; background: rgba(239,68,68,0.08); border: 1.5px solid rgba(239,68,68,0.25); display: grid; place-items: center; color: var(--danger);">
+      <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin: 0 auto;"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+    </div>
+    <h2 style="font-size: 1.5rem; font-weight: 800; color: var(--text-1); margin-bottom: 0.5rem;">Access Denied</h2>
+    <p style="font-size: 0.95rem; line-height: 1.7; color: var(--text-2); margin-bottom: 1.75rem;">
+      You must have a valid, signed invitation link to access this employee registration form. If you were invited, please check your email or contact your administrator for the link.
+    </p>
+    <a href="index.html" class="btn-primary" style="text-decoration:none; display:inline-flex; align-items:center; justify-content:center; margin:0 auto; padding:0.75rem 1.75rem; border-radius:var(--radius-sm); font-weight:700; color:#fff; background:var(--cyan); box-shadow:0 2px 12px rgba(6,182,212,0.25);">Back to Homepage</a>
+  </div>
+
+  <div class="page" id="registration-page">
 
     <!-- Page header -->
     <div class="page-header">
@@ -772,6 +784,37 @@
     window.SUPABASE_ANON = SUPABASE_ANON;
     const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 
+    let inviteTenant = '';
+    let inviteCompany = '';
+    let inviteRole = '';
+    let inviteEmail = '';
+
+    async function generateSignature(tenant, company, role, email) {
+      const msg = `${tenant}:${company}:${role}:${email}:brightkey_invite_salt`;
+      const encoder = new TextEncoder();
+      const data = encoder.encode(msg);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+      return hashHex;
+    }
+
+    async function validateInvitation() {
+      const params = new URLSearchParams(window.location.search);
+      inviteTenant = params.get('tenant') || '';
+      inviteCompany = params.get('company') || '';
+      inviteRole = params.get('role') || '';
+      inviteEmail = params.get('email') || '';
+      const sig = params.get('sig') || '';
+
+      if (!inviteTenant || !inviteCompany || !inviteRole || !inviteEmail || !sig) {
+        return false;
+      }
+
+      const expectedSig = await generateSignature(inviteTenant, inviteCompany, inviteRole, inviteEmail);
+      return sig === expectedSig;
+    }
+
     /* ── File store ────────────────────────────────────────────────────── */
     const files = { profile: null, govId: null, cv: null };
 
@@ -797,6 +840,21 @@
     }
 
     (async function initEmpNumber() {
+      // Validate secure invite link first
+      const isValid = await validateInvitation();
+      if (!isValid) {
+        document.getElementById('registration-page').style.display = 'none';
+        document.getElementById('access-denied-state').style.display = 'block';
+        return;
+      }
+
+      // Pre-fill email and freeze it
+      const emailField = document.getElementById('email-address');
+      emailField.value = inviteEmail;
+      emailField.readOnly = true;
+      emailField.style.cursor = 'not-allowed';
+      emailField.style.opacity = '0.7';
+
       generatedEmpNumber = await generateEmployeeNumber();
       document.getElementById('emp-num-text').textContent = generatedEmpNumber;
     })();
@@ -1018,6 +1076,7 @@
         // Insert employee record
         const payload = {
           employee_number:   empNum,
+          company_id:        inviteCompany,
           first_name:        document.getElementById('first-name').value.trim(),
           middle_name:       document.getElementById('middle-name').value.trim() || null,
           last_name:         document.getElementById('last-name').value.trim(),
