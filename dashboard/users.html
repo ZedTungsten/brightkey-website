@@ -176,7 +176,8 @@
                   <th>Name</th>
                   <th>Role</th>
                   <th>Status</th>
-                  <th style="width: 200px; text-align: center;">Actions</th>
+                  <th style="width:120px; text-align:center;">Actions</th>
+                  <th style="width:200px; text-align:center;">Invitation Link</th>
                 </tr>
               </thead>
               <tbody id="members-list-body">
@@ -305,93 +306,122 @@
     // --- Unified Members Loader ---
     async function loadAllMembers() {
       const tbody = document.getElementById('members-list-body');
+      tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 2rem;">Loading team members...</td></tr>`;
+
+      let activeData = [];
+      let inviteData = [];
+
+      // 1. Fetch Active Members — try with full_name, fallback without
       try {
-        tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 2rem;">Loading team members...</td></tr>`;
-        
-        // 1. Fetch Active Members
-        const { data: activeData, error: activeError } = await sb
+        const { data, error } = await sb
           .from('tenant_members')
           .select('id, user_email, full_name, role, user_id')
           .eq('tenant_id', currentTenantId);
+        if (error && error.message && error.message.includes('full_name')) {
+          // Fallback: schema cache doesn't have full_name yet
+          const { data: d2 } = await sb
+            .from('tenant_members')
+            .select('id, user_email, role, user_id')
+            .eq('tenant_id', currentTenantId);
+          activeData = (d2 || []).map(r => ({ ...r, full_name: null }));
+        } else if (error) {
+          console.error('tenant_members error:', error.message);
+        } else {
+          activeData = data || [];
+        }
+      } catch (err) {
+        console.error('tenant_members fetch failed:', err);
+      }
 
-        if (activeError) throw activeError;
-
-        // 2. Fetch Pending Invitations
-        const { data: inviteData, error: inviteError } = await sb
+      // 2. Fetch Pending Invitations — try with full_name, fallback without
+      try {
+        const { data, error } = await sb
           .from('company_invitations')
           .select('id, email, full_name, role, created_at')
           .eq('tenant_id', currentTenantId);
-
-        if (inviteError) throw inviteError;
-
-        tbody.innerHTML = '';
-        
-        const totalRows = (activeData ? activeData.length : 0) + (inviteData ? inviteData.length : 0);
-        if (totalRows === 0) {
-          tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 2rem;">No members found.</td></tr>`;
-          return;
+        if (error && error.message && error.message.includes('full_name')) {
+          // Fallback: column not yet in schema cache
+          const { data: d2 } = await sb
+            .from('company_invitations')
+            .select('id, email, role, created_at')
+            .eq('tenant_id', currentTenantId);
+          inviteData = (d2 || []).map(r => ({ ...r, full_name: null }));
+        } else if (error) {
+          console.error('company_invitations error:', error.message);
+        } else {
+          inviteData = data || [];
         }
-
-        // Render Active Members
-        if (activeData) {
-          activeData.forEach(row => {
-            const tr = document.createElement('tr');
-            const isSelf = row.user_id === currentUser.id;
-            const isOwner = row.role === 'owner';
-            
-            let roleSelect = '';
-            if (isOwner || isSelf) {
-              roleSelect = `<span class="badge badge-cyan">${ROLE_LABELS[row.role] || row.role}</span>`;
-            } else {
-              roleSelect = `
-                <select class="form-select" style="padding: 0.25rem 0.5rem; font-size: 0.8rem; width: auto; display: inline-block;" onchange="updateMemberRole('${row.id}', this.value)">
-                  ${Object.keys(ROLE_LABELS).filter(r => r !== 'owner').map(roleKey => `
-                    <option value="${roleKey}" ${row.role === roleKey ? 'selected' : ''}>${ROLE_LABELS[roleKey]}</option>
-                  `).join('')}
-                </select>
-              `;
-            }
-
-            const deleteBtn = (isOwner || isSelf) ? '' : `
-              <button class="btn btn-danger" onclick="removeMember('${row.id}')">Remove</button>
-            `;
-
-            tr.innerHTML = `
-              <td>
-                <div style="font-weight: 600;">${row.user_email || 'No email registered'}</div>
-                ${isSelf ? '<div style="font-size:0.75rem; color:var(--text-muted);">Current User</div>' : ''}
-              </td>
-              <td>${row.full_name || '—'}</td>
-              <td>${roleSelect}</td>
-              <td><span class="badge badge-green">Active</span></td>
-              <td style="text-align: center;">${deleteBtn}</td>
-            `;
-            tbody.appendChild(tr);
-          });
-        }
-
-        // Render Pending Invitations
-        if (inviteData) {
-          inviteData.forEach(row => {
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-              <td><strong>${row.email}</strong></td>
-              <td>${row.full_name || '—'}</td>
-              <td><span class="badge badge-gray">${ROLE_LABELS[row.role] || row.role}</span></td>
-              <td><span class="badge badge-orange">Invited</span></td>
-              <td style="text-align: center;">
-                <button class="btn btn-outline" style="padding: 0.25rem 0.5rem; font-size: 0.8rem; margin-right: 0.25rem;" onclick="copyInviteLink('${row.email}', '${row.role}')">Copy Link</button>
-                <button class="btn btn-danger" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="cancelInvitation('${row.id}')">Cancel Send Invitation</button>
-              </td>
-            `;
-            tbody.appendChild(tr);
-          });
-        }
-
       } catch (err) {
-        console.error('Error fetching members:', err);
-        tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--danger); padding: 2rem;">Error loading members.</td></tr>`;
+        console.error('company_invitations fetch failed:', err);
       }
+
+      tbody.innerHTML = '';
+
+      if (activeData.length === 0 && inviteData.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 2rem;">No members found. Use "Add Member" to invite your first team member.</td></tr>`;
+        return;
+      }
+
+      // Render Active Members
+      activeData.forEach(row => {
+        const tr = document.createElement('tr');
+        const isSelf = row.user_id === currentUser.id;
+        const isOwner = row.role === 'owner';
+
+        let roleCell = '';
+        if (isOwner || isSelf) {
+          roleCell = `<span class="badge badge-cyan">${ROLE_LABELS[row.role] || row.role}</span>`;
+        } else {
+          roleCell = `
+            <select class="form-select" style="padding: 0.25rem 0.5rem; font-size: 0.8rem; width: auto; display: inline-block;" onchange="updateMemberRole('${row.id}', this.value)">
+              ${Object.keys(ROLE_LABELS).filter(r => r !== 'owner').map(roleKey => `
+                <option value="${roleKey}" ${row.role === roleKey ? 'selected' : ''}>${ROLE_LABELS[roleKey]}</option>
+              `).join('')}
+            </select>`;
+        }
+
+        const actionsCell = (isOwner || isSelf)
+          ? '<span style="color:var(--text-muted);font-size:0.75rem;">—</span>'
+          : `<button class="btn btn-danger" onclick="removeMember('${row.id}')">Remove</button>`;
+
+        tr.innerHTML = `
+          <td>
+            <div style="font-weight:600;">${row.user_email || 'No email registered'}</div>
+            ${isSelf ? '<div style="font-size:0.75rem;color:var(--text-muted);">You</div>' : ''}
+          </td>
+          <td>${row.full_name || '—'}</td>
+          <td>${roleCell}</td>
+          <td><span class="badge badge-green">Active</span></td>
+          <td style="text-align:center;">${actionsCell}</td>
+          <td style="text-align:center;"><span style="color:var(--text-muted);font-size:0.75rem;">—</span></td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      // Render Pending Invitations
+      inviteData.forEach(row => {
+        const tr = document.createElement('tr');
+        tr.style.background = 'rgba(217,119,6,0.03)';
+        tr.innerHTML = `
+          <td>
+            <div style="font-weight:600;">${row.email}</div>
+            <div style="font-size:0.72rem;color:var(--text-muted);">Awaiting registration</div>
+          </td>
+          <td>${row.full_name || '—'}</td>
+          <td><span class="badge badge-gray">${ROLE_LABELS[row.role] || row.role}</span></td>
+          <td><span class="badge badge-orange">Invited</span></td>
+          <td style="text-align:center;">
+            <button class="btn btn-danger" style="padding:0.3rem 0.65rem;font-size:0.75rem;" onclick="cancelInvitation('${row.id}')">Cancel</button>
+          </td>
+          <td style="text-align:center;">
+            <button class="btn btn-outline" style="padding:0.3rem 0.75rem;font-size:0.78rem;gap:0.35rem;" onclick="copyInviteLink('${row.email}', '${row.role}')">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              Copy Invitation Link
+            </button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
     }
 
     // --- Send New Invitation ---
