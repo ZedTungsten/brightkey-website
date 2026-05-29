@@ -576,7 +576,7 @@ async function buildProducts() {
   await fs.mkdir(outDir, { recursive: true });
 
   // 6. Load SSG template
-  const templateHtml = await fs.readFile(path.resolve('./product-preview.html'), 'utf8');
+  const templateHtml = await fs.readFile(path.resolve('./dashboard/product-preview.html'), 'utf8');
 
   const baseProducts  = products.filter(p => !p.parent_sku);
   const childProducts = products.filter(p =>  p.parent_sku);
