@@ -2417,11 +2417,26 @@
     window.toggleCustomAudienceInput = () => {
       const container = document.getElementById('popup-audience-custom-container');
       const input = document.getElementById('popup-audience-custom');
-      if (!container || !input) return;
+      const select = document.getElementById('popup-audience-select');
+      if (!container || !input || !select) return;
       
       container.style.display = 'flex';
-      input.value = '';
+      
+      const defaultName = 'Popup Signups';
+      input.value = defaultName;
       input.focus();
+      input.select();
+      
+      // Notify if Default Name already exists in the select dropdown options
+      let exists = false;
+      Array.from(select.options).forEach(opt => {
+        if (opt.value.toLowerCase() === defaultName.toLowerCase()) {
+          exists = true;
+        }
+      });
+      if (exists) {
+        showToast("Audience bucket 'Popup Signups' already exists.", true);
+      }
     };
 
     // --- Save Custom Audience Bucket ---
@@ -2442,18 +2457,20 @@
       Array.from(select.options).forEach(opt => {
         if (opt.value.toLowerCase() === newBucket.toLowerCase()) {
           exists = true;
-          opt.selected = true; // select the existing option
         }
       });
       
-      if (!exists) {
-        // Create new option
-        const opt = document.createElement('option');
-        opt.value = newBucket;
-        opt.textContent = newBucket;
-        opt.selected = true;
-        select.appendChild(opt);
+      if (exists) {
+        showToast(`Audience bucket '${newBucket}' already exists.`, true);
+        return; // Block saving duplicate
       }
+      
+      // Create new option
+      const opt = document.createElement('option');
+      opt.value = newBucket;
+      opt.textContent = newBucket;
+      opt.selected = true;
+      select.appendChild(opt);
       
       // Hide input container
       container.style.display = 'none';
