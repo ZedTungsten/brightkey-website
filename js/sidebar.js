@@ -353,7 +353,7 @@
         </button>
         <div class="dash-nav-children">
           <a href="/dashboard/support-inbox" class="dash-nav-child" data-role="hr">Inbox</a>
-          <a href="/internal/ecommerce/product-reviews" class="dash-nav-child" data-role="marketing">Reviews</a>
+          <a href="/dashboard/product-reviews" class="dash-nav-child" data-role="marketing">Reviews</a>
         </div>
       </div>
 
@@ -365,7 +365,7 @@
           <svg class="dash-nav-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
         </button>
         <div class="dash-nav-children">
-          <a class="dash-nav-child" data-role="logistics" style="opacity: 0.5; cursor: not-allowed;">Fulfillment</a>
+          <a href="/dashboard/fulfillment" class="dash-nav-child" data-role="logistics">Fulfillment</a>
           <a class="dash-nav-child" data-role="logistics" style="opacity: 0.5; cursor: not-allowed;">Shipping Rates</a>
         </div>
       </div>
