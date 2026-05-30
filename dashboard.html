@@ -406,6 +406,108 @@
       const user = await BKAuth.requireAuth('admin.html');
       if (!user) return;
 
+      // Forced Password Reset Check
+      if (user.user_metadata?.needs_password_reset === true) {
+        const overlay = document.getElementById('password-reset-overlay');
+        overlay.style.display = 'flex';
+
+        const newPassInp = document.getElementById('new-password');
+        const confirmPassInp = document.getElementById('confirm-new-password');
+        const reqLength = document.getElementById('req-length');
+        const reqCapital = document.getElementById('req-capital');
+        const reqNumber = document.getElementById('req-number');
+        const reqSymbol = document.getElementById('req-symbol');
+        const resetForm = document.getElementById('reset-password-form');
+        const resetAlert = document.getElementById('reset-alert');
+        const resetBtn = document.getElementById('btn-submit-reset');
+
+        function validatePassword(pass) {
+          return {
+            lengthValid: pass.length >= 8,
+            capitalValid: /[A-Z]/.test(pass),
+            numberValid: /[0-9]/.test(pass),
+            symbolValid: /[!@#$%^&*()_+~|}{[\]:;?><,./-]/.test(pass)
+          };
+        }
+
+        function updateRequirementUI(element, isValid) {
+          if (isValid) {
+            element.style.color = '#16a34a';
+            element.querySelector('span').textContent = '✅';
+          } else {
+            element.style.color = '#dc2626';
+            element.querySelector('span').textContent = '❌';
+          }
+        }
+
+        newPassInp.addEventListener('input', () => {
+          const pass = newPassInp.value;
+          const { lengthValid, capitalValid, numberValid, symbolValid } = validatePassword(pass);
+          updateRequirementUI(reqLength, lengthValid);
+          updateRequirementUI(reqCapital, capitalValid);
+          updateRequirementUI(reqNumber, numberValid);
+          updateRequirementUI(reqSymbol, symbolValid);
+        });
+
+        resetForm.addEventListener('submit', async e => {
+          e.preventDefault();
+          resetAlert.style.display = 'none';
+
+          const newPassword = newPassInp.value;
+          const confirmPassword = confirmPassInp.value;
+
+          const { lengthValid, capitalValid, numberValid, symbolValid } = validatePassword(newPassword);
+          if (!lengthValid || !capitalValid || !numberValid || !symbolValid) {
+            resetAlert.style.display = 'block';
+            resetAlert.style.color = '#fff';
+            resetAlert.style.background = 'var(--danger)';
+            resetAlert.style.padding = '10px';
+            resetAlert.style.borderRadius = '6px';
+            resetAlert.style.fontSize = '0.8rem';
+            resetAlert.textContent = 'Please meet all password requirements.';
+            return;
+          }
+
+          if (newPassword !== confirmPassword) {
+            resetAlert.style.display = 'block';
+            resetAlert.style.color = '#fff';
+            resetAlert.style.background = 'var(--danger)';
+            resetAlert.style.padding = '10px';
+            resetAlert.style.borderRadius = '6px';
+            resetAlert.style.fontSize = '0.8rem';
+            resetAlert.textContent = 'Passwords do not match.';
+            return;
+          }
+
+          resetBtn.disabled = true;
+          resetBtn.textContent = 'Updating...';
+
+          try {
+            const { error } = await BKAuth.sb.auth.updateUser({
+              password: newPassword,
+              data: { needs_password_reset: false }
+            });
+
+            if (error) throw error;
+
+            overlay.style.display = 'none';
+            alert('Password updated successfully! Welcome to your dashboard.');
+            location.reload();
+          } catch (err) {
+            console.error('Password reset failure:', err);
+            resetAlert.style.display = 'block';
+            resetAlert.style.color = '#fff';
+            resetAlert.style.background = 'var(--danger)';
+            resetAlert.style.padding = '10px';
+            resetAlert.style.borderRadius = '6px';
+            resetAlert.style.fontSize = '0.8rem';
+            resetAlert.textContent = err.message || 'Failed to update password. Try again.';
+            resetBtn.disabled = false;
+            resetBtn.textContent = 'Update Password';
+          }
+        });
+      }
+
       // Populate user info
       const name  = user.user_metadata?.full_name || user.email.split('@')[0];
       const initials = name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
@@ -481,6 +583,51 @@
       }
     })();
   </script>
+
+  <!-- Forced Password Reset Modal -->
+  <div class="modal-overlay" id="password-reset-overlay" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(9,9,11,0.7); backdrop-filter:blur(6px); z-index:99999; align-items:center; justify-content:center;">
+    <div class="modal-card" style="width:420px; max-width:90%; padding:2.5rem; background:var(--bg-surface); border:1px solid var(--border); border-radius:12px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.15);">
+      <h2 style="font-size:1.3rem; font-weight:700; color:var(--text-primary); margin-bottom:0.5rem;">Secure Your Account</h2>
+      <p style="font-size:0.82rem; color:var(--text-muted); margin-bottom:1.5rem; line-height:1.5;">
+        You are currently using a temporary login password. For security reasons, you must update your password to a strong password before continuing.
+      </p>
+
+      <div id="reset-alert" style="display:none; margin-bottom:1.25rem;"></div>
+
+      <form id="reset-password-form" novalidate>
+        <div class="form-group" style="margin-bottom:1.25rem; display:flex; flex-direction:column; gap:0.4rem;">
+          <label class="form-label" for="new-password" style="font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary);">New Password</label>
+          <input type="password" id="new-password" class="form-input" placeholder="Enter strong password" required style="width:100%; padding:0.75rem; border:1px solid var(--border); border-radius:6px; background:var(--bg-base); color:var(--text-primary); outline:none;" />
+          
+          <!-- Password Checklist -->
+          <ul id="password-requirements" style="margin-top:0.75rem; padding-left:0; list-style-type:none; font-size:0.75rem; color:var(--text-muted); display:flex; flex-direction:column; gap:0.35rem;">
+            <li id="req-length" style="color: #dc2626; display: flex; align-items: center; gap: 0.35rem;">
+              <span>❌</span> At least 8 characters long
+            </li>
+            <li id="req-capital" style="color: #dc2626; display: flex; align-items: center; gap: 0.35rem;">
+              <span>❌</span> At least one uppercase letter (A-Z)
+            </li>
+            <li id="req-number" style="color: #dc2626; display: flex; align-items: center; gap: 0.35rem;">
+              <span>❌</span> At least one number (0-9)
+            </li>
+            <li id="req-symbol" style="color: #dc2626; display: flex; align-items: center; gap: 0.35rem;">
+              <span>❌</span> At least one special symbol (!@#$%^&*)
+            </li>
+          </ul>
+        </div>
+
+        <div class="form-group" style="margin-bottom:1.5rem; display:flex; flex-direction:column; gap:0.4rem;">
+          <label class="form-label" for="confirm-new-password" style="font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary);">Confirm Password</label>
+          <input type="password" id="confirm-new-password" class="form-input" placeholder="Confirm your password" required style="width:100%; padding:0.75rem; border:1px solid var(--border); border-radius:6px; background:var(--bg-base); color:var(--text-primary); outline:none;" />
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-lg" id="btn-submit-reset" style="width:100%; height:44px; background:var(--blue); color:#fff; border:none; border-radius:6px; font-weight:600; cursor:pointer;">
+          Update Password
+        </button>
+      </form>
+    </div>
+  </div>
+
 <script defer src="/_vercel/speed-insights/script.js"></script>
 </body>
 </html>

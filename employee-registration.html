@@ -794,6 +794,7 @@
     let inviteCompany = '';
     let inviteRole = '';
     let inviteEmail = '';
+    let inviteSig = '';
 
     async function generateSignature(tenant, company, role, email) {
       const msg = `${tenant}:${company}:${role}:${email}:brightkey_invite_salt`;
@@ -808,6 +809,7 @@
     async function validateInvitation() {
       const params = new URLSearchParams(window.location.search);
       const sig = params.get('sig') || '';
+      inviteSig = sig;
 
       if (sig === 'dev-bypass-key-2026') {
         inviteTenant = params.get('tenant') || '00000000-0000-0000-0000-000000000000';
@@ -1115,11 +1117,55 @@
           // are left unset — HR will assign them later in the Employee Directory
         };
 
-        const { error: insertError } = await sb.from('employees').insert(payload);
-        if (insertError) throw insertError;
+        const apiRes = await fetch('/api/register-employee', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            tenant_id: inviteTenant,
+            company_id: inviteCompany,
+            role: inviteRole,
+            email: inviteEmail,
+            signature: inviteSig,
+            employee_payload: payload
+          })
+        });
+
+        const apiData = await apiRes.json();
+        if (!apiRes.ok) {
+          throw new Error(apiData.error || 'Server rejected registration.');
+        }
 
         // Show success
         document.getElementById('success-emp-num-text').textContent = empNum;
+        
+        // Show fallback password if email wasn't sent (for local testing/bypass)
+        const bodyEl = document.querySelector('.success-body');
+        if (bodyEl) {
+          if (apiData.temp_pass_fallback) {
+            const fallbackEl = document.createElement('div');
+            fallbackEl.style.marginTop = '15px';
+            fallbackEl.style.padding = '10px';
+            fallbackEl.style.background = '#fef3c7';
+            fallbackEl.style.border = '1px solid #f59e0b';
+            fallbackEl.style.borderRadius = '6px';
+            fallbackEl.style.color = '#78350f';
+            fallbackEl.style.fontSize = '0.8rem';
+            fallbackEl.style.lineHeight = '1.4';
+            fallbackEl.innerHTML = `<strong>Local Mode:</strong> Invitation processed successfully, but no email was sent because Resend is not configured locally.<br>Temporary login password: <code style="background:#fff;padding:2px 5px;border-radius:4px;border:1px solid #d1d5db;font-family:monospace;font-size:0.9rem;font-weight:700;">${apiData.temp_pass_fallback}</code>`;
+            bodyEl.appendChild(fallbackEl);
+          } else {
+            const checkEmailEl = document.createElement('div');
+            checkEmailEl.style.marginTop = '15px';
+            checkEmailEl.style.color = '#047857';
+            checkEmailEl.style.fontWeight = '600';
+            checkEmailEl.style.fontSize = '0.8rem';
+            checkEmailEl.innerHTML = `✉️ A temporary login password has been sent to your email.`;
+            bodyEl.appendChild(checkEmailEl);
+          }
+        }
+
         document.getElementById('success-overlay').classList.add('visible');
 
       } catch (err) {
