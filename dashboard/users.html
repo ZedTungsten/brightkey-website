@@ -334,25 +334,36 @@
       }
 
       // 2. Fetch Pending Invitations — try with full_name, fallback without
+      let inviteError = null;
       try {
+        console.log('[Users] Fetching invitations for tenant_id:', currentTenantId);
         const { data, error } = await sb
           .from('company_invitations')
           .select('id, email, full_name, role, created_at')
           .eq('tenant_id', currentTenantId);
         if (error && error.message && error.message.includes('full_name')) {
-          // Fallback: column not yet in schema cache
-          const { data: d2 } = await sb
+          // Fallback: column not yet in schema cache — retry without full_name
+          const { data: d2, error: e2 } = await sb
             .from('company_invitations')
             .select('id, email, role, created_at')
             .eq('tenant_id', currentTenantId);
-          inviteData = (d2 || []).map(r => ({ ...r, full_name: null }));
+          if (e2) {
+            inviteError = e2.message;
+            console.error('[Users] company_invitations fallback error:', e2);
+          } else {
+            inviteData = (d2 || []).map(r => ({ ...r, full_name: null }));
+            console.log('[Users] Invitations loaded (no full_name):', inviteData.length);
+          }
         } else if (error) {
-          console.error('company_invitations error:', error.message);
+          inviteError = error.message;
+          console.error('[Users] company_invitations error:', error);
         } else {
           inviteData = data || [];
+          console.log('[Users] Invitations loaded:', inviteData.length);
         }
       } catch (err) {
-        console.error('company_invitations fetch failed:', err);
+        inviteError = err.message;
+        console.error('[Users] company_invitations fetch failed:', err);
       }
 
       tbody.innerHTML = '';
@@ -397,6 +408,24 @@
         `;
         tbody.appendChild(tr);
       });
+
+      // Show invitation load error as a visible warning row
+      if (inviteError) {
+        const errTr = document.createElement('tr');
+        errTr.innerHTML = `
+          <td colspan="6" style="padding:1rem; background:rgba(220,38,38,0.04); border-top:1px solid rgba(220,38,38,0.15);">
+            <div style="display:flex;align-items:flex-start;gap:0.6rem;">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#DC2626" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              <div>
+                <div style="font-size:0.8rem;font-weight:700;color:#B91C1C;">Could not load pending invitations</div>
+                <div style="font-size:0.75rem;color:#6B7280;margin-top:0.2rem;">${inviteError}</div>
+                <div style="font-size:0.72rem;color:#6B7280;margin-top:0.35rem;">Run migration <code style="background:#F3F4F6;padding:1px 4px;border-radius:3px;">11_fix_company_invitations_rls.sql</code> in your Supabase SQL Editor to fix RLS permissions.</div>
+              </div>
+            </div>
+          </td>
+        `;
+        tbody.appendChild(errTr);
+      }
 
       // Render Pending Invitations
       inviteData.forEach(row => {
