@@ -742,6 +742,52 @@
         <div class="upload-progress" id="cv-progress"><div class="upload-progress__bar" id="cv-bar"></div></div>
       </div>
 
+      <!-- ── SECTION 5: Create Password ── -->
+      <div class="form-section">
+        <div class="section-head">
+          <div class="section-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          </div>
+          <div class="section-title-wrap">
+            <div class="section-title">Create Password <span class="req" style="font-size:0.7rem; color:var(--danger);">*</span></div>
+            <div class="section-desc">Create a strong password to log in to your dashboard</div>
+          </div>
+        </div>
+
+        <div class="grid-3" style="margin-top: 1rem;">
+          <div class="form-group col-span-2" id="fg-new-password">
+            <label class="form-label" for="new-password">New Password <span class="req">*</span></label>
+            <input type="password" id="new-password" name="new_password" class="form-input" placeholder="••••••••" required />
+            <span class="form-error-msg">Password is required.</span>
+
+            <!-- Password Checklist -->
+            <ul id="password-requirements" style="margin-top:0.75rem; padding-left:0; list-style-type:none; font-size:0.75rem; color:var(--text-m); display:flex; flex-direction:column; gap:0.35rem;">
+              <li id="req-length" style="color: #dc2626; display: flex; align-items: center; gap: 0.35rem;">
+                <span>❌</span> At least 8 characters long
+              </li>
+              <li id="req-capital" style="color: #dc2626; display: flex; align-items: center; gap: 0.35rem;">
+                <span>❌</span> At least one uppercase letter (A-Z)
+              </li>
+              <li id="req-lowercase" style="color: #dc2626; display: flex; align-items: center; gap: 0.35rem;">
+                <span>❌</span> At least one lowercase letter (a-z)
+              </li>
+              <li id="req-number" style="color: #dc2626; display: flex; align-items: center; gap: 0.35rem;">
+                <span>❌</span> At least one number (0-9)
+              </li>
+              <li id="req-symbol" style="color: #dc2626; display: flex; align-items: center; gap: 0.35rem;">
+                <span>❌</span> At least one special symbol (!@#$%^&*)
+              </li>
+            </ul>
+          </div>
+
+          <div class="form-group" id="fg-confirm-password">
+            <label class="form-label" for="confirm-password">Confirm Password <span class="req">*</span></label>
+            <input type="password" id="confirm-password" name="confirm_password" class="form-input" placeholder="••••••••" required />
+            <span class="form-error-msg">Please confirm your password.</span>
+          </div>
+        </div>
+      </div>
+
       <!-- Submit row -->
       <div class="submit-row">
         <button type="button" class="btn-ghost" id="btn-reset" onclick="if(confirm('Clear all fields?')) location.reload()">
@@ -750,7 +796,7 @@
         <button type="submit" class="btn-primary" id="btn-submit">
           <span id="btn-submit-content" style="display:flex;align-items:center;gap:0.5rem;">
             <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
-            Submit Registration
+            Create Account
           </span>
           <span id="btn-submit-spinner" style="display:none;"><span class="btn-spinner"></span></span>
         </button>
@@ -1037,7 +1083,63 @@
       return valid;
     }
 
+    /* ── Password validation ────────────────────────────────────────────── */
+    const newPassInp = document.getElementById('new-password');
+    const confirmPassInp = document.getElementById('confirm-password');
+    const reqLength = document.getElementById('req-length');
+    const reqCapital = document.getElementById('req-capital');
+    const reqLowercase = document.getElementById('req-lowercase');
+    const reqNumber = document.getElementById('req-number');
+    const reqSymbol = document.getElementById('req-symbol');
+
+    function validatePassword(pass) {
+      return {
+        lengthValid: pass.length >= 8,
+        capitalValid: /[A-Z]/.test(pass),
+        lowercaseValid: /[a-z]/.test(pass),
+        numberValid: /[0-9]/.test(pass),
+        symbolValid: /[!@#$%^&*()_+~|}{[\]:;?><,./-]/.test(pass)
+      };
+    }
+
+    function updateRequirementUI(element, isValid) {
+      if (isValid) {
+        element.style.color = '#16a34a';
+        element.querySelector('span').textContent = '✅';
+      } else {
+        element.style.color = '#dc2626';
+        element.querySelector('span').textContent = '❌';
+      }
+    }
+
+    newPassInp.addEventListener('input', () => {
+      const pass = newPassInp.value;
+      const { lengthValid, capitalValid, lowercaseValid, numberValid, symbolValid } = validatePassword(pass);
+      updateRequirementUI(reqLength, lengthValid);
+      updateRequirementUI(reqCapital, capitalValid);
+      updateRequirementUI(reqLowercase, lowercaseValid);
+      updateRequirementUI(reqNumber, numberValid);
+      updateRequirementUI(reqSymbol, symbolValid);
+    });
+
+    confirmPassInp.addEventListener('input', () => {
+      const fg = document.getElementById('fg-confirm-password');
+      const matches = confirmPassInp.value === newPassInp.value;
+      if (fg) fg.classList.toggle('has-error', !matches);
+    });
+
     function validateAll() {
+      const pass = document.getElementById('new-password').value;
+      const confirm = document.getElementById('confirm-password').value;
+      const { lengthValid, capitalValid, lowercaseValid, numberValid, symbolValid } = validatePassword(pass);
+      const passValid = lengthValid && capitalValid && lowercaseValid && numberValid && symbolValid;
+      const matchValid = pass === confirm && pass !== '';
+
+      const fgPass = document.getElementById('fg-new-password');
+      const fgConfirm = document.getElementById('fg-confirm-password');
+      if (fgPass) fgPass.classList.toggle('has-error', !passValid);
+      if (fgConfirm) fgConfirm.classList.toggle('has-error', !matchValid);
+
       const v = [
         validate('first-name',   () => document.getElementById('first-name').value.trim() !== ''),
         validate('last-name',    () => document.getElementById('last-name').value.trim() !== ''),
@@ -1047,6 +1149,8 @@
         validate('contact',      () => document.getElementById('contact-number').value.trim() !== ''),
         validate('emergency-name', () => document.getElementById('emergency-contact-name').value.trim() !== ''),
         validate('emergency-number', () => document.getElementById('emergency-contact-number').value.trim() !== ''),
+        passValid,
+        matchValid
       ];
       return v.every(Boolean);
     }
@@ -1060,7 +1164,7 @@
       hideAlert();
 
       if (!validateAll()) {
-        showAlert('error', 'Please fill in all required fields.');
+        showAlert('error', 'Please fill in all required fields and ensure password requirements are met.');
         document.querySelector('.has-error')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
         return;
       }
@@ -1094,7 +1198,7 @@
         const emergencyName = document.getElementById('emergency-contact-name').value.trim();
         const emergencyNumber = document.getElementById('emergency-contact-number').value.trim();
 
-        // Insert employee record
+        // Construct payload
         const payload = {
           employee_number:   empNum,
           company_id:        inviteCompany,
@@ -1113,9 +1217,9 @@
           sss:               document.getElementById('sss-number').value.trim() || null,
           pagibig:           document.getElementById('pagibig-number').value.trim() || null,
           philhealth:        document.getElementById('philhealth-number').value.trim() || null,
-          // HR fields (department, type/employment_type, position, salary, etc.)
-          // are left unset — HR will assign them later in the Employee Directory
         };
+
+        const chosenPassword = document.getElementById('new-password').value;
 
         const apiRes = await fetch('/api/register-employee', {
           method: 'POST',
@@ -1128,6 +1232,7 @@
             role: inviteRole,
             email: inviteEmail,
             signature: inviteSig,
+            password: chosenPassword,
             employee_payload: payload
           })
         });
@@ -1137,36 +1242,20 @@
           throw new Error(apiData.error || 'Server rejected registration.');
         }
 
-        // Show success
-        document.getElementById('success-emp-num-text').textContent = empNum;
+        // Show success loading state and login
+        submitBtn.textContent = 'Account created! Signing in...';
         
-        // Show fallback password if email wasn't sent (for local testing/bypass)
-        const bodyEl = document.querySelector('.success-body');
-        if (bodyEl) {
-          if (apiData.temp_pass_fallback) {
-            const fallbackEl = document.createElement('div');
-            fallbackEl.style.marginTop = '15px';
-            fallbackEl.style.padding = '10px';
-            fallbackEl.style.background = '#fef3c7';
-            fallbackEl.style.border = '1px solid #f59e0b';
-            fallbackEl.style.borderRadius = '6px';
-            fallbackEl.style.color = '#78350f';
-            fallbackEl.style.fontSize = '0.8rem';
-            fallbackEl.style.lineHeight = '1.4';
-            fallbackEl.innerHTML = `<strong>Local Mode:</strong> Invitation processed successfully, but no email was sent because Resend is not configured locally.<br>Temporary login password: <code style="background:#fff;padding:2px 5px;border-radius:4px;border:1px solid #d1d5db;font-family:monospace;font-size:0.9rem;font-weight:700;">${apiData.temp_pass_fallback}</code>`;
-            bodyEl.appendChild(fallbackEl);
-          } else {
-            const checkEmailEl = document.createElement('div');
-            checkEmailEl.style.marginTop = '15px';
-            checkEmailEl.style.color = '#047857';
-            checkEmailEl.style.fontWeight = '600';
-            checkEmailEl.style.fontSize = '0.8rem';
-            checkEmailEl.innerHTML = `✉️ A temporary login password has been sent to your email.`;
-            bodyEl.appendChild(checkEmailEl);
-          }
+        const { error: loginError } = await sb.auth.signInWithPassword({
+          email: inviteEmail,
+          password: chosenPassword
+        });
+
+        if (loginError) {
+          throw new Error(`Login failed: ${loginError.message}`);
         }
 
-        document.getElementById('success-overlay').classList.add('visible');
+        // Redirect directly to dashboard
+        window.location.href = 'dashboard.html';
 
       } catch (err) {
         console.error('Registration error:', err);

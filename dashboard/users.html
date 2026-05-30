@@ -175,6 +175,7 @@
                   <th>Email</th>
                   <th>Name</th>
                   <th>Role</th>
+                  <th>Date Added</th>
                   <th>Status</th>
                   <th style="width:120px; text-align:center;">Actions</th>
                   <th style="width:200px; text-align:center;">Invitation Link</th>
@@ -182,7 +183,7 @@
               </thead>
               <tbody id="members-list-body">
                 <tr>
-                  <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 2rem;">Loading team members...</td>
+                  <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 2rem;">Loading team members...</td>
                 </tr>
               </tbody>
             </table>
@@ -303,10 +304,18 @@
       }
     }
 
+    // Helper to format Date Added
+    function formatDateAdded(isoString) {
+      if (!isoString) return '—';
+      const d = new Date(isoString);
+      if (isNaN(d.getTime())) return '—';
+      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    }
+
     // --- Unified Members Loader ---
     async function loadAllMembers() {
       const tbody = document.getElementById('members-list-body');
-      tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 2rem;">Loading team members...</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 2rem;">Loading team members...</td></tr>`;
 
       let activeData = [];
       let inviteData = [];
@@ -315,13 +324,13 @@
       try {
         const { data, error } = await sb
           .from('tenant_members')
-          .select('id, user_email, full_name, role, user_id')
+          .select('id, user_email, full_name, role, user_id, created_at')
           .eq('tenant_id', currentTenantId);
         if (error && error.message && error.message.includes('full_name')) {
           // Fallback: schema cache doesn't have full_name yet
           const { data: d2 } = await sb
             .from('tenant_members')
-            .select('id, user_email, role, user_id')
+            .select('id, user_email, role, user_id, created_at')
             .eq('tenant_id', currentTenantId);
           activeData = (d2 || []).map(r => ({ ...r, full_name: null }));
         } else if (error) {
@@ -369,7 +378,7 @@
       tbody.innerHTML = '';
 
       if (activeData.length === 0 && inviteData.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 2rem;">No members found. Use "Add Member" to invite your first team member.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 2rem;">No members found. Use "Add Member" to invite your first team member.</td></tr>`;
         return;
       }
 
@@ -402,6 +411,7 @@
           </td>
           <td>${row.full_name || '—'}</td>
           <td>${roleCell}</td>
+          <td>${formatDateAdded(row.created_at)}</td>
           <td><span class="badge badge-green">Active</span></td>
           <td style="text-align:center;">${actionsCell}</td>
           <td style="text-align:center;"><span style="color:var(--text-muted);font-size:0.75rem;">—</span></td>
@@ -413,7 +423,7 @@
       if (inviteError) {
         const errTr = document.createElement('tr');
         errTr.innerHTML = `
-          <td colspan="6" style="padding:1rem; background:rgba(220,38,38,0.04); border-top:1px solid rgba(220,38,38,0.15);">
+          <td colspan="7" style="padding:1rem; background:rgba(220,38,38,0.04); border-top:1px solid rgba(220,38,38,0.15);">
             <div style="display:flex;align-items:flex-start;gap:0.6rem;">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#DC2626" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
               <div>
@@ -438,6 +448,7 @@
           </td>
           <td>${row.full_name || '—'}</td>
           <td><span class="badge badge-gray">${ROLE_LABELS[row.role] || row.role}</span></td>
+          <td>${formatDateAdded(row.created_at)}</td>
           <td><span class="badge badge-orange">Invited</span></td>
           <td style="text-align:center;">
             <button class="btn btn-danger" style="padding:0.3rem 0.65rem;font-size:0.75rem;" onclick="cancelInvitation('${row.id}')">Cancel</button>
@@ -470,24 +481,36 @@
       btn.innerText = 'Inviting...';
 
       try {
-        const { error } = await sb.from('company_invitations').insert({
-          tenant_id: currentTenantId,
-          email: email,
-          full_name: fullName,
-          role: role,
-          invited_by: currentUser.id
+        const { data: { session } } = await sb.auth.getSession();
+        const token = session?.access_token;
+
+        const res = await fetch('/api/send-invitation', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            tenant_id: currentTenantId,
+            company_id: currentCompanyId,
+            email: email,
+            full_name: fullName,
+            role: role,
+            invited_by: currentUser.id
+          })
         });
 
-        if (error) {
-          if (error.code === '23505') {
-            showToast('An invitation for this email already exists.', true);
-          } else {
-            showToast(`Invitation failed: ${error.message}`, true);
-          }
+        const data = await res.json();
+        if (!res.ok) {
+          showToast(data.error || 'Invitation failed.', true);
           return;
         }
 
-        showToast(`Invitation sent to ${email}.`);
+        if (data.email_sent) {
+          showToast(`Invitation email sent to ${email}.`);
+        } else {
+          showToast(`Member invited! Copy invite link from Actions column.`, false);
+        }
         closeAddMemberModal();
         loadAllMembers();
       } catch (err) {

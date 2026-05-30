@@ -1,26 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { createHash } from 'crypto';
 
-function generateTempPassword() {
-  const lowercase = 'abcdefghijklmnopqrstuvwxyz';
-  const uppercase = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-  const numbers = '0123456789';
-  const symbols = '!@#$%^&*()_+~|}{[]:;?><,./-';
-  
-  let pass = '';
-  pass += lowercase[Math.floor(Math.random() * lowercase.length)];
-  pass += uppercase[Math.floor(Math.random() * uppercase.length)];
-  pass += numbers[Math.floor(Math.random() * numbers.length)];
-  pass += symbols[Math.floor(Math.random() * symbols.length)];
-  
-  const allChars = lowercase + uppercase + numbers + symbols;
-  for (let i = 0; i < 8; i++) {
-    pass += allChars[Math.floor(Math.random() * allChars.length)];
-  }
-  
-  return pass.split('').sort(() => 0.5 - Math.random()).join('');
-}
-
 function verifySignature(tenant, company, role, email, sig) {
   const msg = `${tenant}:${company}:${role}:${email}:brightkey_invite_salt`;
   const hash = createHash('sha256').update(msg).digest('hex');
@@ -50,10 +30,11 @@ export default async function handler(req, res) {
     role,
     email,
     signature,
+    password,
     employee_payload
   } = req.body;
 
-  if (!tenant_id || !company_id || !role || !email || !signature || !employee_payload) {
+  if (!tenant_id || !company_id || !role || !email || !signature || !password || !employee_payload) {
     return res.status(400).json({ error: 'Missing required registration parameters.' });
   }
 
@@ -70,17 +51,14 @@ export default async function handler(req, res) {
   });
 
   try {
-    // 2. Generate temp password
-    const tempPassword = generateTempPassword();
-
-    // 3. Create auth user with service role client
+    // 2. Create auth user with service role client and the user's chosen password
     const { data: authData, error: authError } = await supabase.auth.admin.createUser({
       email: email,
-      password: tempPassword,
+      password: password,
       email_confirm: true,
       user_metadata: {
         full_name: `${employee_payload.first_name} ${employee_payload.last_name}`,
-        needs_password_reset: true
+        needs_password_reset: false
       }
     });
 
@@ -91,7 +69,7 @@ export default async function handler(req, res) {
 
     const userId = authData.user.id;
 
-    // 4. Create tenant member record
+    // 3. Create tenant member record
     const { error: tmError } = await supabase.from('tenant_members').insert({
       tenant_id: tenant_id,
       user_id: userId,
@@ -107,7 +85,7 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: `Database Error (tenant_members): ${tmError.message}` });
     }
 
-    // 5. Create employee record
+    // 4. Create employee record
     const finalEmployeePayload = {
       ...employee_payload,
       id: userId // Set public.employees ID to match the auth user ID for simple relation
@@ -122,13 +100,13 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: `Database Error (employees): ${empError.message}` });
     }
 
-    // 6. Delete the pending invitation since user has successfully registered
+    // 5. Delete the pending invitation since user has successfully registered
     await supabase.from('company_invitations')
       .delete()
       .eq('tenant_id', tenant_id)
       .eq('email', email);
 
-    // 7. Send welcome email via Resend
+    // 6. Send welcome email via Resend
     let emailSent = false;
     if (RESEND_API_KEY) {
       try {
@@ -141,23 +119,17 @@ export default async function handler(req, res) {
           body: JSON.stringify({
             from: EMAIL_FROM,
             to: email,
-            subject: 'Welcome to BrightKey Solutions - Temporary Login Details',
+            subject: 'Welcome to BrightKey Solutions - Account Activated',
             html: `
               <div style="font-family: sans-serif; padding: 20px; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 8px;">
                 <h2 style="color: #0891b2; font-weight: bold; margin-bottom: 20px;">Welcome to BrightKey Solutions!</h2>
                 <p>Hello ${employee_payload.first_name},</p>
-                <p>Your registration is complete. An account has been created for you under your organization's workspace.</p>
-                <p>Please use the following temporary password to sign in:</p>
-                <div style="background-color: #f3f4f6; padding: 12px 20px; font-size: 18px; font-family: monospace; border-radius: 6px; display: inline-block; letter-spacing: 1px; margin: 10px 0; border: 1px dashed #d1d5db;">
-                  <strong>${tempPassword}</strong>
-                </div>
+                <p>Your employee profile has been created and your account is now active.</p>
+                <p>You can access your dashboard at any time by signing in with your email and the password you created:</p>
                 <p style="margin-top: 20px;">
                   <a href="https://www.brightkeysolutions.com/login" style="background-color: #06b6d4; color: white; padding: 10px 20px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">
-                    Sign In to Your Account
+                    Access Your Dashboard
                   </a>
-                </p>
-                <p style="font-size: 13px; color: #6b7280; margin-top: 30px; border-top: 1px solid #e5e7eb; padding-top: 15px;">
-                  * For security reasons, you will be prompted to change this temporary password to a strong password immediately upon logging in.
                 </p>
               </div>
             `
@@ -173,15 +145,11 @@ export default async function handler(req, res) {
       } catch (err) {
         console.error('Failed to dispatch email via Resend:', err);
       }
-    } else {
-      console.warn('RESEND_API_KEY is not defined. Email skip.');
     }
 
     return res.status(200).json({
       success: true,
-      email_sent: emailSent,
-      // For local development fallback if Resend is not configured / during test:
-      ...(!emailSent && { temp_pass_fallback: tempPassword })
+      email_sent: emailSent
     });
 
   } catch (err) {

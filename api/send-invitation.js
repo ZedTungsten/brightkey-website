@@ -1,0 +1,133 @@
+import { createClient } from '@supabase/supabase-js';
+import { createHash } from 'crypto';
+
+export default async function handler(req, res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
+
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Missing or invalid authorization token' });
+  }
+  const token = authHeader.split(' ')[1];
+
+  const SUPABASE_URL = process.env.SUPABASE_URL;
+  const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
+  const RESEND_API_KEY = process.env.RESEND_API_KEY;
+  const EMAIL_FROM = process.env.EMAIL_FROM || 'BrightKey Solutions <onboarding@brightkeysolutions.com>';
+
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    return res.status(500).json({ error: 'Supabase configuration is missing on server.' });
+  }
+
+  const { tenant_id, company_id, email, full_name, role, invited_by } = req.body;
+  if (!tenant_id || !company_id || !email || !full_name || !role) {
+    return res.status(400).json({ error: 'Missing required parameters.' });
+  }
+
+  // Initialize service client
+  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+    auth: { autoRefreshToken: false, persistSession: false }
+  });
+
+  try {
+    // 1. Verify user's session token and identity
+    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+    if (userError || !user) {
+      return res.status(401).json({ error: 'Unauthorized session.' });
+    }
+
+    // 2. Authorize the user (must be owner or admin of this tenant)
+    const { data: member, error: memberError } = await supabase
+      .from('tenant_members')
+      .select('role')
+      .eq('tenant_id', tenant_id)
+      .eq('user_id', user.id)
+      .limit(1);
+
+    if (memberError || !member || member.length === 0 || !['owner', 'admin'].includes(member[0].role)) {
+      return res.status(403).json({ error: 'Forbidden: You do not have permissions to invite members to this tenant.' });
+    }
+
+    // 3. Insert into company_invitations
+    const { error: inviteError } = await supabase
+      .from('company_invitations')
+      .insert({
+        tenant_id,
+        email: email.toLowerCase().trim(),
+        full_name,
+        role,
+        invited_by: user.id
+      });
+
+    if (inviteError) {
+      if (inviteError.code === '23505') {
+        return res.status(400).json({ error: 'An invitation for this email already exists in this tenant.' });
+      }
+      return res.status(500).json({ error: `Invite insertion failed: ${inviteError.message}` });
+    }
+
+    // 4. Generate secure signature
+    const msg = `${tenant_id}:${company_id}:${role}:${email.toLowerCase().trim()}:brightkey_invite_salt`;
+    const signature = createHash('sha256').update(msg).digest('hex');
+
+    // 5. Construct invite URL
+    const origin = req.headers.referer ? new URL(req.headers.referer).origin : 'https://www.brightkeysolutions.com';
+    const inviteLink = `${origin}/employee-registration?tenant=${encodeURIComponent(tenant_id)}&company=${encodeURIComponent(company_id)}&role=${encodeURIComponent(role)}&email=${encodeURIComponent(email.toLowerCase().trim())}&sig=${signature}`;
+
+    // 6. Send email via Resend
+    let emailSent = false;
+    if (RESEND_API_KEY) {
+      try {
+        const mailRes = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${RESEND_API_KEY}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            from: EMAIL_FROM,
+            to: email,
+            subject: 'Invitation to Join BrightKey Solutions Workspace',
+            html: `
+              <div style="font-family: sans-serif; padding: 24px; color: #374151; max-width: 600px; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 8px; background-color: #ffffff;">
+                <h2 style="color: #0891b2; font-weight: bold; margin-bottom: 20px; text-align: center;">Join BrightKey Solutions</h2>
+                <p>Hello ${full_name},</p>
+                <p>You have been invited to join the BrightKey Solutions workspace for your organization as a <strong>${role.replace('_', ' ')}</strong>.</p>
+                <p style="margin-top: 24px; text-align: center;">
+                  <a href="${inviteLink}" style="background-color: #06b6d4; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">
+                    Accept Invitation & Set Up Account
+                  </a>
+                </p>
+                <p style="font-size: 13px; color: #9ca3af; margin-top: 32px; border-top: 1px solid #e5e7eb; padding-top: 16px;">
+                  If you didn't expect this invitation, please ignore this email.
+                </p>
+              </div>
+            `
+          })
+        });
+
+        if (mailRes.ok) {
+          emailSent = true;
+        } else {
+          const mailErr = await mailRes.json();
+          console.error('Resend API error:', mailErr);
+        }
+      } catch (err) {
+        console.error('Failed to dispatch invite email:', err);
+      }
+    } else {
+      console.warn('RESEND_API_KEY not defined. Email dispatch skipped.');
+    }
+
+    return res.status(200).json({ success: true, email_sent: emailSent, fallback_link: inviteLink });
+
+  } catch (err) {
+    console.error('Invitation handler crash:', err);
+    return res.status(500).json({ error: `Server crash: ${err.message}` });
+  }
+}
