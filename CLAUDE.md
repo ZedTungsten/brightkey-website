@@ -79,6 +79,10 @@
 - **Toast z-index must be `99999`**: To guarantee that toast notifications are visible over dark modal overlays, blur filters, and lateral drawers (which typically sit between `100` and `2000` z-index), always style `#toast-container` with `z-index: 99999`.
 - **Target `#toast-container` by ID**: Style rules must target `#toast-container` (ID selector) rather than `.toast-container` (class selector). This ensures page-specific overrides have the specificity required to override any rules inside the global `css/style.css` stylesheet.
 
+## Button Styling Guidelines
+- **Prefer SVG icons over text buttons**: Buttons like Edit and Delete inside content containers, cards, tables, or row lists should be formatted as clean SVG icons (e.g. a gray pencil for edit, a red trashcan for delete) rather than wordy text buttons, unless they are primary CTA buttons.
+
+
 
 
 
