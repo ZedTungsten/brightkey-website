@@ -325,14 +325,44 @@
         <div class="checkout-right-content">
           <h2 style="font-size: 1.25rem; margin-bottom: 1.5rem; color: var(--text-primary); font-weight: 600;">Order Summary</h2>
           
-          <div id="summary-items" style="display:flex; flex-direction:column; gap:1rem; margin-bottom:1.5rem; border-bottom:1px solid var(--border); padding-top:8px; padding-bottom:1.5rem; max-height: 350px; overflow-y:auto;">
+          <div id="summary-items" style="display:flex; flex-direction:column; gap:1rem; padding-top:8px; padding-bottom:1.5rem; max-height: 350px; overflow-y:auto;">
             <!-- Items injected here -->
           </div>
 
+          <!-- Discount Code Field -->
+          <div style="display:flex; gap:0.5rem; margin-bottom:0.75rem; padding-top:1rem; border-top:1px solid var(--border);">
+            <input type="text" id="coupon-input" placeholder="Discount code" class="form-control" style="flex:1; font-size:0.9rem;" />
+            <button id="coupon-apply-btn" onclick="applyCoupon()" style="padding: 0.75rem 1.25rem; background: var(--success); color: #fff; border: none; border-radius: var(--radius-sm); font-family: inherit; font-size: 0.9rem; font-weight: 600; cursor: pointer; white-space: nowrap; transition: background 0.2s;">Apply</button>
+          </div>
+
+          <!-- Applied Coupon Chip -->
+          <div id="coupon-chip" style="display:none; margin-bottom:1rem;">
+            <span style="display:inline-flex; align-items:center; gap:0.5rem; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius-full); padding: 0.3rem 0.75rem; font-size: 0.85rem; color: var(--text-secondary);">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+              <span id="coupon-chip-code" style="font-weight:600; color:var(--text-primary);"></span>
+              <button onclick="removeCoupon()" style="background:none; border:none; cursor:pointer; padding:0; line-height:1; color:var(--text-muted); display:flex; align-items:center;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </span>
+          </div>
+
+          <!-- Subtotal & Shipping -->
           <div style="display:flex; justify-content:space-between; margin-bottom:0.5rem; color:var(--text-secondary); font-size: 0.9rem;">
             <span>Subtotal</span>
             <span id="sum-subtotal">₱0.00</span>
           </div>
+
+          <!-- Discount Line (hidden until applied) -->
+          <div id="sum-discount-row" style="display:none; margin-bottom:0.5rem; font-size: 0.9rem;">
+            <div style="display:flex; justify-content:space-between; color:var(--text-secondary);">
+              <span style="display:flex; align-items:center; gap:0.4rem;">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+                <span id="sum-discount-label"></span>
+              </span>
+              <span id="sum-discount-amount" style="color: var(--success); font-weight: 600;"></span>
+            </div>
+          </div>
+
           <div style="display:flex; justify-content:space-between; margin-bottom:1.5rem; color:var(--text-secondary); font-size: 0.9rem;">
             <span>Shipping</span>
             <span id="sum-shipping">Select city</span>
@@ -368,6 +398,8 @@
     let subtotalCents = 0;
     let shippingCents = 0;
     let totalCents = 0;
+    let discountCents = 0;
+    let appliedCoupon = null;
     let shippingRatesMap = {};
     let isFreeShippingEligible = false;
 
@@ -555,9 +587,97 @@
     }
 
     function updateTotal() {
-      totalCents = subtotalCents + shippingCents;
+      totalCents = subtotalCents + shippingCents - discountCents;
+      if (totalCents < 0) totalCents = 0;
       document.getElementById('sum-total').innerText = `₱${(totalCents/100).toLocaleString('en-PH', {minimumFractionDigits:2})}`;
     }
+
+    // ── Coupon Functions ───────────────────────────────────────────
+
+    // Allow Enter key on coupon input
+    document.addEventListener('DOMContentLoaded', () => {
+      const inp = document.getElementById('coupon-input');
+      if (inp) inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); applyCoupon(); } });
+    });
+
+    window.applyCoupon = async function() {
+      const code = document.getElementById('coupon-input').value.trim().toUpperCase();
+      if (!code) return;
+
+      const btn = document.getElementById('coupon-apply-btn');
+      btn.disabled = true;
+      btn.textContent = '...';
+
+      try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/coupons?code=eq.${encodeURIComponent(code)}&select=*`, {
+          headers: { 'apikey': SUPABASE_ANON, 'Authorization': `Bearer ${SUPABASE_ANON}` }
+        });
+        const rows = await res.json();
+        if (!rows.length) {
+          showToast('Invalid discount code.', 'error');
+          btn.disabled = false;
+          btn.textContent = 'Apply';
+          return;
+        }
+
+        const coupon = rows[0];
+        const now = new Date();
+        if (coupon.start_date && new Date(coupon.start_date) > now) {
+          showToast('This discount code is not yet active.', 'error');
+          btn.disabled = false;
+          btn.textContent = 'Apply';
+          return;
+        }
+        if (coupon.end_date && new Date(coupon.end_date) < now) {
+          showToast('This discount code has expired.', 'error');
+          btn.disabled = false;
+          btn.textContent = 'Apply';
+          return;
+        }
+
+        // Calculate discount
+        appliedCoupon = coupon;
+        if (coupon.discount_type === 'percentage') {
+          discountCents = Math.round(subtotalCents * (coupon.discount_value / 100));
+        } else {
+          // fixed — discount_value is in pesos
+          discountCents = Math.round(coupon.discount_value * 100);
+          if (discountCents > subtotalCents) discountCents = subtotalCents;
+        }
+
+        // Show chip
+        document.getElementById('coupon-chip').style.display = 'block';
+        document.getElementById('coupon-chip-code').textContent = coupon.code;
+
+        // Show discount row in totals
+        const discountAmt = coupon.discount_type === 'percentage'
+          ? `-${coupon.discount_value}% (₱${(discountCents/100).toLocaleString('en-PH', {minimumFractionDigits:2})})`
+          : `-₱${(discountCents/100).toLocaleString('en-PH', {minimumFractionDigits:2})}`;
+        document.getElementById('sum-discount-label').textContent = coupon.code;
+        document.getElementById('sum-discount-amount').textContent = discountAmt;
+        document.getElementById('sum-discount-row').style.display = 'block';
+
+        document.getElementById('coupon-input').value = '';
+        showToast(`Discount code "${coupon.code}" applied!`, 'success');
+        updateTotal();
+      } catch (err) {
+        showToast('Failed to validate code. Please try again.', 'error');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Apply';
+      }
+    };
+
+    window.removeCoupon = function() {
+      appliedCoupon = null;
+      discountCents = 0;
+      document.getElementById('coupon-chip').style.display = 'none';
+      document.getElementById('coupon-chip-code').textContent = '';
+      document.getElementById('sum-discount-row').style.display = 'none';
+      document.getElementById('sum-discount-label').textContent = '';
+      document.getElementById('sum-discount-amount').textContent = '';
+      updateTotal();
+    };
 
     function validateForm() {
       const firstName = document.getElementById('c_first_name').value.trim();
@@ -740,6 +860,11 @@
         lineItems.push({ name: 'Shipping', quantity: 1, amount: shippingCents, currency: 'PHP' });
       }
 
+      // Add discount as a negative line item if coupon applied
+      if (discountCents > 0 && appliedCoupon) {
+        lineItems.push({ name: `Discount (${appliedCoupon.code})`, quantity: 1, amount: -discountCents, currency: 'PHP' });
+      }
+
       const origin = window.location.origin;
 
       try {
@@ -759,6 +884,8 @@
               shipping_city:    info.city,
               shipping_address: info.address,
               shipping_cents:   String(shippingCents),
+              discount_cents:   String(discountCents),
+              coupon_code:      appliedCoupon ? appliedCoupon.code : '',
               total_cents:      String(totalCents),
               cart_items:       JSON.stringify(cartData),
               billing_info:     info.billingInfo ? JSON.stringify(info.billingInfo) : 'same'
