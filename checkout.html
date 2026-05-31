@@ -231,19 +231,38 @@
 
     async function loadShippingRates() {
       try {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/shipping_rates?select=*`, {
+        // Fetch active zones
+        const zonesRes = await fetch(`${SUPABASE_URL}/rest/v1/shipping_zones?is_active=eq.true&select=id,fee`, {
           headers: { 'apikey': SUPABASE_ANON, 'Authorization': `Bearer ${SUPABASE_ANON}` }
         });
-        if (!res.ok) throw new Error();
-        const rates = await res.json();
+        if (!zonesRes.ok) throw new Error();
+        const zonesList = await zonesRes.json();
         
+        const zoneFeeMap = {};
+        zonesList.forEach(z => {
+          zoneFeeMap[z.id] = z.fee;
+        });
+
+        // Fetch areas
+        const areasRes = await fetch(`${SUPABASE_URL}/rest/v1/shipping_areas?select=name,zone_id`, {
+          headers: { 'apikey': SUPABASE_ANON, 'Authorization': `Bearer ${SUPABASE_ANON}` }
+        });
+        if (!areasRes.ok) throw new Error();
+        const areasList = await areasRes.json();
+
         const citySelect = document.getElementById('c_city');
-        rates.forEach(r => {
-          shippingRatesMap[r.city] = r.fee;
-          citySelect.innerHTML += `<option value="${r.city}">${r.city}</option>`;
+        citySelect.innerHTML = '<option value="">Select a city...</option>';
+
+        areasList.forEach(area => {
+          const feeCents = zoneFeeMap[area.zone_id];
+          if (feeCents !== undefined) {
+            // Map expects value in Pesos (e.g. 150) rather than centavos (15000)
+            shippingRatesMap[area.name] = feeCents / 100;
+            citySelect.innerHTML += `<option value="${area.name}">${area.name}</option>`;
+          }
         });
       } catch (err) {
-        console.error('Failed to load shipping rates');
+        console.error('Failed to load shipping rates:', err);
       }
     }
 

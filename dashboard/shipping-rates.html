@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Shipping Zones & Rates — BrightKey Admin</title>
+  <link rel="preconnect" href="https://fonts.bunny.net" />
+  <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg?v=2" />
+
+  <style>
+    :root {
+      --bg-base: #FAFAFA;
+      --bg-surface: #FFFFFF;
+      --bg-elevated: #F4F4F5;
+      --bg-card: #FFFFFF;
+      --border: #E4E4E7;
+      --border-hover: #D4D4D8;
+      --text-primary: #09090B;
+      --text-secondary: #52525B;
+      --text-muted: #A1A1AA;
+      --success: #16A34A;
+      --danger: #DC2626;
+      --warning: #D97706;
+      --blue: #2563EB;
+      --blue-dim: rgba(37,99,235,0.08);
+      --blue-light: #2563EB;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg-base); color: var(--text-secondary); font-family: 'Commissioner', sans-serif; font-size: 0.9rem; }
+
+    .content-area { display: flex; flex: 1; overflow: hidden; }
+    .main-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+    .panel-header { padding: 1.5rem; border-bottom: 1px solid var(--border); background: var(--bg-surface); display: flex; justify-content: space-between; align-items: center; }
+    .panel-title { font-size: 1.1rem; font-weight: 700; color: var(--text-primary); }
+
+    .scroll-container { flex: 1; overflow: auto; padding: 2rem; display: flex; flex-direction: column; gap: 1.5rem; }
+    
+    /* Zone Card */
+    .zone-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md, 12px);
+      padding: 1.5rem;
+      box-shadow: var(--shadow-sm, 0 1px 2px rgba(0,0,0,0.05));
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+      transition: border-color 0.2s;
+    }
+    .zone-card:hover {
+      border-color: var(--border-hover);
+    }
+    .zone-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      border-bottom: 1px solid var(--bg-elevated);
+      padding-bottom: 1rem;
+    }
+    .zone-title-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+    .zone-name {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+    .zone-meta {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+    .zone-info-right {
+      display: flex;
+      align-items: center;
+      gap: 1.5rem;
+    }
+    .zone-fee-badge {
+      font-size: 1.15rem;
+      font-weight: 800;
+      color: var(--text-primary);
+    }
+    
+    /* Status Toggle */
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 44px;
+      height: 24px;
+    }
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background-color: var(--border);
+      transition: .3s;
+      border-radius: 24px;
+    }
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 18px;
+      width: 18px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      transition: .3s;
+      border-radius: 50%;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    input:checked + .slider {
+      background-color: var(--success);
+    }
+    input:checked + .slider:before {
+      transform: translateX(20px);
+    }
+
+    /* Areas Section */
+    .areas-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      align-items: center;
+    }
+    .area-pill {
+      background: var(--bg-elevated);
+      color: var(--text-primary);
+      border: 1px solid var(--border);
+      padding: 0.35rem 0.75rem;
+      border-radius: 9999px;
+      font-size: 0.8rem;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+    .area-remove {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1px;
+      border-radius: 50%;
+    }
+    .area-remove:hover {
+      color: var(--danger);
+      background: rgba(220,38,38,0.08);
+    }
+    .btn-add-area {
+      background: none;
+      border: 1px dashed var(--border);
+      color: var(--text-secondary);
+      padding: 0.35rem 0.75rem;
+      border-radius: 9999px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+      transition: all 0.2s;
+    }
+    .btn-add-area:hover {
+      border-color: var(--blue);
+      color: var(--blue);
+      background: var(--blue-dim);
+    }
+
+    /* Buttons */
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; padding: 0.55rem 1rem; border-radius: 6px; font-size: 0.82rem; font-weight: 600; cursor: pointer; border: 1px solid transparent; transition: all 0.15s; }
+    .btn-primary { background: var(--blue); color: #fff; border-color: var(--blue); }
+    .btn-primary:hover { background: #1d4ed8; border-color: #1d4ed8; }
+    .btn-outline { background: var(--bg-surface); color: var(--text-secondary); border-color: var(--border); }
+    .btn-outline:hover { border-color: var(--blue); color: var(--blue); }
+    .btn-danger { background: rgba(220, 38, 38, 0.08); color: var(--danger); border: none; padding: 0.45rem 0.75rem; }
+    .btn-danger:hover { background: var(--danger); color: #fff; }
+    .btn-sm { padding: 0.35rem 0.65rem; font-size: 0.78rem; }
+
+    /* Modals */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(9, 9, 11, 0.4);
+      backdrop-filter: blur(4px);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      width: 440px;
+      max-width: 90%;
+      box-shadow: var(--shadow-lg);
+      overflow: hidden;
+      animation: modalSlide 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+    @keyframes modalSlide {
+      from { transform: translateY(15px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+    .modal-header { padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+    .modal-title { font-size: 1rem; font-weight: 700; color: var(--text-primary); }
+    .modal-close { background: none; border: none; cursor: pointer; color: var(--text-muted); }
+    .modal-close:hover { color: var(--text-primary); }
+    .modal-close svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 2; }
+    .modal-body { padding: 1.5rem; display: flex; flex-direction: column; gap: 1.25rem; }
+    .modal-footer { padding: 1rem 1.5rem; border-top: 1px solid var(--border); background: var(--bg-elevated); display: flex; justify-content: flex-end; gap: 0.75rem; }
+
+    .form-group { display: flex; flex-direction: column; gap: 0.4rem; }
+    .form-label { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); }
+    .form-input { width: 100%; padding: 0.55rem 0.75rem; border: 1px solid var(--border); border-radius: 6px; font-size: 0.85rem; background: var(--bg-base); color: var(--text-primary); outline: none; }
+    .form-input:focus { border-color: var(--blue); }
+
+    /* Toast */
+    .toast-container { position: fixed; top: 1.5rem; right: 1.5rem; z-index: 9999; display: flex; flex-direction: column; gap: 0.5rem; }
+    .toast { padding: 0.75rem 1rem; border-radius: 6px; font-size: 0.82rem; font-weight: 600; color: #fff; min-width: 250px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); animation: slideIn 0.2s ease-out; }
+    .toast-success { background: var(--success); }
+    .toast-error { background: var(--danger); }
+    @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+    /* Empty state */
+    .empty-state {
+      text-align: center;
+      padding: 5rem 2rem;
+      border: 1px dashed var(--border);
+      border-radius: var(--radius-md, 12px);
+      background: var(--bg-surface);
+    }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+</head>
+<body>
+
+  <div class="toast-container" id="toast-container"></div>
+
+  <div class="dash-layout">
+    <!-- Sidebar -->
+    <aside class="dash-sidebar" id="dash-sidebar"></aside>
+
+    <!-- Main Content -->
+    <div class="dash-main">
+      <!-- Top Bar -->
+      <div class="top-bar">
+        <span class="top-bar-title">Shipping Rates & Zones</span>
+        <div style="flex:1"></div>
+        <button class="btn btn-primary" onclick="openZoneModal()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+          New Zone
+        </button>
+      </div>
+
+      <div class="content-area">
+        <main class="main-panel">
+          <div class="scroll-container" id="zones-list-container">
+            <div style="color: var(--text-muted); text-align: center; padding: 2rem;">Loading shipping configurations...</div>
+          </div>
+        </main>
+      </div>
+    </div>
+  </div>
+
+  <!-- Zone Modal -->
+  <div class="modal-overlay" id="zone-modal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title" id="modal-zone-title">Create Shipping Zone</div>
+        <button class="modal-close" onclick="closeZoneModal()">
+          <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <form id="zone-form" onsubmit="saveZone(event)">
+        <input type="hidden" id="zone-id-input" />
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label" for="zone-name">Zone Name</label>
+            <input type="text" id="zone-name" class="form-input" placeholder="e.g. Metro Manila" required />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="zone-fee">Shipping Fee (₱)</label>
+            <input type="number" step="0.01" id="zone-fee" class="form-input" placeholder="e.g. 150.00" required />
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" onclick="closeZoneModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Zone</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Area Modal -->
+  <div class="modal-overlay" id="area-modal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title">Add Area to Zone</div>
+        <button class="modal-close" onclick="closeAreaModal()">
+          <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <form id="area-form" onsubmit="saveArea(event)">
+        <input type="hidden" id="area-zone-id" />
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label" for="area-name">City / Municipality Name</label>
+            <input type="text" id="area-name" class="form-input" placeholder="e.g. Pasig City" required />
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" onclick="closeAreaModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary">Add Area</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="../js/auth.js"></script>
+  <script src="../js/sidebar.js"></script>
+  <script src="../js/main.js"></script>
+  <script>
+    let sb;
+    let currentTenantId;
+    let currentCompanyId;
+    let zones = [];
+    let areas = [];
+
+    async function initPage() {
+      if (window.BKAuth) {
+        const authInfo = await window.BKAuth.checkRoleGate(['owner', 'admin', 'logistics'], '../admin.html');
+        if (!authInfo) return;
+        currentTenantId = authInfo.tenantId;
+        currentCompanyId = authInfo.companyId;
+        sb = window.BKAuth.sb;
+      } else {
+        showToast('Authentication module missing.', true);
+        return;
+      }
+
+      await loadData();
+    }
+
+    async function loadData() {
+      try {
+        // Fetch Shipping Zones
+        const { data: zonesData, error: zonesErr } = await sb
+          .from('shipping_zones')
+          .select('*')
+          .eq('company_id', currentCompanyId)
+          .order('created_at', { ascending: false });
+
+        if (zonesErr) throw zonesErr;
+        zones = zonesData || [];
+
+        // Fetch Shipping Areas
+        const { data: areasData, error: areasErr } = await sb
+          .from('shipping_areas')
+          .select('*')
+          .eq('company_id', currentCompanyId);
+
+        if (areasErr) throw areasErr;
+        areas = areasData || [];
+
+        renderZones();
+      } catch (err) {
+        console.error('Failed to load data:', err);
+        showToast('Error loading configurations.', true);
+      }
+    }
+
+    function formatDate(isoString) {
+      if (!isoString) return '';
+      const date = new Date(isoString);
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const month = months[date.getMonth()];
+      const day = String(date.getDate()).padStart(2, '0');
+      const year = date.getFullYear();
+      return `${month} ${day}, ${year}`;
+    }
+
+    function renderZones() {
+      const container = document.getElementById('zones-list-container');
+      if (zones.length === 0) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <div style="width: 56px; height: 56px; border-radius: 50%; background: var(--blue-dim); border: 1px dashed var(--blue); display: flex; align-items: center; justify-content: center; margin: 0 auto 1rem;">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+            </div>
+            <h3 style="color: var(--text-primary); font-weight: 700; margin-bottom: 0.5rem;">No Shipping Zones Configured</h3>
+            <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1.5rem;">Create zones to group areas with the same shipping fees.</p>
+            <button class="btn btn-primary btn-sm" onclick="openZoneModal()">Create First Zone</button>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = '';
+      zones.forEach(zone => {
+        const zoneAreas = areas.filter(a => a.zone_id === zone.id);
+        const formattedFee = (zone.fee / 100).toLocaleString('en-PH', { style: 'currency', currency: 'PHP' });
+        
+        const card = document.createElement('div');
+        card.className = 'zone-card';
+        card.innerHTML = `
+          <div class="zone-header">
+            <div class="zone-title-group">
+              <span class="zone-name">${escapeHtml(zone.name)}</span>
+              <span class="zone-meta">Created on ${formatDate(zone.created_at)}</span>
+            </div>
+            <div class="zone-info-right">
+              <span class="zone-fee-badge">${formattedFee}</span>
+              <label class="switch">
+                <input type="checkbox" ${zone.is_active ? 'checked' : ''} onchange="toggleZoneStatus('${zone.id}', this.checked)">
+                <span class="slider"></span>
+              </label>
+              <div style="display: flex; gap: 0.5rem;">
+                <button class="btn btn-outline btn-sm" onclick="openZoneModal('${zone.id}', '${escapeHtml(zone.name)}', ${zone.fee / 100})">Edit</button>
+                <button class="btn btn-danger btn-sm" onclick="deleteZone('${zone.id}')">Delete</button>
+              </div>
+            </div>
+          </div>
+          <div class="areas-container">
+            <span style="font-size: 0.8rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-right: 0.5rem;">Covered Areas:</span>
+            ${zoneAreas.map(area => `
+              <span class="area-pill">
+                ${escapeHtml(area.name)}
+                <button class="area-remove" title="Remove ${escapeHtml(area.name)}" onclick="removeArea('${area.id}')">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+              </span>
+            `).join('')}
+            <button class="btn-add-area" onclick="openAreaModal('${zone.id}')">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Add Area
+            </button>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    // Modal Operations
+    function openZoneModal(id = '', name = '', fee = '') {
+      document.getElementById('zone-id-input').value = id;
+      document.getElementById('zone-name').value = name;
+      document.getElementById('zone-fee').value = fee;
+      document.getElementById('modal-zone-title').textContent = id ? 'Edit Shipping Zone' : 'Create Shipping Zone';
+      document.getElementById('zone-modal').classList.add('open');
+    }
+    function closeZoneModal() {
+      document.getElementById('zone-modal').classList.remove('open');
+    }
+
+    function openAreaModal(zoneId) {
+      document.getElementById('area-zone-id').value = zoneId;
+      document.getElementById('area-name').value = '';
+      document.getElementById('area-modal').classList.add('open');
+    }
+    function closeAreaModal() {
+      document.getElementById('area-modal').classList.remove('open');
+    }
+
+    // Database Writes
+    async function saveZone(e) {
+      e.preventDefault();
+      const id = document.getElementById('zone-id-input').value;
+      const name = document.getElementById('zone-name').value.trim();
+      const feePhp = parseFloat(document.getElementById('zone-fee').value);
+      const feeCents = Math.round(feePhp * 100);
+
+      try {
+        if (id) {
+          const { error } = await sb
+            .from('shipping_zones')
+            .update({ name, fee: feeCents })
+            .eq('id', id);
+          if (error) throw error;
+          showToast('Shipping zone updated.');
+        } else {
+          const { error } = await sb
+            .from('shipping_zones')
+            .insert([{ company_id: currentCompanyId, name, fee: feeCents, is_active: true }]);
+          if (error) throw error;
+          showToast('Shipping zone created.');
+        }
+        closeZoneModal();
+        await loadData();
+      } catch (err) {
+        console.error(err);
+        showToast('Failed to save shipping zone.', true);
+      }
+    }
+
+    async function toggleZoneStatus(id, active) {
+      try {
+        const { error } = await sb
+          .from('shipping_zones')
+          .update({ is_active: active })
+          .eq('id', id);
+        if (error) throw error;
+        showToast(active ? 'Zone activated.' : 'Zone deactivated.');
+      } catch (err) {
+        console.error(err);
+        showToast('Failed to toggle status.', true);
+      }
+    }
+
+    async function deleteZone(id) {
+      if (!confirm('Are you sure you want to delete this shipping zone? All covered areas under it will be removed.')) return;
+      try {
+        const { error } = await sb
+          .from('shipping_zones')
+          .delete()
+          .eq('id', id);
+        if (error) throw error;
+        showToast('Shipping zone deleted.');
+        await loadData();
+      } catch (err) {
+        console.error(err);
+        showToast('Failed to delete zone.', true);
+      }
+    }
+
+    async function saveArea(e) {
+      e.preventDefault();
+      const zoneId = document.getElementById('area-zone-id').value;
+      const name = document.getElementById('area-name').value.trim();
+
+      try {
+        const { error } = await sb
+          .from('shipping_areas')
+          .insert([{ company_id: currentCompanyId, zone_id: zoneId, name }]);
+        if (error) throw error;
+        
+        showToast('Area added successfully.');
+        closeAreaModal();
+        await loadData();
+      } catch (err) {
+        console.error(err);
+        if (err.code === '23505') {
+          showToast('This area is already registered to a shipping zone.', true);
+        } else {
+          showToast('Failed to add area.', true);
+        }
+      }
+    }
+
+    async function removeArea(id) {
+      if (!confirm('Remove this area from the shipping zone?')) return;
+      try {
+        const { error } = await sb
+          .from('shipping_areas')
+          .delete()
+          .eq('id', id);
+        if (error) throw error;
+        showToast('Area removed.');
+        await loadData();
+      } catch (err) {
+        console.error(err);
+        showToast('Failed to remove area.', true);
+      }
+    }
+
+    // Toast Alert Helper
+    function showToast(msg, isError = false) {
+      const container = document.getElementById('toast-container');
+      if (!container) return;
+      const el = document.createElement('div');
+      el.className = `toast toast-${isError ? 'error' : 'success'}`;
+      el.innerText = msg;
+      container.appendChild(el);
+      setTimeout(() => el.remove(), 3500);
+    }
+
+    // Helper to escape HTML to prevent XSS
+    function escapeHtml(str) {
+      if (!str) return '';
+      return str.replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+    }
+
+    document.addEventListener('DOMContentLoaded', initPage);
+  </script>
+</body>
+</html>
