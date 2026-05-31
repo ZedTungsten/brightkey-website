@@ -1909,11 +1909,19 @@
           <script>
             async function saveAsPdf() {
               const element = document.querySelector('.receipt-page');
+              const wrapper = document.querySelector('.receipt-preview-wrapper');
+              
+              // Temporarily remove preview padding to prevent html2canvas offset issues
+              if (wrapper) {
+                wrapper.style.padding = '0';
+                wrapper.style.background = '#ffffff';
+              }
+
               const opt = {
                 margin:       0,
                 filename:     '${folderRefId}.pdf',
                 image:        { type: 'jpeg', quality: 0.98 },
-                html2canvas:  { scale: 2, useCORS: true },
+                html2canvas:  { scale: 2, useCORS: true, scrollY: 0 },
                 jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
               };
               
@@ -1924,7 +1932,7 @@
 
               try {
                 // Download locally
-                html2pdf().set(opt).from(element).save();
+                await html2pdf().set(opt).from(element).save();
 
                 // Generate pdf as data URI and upload in the background
                 const pdfDataUri = await html2pdf().set(opt).from(element).toPdf().output('datauristring');
@@ -1954,6 +1962,11 @@
               } catch (err) {
                 console.error('Error during saving/uploading:', err);
               } finally {
+                // Restore original styles
+                if (wrapper) {
+                  wrapper.style.padding = '';
+                  wrapper.style.background = '';
+                }
                 saveBtn.innerHTML = '✓ Saved & Uploaded';
                 setTimeout(() => {
                   saveBtn.innerHTML = originalText;
