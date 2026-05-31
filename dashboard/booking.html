@@ -1978,22 +1978,56 @@
     }
 
     // --- Booking Calendar Control ---
-    let currentYear = 2026;
-    let currentMonth = 4; // May (0-indexed)
+    const todayDateObj = new Date();
+    const todayYear = todayDateObj.getFullYear();
+    const todayMonth = todayDateObj.getMonth();
+    const todayDay = todayDateObj.getDate();
+
+    let currentYear = todayYear;
+    let currentMonth = todayMonth;
     
     const MONTH_NAMES = [
       "January", "February", "March", "April", "May", "June", 
       "July", "August", "September", "October", "November", "December"
     ];
 
-    const MOCK_BOOKINGS = [
-      { date: '2026-05-18', time: 'Morning', name: 'Juan D.', city: 'Pasig', installer: 'Juan d.C.' },
-      { date: '2026-05-19', time: 'Afternoon', name: 'Clara M.', city: 'Manila', installer: 'Pedro P.' },
-      { date: '2026-05-20', time: 'Morning', name: 'Jose R.', city: 'QC', installer: 'Carlos Y.' },
-      { date: '2026-05-25', time: 'Afternoon', name: 'Ramon V.', city: 'Makati', installer: 'Juan d.C.' }
-    ];
+    let dbBookings = [];
 
-    function openCalendarModal() {
+    async function fetchRealBookings() {
+      try {
+        if (window.BKAuth && window.BKAuth.sb) {
+          const { data, error } = await window.BKAuth.sb
+            .from('installation_bookings')
+            .select('scheduled_date, scheduled_time, customer_name, customer_address, installer_name');
+          if (error) throw error;
+          if (data) {
+            dbBookings = data.map(b => {
+              const nameAbbrev = b.customer_name ? b.customer_name.split(' ')[0] : 'Customer';
+              const city = b.customer_address ? (b.customer_address.split(',')[1]?.trim() || '') : '';
+              
+              let instName = '';
+              if (b.installer_name) {
+                const parts = b.installer_name.split(' (')[0].split(' ');
+                instName = parts[0] + (parts[1] ? ' ' + parts[1][0] + '.' : '');
+              }
+              
+              return {
+                date: b.scheduled_date,
+                time: b.scheduled_time || 'Morning',
+                name: nameAbbrev,
+                city: city,
+                installer: instName
+              };
+            });
+          }
+        }
+      } catch (err) {
+        console.warn('Error fetching bookings for calendar:', err);
+      }
+    }
+
+    async function openCalendarModal() {
+      await fetchRealBookings();
       drawCalendar();
       toggleCalendarModal(true);
     }
@@ -2081,7 +2115,7 @@
       const cellsContainer = document.getElementById('calendar-cells');
       cellsContainer.innerHTML = '';
       
-      const bookings = [...MOCK_BOOKINGS];
+      const bookings = [...dbBookings];
       const saved = localStorage.getItem('latest_installation_order');
       if (saved) {
         const order = JSON.parse(saved);
@@ -2148,7 +2182,7 @@
           }
         });
 
-        const isToday = (currentYear === 2026 && currentMonth === 4 && day === 20); // May 20, 2026
+        const isToday = (currentYear === todayYear && currentMonth === todayMonth && day === todayDay);
         const cellClass = isToday ? 'calendar-cell today' : 'calendar-cell';
 
         const cellHtml = `
