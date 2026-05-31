@@ -343,8 +343,24 @@
         const authInfo = await window.BKAuth.checkRoleGate(['owner', 'admin', 'logistics'], '../admin.html');
         if (!authInfo) return;
         currentTenantId = authInfo.tenantId;
-        currentCompanyId = authInfo.companyId;
         sb = window.BKAuth.sb;
+        
+        // Fetch company ID for this tenant
+        const { data: companyData, error: companyErr } = await sb
+          .from('companies')
+          .select('id')
+          .eq('tenant_id', currentTenantId)
+          .limit(1);
+          
+        if (companyErr) {
+          showToast('Error loading company: ' + companyErr.message, true);
+          return;
+        }
+        if (!companyData || companyData.length === 0) {
+          showToast('No company configuration found.', true);
+          return;
+        }
+        currentCompanyId = companyData[0].id;
       } else {
         showToast('Authentication module missing.', true);
         return;
