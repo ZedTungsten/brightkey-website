@@ -487,8 +487,10 @@
     const MOCK_PRODUCTS = [
       { sku: 'BK-LOCK-01', name: 'Premium Smart Lock (BK-LOCK-01)', price: 1500000, salePrice: 1299900, available: 22, img: '../assets/og-image.png' },
       { sku: 'BK-LOCK-02', name: 'Minimalist Smart Deadbolt (BK-LOCK-02)', price: 950000, salePrice: null, available: 0, img: '../assets/og-image.png' },
-      { sku: 'BK-LOCK-03', name: 'Glass Door Smart Lock (BK-LOCK-03)', name: 'Glass Door Smart Lock (BK-LOCK-03)', price: 1200000, salePrice: 1099900, available: 5, img: '../assets/og-image.png' }
+      { sku: 'BK-LOCK-03', name: 'Glass Door Smart Lock (BK-LOCK-03)', price: 1200000, salePrice: 1099900, available: 5, img: '../assets/og-image.png' }
     ];
+
+    let dbProducts = [];
 
     const MOCK_EMPLOYEES = [
       { id: 'emp-1', employee_number: 'BK-0001', first_name: 'Juan', last_name: 'dela Cruz', title: 'Installer', department: 'Operations' },
@@ -505,7 +507,40 @@
       if (window.BKAuth) {
         const authInfo = await window.BKAuth.checkRoleGate(['owner', 'admin', 'operations'], '../admin.html');
         if (!authInfo) return;
+
+        try {
+          const sb = window.BKAuth.sb;
+          const [productsRes, inventoryRes] = await Promise.all([
+            sb.from('products').select('sku, title, image_main, installation_price'),
+            sb.from('inventory').select('sku, available')
+          ]);
+
+          if (productsRes.data && productsRes.data.length > 0) {
+            const invMap = {};
+            if (inventoryRes.data) {
+              inventoryRes.data.forEach(item => {
+                invMap[item.sku] = item.available;
+              });
+            }
+
+            dbProducts = productsRes.data.map(p => ({
+              sku: p.sku,
+              name: `${p.title} (${p.sku})`,
+              price: p.installation_price || 0,
+              salePrice: null, // Always use installation price
+              available: invMap[p.sku] || 0,
+              img: p.image_main || '../assets/og-image.png'
+            }));
+          }
+        } catch (e) {
+          console.error("Error fetching products from database:", e);
+        }
       }
+
+      if (!dbProducts || dbProducts.length === 0) {
+        dbProducts = MOCK_PRODUCTS;
+      }
+
       addProductRow();
       adjustDoors(1); // Start with 1 door card
       populateInstallerDropdown();
@@ -529,7 +564,7 @@
       const container = document.getElementById('products-container');
       const rowId = 'prod-row-' + Date.now();
       
-      let options = MOCK_PRODUCTS.map(p => {
+      let options = dbProducts.map(p => {
         const activePrice = p.salePrice || p.price;
         const formattedPrice = (activePrice / 100).toLocaleString('en-PH', { minimumFractionDigits: 2 });
         const stockStatus = p.available > 0 ? `${p.available} available` : 'BACKORDER';
@@ -563,7 +598,7 @@
       const select = document.getElementById(`${rowId}-select`);
       const img = document.getElementById(`${rowId}-img`);
       const sku = select.value;
-      const prod = MOCK_PRODUCTS.find(p => p.sku === sku);
+      const prod = dbProducts.find(p => p.sku === sku);
       if (prod) {
         img.src = prod.img;
       } else {
@@ -1126,7 +1161,7 @@
       const prodUnitPrices = [];
       const prodTotals     = [];
       products.forEach(p => {
-        const prodMatch = MOCK_PRODUCTS.find(mp => mp.sku === p.sku);
+        const prodMatch = dbProducts.find(mp => mp.sku === p.sku);
         const unitPrice = prodMatch ? (prodMatch.salePrice || prodMatch.price) : 0;
         const totalPrice = unitPrice * p.qty;
         prodSkus.push(p.sku);
@@ -1225,7 +1260,7 @@
       let totalsHtml = [];
       
       products.forEach(p => {
-        const prodMatch = MOCK_PRODUCTS.find(mp => mp.sku === p.sku);
+        const prodMatch = dbProducts.find(mp => mp.sku === p.sku);
         const unitPrice = prodMatch ? (prodMatch.salePrice || prodMatch.price) : 0;
         const totalLinePrice = unitPrice * p.qty;
         
