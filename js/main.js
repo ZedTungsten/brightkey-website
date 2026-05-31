@@ -5,6 +5,15 @@
 
 'use strict';
 
+// ── Read URL query parameter for coupon_code ──────────────────
+(function checkCouponQueryParam() {
+  const params = new URLSearchParams(window.location.search);
+  const coupon = params.get('coupon_code');
+  if (coupon) {
+    localStorage.setItem('bk_applied_coupon', coupon.trim().toUpperCase());
+  }
+})();
+
 // ── Active nav link ─────────────────────────────────────────
 (function setActiveNav() {
   const currentPage = window.location.pathname.split('/').pop() || 'index.html';
