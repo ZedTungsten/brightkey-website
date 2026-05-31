@@ -953,38 +953,45 @@
       });
     }
 
-    async function uploadFileToBunny(fileBase64, fileName, category, refId, type) {
+    async function uploadFileToSupabase(fileBase64, fileName, category, refId, type) {
       if (!fileBase64) return null;
+      let finalBase64 = fileBase64;
       try {
         // Compress images before uploading (skip PDFs)
-        let dataToUpload = fileBase64;
         if (!fileName.endsWith('.pdf')) {
-          dataToUpload = await compressImage(fileBase64);
+          finalBase64 = await compressImage(fileBase64);
         }
+      } catch (err) {
+        console.warn("Compression bypassed.", err);
+      }
 
+      try {
         const res = await fetch('/api/upload', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            fileBase64: dataToUpload,
-            fileName,
-            category,
-            refId,
-            type
+            fileBase64: finalBase64,
+            fileName: fileName,
+            category: category,
+            refId: refId,
+            type: type
           })
         });
+
         if (res.ok) {
           const data = await res.json();
-          if (data.success) {
-            return data.url;
-          }
+          return data.url;
+        } else {
+          const errData = await res.json();
+          throw new Error(errData.error || 'Upload failed');
         }
       } catch (err) {
-        console.warn("Upload to Bunny CDN serverless endpoint bypassed or failed, using local fallback.", err);
+        console.error('File upload error:', err);
+        showNotification('Upload error: ' + err.message, 'error');
+        return null;
       }
-      return fileBase64; // Fallback to local base64 if serverless function not active/offline
     }
 
     // --- Schedule and print receipt ---
@@ -1079,8 +1086,8 @@
       const mapB64 = mapWrapper ? mapWrapper.getAttribute('data-base64') : null;
       const frontageB64 = frontageWrapper ? frontageWrapper.getAttribute('data-base64') : null;
 
-      const mapUrl = mapB64 ? await uploadFileToBunny(mapB64, 'map_screenshot.png', 'installations', folderRefId, 'site') : null;
-      const frontageUrl = frontageB64 ? await uploadFileToBunny(frontageB64, 'house_frontage.png', 'installations', folderRefId, 'site') : null;
+      const mapUrl = mapB64 ? await uploadFileToSupabase(mapB64, 'map_screenshot.png', 'installations', folderRefId, 'site') : null;
+      const frontageUrl = frontageB64 ? await uploadFileToSupabase(frontageB64, 'house_frontage.png', 'installations', folderRefId, 'site') : null;
 
       // 2. Upload Doors specs
       const doors = [];
@@ -1097,7 +1104,7 @@
           const w = wrappers[j];
           const b64 = w.getAttribute('data-base64');
           if (b64) {
-            const url = await uploadFileToBunny(b64, `door_${i+1}_photo_${j+1}.png`, 'installations', folderRefId, 'doors');
+            const url = await uploadFileToSupabase(b64, `door_${i+1}_photo_${j+1}.png`, 'installations', folderRefId, 'doors');
             photos.push(url);
           }
         }
@@ -1936,34 +1943,8 @@
               try {
                 // Download locally
                 await html2pdf().set(opt).from(element).save();
-
-                // Generate pdf as data URI and upload in the background
-                const pdfDataUri = await html2pdf().set(opt).from(element).toPdf().output('datauristring');
-                
-                saveBtn.innerHTML = '☁️ Uploading to CDN...';
-                const res = await fetch('/api/upload', {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json'
-                  },
-                  body: JSON.stringify({
-                    fileBase64: pdfDataUri,
-                    fileName: '${folderRefId}.pdf',
-                    category: 'installations',
-                    refId: '${folderRefId}',
-                    type: 'receipt'
-                  })
-                });
-
-                if (res.ok) {
-                  const data = await res.json();
-                  console.log('Successfully uploaded to Bunny.net:', data.url);
-                  if (window.opener) {
-                    window.opener.postMessage({ type: 'RECEIPT_UPLOADED', url: data.url, receiptNo: '${folderRefId}' }, '*');
-                  }
-                }
               } catch (err) {
-                console.error('Error during saving/uploading:', err);
+                console.error('Error during saving:', err);
               } finally {
                 // Restore original styles
                 if (wrapper) {
@@ -1973,7 +1954,7 @@
                 if (element) {
                   element.style.margin = '';
                 }
-                saveBtn.innerHTML = '✓ Saved & Uploaded';
+                saveBtn.innerHTML = '✓ Saved PDF';
                 setTimeout(() => {
                   saveBtn.innerHTML = originalText;
                   saveBtn.disabled = false;
@@ -2099,33 +2080,7 @@
       }
     }
 
-    // Listen for background receipt uploads from receipt tab
-    window.addEventListener('message', async (event) => {
-      if (event.data && event.data.type === 'RECEIPT_UPLOADED') {
-        const savedOrder = JSON.parse(localStorage.getItem('latest_installation_order') || '{}');
-        savedOrder.receiptPdfUrl = event.data.url;
-        localStorage.setItem('latest_installation_order', JSON.stringify(savedOrder));
-        showNotification(`Receipt PDF saved & uploaded to CDN!`, 'success');
 
-        // Also patch the Supabase record with the receipt PDF URL
-        if (savedOrder.supabaseId) {
-          try {
-            await fetch(`${SUPABASE_URL}/rest/v1/installation_bookings?id=eq.${savedOrder.supabaseId}`, {
-              method: 'PATCH',
-              headers: {
-                'apikey': SUPABASE_ANON,
-                'Authorization': `Bearer ${SUPABASE_ANON}`,
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify({ receipt_pdf_url: event.data.url })
-            });
-            console.log('Receipt PDF URL updated in Supabase.');
-          } catch (err) {
-            console.warn('Could not update receipt PDF URL in Supabase:', err);
-          }
-        }
-      }
-    });
 
     function changeMonth(direction) {
       currentMonth += direction;

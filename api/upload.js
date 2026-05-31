@@ -1,3 +1,11 @@
+import { createClient } from '@supabase/supabase-js';
+
+const SUPABASE_URL = process.env.SUPABASE_URL || 'https://ymjlosnxuhsybkzkoofq.supabase.co';
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
+
+// Create admin client to bypass RLS policies during uploads
+const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
 export default async function handler(req, res) {
   // Allow requests from localhost and production
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -12,10 +20,6 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method Not Allowed. Use POST.' });
   }
 
-  const BUNNY_STORAGE_ZONE = process.env.BUNNY_STORAGE_ZONE || 'brightkey-assets';
-  const BUNNY_STORAGE_KEY = process.env.BUNNY_STORAGE_KEY || 'e0b6fd97-bf74-4ed4-9f815a6fcf6d-19ad-4eef';
-  const BUNNY_PULL_ZONE = process.env.BUNNY_PULL_ZONE || 'brightkey-assets.b-cdn.net';
-
   try {
     const { fileBase64, fileName, category, refId, type } = req.body;
 
@@ -23,8 +27,14 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Missing fileBase64 or fileName.' });
     }
 
-    // Clean up base64 prefix
-    const base64Data = fileBase64.includes(';base64,') ? fileBase64.split(';base64,').pop() : fileBase64;
+    // Clean up base64 prefix and extract content type
+    const hasPrefix = fileBase64.includes(';base64,');
+    let contentType = 'application/octet-stream';
+    if (hasPrefix) {
+      const match = fileBase64.match(/^data:(.*?);base64,/);
+      if (match) contentType = match[1];
+    }
+    const base64Data = hasPrefix ? fileBase64.split(';base64,').pop() : fileBase64;
     const buffer = Buffer.from(base64Data, 'base64');
 
     // Clean file name to prevent directory traversal
@@ -49,37 +59,38 @@ export default async function handler(req, res) {
       }
     } else if (category === 'employees') {
       folderPath = `employees/${safeRefId}`;
+    } else if (category === 'logos') {
+      folderPath = `logos`;
     } else {
       folderPath = `uploads/general`;
     }
 
-    const bunnyUrl = `https://sg.storage.bunnycdn.com/${BUNNY_STORAGE_ZONE}/${folderPath}/${safeFileName}`;
+    const bucketName = 'brightkey-assets';
+    const filePath = `${folderPath}/${safeFileName}`;
 
-    const response = await fetch(bunnyUrl, {
-      method: 'PUT',
-      headers: {
-        'AccessKey': BUNNY_STORAGE_KEY,
-        'Content-Type': 'application/octet-stream',
-      },
-      body: buffer
-    });
+    // Upload buffer directly to Supabase storage bucket
+    const { error } = await supabase.storage
+      .from(bucketName)
+      .upload(filePath, buffer, {
+        contentType: contentType,
+        upsert: true
+      });
 
-    if (!response.ok) {
-      const errText = await response.text();
-      throw new Error(`Bunny.net returned status ${response.status}: ${errText}`);
+    if (error) {
+      throw error;
     }
 
-    // Return the clean cached Pull Zone CDN delivery URL
-    const publicUrl = `https://${BUNNY_PULL_ZONE}/${folderPath}/${safeFileName}`;
+    // Construct the public access URL
+    const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${bucketName}/${filePath}`;
 
     return res.status(200).json({
       success: true,
       url: publicUrl,
-      path: `${folderPath}/${safeFileName}`
+      path: filePath
     });
 
   } catch (error) {
-    console.error('Bunny Storage Upload Error:', error);
+    console.error('Supabase Storage Upload Error:', error);
     return res.status(500).json({ error: error.message || 'Internal server error during upload.' });
   }
 }
