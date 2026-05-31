@@ -84,9 +84,7 @@
 - **Never use standard browser alert boxes** (`alert(...)`). Standard browser alerts block the main thread and degrade the user experience.
 - **For form validation errors**, highlight the invalid input fields directly in red (`borderColor = '#EF4444'`) and scroll them into view.
 - **For status alerts or other general messages**, always use styled UI dialog boxes, modals, or toast notifications (targeting `#toast-container` with z-index `99999`) instead of browser-native popups.
-
-
-
-
-
-
+ 
+## Database Currency & Pricing Rule
+- **Always store currency/pricing values as integers in centavos (cents)**: To prevent floating-point rounding errors during financial calculations and maintain database consistency, all price-related columns in the database (e.g., `sale_price`, `installation_price`, `subtotal`, `charges`, `deductions`, `grand_total`, `deposit_amount`, `balance_due`) must be stored as `INTEGER` representing centavos (e.g., `10000` = ₱100.00).
+- **Convert on frontend input/display**: Convert these integer values on the frontend by dividing by `100` for human-readable display (e.g., `(cents / 100).toLocaleString(...)`) and multiplying raw numeric user inputs by `100` (e.g., `Math.round(parseFloat(input) * 100)`) before submitting payloads to the database.
