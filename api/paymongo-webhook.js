@@ -52,6 +52,11 @@ export default async function handler(req, res) {
   let cartItems = [];
   try { cartItems = JSON.parse(meta.cart_items || '[]'); } catch (_) {}
 
+  let billingAddress = null;
+  if (meta.billing_info && meta.billing_info !== 'same') {
+    try { billingAddress = JSON.parse(meta.billing_info); } catch (_) {}
+  }
+
   // ── Insert order ─────────────────────────────────────────────
   try {
     const orderRes = await fetch(`${SUPABASE_URL}/rest/v1/orders`, {
@@ -71,7 +76,8 @@ export default async function handler(req, res) {
         total_amount:     totalCents,
         shipping_fee:     shippingCents,
         payment_intent_id: paymentIntentId,
-        status: 'paid'
+        status: 'paid',
+        billing_address:  billingAddress
       })
     });
 
