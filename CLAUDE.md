@@ -80,7 +80,11 @@
 - **Target `#toast-container` by ID**: Style rules must target `#toast-container` (ID selector) rather than `.toast-container` (class selector). This ensures page-specific overrides have the specificity required to override any rules inside the global `css/style.css` stylesheet.
 
 ## Button Styling Guidelines
-- **Prefer SVG icons over text buttons**: Buttons like Edit and Delete inside content containers, cards, tables, or row lists should be formatted as clean SVG icons (e.g. a gray pencil for edit, a red trashcan for delete) rather than wordy text buttons, unless they are primary CTA buttons.
+## UI Alerts and Dialogs Rule
+- **Never use standard browser alert boxes** (`alert(...)`). Standard browser alerts block the main thread and degrade the user experience.
+- **For form validation errors**, highlight the invalid input fields directly in red (`borderColor = '#EF4444'`) and scroll them into view.
+- **For status alerts or other general messages**, always use styled UI dialog boxes, modals, or toast notifications (targeting `#toast-container` with z-index `99999`) instead of browser-native popups.
+
 
 
 

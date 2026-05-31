@@ -204,6 +204,37 @@
       border-color: #D1D5DB transparent transparent transparent;
       z-index: -1;
     }
+    
+    /* Toast Notifications styling */
+    #toast-container {
+      position: fixed;
+      bottom: 2rem;
+      right: 2rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      z-index: 99999;
+    }
+    .toast-item {
+      background: #EF4444;
+      color: #FFFFFF;
+      padding: 0.75rem 1.25rem;
+      border-radius: var(--radius-sm, 4px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      font-size: 0.9rem;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      min-width: 280px;
+      transition: opacity 0.25s ease-out, transform 0.25s ease-out;
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    .toast-item.success {
+      background: #10B981;
+    }
   </style>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -672,6 +703,27 @@
       document.getElementById('sum-total').innerText = `₱${(totalCents/100).toLocaleString('en-PH', {minimumFractionDigits:2})}`;
     }
 
+    function showToast(msg, type = 'error') {
+      const container = document.getElementById('toast-container');
+      if (!container) return;
+      const toast = document.createElement('div');
+      toast.className = `toast-item${type === 'success' ? ' success' : ''}`;
+      toast.innerHTML = `
+        <span>${msg}</span>
+        <button style="background:none; border:none; color:#FFFFFF; font-size:1.2rem; cursor:pointer; line-height:1; font-weight:bold; padding:0; margin:0; outline:none;" onclick="this.parentElement.remove()">×</button>
+      `;
+      container.appendChild(toast);
+      setTimeout(() => {
+        toast.style.opacity = '1';
+        toast.style.transform = 'translateY(0)';
+      }, 10);
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(-20px)';
+        setTimeout(() => toast.remove(), 250);
+      }, 4000);
+    }
+
     // ── Coupon Functions ───────────────────────────────────────────
 
     // Coupon input: toggle Apply button enabled state
@@ -770,23 +822,41 @@
     };
 
     function validateForm() {
-      const firstName = document.getElementById('c_first_name').value.trim();
-      const lastName = document.getElementById('c_last_name').value.trim();
-      const email = document.getElementById('c_email').value.trim();
-      const phone = document.getElementById('c_phone').value.trim();
-      const country = document.getElementById('c_country').value;
-      const address = document.getElementById('c_address').value.trim();
-      const city = document.getElementById('c_city').value;
-      const zipCode = document.getElementById('c_zip').value.trim();
+      // Clear previous validation highlights
+      const inputs = document.querySelectorAll('.form-control');
+      inputs.forEach(input => {
+        input.style.borderColor = '';
+      });
 
-      if (!firstName || !lastName || !email || !phone || !address || !city || !zipCode) {
-        alert('Please fill out all contact and shipping details.');
-        return false;
-      }
-      
-      if (shippingRatesMap[city] === null) {
-        alert('Shipping is not available for the selected city.');
-        return false;
+      const requiredShippingFields = [
+        { id: 'c_first_name', name: 'First name' },
+        { id: 'c_last_name', name: 'Last name' },
+        { id: 'c_email', name: 'Email' },
+        { id: 'c_phone', name: 'Phone' },
+        { id: 'c_address', name: 'Address' },
+        { id: 'c_city', name: 'City' },
+        { id: 'c_zip', name: 'ZIP code' }
+      ];
+
+      let hasError = false;
+      let firstInvalidElement = null;
+
+      requiredShippingFields.forEach(field => {
+        const el = document.getElementById(field.id);
+        if (!el || !el.value.trim()) {
+          el.style.borderColor = '#EF4444';
+          hasError = true;
+          if (!firstInvalidElement) firstInvalidElement = el;
+        }
+      });
+
+      const cityEl = document.getElementById('c_city');
+      const cityVal = cityEl.value;
+      if (cityVal && shippingRatesMap[cityVal] === null) {
+        cityEl.style.borderColor = '#EF4444';
+        hasError = true;
+        if (!firstInvalidElement) firstInvalidElement = cityEl;
+        showToast('Shipping is not available for the selected city.', 'error');
       }
 
       // Check billing address if different
@@ -800,23 +870,55 @@
         const bZip = document.getElementById('b_zip').value.trim();
         const bPhone = document.getElementById('b_phone').value.trim();
 
-        if (!bFirstName || !bLastName || !bAddress || !bCity || !bZip || !bPhone) {
-          alert('Please fill out all billing address details.');
-          return false;
+        const requiredBillingFields = [
+          { id: 'b_first_name', val: bFirstName },
+          { id: 'b_last_name', val: bLastName },
+          { id: 'b_address', val: bAddress },
+          { id: 'b_city', val: bCity },
+          { id: 'b_zip', val: bZip },
+          { id: 'b_phone', val: bPhone }
+        ];
+
+        requiredBillingFields.forEach(field => {
+          const el = document.getElementById(field.id);
+          if (!el || !field.val) {
+            el.style.borderColor = '#EF4444';
+            hasError = true;
+            if (!firstInvalidElement) firstInvalidElement = el;
+          }
+        });
+
+        if (!hasError) {
+          billingInfo = {
+            firstName: bFirstName,
+            lastName: bLastName,
+            name: `${bFirstName} ${bLastName}`,
+            address: bAddress,
+            city: bCity,
+            zipCode: bZip,
+            phone: bPhone
+          };
         }
-        billingInfo = {
-          firstName: bFirstName,
-          lastName: bLastName,
-          name: `${bFirstName} ${bLastName}`,
-          address: bAddress,
-          city: bCity,
-          zipCode: bZip,
-          phone: bPhone
-        };
+      }
+
+      if (hasError) {
+        if (firstInvalidElement) {
+          firstInvalidElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          firstInvalidElement.focus();
+        }
+        return false;
       }
 
       // Save to sessionStorage in case of redirect (Wallet/3DS)
+      const firstName = document.getElementById('c_first_name').value.trim();
+      const lastName = document.getElementById('c_last_name').value.trim();
+      const email = document.getElementById('c_email').value.trim();
+      const phone = document.getElementById('c_phone').value.trim();
+      const country = document.getElementById('c_country').value;
+      const address = document.getElementById('c_address').value.trim();
+      const zipCode = document.getElementById('c_zip').value.trim();
       const name = `${firstName} ${lastName}`;
+
       sessionStorage.setItem('bk_order_info', JSON.stringify({ 
         firstName, 
         lastName, 
@@ -825,7 +927,7 @@
         phone, 
         country, 
         address, 
-        city, 
+        city: cityVal, 
         zipCode,
         billingInfo
       }));
@@ -851,7 +953,7 @@
       if (country === 'Philippines') {
         await createPayMongoCheckout();
       } else {
-        alert('Stripe payments for other countries are currently disabled.');
+        showToast('Stripe payments for other countries are currently disabled.', 'error');
       }
     }
 
@@ -987,7 +1089,7 @@
         if (!res.ok) throw new Error(data.error || 'Failed to create checkout session');
         window.location.href = data.checkout_url;
       } catch (err) {
-        alert('Payment initialization failed: ' + err.message);
+        showToast('Payment initialization failed: ' + err.message, 'error');
         btn.disabled = false;
         btn.innerText = 'Pay Now';
       }
