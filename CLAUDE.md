@@ -66,4 +66,14 @@
 ## Direct SKU Extraction
 - **Cart SKU Fallback**: When checking for products inside the cart, do not rely solely on matching UUIDs (`id` property) and querying the database to resolve their SKUs. Cart items already hold their SKU on the `sku` property (e.g. `item.sku`). Always attempt to read `item.sku` directly to resolve cart items instantly.
 
+## Multi-Tenant Company ID Resolution Rule
+- **`BKAuth.checkRoleGate()` does NOT return `companyId`**: It returns `{ user, role, tenantId }`.
+- **Retrieve `companyId` dynamically**: To obtain the `company_id` for queries, use the `tenantId` to query the `companies` table:
+  ```javascript
+  const { data: companyData } = await sb.from('companies').select('id').eq('tenant_id', tenantId).limit(1);
+  const companyId = companyData?.[0]?.id;
+  ```
+- **Never guess `authInfo.companyId`**: Attempting to read `authInfo.companyId` directly returns `undefined`, which triggers a database type mismatch error (`invalid input syntax for type uuid: "undefined"`) when used in queries.
+
+
 
