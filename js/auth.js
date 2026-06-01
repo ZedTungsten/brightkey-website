@@ -100,31 +100,24 @@
    * Gate access based on allowed roles. Redirects if unauthorized.
    */
   async function checkRoleGate(allowedRoles, redirectTo = '../../admin.html') {
-    console.log("checkRoleGate checking allowedRoles:", allowedRoles, "redirectTo:", redirectTo);
     const user = await requireAuth(redirectTo);
-    console.log("checkRoleGate requireAuth user:", user);
     if (!user) return null;
     
     const roleInfo = await getUserRole();
-    console.log("checkRoleGate getUserRole roleInfo:", roleInfo);
     if (!roleInfo) {
-      console.log("No roleInfo found, redirecting to:", redirectTo);
       window.location.href = redirectTo;
       return null;
     }
 
     const userRole = roleInfo.role;
-    console.log("checkRoleGate userRole:", userRole);
 
     // 1. Owner & Admin always have access
     if (userRole === 'owner' || userRole === 'admin') {
-      console.log("checkRoleGate granted via owner/admin status");
       return { user, role: userRole, tenantId: roleInfo.tenantId };
     }
 
     // 2. Direct static role check
     if (allowedRoles.includes(userRole)) {
-      console.log("checkRoleGate granted via direct static check");
       return { user, role: userRole, tenantId: roleInfo.tenantId };
     }
 
@@ -135,8 +128,6 @@
         .select('accessible_modules')
         .eq('name', userRole)
         .maybeSingle();
-
-      console.log("checkRoleGate dbRole fetch result:", dbRole, "error:", error);
 
       if (!error && dbRole && Array.isArray(dbRole.accessible_modules)) {
         const MODULE_GATE_MAP = {
@@ -156,9 +147,7 @@
           if (keys) keys.forEach(k => allowedKeys.add(k));
         });
 
-        console.log("checkRoleGate allowedKeys built:", Array.from(allowedKeys));
         const hasAccess = allowedRoles.some(roleKey => allowedKeys.has(roleKey));
-        console.log("checkRoleGate hasAccess?", hasAccess);
         if (hasAccess) {
           return { user, role: userRole, tenantId: roleInfo.tenantId };
         }
@@ -167,7 +156,6 @@
       console.error('Error verifying dynamic role gate:', err);
     }
     
-    console.log("checkRoleGate access denied, redirecting to:", redirectTo);
     window.location.href = redirectTo;
     return null;
   }
