@@ -131,13 +131,13 @@
 
       if (!error && dbRole && Array.isArray(dbRole.accessible_modules)) {
         const MODULE_GATE_MAP = {
-          'Products': ['logistics'],
+          'Products': ['products'],
           'Operations': ['operations'],
-          'Marketing': ['marketing', 'customer_service'],
+          'Marketing': ['marketing'],
           'Sales': ['sales'],
-          'Customer Service': ['customer_service', 'hr'],
+          'Customer Service': ['customer_service'],
           'Logistics': ['logistics'],
-          'HR': ['hr', 'customer_service'],
+          'HR': ['hr'],
           'Finance': ['accounting']
         };
 
