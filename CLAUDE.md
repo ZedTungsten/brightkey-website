@@ -1,21 +1,13 @@
 # Project AI Guidelines
 
+* **UI/UX & Design Guidelines**: Always refer to [DESIGN.md](file:///Users/zeustaller/Claude/brightkey-website/DESIGN.md) for styling, alerts, icons, and loading state directives.
+
 ## Supabase Initialization Rule
 **JavaScript Rule**: The Supabase client is initialized as `var sb = window.supabase.createClient(...)` inside `js/auth.js` (`var` is intentional — it avoids `SyntaxError: Identifier 'sb' already declared` when page-level inline scripts also declare their own `const sb`). `auth.js` is included on every page that requires authentication or database access, making `sb` available globally via `window.BKAuth.sb` and as a plain `sb` variable.
 
 - **NEVER** redeclare `const sb` in `auth.js` — keep it as `var sb`. If changed to `const`, it will conflict with any page inline script that also has `const sb`, crashing the page with a fatal SyntaxError.
 - Page-level inline scripts MAY declare their own `const sb = window.supabase.createClient(...)` for convenience — this does NOT conflict with `auth.js`'s `var sb` because `var` is reassignable and `const` in a separate script tag occupies a separate lexical scope.
 - **ALWAYS** use the existing `sb` variable for all queries (e.g., `await sb.from(...)`). Do not create unnecessary extra Supabase clients.
-
-## Icons & Emoji Rule
-**Always use inline SVG for icons.** Never use emojis as icons or decorative elements anywhere in the UI — not in HTML, JS-generated markup, or template strings.
-- **Minimalist SVG Buttons**: When rendering inline SVG buttons (e.g. edit, check/save, close/cancel/delete buttons), always use minimalist SVGs without containers, borders, backgrounds, or default button padding. Ensure buttons wrapping these SVGs are transparent, borderless, and styled cleanly with appropriate colors (e.g. gray for edit/pencil, green for check/success, red for close/danger).
-
-## CSS & Styling Modifications Rule
-**Javascript Override Check**: Whenever modifying CSS styles (like `padding`, `margin`, `display` etc.) for a specific element in the HTML or CSS files, **always** double-check if there is any inline Javascript (e.g., event listeners, UI interactions like `switchMedia()`) that aggressively overrides those same styles via `element.style.property`. 
-
-- Many UI state switches in this codebase manually reset inline styles.
-- Failing to check the Javascript logic will result in the CSS modifications seemingly "not working" because they are immediately overwritten by JS at runtime.
 
 ## Product Dropdown / Selection Rule
 - **Always use the product SKU** (formatted as `[SKU] Product Title` or sorted/identified by SKU) in any product dropdown or selection list in the UI.
@@ -82,15 +74,9 @@
 - **Target `#toast-container` by ID**: Style rules must target `#toast-container` (ID selector) rather than `.toast-container` (class selector). This ensures page-specific overrides have the specificity required to override any rules inside the global `css/style.css` stylesheet.
 
 ## Button Styling Guidelines
-## UI Alerts and Dialogs Rule
-- **Never use standard browser alert boxes** (`alert(...)`). Standard browser alerts block the main thread and degrade the user experience.
-- **For form validation errors**, highlight the invalid input fields directly in red (`borderColor = '#EF4444'`) and scroll them into view.
-- **For status alerts or other general messages**, always use styled UI dialog boxes, modals, or toast notifications (targeting `#toast-container` with z-index `99999`) instead of browser-native popups.
- 
+
 ## Database Currency & Pricing Rule
 - **Always store currency/pricing values as integers in centavos (cents)**: To prevent floating-point rounding errors during financial calculations and maintain database consistency, all price-related columns in the database (e.g., `sale_price`, `installation_price`, `subtotal`, `charges`, `deductions`, `grand_total`, `deposit_amount`, `balance_due`) must be stored as `INTEGER` representing centavos (e.g., `10000` = ₱100.00).
 - **Convert on frontend input/display**: Convert these integer values on the frontend by dividing by `100` for human-readable display (e.g., `(cents / 100).toLocaleString(...)`) and multiplying raw numeric user inputs by `100` (e.g., `Math.round(parseFloat(input) * 100)`) before submitting payloads to the database.
 
-## Skeletal Loading Rule
-- **Always show skeletal loading states during page load or data fetching**: To prevent jarring layout shifts and provide a premium, smooth user experience, never leave components or pages completely blank (or with raw unstyled text) while waiting for data (e.g. from Supabase or localStorage) to load. Always render a CSS-animated skeleton placeholder (typically using a shimmering gradient animation) that matches the structure of the incoming content, transitioning smoothly once the actual data is ready.
 
