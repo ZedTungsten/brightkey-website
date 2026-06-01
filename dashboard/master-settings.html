@@ -127,11 +127,12 @@
                     <th>Plan Name</th>
                     <th>Price (PHP / month)</th>
                     <th>Accessible Features / Modules</th>
+                    <th style="width: 100px; text-align: center;">Visible</th>
                     <th style="width: 180px; text-align: center;">Actions</th>
                   </tr>
                 </thead>
                 <tbody id="tiers-list-body">
-                  <tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 2rem;">Loading pricing tiers...</td></tr>
+                  <tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 2rem;">Loading pricing tiers...</td></tr>
                 </tbody>
               </table>
             </div>
@@ -167,6 +168,11 @@
             <input type="text" id="tier-features" class="form-input" placeholder="e.g. eCommerce, Marketing, Sales" required />
             <div class="form-hint" style="margin-top: 0.35rem;">Enter items separated by commas.</div>
           </div>
+
+          <div class="form-group" style="flex-direction: row; align-items: center; gap: 0.5rem; margin-top: 0.5rem;">
+            <input type="checkbox" id="tier-visible" style="width: auto; cursor: pointer;" checked />
+            <label class="form-label" for="tier-visible" style="cursor: pointer; margin: 0; text-transform: none; letter-spacing: normal;">Visible on Pricing Page</label>
+          </div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-outline" onclick="closeTierModal()">Cancel</button>
@@ -201,7 +207,7 @@
 
     async function loadPricingTiers() {
       const tbody = document.getElementById('tiers-list-body');
-      tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 2rem;">Loading pricing tiers...</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 2rem;">Loading pricing tiers...</td></tr>`;
 
       try {
         const { data, error } = await sb.from('pricing_tiers').select('*').order('price_php', { ascending: true });
@@ -211,18 +217,22 @@
         tbody.innerHTML = '';
 
         if (tiersList.length === 0) {
-          tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 2rem;">No pricing tiers found. Click "Add Tier" to create one.</td></tr>`;
+          tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 2rem;">No pricing tiers found. Click "Add Tier" to create one.</td></tr>`;
           return;
         }
 
         tiersList.forEach(tier => {
           const tr = document.createElement('tr');
           const featuresHtml = (tier.features || []).map(f => `<span class="feature-tag">${escapeHtml(f)}</span>`).join('');
+          const isVisibleBadge = tier.is_visible !== false
+            ? `<span class="badge badge-green">Yes</span>`
+            : `<span class="badge badge-gray">No</span>`;
           
           tr.innerHTML = `
             <td><strong style="font-size: 0.9rem; color: var(--text-primary);">${escapeHtml(tier.name)}</strong></td>
             <td>PHP ${tier.price_php.toLocaleString('en-PH', { minimumFractionDigits: 2 })} / mo</td>
             <td>${featuresHtml}</td>
+            <td style="text-align: center;">${isVisibleBadge}</td>
             <td style="text-align: center;">
               <div style="display: flex; gap: 0.5rem; justify-content: center;">
                 <button class="btn btn-outline" style="padding: 0.35rem 0.75rem; font-size: 0.75rem;" onclick="openTierModal('${tier.id}')">Edit</button>
@@ -234,7 +244,7 @@
         });
       } catch (err) {
         console.error("Error loading tiers:", err);
-        tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--danger); padding: 2rem;">Failed to load tiers: ${err.message}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--danger); padding: 2rem;">Failed to load tiers: ${err.message}</td></tr>`;
       }
     }
 
@@ -252,9 +262,11 @@
           document.getElementById('tier-name').value = tier.name;
           document.getElementById('tier-price').value = tier.price_php;
           document.getElementById('tier-features').value = (tier.features || []).join(', ');
+          document.getElementById('tier-visible').checked = tier.is_visible !== false;
         }
       } else {
         titleEl.textContent = 'Add Pricing Tier';
+        document.getElementById('tier-visible').checked = true;
       }
 
       document.getElementById('tier-modal').classList.add('open');
@@ -269,6 +281,7 @@
       const name = document.getElementById('tier-name').value.trim();
       const price = parseInt(document.getElementById('tier-price').value);
       const featuresStr = document.getElementById('tier-features').value;
+      const isVisible = document.getElementById('tier-visible').checked;
       
       const features = featuresStr.split(',').map(f => f.trim()).filter(Boolean);
 
@@ -282,12 +295,12 @@
         let error;
         if (editingTierId) {
           const { error: err } = await sb.from('pricing_tiers')
-            .update({ name, price_php: price, features })
+            .update({ name, price_php: price, features, is_visible: isVisible })
             .eq('id', editingTierId);
           error = err;
         } else {
           const { error: err } = await sb.from('pricing_tiers')
-            .insert({ name, price_php: price, features });
+            .insert({ name, price_php: price, features, is_visible: isVisible });
           error = err;
         }
 
