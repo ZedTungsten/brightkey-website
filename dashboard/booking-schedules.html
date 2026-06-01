@@ -589,13 +589,35 @@
             <span class="details-label">Receipt PDF</span>
             <span class="details-value" id="det-receipt">-</span>
           </div>
-          <div class="details-group">
+          <div class="details-group" id="group-map-pin">
             <span class="details-label">Google Map Pin</span>
-            <span class="details-value" id="det-map-pin">-</span>
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+              <span class="details-value" id="det-map-pin">-</span>
+              <button type="button" class="btn-icon" style="width: 22px; height: 22px; padding: 2px;" id="btn-edit-map-pin" onclick="toggleEditField('map-pin', true)">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+              </button>
+            </div>
+            <div id="edit-container-map-pin" style="display: none; align-items: center; gap: 0.5rem; margin-top: 0.25rem;">
+              <input type="text" id="input-map-pin" class="form-input" style="padding: 0.3rem 0.5rem; font-size: 0.8rem;" />
+              <button type="button" class="btn-icon" style="border-color: var(--success); color: var(--success); width: 26px; height: 26px;" onclick="saveInlineEdit('map-pin')">✓</button>
+              <button type="button" class="btn-icon" style="border-color: var(--danger); color: var(--danger); width: 26px; height: 26px;" onclick="toggleEditField('map-pin', false)">✕</button>
+            </div>
           </div>
-          <div class="details-group" style="grid-column: span 2;">
+          <div class="details-group" style="grid-column: span 2;" id="group-notes">
             <span class="details-label">Installation Notes</span>
-            <span class="details-value" id="det-notes" style="white-space: pre-wrap;">-</span>
+            <div style="display: flex; align-items: flex-start; gap: 0.5rem;">
+              <span class="details-value" id="det-notes" style="white-space: pre-wrap;">-</span>
+              <button type="button" class="btn-icon" style="width: 22px; height: 22px; padding: 2px; margin-top: 2px;" id="btn-edit-notes" onclick="toggleEditField('notes', true)">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+              </button>
+            </div>
+            <div id="edit-container-notes" style="display: none; align-items: flex-start; gap: 0.5rem; margin-top: 0.25rem;">
+              <textarea id="input-notes" class="form-input" rows="2" style="padding: 0.3rem 0.5rem; font-size: 0.8rem;"></textarea>
+              <div style="display: flex; flex-direction: column; gap: 0.25rem;">
+                <button type="button" class="btn-icon" style="border-color: var(--success); color: var(--success); width: 26px; height: 26px;" onclick="saveInlineEdit('notes')">✓</button>
+                <button type="button" class="btn-icon" style="border-color: var(--danger); color: var(--danger); width: 26px; height: 26px;" onclick="toggleEditField('notes', false)">✕</button>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -958,6 +980,9 @@
       selectedBooking = dbBookings.find(b => b.id === id);
       if (!selectedBooking) return;
 
+      toggleEditField('map-pin', false);
+      toggleEditField('notes', false);
+
       document.getElementById('det-date').innerText = selectedBooking.scheduled_date ? formatDateFriendly(selectedBooking.scheduled_date) : 'Unscheduled';
       document.getElementById('det-time').innerText = selectedBooking.scheduled_time || 'AM Slot';
       document.getElementById('det-name').innerText = selectedBooking.customer_name || 'N/A';
@@ -1032,7 +1057,7 @@
           const doorMaterial = doorsArr[i]?.doorMaterial || 'N/A';
           const jambMaterial = doorsArr[i]?.jambMaterial || 'N/A';
           const swing = doorsArr[i]?.swing || 'N/A';
-          const doorType = (doorMaterial !== 'N/A' || jambMaterial !== 'N/A') ? `${doorMaterial} / ${jambMaterial} (${swing})` : 'N/A';
+          const doorType = (doorMaterial !== 'N/A' || jambMaterial !== 'N/A') ? `${doorMaterial} door<br/>${jambMaterial} jamb<br/><span style="color:var(--text-muted);font-size:0.75rem;">Swing: ${swing}</span>` : 'N/A';
 
           // Door photos thumbnails
           let photosHtml = 'N/A';
@@ -1090,6 +1115,80 @@
 
       toggleDetailsModal(true);
     }
+
+    window.toggleEditField = function(field, show) {
+      if (field === 'map-pin') {
+        document.getElementById('det-map-pin').style.display = show ? 'none' : 'inline';
+        document.getElementById('btn-edit-map-pin').style.display = show ? 'none' : 'inline-flex';
+        document.getElementById('edit-container-map-pin').style.display = show ? 'flex' : 'none';
+        if (show) {
+          document.getElementById('input-map-pin').value = selectedBooking.google_map_pin_url || '';
+        }
+      } else if (field === 'notes') {
+        document.getElementById('det-notes').style.display = show ? 'none' : 'inline';
+        document.getElementById('btn-edit-notes').style.display = show ? 'none' : 'inline-flex';
+        document.getElementById('edit-container-notes').style.display = show ? 'flex' : 'none';
+        if (show) {
+          document.getElementById('input-notes').value = selectedBooking.notes || '';
+        }
+      }
+    };
+
+    window.saveInlineEdit = async function(field) {
+      if (!selectedBooking) return;
+
+      let updatePayload = {};
+      let newValue = '';
+
+      if (field === 'map-pin') {
+        newValue = document.getElementById('input-map-pin').value.trim();
+        updatePayload.google_map_pin_url = newValue || null;
+      } else if (field === 'notes') {
+        newValue = document.getElementById('input-notes').value.trim();
+        updatePayload.notes = newValue || null;
+      }
+
+      try {
+        const { error } = await sb
+          .from('installation_bookings')
+          .update(updatePayload)
+          .eq('id', selectedBooking.id);
+
+        if (error) throw error;
+
+        // Update local memory
+        const bookingIndex = dbBookings.findIndex(b => b.id === selectedBooking.id);
+        if (bookingIndex !== -1) {
+          if (field === 'map-pin') {
+            dbBookings[bookingIndex].google_map_pin_url = newValue || null;
+            selectedBooking.google_map_pin_url = newValue || null;
+          } else if (field === 'notes') {
+            dbBookings[bookingIndex].notes = newValue || null;
+            selectedBooking.notes = newValue || null;
+          }
+        }
+
+        showToast('Saved successfully!');
+        
+        // Refresh detail view display
+        if (field === 'map-pin') {
+          const mapPinEl = document.getElementById('det-map-pin');
+          if (newValue) {
+            mapPinEl.innerHTML = `<a href="${newValue}" target="_blank" style="color:var(--blue); font-weight:600;">Open Google Map Pin</a>`;
+          } else {
+            mapPinEl.innerText = 'No link provided';
+          }
+        } else if (field === 'notes') {
+          document.getElementById('det-notes').innerText = newValue || 'No notes';
+        }
+
+        toggleEditField(field, false);
+        applyFilterAndRender();
+      } catch (err) {
+        console.error(err);
+        showToast('Failed to save changes: ' + err.message, true);
+      }
+    };
 
     function toggleDetailsModal(show) {
       document.getElementById('details-modal').classList.toggle('open', show);
