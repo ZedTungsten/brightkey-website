@@ -43,7 +43,7 @@
         <div class="dash-nav-children">
           <a href="/dashboard/booking" class="dash-nav-child">Book</a>
           <a href="/dashboard/invoices" class="dash-nav-child">Invoices</a>
-          <a class="dash-nav-child" style="opacity: 0.5; cursor: not-allowed;">Schedules</a>
+          <a href="/dashboard/booking-schedules" class="dash-nav-child">Schedules</a>
         </div>
       </div>
 
