@@ -350,9 +350,17 @@
     .form-input:focus, .form-select:focus {
       border-color: var(--cyan);
     }
+
+    /* Toast styling */
+    #toast-container { position: fixed; top: 1.5rem; right: 1.5rem; z-index: 99999; display: flex; flex-direction: column; gap: 0.5rem; }
+    .toast { padding: 0.75rem 1rem; border-radius: 6px; font-size: 0.82rem; font-weight: 600; color: #fff; min-width: 250px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); animation: slideIn 0.2s ease-out; }
+    .toast-success { background: var(--success); }
+    .toast-error { background: var(--danger); }
+    @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
   </style>
 </head>
 <body>
+  <div class="toast-container" id="toast-container"></div>
 
   <div class="dash-layout">
     <!-- Sidebar -->
@@ -369,11 +377,8 @@
           <div style="flex:1;"></div>
           <div style="display:flex; gap:0.5rem; align-items:center;">
             <button id="btn-sync" class="btn btn-primary">
-              <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: -2px; margin-right: 6px;"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Sync Bookings
+              <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: -2px; margin-right: 6px;"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Refresh
             </button>
-            <a href="/dashboard/catalog" class="btn btn-outline">
-              Products Catalog
-            </a>
           </div>
         </div>
 
@@ -382,44 +387,16 @@
       
       <!-- Left Workspace (Tables & Stats) -->
       <div class="main-workspace">
-        
-        <!-- Stats strip -->
-        <div class="stats-strip">
-          <div class="stat-cell">
-            <div class="stat-num" id="stat-available" style="color: var(--success);">0</div>
-            <div class="stat-label">Available</div>
-          </div>
-          <div class="stat-cell">
-            <div class="stat-num" id="stat-reserved" style="color: var(--warning);">0</div>
-            <div class="stat-label">Reserved</div>
-          </div>
-          <div class="stat-cell">
-            <div class="stat-num" id="stat-packed" style="color: var(--cyan-light);">0</div>
-            <div class="stat-label">Packed</div>
-          </div>
-          <div class="stat-cell">
-            <div class="stat-num" id="stat-dispatched">0</div>
-            <div class="stat-label">Dispatched</div>
-          </div>
-          <div class="stat-cell">
-            <div class="stat-num" id="stat-returned" style="color: var(--danger);">0</div>
-            <div class="stat-label">Returned</div>
-          </div>
-          <div class="stat-cell">
-            <div class="stat-num" id="stat-cancelled" style="color: #4b5563;">0</div>
-            <div class="stat-label">Cancelled</div>
-          </div>
-        </div>
 
         <!-- Tab Bar -->
         <div class="drawer-tabs">
           <button class="tab-btn active" onclick="switchTab('inventory')">Inventory Summary</button>
-          <button class="tab-btn" onclick="switchTab('order')">Order Supplier</button>
-          <button class="tab-btn" onclick="switchTab('receive')">Receive <span id="badge-count-receive" style="display:none; background:var(--cyan); color:white; font-size:0.75rem; padding:1px 6px; border-radius:10px; margin-left:4px;">0</span></button>
-          <button class="tab-btn" onclick="switchTab('pack')">Pack <span id="badge-count-pack" style="display:none; background:var(--cyan); color:white; font-size:0.75rem; padding:1px 6px; border-radius:10px; margin-left:4px;">0</span></button>
           <button class="tab-btn" onclick="switchTab('dispatch')">Dispatch <span id="badge-count-dispatch" style="display:none; background:var(--cyan); color:white; font-size:0.75rem; padding:1px 6px; border-radius:10px; margin-left:4px;">0</span></button>
-          <button class="tab-btn" onclick="switchTab('return')">Return</button>
+          <button class="tab-btn" onclick="switchTab('pack')">Pack <span id="badge-count-pack" style="display:none; background:var(--cyan); color:white; font-size:0.75rem; padding:1px 6px; border-radius:10px; margin-left:4px;">0</span></button>
+          <button class="tab-btn" onclick="switchTab('receive')">Receive <span id="badge-count-receive" style="display:none; background:var(--cyan); color:white; font-size:0.75rem; padding:1px 6px; border-radius:10px; margin-left:4px;">0</span></button>
+          <button class="tab-btn" onclick="switchTab('order')">Order Supplier</button>
           <button class="tab-btn" onclick="switchTab('cancel')">Cancel</button>
+          <button class="tab-btn" onclick="switchTab('return')">Return</button>
         </div>
 
         <!-- Table Scroll workspace -->
@@ -708,8 +685,18 @@
         await refreshDashboard();
       } catch (err) {
         console.error(err);
-        alert('Error loading fulfillment data: ' + err.message);
+        showToast('Error loading fulfillment data: ' + err.message, true);
       }
+    }
+
+    function showToast(msg, isError = false) {
+      const container = document.getElementById('toast-container');
+      if (!container) return;
+      const el = document.createElement('div');
+      el.className = `toast toast-${isError ? 'error' : 'success'}`;
+      el.innerText = msg;
+      container.appendChild(el);
+      setTimeout(() => el.remove(), 3500);
     }
 
     function showLoadingState() {
@@ -748,27 +735,11 @@
       renderReturnTab();
       renderCancelTab();
       renderActivityFeed();
-      renderStatsStrip();
       updateBadgeCounts();
     }
 
-    // Render Stats Strip
     function renderStatsStrip() {
-      let available = 0, reserved = 0, packed = 0, dispatched = 0, returned = 0, cancelled = 0;
-      Object.values(allInventory).forEach(inv => {
-        available += inv.available || 0;
-        reserved += inv.reserved || 0;
-        packed += inv.packed || 0;
-        dispatched += inv.dispatched || 0;
-        returned += inv.returned || 0;
-        cancelled += inv.cancelled || 0;
-      });
-      document.getElementById('stat-available').innerText = available;
-      document.getElementById('stat-reserved').innerText = reserved;
-      document.getElementById('stat-packed').innerText = packed;
-      document.getElementById('stat-dispatched').innerText = dispatched;
-      document.getElementById('stat-returned').innerText = returned;
-      document.getElementById('stat-cancelled').innerText = cancelled;
+      // Disabled - stats strip removed
     }
 
     // Auto-Sync Bookings logic
@@ -1382,10 +1353,10 @@
         if (searchInput) searchInput.value = "";
 
         await refreshDashboard();
-        alert('Supplier order successfully requested!');
+        showToast('Supplier order successfully requested!');
       } catch (err) {
         console.error(err);
-        alert('Failed to request supplier order: ' + err.message);
+        showToast('Failed to request supplier order: ' + err.message, true);
       } finally {
         supplierOrderPosting = false;
         renderSupplierOrderTab();
@@ -1401,12 +1372,12 @@
         status: 'received',
         timestamp_received: now
       }).eq('id', id);
-      if (txErr) { alert('Error updating transaction: ' + txErr.message); return; }
+      if (txErr) { showToast('Error updating transaction: ' + txErr.message, true); return; }
 
       // Get current inventory row
       const { data: invRow, error: invErr } = await sb.from('inventory').select('*').eq('sku', sku);
       if (invErr || !invRow || invRow.length === 0) {
-        alert('Error fetching inventory item');
+        showToast('Error fetching inventory item', true);
         return;
       }
 
@@ -1421,7 +1392,7 @@
       }
 
       const { error: updErr } = await sb.from('inventory').update(updates).eq('sku', sku);
-      if (updErr) { alert('Error updating inventory: ' + updErr.message); return; }
+      if (updErr) { showToast('Error updating inventory: ' + updErr.message, true); return; }
 
       await refreshDashboard();
     };
@@ -1434,7 +1405,7 @@
         status: 'packed',
         timestamp_packed: now
       }).eq('id', id);
-      if (txErr) { alert('Error updating transaction: ' + txErr.message); return; }
+      if (txErr) { showToast('Error updating transaction: ' + txErr.message, true); return; }
 
       const { data: invRow } = await sb.from('inventory').select('*').eq('sku', sku);
       if (invRow && invRow.length > 0) {
@@ -1456,7 +1427,7 @@
         status: 'dispatched',
         timestamp_dispatched: now
       }).eq('id', id);
-      if (txErr) { alert('Error updating transaction: ' + txErr.message); return; }
+      if (txErr) { showToast('Error updating transaction: ' + txErr.message, true); return; }
 
       const { data: invRow } = await sb.from('inventory').select('*').eq('sku', sku);
       if (invRow && invRow.length > 0) {
@@ -1478,7 +1449,7 @@
         status: 'returned',
         timestamp_returned: now
       }).eq('id', id);
-      if (txErr) { alert('Error updating transaction: ' + txErr.message); return; }
+      if (txErr) { showToast('Error updating transaction: ' + txErr.message, true); return; }
 
       const { data: invRow } = await sb.from('inventory').select('*').eq('sku', sku);
       if (invRow && invRow.length > 0) {
@@ -1490,14 +1461,14 @@
       }
 
       await refreshDashboard();
-      alert('Order marked as Returned. Warehouse must confirm receipt under the Receive tab.');
+      showToast('Order marked as Returned. Warehouse must confirm receipt under the Receive tab.');
     };
 
     // ACTION: Cancel reserved/packed item
     window.cancelQueueItem = async function(id, sku, qty, prevStatus) {
       await handleCancellationProcess(id, sku, qty, prevStatus);
       await refreshDashboard();
-      alert('Order cancelled. Items sent to Receive tab to be re-shelved.');
+      showToast('Order cancelled. Items sent to Receive tab to be re-shelved.');
     };
 
     async function handleCancellationProcess(id, sku, qty, prevStatus) {
@@ -1525,17 +1496,17 @@
     // Trigger explicit booking sync on demand
     document.getElementById('btn-sync').addEventListener('click', async () => {
       document.getElementById('btn-sync').disabled = true;
-      document.getElementById('btn-sync').innerHTML = `<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: -2px; margin-right: 6px; animation: spin 1s linear infinite;"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Syncing Bookings...`;
+      document.getElementById('btn-sync').innerHTML = `<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: -2px; margin-right: 6px; animation: spin 1s linear infinite;"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Refreshing...`;
       try {
         await runAutoSync();
         await refreshDashboard();
-        alert('Booking synchronization complete!');
+        showToast('Refresh complete!');
       } catch (err) {
         console.error(err);
-        alert('Sync error: ' + err.message);
+        showToast('Refresh error: ' + err.message, true);
       } finally {
         document.getElementById('btn-sync').disabled = false;
-        document.getElementById('btn-sync').innerHTML = `<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: -2px; margin-right: 6px;"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Sync Bookings`;
+        document.getElementById('btn-sync').innerHTML = `<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: -2px; margin-right: 6px;"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Refresh`;
       }
     });
 
