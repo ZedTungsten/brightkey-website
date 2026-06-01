@@ -1272,7 +1272,7 @@
       }
     };
 
-    // Compress a base64 image to target ~100KB for the brand logo
+    // Compress a base64 image to target ~100KB WebP for the brand logo
     async function compressImage(base64String, targetSizeKB = 100) {
       return new Promise((resolve) => {
         const img = new Image();
@@ -1290,17 +1290,12 @@
           const ctx = canvas.getContext('2d');
           ctx.drawImage(img, 0, 0, width, height);
 
-          // Detect original mime type to preserve transparency
-          const mimeMatch = base64String.match(/^data:(image\/[a-z0-9-+.]+);base64,/);
-          const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
-          const outputMime = (mimeType === 'image/png' || mimeType === 'image/gif') ? 'image/png' : 'image/jpeg';
-
-          // Iteratively reduce quality until under target size (for JPEGs)
+          // We output directly to image/webp which handles transparency beautifully
           let quality = 0.85;
           const tryCompress = () => {
-            const compressed = canvas.toDataURL(outputMime, outputMime === 'image/jpeg' ? quality : undefined);
+            const compressed = canvas.toDataURL('image/webp', quality);
             const sizeKB = Math.round((compressed.length * 3) / 4 / 1024);
-            if (outputMime === 'image/jpeg' && sizeKB > targetSizeKB && quality > 0.1) {
+            if (sizeKB > targetSizeKB && quality > 0.1) {
               quality = Math.max(0.1, quality - 0.1);
               tryCompress();
             } else {
@@ -1329,8 +1324,9 @@
         const rawBase64 = e.target.result;
         
         try {
-          // Compress the logo to keep size small
+          // Compress the logo to keep size small and output WebP
           const compressedBase64 = await compressImage(rawBase64);
+          const nameWithoutExt = file.name.substring(0, file.name.lastIndexOf('.')) || 'logo';
           
           const res = await fetch('/api/upload', {
             method: 'POST',
@@ -1339,7 +1335,7 @@
             },
             body: JSON.stringify({
               fileBase64: compressedBase64,
-              fileName: `brand_logo_${Date.now()}_${file.name}`,
+              fileName: `brand_logo_${Date.now()}_${nameWithoutExt}.webp`,
               category: 'logos'
             })
           });

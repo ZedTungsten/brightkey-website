@@ -36,6 +36,12 @@ export default async function handler(req, res) {
     const base64Data = hasPrefix ? fileBase64.split(';base64,').pop() : fileBase64;
     const buffer = Buffer.from(base64Data, 'base64');
 
+    // Enforce 50MB size limit for videos
+    const MAX_VIDEO_SIZE = 50 * 1024 * 1024; // 50MB
+    if (buffer.length > MAX_VIDEO_SIZE) {
+      return res.status(400).json({ error: 'Video file size exceeds the 50MB limit.' });
+    }
+
     // Clean safe filename from title
     const safeTitle = title.replace(/[^a-zA-Z0-9.\-_]/g, '_');
     const extension = contentType.split('/').pop() || 'mp4';
