@@ -89,3 +89,7 @@
 ## Database Currency & Pricing Rule
 - **Always store currency/pricing values as integers in centavos (cents)**: To prevent floating-point rounding errors during financial calculations and maintain database consistency, all price-related columns in the database (e.g., `sale_price`, `installation_price`, `subtotal`, `charges`, `deductions`, `grand_total`, `deposit_amount`, `balance_due`) must be stored as `INTEGER` representing centavos (e.g., `10000` = ₱100.00).
 - **Convert on frontend input/display**: Convert these integer values on the frontend by dividing by `100` for human-readable display (e.g., `(cents / 100).toLocaleString(...)`) and multiplying raw numeric user inputs by `100` (e.g., `Math.round(parseFloat(input) * 100)`) before submitting payloads to the database.
+
+## Skeletal Loading Rule
+- **Always show skeletal loading states during page load or data fetching**: To prevent jarring layout shifts and provide a premium, smooth user experience, never leave components or pages completely blank (or with raw unstyled text) while waiting for data (e.g. from Supabase or localStorage) to load. Always render a CSS-animated skeleton placeholder (typically using a shimmering gradient animation) that matches the structure of the incoming content, transitioning smoothly once the actual data is ready.
+
