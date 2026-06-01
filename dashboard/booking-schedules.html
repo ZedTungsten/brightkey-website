@@ -733,12 +733,24 @@
     async function loadData() {
       try {
         // Fetch bookings matching company_id
-        const { data, error } = await sb
+        let { data, error } = await sb
           .from('installation_bookings')
           .select('*')
           .eq('company_id', currentCompanyId);
 
-        if (error) throw error;
+        if (error) {
+          // Fallback if company_id column does not exist in this database instance yet
+          if (error.message && error.message.includes('column') && error.message.includes('company_id')) {
+            console.warn('Fallback: company_id column missing on installation_bookings. Querying without filter.');
+            const fallbackResult = await sb
+              .from('installation_bookings')
+              .select('*');
+            if (fallbackResult.error) throw fallbackResult.error;
+            data = fallbackResult.data;
+          } else {
+            throw error;
+          }
+        }
         dbBookings = data || [];
         applyFilterAndRender();
       } catch (err) {

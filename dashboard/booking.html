@@ -492,6 +492,7 @@
     ];
 
     let dbProducts = [];
+    let currentCompanyId = null;
 
     const MOCK_EMPLOYEES = [
       { id: 'emp-1', employee_number: 'BK-0001', first_name: 'Juan', last_name: 'dela Cruz', title: 'Installer', department: 'Operations' },
@@ -511,6 +512,14 @@
 
         try {
           const sb = window.BKAuth.sb;
+          const tenantId = authInfo.tenantId;
+
+          // Retrieve companyId dynamically using tenantId
+          const { data: companyData } = await sb.from('companies').select('id').eq('tenant_id', tenantId).limit(1);
+          if (companyData && companyData.length > 0) {
+            currentCompanyId = companyData[0].id;
+          }
+
           const [productsRes, inventoryRes] = await Promise.all([
             sb.from('products').select('sku, title, image_main, installation_price'),
             sb.from('inventory').select('sku, available')
@@ -1215,6 +1224,7 @@
       const allDoorPhotoUrls = doors.flatMap(d => d.photos || []).filter(Boolean);
 
       const supabasePayload = {
+        company_id:         currentCompanyId,
         folder_ref_id:      folderRefId,
         order_no:           receiptNo,
         customer_name:      name,
