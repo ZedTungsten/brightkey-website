@@ -505,11 +505,31 @@
       document.getElementById(`view-${tabId}`).classList.add('active');
     };
 
+    let currentTenantId;
+    let currentCompanyId;
+
     document.addEventListener("DOMContentLoaded", async () => {
       if (window.BKAuth) {
         const authInfo = await window.BKAuth.checkRoleGate(['owner', 'admin', 'operations'], '../admin.html');
         if (!authInfo) return;
         sb = window.BKAuth.sb;
+        currentTenantId = authInfo.tenantId;
+
+        try {
+          // Fetch company ID for this tenant
+          const { data: companyData, error: companyErr } = await sb
+            .from('companies')
+            .select('id')
+            .eq('tenant_id', currentTenantId)
+            .limit(1);
+            
+          if (companyErr) throw companyErr;
+          if (companyData && companyData.length > 0) {
+            currentCompanyId = companyData[0].id;
+          }
+        } catch (err) {
+          console.error('Error loading company:', err);
+        }
       }
       
       initTermsInputs();
@@ -540,7 +560,11 @@
         dbProducts = pData || [];
 
         // Fetch saved template config
-        const { data: settingData } = await sb.from('global_settings').select('*').eq('key', 'invoice_template').single();
+        const { data: settingData } = await sb.from('global_settings')
+          .select('*')
+          .eq('key', 'invoice_template')
+          .eq('company_id', currentCompanyId)
+          .maybeSingle();
         if (settingData && settingData.value) {
           const config = settingData.value;
           activeTemplateHtml = config.html || DEFAULT_TEMPLATE;
@@ -1155,6 +1179,7 @@
       try {
         const { error } = await sb.from('global_settings').upsert({
           key: 'invoice_template',
+          company_id: currentCompanyId,
           value: {
             html: htmlCode,
             logo: logoCdnUrl,
