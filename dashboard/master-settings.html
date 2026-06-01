@@ -92,6 +92,48 @@
     .toast { padding: 0.75rem 1rem; border-radius: 6px; font-size: 0.82rem; font-weight: 600; color: #fff; min-width: 250px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
     .toast-success { background: var(--success); }
     .toast-error { background: var(--danger); }
+
+    /* Switch Style */
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 36px;
+      height: 20px;
+      vertical-align: middle;
+    }
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: var(--border);
+      transition: .2s ease;
+      border-radius: 20px;
+    }
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 14px;
+      width: 14px;
+      left: 3px;
+      bottom: 3px;
+      background-color: var(--bg-surface);
+      transition: .2s ease;
+      border-radius: 50%;
+    }
+    input:checked + .slider {
+      background-color: var(--cyan);
+    }
+    input:checked + .slider:before {
+      transform: translateX(16px);
+    }
   </style>
 </head>
 <body>
@@ -224,15 +266,20 @@
         tiersList.forEach(tier => {
           const tr = document.createElement('tr');
           const featuresHtml = (tier.features || []).map(f => `<span class="feature-tag">${escapeHtml(f)}</span>`).join('');
-          const isVisibleBadge = tier.is_visible !== false
-            ? `<span class="badge badge-green">Yes</span>`
-            : `<span class="badge badge-gray">No</span>`;
+          
+          const isChecked = tier.is_visible !== false ? 'checked' : '';
+          const isVisibleToggle = `
+            <label class="switch">
+              <input type="checkbox" ${isChecked} onchange="toggleTierVisibility('${tier.id}', this.checked)">
+              <span class="slider"></span>
+            </label>
+          `;
           
           tr.innerHTML = `
             <td><strong style="font-size: 0.9rem; color: var(--text-primary);">${escapeHtml(tier.name)}</strong></td>
             <td>PHP ${tier.price_php.toLocaleString('en-PH', { minimumFractionDigits: 2 })} / mo</td>
             <td>${featuresHtml}</td>
-            <td style="text-align: center;">${isVisibleBadge}</td>
+            <td style="text-align: center;">${isVisibleToggle}</td>
             <td style="text-align: center;">
               <div style="display: flex; gap: 0.5rem; justify-content: center;">
                 <button class="btn btn-outline" style="padding: 0.35rem 0.75rem; font-size: 0.75rem;" onclick="openTierModal('${tier.id}')">Edit</button>
@@ -330,6 +377,25 @@
       } catch (err) {
         console.error("Error deleting tier:", err);
         showToast('Failed to delete tier: ' + err.message, true);
+      }
+    }
+
+    async function toggleTierVisibility(tierId, isVisible) {
+      try {
+        const { error } = await sb.from('pricing_tiers')
+          .update({ is_visible: isVisible })
+          .eq('id', tierId);
+        if (error) throw error;
+        
+        const tier = tiersList.find(t => t.id === tierId);
+        if (tier) {
+          tier.is_visible = isVisible;
+        }
+        showToast('Pricing tier visibility updated.');
+      } catch (err) {
+        console.error("Error updating visibility:", err);
+        showToast('Failed to update visibility: ' + err.message, true);
+        loadPricingTiers();
       }
     }
 
