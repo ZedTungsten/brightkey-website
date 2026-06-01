@@ -216,14 +216,8 @@
           
           <div class="form-group">
             <label class="form-label" for="invite-role">Assign Role</label>
-            <select id="invite-role" class="form-select" onchange="handleRoleChange(this.value)" required>
-              <option value="customer_service">Customer Service</option>
-              <option value="operations">Operations</option>
-              <option value="marketing">Marketing</option>
-              <option value="accounting">Accounting</option>
-              <option value="hr">HR</option>
-              <option value="logistics">Logistics</option>
-              <option value="admin">Administrator</option>
+            <select id="invite-role" class="form-select" onchange="handleRoleChange(this.value)">
+              <option value="" disabled selected>Loading roles...</option>
             </select>
           </div>
 
@@ -249,17 +243,7 @@
     let currentTenantId;
     let currentUser;
     let currentCompanyId = '';
-
-    const ROLE_LABELS = {
-      owner: 'Owner',
-      admin: 'Administrator',
-      customer_service: 'Customer Service',
-      operations: 'Operations',
-      marketing: 'Marketing',
-      accounting: 'Accounting',
-      hr: 'HR',
-      logistics: 'Logistics'
-    };
+    let dynamicRoles = [];
 
     document.addEventListener('DOMContentLoaded', async () => {
       // 1. Authenticate and enforce gate access for owner and admin roles
@@ -278,14 +262,55 @@
         console.error('Error fetching company:', err);
       }
 
+      await loadDynamicRoles();
       loadAllMembers();
+      loadRolesDropdown();
     });
+
+    async function loadDynamicRoles() {
+      try {
+        const { data, error } = await sb.from('dashboard_roles').select('*').order('name', { ascending: true });
+        if (!error && data) {
+          dynamicRoles = data;
+        }
+      } catch (err) {
+        console.error('Error fetching dynamic roles:', err);
+      }
+    }
+
+    async function loadRolesDropdown() {
+      const select = document.getElementById('invite-role');
+      if (!select) return;
+      select.innerHTML = '<option value="" disabled selected>Loading roles...</option>';
+
+      let optionsHtml = '';
+      optionsHtml += '<option value="admin">Administrator</option>';
+      
+      if (dynamicRoles.length > 0) {
+        dynamicRoles.forEach(r => {
+          if (r.name !== 'admin' && r.name !== 'owner') {
+            optionsHtml += `<option value="${escapeHtml(r.name)}">${escapeHtml(r.name)}</option>`;
+          }
+        });
+      }
+      
+      optionsHtml += '<option value="">None / Employee Only (No Dashboard Access)</option>';
+      select.innerHTML = optionsHtml;
+      select.value = dynamicRoles.length > 0 ? (dynamicRoles[0].name === 'owner' ? 'admin' : dynamicRoles[0].name) : 'admin';
+      handleRoleChange(select.value);
+    }
 
     // --- Modal Controls ---
     function openAddMemberModal() {
       document.getElementById('invite-email').value = '';
       document.getElementById('invite-name').value = '';
-      document.getElementById('invite-role').value = 'customer_service';
+      
+      const select = document.getElementById('invite-role');
+      if (select) {
+        select.value = dynamicRoles.length > 0 ? (dynamicRoles[0].name === 'owner' ? 'admin' : dynamicRoles[0].name) : 'admin';
+        handleRoleChange(select.value);
+      }
+      
       document.getElementById('admin-warning').style.display = 'none';
       document.getElementById('add-member-modal').classList.add('open');
     }
@@ -296,10 +321,12 @@
 
     function handleRoleChange(role) {
       const warning = document.getElementById('admin-warning');
-      if (role === 'admin') {
-        warning.style.display = 'block';
-      } else {
-        warning.style.display = 'none';
+      if (warning) {
+        if (role === 'admin') {
+          warning.style.display = 'block';
+        } else {
+          warning.style.display = 'none';
+        }
       }
     }
 
@@ -389,13 +416,19 @@
 
         let roleCell = '';
         if (isOwner || isSelf) {
-          roleCell = `<span class="badge badge-cyan">${ROLE_LABELS[row.role] || row.role}</span>`;
+          roleCell = `<span class="badge badge-cyan">${row.role === 'owner' ? 'Owner' : (row.role === 'admin' ? 'Administrator' : (row.role || 'None'))}</span>`;
         } else {
+          let options = `<option value="admin" ${row.role === 'admin' ? 'selected' : ''}>Administrator</option>`;
+          dynamicRoles.forEach(r => {
+            if (r.name !== 'admin' && r.name !== 'owner') {
+              options += `<option value="${escapeHtml(r.name)}" ${row.role === r.name ? 'selected' : ''}>${escapeHtml(r.name)}</option>`;
+            }
+          });
+          options += `<option value="" ${!row.role ? 'selected' : ''}>None / Employee Only (No Access)</option>`;
+
           roleCell = `
             <select class="form-select" style="padding: 0.25rem 0.5rem; font-size: 0.8rem; width: auto; display: inline-block;" onchange="updateMemberRole('${row.id}', this.value)">
-              ${Object.keys(ROLE_LABELS).filter(r => r !== 'owner').map(roleKey => `
-                <option value="${roleKey}" ${row.role === roleKey ? 'selected' : ''}>${ROLE_LABELS[roleKey]}</option>
-              `).join('')}
+              ${options}
             </select>`;
         }
 
@@ -446,7 +479,7 @@
             <div style="font-size:0.72rem;color:var(--text-muted);">Awaiting registration</div>
           </td>
           <td>${row.full_name || '—'}</td>
-          <td><span class="badge badge-gray">${ROLE_LABELS[row.role] || row.role}</span></td>
+          <td><span class="badge badge-gray">${row.role === 'admin' ? 'Administrator' : (row.role || 'None')}</span></td>
           <td>${formatDateAdded(row.created_at)}</td>
           <td><span class="badge badge-orange">Invited</span></td>
           <td style="text-align:center;">
@@ -522,7 +555,7 @@
     }
 
     async function generateSignature(tenant, company, role, email) {
-      const msg = `${tenant}:${company}:${role}:${email}:brightkey_invite_salt`;
+      const msg = `${tenant}:${company}:${role || ''}:${email}:brightkey_invite_salt`;
       const encoder = new TextEncoder();
       const data = encoder.encode(msg);
       const hashBuffer = await crypto.subtle.digest('SHA-256', data);
@@ -534,7 +567,7 @@
     async function copyInviteLink(email, role) {
       try {
         const sig = await generateSignature(currentTenantId, currentCompanyId, role, email);
-        const link = `${window.location.origin}/employee-registration?tenant=${encodeURIComponent(currentTenantId)}&company=${encodeURIComponent(currentCompanyId)}&role=${encodeURIComponent(role)}&email=${encodeURIComponent(email)}&sig=${sig}`;
+        const link = `${window.location.origin}/employee-registration?tenant=${encodeURIComponent(currentTenantId)}&company=${encodeURIComponent(currentCompanyId)}&role=${encodeURIComponent(role || '')}&email=${encodeURIComponent(email)}&sig=${sig}`;
         await navigator.clipboard.writeText(link);
         showToast('Invite link copied to clipboard!');
       } catch (err) {
@@ -563,7 +596,7 @@
       try {
         const { error } = await sb
           .from('tenant_members')
-          .update({ role: newRole })
+          .update({ role: newRole ? newRole : null })
           .eq('id', memberId);
 
         if (error) throw error;

@@ -25,7 +25,7 @@ export default async function handler(req, res) {
   }
 
   const { tenant_id, company_id, email, full_name, role, invited_by } = req.body;
-  if (!tenant_id || !company_id || !email || !full_name || !role) {
+  if (!tenant_id || !company_id || !email || !full_name) {
     return res.status(400).json({ error: 'Missing required parameters.' });
   }
 
@@ -60,7 +60,7 @@ export default async function handler(req, res) {
         tenant_id,
         email: email.toLowerCase().trim(),
         full_name,
-        role,
+        role: role ? role : null,
         invited_by: user.id
       });
 
@@ -72,12 +72,12 @@ export default async function handler(req, res) {
     }
 
     // 4. Generate secure signature
-    const msg = `${tenant_id}:${company_id}:${role}:${email.toLowerCase().trim()}:brightkey_invite_salt`;
+    const msg = `${tenant_id}:${company_id}:${role || ''}:${email.toLowerCase().trim()}:brightkey_invite_salt`;
     const signature = createHash('sha256').update(msg).digest('hex');
 
     // 5. Construct invite URL
     const origin = req.headers.referer ? new URL(req.headers.referer).origin : 'https://www.brightkeysolutions.com';
-    const inviteLink = `${origin}/employee-registration?tenant=${encodeURIComponent(tenant_id)}&company=${encodeURIComponent(company_id)}&role=${encodeURIComponent(role)}&email=${encodeURIComponent(email.toLowerCase().trim())}&sig=${signature}`;
+    const inviteLink = `${origin}/employee-registration?tenant=${encodeURIComponent(tenant_id)}&company=${encodeURIComponent(company_id)}&role=${encodeURIComponent(role || '')}&email=${encodeURIComponent(email.toLowerCase().trim())}&sig=${signature}`;
 
     // 6. Send email via Resend
     let emailSent = false;
@@ -97,7 +97,7 @@ export default async function handler(req, res) {
               <div style="font-family: sans-serif; padding: 24px; color: #374151; max-width: 600px; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 8px; background-color: #ffffff;">
                 <h2 style="color: #0891b2; font-weight: bold; margin-bottom: 20px; text-align: center;">Join BrightKey Solutions</h2>
                 <p>Hello ${full_name},</p>
-                <p>You have been invited to join the BrightKey Solutions workspace for your organization as a <strong>${role.replace('_', ' ')}</strong>.</p>
+                <p>You have been invited to join the BrightKey Solutions workspace for your organization${role ? ` as a <strong>${role.replace('_', ' ')}</strong>` : ''}.</p>
                 <p style="margin-top: 24px; text-align: center;">
                   <a href="${inviteLink}" style="background-color: #06b6d4; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">
                     Accept Invitation & Set Up Account

@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { createHash } from 'crypto';
 
 function verifySignature(tenant, company, role, email, sig) {
-  const msg = `${tenant}:${company}:${role}:${email}:brightkey_invite_salt`;
+  const msg = `${tenant}:${company}:${role || ''}:${email}:brightkey_invite_salt`;
   const hash = createHash('sha256').update(msg).digest('hex');
   return hash === sig;
 }
@@ -34,7 +34,7 @@ export default async function handler(req, res) {
     employee_payload
   } = req.body;
 
-  if (!tenant_id || !company_id || !role || !email || !signature || !password || !employee_payload) {
+  if (!tenant_id || !company_id || !email || !signature || !password || !employee_payload) {
     return res.status(400).json({ error: 'Missing required registration parameters.' });
   }
 
@@ -73,7 +73,7 @@ export default async function handler(req, res) {
     const { error: tmError } = await supabase.from('tenant_members').insert({
       tenant_id: tenant_id,
       user_id: userId,
-      role: role,
+      role: role ? role : null,
       user_email: email,
       full_name: `${employee_payload.first_name} ${employee_payload.last_name}`
     });

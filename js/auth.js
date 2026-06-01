@@ -104,12 +104,60 @@
     if (!user) return null;
     
     const roleInfo = await getUserRole();
-    if (!roleInfo || !allowedRoles.includes(roleInfo.role)) {
-      // If the user's role is not in the allowed roles list, redirect them
+    if (!roleInfo) {
       window.location.href = redirectTo;
       return null;
     }
-    return { user, role: roleInfo.role, tenantId: roleInfo.tenantId };
+
+    const userRole = roleInfo.role;
+
+    // 1. Owner & Admin always have access
+    if (userRole === 'owner' || userRole === 'admin') {
+      return { user, role: userRole, tenantId: roleInfo.tenantId };
+    }
+
+    // 2. Direct static role check
+    if (allowedRoles.includes(userRole)) {
+      return { user, role: userRole, tenantId: roleInfo.tenantId };
+    }
+
+    // 3. Dynamic role lookup
+    try {
+      const { data: dbRole, error } = await sb
+        .from('dashboard_roles')
+        .select('accessible_modules')
+        .eq('name', userRole)
+        .maybeSingle();
+
+      if (!error && dbRole && Array.isArray(dbRole.accessible_modules)) {
+        const MODULE_GATE_MAP = {
+          'Products': ['logistics'],
+          'Operations': ['operations'],
+          'Marketing': ['marketing', 'customer_service'],
+          'Sales': ['sales'],
+          'Customer Service': ['customer_service', 'hr'],
+          'Logistics': ['logistics'],
+          'HR': ['hr', 'customer_service'],
+          'Finance': ['accounting']
+        };
+
+        const allowedKeys = new Set();
+        dbRole.accessible_modules.forEach(mod => {
+          const keys = MODULE_GATE_MAP[mod];
+          if (keys) keys.forEach(k => allowedKeys.add(k));
+        });
+
+        const hasAccess = allowedRoles.some(roleKey => allowedKeys.has(roleKey));
+        if (hasAccess) {
+          return { user, role: userRole, tenantId: roleInfo.tenantId };
+        }
+      }
+    } catch (err) {
+      console.error('Error verifying dynamic role gate:', err);
+    }
+    
+    window.location.href = redirectTo;
+    return null;
   }
 
   // Export everything through window.BKAuth — the only global this file touches

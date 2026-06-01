@@ -271,29 +271,49 @@
         const currentUser = user.data.user;
 
         const roleInfo = await window.BKAuth.getUserRole();
-        const userRole = roleInfo?.role || 'staff';
+        const userRole = roleInfo?.role || null;
 
-        // Filter child links
-        document.querySelectorAll('.dash-nav-child').forEach(el => {
-          const allowedRole = el.dataset.role;
-          if (!allowedRole) return;
-          if (['owner', 'admin'].includes(userRole)) {
-            el.style.display = 'flex';
-          } else if (userRole === allowedRole) {
-            el.style.display = 'flex';
-          } else {
-            el.style.display = 'none';
+        let accessibleModules = [];
+        const isOwnerOrAdmin = ['owner', 'admin'].includes(userRole);
+
+        if (!isOwnerOrAdmin && userRole) {
+          try {
+            const { data: dbRole } = await window.BKAuth.sb
+              .from('dashboard_roles')
+              .select('accessible_modules')
+              .eq('name', userRole)
+              .maybeSingle();
+            if (dbRole && Array.isArray(dbRole.accessible_modules)) {
+              accessibleModules = dbRole.accessible_modules;
+            }
+          } catch (err) {
+            console.error('Sidebar dynamic role fetch error:', err);
           }
-        });
+        }
 
-        // Hide group if no visible children
+        // Filter top-level groups based on dynamic role modules
+        const GROUP_MODULE_MAP = {
+          'nav-group-products': 'Products',
+          'nav-group-operations': 'Operations',
+          'nav-group-marketing': 'Marketing',
+          'nav-group-sales': 'Sales',
+          'nav-group-customerservice': 'Customer Service',
+          'nav-group-logistics': 'Logistics',
+          'nav-group-hr': 'HR',
+          'nav-group-finance': 'Finance'
+        };
+
         document.querySelectorAll('.dash-nav-group').forEach(group => {
-          const children = Array.from(group.querySelectorAll('.dash-nav-child'));
-          const hasVisibleChildren = children.length === 0 || children.some(el => el.style.display !== 'none');
-          if (!hasVisibleChildren) {
-            group.style.display = 'none';
-          } else {
+          const groupId = group.id;
+          const moduleName = GROUP_MODULE_MAP[groupId];
+          if (!moduleName) return;
+
+          if (isOwnerOrAdmin) {
             group.style.display = 'block';
+          } else if (accessibleModules.includes(moduleName)) {
+            group.style.display = 'block';
+          } else {
+            group.style.display = 'none';
           }
         });
 
