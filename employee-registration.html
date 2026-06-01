@@ -493,6 +493,18 @@
     <a href="index.html" class="btn-primary" style="text-decoration:none; display:inline-flex; align-items:center; justify-content:center; margin:0 auto; padding:0.75rem 1.75rem; border-radius:var(--radius-sm); font-weight:700; color:#fff; background:var(--cyan); box-shadow:0 2px 12px rgba(6,182,212,0.25);">Back to Homepage</a>
   </div>
 
+  <!-- Already Registered State (Hidden by default) -->
+  <div id="already-registered-state" class="container text-center" style="display:none; padding: 4rem 2rem; max-width: 600px; margin: 50px auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-md); text-align: center;">
+    <div style="width: 64px; height: 64px; margin: 0 auto 1.5rem; border-radius: 50%; background: rgba(16,185,129,0.08); border: 1.5px solid rgba(16,185,129,0.25); display: grid; place-items: center; color: var(--success);">
+      <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin: 0 auto;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+    </div>
+    <h2 style="font-size: 1.5rem; font-weight: 800; color: var(--text-1); margin-bottom: 0.5rem;">Already Registered</h2>
+    <p style="font-size: 0.95rem; line-height: 1.7; color: var(--text-2); margin-bottom: 1.75rem;">
+      You already have an account registered with this email address. Please proceed to sign in to access your dashboard.
+    </p>
+    <a href="/admin" class="btn-primary" style="text-decoration:none; display:inline-flex; align-items:center; justify-content:center; margin:0 auto; padding:0.75rem 1.75rem; border-radius:var(--radius-sm); font-weight:700; color:#fff; background:var(--cyan); box-shadow:0 2px 12px rgba(6,182,212,0.25);">Sign In</a>
+  </div>
+
   <div class="page" id="registration-page">
 
     <!-- Page header -->
@@ -909,6 +921,24 @@
         document.getElementById('registration-page').style.display = 'none';
         document.getElementById('access-denied-state').style.display = 'block';
         return;
+      }
+
+      // Check if user has already created their account (exists in tenant_members)
+      try {
+        const { data: member, error } = await sb
+          .from('tenant_members')
+          .select('id')
+          .eq('user_email', inviteEmail.toLowerCase().trim())
+          .eq('tenant_id', inviteTenant)
+          .limit(1);
+
+        if (!error && member && member.length > 0) {
+          document.getElementById('registration-page').style.display = 'none';
+          document.getElementById('already-registered-state').style.display = 'block';
+          return;
+        }
+      } catch (err) {
+        console.error('Error checking existing membership:', err);
       }
 
       // Pre-fill email and freeze it
