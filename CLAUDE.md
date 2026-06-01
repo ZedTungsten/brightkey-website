@@ -9,6 +9,7 @@
 
 ## Icons & Emoji Rule
 **Always use inline SVG for icons.** Never use emojis as icons or decorative elements anywhere in the UI — not in HTML, JS-generated markup, or template strings.
+- **Minimalist SVG Buttons**: When rendering inline SVG buttons (e.g. edit, check/save, close/cancel/delete buttons), always use minimalist SVGs without containers, borders, backgrounds, or default button padding. Ensure buttons wrapping these SVGs are transparent, borderless, and styled cleanly with appropriate colors (e.g. gray for edit/pencil, green for check/success, red for close/danger).
 
 ## CSS & Styling Modifications Rule
 **Javascript Override Check**: Whenever modifying CSS styles (like `padding`, `margin`, `display` etc.) for a specific element in the HTML or CSS files, **always** double-check if there is any inline Javascript (e.g., event listeners, UI interactions like `switchMedia()`) that aggressively overrides those same styles via `element.style.property`. 
