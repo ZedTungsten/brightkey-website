@@ -74,6 +74,7 @@
   const companyId = companyData?.[0]?.id;
   ```
 - **Never guess `authInfo.companyId`**: Attempting to read `authInfo.companyId` directly returns `undefined`, which triggers a database type mismatch error (`invalid input syntax for type uuid: "undefined"`) when used in queries.
+- **Ensure Scoped Data Creation**: All new data entries and operations (inserts, updates, upserts) must explicitly include `company_id` (e.g. `company_id: currentCompanyId`) to ensure strict compliance with database Row-Level Security (RLS) policies. Failure to scope writes will cause silent write rejections or query failures.
 
 ## Toast Notification Stacking Rule
 - **Toast z-index must be `99999`**: To guarantee that toast notifications are visible over dark modal overlays, blur filters, and lateral drawers (which typically sit between `100` and `2000` z-index), always style `#toast-container` with `z-index: 99999`.
