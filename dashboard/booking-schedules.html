@@ -874,7 +874,7 @@
           // Parse city from address or fallback
           const cityStr = getCityFromAddress(b.customer_address);
           const displayText = `${escapeHtml(b.customer_name)} (${escapeHtml(cityStr)})`;
-          const badgeHtml = b.installer_name ? `<span class="calendar-inst-badge">${escapeHtml(b.installer_name)}</span>` : '';
+          const badgeHtml = b.installer_name ? `<span class="calendar-inst-badge">${escapeHtml(formatInstallerName(b.installer_name))}</span>` : '';
           
           const slotHtml = `
             <div class="calendar-slot ${isAfternoon(b.scheduled_time) ? 'pm' : 'am'}" title="${displayText}" onclick="showBookingDetails('${b.id}')">
@@ -938,7 +938,7 @@
               <div class="list-card-details">
                 <span><strong>Location:</strong> ${escapeHtml(cityStr)}</span>
                 <span><strong>Products:</strong> ${escapeHtml(formattedProducts)}</span>
-                <span><strong>Installer:</strong> ${escapeHtml(b.installer_name || 'None Assigned')}</span>
+                <span><strong>Installer:</strong> ${escapeHtml(formatInstallerName(b.installer_name))}</span>
               </div>
             </div>
             <div class="list-card-right">
@@ -1079,10 +1079,10 @@
               list = selectedBooking.installers;
             }
             if (list.length > 0) {
-              installersHtml = list.map(inst => inst.name).join(', ');
+              installersHtml = list.map(inst => formatInstallerName(inst.name)).join(', ');
             }
           } else if (selectedBooking.installer_name) {
-            installersHtml = selectedBooking.installer_name.replace(/ \| /g, ', ');
+            installersHtml = formatInstallerName(selectedBooking.installer_name);
           }
 
           tbody.insertAdjacentHTML('beforeend', `
@@ -1287,6 +1287,25 @@
                 .replace(/>/g, "&gt;")
                 .replace(/"/g, "&quot;")
                 .replace(/'/g, "&#039;");
+    }
+
+    function formatInstallerName(nameStr) {
+      if (!nameStr) return 'None Assigned';
+      const delimiter = nameStr.includes('|') ? '|' : (nameStr.includes(',') ? ',' : null);
+      if (delimiter) {
+        return nameStr.split(delimiter)
+          .map(n => formatInstallerName(n.trim()))
+          .filter(Boolean)
+          .join(', ');
+      }
+      let cleaned = nameStr.replace(/\s*\([^)]*\)/g, '').trim();
+      if (!cleaned) return '';
+      const parts = cleaned.split(/\s+/);
+      if (parts.length <= 1) return cleaned;
+      const firstName = parts[0];
+      const lastName = parts[parts.length - 1];
+      const initial = lastName ? ` ${lastName.charAt(0).toUpperCase()}.` : '';
+      return `${firstName}${initial}`;
     }
   </script>
 </body>
