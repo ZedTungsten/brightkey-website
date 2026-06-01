@@ -1190,12 +1190,17 @@
           const ctx = canvas.getContext('2d');
           ctx.drawImage(img, 0, 0, width, height);
 
-          // Iteratively reduce quality until under target size
+          // Detect original mime type to preserve transparency
+          const mimeMatch = base64String.match(/^data:(image\/[a-z0-9-+.]+);base64,/);
+          const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+          const outputMime = (mimeType === 'image/png' || mimeType === 'image/gif') ? 'image/png' : 'image/jpeg';
+
+          // Iteratively reduce quality until under target size (for JPEGs)
           let quality = 0.85;
           const tryCompress = () => {
-            const compressed = canvas.toDataURL('image/jpeg', quality);
+            const compressed = canvas.toDataURL(outputMime, outputMime === 'image/jpeg' ? quality : undefined);
             const sizeKB = Math.round((compressed.length * 3) / 4 / 1024);
-            if (sizeKB > targetSizeKB && quality > 0.1) {
+            if (outputMime === 'image/jpeg' && sizeKB > targetSizeKB && quality > 0.1) {
               quality = Math.max(0.1, quality - 0.1);
               tryCompress();
             } else {
