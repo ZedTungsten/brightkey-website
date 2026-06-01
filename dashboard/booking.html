@@ -503,13 +503,9 @@
 
     let dbProducts = [];
     let currentCompanyId = null;
+    let dbEmployees = [];
 
-    const MOCK_EMPLOYEES = [
-      { id: 'emp-1', employee_number: 'BK-0001', first_name: 'Juan', last_name: 'dela Cruz', title: 'Installer', department: 'Operations' },
-      { id: 'emp-2', employee_number: 'BK-0002', first_name: 'Pedro', last_name: 'Penduko', title: 'Installer', department: 'Operations' },
-      { id: 'emp-3', employee_number: 'BK-0003', first_name: 'Carlos', last_name: 'Yulo', title: 'Installer', department: 'Operations' },
-      { id: 'emp-4', employee_number: 'BK-0004', first_name: 'Maria', last_name: 'Makiling', title: 'Operations Manager', department: 'Operations' }
-    ];
+    const MOCK_EMPLOYEES = []; // Cleared dummy/fake installers
 
     let doorCount = 0;
 
@@ -530,10 +526,15 @@
             currentCompanyId = companyData[0].id;
           }
 
-          const [productsRes, inventoryRes] = await Promise.all([
+          const [productsRes, inventoryRes, employeesRes] = await Promise.all([
             sb.from('products').select('sku, title, image_main, installation_price'),
-            sb.from('inventory').select('sku, available')
+            sb.from('inventory').select('sku, available'),
+            sb.from('employees').select('id, employee_number, first_name, last_name, position, department')
           ]);
+
+          if (employeesRes.data) {
+            dbEmployees = employeesRes.data;
+          }
 
           if (productsRes.data && productsRes.data.length > 0) {
             const invMap = {};
@@ -553,7 +554,7 @@
             }));
           }
         } catch (e) {
-          console.error("Error fetching products from database:", e);
+          console.error("Error fetching data from database:", e);
         }
       }
 
@@ -575,14 +576,20 @@
       }
 
       const rowId = 'inst-row-' + Date.now() + Math.round(Math.random() * 1000);
-      const installers = MOCK_EMPLOYEES.filter(emp => emp.title === 'Installer');
+      
+      // Filter employees by role/position containing 'installer' or department containing 'operations' or 'logistics'
+      const employeeSource = dbEmployees.length > 0 ? dbEmployees : MOCK_EMPLOYEES;
+      const installers = employeeSource.filter(emp => {
+        const title = (emp.position || emp.title || '').toLowerCase();
+        return title.includes('installer') || title.includes('operations') || title.includes('field');
+      });
       
       let optionsHtml = '<option value="">-- Select Installer --</option>';
       installers.forEach(inst => {
         const isSelected = inst.id === selectedValue ? 'selected' : '';
         const lastInitial = inst.last_name ? ` ${inst.last_name.trim().charAt(0).toUpperCase()}.` : '';
         const displayName = `${inst.first_name}${lastInitial}`;
-        optionsHtml += `<option value="${inst.id}" ${isSelected}>${displayName}</option>`;
+        optionsHtml += `<option value="${inst.id}" ${isSelected}>${displayName} (${inst.employee_number || 'N/A'})</option>`;
       });
 
       const rowHtml = `
@@ -1234,7 +1241,7 @@
       installerSelects.forEach(select => {
         const empId = select.value;
         if (empId) {
-          const emp = MOCK_EMPLOYEES.find(e => e.id === empId);
+          const emp = (dbEmployees.length > 0 ? dbEmployees : MOCK_EMPLOYEES).find(e => e.id === empId);
           if (emp) {
             const lastInitial = emp.last_name ? ` ${emp.last_name.trim().charAt(0).toUpperCase()}.` : '';
             const displayName = `${emp.first_name}${lastInitial}`;
