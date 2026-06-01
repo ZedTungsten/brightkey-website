@@ -234,6 +234,25 @@
     </div>
   </div>
 
+  <!-- Custom Confirmation Dialog Modal -->
+  <div class="modal-overlay" id="confirm-modal">
+    <div class="modal-card" style="width: 400px; max-width: 90%;">
+      <div class="modal-header">
+        <div class="modal-title">Confirm Action</div>
+        <button class="modal-close" onclick="closeConfirmModal()">
+          <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body" style="padding: 1.5rem; text-align: center;">
+        <p id="confirm-message" style="font-size: 0.9rem; color: var(--text-secondary); line-height: 1.4;"></p>
+      </div>
+      <div class="modal-footer" style="background: var(--bg-elevated); padding: 1rem 1.5rem; display: flex; justify-content: flex-end; gap: 0.75rem;">
+        <button type="button" class="btn btn-outline" onclick="closeConfirmModal()">Cancel</button>
+        <button type="button" class="btn btn-primary" id="btn-confirm-yes" style="background: var(--danger); border-color: var(--danger);">Confirm</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Supabase CDN and auth.js -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <script src="../js/auth.js"></script>
@@ -244,6 +263,7 @@
     let currentUser;
     let currentCompanyId = '';
     let dynamicRoles = [];
+    let confirmCallback = null;
 
     document.addEventListener('DOMContentLoaded', async () => {
       // 1. Authenticate and enforce gate access for owner and admin roles
@@ -265,7 +285,30 @@
       await loadDynamicRoles();
       loadAllMembers();
       loadRolesDropdown();
+
+      // Hook up confirm modal yes button
+      const confirmYes = document.getElementById('btn-confirm-yes');
+      if (confirmYes) {
+        confirmYes.addEventListener('click', () => {
+          if (confirmCallback) confirmCallback();
+          closeConfirmModal();
+        });
+      }
     });
+
+    function showConfirmModal(message, onConfirm) {
+      const msgEl = document.getElementById('confirm-message');
+      if (msgEl) msgEl.textContent = message;
+      confirmCallback = onConfirm;
+      const modal = document.getElementById('confirm-modal');
+      if (modal) modal.classList.add('open');
+    }
+
+    function closeConfirmModal() {
+      const modal = document.getElementById('confirm-modal');
+      if (modal) modal.classList.remove('open');
+      confirmCallback = null;
+    }
 
     async function loadDynamicRoles() {
       try {
@@ -577,18 +620,19 @@
     }
 
     // --- Cancel Invitation ---
-    async function cancelInvitation(inviteId) {
-      if (!confirm('Are you sure you want to cancel this invitation?')) return;
-      try {
-        const { error } = await sb.from('company_invitations').delete().eq('id', inviteId);
-        if (error) throw error;
+    function cancelInvitation(inviteId) {
+      showConfirmModal('Are you sure you want to cancel this invitation?', async () => {
+        try {
+          const { error } = await sb.from('company_invitations').delete().eq('id', inviteId);
+          if (error) throw error;
 
-        showToast('Invitation cancelled.');
-        loadAllMembers();
-      } catch (err) {
-        console.error('Error cancelling invite:', err);
-        showToast('Failed to cancel invitation.', true);
-      }
+          showToast('Invitation cancelled.');
+          loadAllMembers();
+        } catch (err) {
+          console.error('Error cancelling invite:', err);
+          showToast('Failed to cancel invitation.', true);
+        }
+      });
     }
 
     // --- Update Member Role ---
@@ -609,18 +653,24 @@
     }
 
     // --- Remove Member ---
-    async function removeMember(memberId) {
-      if (!confirm('Are you sure you want to remove this member from your team? They will immediately lose dashboard access.')) return;
-      try {
-        const { error } = await sb.from('tenant_members').delete().eq('id', memberId);
-        if (error) throw error;
+    function removeMember(memberId) {
+      showConfirmModal('Are you sure you want to remove this member from your team? They will immediately lose dashboard access.', async () => {
+        try {
+          const { error } = await sb.from('tenant_members').delete().eq('id', memberId);
+          if (error) throw error;
 
-        showToast('Member removed successfully.');
-        loadAllMembers();
-      } catch (err) {
-        console.error('Error removing member:', err);
-        showToast('Failed to remove member.', true);
-      }
+          showToast('Member removed successfully.');
+          loadAllMembers();
+        } catch (err) {
+          console.error('Error removing member:', err);
+          showToast('Failed to remove member.', true);
+        }
+      });
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
     }
 
     // --- Toast Alert Helper ---
