@@ -589,6 +589,14 @@
             <span class="details-label">Receipt PDF</span>
             <span class="details-value" id="det-receipt">-</span>
           </div>
+          <div class="details-group">
+            <span class="details-label">Google Map Pin</span>
+            <span class="details-value" id="det-map-pin">-</span>
+          </div>
+          <div class="details-group" style="grid-column: span 2;">
+            <span class="details-label">Installation Notes</span>
+            <span class="details-value" id="det-notes" style="white-space: pre-wrap;">-</span>
+          </div>
         </div>
 
         <hr style="border:0; border-top: 1px solid var(--border);" />
@@ -979,6 +987,17 @@
         receiptEl.innerText = 'No receipt generated';
       }
 
+      // Google Map Pin
+      const mapPinEl = document.getElementById('det-map-pin');
+      if (selectedBooking.google_map_pin_url) {
+        mapPinEl.innerHTML = `<a href="${selectedBooking.google_map_pin_url}" target="_blank" style="color:var(--blue); font-weight:600;">Open Google Map Pin</a>`;
+      } else {
+        mapPinEl.innerText = 'No link provided';
+      }
+
+      // Notes
+      document.getElementById('det-notes').innerText = selectedBooking.notes || 'No notes';
+
       // Products & Doors parsing
       const tbody = document.getElementById('det-products-tbody');
       tbody.innerHTML = '';
@@ -1012,7 +1031,8 @@
           
           const doorMaterial = doorsArr[i]?.doorMaterial || 'N/A';
           const jambMaterial = doorsArr[i]?.jambMaterial || 'N/A';
-          const doorType = (doorMaterial !== 'N/A' || jambMaterial !== 'N/A') ? `${doorMaterial} / ${jambMaterial}` : 'N/A';
+          const swing = doorsArr[i]?.swing || 'N/A';
+          const doorType = (doorMaterial !== 'N/A' || jambMaterial !== 'N/A') ? `${doorMaterial} / ${jambMaterial} (${swing})` : 'N/A';
 
           // Door photos thumbnails
           let photosHtml = 'N/A';
@@ -1022,12 +1042,28 @@
             `).join(' ');
           }
 
+          // Parse multiple installers
+          let installersHtml = 'None Assigned';
+          if (selectedBooking.installers && selectedBooking.installers.length > 0) {
+            let list = [];
+            if (typeof selectedBooking.installers === 'string') {
+              try { list = JSON.parse(selectedBooking.installers); } catch(_) {}
+            } else {
+              list = selectedBooking.installers;
+            }
+            if (list.length > 0) {
+              installersHtml = list.map(inst => inst.name).join(', ');
+            }
+          } else if (selectedBooking.installer_name) {
+            installersHtml = selectedBooking.installer_name.replace(/ \| /g, ', ');
+          }
+
           tbody.insertAdjacentHTML('beforeend', `
             <tr>
               <td><strong>${escapeHtml(sku)}</strong><br/><span style="color:var(--text-muted);font-size:0.75rem;">${escapeHtml(title)}</span></td>
               <td>${escapeHtml(doorType)}</td>
               <td>${photosHtml}</td>
-              <td>${escapeHtml(selectedBooking.installer_name || 'None Assigned')}</td>
+              <td>${escapeHtml(installersHtml)}</td>
             </tr>
           `);
         }

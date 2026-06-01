@@ -347,6 +347,10 @@
             
             <div style="margin-top: 1.5rem; border-top: 1px dashed var(--border); padding-top: 1.5rem;">
               <h4 style="font-size:0.95rem; font-weight:700; margin-bottom:1rem; color:var(--text-primary);">Site Details (Optional)</h4>
+              <div class="form-group" style="margin-bottom:1rem;">
+                <label class="form-label">Google Map Pin Link</label>
+                <input type="url" class="form-input" id="cust-map-pin" placeholder="e.g. https://maps.app.goo.gl/..." />
+              </div>
               <div class="form-row">
                 <div class="form-group">
                   <label class="form-label">Google Map Screenshot</label>
@@ -403,15 +407,21 @@
                   <option value="Afternoon">Afternoon (PM Slot - 1:00 PM - 5:00 PM)</option>
                 </select>
               </div>
-              <div class="form-group">
-                <label class="form-label">Assign Installer (Optional)</label>
-                <select class="form-input" id="sched-installer" style="height:auto; padding:0.75rem;">
-                  <option value="">-- Select Installer --</option>
-                  <!-- Dynamically populated -->
-                </select>
+              <div class="form-group" style="grid-column: span 2;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem;">
+                  <label class="form-label">Assign Installers (Optional, Max 5)</label>
+                  <button type="button" class="btn btn-outline btn-sm" id="btn-add-installer" onclick="addInstallerSelect()" style="padding: 0.2rem 0.5rem; font-size: 0.72rem;">+ Add Installer</button>
+                </div>
+                <div id="installers-list-container" style="display: flex; flex-direction: column; gap: 0.5rem;">
+                  <!-- Populated dynamically -->
+                </div>
               </div>
             </div>
-            <div style="margin-top: 0.5rem;">
+            <div class="form-group" style="margin-top: 1rem;">
+              <label class="form-label">Installation Notes</label>
+              <textarea class="form-input" id="sched-notes" rows="3" placeholder="Enter special instructions, gate codes, helper names, etc."></textarea>
+            </div>
+            <div style="margin-top: 1.5rem; border-top: 1px dashed var(--border); padding-top: 1rem;">
               <button type="button" class="btn btn-outline btn-sm" onclick="openCalendarModal()" style="display: inline-flex; align-items: center; gap: 0.5rem;">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--cyan)" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
                 View Booking Calendar
@@ -553,20 +563,61 @@
 
       addProductRow();
       adjustDoors(1); // Start with 1 door card
-      populateInstallerDropdown();
+      addInstallerSelect();
     });
 
-    function populateInstallerDropdown() {
-      const select = document.getElementById('sched-installer');
-      if (!select) return;
-      
+    function addInstallerSelect(selectedValue = '') {
+      const container = document.getElementById('installers-list-container');
+      const currentRows = container.querySelectorAll('.installer-row-item');
+      if (currentRows.length >= 5) {
+        showNotification('Maximum of 5 installers can be assigned.', 'error');
+        return;
+      }
+
+      const rowId = 'inst-row-' + Date.now() + Math.round(Math.random() * 1000);
       const installers = MOCK_EMPLOYEES.filter(emp => emp.title === 'Installer');
+      
+      let optionsHtml = '<option value="">-- Select Installer --</option>';
       installers.forEach(inst => {
-        const opt = document.createElement('option');
-        opt.value = inst.id;
-        opt.innerText = `${inst.first_name} ${inst.last_name} (${inst.employee_number})`;
-        select.appendChild(opt);
+        const isSelected = inst.id === selectedValue ? 'selected' : '';
+        optionsHtml += `<option value="${inst.id}" ${isSelected}>${inst.first_name} ${inst.last_name} (${inst.employee_number})</option>`;
       });
+
+      const rowHtml = `
+        <div class="installer-row-item" id="${rowId}" style="display:flex; gap:0.5rem; align-items:center;">
+          <select class="form-input installer-select-input" style="height:auto; padding:0.5rem;">
+            ${optionsHtml}
+          </select>
+          <button type="button" class="btn btn-outline" style="padding:0.5rem; color:var(--danger); border-color:var(--border);" onclick="removeInstallerSelect('${rowId}')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+          </button>
+        </div>
+      `;
+      container.insertAdjacentHTML('beforeend', rowHtml);
+      updateAddInstallerButtonState();
+    }
+
+    function removeInstallerSelect(rowId) {
+      const el = document.getElementById(rowId);
+      if (el) el.remove();
+      updateAddInstallerButtonState();
+    }
+
+    function updateAddInstallerButtonState() {
+      const container = document.getElementById('installers-list-container');
+      const currentRows = container.querySelectorAll('.installer-row-item');
+      const addBtn = document.getElementById('btn-add-installer');
+      if (addBtn) {
+        if (currentRows.length >= 5) {
+          addBtn.disabled = true;
+          addBtn.style.opacity = '0.5';
+          addBtn.style.cursor = 'not-allowed';
+        } else {
+          addBtn.disabled = false;
+          addBtn.style.opacity = '1';
+          addBtn.style.cursor = 'pointer';
+        }
+      }
     }
 
     // --- Dynamic Product Rows ---
@@ -641,7 +692,7 @@
               <h4 style="margin:0;">Door</h4>
               <button type="button" class="btn btn-outline btn-sm" style="color:#ef4444; border-color:#ef4444; padding: 0.25rem 0.5rem;" onclick="removeDoorCard('${doorId}')">✕</button>
             </div>
-            <div class="form-row">
+            <div class="form-row" style="grid-template-columns: repeat(3, 1fr);">
               <div class="form-group">
                 <label class="form-label">Door Material</label>
                 <select class="form-input" style="height:auto; padding:0.5rem;">
@@ -662,6 +713,15 @@
                   <option value="glass">Glass</option>
                   <option value="gate">Gate</option>
                   <option value="concrete">Concrete</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Swing Dropdown</label>
+                <select class="form-input" style="height:auto; padding:0.5rem;">
+                  <option value="Left swing">Left swing</option>
+                  <option value="Right swing">Right swing</option>
+                  <option value="Sliding">Sliding</option>
+                  <option value="Barn Door">Barn Door</option>
                 </select>
               </div>
             </div>
@@ -1110,7 +1170,7 @@
         const card = doorCards[i];
         const selects = card.querySelectorAll('select');
         const doorMaterial = selects[0].value;
-        const jambMaterial = selects[1].value;
+        const swing = selects[2].value;
         
         const photos = [];
         const wrappers = card.querySelectorAll('.file-input-wrapper');
@@ -1127,6 +1187,7 @@
           index: i + 1,
           doorMaterial: doorMaterial,
           jambMaterial: jambMaterial,
+          swing: swing,
           photos: photos
         });
       }
@@ -1147,9 +1208,21 @@
         }
       });
 
-      const installerSelect = document.getElementById('sched-installer');
-      const installerId = installerSelect ? installerSelect.value : '';
-      const installerName = installerSelect && installerSelect.selectedIndex > 0 ? installerSelect.options[installerSelect.selectedIndex].text : '';
+      // Collect installers list
+      const installerSelects = document.querySelectorAll('.installer-select-input');
+      const installersList = [];
+      installerSelects.forEach(select => {
+        const empId = select.value;
+        if (empId) {
+          const emp = MOCK_EMPLOYEES.find(e => e.id === empId);
+          if (emp) {
+            installersList.push({ id: emp.id, name: `${emp.first_name} ${emp.last_name}`, employee_number: emp.employee_number });
+          }
+        }
+      });
+
+      const installerIdStr = installersList.length > 0 ? installersList.map(inst => inst.id).join(' | ') : null;
+      const installerNameStr = installersList.length > 0 ? installersList.map(inst => inst.name).join(' | ') : null;
 
       // Save order info to localStorage for the installer page to retrieve dynamically!
       const orderData = {
@@ -1164,8 +1237,11 @@
         products: products,
         mapImage: mapUrl,
         frontageImage: frontageUrl,
-        installerId,
-        installerName
+        installerId: installerIdStr,
+        installerName: installerNameStr,
+        installers: installersList,
+        notes: document.getElementById('sched-notes')?.value?.trim() || '',
+        googleMapPinUrl: document.getElementById('cust-map-pin')?.value?.trim() || ''
       };
       
       localStorage.setItem('latest_installation_order', JSON.stringify(orderData));
@@ -1234,8 +1310,11 @@
         customer_address:   `${address}, ${city}, ${province} ${zip}`.trim(),
         scheduled_date:     dateVal || null,
         scheduled_time:     timeVal || null,
-        installer_id:       installerId || null,
-        installer_name:     installerName || null,
+        installer_id:       installerIdStr,
+        installer_name:     installerNameStr,
+        installers:         installersList,
+        notes:              document.getElementById('sched-notes')?.value?.trim() || null,
+        google_map_pin_url: document.getElementById('cust-map-pin')?.value?.trim() || null,
         // Pipe-separated product columns
         product_skus:         prodSkus.join(' | ') || null,
         product_names:        prodNames.join(' | ') || null,
@@ -1250,7 +1329,7 @@
         deduction_labels:   dLabels.join(' | ') || null,
         deduction_values:   dValues.join(' | ') || null,
         // Full door specs JSONB
-        doors:              doors.map(d => ({ index: d.index, doorMaterial: d.doorMaterial, jambMaterial: d.jambMaterial, photos: d.photos })),
+        doors:              doors.map(d => ({ index: d.index, doorMaterial: d.doorMaterial, jambMaterial: d.jambMaterial, swing: d.swing, photos: d.photos })),
         // All CDN image URLs
         map_image_url:      mapUrl || null,
         frontage_image_url: frontageUrl || null,
@@ -2191,7 +2270,14 @@
       // Clear Schedule details
       document.getElementById('sched-date').value = '';
       document.getElementById('sched-time').selectedIndex = 0;
-      document.getElementById('sched-installer').selectedIndex = 0;
+      document.getElementById('sched-notes').value = '';
+      document.getElementById('cust-map-pin').value = '';
+      
+      const installersContainer = document.getElementById('installers-list-container');
+      if (installersContainer) {
+        installersContainer.innerHTML = '';
+        addInstallerSelect();
+      }
 
       // Clear map and frontage photos
       const mapWrapper = document.getElementById('cust-map-wrapper');
