@@ -21,7 +21,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { fileBase64, fileName, category, refId, type } = req.body;
+    const { fileBase64, fileName, category, refId, type, companyId } = req.body;
 
     if (!fileBase64 || !fileName) {
       return res.status(400).json({ error: 'Missing fileBase64 or fileName.' });
@@ -40,29 +40,31 @@ export default async function handler(req, res) {
     // Clean file name to prevent directory traversal
     const safeFileName = fileName.replace(/[^a-zA-Z0-9.\-_]/g, '_');
     const safeRefId = (refId || 'general').replace(/[^a-zA-Z0-9.\-_]/g, '_');
+    const safeCompanyId = (companyId || 'general').replace(/[^a-zA-Z0-9.\-_]/g, '_');
 
-    // Organize folder layout dynamically based on categorizations
+    // Organize folder layout dynamically based on categorizations (scoped per company)
     let folderPath = '';
+    const prefix = `companies/${safeCompanyId}`;
     if (category === 'products') {
-      folderPath = `products/${safeRefId}`;
+      folderPath = `${prefix}/products/${safeRefId}`;
     } else if (category === 'installations') {
       if (type === 'site') {
-        folderPath = `installations/${safeRefId}/site`;
+        folderPath = `${prefix}/installations/${safeRefId}/site`;
       } else if (type === 'doors') {
-        folderPath = `installations/${safeRefId}/doors`;
+        folderPath = `${prefix}/installations/${safeRefId}/doors`;
       } else if (type === 'proof') {
-        folderPath = `installations/${safeRefId}/proof`;
+        folderPath = `${prefix}/installations/${safeRefId}/proof`;
       } else if (type === 'receipt') {
-        folderPath = `installations/${safeRefId}/receipt`;
+        folderPath = `${prefix}/installations/${safeRefId}/receipt`;
       } else {
-        folderPath = `installations/${safeRefId}`;
+        folderPath = `${prefix}/installations/${safeRefId}`;
       }
     } else if (category === 'employees') {
-      folderPath = `employees/${safeRefId}`;
+      folderPath = `${prefix}/employees/${safeRefId}`;
     } else if (category === 'logos') {
-      folderPath = `logos`;
+      folderPath = `${prefix}/logos`;
     } else {
-      folderPath = `uploads/general`;
+      folderPath = `${prefix}/uploads/general`;
     }
 
     const bucketName = 'brightkey-assets';

@@ -20,7 +20,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { fileBase64, title } = req.body;
+    const { fileBase64, title, companyId } = req.body;
 
     if (!fileBase64 || !title) {
       return res.status(400).json({ error: 'Missing fileBase64 or title.' });
@@ -47,8 +47,9 @@ export default async function handler(req, res) {
     const extension = contentType.split('/').pop() || 'mp4';
     const fileName = safeTitle.endsWith(`.${extension}`) ? safeTitle : `${safeTitle}.${extension}`;
 
+    const safeCompanyId = (companyId || 'general').replace(/[^a-zA-Z0-9.\-_]/g, '_');
     const bucketName = 'brightkey-assets';
-    const filePath = `videos/${Date.now()}_${fileName}`;
+    const filePath = `companies/${safeCompanyId}/videos/${Date.now()}_${fileName}`;
 
     // Upload video file directly to Supabase storage bucket under 'videos/' folder
     const { error } = await supabase.storage

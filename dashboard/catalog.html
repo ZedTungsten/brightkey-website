@@ -915,6 +915,7 @@
 
   let lastPublishedAt = null;
   let hasUnpublishedChanges = false;
+  let currentCompanyId = null;
 
   async function checkUnpublishedChanges() {
     try {
@@ -1824,6 +1825,15 @@
     const authInfo = await window.BKAuth.checkRoleGate(['owner', 'admin', 'logistics'], '../admin.html');
     if (!authInfo) return;
 
+    try {
+      const { data: companyData } = await window.BKAuth.sb.from('companies').select('id').eq('tenant_id', authInfo.tenantId).limit(1);
+      if (companyData && companyData.length > 0) {
+        currentCompanyId = companyData[0].id;
+      }
+    } catch (err) {
+      console.error("Error fetching company context:", err);
+    }
+
     fetchProducts();
     initRelatedSkusTagInput();
 
@@ -1942,7 +1952,8 @@
         }
 
         const cleanName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-        const filePath = `products/${sku}/${Date.now()}_${cleanName}`;
+        const safeCompanyId = (currentCompanyId || 'general').replace(/[^a-zA-Z0-9.\-_]/g, '_');
+        const filePath = `companies/${safeCompanyId}/products/${sku}/${Date.now()}_${cleanName}`;
 
         const { data, error } = await window.BKAuth.sb.storage
           .from('brightkey-assets')
