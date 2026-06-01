@@ -12,6 +12,25 @@
 -- =============================================================================
 
 
+-- ── PRE-STEP: Add missing company_id columns to tables that may not have them ──
+-- (These must run BEFORE the DO block so the backfill UPDATEs succeed)
+
+ALTER TABLE public.inventory          ADD COLUMN IF NOT EXISTS company_id UUID REFERENCES public.companies(id) ON DELETE CASCADE;
+ALTER TABLE public.inventory_logs     ADD COLUMN IF NOT EXISTS company_id UUID REFERENCES public.companies(id) ON DELETE CASCADE;
+ALTER TABLE public.inventory_transactions ADD COLUMN IF NOT EXISTS company_id UUID REFERENCES public.companies(id) ON DELETE CASCADE;
+ALTER TABLE public.installations      ADD COLUMN IF NOT EXISTS company_id UUID REFERENCES public.companies(id) ON DELETE SET NULL;
+ALTER TABLE public.employees          ADD COLUMN IF NOT EXISTS company_id UUID REFERENCES public.companies(id) ON DELETE SET NULL;
+ALTER TABLE public.orders             ADD COLUMN IF NOT EXISTS company_id UUID REFERENCES public.companies(id) ON DELETE SET NULL;
+ALTER TABLE public.order_items        ADD COLUMN IF NOT EXISTS company_id UUID REFERENCES public.companies(id) ON DELETE CASCADE;
+ALTER TABLE public.product_reviews    ADD COLUMN IF NOT EXISTS company_id UUID REFERENCES public.companies(id) ON DELETE CASCADE;
+ALTER TABLE public.coupons            ADD COLUMN IF NOT EXISTS company_id UUID REFERENCES public.companies(id) ON DELETE CASCADE;
+ALTER TABLE public.vouchers           ADD COLUMN IF NOT EXISTS company_id UUID REFERENCES public.companies(id) ON DELETE CASCADE;
+ALTER TABLE public.global_settings    ADD COLUMN IF NOT EXISTS company_id UUID REFERENCES public.companies(id) ON DELETE CASCADE;
+ALTER TABLE public.email_marketing_audiences        ADD COLUMN IF NOT EXISTS company_id UUID REFERENCES public.companies(id) ON DELETE CASCADE;
+ALTER TABLE public.email_marketing_audience_members ADD COLUMN IF NOT EXISTS company_id UUID REFERENCES public.companies(id) ON DELETE CASCADE;
+ALTER TABLE public.installation_bookings            ADD COLUMN IF NOT EXISTS company_id UUID REFERENCES public.companies(id) ON DELETE SET NULL;
+
+
 -- ── PART 1: Register BrightKey Tenant & Company ─────────────────────────────
 
 DO $$
@@ -90,12 +109,6 @@ BEGIN
   RAISE NOTICE 'All existing data backfilled to BrightKey company_id: %', v_company_id;
 
 END $$;
-
-
--- ── PART 3: Add missing company_id to inventory and installations ─────────────
-
-ALTER TABLE public.inventory ADD COLUMN IF NOT EXISTS company_id UUID REFERENCES public.companies(id) ON DELETE CASCADE;
-ALTER TABLE public.installations ADD COLUMN IF NOT EXISTS company_id UUID REFERENCES public.companies(id) ON DELETE SET NULL;
 
 
 -- ── PART 4: Harden RLS on Employees ─────────────────────────────────────────
