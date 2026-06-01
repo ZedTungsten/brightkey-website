@@ -171,6 +171,7 @@
           <div class="dash-user-avatar" id="user-avatar">?</div>
           <div style="flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;">
             <div class="dash-user-name" id="user-name">Loading…</div>
+            <div class="dash-user-role" id="user-role"></div>
             <div class="dash-user-email" id="user-email"></div>
           </div>
         </div>
@@ -339,12 +340,45 @@
         const name  = currentUser.user_metadata?.full_name || currentUser.email.split('@')[0];
         const initials = name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
 
+        let profilePictureUrl = null;
+        try {
+          const { data: empData } = await window.BKAuth.sb
+            .from('employees')
+            .select('profile_picture_url')
+            .eq('id', currentUser.id)
+            .maybeSingle();
+          if (empData && empData.profile_picture_url) {
+            profilePictureUrl = empData.profile_picture_url;
+          }
+        } catch (err) {
+          console.error('Sidebar profile picture fetch error:', err);
+        }
+
+        let displayRole = 'Employee';
+        if (userRole) {
+          if (userRole.toLowerCase() === 'hr') {
+            displayRole = 'HR';
+          } else if (userRole.toLowerCase() === 'crm') {
+            displayRole = 'CRM';
+          } else {
+            displayRole = userRole.charAt(0).toUpperCase() + userRole.slice(1);
+          }
+        }
+
         const avatarEl = document.getElementById('user-avatar');
         const nameEl = document.getElementById('user-name');
+        const roleEl = document.getElementById('user-role');
         const emailEl = document.getElementById('user-email');
 
-        if (avatarEl) avatarEl.textContent = initials;
+        if (avatarEl) {
+          if (profilePictureUrl) {
+            avatarEl.innerHTML = `<img src="${profilePictureUrl}" alt="${name}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%; display: block;" />`;
+          } else {
+            avatarEl.textContent = initials;
+          }
+        }
         if (nameEl) nameEl.textContent = name;
+        if (roleEl) roleEl.textContent = displayRole;
         if (emailEl) emailEl.textContent = currentUser.email;
 
       } catch (err) {
