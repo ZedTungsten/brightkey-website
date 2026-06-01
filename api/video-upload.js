@@ -1,3 +1,11 @@
+import { createClient } from '@supabase/supabase-js';
+
+const SUPABASE_URL = process.env.SUPABASE_URL || 'https://ymjlosnxuhsybkzkoofq.supabase.co';
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
+
+// Create admin client to bypass RLS policies during uploads
+const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -11,9 +19,6 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method Not Allowed. Use POST.' });
   }
 
-  const BUNNY_STREAM_LIBRARY_ID = process.env.BUNNY_STREAM_LIBRARY_ID || '665295';
-  const BUNNY_STREAM_API_KEY = process.env.BUNNY_STREAM_API_KEY || '1856adaf-cb43-44fd-ae053c7cddb5-8bce-4abb';
-
   try {
     const { fileBase64, title } = req.body;
 
@@ -21,57 +26,47 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Missing fileBase64 or title.' });
     }
 
-    const base64Data = fileBase64.replace(/^data:video\/\w+;base64,/, '');
+    // Extract content type and clean up base64 prefix
+    const hasPrefix = fileBase64.includes(';base64,');
+    let contentType = 'video/mp4'; // default fallback
+    if (hasPrefix) {
+      const match = fileBase64.match(/^data:(.*?);base64,/);
+      if (match) contentType = match[1];
+    }
+    const base64Data = hasPrefix ? fileBase64.split(';base64,').pop() : fileBase64;
     const buffer = Buffer.from(base64Data, 'base64');
 
-    // 1. Create the video entry in Bunny Stream Library
-    const createUrl = `https://video.bunnycdn.com/library/${BUNNY_STREAM_LIBRARY_ID}/videos`;
-    const createResponse = await fetch(createUrl, {
-      method: 'POST',
-      headers: {
-        'AccessKey': BUNNY_STREAM_API_KEY,
-        'Content-Type': 'application/json',
-        'accept': 'application/json'
-      },
-      body: JSON.stringify({ title })
-    });
+    // Clean safe filename from title
+    const safeTitle = title.replace(/[^a-zA-Z0-9.\-_]/g, '_');
+    const extension = contentType.split('/').pop() || 'mp4';
+    const fileName = safeTitle.endsWith(`.${extension}`) ? safeTitle : `${safeTitle}.${extension}`;
 
-    if (!createResponse.ok) {
-      const errText = await createResponse.text();
-      throw new Error(`Failed to create video placeholder: ${errText}`);
+    const bucketName = 'brightkey-assets';
+    const filePath = `videos/${Date.now()}_${fileName}`;
+
+    // Upload video file directly to Supabase storage bucket under 'videos/' folder
+    const { error } = await supabase.storage
+      .from(bucketName)
+      .upload(filePath, buffer, {
+        contentType: contentType,
+        upsert: true
+      });
+
+    if (error) {
+      throw error;
     }
 
-    const createData = await createResponse.json();
-    const videoId = createData.guid; // Guid matches video ID
-
-    // 2. Upload the raw video stream content
-    const uploadUrl = `https://video.bunnycdn.com/library/${BUNNY_STREAM_LIBRARY_ID}/videos/${videoId}`;
-    const uploadResponse = await fetch(uploadUrl, {
-      method: 'PUT',
-      headers: {
-        'AccessKey': BUNNY_STREAM_API_KEY,
-        'Content-Type': 'application/octet-stream'
-      },
-      body: buffer
-    });
-
-    if (!uploadResponse.ok) {
-      const errText = await uploadResponse.text();
-      throw new Error(`Failed to upload video data: ${errText}`);
-    }
-
-    // Return the secure embed details
-    const embedUrl = `https://iframe.mediadelivery.net/embed/${BUNNY_STREAM_LIBRARY_ID}/${videoId}`;
+    const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${bucketName}/${filePath}`;
 
     return res.status(200).json({
       success: true,
-      videoId,
-      embedUrl,
-      directPlayUrl: `https://iframe.mediadelivery.net/play/${BUNNY_STREAM_LIBRARY_ID}/${videoId}`
+      videoId: filePath,
+      embedUrl: publicUrl,
+      directPlayUrl: publicUrl
     });
 
   } catch (error) {
-    console.error('Bunny Stream Upload Error:', error);
+    console.error('Supabase Video Upload Error:', error);
     return res.status(500).json({ error: error.message || 'Internal server error during video upload.' });
   }
 }
