@@ -262,22 +262,22 @@
     /* ── Side Workspace (Logs) ── */
     .side-workspace {
       position: absolute;
-      top: 0;
+      left: 0;
       right: 0;
       bottom: 0;
-      width: 360px;
+      height: 185px;
       z-index: 100;
       display: flex;
       flex-direction: column;
       background: var(--bg-surface);
-      border-left: 1px solid var(--border);
-      box-shadow: -4px 0 16px rgba(0,0,0,0.08);
-      transform: translateX(100%);
+      border-top: 1px solid var(--border);
+      box-shadow: 0 -4px 16px rgba(0,0,0,0.08);
+      transform: translateY(100%);
       transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
     .side-workspace.open {
-      transform: translateX(0);
+      transform: translateY(0);
     }
 
     #btn-logs.active {
@@ -288,22 +288,33 @@
     }
 
     .side-header {
-      padding: 1.1rem 1.5rem;
+      padding: 0.6rem 1rem;
       border-bottom: 1px solid var(--border);
       font-weight: 700;
       color: var(--text-primary);
-      font-size: 0.9rem;
+      font-size: 0.85rem;
       flex-shrink: 0;
     }
 
     .log-container {
       flex: 1;
       overflow-y: auto;
-      padding: 1.5rem;
+      padding: 0.75rem 1rem;
       font-family: var(--font-mono);
       font-size: 0.75rem;
-      line-height: 1.6;
+      line-height: 1.5;
       background: #FAFAFA;
+    }
+
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
+    .btn-loading {
+      filter: brightness(0.7) !important;
+      cursor: not-allowed !important;
+      pointer-events: none !important;
     }
 
     .log-entry {
@@ -515,7 +526,7 @@
                 <!-- Submit Button -->
                 <div style="margin-top: 1.5rem; text-align: right;">
                   <span style="font-size: 0.75rem; color: var(--text-muted); margin-right: 1.25rem;">Only items with a quantity greater than 0 will be submitted.</span>
-                  <button id="btn-supplier-order-submit" class="btn btn-primary" style="padding: 0.75rem 2rem; font-size: 0.9rem;" onclick="submitSupplierOrder()" disabled>
+                  <button id="btn-supplier-order-submit" class="btn btn-primary" style="padding: 0.75rem 2rem; font-size: 0.9rem;" onclick="submitSupplierOrder(this)" disabled>
                     Request Order
                   </button>
                 </div>
@@ -660,6 +671,22 @@
   <script src="../js/main.js"></script>
   <script>
     'use strict';
+
+    async function wrapActionWithLoading(btn, asyncFn) {
+      if (!btn || btn.disabled) return;
+      const originalHtml = btn.innerHTML;
+      btn.disabled = true;
+      btn.classList.add('btn-loading');
+      btn.innerHTML = `<svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: -2px; margin-right: 6px; animation: spin 1s linear infinite;"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Processing...`;
+      try {
+        await asyncFn();
+      } catch (err) {
+        btn.disabled = false;
+        btn.classList.remove('btn-loading');
+        btn.innerHTML = originalHtml;
+        showToast('Operation failed: ' + err.message, true);
+      }
+    }
 
     let sb;
 
@@ -921,7 +948,7 @@
             <td><strong>${t.quantity}</strong></td>
             <td><span class="badge-status ${badgeClass}">${t.status}</span></td>
             <td>
-              <button class="btn btn-cyan btn-sm" onclick="receiveItem('${t.id}', '${t.sku}', ${t.quantity}, '${t.status}')">
+              <button class="btn btn-cyan btn-sm" onclick="receiveItem(this, '${t.id}', '${t.sku}', ${t.quantity}, '${t.status}')">
                 <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: -2px; margin-right: 6px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Received
               </button>
             </td>
@@ -954,7 +981,7 @@
             <td><strong>${t.quantity}</strong></td>
             <td>${date}</td>
             <td>
-              <button class="btn btn-cyan btn-sm" onclick="packItem('${t.id}', '${t.sku}', ${t.quantity})">
+              <button class="btn btn-cyan btn-sm" onclick="packItem(this, '${t.id}', '${t.sku}', ${t.quantity})">
                 <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: -2px; margin-right: 6px;"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>Packed
               </button>
             </td>
@@ -987,7 +1014,7 @@
             <td><strong>${t.quantity}</strong></td>
             <td>${date}</td>
             <td>
-              <button class="btn btn-cyan btn-sm" onclick="dispatchItem('${t.id}', '${t.sku}', ${t.quantity})">
+              <button class="btn btn-cyan btn-sm" onclick="dispatchItem(this, '${t.id}', '${t.sku}', ${t.quantity})">
                 <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: -2px; margin-right: 6px;"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>Dispatch
               </button>
             </td>
@@ -1020,7 +1047,7 @@
             <td><strong>${t.quantity}</strong></td>
             <td>${date}</td>
             <td style="text-align:right;">
-              <button class="btn btn-outline btn-sm" style="border-color:#ef4444; color:#ef4444;" onclick="returnItem('${t.id}', '${t.sku}', ${t.quantity})">
+              <button class="btn btn-outline btn-sm" style="border-color:#ef4444; color:#ef4444;" onclick="returnItem(this, '${t.id}', '${t.sku}', ${t.quantity})">
                 <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: -2px; margin-right: 6px;"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>Cancelled
               </button>
             </td>
@@ -1052,7 +1079,7 @@
             <td><strong>${t.quantity}</strong></td>
             <td><span class="badge-status ${t.status === 'reserved' ? 'badge-reserved':'badge-packed'}">${t.status}</span></td>
             <td style="text-align:right;">
-              <button class="btn btn-outline btn-sm" style="border-color:#ef4444; color:#ef4444;" onclick="cancelQueueItem('${t.id}', '${t.sku}', ${t.quantity}, '${t.status}')">
+              <button class="btn btn-outline btn-sm" style="border-color:#ef4444; color:#ef4444;" onclick="cancelQueueItem(this, '${t.id}', '${t.sku}', ${t.quantity}, '${t.status}')">
                 Cancel Order
               </button>
             </td>
@@ -1066,7 +1093,7 @@
       const feed = document.getElementById('activity-feed');
       feed.innerHTML = '';
 
-      const logs = activeTransactions.slice(0, 50); // limit to 50 latest logs
+      const logs = activeTransactions.slice(0, 3); // limit to 3 latest logs
       
       if (logs.length === 0) {
         feed.innerHTML = `<div class="log-entry" style="color:var(--text-muted); text-align:center; padding: 2rem 0;">No ledger activity logged.</div>`;
@@ -1330,7 +1357,7 @@
       }
     }
 
-    window.submitSupplierOrder = async function() {
+    window.submitSupplierOrder = async function(btn) {
       const items = [];
       allProducts.forEach(p => {
         const qty = supplierOrderQuantities[p.sku];
@@ -1341,52 +1368,45 @@
 
       if (items.length === 0) return;
 
-      supplierOrderPosting = true;
-      const submitBtn = document.getElementById('btn-supplier-order-submit');
-      if (submitBtn) {
-        submitBtn.disabled = true;
-        submitBtn.innerText = 'Requesting...';
-      }
-
       try {
-        const payloads = items.map(item => ({
-          sku: item.sku,
-          quantity: item.qty,
-          type: 'supplier_order',
-          status: 'ordered',
-          timestamp_ordered: new Date().toISOString()
-        }));
+        await wrapActionWithLoading(btn, async () => {
+          supplierOrderPosting = true;
+          const payloads = items.map(item => ({
+            sku: item.sku,
+            quantity: item.qty,
+            type: 'supplier_order',
+            status: 'ordered',
+            timestamp_ordered: new Date().toISOString()
+          }));
 
-        // Bulk insert into Supabase
-        const { error: txErr } = await sb.from('inventory_transactions').insert(payloads);
-        if (txErr) throw txErr;
+          // Bulk insert into Supabase
+          const { error: txErr } = await sb.from('inventory_transactions').insert(payloads);
+          if (txErr) throw txErr;
 
-        // Ensure inventory rows exist for these SKUs in bulk
-        const uniqueSkus = [...new Set(items.map(i => i.sku))];
-        const { data: existingRows, error: checkErr } = await sb.from('inventory').select('sku').in('sku', uniqueSkus);
-        if (checkErr) throw checkErr;
-        
-        const existingSkus = new Set((existingRows || []).map(r => r.sku));
-        const newInventoryRows = uniqueSkus
-          .filter(sku => !existingSkus.has(sku))
-          .map(sku => ({ sku: sku, available: 0 }));
-        
-        if (newInventoryRows.length > 0) {
-          const { error: insErr } = await sb.from('inventory').insert(newInventoryRows);
-          if (insErr) throw insErr;
-        }
+          // Ensure inventory rows exist for these SKUs in bulk
+          const uniqueSkus = [...new Set(items.map(i => i.sku))];
+          const { data: existingRows, error: checkErr } = await sb.from('inventory').select('sku').in('sku', uniqueSkus);
+          if (checkErr) throw checkErr;
+          
+          const existingSkus = new Set((existingRows || []).map(r => r.sku));
+          const newInventoryRows = uniqueSkus
+            .filter(sku => !existingSkus.has(sku))
+            .map(sku => ({ sku: sku, available: 0 }));
+          
+          if (newInventoryRows.length > 0) {
+            const { error: insErr } = await sb.from('inventory').insert(newInventoryRows);
+            if (insErr) throw insErr;
+          }
 
-        // Reset state
-        supplierOrderQuantities = {};
-        supplierOrderSearch = "";
-        const searchInput = document.getElementById('supplier-search');
-        if (searchInput) searchInput.value = "";
+          // Reset state
+          supplierOrderQuantities = {};
+          supplierOrderSearch = "";
+          const searchInput = document.getElementById('supplier-search');
+          if (searchInput) searchInput.value = "";
 
-        await refreshDashboard();
-        showToast('Supplier order successfully requested!');
-      } catch (err) {
-        console.error(err);
-        showToast('Failed to request supplier order: ' + err.message, true);
+          await refreshDashboard();
+          showToast('Supplier order successfully requested!');
+        });
       } finally {
         supplierOrderPosting = false;
         renderSupplierOrderTab();
@@ -1394,111 +1414,126 @@
     };
 
     // ACTION: Warehouse Confirms Receipt
-    window.receiveItem = async function(id, sku, qty, prevStatus) {
-      const now = new Date().toISOString();
-      
-      // Update transaction status
-      const { error: txErr } = await sb.from('inventory_transactions').update({
-        status: 'received',
-        timestamp_received: now
-      }).eq('id', id);
-      if (txErr) { showToast('Error updating transaction: ' + txErr.message, true); return; }
+    window.receiveItem = async function(btn, id, sku, qty, prevStatus) {
+      await wrapActionWithLoading(btn, async () => {
+        const now = new Date().toISOString();
+        
+        // Update transaction status
+        const { error: txErr } = await sb.from('inventory_transactions').update({
+          status: 'received',
+          timestamp_received: now
+        }).eq('id', id);
+        if (txErr) throw txErr;
 
-      // Get current inventory row
-      const { data: invRow, error: invErr } = await sb.from('inventory').select('*').eq('sku', sku);
-      if (invErr || !invRow || invRow.length === 0) {
-        showToast('Error fetching inventory item', true);
-        return;
-      }
+        // Get current inventory row
+        const { data: invRow, error: invErr } = await sb.from('inventory').select('*').eq('sku', sku);
+        if (invErr || !invRow || invRow.length === 0) {
+          throw new Error('Error fetching inventory item');
+        }
 
-      const inv = invRow[0];
-      const updates = { available: inv.available + qty };
+        const inv = invRow[0];
+        const updates = { available: inv.available + qty };
 
-      // Deduct from previous state counter in inventory
-      if (prevStatus === 'returned') {
-        updates.returned = Math.max(0, inv.returned - qty);
-      } else if (prevStatus === 'cancelled') {
-        updates.cancelled = Math.max(0, inv.cancelled - qty);
-      }
+        // Deduct from previous state counter in inventory
+        if (prevStatus === 'returned') {
+          updates.returned = Math.max(0, inv.returned - qty);
+        } else if (prevStatus === 'cancelled') {
+          updates.cancelled = Math.max(0, inv.cancelled - qty);
+        }
 
-      const { error: updErr } = await sb.from('inventory').update(updates).eq('sku', sku);
-      if (updErr) { showToast('Error updating inventory: ' + updErr.message, true); return; }
+        const { error: updErr } = await sb.from('inventory').update(updates).eq('sku', sku);
+        if (updErr) throw updErr;
 
-      await refreshDashboard();
+        await refreshDashboard();
+      });
     };
 
     // ACTION: Mark Packed
-    window.packItem = async function(id, sku, qty) {
-      const now = new Date().toISOString();
+    window.packItem = async function(btn, id, sku, qty) {
+      await wrapActionWithLoading(btn, async () => {
+        const now = new Date().toISOString();
 
-      const { error: txErr } = await sb.from('inventory_transactions').update({
-        status: 'packed',
-        timestamp_packed: now
-      }).eq('id', id);
-      if (txErr) { showToast('Error updating transaction: ' + txErr.message, true); return; }
+        const { error: txErr } = await sb.from('inventory_transactions').update({
+          status: 'packed',
+          timestamp_packed: now
+        }).eq('id', id);
+        if (txErr) throw txErr;
 
-      const { data: invRow } = await sb.from('inventory').select('*').eq('sku', sku);
-      if (invRow && invRow.length > 0) {
-        const inv = invRow[0];
-        await sb.from('inventory').update({
-          reserved: Math.max(0, inv.reserved - qty),
-          packed: inv.packed + qty
-        }).eq('sku', sku);
-      }
+        const { data: invRow, error: invErr } = await sb.from('inventory').select('*').eq('sku', sku);
+        if (invErr) throw invErr;
+        if (invRow && invRow.length > 0) {
+          const inv = invRow[0];
+          const { error: updErr } = await sb.from('inventory').update({
+            reserved: Math.max(0, inv.reserved - qty),
+            packed: inv.packed + qty
+          }).eq('sku', sku);
+          if (updErr) throw updErr;
+        }
 
-      await refreshDashboard();
+        await refreshDashboard();
+      });
     };
 
     // ACTION: Mark Dispatched
-    window.dispatchItem = async function(id, sku, qty) {
-      const now = new Date().toISOString();
+    window.dispatchItem = async function(btn, id, sku, qty) {
+      await wrapActionWithLoading(btn, async () => {
+        const now = new Date().toISOString();
 
-      const { error: txErr } = await sb.from('inventory_transactions').update({
-        status: 'dispatched',
-        timestamp_dispatched: now
-      }).eq('id', id);
-      if (txErr) { showToast('Error updating transaction: ' + txErr.message, true); return; }
+        const { error: txErr } = await sb.from('inventory_transactions').update({
+          status: 'dispatched',
+          timestamp_dispatched: now
+        }).eq('id', id);
+        if (txErr) throw txErr;
 
-      const { data: invRow } = await sb.from('inventory').select('*').eq('sku', sku);
-      if (invRow && invRow.length > 0) {
-        const inv = invRow[0];
-        await sb.from('inventory').update({
-          packed: Math.max(0, inv.packed - qty),
-          dispatched: inv.dispatched + qty
-        }).eq('sku', sku);
-      }
+        const { data: invRow, error: invErr } = await sb.from('inventory').select('*').eq('sku', sku);
+        if (invErr) throw invErr;
+        if (invRow && invRow.length > 0) {
+          const inv = invRow[0];
+          const { error: updErr } = await sb.from('inventory').update({
+            packed: Math.max(0, inv.packed - qty),
+            dispatched: inv.dispatched + qty
+          }).eq('sku', sku);
+          if (updErr) throw updErr;
+        }
 
-      await refreshDashboard();
+        await refreshDashboard();
+      });
     };
 
     // ACTION: Return dispatched order (Mark "Cancelled")
-    window.returnItem = async function(id, sku, qty) {
-      const now = new Date().toISOString();
+    window.returnItem = async function(btn, id, sku, qty) {
+      await wrapActionWithLoading(btn, async () => {
+        const now = new Date().toISOString();
 
-      const { error: txErr } = await sb.from('inventory_transactions').update({
-        status: 'returned',
-        timestamp_returned: now
-      }).eq('id', id);
-      if (txErr) { showToast('Error updating transaction: ' + txErr.message, true); return; }
+        const { error: txErr } = await sb.from('inventory_transactions').update({
+          status: 'returned',
+          timestamp_returned: now
+        }).eq('id', id);
+        if (txErr) throw txErr;
 
-      const { data: invRow } = await sb.from('inventory').select('*').eq('sku', sku);
-      if (invRow && invRow.length > 0) {
-        const inv = invRow[0];
-        await sb.from('inventory').update({
-          dispatched: Math.max(0, inv.dispatched - qty),
-          returned: inv.returned + qty
-        }).eq('sku', sku);
-      }
+        const { data: invRow, error: invErr } = await sb.from('inventory').select('*').eq('sku', sku);
+        if (invErr) throw invErr;
+        if (invRow && invRow.length > 0) {
+          const inv = invRow[0];
+          const { error: updErr } = await sb.from('inventory').update({
+            dispatched: Math.max(0, inv.dispatched - qty),
+            returned: inv.returned + qty
+          }).eq('sku', sku);
+          if (updErr) throw updErr;
+        }
 
-      await refreshDashboard();
-      showToast('Order marked as Returned. Warehouse must confirm receipt under the Receive tab.');
+        await refreshDashboard();
+        showToast('Order marked as Returned. Warehouse must confirm receipt under the Receive tab.');
+      });
     };
 
     // ACTION: Cancel reserved/packed item
-    window.cancelQueueItem = async function(id, sku, qty, prevStatus) {
-      await handleCancellationProcess(id, sku, qty, prevStatus);
-      await refreshDashboard();
-      showToast('Order cancelled. Items sent to Receive tab to be re-shelved.');
+    window.cancelQueueItem = async function(btn, id, sku, qty, prevStatus) {
+      await wrapActionWithLoading(btn, async () => {
+        await handleCancellationProcess(id, sku, qty, prevStatus);
+        await refreshDashboard();
+        showToast('Order cancelled. Items sent to Receive tab to be re-shelved.');
+      });
     };
 
     async function handleCancellationProcess(id, sku, qty, prevStatus) {
@@ -1508,9 +1543,10 @@
         status: 'cancelled',
         timestamp_cancelled: now
       }).eq('id', id);
-      if (txErr) { console.error('Error updating tx cancellation:', txErr); return; }
+      if (txErr) throw txErr;
 
-      const { data: invRow } = await sb.from('inventory').select('*').eq('sku', sku);
+      const { data: invRow, error: invErr } = await sb.from('inventory').select('*').eq('sku', sku);
+      if (invErr) throw invErr;
       if (invRow && invRow.length > 0) {
         const inv = invRow[0];
         const updates = { cancelled: inv.cancelled + qty };
@@ -1519,7 +1555,8 @@
         } else if (prevStatus === 'packed') {
           updates.packed = Math.max(0, inv.packed - qty);
         }
-        await sb.from('inventory').update(updates).eq('sku', sku);
+        const { error: updErr } = await sb.from('inventory').update(updates).eq('sku', sku);
+        if (updErr) throw updErr;
       }
     }
 
