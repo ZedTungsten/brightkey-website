@@ -308,6 +308,25 @@
     </div>
   </div>
 
+  <!-- Custom Confirmation Dialog Modal -->
+  <div class="modal-overlay" id="confirm-modal">
+    <div class="modal-card" style="width: 400px; max-width: 90%;">
+      <div class="modal-header">
+        <div class="modal-title">Confirm Action</div>
+        <button class="modal-close" onclick="closeConfirmModal()">
+          <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body" style="padding: 1.5rem; text-align: center;">
+        <p id="confirm-message" style="font-size: 0.9rem; color: var(--text-secondary); line-height: 1.4;"></p>
+      </div>
+      <div class="modal-footer" style="background: var(--bg-elevated); padding: 1rem 1.5rem; display: flex; justify-content: flex-end; gap: 0.75rem;">
+        <button type="button" class="btn btn-outline" onclick="closeConfirmModal()">Cancel</button>
+        <button type="button" class="btn btn-primary" id="btn-confirm-yes" style="background: var(--danger); border-color: var(--danger);">Confirm</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Supabase CDN and auth.js -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <script src="../js/auth.js"></script>
@@ -319,6 +338,7 @@
     let editingTierId = null;
     let editingRoleId = null;
     let currentTab = 'pricing';
+    let confirmCallback = null;
 
     document.addEventListener('DOMContentLoaded', async () => {
       // 1. Authenticate and enforce gate check: Only johnzeustaller@gmail.com can access this page
@@ -333,7 +353,30 @@
       sb = BKAuth.sb;
       loadPricingTiers();
       loadDashboardRoles();
+
+      // Hook up confirm modal yes button
+      const confirmYes = document.getElementById('btn-confirm-yes');
+      if (confirmYes) {
+        confirmYes.addEventListener('click', () => {
+          if (confirmCallback) confirmCallback();
+          closeConfirmModal();
+        });
+      }
     });
+
+    function showConfirmModal(message, onConfirm) {
+      const msgEl = document.getElementById('confirm-message');
+      if (msgEl) msgEl.textContent = message;
+      confirmCallback = onConfirm;
+      const modal = document.getElementById('confirm-modal');
+      if (modal) modal.classList.add('open');
+    }
+
+    function closeConfirmModal() {
+      const modal = document.getElementById('confirm-modal');
+      if (modal) modal.classList.remove('open');
+      confirmCallback = null;
+    }
 
     function switchTab(tab) {
       currentTab = tab;
@@ -489,19 +532,19 @@
       }
     }
 
-    async function deleteTier(tierId) {
-      if (!confirm('Are you sure you want to permanently delete this pricing tier?')) return;
+    function deleteTier(tierId) {
+      showConfirmModal('Are you sure you want to permanently delete this pricing tier?', async () => {
+        try {
+          const { error } = await sb.from('pricing_tiers').delete().eq('id', tierId);
+          if (error) throw error;
 
-      try {
-        const { error } = await sb.from('pricing_tiers').delete().eq('id', tierId);
-        if (error) throw error;
-
-        showToast('Pricing tier deleted.');
-        loadPricingTiers();
-      } catch (err) {
-        console.error("Error deleting tier:", err);
-        showToast('Failed to delete tier: ' + err.message, true);
-      }
+          showToast('Pricing tier deleted.');
+          loadPricingTiers();
+        } catch (err) {
+          console.error("Error deleting tier:", err);
+          showToast('Failed to delete tier: ' + err.message, true);
+        }
+      });
     }
 
     async function toggleTierVisibility(tierId, isVisible) {
@@ -597,19 +640,19 @@
       }
     }
 
-    async function deleteRole(roleId) {
-      if (!confirm('Are you sure you want to permanently delete this role? This will revoke dashboard access for users assigned this role.')) return;
+    function deleteRole(roleId) {
+      showConfirmModal('Are you sure you want to permanently delete this role? This will revoke dashboard access for users assigned this role.', async () => {
+        try {
+          const { error } = await sb.from('dashboard_roles').delete().eq('id', roleId);
+          if (error) throw error;
 
-      try {
-        const { error } = await sb.from('dashboard_roles').delete().eq('id', roleId);
-        if (error) throw error;
-
-        showToast('Dashboard role deleted.');
-        loadDashboardRoles();
-      } catch (err) {
-        console.error("Error deleting role:", err);
-        showToast('Failed to delete role: ' + err.message, true);
-      }
+          showToast('Dashboard role deleted.');
+          loadDashboardRoles();
+        } catch (err) {
+          console.error("Error deleting role:", err);
+          showToast('Failed to delete role: ' + err.message, true);
+        }
+      });
     }
 
     async function loadDashboardRoles() {
