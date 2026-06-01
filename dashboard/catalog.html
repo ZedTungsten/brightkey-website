@@ -366,12 +366,13 @@
               <th>Category</th>
               <th style="text-align:right">Sale Price</th>
               <th style="text-align:right">Discounted</th>
+              <th style="text-align:right">Dealer Price</th>
               <th>Status</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody id="products-body">
-            <tr><td colspan="9" style="padding:3rem;text-align:center;color:var(--text-muted)">Loading products…</td></tr>
+            <tr><td colspan="10" style="padding:3rem;text-align:center;color:var(--text-muted)">Loading products…</td></tr>
           </tbody>
         </table>
       </div>
@@ -520,6 +521,11 @@
           <label class="form-label">Installation Price <span>fixed (₱)</span></label>
           <input type="number" step="0.01" min="0" class="form-input" id="f-install-price" placeholder="0.00" />
           <div class="form-hint">Applied when customer checks out with installation</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Dealer Price <span>supplier price (₱)</span></label>
+          <input type="number" step="0.01" min="0" class="form-input" id="f-dealer-price" placeholder="0.00" />
+          <div class="form-hint">Used for supplier orders and cost calculations</div>
         </div>
       </div>
 
@@ -953,10 +959,10 @@
   // ─────────────────────────────────────────────────────
   async function fetchProducts() {
     const tbody = document.getElementById('products-body');
-    tbody.innerHTML = `<tr><td colspan="9" style="padding:2rem;text-align:center;color:var(--text-muted)">Loading…</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="10" style="padding:2rem;text-align:center;color:var(--text-muted)">Loading…</td></tr>`;
     const { data, error } = await sbClient.from('products').select('*').order('created_at', { ascending: false });
     if (error) {
-      tbody.innerHTML = `<tr><td colspan="9" style="padding:2rem;text-align:center;color:var(--danger)">Error: ${esc(error.message)}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="10" style="padding:2rem;text-align:center;color:var(--danger)">Error: ${esc(error.message)}</td></tr>`;
       return;
     }
     allProducts = data || [];
@@ -1018,7 +1024,7 @@
   function renderTable() {
     const tbody = document.getElementById('products-body');
     if (filtered.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="9" style="padding:3rem;text-align:center;color:var(--text-muted)">No products found.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="10" style="padding:3rem;text-align:center;color:var(--text-muted)">No products found.</td></tr>`;
       return;
     }
     tbody.innerHTML = filtered.map(p => {
@@ -1034,6 +1040,7 @@
         <td>${esc(p.category || '—')}</td>
         <td style="text-align:right;font-variant-numeric:tabular-nums">${fmtPHP(p.sale_price)}</td>
         <td style="text-align:right;font-variant-numeric:tabular-nums">${p.discounted_price > 0 ? fmtPHP(p.discounted_price) : '<span style="color:var(--text-muted)">—</span>'}</td>
+        <td style="text-align:right;font-variant-numeric:tabular-nums">${p.dealer_price > 0 ? fmtPHP(p.dealer_price) : '<span style="color:var(--text-muted)">—</span>'}</td>
         <td><span class="status-badge ${statusClass}">${esc(p.status)}</span></td>
         <td>
           <div class="row-actions">
@@ -1114,7 +1121,7 @@
     document.getElementById('f-override-rating').checked = false;
     document.getElementById('f-business').value = '';
     document.getElementById('f-status').value = 'draft';
-    ['f-sale-price','f-discounted-price','f-before-price','f-install-price'].forEach(id => {
+    ['f-sale-price','f-discounted-price','f-before-price','f-install-price','f-dealer-price'].forEach(id => {
        document.getElementById(id).value = '';
     });
     // Reset promo tag checkboxes
@@ -1171,6 +1178,7 @@
     document.getElementById('f-discounted-price').value = fmtPriceInput(p.discounted_price);
     document.getElementById('f-before-price').value = fmtPriceInput(p.before_price);
     document.getElementById('f-install-price').value = fmtPriceInput(p.installation_price);
+    document.getElementById('f-dealer-price').value = fmtPriceInput(p.dealer_price);
     
     // Fill promo tags
     const activeTags = p.promo_tags || [];
@@ -1256,6 +1264,7 @@
       discounted_price:  parsePrice(document.getElementById('f-discounted-price').value),
       before_price:      parsePrice(document.getElementById('f-before-price').value) || null,
       installation_price:parsePrice(document.getElementById('f-install-price').value) || null,
+      dealer_price:      parsePrice(document.getElementById('f-dealer-price').value) || null,
       image_main:        g('f-image-main'),
       image_1:           g('f-image-1'),
       image_2:           g('f-image-2'),
@@ -1959,7 +1968,7 @@
     });
 
     // Price inputs → live preview
-    ['f-sale-price','f-discounted-price','f-before-price','f-install-price'].forEach(id => {
+    ['f-sale-price','f-discounted-price','f-before-price','f-install-price','f-dealer-price'].forEach(id => {
       document.getElementById(id).addEventListener('input', updatePricePreview);
     });
 
