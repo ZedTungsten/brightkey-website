@@ -163,10 +163,15 @@
         min-height: auto;
         margin-bottom: 0;
       }
-      .preview-frame-container {
-        padding: 0.5rem;
-        background: none;
       }
+    }
+
+    .panel-disabled {
+      opacity: 0.45;
+      pointer-events: none;
+      user-select: none;
+      filter: grayscale(0.6);
+      transition: all 0.2s ease;
     }
   </style>
 </head>
@@ -216,7 +221,7 @@
                 </div>
 
                 <!-- Client Details Panel -->
-                <div class="panel" style="padding: 1.25rem;">
+                <div class="panel" id="panel-client-details" style="padding: 1.25rem;">
                   <h3 style="margin-bottom: 1rem; border-bottom: 1px solid var(--border); padding-bottom: 0.25rem;">Client Details</h3>
                   <div class="form-group-row" style="margin-bottom: 0.75rem;">
                     <div class="form-group">
@@ -249,7 +254,7 @@
                 </div>
 
                 <!-- Products Purchased Panel -->
-                <div class="panel" style="padding: 1.25rem;">
+                <div class="panel" id="panel-products" style="padding: 1.25rem;">
                   <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
                     <h3 style="margin: 0;">Products Purchased</h3>
                     <button class="btn btn-outline btn-sm" onclick="addInvoiceProductRow()">+ Add Item</button>
@@ -260,7 +265,7 @@
                 </div>
 
                 <!-- Charges & Deductions -->
-                <div class="panel" style="padding: 1.25rem;">
+                <div class="panel" id="panel-charges-deductions" style="padding: 1.25rem;">
                   <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
                     <h3 style="margin: 0;">Additional Charges</h3>
                     <button class="btn btn-outline btn-sm" onclick="addInvoiceChargeRow()">+ Add Charge</button>
@@ -347,16 +352,21 @@
               <div class="preview-header">
                 <span style="font-weight: 700; font-size: 0.9rem;">Invoice Live Preview</span>
                 <div style="display: flex; gap: 0.5rem;">
-                  <button class="btn btn-outline btn-sm" onclick="exportReceiptPDF()">
+                  <button id="btn-export-pdf" class="btn btn-outline btn-sm" onclick="exportReceiptPDF()">
                     📄 Save to PDF
                   </button>
-                  <button class="btn btn-cyan btn-sm" onclick="printReceiptHtml()">
+                  <button id="btn-print-invoice" class="btn btn-cyan btn-sm" onclick="printReceiptHtml()">
                     🖨️ Print Invoice
                   </button>
                 </div>
               </div>
-              <div class="preview-frame-container" id="preview-container">
-                <iframe id="preview-iframe" style="width: 100%; height: 100%; border: none; background: #ffffff;"></iframe>
+              <div class="preview-frame-container" id="preview-container" style="position: relative;">
+                <iframe id="preview-iframe" style="width: 100%; height: 100%; border: none; background: #ffffff; display: none;"></iframe>
+                <div id="preview-placeholder" style="display: flex; flex-direction: column; align-items: center; justify-content: center; color: #a1a1aa; gap: 0.75rem; text-align: center; width: 100%; height: 100%; min-height: 400px;">
+                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color: #52525b;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                  <span style="font-weight: 600; font-size: 0.95rem; color: #e4e4e7;">Select order to load</span>
+                  <span style="font-size: 0.8rem; color: #a1a1aa; max-width: 220px;">Choose a booking from the dropdown to load and edit the invoice.</span>
+                </div>
               </div>
             </div>
 
@@ -535,6 +545,7 @@
       initTermsInputs();
       await loadDatabaseParameters();
       await loadBookingsDropdown();
+      updatePanelStates(false);
       compileReceipt();
     });
 
@@ -623,8 +634,11 @@
       const { data, error } = await sb.from('installation_bookings').select('*').eq('id', selectedBookingId).single();
       if (error || !data) {
         showNotification('Error loading booking data', 'error');
+        updatePanelStates(false);
         return;
       }
+
+      updatePanelStates(true);
 
       // Fill client info
       document.getElementById('inv-orderno').value = data.order_no;
@@ -691,6 +705,47 @@
       compileReceipt();
     };
 
+    function updatePanelStates(hasSelection) {
+      const panels = [
+        document.getElementById('panel-client-details'),
+        document.getElementById('panel-products'),
+        document.getElementById('panel-charges-deductions')
+      ];
+
+      panels.forEach(panel => {
+        if (!panel) return;
+        if (hasSelection) {
+          panel.classList.remove('panel-disabled');
+          panel.querySelectorAll('input, select, textarea, button').forEach(el => {
+            el.removeAttribute('disabled');
+          });
+        } else {
+          panel.classList.add('panel-disabled');
+          panel.querySelectorAll('input, select, textarea, button').forEach(el => {
+            el.setAttribute('disabled', 'true');
+          });
+        }
+      });
+
+      // Update right panel preview and action buttons
+      const iframe = document.getElementById('preview-iframe');
+      const placeholder = document.getElementById('preview-placeholder');
+      const btnPdf = document.getElementById('btn-export-pdf');
+      const btnPrint = document.getElementById('btn-print-invoice');
+
+      if (hasSelection) {
+        if (iframe) iframe.style.display = 'block';
+        if (placeholder) placeholder.style.display = 'none';
+        if (btnPdf) btnPdf.removeAttribute('disabled');
+        if (btnPrint) btnPrint.removeAttribute('disabled');
+      } else {
+        if (iframe) iframe.style.display = 'none';
+        if (placeholder) placeholder.style.display = 'flex';
+        if (btnPdf) btnPdf.setAttribute('disabled', 'true');
+        if (btnPrint) btnPrint.setAttribute('disabled', 'true');
+      }
+    }
+
     function resetInvoiceForm() {
       document.getElementById('booking-selector').value = '';
       selectedBookingId = null;
@@ -707,6 +762,7 @@
       document.getElementById('inv-deductions-container').innerHTML = '';
       
       setSaveChangesState(false);
+      updatePanelStates(false);
       compileReceipt();
     }
 
