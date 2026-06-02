@@ -505,6 +505,7 @@
             <div class="form-group narrow">
               <label class="form-label">Category</label>
               <select id="new-acct-cat" class="form-select"></select>
+              <input type="text" id="new-cat-name" class="form-input" placeholder="Category name…" style="display:none;margin-top:0.5rem;" />
             </div>
             <button class="btn btn-cyan btn-sm" id="add-acct-btn" type="button" style="flex-shrink:0;">Add</button>
           </div>
@@ -789,11 +790,16 @@
 
       populateCatSelects() {
         const sel = document.getElementById('new-acct-cat');
+        sel.innerHTML = '';
         CATEGORIES.forEach(c => {
           const o = document.createElement('option');
           o.value = o.textContent = c;
           sel.appendChild(o);
         });
+        const createOpt = document.createElement('option');
+        createOpt.value = '__create_new__';
+        createOpt.textContent = '+ Create New';
+        sel.appendChild(createOpt);
       },
 
       clearForm() {
@@ -936,13 +942,31 @@
           toggle.classList.toggle('open', open);
         });
 
+        document.getElementById('new-acct-cat').addEventListener('change', function() {
+          const newCatInput = document.getElementById('new-cat-name');
+          const isCreate = this.value === '__create_new__';
+          newCatInput.style.display = isCreate ? '' : 'none';
+          if (isCreate) newCatInput.focus();
+        });
+
         document.getElementById('add-acct-btn').addEventListener('click', async () => {
           const name = document.getElementById('new-acct-name').value.trim();
-          const cat  = document.getElementById('new-acct-cat').value;
+          let cat = document.getElementById('new-acct-cat').value;
+          if (cat === '__create_new__') {
+            const newCat = document.getElementById('new-cat-name').value.trim();
+            if (!newCat) { Toast.error('Category name is required.'); return; }
+            cat = newCat;
+            if (!CATEGORIES.includes(cat)) {
+              CATEGORIES.splice(CATEGORIES.indexOf('Other'), 0, cat);
+            }
+          }
           if (!name) { Toast.error('Account name is required.'); return; }
           try {
             await sbPost('journal_accounts', { name, category: cat });
             document.getElementById('new-acct-name').value = '';
+            document.getElementById('new-cat-name').value = '';
+            document.getElementById('new-cat-name').style.display = 'none';
+            this.populateCatSelects();
             Toast.success(`"${name}" added.`);
             await this.loadAccounts();
           } catch(e) { Toast.error('Failed: ' + e.message); }
