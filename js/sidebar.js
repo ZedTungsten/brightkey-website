@@ -185,6 +185,46 @@
 
     sidebarContainer.innerHTML = sidebarHTML;
 
+    // Prepend hamburger menu button to .top-bar on mobile
+    const topBar = document.querySelector('.top-bar');
+    if (topBar && !document.getElementById('mobile-menu-toggle')) {
+      const toggle = document.createElement('button');
+      toggle.id = 'mobile-menu-toggle';
+      toggle.title = 'Open Menu';
+      toggle.innerHTML = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 20px; height: 20px; display: block;">
+          <line x1="3" y1="12" x2="21" y2="12"></line>
+          <line x1="3" y1="6" x2="21" y2="6"></line>
+          <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+      `;
+      toggle.style.background = 'none';
+      toggle.style.border = 'none';
+      toggle.style.color = 'var(--text-primary)';
+      toggle.style.cursor = 'pointer';
+      toggle.style.padding = '0.5rem';
+      toggle.style.marginRight = '0.5rem';
+      topBar.prepend(toggle);
+
+      toggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const sidebarEl = document.getElementById('dash-sidebar');
+        if (sidebarEl) {
+          sidebarEl.classList.toggle('mobile-open');
+        }
+      });
+    }
+
+    document.addEventListener('click', (e) => {
+      const sidebarEl = document.getElementById('dash-sidebar');
+      const toggle = document.getElementById('mobile-menu-toggle');
+      if (sidebarEl && sidebarEl.classList.contains('mobile-open')) {
+        if (!sidebarEl.contains(e.target) && (!toggle || !toggle.contains(e.target))) {
+          sidebarEl.classList.remove('mobile-open');
+        }
+      }
+    });
+
     // Define window level methods for accordion
     window.toggleUserMenu = (e) => {
       e.stopPropagation();
