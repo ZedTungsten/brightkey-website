@@ -477,14 +477,32 @@
               </div>
             </div>
 
-            <button class="btn btn-cyan btn-lg" id="sched-action-btn" style="width: 100%; margin-bottom: 1rem;" onclick="scheduleAndPrint()">
+            <!-- VAT Options -->
+            <div style="border-top: 1px solid var(--border); padding-top: 1rem; margin-top: 0.25rem; margin-bottom: 1rem;">
+              <div style="font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 0.6rem;">VAT</div>
+              <div style="display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 0.6rem;">
+                <label style="display:flex;align-items:center;gap:0.35rem;font-size:0.82rem;cursor:pointer;">
+                  <input type="radio" name="vat-type" value="none" checked style="accent-color:var(--cyan);" /> None
+                </label>
+                <label style="display:flex;align-items:center;gap:0.35rem;font-size:0.82rem;cursor:pointer;">
+                  <input type="radio" name="vat-type" value="inclusive" style="accent-color:var(--cyan);" /> VAT Inclusive
+                </label>
+                <label style="display:flex;align-items:center;gap:0.35rem;font-size:0.82rem;cursor:pointer;">
+                  <input type="radio" name="vat-type" value="exclusive" style="accent-color:var(--cyan);" /> VAT Exclusive
+                </label>
+              </div>
+              <label style="display:flex;align-items:center;gap:0.4rem;font-size:0.82rem;cursor:pointer;">
+                <input type="checkbox" id="vat-withholding" style="accent-color:var(--cyan);width:14px;height:14px;" />
+                With withholding tax (2%)
+              </label>
+
+              <!-- Live breakdown -->
+              <div id="vat-breakdown" style="display:none; margin-top:0.75rem; background:var(--bg-elevated); border:1px solid var(--border); border-radius:var(--radius-sm); padding:0.75rem; font-size:0.78rem;"></div>
+            </div>
+
+            <button class="btn btn-cyan btn-lg" id="sched-action-btn" style="width: 100%;" onclick="scheduleAndPrint()">
               Schedule & Print Receipt
             </button>
-            
-            <div style="font-size: 0.8rem; color: var(--text-secondary); line-height: 1.6;">
-              <p>✓ Creates a database entry mapped to <strong>Installation</strong> channel.</p>
-              <p>✓ Allocated items will be subtracted from available stock.</p>
-            </div>
           </div>
         </div>
 
@@ -924,7 +942,71 @@
       document.getElementById('summary-charges').innerText = '+ ' + formatCentavos(totalCharges);
       document.getElementById('summary-deductions').innerText = '- ' + formatCentavos(totalDeductions);
       document.getElementById('summary-grand-total').innerText = formatCentavos(grandTotal);
+
+      currentGrandTotalCents = grandTotal;
+      updateVatBreakdown();
     }
+
+    let currentGrandTotalCents = 0;
+
+    function updateVatBreakdown() {
+      const vatType     = document.querySelector('input[name="vat-type"]:checked')?.value || 'none';
+      const withholding = document.getElementById('vat-withholding')?.checked || false;
+      const el          = document.getElementById('vat-breakdown');
+      if (!el) return;
+
+      if (vatType === 'none') { el.style.display = 'none'; return; }
+
+      const gt  = currentGrandTotalCents / 100; // pesos
+      const fmt = v => '₱' + Math.abs(v).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+      let rows = [];
+
+      if (vatType === 'inclusive') {
+        const netOfVat     = gt / 1.12;
+        const vatAmt       = gt - netOfVat;
+        const withholdAmt  = withholding ? netOfVat * 0.02 : 0;
+        const totalDue     = gt - withholdAmt;
+
+        rows = [
+          { label: 'Total Sales (VAT Inclusive)', value: gt },
+          { label: 'Less: 12% VAT',               value: vatAmt },
+          { label: 'Net of VAT / Total',           value: netOfVat },
+          { label: 'Less: Withholding Tax',        value: withholdAmt },
+          { label: 'TOTAL AMOUNT DUE',             value: totalDue, bold: true },
+        ];
+      } else { // exclusive
+        const vatAmt      = gt * 0.12;
+        const totalSales  = gt + vatAmt;
+        const withholdAmt = withholding ? gt * 0.02 : 0;
+        const totalDue    = totalSales - withholdAmt;
+
+        rows = withholding ? [
+          { label: 'VATABLE Sales',               value: gt },
+          { label: 'VAT (12%)',                   value: vatAmt },
+          { label: 'Total Sales (VAT Inclusive)', value: totalSales },
+          { label: 'Less: Withholding Tax',       value: withholdAmt },
+          { label: 'TOTAL AMOUNT DUE',            value: totalDue, bold: true },
+        ] : [
+          { label: 'VATABLE Sales',               value: gt },
+          { label: 'VAT (12%)',                   value: vatAmt },
+          { label: 'Total Sales (VAT Inclusive)', value: totalSales },
+          { label: 'TOTAL AMOUNT DUE',            value: totalDue, bold: true },
+        ];
+      }
+
+      el.innerHTML = rows.map(r => `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:0.2rem 0;
+          ${r.bold ? 'border-top:1px solid var(--border);margin-top:0.3rem;padding-top:0.45rem;font-weight:700;color:var(--text-primary);' : 'color:var(--text-secondary);'}">
+          <span>${r.label}</span><span>${fmt(r.value)}</span>
+        </div>`).join('');
+      el.style.display = 'block';
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      document.querySelectorAll('input[name="vat-type"]').forEach(r => r.addEventListener('change', updateVatBreakdown));
+      document.getElementById('vat-withholding')?.addEventListener('change', updateVatBreakdown);
+    });
 
     function formatCentavos(cents) {
       return (cents / 100).toLocaleString('en-PH', { style: 'currency', currency: 'PHP' });
@@ -1523,6 +1605,47 @@
       const grandTotalFormatted = document.getElementById('summary-grand-total').innerText;
       const receiptDate = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 
+      // Build VAT breakdown rows for receipt
+      const vatType     = document.querySelector('input[name="vat-type"]:checked')?.value || 'none';
+      const withholding = document.getElementById('vat-withholding')?.checked || false;
+      const gt          = currentGrandTotalCents / 100;
+      const fmtR        = v => '₱' + Math.abs(v).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      let vatReceiptHtml = '';
+      if (vatType !== 'none') {
+        let vatRows = [];
+        if (vatType === 'inclusive') {
+          const net  = gt / 1.12;
+          const vat  = gt - net;
+          const wh   = withholding ? net * 0.02 : 0;
+          const due  = gt - wh;
+          vatRows = [
+            ['Total Sales (VAT Inclusive)', fmtR(gt)],
+            ['Less: 12% VAT',              fmtR(vat)],
+            ['Net of VAT / Total',         fmtR(net)],
+            ['Less: Withholding Tax',      fmtR(wh)],
+            ['TOTAL AMOUNT DUE',           fmtR(due), true],
+          ];
+        } else {
+          const vat  = gt * 0.12;
+          const ts   = gt + vat;
+          const wh   = withholding ? gt * 0.02 : 0;
+          const due  = ts - wh;
+          vatRows = [
+            ['VATABLE Sales',               fmtR(gt)],
+            ['VAT (12%)',                   fmtR(vat)],
+            ['Total Sales (VAT Inclusive)', fmtR(ts)],
+            ...(withholding ? [['Less: Withholding Tax', fmtR(wh)]] : []),
+            ['TOTAL AMOUNT DUE',           fmtR(due), true],
+          ];
+        }
+        vatReceiptHtml = vatRows.map(([label, val, bold]) => `
+          <tr>
+            <td></td>
+            <td align="right" style="padding:4px 8px;font-size:11px;${bold ? 'font-weight:700;border-top:1px solid #e5e7eb;padding-top:8px;' : 'color:#6b7280;'}">${label}</td>
+            <td align="right" style="padding:4px 8px;font-size:11px;${bold ? 'font-weight:700;border-top:1px solid #e5e7eb;padding-top:8px;' : 'color:#6b7280;'}">${val}</td>
+          </tr>`).join('');
+      }
+
       const receiptHtml = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1980,6 +2103,7 @@
                       ${grandTotalFormatted}
                     </td>
                   </tr>
+                  ${vatReceiptHtml}
                 </tbody>
               </table>
 
