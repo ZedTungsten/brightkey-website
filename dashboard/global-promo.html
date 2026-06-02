@@ -933,6 +933,7 @@
 
   <script>
     let sb;
+    let companyId = null;
 
     let activeSkusList = [];
     let previewInterval = null;
@@ -1420,6 +1421,7 @@
         promises.push(
           sb.from('global_settings').upsert({
             key: 'free_shipping',
+            company_id: companyId,
             value: {
               storewide_enabled: fsStorewide,
               threshold: fsThreshold,
@@ -1437,6 +1439,7 @@
         promises.push(
           sb.from('global_settings').upsert({
             key: 'delivery_lead_time',
+            company_id: companyId,
             value: {
               storewide_enabled: ltStorewide,
               from_value: ltFromVal,
@@ -1450,7 +1453,7 @@
         
         // 3. Free Gifts
         promises.push(
-          sb.from('global_settings').upsert({ key: 'free_gifts', value: fgRules })
+          sb.from('global_settings').upsert({ key: 'free_gifts', company_id: companyId, value: fgRules })
         );
         
         // 4. Announcement Bar
@@ -1463,6 +1466,7 @@
         promises.push(
           sb.from('global_settings').upsert({
             key: 'announcement_bar',
+            company_id: companyId,
             value: {
               active: announceActive,
               text: announceText,
@@ -1500,6 +1504,7 @@
         promises.push(
           sb.from('global_settings').upsert({
             key: 'promo_popup',
+            company_id: companyId,
             value: {
               active: popupActive,
               image_url: popupImageUrl,
@@ -1523,6 +1528,7 @@
         promises.push(
           sb.from('global_settings').upsert({
             key: 'upsell_cross_sell',
+            company_id: companyId,
             value: {
               upsell_rules: upsellRules.map(r => ({ enabled: r.enabled, trigger_sku: r.trigger_sku, upsell_sku: r.upsell_sku, body: r.body, price_adjustment: r.price_adjustment, indefinite: r.indefinite, active_from: r.active_from, active_to: r.active_to })),
               crosssell_rules: crosssellRules.map(r => ({ enabled: r.enabled, trigger_sku: r.trigger_sku, addon_skus: r.addon_skus, indefinite: r.indefinite, active_from: r.active_from, active_to: r.active_to }))
@@ -1568,6 +1574,7 @@
       if (!authInfo) return;
 
       sb = window.BKAuth.sb;
+      companyId = authInfo.tenantId;
       fetchPromoData();
       setupSkuTagInput();
       setupAnnouncementRealtimePreview();
@@ -1600,7 +1607,7 @@
 
         // 2. Load free shipping config
         const { data: shippingData, error: sErr } = await sb
-          .from('global_settings').select('value').eq('key', 'free_shipping').single();
+          .from('global_settings').select('value').eq('key', 'free_shipping').eq('company_id', companyId).maybeSingle();
 
         if (!sErr && shippingData) {
           const val = shippingData.value || {};
@@ -1614,7 +1621,7 @@
 
         // 3. Load announcement bar
         const { data: announceData, error: aErr } = await sb
-          .from('global_settings').select('value').eq('key', 'announcement_bar').single();
+          .from('global_settings').select('value').eq('key', 'announcement_bar').eq('company_id', companyId).maybeSingle();
 
         if (!aErr && announceData) {
           const config = announceData.value;
@@ -1631,7 +1638,7 @@
 
         // 4. Load delivery lead time
         const { data: ltData, error: ltErr } = await sb
-          .from('global_settings').select('value').eq('key', 'delivery_lead_time').single();
+          .from('global_settings').select('value').eq('key', 'delivery_lead_time').eq('company_id', companyId).maybeSingle();
 
         if (!ltErr && ltData) {
           const val = ltData.value || {};
@@ -1648,7 +1655,7 @@
 
         // 5. Load free gifts config
         const { data: fgData, error: fgErr } = await sb
-          .from('global_settings').select('value').eq('key', 'free_gifts').single();
+          .from('global_settings').select('value').eq('key', 'free_gifts').eq('company_id', companyId).maybeSingle();
         if (!fgErr && fgData) {
           fgRules = fgData.value || [];
           renderFgRows();
@@ -1656,12 +1663,12 @@
 
         // 6. Fetch all products for free gift dropdowns (including sale_price for upsell comparison)
         const { data: productsData } = await sb
-          .from('products').select('id, sku, title, slug, image_main, sale_price').order('sku');
+          .from('products').select('id, sku, title, slug, image_main, sale_price').eq('company_id', companyId).order('sku');
         allProducts = productsData || [];
 
         // 7. Load Upsells & Cross-sells config
         const { data: upsData } = await sb
-          .from('global_settings').select('value').eq('key', 'upsell_cross_sell').single();
+          .from('global_settings').select('value').eq('key', 'upsell_cross_sell').eq('company_id', companyId).maybeSingle();
         if (upsData && upsData.value) {
           upsellRules = upsData.value.upsell_rules || [];
           crosssellRules = upsData.value.crosssell_rules || [];
@@ -1750,6 +1757,7 @@
       btn.disabled = true; btn.innerText = 'Saving...';
       const { error } = await sb.from('global_settings').upsert({
         key: 'free_shipping',
+        company_id: companyId,
         value: {
           storewide_enabled: document.getElementById('fs-storewide').checked,
           threshold: Math.round(parseFloat(document.getElementById('fs-storewide-threshold').value||'0')*100),
@@ -1815,6 +1823,7 @@
       btn.disabled = true; btn.innerText = 'Saving...';
       const { error } = await sb.from('global_settings').upsert({
         key: 'delivery_lead_time',
+        company_id: companyId,
         value: {
           storewide_enabled: document.getElementById('lt-storewide').checked,
           from_value: parseInt(document.getElementById('lt-storewide-from-val').value)||0,
@@ -1888,7 +1897,7 @@
       e.preventDefault();
       const btn = document.getElementById('btn-save-fg');
       btn.disabled = true; btn.innerText = 'Saving...';
-      const { error } = await sb.from('global_settings').upsert({ key: 'free_gifts', value: fgRules });
+      const { error } = await sb.from('global_settings').upsert({ key: 'free_gifts', company_id: companyId, value: fgRules });
       btn.disabled = false; btn.innerText = 'Save';
       if (error) showToast(`Error: ${error.message}`, true);
       else showToast('Free gift rules saved.');
@@ -1949,6 +1958,7 @@
         .from('global_settings')
         .upsert({
           key: 'announcement_bar',
+          company_id: companyId,
           value: {
             active: active,
             text: text,
@@ -1976,6 +1986,7 @@
       const { data: coupons, error } = await sb
         .from('coupons')
         .select('*')
+        .eq('company_id', companyId)
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -2132,6 +2143,7 @@
       btn.innerText = 'Saving...';
 
       const payload = {
+        company_id: companyId,
         code: code,
         discount_type: type,
         discount_value: discountVal,
@@ -2145,7 +2157,7 @@
       let query;
       if (id) {
         // Edit Mode
-        query = sb.from('coupons').update(payload).eq('id', id);
+        query = sb.from('coupons').update(payload).eq('id', id).eq('company_id', companyId);
       } else {
         // Insert Mode
         query = sb.from('coupons').insert([payload]);
@@ -2382,7 +2394,8 @@
         try {
           const { data: listData } = await sb
             .from('email_marketing_audiences')
-            .select('name');
+            .select('name')
+            .eq('company_id', companyId);
           if (listData) {
             listData.forEach(row => {
               if (row.name) buckets.add(row.name.trim());
@@ -2586,6 +2599,7 @@
 
       const { error } = await sb.from('global_settings').upsert({
         key: 'promo_popup',
+        company_id: companyId,
         value: payload
       });
 
@@ -2594,12 +2608,14 @@
         const { data: existingAud } = await sb
           .from('email_marketing_audiences')
           .select('id')
-          .eq('name', audienceBucket);
+          .eq('name', audienceBucket)
+          .eq('company_id', companyId);
         
         if (!existingAud || existingAud.length === 0) {
           await sb.from('email_marketing_audiences').insert({
             name: audienceBucket,
-            description: `Auto-created audience bucket for Promotional Entry Popup.`
+            description: `Auto-created audience bucket for Promotional Entry Popup.`,
+            company_id: companyId
           });
         }
       } catch (audErr) {
@@ -2630,7 +2646,8 @@
           .from('global_settings')
           .select('value')
           .eq('key', 'promo_popup')
-          .single();
+          .eq('company_id', companyId)
+          .maybeSingle();
 
         let selectedBucket = 'Customer';
 
