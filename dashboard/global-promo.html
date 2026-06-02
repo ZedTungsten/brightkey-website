@@ -1576,7 +1576,26 @@
       if (!authInfo) return;
 
       sb = window.BKAuth.sb;
-      companyId = authInfo.tenantId;
+      
+      // Resolve company_id using tenant_id
+      try {
+        const { data: companyData, error: companyErr } = await sb
+          .from('companies')
+          .select('id')
+          .eq('tenant_id', authInfo.tenantId)
+          .limit(1);
+
+        if (companyErr || !companyData || companyData.length === 0) {
+          showToast('Error: Failed to resolve company ID for tenant.', true);
+          return;
+        }
+        companyId = companyData[0].id;
+      } catch (err) {
+        console.error('Error resolving company:', err);
+        showToast('Error resolving company context.', true);
+        return;
+      }
+
       fetchPromoData();
       setupSkuTagInput();
       setupAnnouncementRealtimePreview();
