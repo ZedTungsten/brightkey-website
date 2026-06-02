@@ -134,7 +134,7 @@
         <div class="dash-nav-children">
           <a href="/dashboard/general-journal" class="dash-nav-child" data-role="accounting">General Journal</a>
           <a href="/dashboard/financial-statement" class="dash-nav-child" data-role="accounting">Financial Statements</a>
-          <a class="dash-nav-child" data-role="accounting" style="opacity: 0.5; cursor: not-allowed;">Ledgers</a>
+          <a href="/dashboard/ledgers" class="dash-nav-child" data-role="accounting">Ledgers</a>
         </div>
       </div>
 
