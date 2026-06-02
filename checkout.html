@@ -1060,22 +1060,31 @@
         }
       }
 
+      // Flatten each item to qty=1 with line total so we can distribute the discount
       const lineItems = cartData
         .filter(item => !item.isFreeGift)
         .map(item => ({
           name: item.title,
-          quantity: item.quantity,
-          amount: item.price,
+          quantity: 1,
+          amount: item.price * item.quantity,
           currency: 'PHP'
         }));
 
-      if (shippingCents > 0) {
-        lineItems.push({ name: 'Shipping', quantity: 1, amount: shippingCents, currency: 'PHP' });
+      // PayMongo forbids negative amounts — distribute discount proportionally across items
+      if (discountCents > 0 && appliedCoupon) {
+        const itemsSubtotal = lineItems.reduce((s, li) => s + li.amount, 0);
+        let remaining = discountCents;
+        for (let i = 0; i < lineItems.length; i++) {
+          const share = i < lineItems.length - 1
+            ? Math.round((lineItems[i].amount / itemsSubtotal) * discountCents)
+            : remaining;
+          lineItems[i].amount -= share;
+          remaining -= share;
+        }
       }
 
-      // Add discount as a negative line item if coupon applied
-      if (discountCents > 0 && appliedCoupon) {
-        lineItems.push({ name: `Discount (${appliedCoupon.code})`, quantity: 1, amount: -discountCents, currency: 'PHP' });
+      if (shippingCents > 0) {
+        lineItems.push({ name: 'Shipping', quantity: 1, amount: shippingCents, currency: 'PHP' });
       }
 
       const origin = window.location.origin;
