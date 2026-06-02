@@ -805,17 +805,11 @@
       const btnPdf = document.getElementById('btn-export-pdf');
       const btnPrint = document.getElementById('btn-print-invoice');
 
-      if (hasSelection) {
-        if (iframe) iframe.style.display = 'block';
-        if (placeholder) placeholder.style.display = 'none';
-        if (btnPdf) btnPdf.removeAttribute('disabled');
-        if (btnPrint) btnPrint.removeAttribute('disabled');
-      } else {
-        if (iframe) iframe.style.display = 'none';
-        if (placeholder) placeholder.style.display = 'flex';
-        if (btnPdf) btnPdf.setAttribute('disabled', 'true');
-        if (btnPrint) btnPrint.setAttribute('disabled', 'true');
-      }
+      // Always show preview iframe; disable print/save when no booking loaded
+      if (iframe) iframe.style.display = 'block';
+      if (placeholder) placeholder.style.display = 'none';
+      if (btnPdf)   { hasSelection ? btnPdf.removeAttribute('disabled')   : btnPdf.setAttribute('disabled', 'true'); }
+      if (btnPrint) { hasSelection ? btnPrint.removeAttribute('disabled') : btnPrint.setAttribute('disabled', 'true'); }
     }
 
     function resetInvoiceForm() {
@@ -952,49 +946,71 @@
 
     // --- Dynamic Receipt Compilation Engine ---
     window.compileReceipt = function() {
-      // Inputs
-      const orderno = document.getElementById('inv-orderno').value || 'ORD-2026XXXX-XXX';
-      const fullname = document.getElementById('inv-fullname').value || 'Customer Name';
-      const contact = document.getElementById('inv-contact').value || 'Contact Number';
-      const email = document.getElementById('inv-email').value || 'Email';
-      const address = document.getElementById('inv-address').value || 'Address';
-      
+      const noBooking = !selectedBookingId;
+
+      // Inputs — use dummy values for builder preview when no booking is loaded
+      const orderno  = document.getElementById('inv-orderno').value  || (noBooking ? 'ORD-PREVIEW-001'              : 'ORD-2026XXXX-XXX');
+      const fullname = document.getElementById('inv-fullname').value || (noBooking ? 'Juan dela Cruz'               : 'Customer Name');
+      const contact  = document.getElementById('inv-contact').value  || (noBooking ? '0917-555-1234'                : 'Contact Number');
+      const email    = document.getElementById('inv-email').value    || (noBooking ? 'sample@email.com'             : 'Email');
+      const address  = document.getElementById('inv-address').value  || (noBooking ? '123 Sample St., Cavite City'  : 'Address');
+
       const rawDateStr = document.getElementById('inv-date').value;
-      const receiptDate = rawDateStr ? new Date(rawDateStr).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+      const receiptDate = rawDateStr
+        ? new Date(rawDateStr).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+        : new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 
       // Build items table
       let itemsHtml = '';
       let subtotal = 0;
-      const itemsList = [];
 
-      document.querySelectorAll('#inv-products-container .product-row').forEach(row => {
-        const select = row.querySelector('select');
-        const qtyInput = row.querySelector('input[type="number"]');
-        const selectedOption = select.options[select.selectedIndex];
-        
-        if (selectedOption && selectedOption.value) {
-          const sku = selectedOption.value;
-          const price = parseFloat(selectedOption.getAttribute('data-price')) || 0;
-          const qty = parseInt(qtyInput.value) || 1;
+      const hasProductRows = document.querySelectorAll('#inv-products-container .product-row').length > 0;
+
+      if (noBooking && !hasProductRows) {
+        // Dummy product lines for builder preview
+        const dummyItems = [
+          { sku: 'BK-LOCK-01', title: 'Smart Lock Premium',       price: 1299900, qty: 1 },
+          { sku: 'BK-LOCK-02', title: 'Smart Deadbolt',           price: 950000,  qty: 2 },
+          { sku: 'BK-LOCK-03', title: 'Glass Door Smart Lock',    price: 1099900, qty: 1 },
+        ];
+        dummyItems.forEach(({ sku, title, price, qty }) => {
           const lineTotal = price * qty;
-          const title = selectedOption.text.split(' (')[0];
-          
           subtotal += lineTotal;
-          itemsList.push({ sku, title, qty, price, lineTotal });
-
           itemsHtml += `
             <tr>
               <td>[${sku}] ${title}</td>
               <td align="right">₱ ${(price / 100).toLocaleString('en-PH', { minimumFractionDigits: 2 })}</td>
               <td align="center">${qty}</td>
               <td align="right">₱ ${(lineTotal / 100).toLocaleString('en-PH', { minimumFractionDigits: 2 })}</td>
-            </tr>
-          `;
-        }
-      });
+            </tr>`;
+        });
+      } else {
+        document.querySelectorAll('#inv-products-container .product-row').forEach(row => {
+          const select = row.querySelector('select');
+          const qtyInput = row.querySelector('input[type="number"]');
+          const selectedOption = select.options[select.selectedIndex];
 
-      if (!itemsHtml) {
-        itemsHtml = `<tr><td colspan="4" align="center" style="color:var(--text-muted); padding: 1.5rem 0;">No items added to invoice</td></tr>`;
+          if (selectedOption && selectedOption.value) {
+            const sku = selectedOption.value;
+            const price = parseFloat(selectedOption.getAttribute('data-price')) || 0;
+            const qty = parseInt(qtyInput.value) || 1;
+            const lineTotal = price * qty;
+            const title = selectedOption.text.split(' (')[0];
+
+            subtotal += lineTotal;
+            itemsHtml += `
+              <tr>
+                <td>[${sku}] ${title}</td>
+                <td align="right">₱ ${(price / 100).toLocaleString('en-PH', { minimumFractionDigits: 2 })}</td>
+                <td align="center">${qty}</td>
+                <td align="right">₱ ${(lineTotal / 100).toLocaleString('en-PH', { minimumFractionDigits: 2 })}</td>
+              </tr>`;
+          }
+        });
+
+        if (!itemsHtml) {
+          itemsHtml = `<tr><td colspan="4" align="center" style="color:#aaa; padding: 1.5rem 0;">No items added to invoice</td></tr>`;
+        }
       }
 
       // Build charges table rows
@@ -1003,19 +1019,30 @@
       const chargeLabels = [];
       const chargeVals = [];
 
-      document.querySelectorAll('#inv-charges-container .charge-row').forEach(row => {
-        const select = row.querySelector('select');
-        const customInput = row.querySelector('input[type="text"]');
-        const valInput = row.querySelector('input[type="number"]');
-        const val = parseFloat(valInput.value) || 0;
-        
-        if (val > 0) {
-          const label = select.value === 'custom' ? (customInput.value || 'Custom Fee') : select.options[select.selectedIndex].text;
-          totalCharges += (val * 100);
+      const hasChargeRows = document.querySelectorAll('#inv-charges-container .charge-row').length > 0;
+
+      if (noBooking && !hasChargeRows) {
+        // Dummy charges for builder preview
+        [['Installation Fee', 1500], ['Rush Delivery', 500]].forEach(([label, val]) => {
+          totalCharges += val * 100;
           chargeLabels.push(label);
           chargeVals.push(`₱ ${val.toLocaleString('en-PH', { minimumFractionDigits: 2 })}`);
-        }
-      });
+        });
+      } else {
+        document.querySelectorAll('#inv-charges-container .charge-row').forEach(row => {
+          const select = row.querySelector('select');
+          const customInput = row.querySelector('input[type="text"]');
+          const valInput = row.querySelector('input[type="number"]');
+          const val = parseFloat(valInput.value) || 0;
+
+          if (val > 0) {
+            const label = select.value === 'custom' ? (customInput.value || 'Custom Fee') : select.options[select.selectedIndex].text;
+            totalCharges += (val * 100);
+            chargeLabels.push(label);
+            chargeVals.push(`₱ ${val.toLocaleString('en-PH', { minimumFractionDigits: 2 })}`);
+          }
+        });
+      }
 
       if (chargeLabels.length > 0) {
         chargesHtml = `
@@ -1033,19 +1060,30 @@
       const deductionLabels = [];
       const deductionVals = [];
 
-      document.querySelectorAll('#inv-deductions-container .deduction-row').forEach(row => {
-        const select = row.querySelector('select');
-        const customInput = row.querySelector('input[type="text"]');
-        const valInput = row.querySelector('input[type="number"]');
-        const val = parseFloat(valInput.value) || 0;
+      const hasDeductionRows = document.querySelectorAll('#inv-deductions-container .deduction-row').length > 0;
 
-        if (val > 0) {
-          const label = select.value === 'custom' ? (customInput.value || 'Custom Deduction') : select.options[select.selectedIndex].text;
-          totalDeductions += (val * 100);
+      if (noBooking && !hasDeductionRows) {
+        // Dummy deductions for builder preview
+        [['Deposit', 5000], ['Promo Discount', 1000], ['Senior Discount', 300]].forEach(([label, val]) => {
+          totalDeductions += val * 100;
           deductionLabels.push(label);
           deductionVals.push(`-₱ ${val.toLocaleString('en-PH', { minimumFractionDigits: 2 })}`);
-        }
-      });
+        });
+      } else {
+        document.querySelectorAll('#inv-deductions-container .deduction-row').forEach(row => {
+          const select = row.querySelector('select');
+          const customInput = row.querySelector('input[type="text"]');
+          const valInput = row.querySelector('input[type="number"]');
+          const val = parseFloat(valInput.value) || 0;
+
+          if (val > 0) {
+            const label = select.value === 'custom' ? (customInput.value || 'Custom Deduction') : select.options[select.selectedIndex].text;
+            totalDeductions += (val * 100);
+            deductionLabels.push(label);
+            deductionVals.push(`-₱ ${val.toLocaleString('en-PH', { minimumFractionDigits: 2 })}`);
+          }
+        });
+      }
 
       if (deductionLabels.length > 0) {
         deductionsHtml = `
@@ -1072,6 +1110,15 @@
             return `<div class="term-line"><strong>${parts[0]}:</strong>${parts.slice(1).join(':')}</div>`;
           }
           return `<div class="term-line">${t}</div>`;
+        }).join('');
+      } else if (noBooking) {
+        termsHtml = [
+          'Non-refundable deposit: Secures your device and installation schedule.',
+          'Full payment: Remaining balance due upon installation.',
+          'Rescheduling: One free reschedule; subsequent reschedules incur a ₱250 fee.',
+        ].map(t => {
+          const [label, ...rest] = t.split(':');
+          return `<div class="term-line"><strong>${label}:</strong>${rest.join(':')}</div>`;
         }).join('');
       } else {
         termsHtml = '<div class="term-line">No special terms specified.</div>';
