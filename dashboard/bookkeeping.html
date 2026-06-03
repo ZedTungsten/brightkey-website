@@ -160,10 +160,25 @@
                 <!-- Transaction Type Selector -->
                 <div class="form-row form-row-2">
                   <div class="form-group">
-                    <label class="form-label" for="f-tx-type">Transaction Type</label>
-                    <select id="f-tx-type" class="form-select" required onchange="BookkeepingApp.handleTypeChange()">
-                      <option value="">Select type…</option>
-                    </select>
+                    <label class="form-label" for="tx-type-trigger">Transaction Type</label>
+                    <div class="custom-select-wrapper">
+                      <div id="tx-type-trigger" class="custom-select-trigger" onclick="BookkeepingApp.togglePopover(event)">
+                        <span id="tx-type-selected-label" style="color: var(--text-muted);">Select type…</span>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="color: var(--text-muted);"><polyline points="6 9 12 15 18 9"/></svg>
+                      </div>
+                      <input type="hidden" id="f-tx-type" required />
+                      
+                      <!-- Popover panel -->
+                      <div id="tx-type-popover" class="select-popover">
+                        <div class="select-popover-search-wrap">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--text-muted);"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                          <input type="text" id="tx-type-search" class="select-popover-search" placeholder="Search transaction types..." oninput="BookkeepingApp.handleSearch(event)" onclick="event.stopPropagation()" />
+                        </div>
+                        <div id="tx-type-popover-list" class="select-popover-list">
+                          <!-- Dynamic items -->
+                        </div>
+                      </div>
+                    </div>
                   </div>
                   <div class="form-group">
                     <label class="form-label" for="f-date">Date</label>
@@ -367,6 +382,15 @@
           document.getElementById('f-date').value = new Date().toISOString().slice(0, 10);
           this.bindEvents();
 
+          // Bind popover close on outside click
+          document.addEventListener('click', (e) => {
+            const wrapper = document.querySelector('.custom-select-wrapper');
+            if (wrapper && !wrapper.contains(e.target)) {
+              const popover = document.getElementById('tx-type-popover');
+              if (popover) popover.style.display = 'none';
+            }
+          });
+
           // Load data
           await this.loadTransactionTypes();
           await this.loadTransactions();
@@ -404,7 +428,7 @@
             this.transactionTypes = await sbGet(url);
             
             this.buildPaths();
-            this.populateTransactionTypeDropdown();
+            this.renderPopoverList();
             this.populateParentDropdown();
             this.renderTypesTree();
           } catch(e) {
@@ -431,7 +455,7 @@
             const pathArr = getPath(t);
             return {
               ...t,
-              path: pathArr.join(' › '),
+              path: pathArr.join(' > '),
               rootCategory: pathArr[0],
               isLeaf: !this.transactionTypes.some(child => child.parent_id === t.id)
             };
@@ -441,38 +465,92 @@
           this.transactionTypesWithPaths.sort((a, b) => a.path.localeCompare(b.path));
         },
 
-        populateTransactionTypeDropdown() {
-          const select = document.getElementById('f-tx-type');
-          if (!select) return;
-          select.innerHTML = '<option value="">Select type…</option>';
+        togglePopover(event) {
+          event.stopPropagation();
+          const popover = document.getElementById('tx-type-popover');
+          if (!popover) return;
+          const isHidden = popover.style.display === 'none' || !popover.style.display;
+          popover.style.display = isHidden ? 'flex' : 'none';
+          if (isHidden) {
+            const search = document.getElementById('tx-type-search');
+            if (search) {
+              search.value = '';
+              search.focus();
+            }
+            this.renderPopoverList();
+          }
+        },
 
-          // Group leaf items by root category
+        handleSearch(event) {
+          this.renderPopoverList(event.target.value);
+        },
+
+        renderPopoverList(filterText = '') {
+          const container = document.getElementById('tx-type-popover-list');
+          if (!container) return;
+
+          container.innerHTML = '';
+          const normalizedFilter = filterText.toLowerCase().trim();
+
+          // Group leaves by root category
           const groups = {};
           this.transactionTypesWithPaths.forEach(t => {
             if (!t.isLeaf) return; // Only show leaves
+
+            if (normalizedFilter && !t.path.toLowerCase().includes(normalizedFilter)) {
+              return;
+            }
+
             const grp = t.rootCategory || 'Other';
             if (!groups[grp]) groups[grp] = [];
             groups[grp].push(t);
           });
 
           const groupKeys = Object.keys(groups).sort();
+          if (groupKeys.length === 0) {
+            container.innerHTML = `<div style="padding: 1rem; text-align: center; color: var(--text-muted); font-size: 0.82rem;">No matching transaction types found.</div>`;
+            return;
+          }
+
           groupKeys.forEach(grp => {
-            const og = document.createElement('optgroup');
-            og.label = grp;
-            
+            const grpTitle = document.createElement('div');
+            grpTitle.className = 'popover-group-title';
+            grpTitle.textContent = grp;
+            container.appendChild(grpTitle);
+
             groups[grp].forEach(item => {
-              const opt = document.createElement('option');
-              opt.value = item.id;
-              
-              const subPath = item.path.startsWith(grp + ' › ') 
+              const div = document.createElement('div');
+              div.className = 'popover-item';
+              div.onclick = () => this.selectTransactionType(item);
+
+              // Sub path without the root category prefix
+              const subPath = item.path.startsWith(grp + ' > ') 
                 ? item.path.slice(grp.length + 3)
                 : item.path;
-              
-              opt.textContent = subPath;
-              og.appendChild(opt);
+
+              div.innerHTML = `
+                <span class="popover-item-name">${esc(item.name)}</span>
+                ${subPath !== item.name ? `<span class="popover-item-path">${esc(subPath)}</span>` : ''}
+              `;
+              container.appendChild(div);
             });
-            select.appendChild(og);
           });
+        },
+
+        selectTransactionType(item) {
+          const input = document.getElementById('f-tx-type');
+          const label = document.getElementById('tx-type-selected-label');
+          const popover = document.getElementById('tx-type-popover');
+          
+          if (input && label) {
+            input.value = item.id;
+            label.textContent = item.path;
+            label.style.color = 'var(--text-primary)';
+            label.style.fontWeight = '600';
+          }
+          if (popover) popover.style.display = 'none';
+
+          this.handleTypeChange();
         },
 
         populateParentDropdown() {
@@ -838,6 +916,14 @@
             
             // Clear form
             document.getElementById('tx-form').reset();
+            const hiddenInput = document.getElementById('f-tx-type');
+            const selectedLabel = document.getElementById('tx-type-selected-label');
+            if (hiddenInput && selectedLabel) {
+              hiddenInput.value = '';
+              selectedLabel.textContent = 'Select type…';
+              selectedLabel.style.color = 'var(--text-muted)';
+              selectedLabel.style.fontWeight = 'normal';
+            }
             document.getElementById('f-date').value = new Date().toISOString().slice(0, 10);
             this.stagedAttachments = [];
             this.renderAttachmentPreviews();
