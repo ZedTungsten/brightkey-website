@@ -139,14 +139,22 @@
     .popover-item-chevron {
       color: #94a3b8; font-size: 0.8rem; font-weight: bold;
     }
-    .popover-back-item {
-      display: flex; align-items: center; gap: 0.5rem;
-      padding: 0.6rem 0.8rem; border-radius: 6px; cursor: pointer;
-      color: var(--cyan); font-weight: 600; font-size: 0.82rem;
-      border-bottom: 1px solid #f1f5f9;
-      margin-bottom: 0.25rem;
+    .popover-breadcrumb {
+      display: flex; align-items: center; flex-wrap: wrap; gap: 0.25rem;
+      padding: 0.45rem 0.8rem; border-bottom: 1px solid var(--border);
+      background: #f8fafc; font-size: 0.78rem; color: #64748b;
     }
-    .popover-back-item:hover { background: #f1f5f9; }
+    .popover-breadcrumb-crumb {
+      cursor: pointer; color: var(--cyan); font-weight: 600;
+      transition: color 0.12s;
+    }
+    .popover-breadcrumb-crumb:hover { color: #0e7490; }
+    .popover-breadcrumb-sep {
+      color: #cbd5e1; font-size: 0.72rem;
+    }
+    .popover-breadcrumb-current {
+      color: #334155; font-weight: 600;
+    }
   </style>
 </head>
 <body>
@@ -196,6 +204,7 @@
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--text-muted);"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                           <input type="text" id="tx-type-search" class="select-popover-search" placeholder="Search transaction types..." oninput="BookkeepingApp.handleSearch(event)" onclick="event.stopPropagation()" />
                         </div>
+                        <div id="tx-type-breadcrumb" class="popover-breadcrumb" style="display:none;"></div>
                         <div id="tx-type-popover-list" class="select-popover-list">
                           <!-- Dynamic items -->
                         </div>
@@ -518,7 +527,9 @@
 
           if (normalizedFilter) {
             // --- SEARCH MODE ---
-            const matchingLeaves = this.transactionTypesWithPaths.filter(t => 
+            const breadcrumbEl2 = document.getElementById('tx-type-breadcrumb');
+            if (breadcrumbEl2) { breadcrumbEl2.style.display = 'none'; breadcrumbEl2.innerHTML = ''; }
+            const matchingLeaves = this.transactionTypesWithPaths.filter(t =>
               t.isLeaf && t.path.toLowerCase().includes(normalizedFilter)
             );
 
@@ -547,23 +558,41 @@
             });
           } else {
             // --- DRILL-DOWN MODE ---
+            // Build breadcrumb trail
+            const breadcrumbEl = document.getElementById('tx-type-breadcrumb');
             if (this.popoverCurrentParentId !== null) {
-              const backDiv = document.createElement('div');
-              backDiv.className = 'popover-back-item';
-              
-              const currentParent = this.transactionTypes.find(t => t.id === this.popoverCurrentParentId);
-              const parentOfParentId = currentParent ? currentParent.parent_id : null;
-              
-              backDiv.onclick = (e) => {
+              // Walk up the tree to collect ancestors
+              const crumbs = []; // [{id, name}]
+              let walkId = this.popoverCurrentParentId;
+              while (walkId !== null) {
+                const node = this.transactionTypes.find(t => t.id === walkId);
+                if (!node) break;
+                crumbs.unshift({ id: node.id, name: node.name, parentId: node.parent_id });
+                walkId = node.parent_id;
+              }
+              // Render breadcrumb: Categories > Crumb1 > Crumb2 (current, not clickable)
+              let html = `<span class="popover-breadcrumb-crumb" data-id="null">Categories</span>`;
+              crumbs.forEach((c, i) => {
+                html += `<span class="popover-breadcrumb-sep">›</span>`;
+                if (i < crumbs.length - 1) {
+                  html += `<span class="popover-breadcrumb-crumb" data-id="${c.id}">${esc(c.name)}</span>`;
+                } else {
+                  html += `<span class="popover-breadcrumb-current">${esc(c.name)}</span>`;
+                }
+              });
+              breadcrumbEl.innerHTML = html;
+              breadcrumbEl.style.display = 'flex';
+              breadcrumbEl.onclick = (e) => {
+                const crumb = e.target.closest('.popover-breadcrumb-crumb');
+                if (!crumb) return;
                 e.stopPropagation();
-                this.popoverCurrentParentId = parentOfParentId;
+                const id = crumb.dataset.id;
+                this.popoverCurrentParentId = id === 'null' ? null : id;
                 this.renderPopoverList();
               };
-              backDiv.innerHTML = `
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 0.25rem;"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
-                <span>Back to ${currentParent && currentParent.parent_id ? esc(this.transactionTypes.find(t => t.id === currentParent.parent_id)?.name || 'Parent') : 'Categories'}</span>
-              `;
-              container.appendChild(backDiv);
+            } else {
+              breadcrumbEl.style.display = 'none';
+              breadcrumbEl.innerHTML = '';
             }
 
             const currentLevelItems = this.transactionTypesWithPaths.filter(t => t.parent_id === this.popoverCurrentParentId);
