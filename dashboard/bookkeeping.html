@@ -160,25 +160,10 @@
                 <!-- Transaction Type Selector -->
                 <div class="form-row form-row-2">
                   <div class="form-group">
-                    <label class="form-label" for="tx-type-trigger">Transaction Type</label>
-                    <div class="custom-select-wrapper">
-                      <div id="tx-type-trigger" class="custom-select-trigger" onclick="BookkeepingApp.togglePopover(event)">
-                        <span id="tx-type-selected-label" style="color: var(--text-muted);">Select type…</span>
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="color: var(--text-muted);"><polyline points="6 9 12 15 18 9"/></svg>
-                      </div>
-                      <input type="hidden" id="f-tx-type" required />
-                      
-                      <!-- Popover panel -->
-                      <div id="tx-type-popover" class="select-popover">
-                        <div class="select-popover-search-wrap">
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--text-muted);"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                          <input type="text" id="tx-type-search" class="select-popover-search" placeholder="Search transaction types..." oninput="BookkeepingApp.handleSearch(event)" onclick="event.stopPropagation()" />
-                        </div>
-                        <div id="tx-type-popover-list" class="select-popover-list">
-                          <!-- Dynamic items -->
-                        </div>
-                      </div>
-                    </div>
+                    <label class="form-label" for="f-tx-type">Transaction Type</label>
+                    <select id="f-tx-type" class="form-select" required onchange="BookkeepingApp.handleTypeChange()">
+                      <option value="">Select type…</option>
+                    </select>
                   </div>
                   <div class="form-group">
                     <label class="form-label" for="f-date">Date</label>
@@ -380,15 +365,6 @@
           document.getElementById('f-date').value = new Date().toISOString().slice(0, 10);
           this.bindEvents();
 
-          // Bind popover close on outside click
-          document.addEventListener('click', (e) => {
-            const wrapper = document.querySelector('.custom-select-wrapper');
-            if (wrapper && !wrapper.contains(e.target)) {
-              const popover = document.getElementById('tx-type-popover');
-              if (popover) popover.style.display = 'none';
-            }
-          });
-
           // Load data
           await this.loadTransactionTypes();
           await this.loadTransactions();
@@ -420,14 +396,14 @@
           try {
             // Get both system-wide (company_id is null) and company-specific transaction types
             let url = 'bookkeeping_transaction_types?select=id,name,parent_id,company_id&order=name.asc';
-            if (this.companyId) {
+            if (this.companyId && this.companyId !== 'undefined' && this.companyId !== 'null') {
               url = `bookkeeping_transaction_types?select=id,name,parent_id,company_id&or=(company_id.is.null,company_id.eq.${this.companyId})&order=name.asc`;
             }
             this.transactionTypes = await sbGet(url);
             console.log('BookkeepingApp: loaded transactionTypes raw array:', this.transactionTypes);
             
             this.buildPaths();
-            this.renderPopoverList();
+            this.populateTransactionTypeDropdown();
             this.populateParentDropdown();
             this.renderTypesTree();
           } catch(e) {
@@ -462,93 +438,38 @@
           });
         },
 
-        togglePopover(event) {
-          event.stopPropagation();
-          const popover = document.getElementById('tx-type-popover');
-          if (!popover) return;
-          const isHidden = popover.style.display === 'none' || !popover.style.display;
-          popover.style.display = isHidden ? 'flex' : 'none';
-          if (isHidden) {
-            const search = document.getElementById('tx-type-search');
-            if (search) {
-              search.value = '';
-              search.focus();
-            }
-            this.renderPopoverList();
-          }
-        },
+        populateTransactionTypeDropdown() {
+          const select = document.getElementById('f-tx-type');
+          if (!select) return;
+          select.innerHTML = '<option value="">Select type…</option>';
 
-        handleSearch(event) {
-          this.renderPopoverList(event.target.value);
-        },
-
-        renderPopoverList(filterText = '') {
-          const container = document.getElementById('tx-type-popover-list');
-          if (!container) return;
-
-          container.innerHTML = '';
-          const normalizedFilter = filterText.toLowerCase().trim();
-          console.log('BookkeepingApp: rendering popover list with filter:', normalizedFilter, 'total with paths:', this.transactionTypesWithPaths?.length);
-
-          // Group leaves by root category
+          // Group leaf items by root category
           const groups = {};
           this.transactionTypesWithPaths.forEach(t => {
             if (!t.isLeaf) return; // Only show leaves
-
-            if (normalizedFilter && !t.path.toLowerCase().includes(normalizedFilter)) {
-              return;
-            }
-
             const grp = t.rootCategory || 'Other';
             if (!groups[grp]) groups[grp] = [];
             groups[grp].push(t);
           });
 
-          console.log('BookkeepingApp: grouped selectable leaves:', groups);
           const groupKeys = Object.keys(groups).sort();
-          if (groupKeys.length === 0) {
-            container.innerHTML = `<div style="padding: 1rem; text-align: center; color: var(--text-muted); font-size: 0.82rem;">No matching transaction types found.</div>`;
-            return;
-          }
-
           groupKeys.forEach(grp => {
-            const grpTitle = document.createElement('div');
-            grpTitle.className = 'popover-group-title';
-            grpTitle.textContent = grp;
-            container.appendChild(grpTitle);
-
+            const og = document.createElement('optgroup');
+            og.label = grp;
+            
             groups[grp].forEach(item => {
-              const div = document.createElement('div');
-              div.className = 'popover-item';
-              div.onclick = () => this.selectTransactionType(item);
-
+              const opt = document.createElement('option');
+              opt.value = item.id;
+              
               const subPath = item.path.startsWith(grp + ' › ') 
                 ? item.path.slice(grp.length + 3)
                 : item.path;
-
-              div.innerHTML = `
-                <span class="popover-item-name">${esc(item.name)}</span>
-                ${subPath !== item.name ? `<span class="popover-item-path">${esc(subPath)}</span>` : ''}
-              `;
-              container.appendChild(div);
+              
+              opt.textContent = subPath;
+              og.appendChild(opt);
             });
+            select.appendChild(og);
           });
-        },
-
-        selectTransactionType(item) {
-          const input = document.getElementById('f-tx-type');
-          const label = document.getElementById('tx-type-selected-label');
-          const popover = document.getElementById('tx-type-popover');
-          
-          if (input && label) {
-            input.value = item.id;
-            label.textContent = item.path;
-            label.style.color = 'var(--text-primary)';
-            label.style.fontWeight = '600';
-          }
-          if (popover) popover.style.display = 'none';
-
-          this.handleTypeChange();
         },
 
         populateParentDropdown() {
@@ -806,7 +727,7 @@
         async loadTransactions() {
           try {
             let url = 'bookkeeping?select=id,date,reference_no,description,created_by,bookkeeping_transaction_types(name),bookkeeping_attachments(file_url,file_name)&order=created_at.desc&limit=50';
-            if (this.companyId) {
+            if (this.companyId && this.companyId !== 'undefined' && this.companyId !== 'null') {
               url = `bookkeeping?select=id,date,reference_no,description,created_by,bookkeeping_transaction_types(name),bookkeeping_attachments(file_url,file_name)&company_id=eq.${this.companyId}&order=created_at.desc&limit=50`;
             }
             this.transactions = await sbGet(url);
