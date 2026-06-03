@@ -466,6 +466,19 @@
             </div>
           </div>
 
+          <!-- Attachments -->
+          <div style="margin-top: 1rem; border-top: 1px solid var(--border); padding-top: 1rem; margin-bottom: 1.5rem;">
+            <label class="form-label" style="margin-bottom: 0.5rem; display: block;">Receipt Attachments (Max 5 PDF/Images)</label>
+            <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+              <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+                <input type="file" id="f-attachments" multiple accept="image/*,application/pdf" class="form-input" style="height: auto; padding: 0.4rem; display: none;" onchange="JournalApp.handleAttachmentSelect(event)" />
+                <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('f-attachments').click()">Choose Files</button>
+                <span id="attachment-status" style="font-size: 0.8rem; color: var(--text-muted);">No files selected (0/5)</span>
+              </div>
+              <div id="attachment-preview-container" style="display: flex; flex-wrap: wrap; gap: 0.5rem;"></div>
+            </div>
+          </div>
+
           <div class="form-actions">
             <div id="form-alert" style="display:none;" class="inline-alert error"></div>
             <label style="display:flex;align-items:center;gap:0.4rem;font-size:0.78rem;color:var(--text-secondary);cursor:pointer;user-select:none;">
@@ -607,11 +620,12 @@
                 <th>Credit</th>
                 <th style="min-width:140px;">Desc 1</th>
                 <th style="min-width:140px;">Desc 2</th>
+                <th style="width:70px;text-align:center;">Docs</th>
                 <th class="delete-col-header" id="delete-col-header" style="display:none;"></th>
               </tr>
             </thead>
             <tbody id="j-tbody">
-              <tr><td colspan="8" class="tbl-state">Loading entries…</td></tr>
+              <tr><td colspan="9" class="tbl-state">Loading entries…</td></tr>
             </tbody>
           </table>
         </div>
@@ -746,6 +760,9 @@
       pageSize:  50,
       activeOrphanId:      null,
       activeOrphanAccount: null,
+      companyId: null,
+      tenantId: null,
+      stagedAttachments:   [],
       /* ── Edit mode state ── */
       editMode:       false,
       pendingChanges: {},
@@ -760,9 +777,26 @@
 
       /* ── Boot ── */
       async init() {
+        let sb;
         if (window.BKAuth) {
           const authInfo = await window.BKAuth.checkRoleGate(['owner', 'admin', 'accounting'], '../admin.html');
           if (!authInfo) return;
+          sb = window.BKAuth.sb;
+          this.tenantId = authInfo.tenantId;
+
+          try {
+            // Fetch company ID for this tenant
+            const { data: companyData } = await sb
+              .from('companies')
+              .select('id')
+              .eq('tenant_id', this.tenantId)
+              .limit(1);
+            if (companyData && companyData.length > 0) {
+              this.companyId = companyData[0].id;
+            }
+          } catch (err) {
+            console.error('Error loading company:', err);
+          }
         }
         this.setTodayDate();
         this.populateCatSelects();
@@ -809,13 +843,120 @@
           const el = document.getElementById(id);
           if (el) el.value = '';
         });
+        this.stagedAttachments = [];
+        this.renderAttachmentPreviews();
         this.hideFormAlert();
+      },
+
+      async compressImage(file, quality = 0.7) {
+        if (!file.type.startsWith('image/')) {
+          return file;
+        }
+        return new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.readAsDataURL(file);
+          reader.onload = (e) => {
+            const img = new Image();
+            img.src = e.target.result;
+            img.onload = () => {
+              const canvas = document.createElement('canvas');
+              canvas.width = img.width;
+              canvas.height = img.height;
+              const ctx = canvas.getContext('2d');
+              ctx.drawImage(img, 0, 0, img.width, img.height);
+              canvas.toBlob((blob) => {
+                if (blob) {
+                  const compressedFile = new File([blob], file.name.replace(/\.[^/.]+$/, "") + ".jpg", {
+                    type: 'image/jpeg',
+                    lastModified: Date.now()
+                  });
+                  resolve(compressedFile);
+                } else {
+                  resolve(file);
+                }
+              }, 'image/jpeg', quality);
+            };
+            img.onerror = () => resolve(file);
+          };
+          reader.onerror = () => resolve(file);
+        });
+      },
+
+      async handleAttachmentSelect(event) {
+        const files = Array.from(event.target.files);
+        if (!files.length) return;
+
+        if (this.stagedAttachments.length + files.length > 5) {
+          Toast.error('You can upload a maximum of 5 attachments.');
+          event.target.value = '';
+          return;
+        }
+
+        const statusEl = document.getElementById('attachment-status');
+        if (statusEl) {
+          statusEl.textContent = `Processing files... (${this.stagedAttachments.length}/5)`;
+        }
+
+        for (let file of files) {
+          try {
+            const compressed = await this.compressImage(file);
+            this.stagedAttachments.push({
+              name: compressed.name,
+              file: compressed,
+              type: compressed.type
+            });
+          } catch (err) {
+            console.error('File compression failed, using original:', err);
+            this.stagedAttachments.push({
+              name: file.name,
+              file: file,
+              type: file.type
+            });
+          }
+        }
+
+        event.target.value = '';
+        this.renderAttachmentPreviews();
+      },
+
+      removeStagedAttachment(index) {
+        this.stagedAttachments.splice(index, 1);
+        this.renderAttachmentPreviews();
+      },
+
+      renderAttachmentPreviews() {
+        const container = document.getElementById('attachment-preview-container');
+        const statusEl = document.getElementById('attachment-status');
+        if (!container) return;
+
+        container.innerHTML = '';
+        if (statusEl) {
+          statusEl.textContent = `${this.stagedAttachments.length}/5 files selected`;
+        }
+
+        this.stagedAttachments.forEach((item, idx) => {
+          const div = document.createElement('div');
+          div.setAttribute('style', 'position: relative; display: flex; align-items: center; gap: 0.5rem; background: var(--bg-surface-elevated, #242424); border: 1px solid var(--border); padding: 0.4rem 0.6rem; border-radius: 4px; font-size: 0.78rem; max-width: 180px;');
+
+          const icon = item.type.startsWith('image/') ? '📷' : '📄';
+
+          div.innerHTML = `
+            <span>${icon}</span>
+            <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;" title="${esc(item.name)}">${esc(item.name)}</span>
+            <button type="button" style="background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 1rem; line-height: 1; padding: 0 0.2rem; display: flex; align-items: center;" onclick="JournalApp.removeStagedAttachment(${idx})" title="Remove">×</button>
+          `;
+          container.appendChild(div);
+        });
       },
 
       /* ── Load accounts ── */
       async loadAccounts() {
         try {
-          this.accounts = await sbGet('journal_accounts?select=id,name,category&order=category.asc,name.asc');
+          let url = 'journal_accounts?select=id,name,category&order=category.asc,name.asc';
+          if (this.companyId) {
+            url = `journal_accounts?select=id,name,category&company_id=eq.${this.companyId}&order=category.asc,name.asc`;
+          }
+          this.accounts = await sbGet(url);
           this.populateDropdowns();
           this.renderAcctsList();
         } catch(e) {
@@ -960,7 +1101,7 @@
           }
           if (!name) { Toast.error('Account name is required.'); return; }
           try {
-            await sbPost('journal_accounts', { name, category: cat });
+            await sbPost('journal_accounts', { name, category: cat, company_id: this.companyId });
             document.getElementById('new-acct-name').value = '';
             document.getElementById('new-cat-name').value = '';
             document.getElementById('new-cat-name').style.display = 'none';
@@ -1001,10 +1142,39 @@
         try {
           const entryNum = await this.getNextEntryNum();
           const [yr, mo] = date.split('-').map(Number);
+          const uploadedUrls = [];
+          if (this.stagedAttachments && this.stagedAttachments.length > 0) {
+            const entryLabel = fmtEntry(entryNum);
+            const supabaseClient = window.BKAuth ? window.BKAuth.sb : null;
+            if (!supabaseClient) {
+              throw new Error('Supabase client is not initialized.');
+            }
+
+            for (let i = 0; i < this.stagedAttachments.length; i++) {
+              const item = this.stagedAttachments[i];
+              const ext = item.name.split('.').pop().toLowerCase();
+              const filename = `${entryLabel}-${String(i + 1).padStart(2, '0')}.${ext}`;
+              const path = `${this.companyId}/bookkeeping/${filename}`;
+              
+              const { data, error } = await supabaseClient.storage
+                .from('brightkey-assets')
+                .upload(path, item.file, { upsert: true });
+                
+              if (error) {
+                throw new Error(`File upload failed: ${error.message}`);
+              }
+              
+              const { data: { publicUrl } } = supabaseClient.storage
+                .from('brightkey-assets')
+                .getPublicUrl(path);
+                
+              uploadedUrls.push(publicUrl);
+            }
+          }
 
           await sbPost('general_journal', [
-            { entry_number: entryNum, year: yr, month: mo, date, account: debitAcc,  debit: amount, credit: null, description_1: desc1, description_2: desc2 },
-            { entry_number: entryNum, year: yr, month: mo, date, account: creditAcc, debit: null, credit: amount, description_1: desc1, description_2: desc2 },
+            { company_id: this.companyId, entry_number: entryNum, year: yr, month: mo, date, account: debitAcc,  debit: amount, credit: null, description_1: desc1, description_2: desc2, attachments: uploadedUrls },
+            { company_id: this.companyId, entry_number: entryNum, year: yr, month: mo, date, account: creditAcc, debit: null, credit: amount, description_1: desc1, description_2: desc2, attachments: uploadedUrls },
           ]);
 
           Toast.success(`Entry ${fmtEntry(entryNum)} added.`);
@@ -1031,7 +1201,11 @@
 
       async getNextEntryNum() {
         // Fetch all entry numbers and use Math.max to avoid text-sort ordering issues
-        const rows = await sbGet('general_journal?select=entry_number');
+        let url = 'general_journal?select=entry_number';
+        if (this.companyId) {
+          url = `general_journal?select=entry_number&company_id=eq.${this.companyId}`;
+        }
+        const rows = await sbGet(url);
         if (!rows.length) return 1;
         const max = Math.max(...rows.map(r => parseInt(r.entry_number, 10) || 0));
         return max + 1;
@@ -1281,6 +1455,7 @@
 
       buildQS(f, opts = {}) {
         const p = new URLSearchParams();
+        if (this.companyId) p.set('company_id', `eq.${this.companyId}`);
         if (opts.select) p.set('select', opts.select); else p.set('select', '*');
         if (!opts.noOrder) {
           const dir = this.sortDir === 'asc' ? 'asc' : 'desc';
@@ -1307,6 +1482,7 @@
       // Filter-only query string (no select/order/limit) — used by aggregate totals
       buildFilterQS(f) {
         const p = new URLSearchParams();
+        if (this.companyId) p.set('company_id', `eq.${this.companyId}`);
         const hasDateRange = f.dateFrom || f.dateTo;
         if (!hasDateRange) {
           if (f.year)  p.set('year',  `eq.${f.year}`);
@@ -1350,7 +1526,7 @@
           this.renderTable();
           this.renderPagination();
         } catch(e) {
-          tbody.innerHTML = `<tr><td colspan="8" class="tbl-state error">Error: ${esc(e.message)}</td></tr>`;
+          tbody.innerHTML = `<tr><td colspan="9" class="tbl-state error">Error: ${esc(e.message)}</td></tr>`;
         }
       },
 
@@ -1358,7 +1534,7 @@
         const tbody  = document.getElementById('j-tbody');
         const known  = new Set(this.accounts.map(a => a.name));
         const off    = (this.page - 1) * this.pageSize;
-        const cols   = this.editMode ? 9 : 8;
+        const cols   = this.editMode ? 10 : 9;
 
         if (!this.entries.length) {
           tbody.innerHTML = `<tr><td colspan="${cols}" class="tbl-state" style="padding: 200px 0;">No entries found.</td></tr>`;
@@ -1392,6 +1568,14 @@
                 : `<button class="btn btn-ghost btn-sm" style="color:var(--danger);padding:0 6px;" onclick="JournalApp.markDelete(${r.entry_number})" title="Remove entry"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg></button>`}
             </td>` : '';
 
+          const atts = r.attachments || [];
+          const docsHtml = atts.map((url) => {
+            const isPdf = url.toLowerCase().endsWith('.pdf');
+            const icon = isPdf ? '📄' : '📷';
+            const title = isPdf ? 'PDF Receipt' : 'Image Receipt';
+            return `<a href="${url}" target="_blank" rel="noopener noreferrer" title="${title}" style="text-decoration:none; margin: 0 4px; font-size: 0.95rem;">${icon}</a>`;
+          }).join('');
+
           return `<tr class="${rowCls}" data-id="${r.id}" data-entry="${r.entry_number}"${oa}>
             <td class="num" style="color:var(--text-muted);font-size:0.72rem;">${off + i + 1}</td>
             <td class="entry-num">${fmtEntry(r.entry_number)}</td>
@@ -1401,6 +1585,7 @@
             <td class="credit"${ec('credit')}>${d.credit ? php(d.credit) : '—'}</td>
             <td${ec('description_1')}>${esc(d.description_1 || '')}</td>
             <td${ec('description_2')}>${esc(d.description_2 || '')}</td>
+            <td style="text-align:center;">${docsHtml || '—'}</td>
             ${delCell}
           </tr>`;
         }).join('');
@@ -1493,7 +1678,7 @@
           const name = this.activeOrphanAccount;
           if (!name) return;
           try {
-            await sbPost('journal_accounts', { name, category: 'Other' });
+            await sbPost('journal_accounts', { name, category: 'Other', company_id: this.companyId });
             Toast.success(`"${name}" added to accounts.`);
             this.closeOrphanPop();
             await this.loadAccounts();
@@ -1756,6 +1941,7 @@
       async logAction(action, entryNumber, fieldChanged = null, oldValue = null, newValue = null) {
         try {
           await sbPost('journal_audit_log', {
+            company_id:    this.companyId,
             action,
             entry_number:  entryNumber,
             entry_label:   fmtEntry(entryNumber),
@@ -1804,7 +1990,11 @@
       async loadLogs() {
         document.getElementById('log-list').innerHTML = '<p class="log-empty">Loading…</p>';
         try {
-          const rows = await sbGet('journal_audit_log?order=logged_at.desc&limit=500');
+          let url = 'journal_audit_log?order=logged_at.desc&limit=500';
+          if (this.companyId) {
+            url = `journal_audit_log?order=logged_at.desc&limit=500&company_id=eq.${this.companyId}`;
+          }
+          const rows = await sbGet(url);
           this._allLogRows = rows;
           this.populateLogMonths(rows);
           this.filterLogs();
