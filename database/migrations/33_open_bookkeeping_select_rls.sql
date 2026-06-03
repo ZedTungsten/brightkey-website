@@ -13,16 +13,48 @@ CREATE POLICY "Bookkeeping accounts select" ON public.bookkeeping_accounts
   FOR SELECT USING (auth.uid() IS NOT NULL);
 
 -- 3. Create strict write policies (INSERT, UPDATE, DELETE) for company staff
-CREATE POLICY "Bookkeeping transaction types write" ON public.bookkeeping_transaction_types
-  FOR INSERT, UPDATE, DELETE WITH CHECK (
+CREATE POLICY "Bookkeeping transaction types insert" ON public.bookkeeping_transaction_types
+  FOR INSERT WITH CHECK (
     company_id IN (
       SELECT id FROM public.companies 
       WHERE tenant_id IN (SELECT public.get_user_tenants(auth.uid()))
     )
   );
 
-CREATE POLICY "Bookkeeping accounts write" ON public.bookkeeping_accounts
-  FOR INSERT, UPDATE, DELETE WITH CHECK (
+CREATE POLICY "Bookkeeping transaction types update" ON public.bookkeeping_transaction_types
+  FOR UPDATE USING (
+    company_id IN (
+      SELECT id FROM public.companies 
+      WHERE tenant_id IN (SELECT public.get_user_tenants(auth.uid()))
+    )
+  );
+
+CREATE POLICY "Bookkeeping transaction types delete" ON public.bookkeeping_transaction_types
+  FOR DELETE USING (
+    company_id IN (
+      SELECT id FROM public.companies 
+      WHERE tenant_id IN (SELECT public.get_user_tenants(auth.uid()))
+    )
+  );
+
+CREATE POLICY "Bookkeeping accounts insert" ON public.bookkeeping_accounts
+  FOR INSERT WITH CHECK (
+    company_id IN (
+      SELECT id FROM public.companies 
+      WHERE tenant_id IN (SELECT public.get_user_tenants(auth.uid()))
+    )
+  );
+
+CREATE POLICY "Bookkeeping accounts update" ON public.bookkeeping_accounts
+  FOR UPDATE USING (
+    company_id IN (
+      SELECT id FROM public.companies 
+      WHERE tenant_id IN (SELECT public.get_user_tenants(auth.uid()))
+    )
+  );
+
+CREATE POLICY "Bookkeeping accounts delete" ON public.bookkeeping_accounts
+  FOR DELETE USING (
     company_id IN (
       SELECT id FROM public.companies 
       WHERE tenant_id IN (SELECT public.get_user_tenants(auth.uid()))
