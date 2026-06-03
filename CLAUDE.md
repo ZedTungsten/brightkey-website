@@ -69,6 +69,15 @@
 - **Never guess `authInfo.companyId`**: Attempting to read `authInfo.companyId` directly returns `undefined`, which triggers a database type mismatch error (`invalid input syntax for type uuid: "undefined"`) when used in queries.
 - **Ensure Scoped Data Creation**: All new data entries and operations (inserts, updates, upserts) must explicitly include `company_id` (e.g. `company_id: currentCompanyId`) to ensure strict compliance with database Row-Level Security (RLS) policies. Failure to scope writes will cause silent write rejections or query failures.
 
+## Supabase REST API Auth Headers Rule
+- **Never read `sb.auth.headers` directly**: In newer versions of the Supabase JS SDK, `sb.auth.headers` is undefined. Accessing it will cause a crash or evaluate to `Bearer undefined`, which strips authentication and triggers database RLS failures.
+- **Retrieve access tokens dynamically**: When constructing custom fetch/REST calls requiring authorization (e.g. direct PostgREST fetch calls using custom headers), resolve the JWT session token dynamically via `sb.auth.getSession()`:
+  ```javascript
+  const { data: { session } } = await sb.auth.getSession();
+  const token = session ? session.access_token : sb.supabaseKey;
+  const H = { 'Authorization': `Bearer ${token}`, 'apikey': sb.supabaseKey, 'Content-Type': 'application/json' };
+  ```
+
 ## Toast Notification Stacking Rule
 - **Toast z-index must be `99999`**: To guarantee that toast notifications are visible over dark modal overlays, blur filters, and lateral drawers (which typically sit between `100` and `2000` z-index), always style `#toast-container` with `z-index: 99999`.
 - **Target `#toast-container` by ID**: Style rules must target `#toast-container` (ID selector) rather than `.toast-container` (class selector). This ensures page-specific overrides have the specificity required to override any rules inside the global `css/style.css` stylesheet.
