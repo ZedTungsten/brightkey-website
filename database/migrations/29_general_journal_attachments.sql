@@ -11,6 +11,19 @@ ALTER TABLE public.journal_accounts ADD COLUMN IF NOT EXISTS company_id UUID REF
 -- 2b. Add company_id column to public.journal_audit_log
 ALTER TABLE public.journal_audit_log ADD COLUMN IF NOT EXISTS company_id UUID REFERENCES public.companies(id) ON DELETE CASCADE;
 
+-- 2c. Populate existing NULL values with the BrightKey company ID
+DO $$
+DECLARE
+  v_company_id UUID;
+BEGIN
+  SELECT id INTO v_company_id FROM public.companies WHERE subdomain = 'brightkey' LIMIT 1;
+  IF v_company_id IS NOT NULL THEN
+    UPDATE public.general_journal SET company_id = v_company_id WHERE company_id IS NULL;
+    UPDATE public.journal_accounts SET company_id = v_company_id WHERE company_id IS NULL;
+    UPDATE public.journal_audit_log SET company_id = v_company_id WHERE company_id IS NULL;
+  END IF;
+END $$;
+
 -- 3. Enable RLS on the tables (just in case they aren't already enabled)
 ALTER TABLE public.general_journal ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.journal_accounts ENABLE ROW LEVEL SECURITY;
