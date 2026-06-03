@@ -356,6 +356,8 @@
         stagedAttachments: [],
         transactions: [],
         popoverCurrentParentId: null,
+        expensePaymentId: null,
+        expenseCategories: [],
 
         async init() {
           if (window.BKAuth) {
@@ -495,6 +497,13 @@
 
           // Sort by full path to keep subcategories grouped together
           this.transactionTypesWithPaths.sort((a, b) => a.path.localeCompare(b.path));
+
+          // Identify "Expense Payment" as a selectable parent — its children become a Category field
+          const expPayment = this.transactionTypes.find(t => t.name === 'Expense Payment');
+          this.expensePaymentId = expPayment ? expPayment.id : null;
+          this.expenseCategories = this.expensePaymentId
+            ? this.transactionTypes.filter(t => t.parent_id === this.expensePaymentId).sort((a, b) => a.name.localeCompare(b.name))
+            : [];
         },
 
         togglePopover(event) {
@@ -530,7 +539,7 @@
             const breadcrumbEl2 = document.getElementById('tx-type-breadcrumb');
             if (breadcrumbEl2) { breadcrumbEl2.style.display = 'none'; breadcrumbEl2.innerHTML = ''; }
             const matchingLeaves = this.transactionTypesWithPaths.filter(t =>
-              t.isLeaf && t.path.toLowerCase().includes(normalizedFilter)
+              (t.isLeaf || t.id === this.expensePaymentId) && t.path.toLowerCase().includes(normalizedFilter)
             );
 
             if (matchingLeaves.length === 0) {
@@ -603,11 +612,13 @@
             }
 
             currentLevelItems.forEach(item => {
+              // "Expense Payment" is selectable directly even though it has children
+              const isSelectableParent = item.id === this.expensePaymentId;
               const div = document.createElement('div');
               div.className = 'popover-item';
               div.onclick = (e) => {
                 e.stopPropagation();
-                if (item.isLeaf) {
+                if (item.isLeaf || isSelectableParent) {
                   this.selectTransactionType(item);
                 } else {
                   this.popoverCurrentParentId = item.id;
@@ -615,7 +626,7 @@
                 }
               };
 
-              if (item.isLeaf) {
+              if (item.isLeaf || isSelectableParent) {
                 div.innerHTML = `
                   <div class="popover-item-text-wrap">
                     <span class="popover-item-name">${esc(item.name)}</span>
@@ -782,10 +793,24 @@
           let fieldsHtml = '';
 
           // Basic setup for fields, will expand during the build phase.
+          const isExpensePayment = typeId === this.expensePaymentId;
+          const categoryField = isExpensePayment ? `
+            <div class="form-row" style="margin-bottom: 0.75rem;">
+              <div class="form-group" style="flex: 1;">
+                <label class="form-label" for="f-expense-category">Category <span style="color: var(--danger);">*</span></label>
+                <select id="f-expense-category" class="form-input" required>
+                  <option value="">Select a category…</option>
+                  ${this.expenseCategories.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('')}
+                </select>
+              </div>
+            </div>
+          ` : '';
+
           fieldsHtml = `
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 1rem;">
               <span style="font-weight: 700; font-size: 0.82rem; color: var(--cyan); text-transform: uppercase;">Parameters: ${esc(typeName)}</span>
             </div>
+            ${categoryField}
             <div class="form-row form-row-2">
               <div class="form-group">
                 <label class="form-label" for="f-amount">Amount (PHP)</label>
