@@ -385,11 +385,11 @@
         try {
           const { data: empData } = await window.BKAuth.sb
             .from('employees')
-            .select('profile_picture_url')
+            .select('picture_link')
             .eq('id', currentUser.id)
             .maybeSingle();
-          if (empData && empData.profile_picture_url) {
-            profilePictureUrl = empData.profile_picture_url;
+          if (empData && empData.picture_link) {
+            profilePictureUrl = empData.picture_link;
           }
         } catch (err) {
           console.error('Sidebar profile picture fetch error:', err);
