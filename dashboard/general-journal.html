@@ -722,29 +722,44 @@
     }
 
     /* ── Supabase REST helpers ── */
-    const H = { 'Content-Type': 'application/json', 'apikey': SB_ANON, 'Authorization': `Bearer ${SB_ANON}` };
+    async function getRestHeaders() {
+      let token = SB_ANON;
+      if (window.BKAuth && window.BKAuth.sb) {
+        const { data: { session } } = await window.BKAuth.sb.auth.getSession();
+        if (session) token = session.access_token;
+      }
+      return {
+        'Content-Type': 'application/json',
+        'apikey': SB_ANON,
+        'Authorization': `Bearer ${token}`
+      };
+    }
 
     async function sbGet(path, extraHeaders = {}) {
-      const r = await fetch(`${SB_URL}/rest/v1/${path}`, { headers: { ...H, 'Prefer': 'return=representation', ...extraHeaders } });
+      const headers = await getRestHeaders();
+      const r = await fetch(`${SB_URL}/rest/v1/${path}`, { headers: { ...headers, 'Prefer': 'return=representation', ...extraHeaders } });
       if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.message || `Supabase ${r.status}`); }
       return r.json();
     }
     async function sbPost(table, body) {
+      const headers = await getRestHeaders();
       const r = await fetch(`${SB_URL}/rest/v1/${table}`, {
-        method: 'POST', headers: { ...H, 'Prefer': 'return=representation' }, body: JSON.stringify(body)
+        method: 'POST', headers: { ...headers, 'Prefer': 'return=representation' }, body: JSON.stringify(body)
       });
       if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.message || `Insert ${r.status}`); }
       return r.json();
     }
     async function sbPatch(table, filter, body) {
+      const headers = await getRestHeaders();
       const r = await fetch(`${SB_URL}/rest/v1/${table}?${filter}`, {
-        method: 'PATCH', headers: { ...H, 'Prefer': 'return=minimal' }, body: JSON.stringify(body)
+        method: 'PATCH', headers: { ...headers, 'Prefer': 'return=minimal' }, body: JSON.stringify(body)
       });
       if (!r.ok) throw new Error(`Update ${r.status}`);
     }
     async function sbDelete(table, filter) {
+      const headers = await getRestHeaders();
       const r = await fetch(`${SB_URL}/rest/v1/${table}?${filter}`, {
-        method: 'DELETE', headers: { ...H, 'Prefer': 'return=minimal' }
+        method: 'DELETE', headers: { ...headers, 'Prefer': 'return=minimal' }
       });
       if (!r.ok) throw new Error(`Delete ${r.status}`);
     }
