@@ -68,6 +68,8 @@
   ```
 - **Never guess `authInfo.companyId`**: Attempting to read `authInfo.companyId` directly returns `undefined`, which triggers a database type mismatch error (`invalid input syntax for type uuid: "undefined"`) when used in queries.
 - **Ensure Scoped Data Creation**: All new data entries and operations (inserts, updates, upserts) must explicitly include `company_id` (e.g. `company_id: currentCompanyId`) to ensure strict compliance with database Row-Level Security (RLS) policies. Failure to scope writes will cause silent write rejections or query failures.
+- **Enforce Authenticated Users in RLS Policies**: Database RLS policies for internal elements (like general journal, bookkeeping, audit logs, etc.) must explicitly include `auth.uid() IS NOT NULL` in the `USING` and `WITH CHECK` clauses. This prevents anonymous requests using the public anon key (`Bearer ${SB_ANON}`) from accessing or modifying restricted data.
+
 
 ## Supabase REST API Auth Headers Rule
 - **Never read `sb.auth.headers` directly**: In newer versions of the Supabase JS SDK, `sb.auth.headers` is undefined. Accessing it will cause a crash or evaluate to `Bearer undefined`, which strips authentication and triggers database RLS failures.
