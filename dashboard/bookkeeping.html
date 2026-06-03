@@ -76,6 +76,55 @@
 
     /* ── Table style overrides ── */
     .j-table th { font-weight: 700; text-transform: uppercase; font-size: 0.68rem; letter-spacing: 0.05em; }
+
+    /* ── Searchable Popover Selector ── */
+    .custom-select-wrapper { position: relative; }
+    .custom-select-trigger {
+      display: flex; align-items: center; justify-content: space-between;
+      cursor: pointer; min-height: 38px; background: var(--bg-surface);
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      padding: 0.5rem 0.75rem; font-size: 0.88rem; transition: border-color 0.15s;
+    }
+    .custom-select-trigger:hover { border-color: var(--cyan); }
+    
+    .select-popover {
+      display: none; position: absolute; top: calc(100% + 6px); left: 0; right: 0;
+      background: var(--bg-surface-elevated, #242424); border: 1px solid var(--border);
+      border-radius: var(--radius-md); box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+      z-index: 999; flex-direction: column; max-height: 320px;
+    }
+    
+    .select-popover-search-wrap {
+      padding: 0.6rem 0.8rem; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 0.5rem;
+    }
+    .select-popover-search {
+      background: none; border: none; outline: none; color: var(--text-primary);
+      font-size: 0.85rem; width: 100%;
+    }
+    
+    .select-popover-list {
+      overflow-y: auto; padding: 0.5rem; display: flex; flex-direction: column; gap: 0.25rem;
+    }
+    
+    .popover-group-title {
+      font-size: 0.68rem; font-weight: 700; color: var(--cyan);
+      text-transform: uppercase; letter-spacing: 0.05em;
+      padding: 0.5rem 0.6rem 0.25rem;
+    }
+    
+    .popover-item {
+      display: flex; flex-direction: column; gap: 0.15rem;
+      padding: 0.5rem 0.6rem; border-radius: 4px; cursor: pointer;
+      transition: background 0.15s;
+    }
+    .popover-item:hover { background: var(--bg-elevated); }
+    .popover-item-path {
+      font-size: 0.72rem; color: var(--text-muted);
+    }
+    .popover-item-name {
+      font-size: 0.85rem; font-weight: 600; color: var(--text-primary);
+    }
   </style>
 </head>
 <body>
@@ -111,10 +160,25 @@
                 <!-- Transaction Type Selector -->
                 <div class="form-row form-row-2">
                   <div class="form-group">
-                    <label class="form-label" for="f-tx-type">Transaction Type</label>
-                    <select id="f-tx-type" class="form-select" onchange="BookkeepingApp.handleTypeChange()" required>
-                      <option value="">Select type…</option>
-                    </select>
+                    <label class="form-label" for="tx-type-trigger">Transaction Type</label>
+                    <div class="custom-select-wrapper">
+                      <div id="tx-type-trigger" class="custom-select-trigger" onclick="BookkeepingApp.togglePopover(event)">
+                        <span id="tx-type-selected-label" style="color: var(--text-muted);">Select type…</span>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="color: var(--text-muted);"><polyline points="6 9 12 15 18 9"/></svg>
+                      </div>
+                      <input type="hidden" id="f-tx-type" required />
+                      
+                      <!-- Popover panel -->
+                      <div id="tx-type-popover" class="select-popover">
+                        <div class="select-popover-search-wrap">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--text-muted);"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                          <input type="text" id="tx-type-search" class="select-popover-search" placeholder="Search transaction types..." oninput="BookkeepingApp.handleSearch(event)" onclick="event.stopPropagation()" />
+                        </div>
+                        <div id="tx-type-popover-list" class="select-popover-list">
+                          <!-- Dynamic items -->
+                        </div>
+                      </div>
+                    </div>
                   </div>
                   <div class="form-group">
                     <label class="form-label" for="f-date">Date</label>
@@ -316,6 +380,15 @@
           document.getElementById('f-date').value = new Date().toISOString().slice(0, 10);
           this.bindEvents();
 
+          // Bind popover close on outside click
+          document.addEventListener('click', (e) => {
+            const wrapper = document.querySelector('.custom-select-wrapper');
+            if (wrapper && !wrapper.contains(e.target)) {
+              const popover = document.getElementById('tx-type-popover');
+              if (popover) popover.style.display = 'none';
+            }
+          });
+
           // Load data
           await this.loadTransactionTypes();
           await this.loadTransactions();
@@ -352,7 +425,8 @@
             }
             this.transactionTypes = await sbGet(url);
             
-            this.populateTypesDropdown();
+            this.buildPaths();
+            this.renderPopoverList();
             this.populateParentDropdown();
             this.renderTypesTree();
           } catch(e) {
@@ -360,33 +434,116 @@
           }
         },
 
-        // Builds a flat list representing hierarchical dropdown options
-        populateTypesDropdown() {
-          const select = document.getElementById('f-tx-type');
-          select.innerHTML = '<option value="">Select type…</option>';
+        buildPaths() {
+          const map = {};
+          this.transactionTypes.forEach(t => { map[t.id] = t; });
 
-          // Helper to recursively append children with indents
-          const appendOptions = (parentId, indent = '') => {
-            const children = this.transactionTypes.filter(t => t.parent_id === parentId);
-            children.forEach(c => {
-              const opt = document.createElement('option');
-              opt.value = c.id;
-              opt.textContent = `${indent}${c.name}`;
-              select.appendChild(opt);
-              appendOptions(c.id, indent + '── ');
-            });
+          const getPath = (item) => {
+            const path = [];
+            let curr = item;
+            while (curr) {
+              path.unshift(curr.name);
+              curr = curr.parent_id ? map[curr.parent_id] : null;
+            }
+            return path;
           };
 
-          // Append top-level categories first
-          const roots = this.transactionTypes.filter(t => !t.parent_id);
-          roots.forEach(r => {
-            const opt = document.createElement('option');
-            opt.value = r.id;
-            opt.textContent = r.name;
-            opt.style.fontWeight = 'bold';
-            select.appendChild(opt);
-            appendOptions(r.id, '── ');
+          this.transactionTypesWithPaths = this.transactionTypes.map(t => {
+            const pathArr = getPath(t);
+            return {
+              ...t,
+              path: pathArr.join(' › '),
+              rootCategory: pathArr[0],
+              isLeaf: !this.transactionTypes.some(child => child.parent_id === t.id)
+            };
           });
+        },
+
+        togglePopover(event) {
+          event.stopPropagation();
+          const popover = document.getElementById('tx-type-popover');
+          if (!popover) return;
+          const isHidden = popover.style.display === 'none' || !popover.style.display;
+          popover.style.display = isHidden ? 'flex' : 'none';
+          if (isHidden) {
+            const search = document.getElementById('tx-type-search');
+            if (search) {
+              search.value = '';
+              search.focus();
+            }
+            this.renderPopoverList();
+          }
+        },
+
+        handleSearch(event) {
+          this.renderPopoverList(event.target.value);
+        },
+
+        renderPopoverList(filterText = '') {
+          const container = document.getElementById('tx-type-popover-list');
+          if (!container) return;
+
+          container.innerHTML = '';
+          const normalizedFilter = filterText.toLowerCase().trim();
+
+          // Group leaves by root category
+          const groups = {};
+          this.transactionTypesWithPaths.forEach(t => {
+            if (!t.isLeaf) return; // Only show leaves
+
+            if (normalizedFilter && !t.path.toLowerCase().includes(normalizedFilter)) {
+              return;
+            }
+
+            const grp = t.rootCategory || 'Other';
+            if (!groups[grp]) groups[grp] = [];
+            groups[grp].push(t);
+          });
+
+          const groupKeys = Object.keys(groups).sort();
+          if (groupKeys.length === 0) {
+            container.innerHTML = `<div style="padding: 1rem; text-align: center; color: var(--text-muted); font-size: 0.82rem;">No matching transaction types found.</div>`;
+            return;
+          }
+
+          groupKeys.forEach(grp => {
+            const grpTitle = document.createElement('div');
+            grpTitle.className = 'popover-group-title';
+            grpTitle.textContent = grp;
+            container.appendChild(grpTitle);
+
+            groups[grp].forEach(item => {
+              const div = document.createElement('div');
+              div.className = 'popover-item';
+              div.onclick = () => this.selectTransactionType(item);
+
+              const subPath = item.path.startsWith(grp + ' › ') 
+                ? item.path.slice(grp.length + 3)
+                : item.path;
+
+              div.innerHTML = `
+                <span class="popover-item-name">${esc(item.name)}</span>
+                ${subPath !== item.name ? `<span class="popover-item-path">${esc(subPath)}</span>` : ''}
+              `;
+              container.appendChild(div);
+            });
+          });
+        },
+
+        selectTransactionType(item) {
+          const input = document.getElementById('f-tx-type');
+          const label = document.getElementById('tx-type-selected-label');
+          const popover = document.getElementById('tx-type-popover');
+          
+          if (input && label) {
+            input.value = item.id;
+            label.textContent = item.path;
+            label.style.color = 'var(--text-primary)';
+            label.style.fontWeight = '600';
+          }
+          if (popover) popover.style.display = 'none';
+
+          this.handleTypeChange();
         },
 
         populateParentDropdown() {
