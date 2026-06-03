@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bookkeeping — BrightKey Internal</title>
+  <link rel="preconnect" href="https://fonts.bunny.net" />
+  <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg?v=2" />
+  <style>
+    /* ── Page wrap ── */
+    .int-wrap { max-width: 1200px; margin: 0 auto; padding: 2rem 2rem 5rem; }
+
+    /* ── Tab Layout ── */
+    .drawer-tabs {
+      display: flex; gap: 0.5rem; border-bottom: 1px solid var(--border);
+      margin-bottom: 2rem; padding: 0.5rem 2rem 0; background: var(--bg-surface);
+    }
+    .drawer-tab {
+      background: none; border: none; padding: 0.75rem 1rem; font-size: 0.88rem;
+      font-weight: 600; color: var(--text-muted); cursor: pointer;
+      position: relative; transition: color 0.2s;
+    }
+    .drawer-tab:hover { color: var(--text-primary); }
+    .drawer-tab.active { color: var(--cyan); }
+    .drawer-tab.active::after {
+      content: ''; position: absolute; bottom: -1px; left: 0; right: 0;
+      height: 2px; background: var(--cyan);
+    }
+
+    /* ── Card ── */
+    .j-card {
+      background: var(--bg-surface); border: 1px solid var(--border);
+      border-radius: var(--radius-md); padding: 1.75rem;
+      margin-bottom: 1.5rem; box-shadow: var(--shadow-sm);
+    }
+    .j-card-title {
+      font-size: 0.88rem; font-weight: 700; color: var(--text-primary);
+      letter-spacing: -0.02em; margin-bottom: 1.5rem;
+      display: flex; align-items: center; gap: 0.5rem;
+    }
+    .j-card-title::before {
+      content: ''; width: 3px; height: 16px;
+      background: var(--cyan); border-radius: 2px; flex-shrink: 0;
+    }
+
+    /* ── Form Grid ── */
+    .form-row   { display: grid; gap: 1rem 1.5rem; margin-bottom: 1rem; }
+    .form-row-2 { grid-template-columns: 1fr 1fr; }
+    .form-row-3 { grid-template-columns: 1fr 1fr 1fr; }
+    .form-row-auto { grid-template-columns: 220px 1fr; }
+
+    /* ── Tree View for Taxonomy ── */
+    .taxonomy-tree {
+      display: flex; flex-direction: column; gap: 0.5rem;
+    }
+    .tree-node {
+      border: 1px solid var(--border); border-radius: 4px;
+      background: var(--bg-surface-elevated, #242424);
+      padding: 0.5rem 0.75rem;
+    }
+    .tree-node-header {
+      display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+    }
+    .tree-node-name {
+      font-weight: 600; font-size: 0.88rem; color: var(--text-primary);
+    }
+    .tree-node-actions {
+      display: flex; gap: 0.25rem;
+    }
+    .tree-children {
+      margin-left: 1.5rem; margin-top: 0.5rem; border-left: 1px dashed var(--border);
+      padding-left: 1rem; display: flex; flex-direction: column; gap: 0.4rem;
+    }
+
+    /* ── Table style overrides ── */
+    .j-table th { font-weight: 700; text-transform: uppercase; font-size: 0.68rem; letter-spacing: 0.05em; }
+  </style>
+</head>
+<body>
+
+  <div class="dash-layout">
+    <!-- Sidebar -->
+    <aside class="dash-sidebar" id="dash-sidebar"></aside>
+
+    <!-- Main Content -->
+    <div class="dash-main">
+
+      <!-- Top Bar -->
+      <div class="top-bar">
+        <div class="top-bar-title">Bookkeeping</div>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <div class="drawer-tabs">
+        <button class="drawer-tab active" onclick="BookkeepingApp.switchTab('transactions')">Transactions</button>
+        <button class="drawer-tab" onclick="BookkeepingApp.switchTab('types')">Transaction Types Manager</button>
+      </div>
+
+      <main style="overflow-y: auto; flex: 1;">
+        <div class="int-wrap">
+
+          <!-- ── TAB 1: TRANSACTIONS ── -->
+          <div id="tab-transactions" class="tab-content">
+            
+            <div class="j-card">
+              <div class="j-card-title">New Bookkeeping Transaction</div>
+              
+              <form id="tx-form" novalidate autocomplete="off">
+                <!-- Transaction Type Selector -->
+                <div class="form-row form-row-2">
+                  <div class="form-group">
+                    <label class="form-label" for="f-tx-type">Transaction Type</label>
+                    <select id="f-tx-type" class="form-select" onchange="BookkeepingApp.handleTypeChange()" required>
+                      <option value="">Select type…</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label" for="f-date">Date</label>
+                    <input type="date" id="f-date" class="form-input" required />
+                  </div>
+                </div>
+
+                <!-- Dynamic Input Container -->
+                <div id="dynamic-fields-container" style="margin-top: 1rem; padding: 1rem; background: var(--bg-elevated); border-radius: var(--radius-sm); border: 1px solid var(--border);">
+                  <p style="color: var(--text-muted); font-size: 0.82rem; margin: 0;">Select a transaction type above to fill relevant parameters.</p>
+                </div>
+
+                <!-- Core Parameters (Common for all) -->
+                <div class="form-row form-row-2" style="margin-top: 1.5rem;">
+                  <div class="form-group">
+                    <label class="form-label" for="f-ref">Reference No.</label>
+                    <input type="text" id="f-ref" class="form-input" placeholder="e.g. Invoice, PO, OR..." />
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label" for="f-desc">Description</label>
+                    <input type="text" id="f-desc" class="form-input" placeholder="Transaction description/notes..." />
+                  </div>
+                </div>
+
+                <!-- Attachments -->
+                <div style="margin-top: 1.5rem; border-top: 1px solid var(--border); padding-top: 1.5rem; margin-bottom: 1.5rem;">
+                  <label class="form-label" style="margin-bottom: 0.5rem; display: block;">Receipt Attachments (Max 5 PDF/Images)</label>
+                  <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                    <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+                      <input type="file" id="f-attachments" multiple accept="image/*,application/pdf" class="form-input" style="height: auto; padding: 0.4rem; display: none;" onchange="BookkeepingApp.handleAttachmentSelect(event)" />
+                      <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('f-attachments').click()">Choose Files</button>
+                      <span id="attachment-status" style="font-size: 0.8rem; color: var(--text-muted);">No files selected (0/5)</span>
+                    </div>
+                    <div id="attachment-preview-container" style="display: flex; flex-wrap: wrap; gap: 0.5rem;"></div>
+                  </div>
+                </div>
+
+                <div class="form-actions">
+                  <div id="form-alert" style="display:none;" class="inline-alert error"></div>
+                  <div class="spacer"></div>
+                  <button type="submit" class="btn btn-cyan" id="submit-btn">
+                    Record Transaction
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            <!-- Transactions List -->
+            <div class="j-card" style="margin-top: 2rem;">
+              <div class="j-card-title">Recent Bookkeeping Log</div>
+              
+              <div class="table-wrap">
+                <table class="j-table">
+                  <thead>
+                    <tr>
+                      <th style="width: 36px;">#</th>
+                      <th>Date</th>
+                      <th>Type</th>
+                      <th>Ref No</th>
+                      <th>Description</th>
+                      <th>Created By</th>
+                      <th style="width: 80px; text-align: center;">Docs</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tx-tbody">
+                    <tr><td colspan="7" class="tbl-state">Loading transactions…</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- ── TAB 2: TRANSACTION TYPES MANAGER ── -->
+          <div id="tab-types" class="tab-content" style="display: none;">
+            
+            <div class="j-card">
+              <div class="j-card-title">Create Transaction Type / Submenu</div>
+              <form id="type-form" novalidate autocomplete="off">
+                <div class="form-row form-row-3">
+                  <div class="form-group">
+                    <label class="form-label" for="f-new-type-name">Name</label>
+                    <input type="text" id="f-new-type-name" class="form-input" placeholder="e.g. Lalamove Delivery" required />
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label" for="f-new-type-parent">Parent Category (Optional)</label>
+                    <select id="f-new-type-parent" class="form-select">
+                      <option value="">None (Top-Level Category)</option>
+                    </select>
+                  </div>
+                  <div class="form-group" style="display: flex; align-items: flex-end;">
+                    <button type="submit" class="btn btn-cyan" id="add-type-btn" style="width: 100%;">Add Type / Submenu</button>
+                  </div>
+                </div>
+              </form>
+            </div>
+
+            <div class="j-card">
+              <div class="j-card-title">Transaction Types Hierarchy</div>
+              <div class="taxonomy-tree" id="types-tree-container">
+                <div class="tbl-state">Loading hierarchy…</div>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+      </main>
+
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- Supabase SDK, Authentication and Global Scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/sidebar.js"></script>
+  <script src="../js/main.js"></script>
+  
+  <script>
+    (function() {
+      'use strict';
+
+      let sbGet, sbPost, sbPatch, sbDelete;
+
+      // HTML Escaper
+      function esc(s) {
+        if (s == null) return '';
+        return String(s)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
+
+      window.BookkeepingApp = {
+        companyId: null,
+        tenantId: null,
+        transactionTypes: [],
+        stagedAttachments: [],
+        transactions: [],
+
+        async init() {
+          if (window.BKAuth) {
+            const authInfo = await window.BKAuth.checkRoleGate(['owner', 'admin', 'accounting'], '../admin.html');
+            if (!authInfo) return;
+            const sb = window.BKAuth.sb;
+            this.tenantId = authInfo.tenantId;
+
+            // Fetch company ID for this tenant
+            try {
+              const { data: companyData } = await sb
+                .from('companies')
+                .select('id')
+                .eq('tenant_id', this.tenantId)
+                .limit(1);
+              if (companyData && companyData.length > 0) {
+                this.companyId = companyData[0].id;
+              }
+            } catch (err) {
+              console.error('Error loading company:', err);
+            }
+
+            // Bind shorthand AJAX functions
+            const H = { 'Authorization': `Bearer ${sb.auth.headers.Authorization.split(' ')[1]}`, 'apikey': sb.supabaseKey, 'Content-Type': 'application/json' };
+            const SB_URL = sb.supabaseUrl;
+
+            sbGet = async (endpoint, extraHeaders = {}) => {
+              const r = await fetch(`${SB_URL}/rest/v1/${endpoint}`, { headers: { ...H, ...extraHeaders } });
+              if (!r.ok) throw new Error(`Fetch ${r.status}`);
+              return r.json();
+            };
+            sbPost = async (table, body) => {
+              const r = await fetch(`${SB_URL}/rest/v1/${table}`, {
+                method: 'POST', headers: { ...H, 'Prefer': 'return=representation' }, body: JSON.stringify(body)
+              });
+              if (!r.ok) throw new Error(`Insert ${r.status}`);
+              return r.json();
+            };
+            sbPatch = async (table, filter, body) => {
+              const r = await fetch(`${SB_URL}/rest/v1/${table}?${filter}`, {
+                method: 'PATCH', headers: { ...H, 'Prefer': 'return=minimal' }, body: JSON.stringify(body)
+              });
+              if (!r.ok) throw new Error(`Update ${r.status}`);
+            };
+            sbDelete = async (table, filter) => {
+              const r = await fetch(`${SB_URL}/rest/v1/${table}?${filter}`, {
+                method: 'DELETE', headers: { ...H, 'Prefer': 'return=minimal' }
+              });
+              if (!r.ok) throw new Error(`Delete ${r.status}`);
+            };
+          }
+
+          // Initial UI setters
+          document.getElementById('f-date').value = new Date().toISOString().slice(0, 10);
+          this.bindEvents();
+
+          // Load data
+          await this.loadTransactionTypes();
+          await this.loadTransactions();
+        },
+
+        bindEvents() {
+          document.getElementById('tx-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            await this.submitTransaction();
+          });
+
+          document.getElementById('type-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            await this.addTransactionType();
+          });
+        },
+
+        switchTab(tabId) {
+          document.querySelectorAll('.drawer-tab').forEach(btn => {
+            btn.classList.toggle('active', btn.textContent.toLowerCase().includes(tabId));
+          });
+          document.querySelectorAll('.tab-content').forEach(content => {
+            content.style.display = content.id === `tab-${tabId}` ? 'block' : 'none';
+          });
+        },
+
+        // ── LOAD TRANSACTION TYPES & SEED DROP-DOWNS ──
+        async loadTransactionTypes() {
+          try {
+            // Get both system-wide (company_id is null) and company-specific transaction types
+            let url = 'bookkeeping_transaction_types?select=id,name,parent_id,company_id&order=name.asc';
+            if (this.companyId) {
+              url = `bookkeeping_transaction_types?select=id,name,parent_id,company_id&or=(company_id.is.null,company_id.eq.${this.companyId})&order=name.asc`;
+            }
+            this.transactionTypes = await sbGet(url);
+            
+            this.populateTypesDropdown();
+            this.populateParentDropdown();
+            this.renderTypesTree();
+          } catch(e) {
+            Toast.error('Failed to load transaction types: ' + e.message);
+          }
+        },
+
+        // Builds a flat list representing hierarchical dropdown options
+        populateTypesDropdown() {
+          const select = document.getElementById('f-tx-type');
+          select.innerHTML = '<option value="">Select type…</option>';
+
+          // Helper to recursively append children with indents
+          const appendOptions = (parentId, indent = '') => {
+            const children = this.transactionTypes.filter(t => t.parent_id === parentId);
+            children.forEach(c => {
+              const opt = document.createElement('option');
+              opt.value = c.id;
+              opt.textContent = `${indent}${c.name}`;
+              select.appendChild(opt);
+              appendOptions(c.id, indent + '── ');
+            });
+          };
+
+          // Append top-level categories first
+          const roots = this.transactionTypes.filter(t => !t.parent_id);
+          roots.forEach(r => {
+            const opt = document.createElement('option');
+            opt.value = r.id;
+            opt.textContent = r.name;
+            opt.style.fontWeight = 'bold';
+            select.appendChild(opt);
+            appendOptions(r.id, '── ');
+          });
+        },
+
+        populateParentDropdown() {
+          const select = document.getElementById('f-new-type-parent');
+          select.innerHTML = '<option value="">None (Top-Level Category)</option>';
+
+          const roots = this.transactionTypes.filter(t => !t.parent_id);
+          roots.forEach(r => {
+            const opt = document.createElement('option');
+            opt.value = r.id;
+            opt.textContent = r.name;
+            select.appendChild(opt);
+            
+            // Allow nesting one level deep in the drop down parent selector
+            const subcategories = this.transactionTypes.filter(t => t.parent_id === r.id);
+            subcategories.forEach(sub => {
+              const subOpt = document.createElement('option');
+              subOpt.value = sub.id;
+              subOpt.textContent = `── ${sub.name}`;
+              select.appendChild(subOpt);
+            });
+          });
+        },
+
+        // ── RENDER TAXONOMY TREE MANAGER ──
+        renderTypesTree() {
+          const container = document.getElementById('types-tree-container');
+          if (!container) return;
+
+          if (!this.transactionTypes.length) {
+            container.innerHTML = '<div class="tbl-state">No transaction types defined.</div>';
+            return;
+          }
+
+          const renderNode = (node) => {
+            const children = this.transactionTypes.filter(t => t.parent_id === node.id);
+            const isSystem = !node.company_id;
+
+            const actions = isSystem
+              ? `<span style="font-size: 0.72rem; color: var(--text-muted); padding: 0.2rem 0.5rem; background: var(--bg-elevated); border-radius: 4px;">System</span>`
+              : `<div class="tree-node-actions">
+                  <button type="button" class="btn btn-ghost btn-xs" onclick="BookkeepingApp.editTypeName('${node.id}', '${esc(node.name)}')">Edit</button>
+                  <button type="button" class="btn btn-ghost btn-xs" style="color: var(--danger);" onclick="BookkeepingApp.deleteType('${node.id}')">Delete</button>
+                </div>`;
+
+            let childrenHtml = '';
+            if (children.length > 0) {
+              childrenHtml = `<div class="tree-children">${children.map(c => renderNode(c)).join('')}</div>`;
+            }
+
+            return `
+              <div class="tree-node" id="tn-${node.id}">
+                <div class="tree-node-header">
+                  <span class="tree-node-name">${esc(node.name)}</span>
+                  ${actions}
+                </div>
+                ${childrenHtml}
+              </div>
+            `;
+          };
+
+          const roots = this.transactionTypes.filter(t => !t.parent_id);
+          container.innerHTML = roots.map(r => renderNode(r)).join('');
+        },
+
+        // Edit custom transaction type label
+        async editTypeName(id, currentName) {
+          const newName = prompt('Enter new name for the transaction type:', currentName);
+          if (!newName || !newName.trim()) return;
+          try {
+            await sbPatch('bookkeeping_transaction_types', `id=eq.${id}`, { name: newName.trim() });
+            Toast.success('Transaction type updated.');
+            await this.loadTransactionTypes();
+          } catch(e) {
+            Toast.error('Failed to update: ' + e.message);
+          }
+        },
+
+        // Delete custom transaction type
+        async deleteType(id) {
+          if (!confirm('Are you sure you want to delete this transaction type? Children subtypes will be deleted as well.')) return;
+          try {
+            await sbDelete('bookkeeping_transaction_types', `id=eq.${id}`);
+            Toast.success('Transaction type deleted.');
+            await this.loadTransactionTypes();
+          } catch(e) {
+            Toast.error('Failed to delete: ' + e.message);
+          }
+        },
+
+        // Add custom transaction type
+        async addTransactionType() {
+          const nameInput = document.getElementById('f-new-type-name');
+          const parentSelect = document.getElementById('f-new-type-parent');
+
+          const name = nameInput.value.trim();
+          const parent_id = parentSelect.value || null;
+
+          if (!name) return;
+
+          try {
+            await sbPost('bookkeeping_transaction_types', {
+              name,
+              parent_id,
+              company_id: this.companyId
+            });
+            nameInput.value = '';
+            parentSelect.value = '';
+            Toast.success(`"${name}" added.`);
+            await this.loadTransactionTypes();
+          } catch(e) {
+            Toast.error('Failed to add transaction type: ' + e.message);
+          }
+        },
+
+        // ── FORM INTERACTION: DYNAMIC FIELDS ──
+        handleTypeChange() {
+          const typeId = document.getElementById('f-tx-type').value;
+          const container = document.getElementById('dynamic-fields-container');
+          
+          if (!typeId) {
+            container.innerHTML = `<p style="color: var(--text-muted); font-size: 0.82rem; margin: 0;">Select a transaction type above to fill relevant parameters.</p>`;
+            return;
+          }
+
+          const selectedType = this.transactionTypes.find(t => t.id === typeId);
+          const typeName = selectedType ? selectedType.name : '';
+
+          // Dynamically adjust inputs depending on selected action type
+          let fieldsHtml = '';
+
+          // Basic setup for fields, will expand during the build phase.
+          fieldsHtml = `
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 1rem;">
+              <span style="font-weight: 700; font-size: 0.82rem; color: var(--cyan); text-transform: uppercase;">Parameters: ${esc(typeName)}</span>
+            </div>
+            <div class="form-row form-row-2">
+              <div class="form-group">
+                <label class="form-label" for="f-amount">Amount (PHP)</label>
+                <input type="number" id="f-amount" class="form-input" placeholder="0.00" step="0.01" required />
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="f-notes">Internal Notes</label>
+                <input type="text" id="f-notes" class="form-input" placeholder="Notes specific to the items/reconciliation..." />
+              </div>
+            </div>
+          `;
+
+          container.innerHTML = fieldsHtml;
+        },
+
+        // ── FILE ATTACHMENTS ──
+        async compressImage(file, quality = 0.7) {
+          if (!file.type.startsWith('image/')) {
+            return file;
+          }
+          return new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = (e) => {
+              const img = new Image();
+              img.src = e.target.result;
+              img.onload = () => {
+                const canvas = document.createElement('canvas');
+                canvas.width = img.width;
+                canvas.height = img.height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, img.width, img.height);
+                canvas.toBlob((blob) => {
+                  if (blob) {
+                    const compressedFile = new File([blob], file.name.replace(/\.[^/.]+$/, "") + ".jpg", {
+                      type: 'image/jpeg',
+                      lastModified: Date.now()
+                    });
+                    resolve(compressedFile);
+                  } else {
+                    resolve(file);
+                  }
+                }, 'image/jpeg', quality);
+              };
+              img.onerror = () => resolve(file);
+            };
+            reader.onerror = () => resolve(file);
+          });
+        },
+
+        async handleAttachmentSelect(event) {
+          const files = Array.from(event.target.files);
+          if (!files.length) return;
+
+          if (this.stagedAttachments.length + files.length > 5) {
+            Toast.error('You can upload a maximum of 5 attachments.');
+            event.target.value = '';
+            return;
+          }
+
+          const statusEl = document.getElementById('attachment-status');
+          if (statusEl) {
+            statusEl.textContent = `Processing files... (${this.stagedAttachments.length}/5)`;
+          }
+
+          for (let file of files) {
+            try {
+              const compressed = await this.compressImage(file);
+              this.stagedAttachments.push({
+                name: compressed.name,
+                file: compressed,
+                type: compressed.type
+              });
+            } catch (err) {
+              console.error('File compression failed, using original:', err);
+              this.stagedAttachments.push({
+                name: file.name,
+                file: file,
+                type: file.type
+              });
+            }
+          }
+
+          event.target.value = '';
+          this.renderAttachmentPreviews();
+        },
+
+        removeStagedAttachment(index) {
+          this.stagedAttachments.splice(index, 1);
+          this.renderAttachmentPreviews();
+        },
+
+        renderAttachmentPreviews() {
+          const container = document.getElementById('attachment-preview-container');
+          const statusEl = document.getElementById('attachment-status');
+          if (!container) return;
+
+          container.innerHTML = '';
+          if (statusEl) {
+            statusEl.textContent = `${this.stagedAttachments.length}/5 files selected`;
+          }
+
+          this.stagedAttachments.forEach((item, idx) => {
+            const div = document.createElement('div');
+            div.setAttribute('style', 'position: relative; display: flex; align-items: center; gap: 0.5rem; background: var(--bg-surface-elevated, #242424); border: 1px solid var(--border); padding: 0.4rem 0.6rem; border-radius: 4px; font-size: 0.78rem; max-width: 180px;');
+
+            const icon = item.type.startsWith('image/') ? '📷' : '📄';
+
+            div.innerHTML = `
+              <span>${icon}</span>
+              <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;" title="${esc(item.name)}">${esc(item.name)}</span>
+              <button type="button" style="background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 1rem; line-height: 1; padding: 0 0.2rem; display: flex; align-items: center;" onclick="BookkeepingApp.removeStagedAttachment(${idx})" title="Remove">×</button>
+            `;
+            container.appendChild(div);
+          });
+        },
+
+        // ── LOAD BOOKKEEPING LOG ──
+        async loadTransactions() {
+          try {
+            let url = 'bookkeeping?select=id,date,reference_no,description,created_by,bookkeeping_transaction_types(name),bookkeeping_attachments(file_url,file_name)&order=created_at.desc&limit=50';
+            if (this.companyId) {
+              url = `bookkeeping?select=id,date,reference_no,description,created_by,bookkeeping_transaction_types(name),bookkeeping_attachments(file_url,file_name)&company_id=eq.${this.companyId}&order=created_at.desc&limit=50`;
+            }
+            this.transactions = await sbGet(url);
+            this.renderTransactions();
+          } catch(e) {
+            Toast.error('Failed to load transactions log: ' + e.message);
+          }
+        },
+
+        renderTransactions() {
+          const tbody = document.getElementById('tx-tbody');
+          if (!tbody) return;
+
+          if (!this.transactions.length) {
+            tbody.innerHTML = `<tr><td colspan="7" class="tbl-state" style="padding: 100px 0;">No bookkeeping transactions logged.</td></tr>`;
+            return;
+          }
+
+          tbody.innerHTML = this.transactions.map((tx, idx) => {
+            const dateStr = tx.date || '—';
+            const typeStr = tx.bookkeeping_transaction_types ? tx.bookkeeping_transaction_types.name : '—';
+            const refStr = tx.reference_no || '—';
+            const descStr = tx.description || '—';
+            const userStr = tx.created_by || 'System';
+
+            const atts = tx.bookkeeping_attachments || [];
+            const docsHtml = atts.map((url) => {
+              const isPdf = url.file_url.toLowerCase().endsWith('.pdf');
+              const icon = isPdf ? '📄' : '📷';
+              return `<a href="${url.file_url}" target="_blank" rel="noopener noreferrer" title="${esc(url.file_name)}" style="text-decoration:none; margin: 0 4px; font-size: 0.95rem;">${icon}</a>`;
+            }).join('');
+
+            return `
+              <tr>
+                <td style="color: var(--text-muted); font-size: 0.72rem;">${idx + 1}</td>
+                <td>${esc(dateStr)}</td>
+                <td>${esc(typeStr)}</td>
+                <td>${esc(refStr)}</td>
+                <td>${esc(descStr)}</td>
+                <td>${esc(userStr)}</td>
+                <td style="text-align:center;">${docsHtml || '—'}</td>
+              </tr>
+            `;
+          }).join('');
+        },
+
+        // ── SUBMIT TRANSACTION ──
+        async submitTransaction() {
+          const btn = document.getElementById('submit-btn');
+          const typeId = document.getElementById('f-tx-type').value;
+          const date = document.getElementById('f-date').value;
+          const ref = document.getElementById('f-ref').value.trim() || null;
+          const desc = document.getElementById('f-desc').value.trim() || null;
+          
+          const amountInput = document.getElementById('f-amount');
+          const amount = amountInput ? parseFloat(amountInput.value) : 0;
+          
+          if (!typeId) return Toast.error('Transaction Type is required.');
+          if (!date) return Toast.error('Date is required.');
+
+          btn.disabled = true;
+          try {
+            // 1. Post bookkeeping header row
+            const user = window.BKAuth ? (await window.BKAuth.sb.auth.getUser()).data.user : null;
+            const txData = await sbPost('bookkeeping', {
+              company_id: this.companyId,
+              transaction_type_id: typeId,
+              date,
+              reference_no: ref,
+              description: desc,
+              created_by: user ? user.id : null
+            });
+
+            const bookkeepingId = txData[0].id;
+
+            // 2. Upload attachments
+            if (this.stagedAttachments.length > 0) {
+              const supabaseClient = window.BKAuth ? window.BKAuth.sb : null;
+              
+              for (let i = 0; i < this.stagedAttachments.length; i++) {
+                const item = this.stagedAttachments[i];
+                const ext = item.name.split('.').pop().toLowerCase();
+                const filename = `${bookkeepingId}-${String(i + 1).padStart(2, '0')}.${ext}`;
+                const path = `${this.companyId}/bookkeeping/${filename}`;
+                
+                const { error } = await supabaseClient.storage
+                  .from('brightkey-assets')
+                  .upload(path, item.file, { upsert: true });
+                  
+                if (error) throw new Error(`File upload failed: ${error.message}`);
+                
+                const { data: { publicUrl } } = supabaseClient.storage
+                  .from('brightkey-assets')
+                  .getPublicUrl(path);
+                  
+                await sbPost('bookkeeping_attachments', {
+                  bookkeeping_id: bookkeepingId,
+                  file_url: publicUrl,
+                  file_name: item.name
+                });
+              }
+            }
+
+            Toast.success('Transaction successfully logged.');
+            
+            // Clear form
+            document.getElementById('tx-form').reset();
+            document.getElementById('f-date').value = new Date().toISOString().slice(0, 10);
+            this.stagedAttachments = [];
+            this.renderAttachmentPreviews();
+            this.handleTypeChange();
+
+            await this.loadTransactions();
+          } catch(e) {
+            Toast.error('Error logging transaction: ' + e.message);
+          } finally {
+            btn.disabled = false;
+          }
+        }
+      };
+
+      document.addEventListener('DOMContentLoaded', () => {
+        window.BookkeepingApp.init();
+      });
+
+    })();
+  </script>
+</body>
+</html>
