@@ -79,4 +79,7 @@
 - **Always store currency/pricing values as integers in centavos (cents)**: To prevent floating-point rounding errors during financial calculations and maintain database consistency, all price-related columns in the database (e.g., `sale_price`, `installation_price`, `subtotal`, `charges`, `deductions`, `grand_total`, `deposit_amount`, `balance_due`) must be stored as `INTEGER` representing centavos (e.g., `10000` = ₱100.00).
 - **Convert on frontend input/display**: Convert these integer values on the frontend by dividing by `100` for human-readable display (e.g., `(cents / 100).toLocaleString(...)`) and multiplying raw numeric user inputs by `100` (e.g., `Math.round(parseFloat(input) * 100)`) before submitting payloads to the database.
 
+## Default Company ID Scoping
+- **Use BrightKey by default**: For any database operation, seed data, or query scoping where a company ID is required, always default to the **BrightKey** company (resolvable via the `'brightkey'` subdomain), unless explicitly stated otherwise.
+
 
