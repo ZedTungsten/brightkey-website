@@ -93,4 +93,8 @@
 ## Default Company ID Scoping
 - **Use BrightKey by default**: For any database operation, seed data, or query scoping where a company ID is required, always default to the **BrightKey** company (resolvable via the `'brightkey'` subdomain), unless explicitly stated otherwise.
 
+## PostgREST Filter Special Characters Escaping Rule
+- **Escape special characters in `in.(...)` list filters**: When querying via PostgREST using `in.(...)` (e.g., filtering on `account` names with `in.(...)`), if any option contains spaces, commas, or parentheses `()`, wrap each item in double quotes and escape internal double quotes (e.g. `const escaped = item.replace(/"/g, '\\"'); return `"${escaped}"`;`). Otherwise, PostgREST will parse the parentheses as list delimiters or syntax errors, resulting in empty query results.
+
+
 
