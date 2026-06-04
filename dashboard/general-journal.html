@@ -644,6 +644,10 @@
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
               Logs
             </button>
+            <button class="btn btn-cyan btn-sm" id="export-csv-btn" type="button">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Export
+            </button>
           </div>
         </div>
 
@@ -922,6 +926,7 @@
         this.bindLogs();
         document.getElementById('clear-form-btn').addEventListener('click', () => this.clearForm());
         document.getElementById('ss-create-btn').addEventListener('click', () => this.createSnapshot());
+        document.getElementById('export-csv-btn').addEventListener('click', () => this.exportToCSV());
         // Detect IP + browser silently
         this.detectUser();
         await this.loadAccounts();
@@ -1713,6 +1718,98 @@
           dateFrom: f.dateFrom,
           dateTo: f.dateTo
         };
+      },
+
+      async exportToCSV() {
+        const btn = document.getElementById('export-csv-btn');
+        if (!btn) return;
+        const origText = btn.innerHTML;
+        btn.disabled = true;
+        btn.textContent = 'Exporting…';
+
+        try {
+          const f = this.getFilters();
+          const { filter: ssFilter, dateFrom, dateTo } = await this.getQueryFilterString(f);
+          const filterQS = this.buildFilterQS(f, { dateFrom, dateTo });
+
+          // Fetch all matching rows without pagination limit/offset, sorted by date & entry_number
+          const dir = this.sortDir === 'asc' ? 'asc' : 'desc';
+          let order = `date.${dir},entry_number.${dir},id.${dir}`;
+          if (this.sortBy === 'entry_number') {
+            order = `entry_number.${dir},date.${dir},id.${dir}`;
+          }
+          const url = `general_journal?${filterQS}&${ssFilter}&order=${order}`;
+          const rows = await sbGet(url, { 'Range': '0-99999', 'Range-Unit': 'items' });
+
+          if (!rows.length) {
+            Toast.error('No matching records to export.');
+            return;
+          }
+
+          // Build CSV content
+          const csvRows = [];
+          // Headers
+          csvRows.push(['#', 'Entry', 'Date', 'Account', 'Debit', 'Credit', 'Desc 1', 'Desc 2'].join(','));
+
+          rows.forEach((r, idx) => {
+            const entryLabel = fmtEntry(r.entry_number);
+            const dateStr = r.date || '';
+            const accountStr = r.account || '';
+            const debitVal = r.debit !== null && r.debit !== undefined ? r.debit : '';
+            const creditVal = r.credit !== null && r.credit !== undefined ? r.credit : '';
+            const desc1 = r.description_1 || '';
+            const desc2 = r.description_2 || '';
+
+            // Helper to escape values for CSV
+            const escVal = (val) => {
+              const str = String(val ?? '');
+              if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+                return `"${str.replace(/"/g, '""')}"`;
+              }
+              return str;
+            };
+
+            csvRows.push([
+              idx + 1,
+              escVal(entryLabel),
+              escVal(dateStr),
+              escVal(accountStr),
+              debitVal,
+              creditVal,
+              escVal(desc1),
+              escVal(desc2)
+            ].join(','));
+          });
+
+          const csvContent = "\uFEFF" + csvRows.join("\n"); // UTF-8 BOM for Excel support
+          const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+          const link = document.createElement('a');
+          const urlObj = URL.createObjectURL(blob);
+          link.setAttribute('href', urlObj);
+
+          // Filename based on date range or general
+          let filename = 'general_journal';
+          if (dateFrom && dateTo) {
+            filename += `_${dateFrom}_to_${dateTo}`;
+          } else if (dateFrom) {
+            filename += `_from_${dateFrom}`;
+          } else if (dateTo) {
+            filename += `_to_${dateTo}`;
+          }
+          link.setAttribute('download', `${filename}.csv`);
+          link.style.visibility = 'hidden';
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          URL.revokeObjectURL(urlObj);
+          Toast.success(`Exported ${rows.length} rows successfully.`);
+        } catch (err) {
+          console.error(err);
+          Toast.error('Export failed: ' + err.message);
+        } finally {
+          btn.disabled = false;
+          btn.innerHTML = origText;
+        }
       },
 
       /* ── Helper: createSnapshot ── */
