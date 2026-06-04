@@ -214,6 +214,22 @@
     .tbl-state { text-align: center; padding: 2.5rem 1rem; color: var(--text-muted); font-size: 0.875rem; }
     .tbl-state.error { color: var(--danger); }
 
+    /* ── Skeleton loader ── */
+    @keyframes shimmer {
+      0% { background-position: -200% 0; }
+      100% { background-position: 200% 0; }
+    }
+    .skeleton-shimmer {
+      background: linear-gradient(90deg, var(--border) 25%, var(--bg-elevated) 50%, var(--border) 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.6s infinite linear;
+      display: inline-block;
+    }
+    .skeleton-row td {
+      border-bottom: 1px solid var(--border);
+      vertical-align: middle;
+    }
+
     /* ── Alert inline ── */
     .inline-alert { padding: 0.45rem 0.8rem; border-radius: var(--radius-sm); font-size: 0.8rem; border: 1px solid; }
     .inline-alert.error { background: rgba(239,68,68,0.06); border-color: rgba(239,68,68,0.3); color: var(--danger); }
@@ -1813,7 +1829,35 @@
 
       async loadEntries() {
         const tbody = document.getElementById('j-tbody');
-        tbody.innerHTML = '<tr><td colspan="8" class="tbl-state">Loading…</td></tr>';
+        const cols = this.editMode ? 10 : 9;
+
+        // Dynamically set min-height on .table-wrap based on pageSize to prevent jumping
+        const wrap = document.querySelector('.table-wrap');
+        if (wrap) {
+          const expectedHeight = (this.pageSize * 37.6) + 33;
+          wrap.style.minHeight = `${expectedHeight}px`;
+        }
+
+        // Render skeleton rows matching this.pageSize to keep the layout height stable
+        let skeletonHtml = '';
+        for (let i = 0; i < this.pageSize; i++) {
+          skeletonHtml += `
+            <tr class="skeleton-row">
+              <td class="num"><div class="skeleton-shimmer" style="width: 16px; height: 12px; border-radius: 4px;"></div></td>
+              <td class="entry-num"><div class="skeleton-shimmer" style="width: 70px; height: 12px; border-radius: 4px;"></div></td>
+              <td><div class="skeleton-shimmer" style="width: 75px; height: 12px; border-radius: 4px;"></div></td>
+              <td><div class="skeleton-shimmer" style="width: 130px; height: 12px; border-radius: 4px;"></div></td>
+              <td><div class="skeleton-shimmer" style="width: 60px; height: 12px; border-radius: 4px;"></div></td>
+              <td><div class="skeleton-shimmer" style="width: 60px; height: 12px; border-radius: 4px;"></div></td>
+              <td><div class="skeleton-shimmer" style="width: 120px; height: 12px; border-radius: 4px;"></div></td>
+              <td><div class="skeleton-shimmer" style="width: 100px; height: 12px; border-radius: 4px;"></div></td>
+              <td style="text-align:center;"><div class="skeleton-shimmer" style="width: 20px; height: 12px; border-radius: 4px; margin:0 auto;"></div></td>
+              ${this.editMode ? '<td class="delete-col"><div class="skeleton-shimmer" style="width: 20px; height: 12px; border-radius: 4px; margin:0 auto;"></div></td>' : ''}
+            </tr>
+          `;
+        }
+        tbody.innerHTML = skeletonHtml;
+
         const f = this.getFilters();
         const offset = (this.page - 1) * this.pageSize;
         try {
@@ -1844,7 +1888,8 @@
           this.renderTable();
           this.renderPagination();
         } catch(e) {
-          tbody.innerHTML = `<tr><td colspan="9" class="tbl-state error">Error: ${esc(e.message)}</td></tr>`;
+          const tblHeight = (this.pageSize * 37.6);
+          tbody.innerHTML = `<tr><td colspan="${cols}" class="tbl-state error" style="height: ${tblHeight}px; vertical-align: middle; text-align: center;">Error: ${esc(e.message)}</td></tr>`;
         }
       },
 
@@ -1854,8 +1899,16 @@
         const off    = (this.page - 1) * this.pageSize;
         const cols   = this.editMode ? 10 : 9;
 
+        // Dynamically set min-height on .table-wrap based on pageSize to prevent jumping
+        const wrap = document.querySelector('.table-wrap');
+        if (wrap) {
+          const expectedHeight = (this.pageSize * 37.6) + 33;
+          wrap.style.minHeight = `${expectedHeight}px`;
+        }
+
         if (!this.entries.length) {
-          tbody.innerHTML = `<tr><td colspan="${cols}" class="tbl-state" style="padding: 200px 0;">No entries found.</td></tr>`;
+          const tblHeight = (this.pageSize * 37.6);
+          tbody.innerHTML = `<tr><td colspan="${cols}" class="tbl-state" style="height: ${tblHeight}px; vertical-align: middle; text-align: center;">No entries found.</td></tr>`;
           return;
         }
 
