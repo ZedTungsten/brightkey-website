@@ -1280,14 +1280,14 @@
       },
 
       async getNextEntryNum() {
-        // Fetch only positive entry numbers to avoid counting negative snapshot numbers
-        let url = 'general_journal?select=entry_number&entry_number=gt.0';
+        // Fetch only the largest positive entry number to avoid counting negative snapshot numbers
+        let url = 'general_journal?select=entry_number&entry_number=gt.0&order=entry_number.desc&limit=1';
         if (this.companyId && this.companyId !== 'undefined' && this.companyId !== 'null') {
-          url = `general_journal?select=entry_number&entry_number=gt.0&company_id=eq.${this.companyId}`;
+          url = `general_journal?select=entry_number&entry_number=gt.0&company_id=eq.${this.companyId}&order=entry_number.desc&limit=1`;
         }
         const rows = await sbGet(url);
         if (!rows.length) return 1;
-        const max = Math.max(...rows.map(r => parseInt(r.entry_number, 10) || 0));
+        const max = parseInt(rows[0].entry_number, 10) || 0;
         return max <= 0 ? 1 : max + 1;
       },
 
@@ -1768,7 +1768,11 @@
           }
 
           // 3. Delete existing snapshot for this month and year
-          await sbDelete('general_journal', `entry_number=eq.${snapEntryNum}`);
+          let snapFilter = `entry_number=eq.${snapEntryNum}`;
+          if (this.companyId && this.companyId !== 'undefined' && this.companyId !== 'null') {
+            snapFilter += `&company_id=eq.${this.companyId}`;
+          }
+          await sbDelete('general_journal', snapFilter);
 
           // 4. Insert new snapshot rows
           await sbPost('general_journal', snapshotRows);
@@ -2203,7 +2207,11 @@
         try {
           // 1. Process deletes
           for (const entryNum of this.pendingDeletes) {
-            await sbDelete('general_journal', `entry_number=eq.${entryNum}`);
+            let filter = `entry_number=eq.${entryNum}`;
+            if (this.companyId && this.companyId !== 'undefined' && this.companyId !== 'null') {
+              filter += `&company_id=eq.${this.companyId}`;
+            }
+            await sbDelete('general_journal', filter);
             await this.logAction('DELETE', entryNum);
           }
           // 2. Process edits
