@@ -1644,16 +1644,17 @@
             return;
           }
 
-          // 2. Consolidate by account
+          // 2. Consolidate by account: sum debits and credits separately
           const consolidated = {};
           entries.forEach(e => {
             const acc = e.account;
             const deb = parseFloat(e.debit || 0);
             const crd = parseFloat(e.credit || 0);
             if (!consolidated[acc]) {
-              consolidated[acc] = 0;
+              consolidated[acc] = { debit: 0, credit: 0 };
             }
-            consolidated[acc] += (deb - crd);
+            consolidated[acc].debit += deb;
+            consolidated[acc].credit += crd;
           });
 
           const snapshotRows = [];
@@ -1661,25 +1662,40 @@
           // Last day of month
           const lastDayStr = new Date(Y, M, 0).toISOString().slice(0, 10);
 
-          Object.entries(consolidated).forEach(([account, balance]) => {
-            if (Math.abs(balance) < 0.001) return; // Skip zero balances
-            
-            const isDebit = balance > 0;
-            const absBal = parseFloat(Math.abs(balance).toFixed(2));
+          Object.entries(consolidated).forEach(([account, totals]) => {
+            const roundedDebit = parseFloat(totals.debit.toFixed(2));
+            const roundedCredit = parseFloat(totals.credit.toFixed(2));
 
-            snapshotRows.push({
-              company_id: this.companyId,
-              entry_number: snapEntryNum,
-              year: Y,
-              month: M,
-              date: lastDayStr,
-              account: account,
-              debit: isDebit ? absBal : null,
-              credit: isDebit ? null : absBal,
-              description_1: 'Monthly Consolidated Snapshot',
-              description_2: null,
-              attachments: []
-            });
+            if (roundedDebit > 0) {
+              snapshotRows.push({
+                company_id: this.companyId,
+                entry_number: snapEntryNum,
+                year: Y,
+                month: M,
+                date: lastDayStr,
+                account: account,
+                debit: roundedDebit,
+                credit: null,
+                description_1: 'Monthly Consolidated Snapshot',
+                description_2: null,
+                attachments: []
+              });
+            }
+            if (roundedCredit > 0) {
+              snapshotRows.push({
+                company_id: this.companyId,
+                entry_number: snapEntryNum,
+                year: Y,
+                month: M,
+                date: lastDayStr,
+                account: account,
+                debit: null,
+                credit: roundedCredit,
+                description_1: 'Monthly Consolidated Snapshot',
+                description_2: null,
+                attachments: []
+              });
+            }
           });
 
           if (!snapshotRows.length) {
