@@ -153,8 +153,8 @@
     .j-table td.entry-num { color: var(--cyan-light); font-weight: 700; font-size: 0.75rem; font-family: var(--font-mono, monospace); }
     .j-table td.debit  { color: #0e7490; font-weight: 600; font-variant-numeric: tabular-nums; }
     .j-table td.credit { color: #047857; font-weight: 600; font-variant-numeric: tabular-nums; }
-    .j-table td[data-col]:not(.entry-num):not(.num) { cursor: pointer; }
-    .j-table td[data-col]:not(.entry-num):not(.num):hover { background: rgba(6,182,212,0.04); }
+    .j-table td[data-col]:not(.num) { cursor: pointer; }
+    .j-table td[data-col]:not(.num):hover { background: rgba(6,182,212,0.04); }
 
     /* Orphan row */
     .row-orphan td { background: rgba(239,68,68,0.04); }
@@ -771,6 +771,29 @@
       const c1 = String.fromCharCode(65 + Math.floor(li / 26));
       const c2 = String.fromCharCode(65 + (li % 26));
       return `BK-${c1}${c2}${String(num).padStart(4, '0')}`;
+    }
+
+    function parseEntry(str) {
+      if (!str) return null;
+      const s = String(str).trim().toUpperCase();
+      let match = s.match(/^BK-SS(\d+)$/);
+      if (match) {
+        return -parseInt(match[1], 10);
+      }
+      match = s.match(/^BK-([A-Z]{2})(\d{4})$/);
+      if (match) {
+        const c1 = match[1].charCodeAt(0) - 65;
+        const c2 = match[1].charCodeAt(1) - 65;
+        const num = parseInt(match[2], 10);
+        const li = c1 * 26 + c2;
+        if (li === 0) {
+          return num;
+        } else {
+          return 10000 + (li - 1) * 10000 + num;
+        }
+      }
+      const p = parseInt(s, 10);
+      return isNaN(p) ? null : p;
     }
 
     /* ── PHP formatter ── */
@@ -1873,7 +1896,7 @@
 
           return `<tr class="${rowCls}" data-id="${r.id}" data-entry="${r.entry_number}"${oa}>
             <td class="num" style="color:var(--text-muted);font-size:0.72rem;">${off + i + 1}</td>
-            <td class="entry-num">${fmtEntry(r.entry_number)}</td>
+            <td class="entry-num"${ec('entry_number')}>${fmtEntry(d.entry_number)}</td>
             <td${ec('date')}>${d.date || '—'}</td>
             <td${ec('account')} style="${orphan ? 'color:var(--danger);font-weight:600;' : ''}">${esc(d.account)}</td>
             <td class="debit"${ec('debit')}>${d.debit   ? php(d.debit)   : '—'}</td>
@@ -1916,6 +1939,9 @@
         } else if (col === 'debit' || col === 'credit') {
           const num = currentVal ? String(currentVal).replace(/[₱,]/g, '') : '';
           html = `<input type="number" class="cell-edit-input" value="${num}" step="0.01" min="0" />`;
+        } else if (col === 'entry_number') {
+          const formatted = currentVal ? fmtEntry(currentVal) : '';
+          html = `<input type="text" class="cell-edit-input" value="${formatted}" />`;
         } else {
           html = `<input type="text" class="cell-edit-input" value="${!currentVal || currentVal === '—' ? '' : currentVal}" />`;
         }
@@ -1935,17 +1961,38 @@
           } else if (col === 'date') {
             if (!val) { this.renderTable(); return; }
             newVal = val;
+          } else if (col === 'entry_number') {
+            newVal = parseEntry(val);
+            if (newVal === null) {
+              Toast.error('Invalid entry format. Use e.g. BK-AA0759');
+              this.renderTable();
+              return;
+            }
           } else {
             newVal = val || null;
           }
 
           // Stage the change
-          if (!this.pendingChanges[id]) this.pendingChanges[id] = {};
-          if (JSON.stringify(newVal) !== JSON.stringify(origVal)) {
-            this.pendingChanges[id][col] = { old: origVal, new: newVal, entryNum: r.entry_number };
+          if (col === 'entry_number') {
+            const sameEntryRows = this.entries.filter(x => x.entry_number === r.entry_number);
+            for (const row of sameEntryRows) {
+              const rowId = row.id;
+              if (!this.pendingChanges[rowId]) this.pendingChanges[rowId] = {};
+              if (newVal !== row.entry_number) {
+                this.pendingChanges[rowId]['entry_number'] = { old: row.entry_number, new: newVal, entryNum: row.entry_number };
+              } else {
+                delete this.pendingChanges[rowId]['entry_number'];
+                if (!Object.keys(this.pendingChanges[rowId]).length) delete this.pendingChanges[rowId];
+              }
+            }
           } else {
-            delete this.pendingChanges[id][col];
-            if (!Object.keys(this.pendingChanges[id]).length) delete this.pendingChanges[id];
+            if (!this.pendingChanges[id]) this.pendingChanges[id] = {};
+            if (JSON.stringify(newVal) !== JSON.stringify(origVal)) {
+              this.pendingChanges[id][col] = { old: origVal, new: newVal, entryNum: r.entry_number };
+            } else {
+              delete this.pendingChanges[id][col];
+              if (!Object.keys(this.pendingChanges[id]).length) delete this.pendingChanges[id];
+            }
           }
           this.renderTable();
           this.updateEditBar();
