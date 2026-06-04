@@ -27,3 +27,9 @@ WHERE account_name IN (
   'Savings Account',
   'PayMongo Clearing'
 );
+
+-- 4. Ensure all bookkeeping accounts have the BrightKey company ID
+UPDATE public.bookkeeping_accounts
+SET company_id = (SELECT id FROM public.companies WHERE subdomain = 'brightkey' LIMIT 1)
+WHERE company_id IS NULL;
+
