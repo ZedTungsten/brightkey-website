@@ -1540,14 +1540,15 @@
           const dir = this.sortDir === 'asc' ? 'asc' : 'desc';
           p.set('order', `date.${dir},entry_number.${dir},id.${dir}`);
         }
-        // Skip year/month integers when a date range is active — date field is authoritative
-        const hasDateRange = f.dateFrom || f.dateTo;
+        const dateFrom = opts.dateFrom !== undefined ? opts.dateFrom : f.dateFrom;
+        const dateTo = opts.dateTo !== undefined ? opts.dateTo : f.dateTo;
+        const hasDateRange = dateFrom || dateTo;
         if (!hasDateRange) {
           if (f.year)  p.set('year',  `eq.${f.year}`);
           if (f.month) p.set('month', `eq.${f.month}`);
         }
-        if (f.dateFrom) p.append('date', `gte.${f.dateFrom}`);
-        if (f.dateTo)   p.append('date', `lte.${f.dateTo}`);
+        if (dateFrom) p.append('date', `gte.${dateFrom}`);
+        if (dateTo)   p.append('date', `lte.${dateTo}`);
         if (f.selectedAccounts && f.selectedAccounts.size > 0) {
           p.set('account', `in.(${[...f.selectedAccounts].join(',')})`);
         }
@@ -1559,16 +1560,18 @@
 
       /* ── Load entries ── */
       // Filter-only query string (no select/order/limit) — used by aggregate totals
-      buildFilterQS(f) {
+      buildFilterQS(f, opts = {}) {
         const p = new URLSearchParams();
         if (this.companyId && this.companyId !== 'undefined' && this.companyId !== 'null') p.set('company_id', `eq.${this.companyId}`);
-        const hasDateRange = f.dateFrom || f.dateTo;
+        const dateFrom = opts.dateFrom !== undefined ? opts.dateFrom : f.dateFrom;
+        const dateTo = opts.dateTo !== undefined ? opts.dateTo : f.dateTo;
+        const hasDateRange = dateFrom || dateTo;
         if (!hasDateRange) {
           if (f.year)  p.set('year',  `eq.${f.year}`);
           if (f.month) p.set('month', `eq.${f.month}`);
         }
-        if (f.dateFrom) p.append('date', `gte.${f.dateFrom}`);
-        if (f.dateTo)   p.append('date', `lte.${f.dateTo}`);
+        if (dateFrom) p.append('date', `gte.${dateFrom}`);
+        if (dateTo)   p.append('date', `lte.${dateTo}`);
         if (f.selectedAccounts && f.selectedAccounts.size > 0) {
           p.set('account', `in.(${[...f.selectedAccounts].join(',')})`);
         }
@@ -1579,7 +1582,11 @@
       /* ── Helper: getQueryFilterString ── */
       async getQueryFilterString(f) {
         if (!f.prioritizeSnapshot) {
-          return 'entry_number=gt.0';
+          return {
+            filter: 'entry_number=gt.0',
+            dateFrom: f.dateFrom,
+            dateTo: f.dateTo
+          };
         }
 
         try {
@@ -1587,32 +1594,72 @@
           if (this.companyId && this.companyId !== 'undefined' && this.companyId !== 'null') {
             ssUrl += `&company_id=eq.${this.companyId}`;
           }
-          if (f.dateFrom) ssUrl += `&date=gte.${f.dateFrom}`;
-          if (f.dateTo)   ssUrl += `&date=lte.${f.dateTo}`;
           
           const snapshots = await sbGet(ssUrl);
           
           if (snapshots && snapshots.length > 0) {
-            const seen = new Set();
-            const uniqueSnapshots = [];
-            snapshots.forEach(s => {
-              const key = `${s.year}-${s.month}`;
-              if (!seen.has(key)) {
-                seen.add(key);
-                uniqueSnapshots.push(s);
+            const getMonthsInRange = (dFrom, dTo) => {
+              const months = [];
+              if (!dFrom || !dTo) return months;
+              const start = new Date(dFrom);
+              const end = new Date(dTo);
+              let curr = new Date(start.getFullYear(), start.getMonth(), 1);
+              while (curr <= end) {
+                months.push({ year: curr.getFullYear(), month: curr.getMonth() + 1 });
+                curr.setMonth(curr.getMonth() + 1);
               }
-            });
+              return months;
+            };
 
-            const ssNums = uniqueSnapshots.map(s => s.entry_number);
-            const ssConditions = uniqueSnapshots.map(s => `and(year.eq.${s.year},month.eq.${s.month})`).join(',');
+            const touched = getMonthsInRange(f.dateFrom, f.dateTo);
+            const activeSnapshots = snapshots.filter(s => 
+              touched.some(t => t.year === s.year && t.month === s.month)
+            );
 
-            return `or=(entry_number.in.(${ssNums.join(',')}),and(entry_number.gt.0,not.or(${ssConditions})))`;
+            if (activeSnapshots.length > 0) {
+              const ssNums = activeSnapshots.map(s => s.entry_number);
+              const ssConditions = activeSnapshots.map(s => `and(year.eq.${s.year},month.eq.${s.month})`).join(',');
+
+              let adjustedFrom = f.dateFrom;
+              let adjustedTo = f.dateTo;
+
+              if (f.dateFrom) {
+                const fromDateObj = new Date(f.dateFrom);
+                const fromYr = fromDateObj.getFullYear();
+                const fromMo = fromDateObj.getMonth() + 1;
+                const hasStartSnap = activeSnapshots.some(s => s.year === fromYr && s.month === fromMo);
+                if (hasStartSnap) {
+                  adjustedFrom = `${fromYr}-${String(fromMo).padStart(2, '0')}-01`;
+                }
+              }
+
+              if (f.dateTo) {
+                const toDateObj = new Date(f.dateTo);
+                const toYr = toDateObj.getFullYear();
+                const toMo = toDateObj.getMonth() + 1;
+                const hasEndSnap = activeSnapshots.some(s => s.year === toYr && s.month === toMo);
+                if (hasEndSnap) {
+                  const lastDay = new Date(toYr, toMo, 0).getDate();
+                  adjustedTo = `${toYr}-${String(toMo).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+                }
+              }
+
+              return {
+                filter: `or=(entry_number.in.(${ssNums.join(',')}),and(entry_number.gt.0,not.or(${ssConditions})))`,
+                dateFrom: adjustedFrom,
+                dateTo: adjustedTo
+              };
+            }
           }
         } catch (err) {
           console.error('Failed to resolve snapshots:', err);
         }
 
-        return 'entry_number=gt.0';
+        return {
+          filter: 'entry_number=gt.0',
+          dateFrom: f.dateFrom,
+          dateTo: f.dateTo
+        };
       },
 
       /* ── Helper: createSnapshot ── */
@@ -1728,8 +1775,8 @@
         const f = this.getFilters();
         const offset = (this.page - 1) * this.pageSize;
         try {
-          const ssFilter = await this.getQueryFilterString(f);
-          const filterQS = this.buildFilterQS(f);
+          const { filter: ssFilter, dateFrom, dateTo } = await this.getQueryFilterString(f);
+          const filterQS = this.buildFilterQS(f, { dateFrom, dateTo });
 
           const totalUrl = `general_journal?select=debit,credit&${filterQS}&${ssFilter}`;
           const all = await sbGet(
@@ -1749,7 +1796,7 @@
           document.getElementById('total-count').textContent  = `${rowCount} row${rowCount !== 1 ? 's' : ''}`;
 
           /* page */
-          const pageQS = this.buildQS(f, { limit: this.pageSize, offset });
+          const pageQS = this.buildQS(f, { limit: this.pageSize, offset, dateFrom, dateTo });
           const pageUrl = `general_journal?${pageQS}&${ssFilter}`;
           this.entries = await sbGet(pageUrl);
           this.renderTable();
