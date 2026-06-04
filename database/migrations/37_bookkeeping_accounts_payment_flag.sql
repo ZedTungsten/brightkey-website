@@ -28,8 +28,46 @@ WHERE account_name IN (
   'PayMongo Clearing'
 );
 
--- 4. Ensure all bookkeeping accounts have the BrightKey company ID
-UPDATE public.bookkeeping_accounts
-SET company_id = (SELECT id FROM public.companies WHERE subdomain = 'brightkey' LIMIT 1)
-WHERE company_id IS NULL;
+-- 4. Ensure all bookkeeping accounts have the BrightKey company ID (safely merging duplicates if they exist)
+DO $$
+DECLARE
+  v_company_id UUID;
+  r RECORD;
+  v_dup_id UUID;
+BEGIN
+  -- Resolve BrightKey company ID
+  SELECT id INTO v_company_id FROM public.companies WHERE subdomain = 'brightkey' LIMIT 1;
+  
+  IF v_company_id IS NOT NULL THEN
+    -- Loop through all accounts with NULL company_id
+    FOR r IN SELECT id, account_code FROM public.bookkeeping_accounts WHERE company_id IS NULL LOOP
+      -- Check if there is already a duplicate account for BrightKey with this code
+      SELECT id INTO v_dup_id 
+      FROM public.bookkeeping_accounts 
+      WHERE company_id = v_company_id AND account_code = r.account_code 
+      LIMIT 1;
+
+      IF v_dup_id IS NOT NULL THEN
+        -- Re-link any transaction lines to the BrightKey-specific account
+        UPDATE public.bookkeeping_lines 
+        SET account_id = v_dup_id 
+        WHERE account_id = r.id;
+
+        -- Delete the duplicate NULL-company account
+        DELETE FROM public.bookkeeping_accounts WHERE id = r.id;
+      ELSE
+        -- No duplicate exists, so we can safely assign the company_id
+        UPDATE public.bookkeeping_accounts 
+        SET company_id = v_company_id 
+        WHERE id = r.id;
+      END IF;
+    END LOOP;
+
+    -- Update any remaining NULL company_ids to BrightKey ID
+    UPDATE public.bookkeeping_accounts
+    SET company_id = v_company_id
+    WHERE company_id IS NULL;
+  END IF;
+END $$;
+
 
