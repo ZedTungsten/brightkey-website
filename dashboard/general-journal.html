@@ -1951,7 +1951,7 @@
         inp.focus();
         if (inp.select) inp.select();
 
-        const commit = () => {
+        const commit = async () => {
           const val = inp.value;
           let newVal;
           const origVal = r[col]; // original DB value
@@ -1962,11 +1962,16 @@
             if (!val) { this.renderTable(); return; }
             newVal = val;
           } else if (col === 'entry_number') {
-            newVal = parseEntry(val);
-            if (newVal === null) {
-              Toast.error('Invalid entry format. Use e.g. BK-AA0759');
-              this.renderTable();
-              return;
+            const trimmed = val.trim();
+            if (trimmed === '') {
+              newVal = await this.getNextEntryNum();
+            } else {
+              newVal = parseEntry(val);
+              if (newVal === null) {
+                Toast.error('Invalid entry format. Use e.g. BK-AA0759');
+                this.renderTable();
+                return;
+              }
             }
           } else {
             newVal = val || null;
@@ -2005,7 +2010,7 @@
             e.preventDefault();
             if (!saving && !discarded) {
               saving = true;
-              commit();
+              await commit();
             }
           }
           if (e.key === 'Escape') {
@@ -2013,10 +2018,10 @@
             this.renderTable();
           }
         });
-        inp.addEventListener('blur', () => {
+        inp.addEventListener('blur', async () => {
           if (!saving && !discarded) {
             saving = true;
-            commit();
+            await commit();
           }
         });
       },
