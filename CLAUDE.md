@@ -96,5 +96,9 @@
 ## PostgREST Filter Special Characters Escaping Rule
 - **Escape special characters in `in.(...)` list filters**: When querying via PostgREST using `in.(...)` (e.g., filtering on `account` names with `in.(...)`), if any option contains spaces, commas, or parentheses `()`, wrap each item in double quotes and escape internal double quotes (e.g. `const escaped = item.replace(/"/g, '\\"'); return `"${escaped}"`;`). Otherwise, PostgREST will parse the parentheses as list delimiters or syntax errors, resulting in empty query results.
 
+## Database Deletion & Scoping Rule
+- **Enforce `company_id` filter on all deletions**: When performing deletions (such as deleting journal entries or snapshots based on an `entry_number`), you MUST include a `company_id` filter (e.g. `entry_number=eq.N&company_id=eq.CID`). Since identifiers like `entry_number` are only unique per company, deleting by `entry_number` alone will dangerously delete corresponding entries across all other tenants/companies.
+- **Accurate Next Auto-Increment Queries**: When querying the next incrementing sequence number (like `entry_number`) from the database, always query using ordering and limits (e.g. `order=entry_number.desc&limit=1`) instead of loading all database records to calculate maximums client-side. This avoids client-side performance degradation and prevents duplicate key errors caused by API pagination limit truncations (like the default PostgREST 1000-row limit).
+
 
 
