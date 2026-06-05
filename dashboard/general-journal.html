@@ -1633,7 +1633,21 @@
           }).join(',');
           p.set('account', `in.(${escapedAccounts})`);
         }
-        if (f.search) p.set('or', `(account.ilike.*${f.search}*,description_1.ilike.*${f.search}*,description_2.ilike.*${f.search}*)`);
+        if (f.search) {
+          const entryNum = parseEntry(f.search);
+          if (entryNum !== null) {
+            p.set('or', `(account.ilike.*${f.search}*,description_1.ilike.*${f.search}*,description_2.ilike.*${f.search}*,entry_number.eq.${entryNum})`);
+          } else {
+            let cleanSearch = f.search.toUpperCase();
+            if (cleanSearch.startsWith('BK-')) cleanSearch = cleanSearch.replace('BK-', '');
+            const entryNumWithPrefix = parseEntry('BK-' + cleanSearch);
+            if (entryNumWithPrefix !== null) {
+              p.set('or', `(account.ilike.*${f.search}*,description_1.ilike.*${f.search}*,description_2.ilike.*${f.search}*,entry_number.eq.${entryNumWithPrefix})`);
+            } else {
+              p.set('or', `(account.ilike.*${f.search}*,description_1.ilike.*${f.search}*,description_2.ilike.*${f.search}*)`);
+            }
+          }
+        }
         return p.toString();
       },
 
