@@ -34,3 +34,10 @@ Guidelines for styling, icons, modal alerts, and loading components to maintain 
 ## 5. Input Fields & Dark Mode Behavior
 * **Important internal form fields (like those in payment accounts management)** must remain solid white with dark text (`#09090B`) and readable dark-gray placeholders.
 * They should **not** dynamically adapt to user/system dark mode preferences, preventing contrast issues and ensuring consistent visual clarity.
+
+---
+
+## 6. Static Site Generation (SSG) for Product Pages
+* **Never edit product HTML files (e.g. `products/*.html`) directly.** 
+* Product pages are dynamically generated at build time using the template `dashboard/product-preview.html` and the generator script `scripts/build-products.js`.
+* Any layout, CSS, or JS changes intended for product pages must be applied to `dashboard/product-preview.html` (for general structure/styles/scripts) and/or `scripts/build-products.js` (for dynamically injected tables/components). Re-run `npm run build` locally to test your updates before pushing.
