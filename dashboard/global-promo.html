@@ -613,25 +613,19 @@
               
               <div class="form-group" style="margin-bottom:1rem;">
                 <label class="form-label">Business Types</label>
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; margin-top:0.25rem;">
-                  <label style="display:flex; align-items:center; gap:0.4rem; font-size:0.85rem; cursor:pointer;">
-                    <input type="checkbox" name="popup-business" value="smart_lock" /> Smart Locks
-                  </label>
-                  <label style="display:flex; align-items:center; gap:0.4rem; font-size:0.85rem; cursor:pointer;">
-                    <input type="checkbox" name="popup-business" value="solar_power" /> Solar Power
-                  </label>
-                  <label style="display:flex; align-items:center; gap:0.4rem; font-size:0.85rem; cursor:pointer;">
-                    <input type="checkbox" name="popup-business" value="cctv" /> CCTV
-                  </label>
-                  <label style="display:flex; align-items:center; gap:0.4rem; font-size:0.85rem; cursor:pointer;">
-                    <input type="checkbox" name="popup-business" value="fire_extinguisher" /> Fire Extinguishers
-                  </label>
+                <div id="popup-business-list" style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; margin-top:0.25rem;">
+                  <span style="color:var(--text-muted); font-size:0.8rem; grid-column:1/-1;">Loading businesses...</span>
                 </div>
               </div>
 
-              <div class="form-group" style="margin-bottom:0;">
+              <div class="form-group" style="margin-bottom:1rem;">
                 <label class="form-label">Categories (Comma Separated)</label>
                 <input type="text" class="form-input" id="popup-categories" placeholder="e.g. Hardware, Accessories (blank = all)" />
+              </div>
+
+              <div class="form-group" style="margin-bottom:0;">
+                <label class="form-label">Tags (Comma Separated)</label>
+                <input type="text" class="form-input" id="popup-tags" placeholder="e.g. promo, featured, sale (blank = all)" />
               </div>
             </div>
 
@@ -1380,6 +1374,7 @@
         popup_show_mobile: popupShowMobile ? popupShowMobile.checked : true,
         popup_businesses: popupBizArr,
         popup_categories: popupCategories ? popupCategories.value : '',
+        popup_tags: (document.getElementById('popup-tags') || {}).value || '',
         upsell_rules: upsellRules.map(r => ({ enabled: r.enabled, trigger_sku: r.trigger_sku, upsell_sku: r.upsell_sku, body: r.body, price_adjustment: r.price_adjustment, indefinite: r.indefinite, active_from: r.active_from, active_to: r.active_to })),
         crosssell_rules: crosssellRules.map(r => ({ enabled: r.enabled, trigger_sku: r.trigger_sku, addon_skus: r.addon_skus, indefinite: r.indefinite, active_from: r.active_from, active_to: r.active_to }))
       };
@@ -1502,6 +1497,8 @@
         });
         const popupCategoriesRaw = document.getElementById('popup-categories').value;
         const popupCategoriesArr = popupCategoriesRaw ? popupCategoriesRaw.split(',').map(c => c.trim()).filter(Boolean) : [];
+        const popupTagsRaw = document.getElementById('popup-tags').value;
+        const popupTagsArr = popupTagsRaw ? popupTagsRaw.split(',').map(t => t.trim()).filter(Boolean) : [];
         
         promises.push(
           sb.from('global_settings').upsert({
@@ -1523,7 +1520,8 @@
               show_desktop: popupShowDesktop,
               show_mobile: popupShowMobile,
               applicable_businesses: popupCheckedBusinesses,
-              applicable_categories: popupCategoriesArr
+              applicable_categories: popupCategoriesArr,
+              applicable_tags: popupTagsArr
             }
           })
         );
@@ -2667,6 +2665,36 @@
       }
     };
 
+    // --- Render popup business checkboxes from tenant_businesses ---
+    async function renderPopupBusinessCheckboxes(savedValues) {
+      const container = document.getElementById('popup-business-list');
+      if (!container) return;
+      try {
+        const { data: bizRows } = await sb
+          .from('tenant_businesses')
+          .select('id, name')
+          .eq('company_id', companyId)
+          .order('name', { ascending: true });
+
+        if (!bizRows || bizRows.length === 0) {
+          container.innerHTML = '<span style="color:var(--text-muted); font-size:0.8rem; grid-column:1/-1;">No businesses configured. Add them in Master Settings → Tenants.</span>';
+          return;
+        }
+
+        container.innerHTML = bizRows.map(b => {
+          const isChecked = (savedValues || []).includes(b.name) ? 'checked' : '';
+          const label = b.name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+          return `<label style="display:flex; align-items:center; gap:0.4rem; font-size:0.85rem; cursor:pointer;">
+            <input type="checkbox" name="popup-business" value="${b.name}" ${isChecked} onchange="checkDirty()" />
+            ${label}
+          </label>`;
+        }).join('');
+      } catch (e) {
+        console.error('Failed to load tenant businesses for popup:', e);
+        container.innerHTML = '<span style="color:var(--text-muted); font-size:0.8rem; grid-column:1/-1;">Failed to load businesses.</span>';
+      }
+    }
+
     // --- Load Popup Settings ---
     const originalFetchPromoData = fetchPromoData;
     fetchPromoData = async function() {
@@ -2708,12 +2736,11 @@
           document.getElementById('popup-show-desktop').checked = v.show_desktop !== false;
           document.getElementById('popup-show-mobile').checked = v.show_mobile !== false;
 
-          const businesses = v.applicable_businesses || [];
-          document.querySelectorAll('input[name="popup-business"]').forEach(cb => {
-            cb.checked = businesses.includes(cb.value);
-          });
+          // Render dynamic checkboxes first (with saved values pre-applied)
+          await renderPopupBusinessCheckboxes(v.applicable_businesses || []);
 
           document.getElementById('popup-categories').value = (v.applicable_categories || []).join(', ');
+          document.getElementById('popup-tags').value = (v.applicable_tags || []).join(', ');
           
           if (v.audience_bucket) {
             selectedBucket = v.audience_bucket;
@@ -2721,6 +2748,10 @@
         }
 
         // Load unique audience buckets and set active
+        if (!popupData || !popupData.value) {
+          // No saved data yet — still render the empty business list
+          await renderPopupBusinessCheckboxes([]);
+        }
         await window.loadAudienceBuckets(selectedBucket);
 
       } catch (err) {
