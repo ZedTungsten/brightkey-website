@@ -79,23 +79,17 @@
 
     // sb is already defined globally by auth.js
 
-    const expectedHeaders = [
+    let expectedHeaders = [
       'sku', 'title', 'slug', 'status', 'business', 'category', 'description', 
       'parent_sku', 'variant_name', 'variant_value', 'related_skus', 'tags',
       'available_inventory',
       'sale_price', 'discounted_price', 'before_price', 'installation_price', 'dealer_price',
       'image_main', 'image_1', 'image_2', 'image_3', 'image_4', 'video_1', 'video_2', 'user_manual',
       'spec_warranty', 'spec_support', 'spec_material', 'spec_voltage', 'spec_dimension',
-      'display_rating', 'display_reviews_count', 'display_bought_month', 'override_rating',
-      // Smart Lock
-      'pin_unlock', 'rfid_unlock', 'fingerprint_unlock', 'face_recognition_3d', 'palm_vein_unlock', 'mechanical_key', 'emergency_usb', 'app_control', 'bluetooth', 'wifi', 'temporary_pin', 'doorbell', 'intercom', 'monitoring', 'dual_cameras', 'waterproof', 'fireproof', 'scratchproof', 'sunproof', 'moisture_proof', 'splash_proof',
-      // Solar Power
-      'grid_tie', 'off_grid', 'hybrid', 'mppt_controller', 'monitoring_app', 'battery_backup', 'auto_switching', 'weather_resistant', 'wifi_connect', 'mobile_alerts',
-      // CCTV
-      'night_vision', 'resolution', 'pan_tilt_zoom', 'motion_detection', 'two_way_audio', 'cloud_storage', 'local_storage', 'weatherproof', 'wide_angle', 'ai_detection', 'mobile_app', 'poe_support',
-      // Fire Extinguisher
-      'type_abc', 'type_co2', 'type_dry_chemical', 'type_foam', 'wall_mountable', 'vehicle_mountable', 'refillable', 'pressure_gauge', 'with_bracket', 'with_hose'
+      'display_rating', 'display_reviews_count', 'display_bought_month', 'override_rating'
     ];
+
+    let dynamicFeaturesByBusiness = {};
 
     document.getElementById('btn-download').addEventListener('click', () => {
       const csv = Papa.unparse([expectedHeaders]);
@@ -121,6 +115,33 @@
     document.addEventListener('DOMContentLoaded', async () => {
       const authInfo = await window.BKAuth.checkRoleGate(['owner', 'admin', 'products'], '../admin.html');
       if (!authInfo) return;
+
+      // Load dynamic features from database based on Tenants settings
+      try {
+        const { data: companyData } = await supabaseClient.from('companies').select('id').eq('subdomain', 'brightkey').limit(1);
+        if (companyData && companyData.length > 0) {
+          const companyId = companyData[0].id;
+          const { data: businesses } = await supabaseClient.from('tenant_businesses').select('id, name').eq('company_id', companyId);
+          const { data: dbFeatures } = await supabaseClient.from('business_features').select('business_id, name');
+
+          if (businesses && dbFeatures) {
+            businesses.forEach(biz => {
+              const key = biz.name.toLowerCase().replace(/[\s_.-]+/g, '_');
+              const bizFeats = dbFeatures.filter(f => f.business_id === biz.id).map(f => f.name);
+              dynamicFeaturesByBusiness[key] = bizFeats;
+              
+              // Append to expected headers for download template
+              bizFeats.forEach(f => {
+                if (!expectedHeaders.includes(f)) {
+                  expectedHeaders.push(f);
+                }
+              });
+            });
+          }
+        }
+      } catch (err) {
+        console.error("Error loading dynamic features in add-products page:", err);
+      }
     });
 
     fileInput.addEventListener('change', (e) => {
@@ -270,79 +291,14 @@
           await supabaseClient.from('fireextinguisher_features').delete().eq('product_id', productId);
 
           const biz = productPayload.business;
-          if (biz === 'smart_lock') {
-            const featPayload = {
-              product_id: productId,
-              pin_unlock: row.pin_unlock ? row.pin_unlock.trim() : null,
-              rfid_unlock: row.rfid_unlock ? row.rfid_unlock.trim() : null,
-              fingerprint_unlock: row.fingerprint_unlock ? row.fingerprint_unlock.trim() : null,
-              face_recognition_3d: row.face_recognition_3d ? row.face_recognition_3d.trim() : null,
-              palm_vein_unlock: row.palm_vein_unlock ? row.palm_vein_unlock.trim() : null,
-              mechanical_key: row.mechanical_key ? row.mechanical_key.trim() : null,
-              emergency_usb: row.emergency_usb ? row.emergency_usb.trim() : null,
-              app_control: row.app_control ? row.app_control.trim() : null,
-              bluetooth: row.bluetooth ? row.bluetooth.trim() : null,
-              wifi: row.wifi ? row.wifi.trim() : null,
-              temporary_pin: row.temporary_pin ? row.temporary_pin.trim() : null,
-              doorbell: row.doorbell ? row.doorbell.trim() : null,
-              intercom: row.intercom ? row.intercom.trim() : null,
-              monitoring: row.monitoring ? row.monitoring.trim() : null,
-              dual_cameras: row.dual_cameras ? row.dual_cameras.trim() : null,
-              waterproof: row.waterproof ? row.waterproof.trim() : null,
-              fireproof: row.fireproof ? row.fireproof.trim() : null,
-              scratchproof: row.scratchproof ? row.scratchproof.trim() : null,
-              sunproof: row.sunproof ? row.sunproof.trim() : null,
-              moisture_proof: row.moisture_proof ? row.moisture_proof.trim() : null,
-              splash_proof: row.splash_proof ? row.splash_proof.trim() : null
-            };
-            await supabaseClient.from('smartlock_features').insert([featPayload]);
-          } else if (biz === 'solar_power') {
-            const featPayload = {
-              product_id: productId,
-              grid_tie: row.grid_tie ? row.grid_tie.trim() : null,
-              off_grid: row.off_grid ? row.off_grid.trim() : null,
-              hybrid: row.hybrid ? row.hybrid.trim() : null,
-              mppt_controller: row.mppt_controller ? row.mppt_controller.trim() : null,
-              monitoring_app: row.monitoring_app ? row.monitoring_app.trim() : null,
-              battery_backup: row.battery_backup ? row.battery_backup.trim() : null,
-              auto_switching: row.auto_switching ? row.auto_switching.trim() : null,
-              weather_resistant: row.weather_resistant ? row.weather_resistant.trim() : null,
-              wifi_connect: row.wifi_connect ? row.wifi_connect.trim() : null,
-              mobile_alerts: row.mobile_alerts ? row.mobile_alerts.trim() : null
-            };
-            await supabaseClient.from('solarpower_features').insert([featPayload]);
-          } else if (biz === 'cctv') {
-            const featPayload = {
-              product_id: productId,
-              night_vision: row.night_vision ? row.night_vision.trim() : null,
-              resolution: row.resolution ? row.resolution.trim() : null,
-              pan_tilt_zoom: row.pan_tilt_zoom ? row.pan_tilt_zoom.trim() : null,
-              motion_detection: row.motion_detection ? row.motion_detection.trim() : null,
-              two_way_audio: row.two_way_audio ? row.two_way_audio.trim() : null,
-              cloud_storage: row.cloud_storage ? row.cloud_storage.trim() : null,
-              local_storage: row.local_storage ? row.local_storage.trim() : null,
-              weatherproof: row.weatherproof ? row.weatherproof.trim() : null,
-              wide_angle: row.wide_angle ? row.wide_angle.trim() : null,
-              ai_detection: row.ai_detection ? row.ai_detection.trim() : null,
-              mobile_app: row.mobile_app ? row.mobile_app.trim() : null,
-              poe_support: row.poe_support ? row.poe_support.trim() : null
-            };
-            await supabaseClient.from('cctv_features').insert([featPayload]);
-          } else if (biz === 'fire_extinguisher') {
-            const featPayload = {
-              product_id: productId,
-              type_abc: row.type_abc ? row.type_abc.trim() : null,
-              type_co2: row.type_co2 ? row.type_co2.trim() : null,
-              type_dry_chemical: row.type_dry_chemical ? row.type_dry_chemical.trim() : null,
-              type_foam: row.type_foam ? row.type_foam.trim() : null,
-              wall_mountable: row.wall_mountable ? row.wall_mountable.trim() : null,
-              vehicle_mountable: row.vehicle_mountable ? row.vehicle_mountable.trim() : null,
-              refillable: row.refillable ? row.refillable.trim() : null,
-              pressure_gauge: row.pressure_gauge ? row.pressure_gauge.trim() : null,
-              with_bracket: row.with_bracket ? row.with_bracket.trim() : null,
-              with_hose: row.with_hose ? row.with_hose.trim() : null
-            };
-            await supabaseClient.from('fireextinguisher_features').insert([featPayload]);
+          const dynamicFeatList = dynamicFeaturesByBusiness[biz] || [];
+          if (dynamicFeatList.length > 0) {
+            const featPayload = { product_id: productId };
+            dynamicFeatList.forEach(f => {
+              featPayload[f] = row[f] ? row[f].trim() : null;
+            });
+            const tableName = biz.replace(/_/g, '') + '_features';
+            await supabaseClient.from(tableName).insert([featPayload]);
           }
 
         } catch (e) {

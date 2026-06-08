@@ -2043,8 +2043,51 @@
       if (companyData && companyData.length > 0) {
         currentCompanyId = companyData[0].id;
       }
+      
+      // Dynamically load feature definitions from the database based on Tenants settings
+      if (currentCompanyId) {
+        const { data: businesses } = await window.BKAuth.sb.from('tenant_businesses').select('id, name').eq('company_id', currentCompanyId);
+        const { data: dbFeatures } = await window.BKAuth.sb.from('business_features').select('business_id, name');
+        
+        if (businesses && dbFeatures) {
+          businesses.forEach(biz => {
+            const key = biz.name.toLowerCase().replace(/[\s_.-]+/g, '_');
+            if (!FEATURE_DEFS[key]) {
+              FEATURE_DEFS[key] = {
+                table: key.replace(/_/g, '') + '_features',
+                label: biz.name,
+                features: []
+              };
+            } else {
+              FEATURE_DEFS[key].features = [];
+            }
+            
+            const bizFeats = dbFeatures.filter(f => f.business_id === biz.id);
+            bizFeats.forEach(f => {
+              // Pretty format matching featureLabel() logic
+              let label = f.name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+              label = label
+                .replace(/\bPin\b/g, 'PIN')
+                .replace(/\bRfid\b/g, 'RFID')
+                .replace(/\bUsb\b/g, 'USB')
+                .replace(/\b3d\b/gi, '3D')
+                .replace(/\bWifi\b/g, 'WiFi')
+                .replace(/\bPoe\b/g, 'PoE')
+                .replace(/\bCo2\b/gi, 'CO₂')
+                .replace(/\bAbc\b/g, 'ABC')
+                .replace(/\bAi\b/g, 'AI')
+                .replace(/\bMppt\b/g, 'MPPT');
+                
+              FEATURE_DEFS[key].features.push({
+                col: f.name,
+                label: label
+              });
+            });
+          });
+        }
+      }
     } catch (err) {
-      console.error("Error fetching company context:", err);
+      console.error("Error fetching company context or dynamic features:", err);
     }
 
     fetchProducts();
