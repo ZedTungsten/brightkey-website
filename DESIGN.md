@@ -28,3 +28,9 @@ Guidelines for styling, icons, modal alerts, and loading components to maintain 
 * **Always show skeletal loading states** during page load or async data fetching.
 * Avoid leaving containers completely blank or with raw text placeholders.
 * Render a CSS-shimmering gradient skeleton that matches the layout of the incoming data, transitioning smoothly when loaded.
+
+---
+
+## 5. Input Fields & Dark Mode Behavior
+* **Important internal form fields (like those in payment accounts management)** must remain solid white with dark text (`#09090B`) and readable dark-gray placeholders.
+* They should **not** dynamically adapt to user/system dark mode preferences, preventing contrast issues and ensuring consistent visual clarity.
