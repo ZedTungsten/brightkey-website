@@ -398,9 +398,10 @@ function renderComparisonTable(ct, products = [], allReviews = [], currentProduc
   const ths = finalProducts.map((prod, pIdx) => {
     const colStyle = getColStyle(pIdx, focusIndex, true, false);
     const imgUrl = prod.image_main || '../assets/og-image.png';
+    const borderStyle = pIdx > 0 ? 'border-left: 1px solid var(--border);' : '';
 
     return `
-      <th style="padding: 1rem 0.75rem; width:220px; min-width:220px; max-width:220px; vertical-align: middle; border-bottom: 1px solid var(--border); text-align: center; ${colStyle}">
+      <th style="padding: 1rem 0.75rem; width:220px; min-width:220px; max-width:220px; vertical-align: middle; border-bottom: 1px solid var(--border); text-align: center; ${borderStyle} ${colStyle}">
         <div style="aspect-ratio:1/1; width:160px; margin: 0 auto; border-radius:var(--radius-sm); background:#fff; padding:0.25rem; display:flex; align-items:center; justify-content:center; overflow:hidden; border:1px solid var(--border);">
           <img src="${imgUrl}" alt="${prod.title}" style="max-width:100%; max-height:100%; object-fit:contain;" />
         </div>
@@ -412,9 +413,10 @@ function renderComparisonTable(ct, products = [], allReviews = [], currentProduc
     const colStyle = getColStyle(pIdx, focusIndex, false, false);
     const isCurrent = prod.sku === currentProduct.sku;
     const linkHref = isCurrent ? '#' : `${prod.slug}.html`;
+    const borderStyle = pIdx > 0 ? 'border-left: 1px solid var(--border);' : '';
 
     return `
-      <td style="padding: 0.6rem 0.75rem; border-bottom: 1px solid var(--border); vertical-align: middle; text-align: center; ${colStyle}">
+      <td style="padding: 0.6rem 0.75rem; border-bottom: 1px solid var(--border); vertical-align: middle; text-align: center; ${borderStyle} ${colStyle}">
         <a href="${linkHref}" style="font-weight:bold; color:var(--cyan); text-decoration:none; font-size:0.95rem; line-height:1.3; display:inline-block;">
           ${prod.title}
         </a>
@@ -424,8 +426,9 @@ function renderComparisonTable(ct, products = [], allReviews = [], currentProduc
 
   const priceTds = finalProducts.map((prod, pIdx) => {
     const colStyle = getColStyle(pIdx, focusIndex, false, false);
+    const borderStyle = pIdx > 0 ? 'border-left: 1px solid var(--border);' : '';
     return `
-      <td style="padding: 0.6rem 0.75rem; border-bottom: 1px solid var(--border); vertical-align: middle; text-align: center; ${colStyle}">
+      <td style="padding: 0.6rem 0.75rem; border-bottom: 1px solid var(--border); vertical-align: middle; text-align: center; ${borderStyle} ${colStyle}">
         ${priceHtml(prod)}
       </td>
     `;
@@ -435,9 +438,10 @@ function renderComparisonTable(ct, products = [], allReviews = [], currentProduc
     const colStyle = getColStyle(pIdx, focusIndex, false, false);
     const rData = getProductRatingAndReviewCount(prod, allReviews);
     const pct = Math.min(100, Math.max(0, (rData.rating / 5) * 100));
+    const borderStyle = pIdx > 0 ? 'border-left: 1px solid var(--border);' : '';
 
     return `
-      <td style="padding: 0.6rem 0.75rem; border-bottom: 1px solid var(--border); vertical-align: middle; text-align: center; ${colStyle}">
+      <td style="padding: 0.6rem 0.75rem; border-bottom: 1px solid var(--border); vertical-align: middle; text-align: center; ${borderStyle} ${colStyle}">
         <div style="display:inline-flex; align-items:center; justify-content:center; gap:0.25rem; white-space:nowrap; width:100%;">
           <span style="font-weight:600; color:var(--text-primary); font-size:0.95rem;">${rData.rating.toFixed(1)}</span>
           <div style="position:relative; display:inline-block; font-size:1rem; line-height:1; letter-spacing:1px; white-space:nowrap;">
@@ -456,8 +460,9 @@ function renderComparisonTable(ct, products = [], allReviews = [], currentProduc
       const colStyle = getColStyle(pIdx, focusIndex, false, isLastRow);
       const featRow = featuresMap[prod.id] || {};
       const val = featRow[feat.col];
+      const borderStyle = pIdx > 0 ? 'border-left: 1px solid var(--border);' : '';
       return `
-        <td style="padding: 0.6rem 0.75rem; border-bottom: 1px solid var(--border); vertical-align: middle; text-align: center; ${colStyle}">
+        <td style="padding: 0.6rem 0.75rem; border-bottom: 1px solid var(--border); vertical-align: middle; text-align: center; ${borderStyle} ${colStyle}">
           ${renderCellContent(val)}
         </td>
       `;
