@@ -33,9 +33,17 @@
           <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 2rem; margin-bottom: 2rem;">
             <h2 style="margin-bottom: 1rem;">1. Download the Template</h2>
             <p style="color: var(--text-secondary); margin-bottom: 1.5rem; line-height: 1.6;">
-              To ensure all 56+ columns map correctly to the database, please use this exact CSV format. Do not change the header names.
+              Select a business category to generate a tailored CSV template. The downloaded file will only contain columns relevant to the selected business type, alongside standard product info.
             </p>
-            <button id="btn-download" class="btn btn-outline">Download CSV Template</button>
+            <div style="display: flex; gap: 1rem; align-items: flex-end; max-width: 500px;">
+              <div style="display: flex; flex-direction: column; gap: 0.4rem; flex: 1;">
+                <label style="font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary);">Business Category</label>
+                <select id="select-business-download" style="width: 100%; padding: 0.55rem 0.75rem; border: 1px solid var(--border); border-radius: 6px; font-size: 0.85rem; background: var(--bg-base); color: var(--text-primary); outline: none;">
+                  <option value="" disabled selected>Loading business types...</option>
+                </select>
+              </div>
+              <button id="btn-download" class="btn btn-outline" style="height: 38px;">Download CSV Template</button>
+            </div>
           </div>
 
           <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 2rem;">
@@ -79,7 +87,7 @@
 
     // sb is already defined globally by auth.js
 
-    let expectedHeaders = [
+    let basicHeaders = [
       'sku', 'title', 'slug', 'status', 'business', 'category', 'description', 
       'parent_sku', 'variant_name', 'variant_value', 'related_skus', 'tags',
       'available_inventory',
@@ -92,12 +100,22 @@
     let dynamicFeaturesByBusiness = {};
 
     document.getElementById('btn-download').addEventListener('click', () => {
-      const csv = Papa.unparse([expectedHeaders]);
+      const selectedBiz = document.getElementById('select-business-download').value;
+      if (!selectedBiz) {
+        alert('Please select a business category first.');
+        return;
+      }
+
+      // Concat basic headers with the features of the selected business only
+      const selectedFeatures = dynamicFeaturesByBusiness[selectedBiz] || [];
+      const finalHeaders = [...basicHeaders, ...selectedFeatures];
+
+      const csv = Papa.unparse([finalHeaders]);
       // Add UTF-8 BOM (\ufeff) so Excel correctly opens and saves the file in UTF-8
       const blob = new Blob(["\ufeff", csv], { type: 'text/csv;charset=utf-8;' });
       const link = document.createElement("a");
       link.href = URL.createObjectURL(blob);
-      link.download = "brightkey_products_template.csv";
+      link.download = `brightkey_products_${selectedBiz}_template.csv`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -125,17 +143,19 @@
           const { data: dbFeatures } = await supabaseClient.from('business_features').select('business_id, name');
 
           if (businesses && dbFeatures) {
+            const selectEl = document.getElementById('select-business-download');
+            selectEl.innerHTML = '<option value="" disabled selected>Select a category...</option>';
+
             businesses.forEach(biz => {
               const key = biz.name.toLowerCase().replace(/[\s_.-]+/g, '_');
               const bizFeats = dbFeatures.filter(f => f.business_id === biz.id).map(f => f.name);
               dynamicFeaturesByBusiness[key] = bizFeats;
-              
-              // Append to expected headers for download template
-              bizFeats.forEach(f => {
-                if (!expectedHeaders.includes(f)) {
-                  expectedHeaders.push(f);
-                }
-              });
+
+              // Populate select dropdown option
+              const opt = document.createElement('option');
+              opt.value = key;
+              opt.textContent = biz.name;
+              selectEl.appendChild(opt);
             });
           }
         }
