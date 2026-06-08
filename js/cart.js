@@ -112,23 +112,25 @@ function renderCart() {
          </div>`;
 
     itemsContainer.innerHTML += `
-      <div style="display:flex; padding: 1.5rem; border-bottom: 1px solid var(--border); gap: 1.5rem; align-items:center; flex-wrap:wrap;">
-        <div style="width: 80px; height: 80px; border: 1px solid var(--border); border-radius: var(--radius-sm); padding:0.25rem; background:#fff; flex-shrink:0;">
+      <div class="cart-item-row" style="display:flex; padding: 1.5rem; border-bottom: 1px solid var(--border); gap: 1.5rem; align-items:center; flex-wrap:wrap;">
+        <div class="cart-item__img-container" style="width: 80px; height: 80px; border: 1px solid var(--border); border-radius: var(--radius-sm); padding:0.25rem; background:#fff; flex-shrink:0;">
           <img src="${item.image}" alt="${item.title}" style="width:100%; height:100%; object-fit:contain;" />
         </div>
 
-        <div style="flex: 1; min-width:200px;">
+        <div class="cart-item__info" style="flex: 1; min-width:200px;">
           <a href="${pathPrefix}products/${item.slug}" style="font-weight:600; font-size:1.1rem; color:var(--text-primary); text-decoration:none;">${item.title}</a>
-          <p style="color:var(--text-secondary); margin-top:0.25rem; font-size:0.9rem;">${priceStr}</p>
+          <p class="cart-item__price-under" style="color:var(--text-secondary); margin-top:0.25rem; font-size:0.9rem;">${priceStr}</p>
         </div>
 
-        ${qtyBlock}
+        <div class="cart-item__qty-container">
+          ${qtyBlock}
+        </div>
 
-        <div style="min-width: 100px; text-align:right;">
+        <div class="cart-item__total" style="min-width: 100px; text-align:right;">
           ${totalStr}
         </div>
 
-        <button onclick="removeItem('${item.id}')" style="background:transparent; border:none; color:var(--text-secondary); cursor:pointer; padding:0.5rem;" title="Remove Item">
+        <button class="cart-item__remove" onclick="removeItem('${item.id}')" style="background:transparent; border:none; color:var(--text-secondary); cursor:pointer; padding:0.5rem;" title="Remove Item">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
         </button>
       </div>
