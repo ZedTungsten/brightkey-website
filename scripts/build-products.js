@@ -97,8 +97,24 @@ function getPromoTagsHtmlForCard(tags) {
   return tags.map(t => map[t] || '').filter(Boolean).join('');
 }
 
+// Dictionary to explicitly map snake_case feature columns to custom front-end display labels.
+const FEATURE_LABELS = {
+  pan_tilt_zoom: 'Pan, Tilt & Zoom (PTZ)',
+  face_recognition_3d: '3D Face Recognition',
+  type_co2: 'CO₂ Gas Type',
+  type_abc: 'ABC Dry Chemical',
+  type_dry_chemical: 'Dry Chemical Powder',
+  type_foam: 'Foam Spray',
+  pressure_gauge: 'Pressure Gauge Indicator',
+  wifi_connect: 'WiFi Connectivity'
+};
+
 /** Pretty-print a feature column name: "pin_unlock" → "PIN Unlock" */
 function featureLabel(col) {
+  if (FEATURE_LABELS[col]) {
+    return FEATURE_LABELS[col];
+  }
+  
   let s = col.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
   return s
     .replace(/\bPin\b/g, 'PIN')
