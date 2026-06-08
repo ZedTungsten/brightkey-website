@@ -444,6 +444,11 @@
             <input type="text" class="form-input" id="f-related" placeholder="A01, A05, SC01" />
             <div class="form-hint">Used for cross-sells and recommendations</div>
           </div>
+          <div class="form-group">
+            <label class="form-label">Tags <span>comma-separated</span></label>
+            <input type="text" class="form-input" id="f-tags" placeholder="e.g. smart, keyless, promotional" />
+            <div class="form-hint">Used for grouping products and targeting promotions</div>
+          </div>
         </div>
       </div>
 
@@ -1106,7 +1111,7 @@
   // Form: Fill / Clear
   // ─────────────────────────────────────────────────────
   function clearForm() {
-    ['f-sku','f-slug','f-title','f-description','f-category','f-related',
+    ['f-sku','f-slug','f-title','f-description','f-category','f-related','f-tags',
      'f-parent-sku','f-variant-name','f-variant-value',
      'f-image-main','f-image-1','f-image-2','f-image-3','f-image-4','f-video-1','f-video-2',
      'f-spec-warranty','f-spec-support','f-spec-material','f-spec-voltage','f-spec-dimension',
@@ -1146,6 +1151,7 @@
     set('f-description', p.description);
     set('f-category', p.category);
     set('f-related', (p.related_skus || []).join(', '));
+    set('f-tags', (p.tags || []).join(', '));
     set('f-parent-sku', p.parent_sku);
     set('f-variant-name', p.variant_name);
     set('f-variant-value', p.variant_value);
@@ -1220,6 +1226,8 @@
     const g = id => document.getElementById(id)?.value?.trim() || null;
     const relatedRaw = g('f-related');
     const relatedArr = relatedRaw ? relatedRaw.split(',').map(s=>s.trim()).filter(Boolean) : null;
+    const tagsRaw = g('f-tags');
+    const tagsArr = tagsRaw ? tagsRaw.split(',').map(s=>s.trim().toLowerCase()).filter(Boolean) : [];
 
     const slugVal = g('f-slug') || slugify(g('f-title') || '');
 
@@ -1279,6 +1287,7 @@
       aplus_content:     collectAPlusContent(),
       comparison_table:  comparison_table,
       promo_tags:        checkedTags.length > 0 ? checkedTags : null,
+      tags:              tagsArr,
     };
   }
 
@@ -1811,6 +1820,216 @@
     });
   }
 
+  function initTagsInput() {
+    const originalInput = document.getElementById('f-tags');
+    if (!originalInput) return;
+
+    const container = document.createElement('div');
+    container.className = 'tag-input-container';
+    container.style.position = 'relative';
+
+    const tagsWrapper = document.createElement('span');
+    tagsWrapper.style.display = 'flex';
+    tagsWrapper.style.flexWrap = 'wrap';
+    tagsWrapper.style.gap = '0.35rem';
+
+    const textInput = document.createElement('input');
+    textInput.type = 'text';
+    textInput.className = 'tag-text-input';
+    textInput.placeholder = originalInput.placeholder || 'Type tag and press comma...';
+
+    const suggBox = document.createElement('div');
+    suggBox.className = 'tag-suggestions-box';
+    suggBox.style.cssText = `
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      background: var(--bg-surface, #ffffff);
+      border: 1px solid var(--border, #e2e8f0);
+      border-radius: var(--radius-sm, 6px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      max-height: 150px;
+      overflow-y: auto;
+      z-index: 1000;
+      display: none;
+      margin-top: 4px;
+    `;
+
+    container.appendChild(tagsWrapper);
+    container.appendChild(textInput);
+    container.appendChild(suggBox);
+
+    originalInput.style.display = 'none';
+    originalInput.parentNode.insertBefore(container, originalInput);
+
+    container.addEventListener('click', (e) => {
+      if (e.target !== suggBox && !suggBox.contains(e.target)) {
+        textInput.focus();
+      }
+    });
+
+    let tags = [];
+
+    function updateTagsUI() {
+      tagsWrapper.innerHTML = '';
+      tags.forEach((tag, idx) => {
+        const pill = document.createElement('span');
+        pill.className = 'tag-badge';
+        pill.textContent = tag.toLowerCase();
+
+        const closeBtn = document.createElement('button');
+        closeBtn.type = 'button';
+        closeBtn.className = 'tag-badge-close';
+        closeBtn.innerHTML = '&times;';
+        closeBtn.onclick = (e) => {
+          e.stopPropagation();
+          removeTag(idx);
+        };
+
+        pill.appendChild(closeBtn);
+        tagsWrapper.appendChild(pill);
+      });
+
+      if (tags.length > 0) {
+        textInput.placeholder = '';
+      } else {
+        textInput.placeholder = originalInput.placeholder || 'Type tag and press comma...';
+      }
+    }
+
+    function addTag(value) {
+      const clean = value.trim().toLowerCase().replace(/,/g, '');
+      if (clean && !tags.includes(clean)) {
+        tags.push(clean);
+        updateTagsUI();
+        triggerOriginalChange();
+      }
+      hideSuggestions();
+    }
+
+    function removeTag(idx) {
+      tags.splice(idx, 1);
+      updateTagsUI();
+      triggerOriginalChange();
+      hideSuggestions();
+    }
+
+    function triggerOriginalChange() {
+      const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+      descriptor.set.call(originalInput, tags.join(', '));
+      originalInput.dispatchEvent(new Event('input', { bubbles: true }));
+      originalInput.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    Object.defineProperty(originalInput, 'value', {
+      get() {
+        return tags.join(', ');
+      },
+      set(val) {
+        const values = val ? val.split(',').map(s => s.trim().toLowerCase()).filter(Boolean) : [];
+        tags = [...new Set(values)];
+        updateTagsUI();
+      },
+      configurable: true
+    });
+
+    function getAllExistingTags() {
+      const tagsSet = new Set();
+      if (allProducts) {
+        allProducts.forEach(p => {
+          if (p.tags && Array.isArray(p.tags)) {
+            p.tags.forEach(t => {
+              if (t) tagsSet.add(t.toLowerCase().trim());
+            });
+          }
+        });
+      }
+      return Array.from(tagsSet);
+    }
+
+    function showSuggestions() {
+      const allExisting = getAllExistingTags();
+      const currentVal = textInput.value.trim().toLowerCase();
+      const unused = allExisting.filter(t => !tags.includes(t));
+      const matches = currentVal 
+        ? unused.filter(t => t.includes(currentVal))
+        : unused;
+
+      if (matches.length === 0) {
+        hideSuggestions();
+        return;
+      }
+
+      suggBox.innerHTML = '';
+      matches.forEach(match => {
+        const item = document.createElement('div');
+        item.style.cssText = `
+          padding: 0.5rem 0.75rem;
+          cursor: pointer;
+          font-size: 0.85rem;
+          color: var(--text-primary);
+          transition: background 0.15s;
+        `;
+        item.textContent = match;
+
+        item.addEventListener('mouseenter', () => {
+          item.style.background = 'var(--bg-elevated, #f7fafc)';
+        });
+        item.addEventListener('mouseleave', () => {
+          item.style.background = 'transparent';
+        });
+        item.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          addTag(match);
+          textInput.value = '';
+          textInput.focus();
+        });
+
+        suggBox.appendChild(item);
+      });
+
+      suggBox.style.display = 'block';
+    }
+
+    function hideSuggestions() {
+      suggBox.style.display = 'none';
+    }
+
+    textInput.addEventListener('focus', showSuggestions);
+    textInput.addEventListener('input', showSuggestions);
+
+    textInput.addEventListener('blur', () => {
+      setTimeout(() => {
+        if (textInput.value) {
+          addTag(textInput.value);
+          textInput.value = '';
+        }
+        hideSuggestions();
+      }, 200);
+    });
+
+    textInput.addEventListener('keydown', (e) => {
+      const val = textInput.value;
+      if (e.key === ',' || e.key === 'Enter') {
+        e.preventDefault();
+        addTag(val);
+        textInput.value = '';
+      } else if (e.key === 'Backspace' && !val && tags.length > 0) {
+        removeTag(tags.length - 1);
+      }
+    });
+
+    textInput.addEventListener('input', (e) => {
+      const val = textInput.value;
+      if (val.includes(',')) {
+        const parts = val.split(',');
+        parts.slice(0, -1).forEach(addTag);
+        textInput.value = parts[parts.length - 1];
+      }
+    });
+  }
+
   // ─────────────────────────────────────────────────────
   // Event Binding
   // ─────────────────────────────────────────────────────
@@ -1829,6 +2048,7 @@
 
     fetchProducts();
     initRelatedSkusTagInput();
+    initTagsInput();
 
     document.getElementById('btn-add').addEventListener('click', openDrawerAdd);
     document.getElementById('btn-publish').addEventListener('click', publishSite);
