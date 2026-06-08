@@ -156,6 +156,7 @@
           <div class="tabs-nav" style="display: flex; gap: 1rem; padding: 0.5rem 1.5rem; border-bottom: 1px solid var(--border); background: var(--bg-surface);">
             <button class="tab-btn active" onclick="switchTab('pricing')" id="tab-btn-pricing" style="background: none; border: none; border-bottom: 2px solid var(--cyan); padding: 0.5rem 0.25rem; font-weight: 700; color: var(--text-primary); cursor: pointer; outline: none;">Pricing Tiers</button>
             <button class="tab-btn" onclick="switchTab('roles')" id="tab-btn-roles" style="background: none; border: none; border-bottom: 2px solid transparent; padding: 0.5rem 0.25rem; font-weight: 600; color: var(--text-secondary); cursor: pointer; outline: none;">Roles</button>
+            <button class="tab-btn" onclick="switchTab('tenants')" id="tab-btn-tenants" style="background: none; border: none; border-bottom: 2px solid transparent; padding: 0.5rem 0.25rem; font-weight: 600; color: var(--text-secondary); cursor: pointer; outline: none;">Tenants</button>
           </div>
 
           <div class="panel-header">
@@ -168,6 +169,10 @@
               <button class="btn btn-primary" id="btn-add-role" onclick="openRoleModal()" style="display: none;">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                 Add Role
+              </button>
+              <button class="btn btn-primary" id="btn-add-business" onclick="openBusinessModal()" style="display: none;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                Add Business
               </button>
             </div>
           </div>
@@ -207,6 +212,18 @@
                   <tr><td colspan="3" style="text-align: center; color: var(--text-muted); padding: 2rem;">Loading dashboard roles...</td></tr>
                 </tbody>
               </table>
+            </div>
+          </div>
+
+          <!-- Tenants Section -->
+          <div class="table-scroll" id="tenants-section" style="display: none;">
+            <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md, 8px); padding: 1.5rem; margin-bottom: 1.5rem;">
+              <h3 style="font-size: 1.1rem; font-weight: 800; color: var(--text-primary); margin-bottom: 0.5rem;" id="tenant-company-name">BrightKey (Current Company)</h3>
+              <p style="font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 1.5rem;">Managed businesses and their standard product/service reference features.</p>
+              
+              <div id="businesses-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1.5rem;">
+                <!-- Dynamically populated businesses and features go here -->
+              </div>
             </div>
           </div>
         </main>
@@ -327,6 +344,54 @@
     </div>
   </div>
 
+  <!-- Add Business Modal -->
+  <div class="modal-overlay" id="business-modal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title">Add Business</div>
+        <button class="modal-close" onclick="closeBusinessModal()">
+          <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <form id="business-form" onsubmit="saveBusiness(event)">
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label" for="business-name">Business Name</label>
+            <input type="text" id="business-name" class="form-input" placeholder="e.g. CCTV, Smart Lock" required />
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" onclick="closeBusinessModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-submit-business">Save Business</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Add Feature Modal -->
+  <div class="modal-overlay" id="feature-modal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title">Add Feature</div>
+        <button class="modal-close" onclick="closeFeatureModal()">
+          <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <form id="feature-form" onsubmit="saveFeature(event)">
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label" for="feature-name">Feature Name</label>
+            <input type="text" id="feature-name" class="form-input" placeholder="e.g. pin_unlock, night_vision" required />
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" onclick="closeFeatureModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-submit-feature">Save Feature</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- Supabase CDN and auth.js -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <script src="../js/auth.js"></script>
@@ -384,35 +449,309 @@
       currentTab = tab;
       const pricingBtn = document.getElementById('tab-btn-pricing');
       const rolesBtn = document.getElementById('tab-btn-roles');
+      const tenantsBtn = document.getElementById('tab-btn-tenants');
+      
+      // Reset active styles
+      [pricingBtn, rolesBtn, tenantsBtn].forEach(btn => {
+        if (btn) {
+          btn.style.borderBottomColor = 'transparent';
+          btn.style.fontWeight = '600';
+          btn.style.color = 'var(--text-secondary)';
+        }
+      });
+      
+      // Hide all sections
+      document.getElementById('pricing-section').style.display = 'none';
+      document.getElementById('roles-section').style.display = 'none';
+      document.getElementById('tenants-section').style.display = 'none';
+      
+      // Hide all header buttons
+      document.getElementById('btn-add-tier').style.display = 'none';
+      document.getElementById('btn-add-role').style.display = 'none';
+      document.getElementById('btn-add-business').style.display = 'none';
+      
+      const activeBtn = document.getElementById(`tab-btn-${tab}`);
+      if (activeBtn) {
+        activeBtn.style.borderBottomColor = 'var(--cyan)';
+        activeBtn.style.fontWeight = '700';
+        activeBtn.style.color = 'var(--text-primary)';
+      }
       
       if (tab === 'pricing') {
-        pricingBtn.style.borderBottomColor = 'var(--cyan)';
-        pricingBtn.style.fontWeight = '700';
-        pricingBtn.style.color = 'var(--text-primary)';
-        
-        rolesBtn.style.borderBottomColor = 'transparent';
-        rolesBtn.style.fontWeight = '600';
-        rolesBtn.style.color = 'var(--text-secondary)';
-        
         document.getElementById('pricing-section').style.display = 'block';
-        document.getElementById('roles-section').style.display = 'none';
         document.getElementById('btn-add-tier').style.display = 'inline-flex';
-        document.getElementById('btn-add-role').style.display = 'none';
         document.getElementById('main-panel-title').textContent = 'Global Subscription Plans (Pricing Tiers)';
-      } else {
-        pricingBtn.style.borderBottomColor = 'transparent';
-        pricingBtn.style.fontWeight = '600';
-        pricingBtn.style.color = 'var(--text-secondary)';
-        
-        rolesBtn.style.borderBottomColor = 'var(--cyan)';
-        rolesBtn.style.fontWeight = '700';
-        rolesBtn.style.color = 'var(--text-primary)';
-        
-        document.getElementById('pricing-section').style.display = 'none';
+      } else if (tab === 'roles') {
         document.getElementById('roles-section').style.display = 'block';
-        document.getElementById('btn-add-tier').style.display = 'none';
         document.getElementById('btn-add-role').style.display = 'inline-flex';
         document.getElementById('main-panel-title').textContent = 'Dashboard Roles & Page Access';
+      } else if (tab === 'tenants') {
+        document.getElementById('tenants-section').style.display = 'block';
+        document.getElementById('btn-add-business').style.display = 'inline-flex';
+        document.getElementById('main-panel-title').textContent = 'Tenants & Business Features Configuration';
+        loadTenantsData();
+      }
+    }
+
+    /* --- Tenants, Businesses and Features CRUD Operations --- */
+    let currentCompanyId = null;
+    let companyBusinesses = [];
+    let selectedBusinessIdForFeature = null;
+
+    function openBusinessModal() {
+      document.getElementById('business-name').value = '';
+      document.getElementById('business-modal').classList.add('open');
+    }
+    
+    function closeBusinessModal() {
+      document.getElementById('business-modal').classList.remove('open');
+    }
+    
+    async function saveBusiness(e) {
+      e.preventDefault();
+      const name = document.getElementById('business-name').value.trim();
+      if (!name || !currentCompanyId) return;
+      
+      const btn = document.getElementById('btn-submit-business');
+      btn.disabled = true;
+      btn.textContent = 'Saving...';
+      
+      try {
+        const { error } = await sb.from('tenant_businesses').insert({ company_id: currentCompanyId, name });
+        if (error) throw error;
+        showToast('Business added successfully!');
+        closeBusinessModal();
+        loadTenantsData();
+      } catch (err) {
+        console.error("Error saving business:", err);
+        showToast('Failed to add business: ' + err.message, true);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Save Business';
+      }
+    }
+    
+    function deleteBusiness(businessId) {
+      showConfirmModal('Are you sure you want to remove this business? All product features and specs references belonging to this business will be disconnected.', async () => {
+        try {
+          const { error } = await sb.from('tenant_businesses').delete().eq('id', businessId);
+          if (error) throw error;
+          showToast('Business deleted.');
+          loadTenantsData();
+        } catch (err) {
+          console.error("Error deleting business:", err);
+          showToast('Failed to delete business: ' + err.message, true);
+        }
+      });
+    }
+
+    function openFeatureModal(businessId) {
+      selectedBusinessIdForFeature = businessId;
+      document.getElementById('feature-name').value = '';
+      document.getElementById('feature-modal').classList.add('open');
+    }
+    
+    function closeFeatureModal() {
+      document.getElementById('feature-modal').classList.remove('open');
+    }
+    
+    async function saveFeature(e) {
+      e.preventDefault();
+      const name = document.getElementById('feature-name').value.trim().toLowerCase();
+      if (!name || !selectedBusinessIdForFeature) return;
+      
+      const btn = document.getElementById('btn-submit-feature');
+      btn.disabled = true;
+      btn.textContent = 'Saving...';
+      
+      try {
+        const { error } = await sb.from('business_features').insert({ business_id: selectedBusinessIdForFeature, name });
+        if (error) throw error;
+        showToast('Feature added successfully!');
+        closeFeatureModal();
+        loadTenantsData();
+      } catch (err) {
+        console.error("Error saving feature:", err);
+        showToast('Failed to add feature: ' + err.message, true);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Save Feature';
+      }
+    }
+    
+    function deleteFeature(featureId) {
+      showConfirmModal('Are you sure you want to delete this feature?', async () => {
+        try {
+          const { error } = await sb.from('business_features').delete().eq('id', featureId);
+          if (error) throw error;
+          showToast('Feature deleted.');
+          loadTenantsData();
+        } catch (err) {
+          console.error("Error deleting feature:", err);
+          showToast('Failed to delete feature: ' + err.message, true);
+        }
+      });
+    }
+
+    async function loadTenantsData() {
+      const grid = document.getElementById('businesses-grid');
+      grid.innerHTML = '<div style="color:var(--text-muted); padding:2rem;">Loading businesses and features...</div>';
+      
+      try {
+        // 1. Get current company
+        const { data: companies, error: compErr } = await sb.from('companies').select('*').eq('subdomain', 'brightkey').limit(1);
+        if (compErr) throw compErr;
+        
+        if (!companies || companies.length === 0) {
+          grid.innerHTML = '<div style="color:var(--danger); padding:2rem;">BrightKey company context not found.</div>';
+          return;
+        }
+        
+        const company = companies[0];
+        currentCompanyId = company.id;
+        document.getElementById('tenant-company-name').textContent = `${company.name} (Current Company)`;
+        
+        // 2. Load businesses
+        const { data: businesses, error: bizErr } = await sb.from('tenant_businesses').select('*').eq('company_id', currentCompanyId).order('name', { ascending: true });
+        if (bizErr) throw bizErr;
+        
+        companyBusinesses = businesses || [];
+        
+        // 3. Load features
+        const { data: features, error: featErr } = await sb.from('business_features').select('*').order('name', { ascending: true });
+        if (featErr) throw featErr;
+        
+        grid.innerHTML = '';
+        if (companyBusinesses.length === 0) {
+          grid.innerHTML = '<div style="color:var(--text-muted); padding:2rem;">No businesses defined under this tenant. Click "Add Business" to create one.</div>';
+          return;
+        }
+        
+        companyBusinesses.forEach(biz => {
+          const bizFeatures = (features || []).filter(f => f.business_id === biz.id);
+          
+          const card = document.createElement('div');
+          card.style.cssText = `
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md, 8px);
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            box-shadow: var(--shadow-sm, 0 1px 2px rgba(0,0,0,0.05));
+          `;
+          
+          // Header block with name and action button
+          const header = document.createElement('div');
+          header.style.cssText = `
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 0.75rem;
+          `;
+          
+          const title = document.createElement('h4');
+          title.style.cssText = `
+            font-size: 0.95rem;
+            font-weight: 700;
+            color: var(--text-primary);
+          `;
+          title.textContent = biz.name;
+          
+          const deleteBizBtn = document.createElement('button');
+          deleteBizBtn.className = 'btn btn-danger';
+          deleteBizBtn.style.padding = '0.2rem 0.5rem';
+          deleteBizBtn.style.fontSize = '0.7rem';
+          deleteBizBtn.textContent = 'Remove';
+          deleteBizBtn.onclick = () => deleteBusiness(biz.id);
+          
+          header.appendChild(title);
+          header.appendChild(deleteBizBtn);
+          card.appendChild(header);
+          
+          // Features tags wrapper
+          const tagsWrapper = document.createElement('div');
+          tagsWrapper.style.cssText = `
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.35rem;
+            min-height: 40px;
+          `;
+          
+          if (bizFeatures.length === 0) {
+            const empty = document.createElement('em');
+            empty.style.cssText = `
+              color: var(--text-muted);
+              font-size: 0.75rem;
+              display: block;
+              margin-bottom: 0.5rem;
+            `;
+            empty.textContent = 'No features configured.';
+            tagsWrapper.appendChild(empty);
+          } else {
+            bizFeatures.forEach(feat => {
+              const pill = document.createElement('span');
+              pill.className = 'feature-tag';
+              pill.style.cssText = `
+                display: inline-flex;
+                align-items: center;
+                gap: 0.25rem;
+                background: var(--cyan-dim);
+                color: var(--cyan-light);
+                border: 1px solid var(--cyan-border);
+                padding: 0.2rem 0.5rem;
+                border-radius: 4px;
+                font-size: 0.75rem;
+                font-weight: 600;
+              `;
+              pill.textContent = feat.name;
+              
+              const deleteFeatBtn = document.createElement('span');
+              deleteFeatBtn.style.cssText = `
+                cursor: pointer;
+                color: var(--text-muted);
+                font-weight: bold;
+                margin-left: 0.2rem;
+              `;
+              deleteFeatBtn.innerHTML = '&times;';
+              deleteFeatBtn.onclick = (e) => {
+                e.stopPropagation();
+                deleteFeature(feat.id);
+              };
+              
+              pill.appendChild(deleteFeatBtn);
+              tagsWrapper.appendChild(pill);
+            });
+          }
+          card.appendChild(tagsWrapper);
+          
+          // Footer with action button to add features
+          const footer = document.createElement('div');
+          footer.style.cssText = `
+            display: flex;
+            justify-content: flex-end;
+            margin-top: auto;
+            padding-top: 0.5rem;
+          `;
+          
+          const addFeatBtn = document.createElement('button');
+          addFeatBtn.className = 'btn btn-outline';
+          addFeatBtn.style.padding = '0.35rem 0.75rem';
+          addFeatBtn.style.fontSize = '0.75rem';
+          addFeatBtn.textContent = '+ Add Feature';
+          addFeatBtn.onclick = () => openFeatureModal(biz.id);
+          
+          footer.appendChild(addFeatBtn);
+          card.appendChild(footer);
+          
+          grid.appendChild(card);
+        });
+        
+      } catch (err) {
+        console.error("Error loading tenants:", err);
+        grid.innerHTML = `<div style="color:var(--danger); padding:2rem;">Failed to load businesses: ${err.message}</div>`;
       }
     }
 
