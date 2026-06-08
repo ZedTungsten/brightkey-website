@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Payment Accounts — BrightKey Internal</title>
+  <link rel="preconnect" href="https://fonts.bunny.net" />
+  <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg?v=2" />
+  <style>
+    .int-wrap { max-width: 1200px; margin: 0 auto; padding: 2rem 2rem 5rem; }
+    
+    /* ── Header ── */
+    .int-header {
+      display: flex; align-items: flex-start; justify-content: space-between;
+      flex-wrap: wrap; gap: 1rem; margin-bottom: 2rem;
+    }
+    .int-title {
+      font-size: 1.55rem; font-weight: 800; color: var(--text-primary);
+      letter-spacing: -0.04em; line-height: 1.1; margin-top: 0.4rem;
+    }
+    
+    /* ── Metrics Grid ── */
+    .payment-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 1.25rem;
+      margin-bottom: 2rem;
+    }
+    .payment-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 1.5rem;
+      box-shadow: var(--shadow-sm);
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      position: relative;
+      overflow: hidden;
+    }
+    .payment-card::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+    }
+    .payment-card.card-credit_card::before { background: var(--cyan); }
+    .payment-card.card-debit::before { background: var(--blue, #2563eb); }
+    .payment-card.card-cash_account::before { background: var(--emerald, #10b981); }
+    .payment-card.card-e_wallet::before { background: var(--amber, #f59e0b); }
+    .payment-card.card-other_payment_account::before { background: var(--text-muted); }
+    
+    .payment-card__header {
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .payment-card__type {
+      font-size: 0.65rem; font-weight: 800; text-transform: uppercase;
+      letter-spacing: 0.08em; color: var(--text-muted);
+    }
+    .payment-card__status {
+      font-size: 0.65rem; font-weight: 700; text-transform: uppercase;
+      padding: 2px 6px; border-radius: 4px;
+    }
+    .payment-card__status.active { background: rgba(16,185,129,0.1); color: #10b981; }
+    .payment-card__status.inactive { background: rgba(239,68,68,0.1); color: #ef4444; }
+    
+    .payment-card__name {
+      font-size: 1.15rem; font-weight: 800; color: var(--text-primary);
+      letter-spacing: -0.03em; margin: 0.25rem 0;
+    }
+    .payment-card__meta {
+      display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.78rem; color: var(--text-secondary);
+    }
+    .payment-card__meta-item {
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .payment-card__meta-label { color: var(--text-muted); font-weight: 500; }
+    .payment-card__meta-value { font-weight: 600; color: var(--text-primary); }
+    
+    /* ── Table styles ── */
+    .table-wrap {
+      overflow-x: auto; border: 1px solid var(--border);
+      border-radius: var(--radius-md); background: var(--bg-surface);
+      margin-bottom: 2rem;
+    }
+    .j-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+    .j-table th {
+      padding: 0.75rem 1rem; text-align: left; font-size: 0.65rem;
+      font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
+      color: var(--text-muted); background: var(--bg-elevated);
+      border-bottom: 1px solid var(--border); white-space: nowrap;
+    }
+    .j-table td {
+      padding: 0.75rem 1rem; color: var(--text-secondary);
+      border-bottom: 1px solid var(--border); vertical-align: middle;
+      white-space: nowrap;
+    }
+    .j-table tr:last-child td { border-bottom: none; }
+    .j-table tr:hover td { background: var(--bg-elevated); }
+    
+    /* ── Drawer for Add/Edit ── */
+    .drawer-overlay {
+      display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+      backdrop-filter: blur(4px); z-index: 1000;
+    }
+    .drawer-content {
+      position: fixed; top: 0; right: -450px; bottom: 0; width: 450px; max-width: 100%;
+      background: var(--bg-surface); border-left: 1px solid var(--border);
+      box-shadow: -10px 0 30px rgba(0,0,0,0.25); z-index: 1001;
+      display: flex; flex-direction: column;
+      transition: right 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .drawer-content.open { right: 0; }
+    
+    .drawer-header {
+      padding: 1.5rem; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .drawer-title { font-size: 1.1rem; font-weight: 800; color: var(--text-primary); letter-spacing: -0.02em; }
+    .drawer-close { background: none; border: none; font-size: 1.25rem; color: var(--text-muted); cursor: pointer; }
+    .drawer-close:hover { color: var(--text-primary); }
+    
+    .drawer-body { padding: 1.5rem; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 1.25rem; }
+    .drawer-footer { padding: 1.5rem; border-top: 1px solid var(--border); display: flex; gap: 0.75rem; }
+    
+    /* ── Form Controls ── */
+    .form-group { display: flex; flex-direction: column; gap: 0.35rem; }
+    .form-label { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); letter-spacing: 0.05em; }
+    .form-input, .form-select {
+      background: var(--bg-surface-elevated, #242424); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); padding: 0.55rem 0.75rem; font-size: 0.88rem;
+      color: var(--text-primary); width: 100%; outline: none; transition: border-color 0.15s;
+    }
+    .form-input:focus, .form-select:focus { border-color: var(--cyan); }
+    
+    /* Toggle Switch */
+    .toggle-wrapper { display: flex; align-items: center; justify-content: space-between; padding: 0.5rem 0; }
+    .toggle-switch {
+      position: relative; display: inline-block; width: 44px; height: 24px;
+    }
+    .toggle-switch input { opacity: 0; width: 0; height: 0; }
+    .toggle-slider {
+      position: absolute; cursor: pointer; inset: 0; background-color: var(--border);
+      transition: .3s; border-radius: 24px;
+    }
+    .toggle-slider:before {
+      position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px;
+      background-color: #fff; transition: .3s; border-radius: 50%;
+    }
+    input:checked + .toggle-slider { background-color: var(--cyan); }
+    input:checked + .toggle-slider:before { transform: translateX(20px); }
+  </style>
+</head>
+<body>
+
+  <div class="dash-layout">
+    <!-- Sidebar -->
+    <aside class="dash-sidebar" id="dash-sidebar"></aside>
+
+    <!-- Main -->
+    <div class="dash-main">
+      <header class="dash-topbar">
+        <span></span>
+        <span id="topbar-date" style="font-size: 0.85rem; font-weight: 500; color: var(--text-secondary);"></span>
+      </header>
+
+      <div class="dash-content">
+        <div class="int-wrap">
+          
+          <div class="int-header">
+            <div>
+              <div class="int-title">Payment Accounts</div>
+              <p style="font-size: 0.82rem; color: var(--text-muted); margin-top: 0.25rem;">
+                Manage banks, credit cards, e-wallets, and cash accounts in the Chart of Accounts.
+              </p>
+            </div>
+            <button class="btn btn-cyan btn-sm" onclick="PaymentAccountsApp.openAddDrawer()">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+              Add Payment Account
+            </button>
+          </div>
+
+          <!-- Quick Cards Grid -->
+          <div class="payment-grid" id="quick-cards-grid">
+            <!-- Rendered via JS -->
+          </div>
+
+          <!-- Datatable -->
+          <div class="table-wrap">
+            <table class="j-table">
+              <thead>
+                <tr>
+                  <th style="width: 80px;">Code</th>
+                  <th>Account Name</th>
+                  <th>Type</th>
+                  <th>Payment Type</th>
+                  <th>Bank</th>
+                  <th>Statement/Due</th>
+                  <th>Credit Limit</th>
+                  <th>Last 4</th>
+                  <th>Active</th>
+                  <th style="width: 80px; text-align: center;">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="accounts-tbody">
+                <tr><td colspan="10" class="tbl-state" style="padding: 100px 0;">Loading payment accounts…</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add / Edit Side Drawer -->
+  <div class="drawer-overlay" id="drawer-overlay" onclick="PaymentAccountsApp.closeDrawer()"></div>
+  <div class="drawer-content" id="drawer-content">
+    <div class="drawer-header">
+      <div class="drawer-title" id="drawer-title">Add Payment Account</div>
+      <button class="drawer-close" onclick="PaymentAccountsApp.closeDrawer()">✕</button>
+    </div>
+    <div class="drawer-body">
+      <input type="hidden" id="f-id" />
+
+      <div class="form-group">
+        <label class="form-label" for="f-name">Account Name</label>
+        <input type="text" id="f-name" class="form-input" placeholder="e.g. GCash Business, CIMB Credit Card" required />
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="f-type">Payment Type</label>
+        <select id="f-type" class="form-select" onchange="PaymentAccountsApp.handleTypeChange()" required>
+          <option value="debit">Debit / Bank Account</option>
+          <option value="credit_card">Credit Card</option>
+          <option value="cash_account">Cash Account</option>
+          <option value="e_wallet">E-Wallet</option>
+          <option value="other_payment_account">Other Payment Account</option>
+        </select>
+      </div>
+
+      <div class="toggle-wrapper">
+        <span class="form-label">Active / Enabled</span>
+        <label class="toggle-switch">
+          <input type="checkbox" id="f-active" checked />
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+
+      <div class="form-group" id="group-bank">
+        <label class="form-label" for="f-bank">Bank Name</label>
+        <input type="text" id="f-bank" class="form-input" placeholder="e.g. CIMB, BPI, UnionBank" />
+      </div>
+
+      <div class="form-row form-row-2" id="group-dates">
+        <div class="form-group">
+          <label class="form-label" for="f-statement">Statement Date (1-31)</label>
+          <input type="number" id="f-statement" class="form-input" min="1" max="31" placeholder="e.g. 5" />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="f-due">Due Date (1-31)</label>
+          <input type="number" id="f-due" class="form-input" min="1" max="31" placeholder="e.g. 25" />
+        </div>
+      </div>
+
+      <div class="form-group" id="group-limit">
+        <label class="form-label" for="f-limit">Credit Limit (Pesos)</label>
+        <input type="number" id="f-limit" class="form-input" placeholder="e.g. 50000" min="0" step="1" />
+      </div>
+
+      <div class="form-row form-row-2" id="group-card-details">
+        <div class="form-group">
+          <label class="form-label" for="f-card-last4">Card Number Last 4</label>
+          <input type="text" id="f-card-last4" class="form-input" placeholder="e.g. 1234" maxlength="4" />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="f-card-holder">Card Holder Name</label>
+          <input type="text" id="f-card-holder" class="form-input" placeholder="e.g. John Doe" />
+        </div>
+      </div>
+
+      <div class="form-group" id="group-rewards">
+        <label class="form-label" for="f-rewards">Rewards / Cashbacks</label>
+        <input type="text" id="f-rewards" class="form-input" placeholder="e.g. 1% cashback on utilities" />
+      </div>
+
+    </div>
+    <div class="drawer-footer">
+      <button class="btn btn-ghost btn-sm" onclick="PaymentAccountsApp.closeDrawer()" style="flex:1;">Cancel</button>
+      <button class="btn btn-cyan btn-sm" id="btn-save" onclick="PaymentAccountsApp.saveAccount()" style="flex:1;">Save Account</button>
+    </div>
+  </div>
+
+  <div id="toast-container" aria-live="polite"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/sidebar.js"></script>
+  <script src="../js/main.js"></script>
+  <script>
+    'use strict';
+
+    const SB_URL  = (typeof SUPABASE_URL  !== 'undefined') ? SUPABASE_URL  : '';
+    const SB_ANON = (typeof SUPABASE_ANON !== 'undefined') ? SUPABASE_ANON : '';
+
+    /* ── HTML escaping ── */
+    function esc(s) {
+      return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+    }
+
+    /* ── Formatting ── */
+    function php(v) {
+      if (v === null || v === undefined || v === '') return '—';
+      return '₱' + Number(v).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function formatPaymentType(t) {
+      if (!t) return '—';
+      return t.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+    }
+
+    /* ── Fetch Helper ── */
+    async function getRestHeaders() {
+      let token = SB_ANON;
+      if (window.BKAuth && window.BKAuth.sb) {
+        const { data: { session } } = await window.BKAuth.sb.auth.getSession();
+        if (session) token = session.access_token;
+      }
+      return {
+        'Content-Type': 'application/json',
+        'apikey': SB_ANON,
+        'Authorization': `Bearer ${token}`
+      };
+    }
+
+    async function sbGet(path) {
+      const headers = await getRestHeaders();
+      const r = await fetch(`${SB_URL}/rest/v1/${path}`, { headers });
+      if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.message || `Supabase GET Error ${r.status}`); }
+      return r.json();
+    }
+
+    async function sbPost(table, body) {
+      const headers = await getRestHeaders();
+      const r = await fetch(`${SB_URL}/rest/v1/${table}`, {
+        method: 'POST', headers: { ...headers, 'Prefer': 'return=representation' }, body: JSON.stringify(body)
+      });
+      if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.message || `Insert ${r.status}`); }
+      return r.json();
+    }
+
+    async function sbPatch(table, filter, body) {
+      const headers = await getRestHeaders();
+      const r = await fetch(`${SB_URL}/rest/v1/${table}?${filter}`, {
+        method: 'PATCH', headers: { ...headers, 'Prefer': 'return=minimal' }, body: JSON.stringify(body)
+      });
+      if (!r.ok) throw new Error(`Update Failed ${r.status}`);
+    }
+
+    /* ── App Object ── */
+    const PaymentAccountsApp = {
+      companyId: null,
+      accounts: [],
+
+      async init() {
+        if (window.BKAuth) {
+          const authInfo = await window.BKAuth.checkRoleGate(['owner', 'admin', 'accounting'], '../admin.html');
+          if (!authInfo) return;
+          this.companyId = await this.getCompanyId(authInfo.tenantId);
+        }
+        
+        await this.loadAccounts();
+      },
+
+      async getCompanyId(tenantId) {
+        try {
+          const sb = window.BKAuth.sb;
+          const { data } = await sb.from('companies').select('id').eq('tenant_id', tenantId).limit(1);
+          return data?.[0]?.id || null;
+        } catch (err) {
+          console.error('Failed to resolve company ID:', err);
+          return null;
+        }
+      },
+
+      async loadAccounts() {
+        const tbody = document.getElementById('accounts-tbody');
+        tbody.innerHTML = '<tr><td colspan="10" class="tbl-state" style="padding: 50px 0;">Loading payment accounts…</td></tr>';
+        
+        try {
+          let url = 'bookkeeping_accounts?is_payment_account=eq.true&order=account_code.asc';
+          if (this.companyId) {
+            url = `bookkeeping_accounts?is_payment_account=eq.true&company_id=eq.${this.companyId}&order=account_code.asc`;
+          }
+          this.accounts = await sbGet(url);
+          this.renderList();
+        } catch (err) {
+          console.error(err);
+          tbody.innerHTML = `<tr><td colspan="10" class="tbl-state error" style="padding: 50px 0; color:var(--danger);">Failed to load accounts: ${esc(err.message)}</td></tr>`;
+        }
+      },
+
+      renderList() {
+        const tbody = document.getElementById('accounts-tbody');
+        const grid = document.getElementById('quick-cards-grid');
+        
+        if (!this.accounts.length) {
+          tbody.innerHTML = '<tr><td colspan="10" class="tbl-state" style="padding: 100px 0;">No payment accounts configured yet.</td></tr>';
+          grid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: var(--text-muted); font-size: 0.88rem; padding: 2rem;">No card, bank, or wallet widgets to display.</div>';
+          return;
+        }
+
+        // 1. Render Table Rows
+        tbody.innerHTML = this.accounts.map(acc => {
+          const limitPesos = acc.credit_limit ? (acc.credit_limit / 100) : null;
+          const limitStr = limitPesos ? php(limitPesos) : '—';
+          
+          let dateStr = '—';
+          if (acc.statement_date || acc.due_date) {
+            const st = acc.statement_date ? `Cutoff: ${acc.statement_date}` : 'Cutoff: —';
+            const due = acc.due_date ? `Due: ${acc.due_date}` : 'Due: —';
+            dateStr = `${st} / ${due}`;
+          }
+
+          const activeChecked = acc.is_active ? 'checked' : '';
+
+          return `
+            <tr>
+              <td><strong>${esc(acc.account_code)}</strong></td>
+              <td><strong>${esc(acc.account_name)}</strong></td>
+              <td>${esc(acc.account_type)}</td>
+              <td><span style="font-size:0.75rem; background:rgba(6,182,212,0.08); padding:2px 6px; border-radius:4px; font-weight:600; color:var(--cyan);">${esc(formatPaymentType(acc.payment_account_type))}</span></td>
+              <td>${esc(acc.bank || '—')}</td>
+              <td style="font-size:0.78rem;">${esc(dateStr)}</td>
+              <td>${esc(limitStr)}</td>
+              <td style="font-family:monospace; font-size:0.85rem;">${acc.card_number_last_4 ? `•••• ${acc.card_number_last_4}` : '—'}</td>
+              <td>
+                <label class="toggle-switch">
+                  <input type="checkbox" ${activeChecked} onchange="PaymentAccountsApp.toggleActive('${acc.id}', this.checked)" />
+                  <span class="toggle-slider"></span>
+                </label>
+              </td>
+              <td style="text-align: center;">
+                <button class="btn btn-ghost btn-xs" onclick="PaymentAccountsApp.openEditDrawer('${acc.id}')">Edit</button>
+              </td>
+            </tr>
+          `;
+        }).join('');
+
+        // 2. Render Widgets/Cards (focus on Credit Cards, E-wallets, Banks)
+        grid.innerHTML = this.accounts.map(acc => {
+          const limitPesos = acc.credit_limit ? (acc.credit_limit / 100) : null;
+          const activeClass = acc.is_active ? 'active' : 'inactive';
+          
+          let cardDetails = '';
+          if (acc.payment_account_type === 'credit_card') {
+            cardDetails = `
+              <div class="payment-card__meta-item">
+                <span class="payment-card__meta-label">Credit Limit</span>
+                <span class="payment-card__meta-value">${php(limitPesos)}</span>
+              </div>
+              <div class="payment-card__meta-item">
+                <span class="payment-card__meta-label">Statement Date</span>
+                <span class="payment-card__meta-value">Every ${acc.statement_date || '—'}</span>
+              </div>
+              <div class="payment-card__meta-item">
+                <span class="payment-card__meta-label">Due Date</span>
+                <span class="payment-card__meta-value">Every ${acc.due_date || '—'}</span>
+              </div>
+            `;
+          } else {
+            cardDetails = `
+              <div class="payment-card__meta-item">
+                <span class="payment-card__meta-label">Bank</span>
+                <span class="payment-card__meta-value">${esc(acc.bank || '—')}</span>
+              </div>
+              <div class="payment-card__meta-item">
+                <span class="payment-card__meta-label">Account Code</span>
+                <span class="payment-card__meta-value">${esc(acc.account_code)}</span>
+              </div>
+            `;
+          }
+
+          const cardNo = acc.card_number_last_4 ? `•••• •••• •••• ${acc.card_number_last_4}` : 'No Card Linked';
+
+          return `
+            <div class="payment-card card-${acc.payment_account_type}">
+              <div class="payment-card__header">
+                <span class="payment-card__type">${esc(formatPaymentType(acc.payment_account_type))}</span>
+                <span class="payment-card__status ${activeClass}">${acc.is_active ? 'Active' : 'Disabled'}</span>
+              </div>
+              <div class="payment-card__name">${esc(acc.account_name)}</div>
+              
+              <div style="font-family:monospace; font-size:0.85rem; color:var(--text-muted); margin: 0.25rem 0 0.5rem;">
+                ${cardNo}
+              </div>
+
+              <div class="payment-card__meta">
+                ${cardDetails}
+                ${acc.card_holder_name ? `
+                  <div class="payment-card__meta-item">
+                    <span class="payment-card__meta-label">Holder</span>
+                    <span class="payment-card__meta-value">${esc(acc.card_holder_name)}</span>
+                  </div>
+                ` : ''}
+                ${acc.rewards ? `
+                  <div class="payment-card__meta-item" style="border-top:1px dashed var(--border); padding-top:0.4rem; margin-top:0.2rem;">
+                    <span class="payment-card__meta-label">Rewards</span>
+                    <span class="payment-card__meta-value" style="color:var(--cyan); font-size:0.75rem;">${esc(acc.rewards)}</span>
+                  </div>
+                ` : ''}
+              </div>
+            </div>
+          `;
+        }).join('');
+      },
+
+      async toggleActive(id, isActive) {
+        try {
+          await sbPatch('bookkeeping_accounts', `id=eq.${id}`, { is_active: isActive });
+          Toast.success(`Account status updated.`);
+          await this.loadAccounts();
+        } catch (err) {
+          console.error(err);
+          Toast.error(`Failed to update status: ${err.message}`);
+          await this.loadAccounts(); // revert toggle visually
+        }
+      },
+
+      /* ── Drawer Controls ── */
+      openAddDrawer() {
+        document.getElementById('drawer-title').textContent = 'Add Payment Account';
+        document.getElementById('f-id').value = '';
+        document.getElementById('f-name').value = '';
+        document.getElementById('f-type').value = 'debit';
+        document.getElementById('f-active').checked = true;
+        document.getElementById('f-bank').value = '';
+        document.getElementById('f-statement').value = '';
+        document.getElementById('f-due').value = '';
+        document.getElementById('f-limit').value = '';
+        document.getElementById('f-card-last4').value = '';
+        document.getElementById('f-card-holder').value = '';
+        document.getElementById('f-rewards').value = '';
+
+        this.handleTypeChange();
+
+        document.getElementById('drawer-overlay').style.display = 'block';
+        document.getElementById('drawer-content').classList.add('open');
+      },
+
+      openEditDrawer(id) {
+        const acc = this.accounts.find(a => a.id === id);
+        if (!acc) return;
+
+        document.getElementById('drawer-title').textContent = 'Edit Payment Account';
+        document.getElementById('f-id').value = acc.id;
+        document.getElementById('f-name').value = acc.account_name;
+        document.getElementById('f-type').value = acc.payment_account_type || 'debit';
+        document.getElementById('f-active').checked = acc.is_active;
+        document.getElementById('f-bank').value = acc.bank || '';
+        document.getElementById('f-statement').value = acc.statement_date || '';
+        document.getElementById('f-due').value = acc.due_date || '';
+        document.getElementById('f-limit').value = acc.credit_limit ? (acc.credit_limit / 100) : '';
+        document.getElementById('f-card-last4').value = acc.card_number_last_4 || '';
+        document.getElementById('f-card-holder').value = acc.card_holder_name || '';
+        document.getElementById('f-rewards').value = acc.rewards || '';
+
+        this.handleTypeChange();
+
+        document.getElementById('drawer-overlay').style.display = 'block';
+        document.getElementById('drawer-content').classList.add('open');
+      },
+
+      closeDrawer() {
+        document.getElementById('drawer-overlay').style.display = 'none';
+        document.getElementById('drawer-content').classList.remove('open');
+      },
+
+      handleTypeChange() {
+        const type = document.getElementById('f-type').value;
+        const groupBank = document.getElementById('group-bank');
+        const groupDates = document.getElementById('group-dates');
+        const groupLimit = document.getElementById('group-limit');
+        const groupCardDetails = document.getElementById('group-card-details');
+        const groupRewards = document.getElementById('group-rewards');
+
+        if (type === 'credit_card') {
+          groupBank.style.display = 'flex';
+          groupDates.style.display = 'grid';
+          groupLimit.style.display = 'flex';
+          groupCardDetails.style.display = 'grid';
+          groupRewards.style.display = 'flex';
+        } else if (type === 'debit') {
+          groupBank.style.display = 'flex';
+          groupDates.style.display = 'none';
+          groupLimit.style.display = 'none';
+          groupCardDetails.style.display = 'grid';
+          groupRewards.style.display = 'none';
+        } else if (type === 'e_wallet') {
+          groupBank.style.display = 'none';
+          groupDates.style.display = 'none';
+          groupLimit.style.display = 'none';
+          groupCardDetails.style.display = 'grid'; // mobile / reference last 4
+          groupRewards.style.display = 'none';
+        } else { // cash_account or other
+          groupBank.style.display = 'none';
+          groupDates.style.display = 'none';
+          groupLimit.style.display = 'none';
+          groupCardDetails.style.display = 'none';
+          groupRewards.style.display = 'none';
+        }
+      },
+
+      async getNextAccountCode(accountType) {
+        // Query to find the highest code in Asset (starts with 10) or Liability (starts with 22)
+        const prefix = accountType === 'Asset' ? '10' : '22';
+        const startCode = accountType === 'Asset' ? 1080 : 2210;
+
+        let url = `bookkeeping_accounts?select=account_code&account_code=like.${prefix}*`;
+        if (this.companyId) {
+          url = `bookkeeping_accounts?select=account_code&company_id=eq.${this.companyId}&account_code=like.${prefix}*`;
+        }
+
+        const rows = await sbGet(url);
+        if (!rows.length) return String(startCode);
+
+        // Find the maximum numerical code
+        const codes = rows.map(r => parseInt(r.account_code, 10)).filter(c => !isNaN(c));
+        if (!codes.length) return String(startCode);
+
+        const max = Math.max(...codes);
+        return String(max + 10);
+      },
+
+      async saveAccount() {
+        const id = document.getElementById('f-id').value;
+        const name = document.getElementById('f-name').value.trim();
+        const type = document.getElementById('f-type').value;
+        const active = document.getElementById('f-active').checked;
+        const bank = document.getElementById('f-bank').value.trim();
+        const statementVal = document.getElementById('f-statement').value;
+        const dueVal = document.getElementById('f-due').value;
+        const limitVal = document.getElementById('f-limit').value;
+        const cardLast4 = document.getElementById('f-card-last4').value.trim();
+        const cardHolder = document.getElementById('f-card-holder').value.trim();
+        const rewards = document.getElementById('f-rewards').value.trim();
+
+        if (!name) { Toast.error('Please enter an account name.'); return; }
+
+        const btn = document.getElementById('btn-save');
+        btn.disabled = true;
+        btn.textContent = 'Saving…';
+
+        try {
+          // Determine account category mapping
+          // Credit Card = Liability, others = Asset
+          const accountType = (type === 'credit_card') ? 'Liability' : 'Asset';
+
+          // Payload assembly
+          const payload = {
+            account_name: name,
+            account_type: accountType,
+            is_active: active,
+            is_payment_account: true,
+            payment_account_type: type,
+            bank: bank || null,
+            statement_date: statementVal ? parseInt(statementVal, 10) : null,
+            due_date: dueVal ? parseInt(dueVal, 10) : null,
+            credit_limit: limitVal ? Math.round(parseFloat(limitVal) * 100) : null, // Store as centavos
+            card_number_last_4: cardLast4 || null,
+            card_holder_name: cardHolder || null,
+            rewards: rewards || null
+          };
+
+          if (payload.statement_date && (payload.statement_date < 1 || payload.statement_date > 31)) {
+            throw new Error('Statement Date must be between 1 and 31.');
+          }
+          if (payload.due_date && (payload.due_date < 1 || payload.due_date > 31)) {
+            throw new Error('Due Date must be between 1 and 31.');
+          }
+          if (payload.card_number_last_4 && !/^\d{3,4}$/.test(payload.card_number_last_4)) {
+            throw new Error('Card last digits must be a 3-4 digit number.');
+          }
+
+          if (id) {
+            // Edit mode
+            await sbPatch('bookkeeping_accounts', `id=eq.${id}`, payload);
+            Toast.success('Payment account updated successfully.');
+          } else {
+            // Create mode
+            payload.company_id = this.companyId;
+            // Generate next sequential account code
+            payload.account_code = await this.getNextAccountCode(accountType);
+            await sbPost('bookkeeping_accounts', payload);
+            Toast.success(`Payment account added successfully as code ${payload.account_code}.`);
+          }
+
+          this.closeDrawer();
+          await this.loadAccounts();
+        } catch (err) {
+          console.error(err);
+          Toast.error(err.message || 'Failed to save payment account.');
+        } finally {
+          btn.disabled = false;
+          btn.textContent = 'Save Account';
+        }
+      }
+    };
+
+    // Boot
+    document.addEventListener('DOMContentLoaded', () => {
+      PaymentAccountsApp.init();
+    });
+  </script>
+</body>
+</html>
