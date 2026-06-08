@@ -474,14 +474,19 @@ function renderComparisonTable(ct, products = [], allReviews = [], currentProduc
   }).join('');
 
   return `
-    <div style="background:var(--bg-base); padding:5rem 2rem; overflow:hidden; border-top: 1px solid var(--border);">
-      <div style="max-width:1200px; margin:0 auto;">
-        <h2 style="font-size:2.25rem; font-weight:800; margin-bottom:3rem; text-align:center; color:var(--text-primary); letter-spacing:-0.03em;">
+    <div class="comparison-section">
+      <div class="comparison-container">
+        <h2 class="comparison-title">
           ${ct.title || 'Product Comparison'}
         </h2>
-        <div style="margin: 0 auto; border:1px solid var(--border); border-radius:var(--radius-md); background:var(--bg-surface); box-shadow:0 4px 20px rgba(0,0,0,0.05); width: max-content; max-width: 100%; overflow: hidden;">
-          <div style="width:100%; overflow-x:auto;">
-            <table style="border-collapse:collapse; text-align:center; font-size:0.9rem; table-layout: fixed; width: max-content;">
+        <div class="comparison-table-wrapper">
+          <!-- Left Gradient Overlay -->
+          <div class="comparison-fade fade-left"></div>
+          <!-- Right Gradient Overlay -->
+          <div class="comparison-fade fade-right"></div>
+          
+          <div class="comparison-scroll-container" onscroll="handleComparisonScroll(this)">
+            <table style="border-collapse:collapse; text-align:center; font-size:0.9rem; table-layout: fixed; width: max-content; margin: 0 auto;">
               <thead>
                 <tr>
                   <th style="padding: 0.6rem 0.75rem; width:180px; min-width:180px; max-width:180px; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); vertical-align: bottom; font-weight:700; color:var(--text-primary); font-size:0.75rem;"></th>
