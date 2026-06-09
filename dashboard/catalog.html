@@ -137,6 +137,11 @@
     .drawer-close:hover { background: var(--bg-elevated); color: var(--text-primary); }
     .drawer-close svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
+    .drawer-nav-btn { width: 32px; height: 32px; border-radius: 6px; border: 1px solid var(--border); background: none; cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--text-muted); transition: all 0.15s; }
+    .drawer-nav-btn:hover:not(:disabled) { background: var(--bg-elevated); color: var(--text-primary); }
+    .drawer-nav-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+    .drawer-nav-btn svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
     /* Tabs */
     .drawer-tabs { display: flex; border-bottom: 1px solid var(--border); flex-shrink: 0; overflow-x: auto; background: var(--bg-surface); }
     .tab-btn { padding: 0.7rem 1rem; font-size: 0.8rem; font-weight: 600; color: var(--text-muted); border: none; background: none; cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap; transition: all 0.15s; }
@@ -441,6 +446,14 @@
 <div class="drawer" id="product-drawer">
   <div class="drawer-header">
     <div class="drawer-title" id="drawer-title">Add Product</div>
+    <div class="drawer-nav-actions" style="display: flex; align-items: center; gap: 0.5rem; margin-left: auto; margin-right: 0.75rem;">
+      <button class="drawer-nav-btn" id="drawer-prev" title="Previous Product">
+        <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
+      <button class="drawer-nav-btn" id="drawer-next" title="Next Product">
+        <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+      </button>
+    </div>
     <button class="drawer-close" id="drawer-close">
       <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
     </button>
@@ -1215,11 +1228,37 @@
   // ─────────────────────────────────────────────────────
   // Drawer: Open / Close
   // ─────────────────────────────────────────────────────
+  function updateDrawerNavigation() {
+    const prevBtn = document.getElementById('drawer-prev');
+    const nextBtn = document.getElementById('drawer-next');
+    const titleEl = document.getElementById('drawer-title');
+
+    if (!editingId) {
+      titleEl.textContent = 'Add Product';
+      if (prevBtn) prevBtn.style.display = 'none';
+      if (nextBtn) nextBtn.style.display = 'none';
+      return;
+    }
+
+    const currentIndex = filtered.findIndex(x => x.id === editingId);
+    const p = allProducts.find(x => x.id === editingId);
+    titleEl.textContent = p ? (p.sku || 'Edit Product') : 'Edit Product';
+
+    if (prevBtn) {
+      prevBtn.style.display = 'flex';
+      prevBtn.disabled = (currentIndex <= 0);
+    }
+    if (nextBtn) {
+      nextBtn.style.display = 'flex';
+      nextBtn.disabled = (currentIndex === -1 || currentIndex >= filtered.length - 1);
+    }
+  }
+
   function openDrawerAdd() {
     editingId = null;
     editingFeatureId = null;
     clearForm();
-    document.getElementById('drawer-title').textContent = 'Add Product';
+    updateDrawerNavigation();
     document.getElementById('drawer-status').textContent = '';
     switchTab('basic');
     document.getElementById('product-drawer').classList.add('open');
@@ -1230,14 +1269,16 @@
     editingId = id;
     editingFeatureId = null;
     clearForm();
-    document.getElementById('drawer-title').textContent = 'Edit Product';
+    
+    const p = allProducts.find(x => x.id === id);
+    if (p) fillForm(p);
+    
+    updateDrawerNavigation();
+    
     document.getElementById('drawer-status').textContent = 'Loading…';
     document.getElementById('product-drawer').classList.add('open');
     document.getElementById('drawer-overlay').classList.add('open');
     switchTab('basic');
-
-    const p = allProducts.find(x => x.id === id);
-    if (p) fillForm(p);
 
     // Load features
     if (p && p.business && FEATURE_DEFS[p.business]) {
@@ -1812,8 +1853,15 @@
       }
 
       toast(editingId ? 'Product updated!' : 'Product created!', 'success');
-      closeDrawer();
       await fetchProducts();
+      if (!editingId && productId) {
+        editingId = productId;
+      }
+      if (editingId) {
+        await openDrawerEdit(editingId);
+      } else {
+        updateDrawerNavigation();
+      }
 
     } catch (err) {
       console.error(err);
@@ -2304,6 +2352,22 @@
     document.getElementById('btn-publish').addEventListener('click', publishSite);
     document.getElementById('drawer-close').addEventListener('click', closeDrawer);
     document.getElementById('drawer-cancel').addEventListener('click', closeDrawer);
+
+    document.getElementById('drawer-prev').addEventListener('click', () => {
+      if (!editingId) return;
+      const currentIndex = filtered.findIndex(x => x.id === editingId);
+      if (currentIndex > 0) {
+        openDrawerEdit(filtered[currentIndex - 1].id);
+      }
+    });
+
+    document.getElementById('drawer-next').addEventListener('click', () => {
+      if (!editingId) return;
+      const currentIndex = filtered.findIndex(x => x.id === editingId);
+      if (currentIndex !== -1 && currentIndex < filtered.length - 1) {
+        openDrawerEdit(filtered[currentIndex + 1].id);
+      }
+    });
 
     // ─────────────────────────────────────────────────────
     // Direct Supabase Storage Uploads
