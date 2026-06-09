@@ -76,7 +76,7 @@
     /* ── Table ── */
     .table-scroll { flex: 1; overflow: auto; }
     table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
-    thead th { position: sticky; top: 0; background: var(--bg-elevated); color: var(--text-muted); font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; padding: 0.6rem 1rem; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; }
+    thead th { position: sticky; top: 0; background: var(--bg-elevated); color: var(--text-muted); font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; padding: 0.6rem 1rem; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; z-index: 5; }
     tbody tr { border-bottom: 1px solid var(--border); transition: background 0.1s; }
     tbody tr:hover { background: var(--bg-elevated); }
     tbody td { padding: 0.65rem 1rem; color: var(--text-secondary); vertical-align: middle; }
@@ -346,6 +346,12 @@
       opacity: 1;
       color: var(--cyan);
     }
+    .form-input.mixed-value,
+    .form-textarea.mixed-value,
+    .form-select.mixed-value {
+      color: var(--text-muted) !important;
+      font-style: italic !important;
+    }
   </style>
 </head>
 <body>
@@ -420,32 +426,37 @@
           <option value="draft">Draft</option>
         </select>
         <div class="toolbar-gap"></div>
+        <button class="btn btn-outline" id="btn-batch-edit" disabled style="display: inline-flex; align-items: center; gap: 0.4rem; margin-right: 0.5rem;">
+          <svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          Batch Edit (<span id="batch-edit-count">0</span>)
+        </button>
         <button class="btn btn-outline" id="btn-add">
           <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           Add Product
         </button>
       </div>
-
-      <!-- Table -->
-      <div class="table-scroll">
-        <table>
-          <thead>
-            <tr>
-              <th class="sortable" data-sort="sku" style="cursor:pointer; user-select:none;">SKU</th>
-              <th class="sortable" data-sort="title" style="cursor:pointer; user-select:none;">Title</th>
-              <th class="sortable" data-sort="business" style="cursor:pointer; user-select:none;">Business</th>
-              <th class="sortable" data-sort="category" style="cursor:pointer; user-select:none;">Category</th>
-              <th class="sortable" data-sort="sale_price" style="cursor:pointer; user-select:none; text-align:right">Sale Price</th>
-              <th class="sortable" data-sort="discounted_price" style="cursor:pointer; user-select:none; text-align:right">Discounted</th>
-              <th class="sortable" data-sort="dealer_price" style="cursor:pointer; user-select:none; text-align:right">Dealer Price</th>
-              <th class="sortable" data-sort="status" style="cursor:pointer; user-select:none;">Status</th>
-              <th class="sortable desc" data-sort="created_at" style="cursor:pointer; user-select:none;">Uploaded</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody id="products-body">
-            <tr><td colspan="11" style="padding:3rem;text-align:center;color:var(--text-muted)">Loading products…</td></tr>
-          </tbody>
+ 
+       <!-- Table -->
+       <div class="table-scroll">
+         <table>
+           <thead>
+             <tr>
+               <th style="width: 40px; text-align: center; vertical-align: middle;"><input type="checkbox" id="th-select-all" style="cursor: pointer; transform: scale(1.1);" /></th>
+               <th class="sortable" data-sort="sku" style="cursor:pointer; user-select:none;">SKU</th>
+               <th class="sortable" data-sort="title" style="cursor:pointer; user-select:none;">Title</th>
+               <th class="sortable" data-sort="business" style="cursor:pointer; user-select:none;">Business</th>
+               <th class="sortable" data-sort="category" style="cursor:pointer; user-select:none;">Category</th>
+               <th class="sortable" data-sort="sale_price" style="cursor:pointer; user-select:none; text-align:right">Sale Price</th>
+               <th class="sortable" data-sort="discounted_price" style="cursor:pointer; user-select:none; text-align:right">Discounted</th>
+               <th class="sortable" data-sort="dealer_price" style="cursor:pointer; user-select:none; text-align:right">Dealer Price</th>
+               <th class="sortable" data-sort="status" style="cursor:pointer; user-select:none;">Status</th>
+               <th class="sortable desc" data-sort="created_at" style="cursor:pointer; user-select:none;">Uploaded</th>
+               <th>Actions</th>
+             </tr>
+           </thead>
+           <tbody id="products-body">
+             <tr><td colspan="11" style="padding:3rem;text-align:center;color:var(--text-muted)">Loading products…</td></tr>
+           </tbody>
         </table>
       </div>
 
@@ -544,7 +555,8 @@
         <div class="form-grid">
           <div class="form-group">
             <label class="form-label">Parent SKU</label>
-            <input type="text" class="form-input" id="f-parent-sku" placeholder="Leave blank if this is the parent" />
+            <input type="text" class="form-input" id="f-parent-sku" placeholder="Leave blank if this is the parent" list="parent-skus-list" />
+            <datalist id="parent-skus-list"></datalist>
           </div>
           <div class="form-group">
             <label class="form-label">Variant Name <span>selector label</span></label>
@@ -1108,6 +1120,7 @@
       return;
     }
     allProducts = data || [];
+    updateParentSkuDatalist();
     updateStats();
     applyFilters();
     await checkUnpublishedChanges();
@@ -1118,6 +1131,13 @@
     document.getElementById('stat-published').textContent = allProducts.filter(p=>p.status==='published').length;
     document.getElementById('stat-draft').textContent = allProducts.filter(p=>p.status==='draft').length;
     document.getElementById('stat-smart-lock').textContent = allProducts.filter(p=>p.business==='smart_lock').length;
+  }
+
+  function updateParentSkuDatalist() {
+    const dl = document.getElementById('parent-skus-list');
+    if (!dl) return;
+    const allSkus = [...new Set(allProducts.filter(p => p.sku).map(p => p.sku))];
+    dl.innerHTML = allSkus.map(sku => `<option value="${esc(sku)}"></option>`).join('');
   }
 
   function applyFilters() {
@@ -1199,6 +1219,75 @@
     renderTable();
   }
 
+  let selectedProductIds = [];
+  let isBatchEditing = false;
+  let touchedFields = new Set();
+
+  const fieldMapping = {
+    'f-title': 'title',
+    'f-description': 'description',
+    'f-business': 'business',
+    'f-category': 'category',
+    'f-status': 'status',
+    'f-parent-sku': 'parent_sku',
+    'f-variant-name': 'variant_name',
+    'f-variant-value': 'variant_value',
+    'f-image-main': 'image_main',
+    'f-image-1': 'image_1',
+    'f-image-2': 'image_2',
+    'f-image-3': 'image_3',
+    'f-image-4': 'image_4',
+    'f-video-1': 'video_1',
+    'f-video-2': 'video_2',
+    'f-user-manual': 'user_manual',
+    'f-spec-warranty': 'spec_warranty',
+    'f-spec-support': 'spec_support',
+    'f-spec-material': 'spec_material',
+    'f-spec-voltage': 'spec_voltage',
+    'f-spec-dimension': 'spec_dimension',
+    'f-display-rating': 'display_rating',
+    'f-display-reviews-count': 'display_reviews_count',
+    'f-display-bought-month': 'display_bought_month',
+    'f-sale-price': 'sale_price',
+    'f-discounted-price': 'discounted_price',
+    'f-before-price': 'before_price',
+    'f-install-price': 'installation_price',
+    'f-dealer-price': 'dealer_price',
+    'f-override-rating': 'override_rating',
+    'f-show-on-ecommerce': 'show_on_ecommerce',
+    'f-count-inventory': 'count_inventory',
+    'f-show-features': 'show_features',
+    'f-show-specs': 'show_specs',
+    'f-tags': 'tags',
+    'f-related': 'related_skus'
+  };
+
+  function updateBatchEditUI() {
+    const btn = document.getElementById('btn-batch-edit');
+    const countEl = document.getElementById('batch-edit-count');
+    if (btn && countEl) {
+      const count = selectedProductIds.length;
+      countEl.textContent = count;
+      btn.disabled = (count === 0);
+    }
+
+    const thSelectAll = document.getElementById('th-select-all');
+    if (thSelectAll) {
+      const visibleIds = filtered.map(p => p.id);
+      const selectedVisible = visibleIds.filter(id => selectedProductIds.includes(id));
+      if (selectedVisible.length === 0) {
+        thSelectAll.checked = false;
+        thSelectAll.indeterminate = false;
+      } else if (selectedVisible.length === visibleIds.length) {
+        thSelectAll.checked = true;
+        thSelectAll.indeterminate = false;
+      } else {
+        thSelectAll.checked = false;
+        thSelectAll.indeterminate = true;
+      }
+    }
+  }
+
   function renderTable() {
     const tbody = document.getElementById('products-body');
     if (filtered.length === 0) {
@@ -1212,6 +1301,14 @@
       const isChild = !!p.parent_sku;
       const hasPage = p.show_on_ecommerce !== false;
 
+      let parentExists = true;
+      if (p.parent_sku) {
+        parentExists = allProducts.some(x => x.sku && x.sku.toLowerCase() === p.parent_sku.toLowerCase());
+      }
+      const parentWarningHtml = (!parentExists && p.parent_sku)
+        ? `<span style="color:var(--danger); font-weight:bold; cursor:help; margin-left:0.25rem;" title="Parent SKU '${esc(p.parent_sku)}' does not exist!">❓</span>`
+        : '';
+
       const titleHtml = hasPage 
         ? `<a href="https://www.brightkeysolutions.com/products/${esc(p.slug)}" target="_blank" style="color:var(--cyan);text-decoration:none;font-weight:600;display:inline-flex;align-items:center;gap:0.25rem;">${esc(p.title || '—')} <svg style="width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:2;" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg></a>`
         : `<span style="color:var(--text-primary);font-weight:500;" title="This product has no public page on ecommerce">${esc(p.title || '—')} <span style="font-size:0.7rem;color:var(--text-muted);font-weight:normal;margin-left:0.25rem;">(Hidden)</span></span>`;
@@ -1219,7 +1316,8 @@
       const uploadedDate = p.created_at ? new Date(p.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
 
       return `<tr class="${isChild ? 'row-child' : ''}">
-        <td class="cell-sku"><span class="sku-badge">${esc(p.sku || 'NO-SKU')}</span></td>
+        <td style="text-align: center; vertical-align: middle;"><input type="checkbox" class="row-checkbox" data-id="${p.id}" style="cursor: pointer;" ${selectedProductIds.includes(p.id) ? 'checked' : ''} /></td>
+        <td class="cell-sku"><span class="sku-badge">${esc(p.sku || 'NO-SKU')}</span>${parentWarningHtml}</td>
         <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${titleHtml}</td>
         <td><span class="biz-badge ${bizClass}">${esc(biz)}</span></td>
         <td>${esc(p.category || '—')}</td>
@@ -1240,40 +1338,13 @@
         </td>
       </tr>`;
     }).join('');
+
+    updateBatchEditUI();
   }
 
-  // ─────────────────────────────────────────────────────
-  // Drawer: Open / Close
-  // ─────────────────────────────────────────────────────
-  function updateDrawerNavigation() {
-    const prevBtn = document.getElementById('drawer-prev');
-    const nextBtn = document.getElementById('drawer-next');
-    const titleEl = document.getElementById('drawer-title');
-
-    if (!editingId) {
-      titleEl.textContent = 'Add Product';
-      if (prevBtn) prevBtn.style.display = 'none';
-      if (nextBtn) nextBtn.style.display = 'none';
-      return;
-    }
-
-    const currentIndex = filtered.findIndex(x => x.id === editingId);
-    const p = allProducts.find(x => x.id === editingId);
-    titleEl.textContent = p ? (p.sku || 'Edit Product') : 'Edit Product';
-
-    if (prevBtn) {
-      prevBtn.style.display = 'flex';
-      prevBtn.disabled = (currentIndex <= 0);
-    }
-    if (nextBtn) {
-      nextBtn.style.display = 'flex';
-      nextBtn.disabled = (currentIndex === -1 || currentIndex >= filtered.length - 1);
-    }
-  }
-
-  function openDrawerAdd() {
-    editingId = null;
-    editingFeatureId = null;
+  // ────────────  function openDrawerAdd() {
+    isBatchEditing = false;
+    touchedFields.clear();
     clearForm();
     updateDrawerNavigation();
     document.getElementById('drawer-status').textContent = '';
@@ -1283,8 +1354,8 @@
   }
 
   async function openDrawerEdit(id) {
-    editingId = id;
-    editingFeatureId = null;
+    isBatchEditing = false;
+    touchedFields.clear();
     clearForm();
     
     const p = allProducts.find(x => x.id === id);
@@ -1307,6 +1378,227 @@
       }
     }
     document.getElementById('drawer-status').textContent = '';
+  }
+
+  async function openDrawerBatchEdit() {
+    isBatchEditing = true;
+    touchedFields.clear();
+    clearForm();
+
+    const titleEl = document.getElementById('drawer-title');
+    titleEl.textContent = `Batch Edit (${selectedProductIds.length} Products)`;
+
+    const prevBtn = document.getElementById('drawer-prev');
+    const nextBtn = document.getElementById('drawer-next');
+    if (prevBtn) prevBtn.style.display = 'none';
+    if (nextBtn) nextBtn.style.display = 'none';
+
+    const skuInp = document.getElementById('f-sku');
+    const slugInp = document.getElementById('f-slug');
+    if (skuInp) {
+      skuInp.disabled = true;
+      skuInp.placeholder = '(not editable in batch)';
+    }
+    if (slugInp) {
+      slugInp.disabled = true;
+      slugInp.placeholder = '(not editable in batch)';
+    }
+
+    const selectedProducts = allProducts.filter(p => selectedProductIds.includes(p.id));
+
+    const fields = [
+      { id: 'f-title', key: 'title', type: 'text' },
+      { id: 'f-description', key: 'description', type: 'textarea' },
+      { id: 'f-business', key: 'business', type: 'select' },
+      { id: 'f-category', key: 'category', type: 'text' },
+      { id: 'f-status', key: 'status', type: 'select' },
+      { id: 'f-parent-sku', key: 'parent_sku', type: 'text' },
+      { id: 'f-variant-name', key: 'variant_name', type: 'text' },
+      { id: 'f-variant-value', key: 'variant_value', type: 'text' },
+      { id: 'f-image-main', key: 'image_main', type: 'text' },
+      { id: 'f-image-1', key: 'image_1', type: 'text' },
+      { id: 'f-image-2', key: 'image_2', type: 'text' },
+      { id: 'f-image-3', key: 'image_3', type: 'text' },
+      { id: 'f-image-4', key: 'image_4', type: 'text' },
+      { id: 'f-video-1', key: 'video_1', type: 'text' },
+      { id: 'f-video-2', key: 'video_2', type: 'text' },
+      { id: 'f-user-manual', key: 'user_manual', type: 'text' },
+      { id: 'f-spec-warranty', key: 'spec_warranty', type: 'text' },
+      { id: 'f-spec-support', key: 'spec_support', type: 'text' },
+      { id: 'f-spec-material', key: 'spec_material', type: 'text' },
+      { id: 'f-spec-voltage', key: 'spec_voltage', type: 'text' },
+      { id: 'f-spec-dimension', key: 'spec_dimension', type: 'text' },
+      { id: 'f-display-rating', key: 'display_rating', type: 'number' },
+      { id: 'f-display-reviews-count', key: 'display_reviews_count', type: 'number' },
+      { id: 'f-display-bought-month', key: 'display_bought_month', type: 'text' }
+    ];
+
+    fields.forEach(f => {
+      const el = document.getElementById(f.id);
+      if (!el) return;
+
+      const values = selectedProducts.map(p => p[f.key]);
+      const uniqueValues = [...new Set(values)];
+
+      if (uniqueValues.length === 1) {
+        const val = uniqueValues[0];
+        if (f.type === 'select') {
+          el.value = val || '';
+        } else {
+          el.value = val !== null && val !== undefined ? val : '';
+        }
+        el.classList.remove('mixed-value');
+      } else {
+        el.classList.add('mixed-value');
+        if (f.type === 'select') {
+          let mixedOpt = el.querySelector('option[value="__mixed"]');
+          if (!mixedOpt) {
+            mixedOpt = document.createElement('option');
+            mixedOpt.value = '__mixed';
+            mixedOpt.disabled = true;
+            mixedOpt.style.fontStyle = 'italic';
+            mixedOpt.style.color = 'var(--text-muted)';
+            mixedOpt.textContent = '(mixed)';
+            el.appendChild(mixedOpt);
+          }
+          el.value = '__mixed';
+        } else {
+          el.value = '(mixed)';
+        }
+      }
+    });
+
+    const priceFields = [
+      { id: 'f-sale-price', key: 'sale_price' },
+      { id: 'f-discounted-price', key: 'discounted_price' },
+      { id: 'f-before-price', key: 'before_price' },
+      { id: 'f-install-price', key: 'installation_price' },
+      { id: 'f-dealer-price', key: 'dealer_price' }
+    ];
+
+    priceFields.forEach(f => {
+      const el = document.getElementById(f.id);
+      if (!el) return;
+
+      const values = selectedProducts.map(p => p[f.key]);
+      const uniqueValues = [...new Set(values.map(v => v === null || v === undefined ? '' : String(v)))];
+
+      if (uniqueValues.length === 1) {
+        const val = uniqueValues[0];
+        el.value = val ? fmtPriceInput(parseFloat(val)) : '';
+        el.classList.remove('mixed-value');
+      } else {
+        el.value = '(mixed)';
+        el.classList.add('mixed-value');
+      }
+    });
+
+    const toggles = [
+      { id: 'f-override-rating', key: 'override_rating' },
+      { id: 'f-show-on-ecommerce', key: 'show_on_ecommerce' },
+      { id: 'f-count-inventory', key: 'count_inventory' },
+      { id: 'f-show-features', key: 'show_features' },
+      { id: 'f-show-specs', key: 'show_specs' }
+    ];
+
+    toggles.forEach(t => {
+      const el = document.getElementById(t.id);
+      if (!el) return;
+
+      const values = selectedProducts.map(p => p[t.key] !== false);
+      const uniqueValues = [...new Set(values)];
+
+      if (uniqueValues.length === 1) {
+        el.checked = uniqueValues[0];
+        el.indeterminate = false;
+      } else {
+        el.checked = false;
+        el.indeterminate = true;
+      }
+    });
+
+    const arrayFields = [
+      { id: 'f-tags', key: 'tags' },
+      { id: 'f-related', key: 'related_skus' }
+    ];
+
+    arrayFields.forEach(af => {
+      const el = document.getElementById(af.id);
+      if (!el) return;
+
+      const stringifiedArrays = selectedProducts.map(p => JSON.stringify((p[af.key] || []).map(s => s.toLowerCase()).sort()));
+      const uniqueArrays = [...new Set(stringifiedArrays)];
+
+      if (uniqueArrays.length === 1) {
+        const arr = JSON.parse(uniqueArrays[0]);
+        el.value = arr.join(', ');
+      } else {
+        el.value = '(mixed)';
+      }
+    });
+
+    const promoCheckboxes = document.querySelectorAll('.promo-tag-checkbox');
+    promoCheckboxes.forEach(cb => {
+      const tagVal = cb.value;
+      const counts = selectedProducts.filter(p => (p.promo_tags || []).includes(tagVal)).length;
+      if (counts === 0) {
+        cb.checked = false;
+        cb.indeterminate = false;
+      } else if (counts === selectedProducts.length) {
+        cb.checked = true;
+        cb.indeterminate = false;
+      } else {
+        cb.checked = false;
+        cb.indeterminate = true;
+      }
+    });
+
+    updateMediaPreviews();
+    updatePricePreview();
+    updateStatusSelectStyle();
+
+    const bizValues = selectedProducts.map(p => p.business);
+    const uniqueBiz = [...new Set(bizValues)];
+    if (uniqueBiz.length === 1 && uniqueBiz[0] && FEATURE_DEFS[uniqueBiz[0]]) {
+      const business = uniqueBiz[0];
+      const featureDef = FEATURE_DEFS[business];
+      renderFeaturesTab(business);
+
+      document.getElementById('drawer-status').textContent = 'Loading features…';
+      try {
+        const { data: featsData } = await sbClient.from(featureDef.table).select('*').in('product_id', selectedProductIds);
+        if (featsData && featsData.length > 0) {
+          featureDef.features.forEach(f => {
+            const vals = selectedProducts.map(p => {
+              const fRow = featsData.find(fd => fd.product_id === p.id);
+              return fRow ? (fRow[f.col] || '') : '';
+            });
+            const uniqueVals = [...new Set(vals)];
+            const el = document.getElementById(`feat-${f.col}`);
+            if (el) {
+              if (uniqueVals.length === 1) {
+                el.value = uniqueVals[0];
+                el.classList.remove('mixed-value');
+                updateFeatureRow(f.col, el.value);
+              } else {
+                el.value = '(mixed)';
+                el.classList.add('mixed-value');
+                updateFeatureRow(f.col, '(mixed)');
+              }
+            }
+          });
+        }
+      } catch (err) {
+        console.error('Failed to load batch features:', err);
+      }
+    } else {
+      renderFeaturesTab('');
+    }
+
+    document.getElementById('drawer-status').textContent = '';
+    switchTab('basic');
+    document.getElementById('product-drawer').classList.add('open');
+    document.getElementById('drawer-overlay').classList.add('open');
   }
 
   function closeDrawer() {
@@ -1343,26 +1635,60 @@
      'f-image-main','f-image-1','f-image-2','f-image-3','f-image-4','f-video-1','f-video-2',
      'f-spec-warranty','f-spec-support','f-spec-material','f-spec-voltage','f-spec-dimension',
      'f-display-rating', 'f-display-reviews-count', 'f-display-bought-month'
-    ].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
-    document.getElementById('f-override-rating').checked = false;
+    ].forEach(id => { 
+      const el = document.getElementById(id); 
+      if(el) {
+        el.value = '';
+        el.classList.remove('mixed-value');
+      }
+    });
+
+    const skuInp = document.getElementById('f-sku');
+    if (skuInp) {
+      skuInp.disabled = false;
+      skuInp.placeholder = 'e.g. A04';
+    }
+    const slugInp = document.getElementById('f-slug');
+    if (slugInp) {
+      slugInp.disabled = false;
+      slugInp.placeholder = 'e.g. a04';
+    }
+
+    document.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+      cb.checked = false;
+      cb.indeterminate = false;
+    });
+
     document.getElementById('f-show-on-ecommerce').checked = true;
     document.getElementById('f-count-inventory').checked = true;
     document.getElementById('f-show-features').checked = true;
     document.getElementById('f-show-specs').checked = true;
     document.getElementById('f-business').value = '';
     document.getElementById('f-status').value = 'draft';
+    document.getElementById('f-status').classList.remove('mixed-value');
+    document.getElementById('f-business').classList.remove('mixed-value');
+    
+    // Remove temporary mixed option if any
+    document.querySelectorAll('option[value="__mixed"]').forEach(opt => opt.remove());
+
     updateStatusSelectStyle();
     ['f-sale-price','f-discounted-price','f-before-price','f-install-price','f-dealer-price'].forEach(id => {
-       document.getElementById(id).value = '';
+       const el = document.getElementById(id);
+       if (el) {
+         el.value = '';
+         el.classList.remove('mixed-value');
+       }
     });
-    // Reset promo tag checkboxes
-    document.querySelectorAll('.promo-tag-checkbox').forEach(cb => cb.checked = false);
-    
+    const parentInp = document.getElementById('f-parent-sku');
+    if (parentInp) {
+      parentInp.style.borderColor = '';
+      parentInp.style.boxShadow = '';
+    }
+
     updatePricePreview();
     updateMediaPreviews();
     document.getElementById('aplus-blocks-container').innerHTML = '';
 
-    // Clear Comparison Table
     document.getElementById('comp-title-header').value = '';
     document.getElementById('comp-sku-1').value = '';
     document.getElementById('comp-sku-2').value = '';
@@ -1372,7 +1698,6 @@
       updateComparisonFields(editorEl);
     }
     
-    renderFeaturesTab('');
   }
 
   function fillForm(p) {
@@ -1411,6 +1736,19 @@
     document.getElementById('f-business').value = p.business || '';
     document.getElementById('f-status').value = p.status || 'draft';
     updateStatusSelectStyle();
+
+    // Highlight parent SKU field if missing
+    const parentExists = !p.parent_sku || allProducts.some(x => x.sku && x.sku.toLowerCase() === p.parent_sku.toLowerCase());
+    const parentInp = document.getElementById('f-parent-sku');
+    if (parentInp) {
+      if (!parentExists) {
+        parentInp.style.borderColor = 'var(--danger)';
+        parentInp.style.boxShadow = '0 0 0 3px rgba(220, 38, 38, 0.15)';
+      } else {
+        parentInp.style.borderColor = '';
+        parentInp.style.boxShadow = '';
+      }
+    }
     document.getElementById('f-sale-price').value = fmtPriceInput(p.sale_price);
     document.getElementById('f-discounted-price').value = fmtPriceInput(p.discounted_price);
     document.getElementById('f-before-price').value = fmtPriceInput(p.before_price);
@@ -1844,7 +2182,56 @@
     try {
       const payload = collectForm();
 
-      // Validate
+      if (isBatchEditing) {
+        if (touchedFields.size === 0) {
+          toast('No changes detected to save.', 'info');
+          closeDrawer();
+          isBatchEditing = false;
+          return;
+        }
+
+        const updatePayload = {};
+        touchedFields.forEach(fieldId => {
+          const key = fieldMapping[fieldId];
+          if (key && key !== 'sku' && key !== 'slug') {
+            updatePayload[key] = payload[key];
+          }
+        });
+
+        if (Object.keys(updatePayload).length > 0) {
+          const { error } = await sbClient.from('products').update(updatePayload).in('id', selectedProductIds);
+          if (error) throw error;
+        }
+
+        // Save features if edited in batch
+        if (touchedFields.has('features')) {
+          const business = document.getElementById('f-business').value;
+          const featureDef = FEATURE_DEFS[business];
+          if (featureDef) {
+            const featData = collectFeatures(business);
+            for (const productId of selectedProductIds) {
+              const { data: existing } = await sbClient.from(featureDef.table).select('id').eq('product_id', productId).single();
+              if (existing) {
+                await sbClient.from(featureDef.table).update(featData).eq('id', existing.id);
+              } else {
+                await sbClient.from(featureDef.table).insert({ ...featData, product_id: productId });
+              }
+            }
+          }
+        }
+
+        toast(`Updated ${selectedProductIds.length} products successfully!`, 'success');
+        selectedProductIds = [];
+        const thSelectAll = document.getElementById('th-select-all');
+        if (thSelectAll) thSelectAll.checked = false;
+        
+        await fetchProducts();
+        closeDrawer();
+        isBatchEditing = false;
+        return;
+      }
+
+      // Validate single product fields
       if (!payload.sku) throw new Error('SKU is required.');
       if (!payload.title) throw new Error('Title is required.');
       if (!payload.business) throw new Error('Business type is required.');
@@ -1970,7 +2357,14 @@
     originalInput.parentNode.insertBefore(container, originalInput);
 
     // Click container to focus text input
-    container.addEventListener('click', () => textInput.focus());
+    container.addEventListener('click', () => {
+      if (tags.length === 1 && (tags[0] === '(mixed)' || tags[0] === '(mixed values)')) {
+        tags = [];
+        updateTagsUI();
+        triggerOriginalChange();
+      }
+      textInput.focus();
+    });
 
     let tags = [];
 
@@ -1980,6 +2374,10 @@
         const pill = document.createElement('span');
         pill.className = 'tag-badge';
         pill.textContent = tag;
+        if (tag === '(mixed)' || tag === '(mixed values)') {
+          pill.style.fontStyle = 'italic';
+          pill.style.color = 'var(--text-muted)';
+        }
 
         const closeBtn = document.createElement('button');
         closeBtn.type = 'button';
@@ -1990,7 +2388,9 @@
           removeTag(idx);
         };
 
-        pill.appendChild(closeBtn);
+        if (tag !== '(mixed)' && tag !== '(mixed values)') {
+          pill.appendChild(closeBtn);
+        }
         tagsWrapper.appendChild(pill);
       });
       
@@ -2032,9 +2432,13 @@
         return tags.join(', ');
       },
       set(val) {
-        // Parse CSV string and load tags
-        const values = val ? val.split(',').map(s => s.trim().toUpperCase()).filter(Boolean) : [];
-        tags = [...new Set(values)]; // unique tags
+        if (val === '(mixed)' || val === '(mixed values)') {
+          tags = ['(mixed)'];
+        } else {
+          // Parse CSV string and load tags
+          const values = val ? val.split(',').map(s => s.trim().toUpperCase()).filter(Boolean) : [];
+          tags = [...new Set(values)]; // unique tags
+        }
         updateTagsUI();
       },
       configurable: true
@@ -2112,6 +2516,11 @@
     originalInput.parentNode.insertBefore(container, originalInput);
 
     container.addEventListener('click', (e) => {
+      if (tags.length === 1 && (tags[0] === '(mixed)' || tags[0] === '(mixed values)')) {
+        tags = [];
+        updateTagsUI();
+        triggerOriginalChange();
+      }
       if (e.target !== suggBox && !suggBox.contains(e.target)) {
         textInput.focus();
       }
@@ -2125,6 +2534,10 @@
         const pill = document.createElement('span');
         pill.className = 'tag-badge';
         pill.textContent = tag.toLowerCase();
+        if (tag === '(mixed)' || tag === '(mixed values)') {
+          pill.style.fontStyle = 'italic';
+          pill.style.color = 'var(--text-muted)';
+        }
 
         const closeBtn = document.createElement('button');
         closeBtn.type = 'button';
@@ -2135,7 +2548,9 @@
           removeTag(idx);
         };
 
-        pill.appendChild(closeBtn);
+        if (tag !== '(mixed)' && tag !== '(mixed values)') {
+          pill.appendChild(closeBtn);
+        }
         tagsWrapper.appendChild(pill);
       });
 
@@ -2175,8 +2590,12 @@
         return tags.join(', ');
       },
       set(val) {
-        const values = val ? val.split(',').map(s => s.trim().toLowerCase()).filter(Boolean) : [];
-        tags = [...new Set(values)];
+        if (val === '(mixed)' || val === '(mixed values)') {
+          tags = ['(mixed)'];
+        } else {
+          const values = val ? val.split(',').map(s => s.trim().toLowerCase()).filter(Boolean) : [];
+          tags = [...new Set(values)];
+        }
         updateTagsUI();
       },
       configurable: true
@@ -2379,11 +2798,109 @@
     initRelatedSkusTagInput();
     initTagsInput();
 
+    document.getElementById('btn-batch-edit').addEventListener('click', openDrawerBatchEdit);
+
+    const productsBody = document.getElementById('products-body');
+    if (productsBody) {
+      productsBody.addEventListener('change', (e) => {
+        if (e.target.classList.contains('row-checkbox')) {
+          const id = e.target.dataset.id;
+          if (e.target.checked) {
+            if (!selectedProductIds.includes(id)) selectedProductIds.push(id);
+          } else {
+            selectedProductIds = selectedProductIds.filter(x => x !== id);
+          }
+          updateBatchEditUI();
+        }
+      });
+    }
+
+    const thSelectAll = document.getElementById('th-select-all');
+    if (thSelectAll) {
+      thSelectAll.addEventListener('change', (e) => {
+        const checked = e.target.checked;
+        const visibleIds = filtered.map(p => p.id);
+        if (checked) {
+          visibleIds.forEach(id => {
+            if (!selectedProductIds.includes(id)) selectedProductIds.push(id);
+          });
+        } else {
+          selectedProductIds = selectedProductIds.filter(id => !visibleIds.includes(id));
+        }
+        document.querySelectorAll('.row-checkbox').forEach(cb => {
+          cb.checked = checked;
+        });
+        updateBatchEditUI();
+      });
+    }
+
+    // Set up listeners to track touched fields for batch saving
+    const inputsToTrack = [
+      '.form-input', '.form-select', '.form-textarea', '.promo-tag-checkbox',
+      '#f-override-rating', '#f-show-on-ecommerce', '#f-count-inventory',
+      '#f-show-features', '#f-show-specs'
+    ].join(', ');
+
+    document.querySelectorAll(inputsToTrack).forEach(el => {
+      const handleEvent = () => {
+        if (!isBatchEditing) return;
+        el.classList.remove('mixed-value');
+        if (el.classList.contains('promo-tag-checkbox')) {
+          touchedFields.add('promo_tags');
+        } else if (el.id.startsWith('comp-')) {
+          touchedFields.add('comparison_table');
+        } else {
+          touchedFields.add(el.id);
+        }
+      };
+      el.addEventListener('change', handleEvent);
+      el.addEventListener('input', handleEvent);
+      el.addEventListener('focus', () => {
+        if (isBatchEditing && el.classList.contains('mixed-value')) {
+          if (el.value === '(mixed)' || el.value === '(mixed values)') {
+            el.value = '';
+            el.classList.remove('mixed-value');
+          }
+        }
+      });
+    });
+
+    // Also track features input events globally
+    document.getElementById('features-grid')?.addEventListener('input', (e) => {
+      if (isBatchEditing && e.target.classList.contains('feature-input')) {
+        e.target.classList.remove('mixed-value');
+        touchedFields.add('features');
+      }
+    });
+
+    // Also track A+ content tab additions and edits
+    document.getElementById('btn-add-aplus-block')?.addEventListener('click', () => {
+      if (isBatchEditing) touchedFields.add('aplus_content');
+    });
+    document.getElementById('aplus-blocks-container')?.addEventListener('input', () => {
+      if (isBatchEditing) touchedFields.add('aplus_content');
+    });
+    document.getElementById('aplus-blocks-container')?.addEventListener('change', () => {
+      if (isBatchEditing) touchedFields.add('aplus_content');
+    });
+
     document.getElementById('btn-add').addEventListener('click', openDrawerAdd);
     document.getElementById('btn-publish').addEventListener('click', publishSite);
     document.getElementById('drawer-close').addEventListener('click', closeDrawer);
     document.getElementById('drawer-cancel').addEventListener('click', closeDrawer);
     document.getElementById('f-status').addEventListener('change', updateStatusSelectStyle);
+
+    document.getElementById('f-parent-sku').addEventListener('input', (e) => {
+      const val = e.target.value.trim();
+      const exists = !val || allProducts.some(x => x.sku && x.sku.toLowerCase() === val.toLowerCase());
+      if (exists) {
+        e.target.style.borderColor = '';
+        e.target.style.boxShadow = '';
+      } else {
+        e.target.style.borderColor = 'var(--danger)';
+        e.target.style.boxShadow = '0 0 0 3px rgba(220, 38, 38, 0.15)';
+      }
+    });
 
     document.getElementById('drawer-prev').addEventListener('click', () => {
       if (!editingId) return;
