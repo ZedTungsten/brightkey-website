@@ -391,8 +391,8 @@
     }
 
     /* Separator line between Available and other counts */
-    .tally-table th:nth-child(5),
-    .tally-table td:nth-child(5) {
+    .tally-table th:nth-child(6),
+    .tally-table td:nth-child(6) {
       border-left: 1.5px solid var(--border);
       padding-left: 1.5rem;
     }
@@ -456,14 +456,27 @@
             <div class="panel">
               <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center;">
                 <span>Warehouse Tally</span>
-                <div style="display: flex; align-items: center; gap: 0.5rem; text-transform: none; font-weight: normal; font-size: 0.82rem;">
-                  <span style="color: var(--text-muted); font-size: 0.75rem; font-weight: 600; text-transform: uppercase;">Date Range:</span>
-                  <select id="date-range-select" class="form-select" style="width: auto; padding: 0.25rem 2rem 0.25rem 0.75rem; font-size: 0.82rem; height: 30px; border-radius: 6px;" onchange="handleDateRangeChange()">
-                    <option value="7" selected>7 Days</option>
-                    <option value="14">14 Days</option>
-                    <option value="30">30 Days</option>
-                    <option value="60">60 Days</option>
-                  </select>
+                <div style="display: flex; align-items: center; gap: 1rem; text-transform: none; font-weight: normal; font-size: 0.82rem;">
+                  <!-- Category Dropdown Container -->
+                  <div class="dropdown" id="category-dropdown-container" style="position: relative;">
+                    <button type="button" class="btn btn-outline" style="height: 30px; padding: 0.25rem 0.75rem; font-size: 0.82rem; display: inline-flex; align-items: center; gap: 0.35rem;" onclick="toggleCategoryDropdown(event)">
+                      Categories
+                      <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: middle;"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    </button>
+                    <div id="category-dropdown-menu" style="display: none; position: absolute; top: 34px; right: 0; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); padding: 0.5rem; min-width: 180px; z-index: 1000; max-height: 250px; overflow-y: auto;">
+                      <!-- Checkboxes dynamically generated here -->
+                    </div>
+                  </div>
+
+                  <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    <span style="color: var(--text-muted); font-size: 0.75rem; font-weight: 600; text-transform: uppercase;">Date Range:</span>
+                    <select id="date-range-select" class="form-select" style="width: auto; padding: 0.25rem 2rem 0.25rem 0.75rem; font-size: 0.82rem; height: 30px; border-radius: 6px;" onchange="handleDateRangeChange()">
+                      <option value="7" selected>7 Days</option>
+                      <option value="14">14 Days</option>
+                      <option value="30">30 Days</option>
+                      <option value="60">60 Days</option>
+                    </select>
+                  </div>
                 </div>
               </div>
               <table class="ledger-table tally-table">
@@ -471,6 +484,7 @@
                   <tr>
                     <th class="sortable" onclick="handleSort('sku')">SKU <span id="sort-icon-sku"></span></th>
                     <th class="sortable" onclick="handleSort('title')">Product Title <span id="sort-icon-title"></span></th>
+                    <th class="sortable" onclick="handleSort('category')">Category <span id="sort-icon-category"></span></th>
                     <th class="sortable" onclick="handleSort('business')">Business <span id="sort-icon-business"></span></th>
                     <th class="sortable" onclick="handleSort('available')" style="color:var(--success);">Available <span id="sort-icon-available"></span></th>
                     <th class="sortable" onclick="handleSort('reserved')" style="color:var(--warning);">Reserved <span id="sort-icon-reserved"></span></th>
@@ -481,7 +495,7 @@
                   </tr>
                 </thead>
                 <tbody id="inventory-list">
-                  <tr><td colspan="9" class="text-center">Loading stock snapshot...</td></tr>
+                  <tr><td colspan="10" class="text-center">Loading stock snapshot...</td></tr>
                 </tbody>
               </table>
             </div>
@@ -785,15 +799,16 @@
     }
 
     function showLoadingState() {
-      const loading = `<tr><td colspan="9" class="text-center">Syncing and loading ledger data...</td></tr>`;
+      const loading = `<tr><td colspan="10" class="text-center">Syncing and loading ledger data...</td></tr>`;
       document.getElementById('inventory-list').innerHTML = loading;
     }
 
     async function loadCoreData() {
-      // 1. Fetch products (with image_main and dealer_price columns)
-      const { data: pData, error: pErr } = await sb.from('products').select('sku, title, business, image_main, dealer_price').order('sku');
+      // 1. Fetch products (with image_main, category, and dealer_price columns)
+      const { data: pData, error: pErr } = await sb.from('products').select('sku, title, category, business, image_main, dealer_price').order('sku');
       if (pErr) throw pErr;
       allProducts = pData || [];
+      populateCategoryFilter();
     }
 
     async function refreshDashboard() {
@@ -915,9 +930,65 @@
 
     let sortCol = 'sku';
     let sortDir = 'asc';
+    let selectedCategories = new Set();
+    let uniqueCategories = [];
+
+    function populateCategoryFilter() {
+      const cats = new Set();
+      allProducts.forEach(p => {
+        cats.add(p.category || '');
+      });
+      uniqueCategories = Array.from(cats).sort();
+
+      const menu = document.getElementById('category-dropdown-menu');
+      if (!menu) return;
+
+      // Initialize all categories as selected on first load
+      if (selectedCategories.size === 0) {
+        uniqueCategories.forEach(cat => selectedCategories.add(cat));
+      }
+
+      menu.innerHTML = uniqueCategories.map(cat => {
+        const displayLabel = cat ? cat.replace(/_/g, ' ') : '(No Category)';
+        const checked = selectedCategories.has(cat) ? 'checked' : '';
+        return `
+          <label style="display: flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0.5rem; font-size: 0.82rem; cursor: pointer; color: var(--text-secondary); user-select: none;">
+            <input type="checkbox" value="${cat}" ${checked} onchange="handleCategoryCheckboxChange(this)" style="cursor: pointer;" />
+            <span style="text-transform: capitalize;">${displayLabel}</span>
+          </label>
+        `;
+      }).join('');
+    }
+
+    window.toggleCategoryDropdown = function(event) {
+      event.stopPropagation();
+      const menu = document.getElementById('category-dropdown-menu');
+      if (!menu) return;
+      const isOpen = menu.style.display === 'block';
+      menu.style.display = isOpen ? 'none' : 'block';
+    };
+
+    window.handleCategoryCheckboxChange = function(cb) {
+      const cat = cb.value;
+      if (cb.checked) {
+        selectedCategories.add(cat);
+      } else {
+        selectedCategories.delete(cat);
+      }
+      renderInventorySummary();
+    };
+
+    // Close dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+      const container = document.getElementById('category-dropdown-container');
+      const menu = document.getElementById('category-dropdown-menu');
+      if (menu && container && !container.contains(e.target)) {
+        menu.style.display = 'none';
+      }
+    });
 
     function updateSortIndicators() {
-      const cols = ['sku', 'title', 'business', 'available', 'reserved', 'packed', 'dispatched', 'returned', 'cancelled'];
+      const cols = ['sku', 'title', 'category', 'business', 'available', 'reserved', 'packed', 'dispatched', 'returned', 'cancelled'];
       cols.forEach(col => {
         const span = document.getElementById(`sort-icon-${col}`);
         if (!span) return;
@@ -951,7 +1022,19 @@
       tbody.innerHTML = '';
 
       if (allProducts.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="9" class="text-center">No products found in database.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="10" class="text-center">No products found in database.</td></tr>`;
+        return;
+      }
+
+      // Filter products by selected categories
+      const filteredProducts = allProducts.filter(p => {
+        const cat = p.category || '';
+        return selectedCategories.has(cat);
+      });
+
+      if (filteredProducts.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="10" class="text-center">No products match the selected categories.</td></tr>`;
+        updateSortIndicators();
         return;
       }
 
@@ -986,7 +1069,7 @@
       });
 
       // Sort
-      const sortedProducts = [...allProducts].sort((a, b) => {
+      const sortedProducts = [...filteredProducts].sort((a, b) => {
         let valA, valB;
         if (sortCol === 'sku') {
           valA = a.sku || '';
@@ -994,6 +1077,9 @@
         } else if (sortCol === 'title') {
           valA = a.title || '';
           valB = b.title || '';
+        } else if (sortCol === 'category') {
+          valA = a.category || '';
+          valB = b.category || '';
         } else if (sortCol === 'business') {
           valA = a.business || '';
           valB = b.business || '';
@@ -1021,6 +1107,7 @@
           <tr>
             <td><strong>${p.sku}</strong></td>
             <td>${p.title}</td>
+            <td><span class="badge-status dispatched" style="font-size: 0.72rem; padding: 0.15rem 0.4rem; background: var(--bg-elevated); border: 1px solid var(--border); text-transform: capitalize;">${(p.category || '—').replace(/_/g, ' ')}</span></td>
             <td><span class="badge-status dispatched" style="font-size: 0.72rem; padding: 0.15rem 0.4rem; background: var(--bg-elevated); border: 1px solid var(--border);">${p.business.replace(/_/g, ' ')}</span></td>
             <td style="color:var(--success); font-weight:700;">${baseInv.available}</td>
             <td style="color:var(--warning); font-weight:600;">${fInv.reserved}</td>
