@@ -79,3 +79,40 @@ function closeDrawer() {
   if (ts) requestAnimationFrame(() => { ts.scrollTop = savedScroll; });
 }
 ```
+
+---
+
+## 8. Fixed/Positioned Overlay Elements Must Not Block Pointer Events
+
+**Rule: Any `position: fixed` or `position: absolute` element that is always present in the DOM (e.g. toast containers, notification wrappers, badge overlays) MUST have `pointer-events: none`.**
+
+**Why:** Even visually empty fixed elements intercept mouse events — including scroll gestures (especially on macOS trackpad) and hover detection — across whatever area of the viewport they occupy. At high `z-index` values, this silently breaks scrolling and `:hover` on everything underneath, which is extremely hard to debug.
+
+**Always do this for persistent overlay containers:**
+```css
+#toast-container,
+.notification-wrapper,
+.overlay-badge-container {
+  pointer-events: none; /* container never blocks interaction */
+}
+
+/* Individual interactive children re-enable as needed */
+.toast.clickable,
+.notification-item {
+  pointer-events: auto;
+}
+```
+
+**What NOT to do:**
+```css
+/* ❌ This container sits at z-index: 99999 fixed on the page */
+/* ❌ Even when empty, it can block scroll/hover on elements below */
+#toast-container {
+  position: fixed;
+  top: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 99999;
+  /* missing pointer-events: none — OBSTRUCTIVE */
+}
+```
