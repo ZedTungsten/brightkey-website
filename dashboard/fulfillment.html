@@ -866,8 +866,8 @@
     }
 
     async function loadCoreData() {
-      // 1. Fetch products (with image_main, category, and dealer_price columns)
-      const { data: pData, error: pErr } = await sb.from('products').select('sku, title, category, business, image_main, dealer_price').order('sku');
+      // 1. Fetch products (with image_main, category, business, dealer_price, and count_inventory columns)
+      const { data: pData, error: pErr } = await sb.from('products').select('sku, title, category, business, image_main, dealer_price, count_inventory').order('sku');
       if (pErr) throw pErr;
       allProducts = pData || [];
       populateCategoryFilter();
@@ -952,6 +952,11 @@
           }
 
           for (const item of items) {
+            const prod = allProducts.find(x => x.sku === item.sku);
+            if (prod && prod.count_inventory === false) {
+              console.log(`Skipping inventory update for service/non-stocked item: ${item.sku}`);
+              continue;
+            }
             console.log(`Syncing reserved item: ${item.qty}x ${item.sku} for order ${orderNo}`);
             
             // Create transaction record
@@ -1192,18 +1197,26 @@
           availColor = 'var(--danger)'; // red
         }
 
+        const isStocked = p.count_inventory !== false;
+        const styleAvail = isStocked ? `color:${availColor}; font-weight:700;` : 'color:var(--text-muted) !important; opacity:0.4;';
+        const styleReserved = isStocked ? 'color:var(--warning); font-weight:600;' : 'color:var(--text-muted) !important; opacity:0.4;';
+        const stylePacked = isStocked ? 'color:var(--cyan-light); font-weight:600;' : 'color:var(--text-muted) !important; opacity:0.4;';
+        const styleDispatched = isStocked ? 'font-weight:600;' : 'color:var(--text-muted) !important; opacity:0.4;';
+        const styleReturned = isStocked ? 'color:var(--danger);' : 'color:var(--text-muted) !important; opacity:0.4;';
+        const styleCancelled = isStocked ? 'color:#4b5563;' : 'color:var(--text-muted) !important; opacity:0.4;';
+
         tbody.innerHTML += `
           <tr>
             <td><strong>${p.sku}</strong></td>
             <td>${p.title}</td>
             <td><span class="badge-status dispatched" style="font-size: 0.72rem; padding: 0.15rem 0.4rem; background: var(--bg-elevated); border: 1px solid var(--border); text-transform: capitalize;">${(p.category || '—').replace(/_/g, ' ')}</span></td>
             <td><span class="badge-status dispatched" style="font-size: 0.72rem; padding: 0.15rem 0.4rem; background: var(--bg-elevated); border: 1px solid var(--border);">${p.business.replace(/_/g, ' ')}</span></td>
-            <td style="color:${availColor}; font-weight:700;">${avail}</td>
-            <td style="color:var(--warning); font-weight:600;">${fInv.reserved}</td>
-            <td style="color:var(--cyan-light); font-weight:600;">${fInv.packed}</td>
-            <td style="font-weight:600;">${fInv.dispatched}</td>
-            <td style="color:var(--danger);">${fInv.returned}</td>
-            <td style="color:#4b5563;">${fInv.cancelled}</td>
+            <td style="${styleAvail}">${avail}</td>
+            <td style="${styleReserved}">${fInv.reserved}</td>
+            <td style="${stylePacked}">${fInv.packed}</td>
+            <td style="${styleDispatched}">${fInv.dispatched}</td>
+            <td style="${styleReturned}">${fInv.returned}</td>
+            <td style="${styleCancelled}">${fInv.cancelled}</td>
           </tr>
         `;
       });
