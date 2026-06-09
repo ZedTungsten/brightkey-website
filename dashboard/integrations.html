@@ -135,6 +135,39 @@
 
               <button class="btn btn-primary" id="btn-save" onclick="saveKeys()">Save Settings</button>
             </div>
+
+            <!-- Stripe Gateway Settings -->
+            <div class="card">
+              <div class="card-title">
+                <svg viewBox="0 0 24 24" style="width: 20px; height: 20px; fill: none; stroke: var(--cyan); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;"><rect x="2" y="4" width="20" height="16" rx="2" ry="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+                <span>Stripe Payment Gateway</span>
+              </div>
+              <p class="card-desc">
+                Configure your Stripe API credentials to accept payments from international customers. Your keys are stored securely under your tenant profile.
+              </p>
+
+              <div class="form-group">
+                <label class="form-label" for="stripe-public-key">Stripe Public Key</label>
+                <div class="input-wrapper">
+                  <input type="password" class="form-input" id="stripe-public-key" placeholder="pk_live_..." autocomplete="off" />
+                  <button class="view-toggle" onclick="toggleVisibility('stripe-public-key')" type="button" title="Toggle visibility">
+                    <svg class="eye-icon" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                  </button>
+                </div>
+              </div>
+
+              <div class="form-group" style="margin-bottom: 2rem;">
+                <label class="form-label" for="stripe-secret-key">Stripe Secret Key</label>
+                <div class="input-wrapper">
+                  <input type="password" class="form-input" id="stripe-secret-key" placeholder="sk_live_..." autocomplete="off" />
+                  <button class="view-toggle" onclick="toggleVisibility('stripe-secret-key')" type="button" title="Toggle visibility">
+                    <svg class="eye-icon" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                  </button>
+                </div>
+              </div>
+
+              <button class="btn btn-primary" id="btn-save-stripe" onclick="saveKeys()">Save Settings</button>
+            </div>
           </div>
         </div>
       </div>
@@ -204,12 +237,14 @@
 
         if (getErr) throw getErr;
 
-        if (integration) {
-          integrationId = integration.id;
-          document.getElementById('paymongo-public-key').value = integration.paymongo_public_key || '';
-          document.getElementById('paymongo-secret-key').value = integration.paymongo_secret_key || '';
-        }
-      } catch (err) {
+          if (integration) {
+            integrationId = integration.id;
+            document.getElementById('paymongo-public-key').value = integration.paymongo_public_key || '';
+            document.getElementById('paymongo-secret-key').value = integration.paymongo_secret_key || '';
+            document.getElementById('stripe-public-key').value = integration.stripe_public_key || '';
+            document.getElementById('stripe-secret-key').value = integration.stripe_secret_key || '';
+          }
+        } catch (err) {
         console.error('Integrations setup error:', err);
         toast(`Failed to load settings: ${err.message}`, 'error');
       }
@@ -223,16 +258,21 @@
       }
 
       const saveBtn = document.getElementById('btn-save');
-      saveBtn.disabled = true;
-      saveBtn.textContent = 'Saving...';
+      const saveBtnStripe = document.getElementById('btn-save-stripe');
+      if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving...'; }
+      if (saveBtnStripe) { saveBtnStripe.disabled = true; saveBtnStripe.textContent = 'Saving...'; }
 
       const pubKey = document.getElementById('paymongo-public-key').value.trim();
       const secKey = document.getElementById('paymongo-secret-key').value.trim();
+      const stripePubKey = document.getElementById('stripe-public-key').value.trim();
+      const stripeSecKey = document.getElementById('stripe-secret-key').value.trim();
 
       const payload = {
         company_id: currentCompanyId,
         paymongo_public_key: pubKey || null,
         paymongo_secret_key: secKey || null,
+        stripe_public_key: stripePubKey || null,
+        stripe_secret_key: stripeSecKey || null,
         updated_at: new Date().toISOString()
       };
 
@@ -263,8 +303,8 @@
         console.error('Save keys error:', err);
         toast(`Failed to save settings: ${err.message}`, 'error');
       } finally {
-        saveBtn.disabled = false;
-        saveBtn.textContent = 'Save Settings';
+        if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save Settings'; }
+        if (saveBtnStripe) { saveBtnStripe.disabled = false; saveBtnStripe.textContent = 'Save Settings'; }
       }
     };
   </script>

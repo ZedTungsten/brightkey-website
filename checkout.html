@@ -524,6 +524,131 @@
     let appliedCoupon = null;
     let shippingRatesMap = {};
     let isFreeShippingEligible = false;
+    let currentCompanyId = null;
+    let paymongoConfigured = false;
+    let stripeConfigured = false;
+
+    async function checkPaymentIntegrations() {
+      try {
+        const host = window.location.hostname;
+        const parts = host.split('.');
+        let subdomain = 'brightkey';
+        if (parts.length > 1 && host !== 'localhost' && host !== '127.0.0.1') {
+          subdomain = parts[0];
+        }
+
+        // Fetch company profile ID
+        const compRes = await fetch(`${SUPABASE_URL}/rest/v1/companies?subdomain=eq.${subdomain}&select=id`, {
+          headers: { 'apikey': SUPABASE_ANON, 'Authorization': `Bearer ${SUPABASE_ANON}` }
+        });
+        const compData = await compRes.json();
+        if (compData && compData.length > 0) {
+          currentCompanyId = compData[0].id;
+        }
+
+        if (currentCompanyId) {
+          const intRes = await fetch(`${SUPABASE_URL}/rest/v1/view_public_integrations?company_id=eq.${currentCompanyId}&select=*`, {
+            headers: { 'apikey': SUPABASE_ANON, 'Authorization': `Bearer ${SUPABASE_ANON}` }
+          });
+          const intData = await intRes.json();
+          if (intData && intData.length > 0) {
+            paymongoConfigured = !!intData[0].paymongo_configured;
+            stripeConfigured = !!intData[0].stripe_configured;
+          }
+        }
+
+        const optionPaymongo = document.getElementById('option-paymongo');
+        const optionStripe = document.getElementById('option-stripe');
+        const payPaymongoRadio = document.getElementById('pay_paymongo');
+        const payStripeRadio = document.getElementById('pay_stripe');
+        const redirectText = document.getElementById('redirect-text');
+        const btnPay = document.getElementById('btn-pay');
+
+        // Toggle Paymongo
+        if (!paymongoConfigured) {
+          if (payPaymongoRadio) {
+            payPaymongoRadio.disabled = true;
+            payPaymongoRadio.checked = false;
+          }
+          if (optionPaymongo) {
+            optionPaymongo.style.opacity = '0.5';
+            optionPaymongo.style.cursor = 'not-allowed';
+            optionPaymongo.onclick = null;
+          }
+          if (redirectText) {
+            redirectText.textContent = 'PayMongo is not configured for this store.';
+            redirectText.style.color = 'var(--danger)';
+          }
+        }
+
+        // Toggle Stripe
+        if (stripeConfigured) {
+          if (payStripeRadio) {
+            payStripeRadio.disabled = false;
+            payStripeRadio.style.cursor = 'pointer';
+          }
+          if (optionStripe) {
+            optionStripe.style.opacity = '1';
+            optionStripe.style.cursor = 'pointer';
+            optionStripe.style.background = 'var(--bg-surface)';
+            optionStripe.style.color = 'var(--text-primary)';
+            optionStripe.onclick = () => selectPaymentMethod('stripe');
+          }
+          const labelStripe = optionStripe ? optionStripe.querySelector('label') : null;
+          if (labelStripe) {
+            labelStripe.style.cursor = 'pointer';
+            labelStripe.style.color = 'var(--text-primary)';
+            labelStripe.style.fontWeight = '600';
+          }
+          // Add inline redirect subtext
+          if (optionStripe && !document.getElementById('stripe-redirect-text')) {
+            const stripeDiv = document.createElement('div');
+            stripeDiv.id = 'stripe-redirect-text';
+            stripeDiv.style.fontSize = '0.78rem';
+            stripeDiv.style.color = 'var(--text-secondary)';
+            stripeDiv.style.paddingLeft = '2rem';
+            stripeDiv.style.marginTop = '0.35rem';
+            stripeDiv.textContent = 'You will be redirected to Secure Payments via Stripe to complete your purchase.';
+            optionStripe.appendChild(stripeDiv);
+            optionStripe.style.flexDirection = 'column';
+            optionStripe.style.alignItems = 'flex-start';
+            optionStripe.style.gap = '0.35rem';
+          }
+        }
+
+        // Default Checked Payment Selection
+        if (stripeConfigured && !paymongoConfigured) {
+          if (payStripeRadio) payStripeRadio.checked = true;
+        } else if (paymongoConfigured) {
+          if (payPaymongoRadio) payPaymongoRadio.checked = true;
+        }
+
+        // If neither configured
+        if (!paymongoConfigured && !stripeConfigured) {
+          if (btnPay) {
+            btnPay.disabled = true;
+            btnPay.innerText = 'Checkout Disabled';
+          }
+          
+          const section = document.getElementById('payment-section');
+          if (section) {
+            const warningDiv = document.createElement('div');
+            warningDiv.style.marginTop = '1rem';
+            warningDiv.style.padding = '0.75rem 1rem';
+            warningDiv.style.background = 'rgba(220, 38, 38, 0.08)';
+            warningDiv.style.border = '1px solid rgba(220, 38, 38, 0.25)';
+            warningDiv.style.borderRadius = '6px';
+            warningDiv.style.color = 'var(--danger)';
+            warningDiv.style.fontSize = '0.82rem';
+            warningDiv.style.lineHeight = '1.4';
+            warningDiv.textContent = 'Online payments are currently unavailable because this store\'s payment integrations have not been configured. Please contact the store administrator.';
+            section.appendChild(warningDiv);
+          }
+        }
+      } catch (err) {
+        console.error('Error checking integrations:', err);
+      }
+    }
 
     async function initCheckout() {
       cartData = getCart();
@@ -535,6 +660,7 @@
       renderSummary();
       await loadShippingRates();
       await checkFreeShippingEligibility();
+      await checkPaymentIntegrations();
 
       // Prefill saved info
       const savedInfo = sessionStorage.getItem('bk_order_info');
@@ -970,7 +1096,11 @@
 
     window.selectPaymentMethod = function(method) {
       if (method === 'paymongo') {
-        document.getElementById('pay_paymongo').checked = true;
+        const rad = document.getElementById('pay_paymongo');
+        if (rad && !rad.disabled) rad.checked = true;
+      } else if (method === 'stripe') {
+        const rad = document.getElementById('pay_stripe');
+        if (rad && !rad.disabled) rad.checked = true;
       }
     };
 
@@ -981,11 +1111,13 @@
     };
 
     async function executePayment() {
-      const country = document.getElementById('c_country').value;
-      if (country === 'Philippines') {
+      const selectedMethod = document.querySelector('input[name="payment_method"]:checked')?.value;
+      if (selectedMethod === 'paymongo') {
         await createPayMongoCheckout();
+      } else if (selectedMethod === 'stripe') {
+        await createStripeCheckout();
       } else {
-        showToast('Stripe payments for other countries are currently disabled.', 'error');
+        showToast('Please select a payment method.', 'error');
       }
     }
 
@@ -1105,6 +1237,7 @@
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            company_id: currentCompanyId,
             billing: { name: info.name, email: info.email, phone: info.phone },
             line_items: lineItems,
             success_url: `${origin}/checkout?payment=success`,
@@ -1128,6 +1261,65 @@
 
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Failed to create checkout session');
+        window.location.href = data.checkout_url;
+      } catch (err) {
+        showToast('Payment initialization failed: ' + err.message, 'error');
+        btn.disabled = false;
+        btn.innerText = 'Pay Now';
+      }
+    }
+
+    async function createStripeCheckout() {
+      if (!validateForm()) return;
+
+      const btn = document.getElementById('btn-pay');
+      btn.disabled = true;
+      btn.innerText = 'Redirecting...';
+
+      const info = JSON.parse(sessionStorage.getItem('bk_order_info'));
+      
+      const lineItems = cartData
+        .filter(item => !item.isFreeGift)
+        .map(item => ({
+          name: item.title,
+          quantity: item.quantity,
+          amount: Math.round(item.price * 100), // Stripe unit price in cents
+          currency: 'PHP'
+        }));
+
+      if (discountCents > 0 && appliedCoupon) {
+        const itemsSubtotal = lineItems.reduce((s, li) => s + (li.amount * li.quantity), 0);
+        let remaining = discountCents;
+        for (let i = 0; i < lineItems.length; i++) {
+          const itemTotal = lineItems[i].amount * lineItems[i].quantity;
+          const share = i < lineItems.length - 1
+            ? Math.round((itemTotal / itemsSubtotal) * discountCents)
+            : remaining;
+          lineItems[i].amount -= Math.round(share / lineItems[i].quantity);
+          remaining -= share;
+        }
+      }
+
+      if (shippingCents > 0) {
+        lineItems.push({ name: 'Shipping', quantity: 1, amount: shippingCents, currency: 'PHP' });
+      }
+
+      const origin = window.location.origin;
+
+      try {
+        const res = await fetch('/api/create-stripe-checkout-session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            company_id: currentCompanyId,
+            line_items: lineItems,
+            success_url: `${origin}/checkout?payment=success`,
+            cancel_url: `${origin}/checkout`
+          })
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to create Stripe checkout session');
         window.location.href = data.checkout_url;
       } catch (err) {
         showToast('Payment initialization failed: ' + err.message, 'error');
