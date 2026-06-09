@@ -1052,6 +1052,18 @@
     const q = document.getElementById('search-input').value.toLowerCase();
     const biz = document.getElementById('filter-business').value;
     const st = document.getElementById('filter-status').value;
+
+    function getFamilySku(p, list) {
+      if (!p.parent_sku) return p.sku;
+      const parent = list.find(x => !x.parent_sku && (
+        x.sku === p.parent_sku ||
+        x.sku.toLowerCase() === p.parent_sku.toLowerCase() ||
+        x.sku.toLowerCase().startsWith(p.parent_sku.toLowerCase()) ||
+        p.parent_sku.toLowerCase().startsWith(x.sku.toLowerCase())
+      ));
+      return parent ? parent.sku : p.parent_sku;
+    }
+
     filtered = allProducts.filter(p => {
       if (q && !`${p.sku} ${p.title}`.toLowerCase().includes(q)) return false;
       if (biz && p.business !== biz) return false;
@@ -1063,15 +1075,15 @@
     const familyRank = {};
     let rank = 0;
     for (const p of filtered) {
-      const family = p.parent_sku || p.sku;
+      const family = getFamilySku(p, allProducts);
       if (familyRank[family] === undefined) {
         familyRank[family] = rank++;
       }
     }
 
     filtered.sort((a, b) => {
-      const familyA = a.parent_sku || a.sku;
-      const familyB = b.parent_sku || b.sku;
+      const familyA = getFamilySku(a, allProducts);
+      const familyB = getFamilySku(b, allProducts);
       
       if (familyRank[familyA] !== familyRank[familyB]) {
         return familyRank[familyA] - familyRank[familyB];
