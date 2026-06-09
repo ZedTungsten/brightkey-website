@@ -116,3 +116,34 @@ function closeDrawer() {
   /* missing pointer-events: none — OBSTRUCTIVE */
 }
 ```
+
+---
+
+## 9. Loading States for Table Entries
+
+* **Always include animation loading for all data loading for table entries.**
+* **Loading indicator style**: A clean circle animation going around, styled in cyan blue (`var(--cyan)`).
+* **Implementation pattern**: Wrap the circular spinner inside a centered flex layout container (`.loading-wrapper` with a `.spinner-cyan` child) in the table `<tbody>` row:
+  ```css
+  .spinner-cyan {
+    width: 24px;
+    height: 24px;
+    border: 3px solid rgba(6, 182, 212, 0.15);
+    border-top-color: var(--cyan);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    display: inline-block;
+  }
+  .loading-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    padding: 2.5rem 0;
+    color: var(--text-muted);
+    font-size: 0.82rem;
+    font-weight: 600;
+  }
+  ```
+```
