@@ -608,6 +608,10 @@ async function buildProducts() {
   const childProducts = products.filter(p =>  p.parent_sku);
 
   for (const p of baseProducts) {
+    if (p.show_on_ecommerce === false) {
+      console.log(`Skipping build for: ${p.slug} (show_on_ecommerce = false)`);
+      continue;
+    }
     console.log(`Building: ${p.slug}`);
     const $ = cheerio.load(templateHtml);
 
@@ -843,13 +847,13 @@ async function buildProducts() {
     }
 
     // Specs
-    const specs = [
+    const specs = (p.show_specs !== false) ? [
       { label: 'Warranty',           val: p.spec_warranty  },
       { label: 'Technical Support',  val: p.spec_support   },
       { label: 'Material',           val: p.spec_material  },
       { label: 'Voltage',            val: p.spec_voltage   },
       { label: 'Dimension',          val: p.spec_dimension },
-    ].filter(s => s.val);
+    ].filter(s => s.val) : [];
 
     if (specs.length > 0) {
       const specsHtml = specs.map(s => `
@@ -867,7 +871,7 @@ async function buildProducts() {
 
     // Features
     const featuresRow = featuresMap[p.id] || null;
-    const featuresHtml = renderFeaturesHtml(featuresRow);
+    const featuresHtml = (p.show_features !== false) ? renderFeaturesHtml(featuresRow) : '';
     if (featuresHtml) {
       $('[data-template="features-list"]').html(featuresHtml);
       $('[data-template="features-tab-btn"]').css('display', 'block');
