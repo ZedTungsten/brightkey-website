@@ -2194,16 +2194,37 @@
         }
 
         // Create a temporary off-screen container to render the receipt for html2pdf
+        // Extract the <style> block from the receipt head so CSS renders correctly in the container
+        const styleMatch = receiptHtml.match(/<style[^>]*>([\s\S]*?)<\/style>/i);
+        const receiptCss = styleMatch ? styleMatch[1] : '';
+
+        // Extract body content only (strip doctype, html, head, body wrapper tags)
+        const bodyMatch = receiptHtml.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+        const bodyContent = bodyMatch ? bodyMatch[1] : receiptHtml;
+
         const pdfContainer = document.createElement('div');
-        pdfContainer.style.cssText = 'position:fixed;left:-9999px;top:0;width:794px;background:#fff;';
-        pdfContainer.innerHTML = receiptHtml.replace(/<!DOCTYPE[^>]*>/i, '').replace(/<html[^>]*>/i, '').replace(/<\/html>/i, '').replace(/<head>[\s\S]*?<\/head>/i, '').replace(/<body[^>]*>/i, '').replace(/<\/body>/i, '');
+        pdfContainer.style.cssText = 'position:fixed;left:-9999px;top:0;width:794px;margin:0;padding:0;';
+        pdfContainer.innerHTML = `<style>
+          html,body,div{box-sizing:border-box;}
+          ${receiptCss}
+          /* Ensure receipt-page fills container flush with no offset */
+          .receipt-preview-wrapper{padding:0!important;margin:0!important;}
+          .receipt-page{margin:0!important;}
+        </style>${bodyContent}`;
         document.body.appendChild(pdfContainer);
 
         const pdfOpt = {
           margin: 0,
           filename: `receipt-${receiptNo}.pdf`,
           image: { type: 'jpeg', quality: 0.95 },
-          html2canvas: { scale: 2, useCORS: true, logging: false },
+          html2canvas: {
+            scale: 2,
+            useCORS: true,
+            logging: false,
+            windowWidth: 794,
+            scrollX: 0,
+            scrollY: 0
+          },
           jsPDF: { unit: 'px', format: [794, 1123], orientation: 'portrait' }
         };
 
