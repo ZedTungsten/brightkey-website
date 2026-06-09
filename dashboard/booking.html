@@ -1132,7 +1132,7 @@
       });
     }
 
-    async function uploadFileToSupabase(fileBase64, fileName, category, refId, type) {
+    async function uploadFileToSupabase(fileBase64, fileName, category, refId, type, companyId) {
       if (!fileBase64) return null;
       let finalBase64 = fileBase64;
       let finalFileName = fileName;
@@ -1158,7 +1158,8 @@
             fileName: finalFileName,
             category: category,
             refId: refId,
-            type: type
+            type: type,
+            companyId: companyId || null
           })
         });
 
@@ -1166,8 +1167,8 @@
           const data = await res.json();
           return data.url;
         } else {
-          const errData = await res.json();
-          throw new Error(errData.error || 'Upload failed');
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error || `Upload failed (HTTP ${res.status})`);
         }
       } catch (err) {
         console.error('File upload error:', err);
@@ -1193,6 +1194,12 @@
         showNotification("Please specify Customer Name and Preferred Installation Date.", 'error');
         return;
       }
+
+      // Capture button reference early so finally block can always restore it
+      const schedBtn = document.getElementById('sched-action-btn') || document.querySelector('button[onclick="scheduleAndPrint()"]');
+      const originalBtnText = schedBtn ? schedBtn.innerText : 'Schedule & Print Receipt';
+
+      try {
 
       // Build SURNAME-ORDERNO folder ID (e.g. DELACRUZ-ORD-20260520-123)
       const surname = name.trim().split(' ').pop().toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -1255,8 +1262,6 @@
       }
 
       // Set uploading state on button
-      const schedBtn = document.getElementById('sched-action-btn') || document.querySelector('button[onclick="scheduleAndPrint()"]');
-      const originalBtnText = schedBtn ? schedBtn.innerText : 'Schedule & Print Receipt';
       if (schedBtn) {
         schedBtn.innerText = "Uploading Media to Supabase Storage...";
         schedBtn.disabled = true;
@@ -1268,8 +1273,8 @@
       const mapB64 = mapWrapper ? mapWrapper.getAttribute('data-base64') : null;
       const frontageB64 = frontageWrapper ? frontageWrapper.getAttribute('data-base64') : null;
 
-      const mapUrl = mapB64 ? await uploadFileToSupabase(mapB64, 'map_screenshot.png', 'installations', folderRefId, 'site') : null;
-      const frontageUrl = frontageB64 ? await uploadFileToSupabase(frontageB64, 'house_frontage.png', 'installations', folderRefId, 'site') : null;
+      const mapUrl = mapB64 ? await uploadFileToSupabase(mapB64, 'map_screenshot.png', 'installations', folderRefId, 'site', currentCompanyId) : null;
+      const frontageUrl = frontageB64 ? await uploadFileToSupabase(frontageB64, 'house_frontage.png', 'installations', folderRefId, 'site', currentCompanyId) : null;
 
       // 2. Upload Doors specs
       const doors = [];
@@ -1287,7 +1292,7 @@
           const w = wrappers[j];
           const b64 = w.getAttribute('data-base64');
           if (b64) {
-            const url = await uploadFileToSupabase(b64, `door_${i+1}_photo_${j+1}.png`, 'installations', folderRefId, 'doors');
+            const url = await uploadFileToSupabase(b64, `door_${i+1}_photo_${j+1}.png`, 'installations', folderRefId, 'doors', currentCompanyId);
             photos.push(url);
           }
         }
@@ -2189,6 +2194,17 @@
 
       showNotification("Installation scheduled successfully!", 'success');
       toggleReceiptModal(true);
+
+      } catch (err) {
+        console.error('scheduleAndPrint error:', err);
+        showNotification('Booking error: ' + (err.message || 'Something went wrong. Please try again.'), 'error');
+      } finally {
+        // Always restore button so user is never stuck
+        if (schedBtn) {
+          schedBtn.innerText = originalBtnText;
+          schedBtn.disabled = false;
+        }
+      }
     }
 
     // --- Booking Calendar Control ---
