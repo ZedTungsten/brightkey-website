@@ -174,30 +174,73 @@ function closeDrawer() {
 
 ---
 
-## 10. Sticky Table Headers Scroll Clipping
+## 10. Sticky Table Headers & Horizontal Scroll in Cards/Panels
 
-**Problem:** When using `position: sticky; top: 0;` on table headers (`thead th`) inside a scrollable container (e.g., `.table-scroll`), applying padding directly to that scrollable container causes scrolled body rows to scroll *above* the sticky headers, making them visible in the padding gap. This happens because the headers stick to the top of the scroll container's *content box* (which is inset by padding), while the scrolling rows scroll all the way to the top of the *padding box*.
+**Problem:** When a table is wrapped in a card/panel (`.panel`) that features a top header with buttons/actions (`.panel-header`), we want:
+1. The table contents to scroll horizontally when screen width is small (without overflow spilling out of the panel border).
+2. The header/actions (`.panel-header`) to remain full-width and completely stationary (not scroll horizontally with the table).
+3. The vertical sticky header (`thead th` with `position: sticky; top: 0;`) to still function properly when scrolling vertically inside the card.
 
-**Fix Pattern — Never put padding on the scrollable container itself:**
+If you simply wrap the table in `overflow-x: auto`, it creates a horizontal scrolling container which intercepts the sticky vertical header's scroll context, breaking its vertical stickiness.
+
+**Fix Pattern — Flex Column Panel with nested `.table-responsive`:**
+Instead of scrolling the whole panel, restrict vertical and horizontal scrolling specifically to the table wrapper:
+
+1. **The Panel Container (`.panel`)**: Style it as a full-height flex column with hidden overflow:
 ```css
-/* ❌ AVOID this: padding on the scrollable container causes sticky header gaps */
-.table-scroll {
-  flex: 1;
-  overflow: auto;
-  padding: 1.5rem; /* ❌ Breaks sticky header clipping */
-}
-
-/*  DO this instead: remove padding from the scroll container... */
-.table-scroll {
-  flex: 1;
-  overflow: auto;
-}
-
-/* ...and apply the padding to the child wrapper/tab-panel instead */
-.tab-panel {
-  display: none;
+.panel {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow-sm);
+  position: relative;
+  
+  /* Flexbox settings to constrain table scrolling */
   height: 100%;
-  padding: 1.5rem; /*  Keeps layout spacing, allows correct sticky header alignment */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 ```
+
+2. **The Panel Header (`.panel-header`)**: Ensure it doesn't shrink and remains stationary:
+```css
+.panel-header {
+  /* ... padding, backgrounds, borders ... */
+  flex-shrink: 0; /* Prevents header compression */
+}
+```
+
+3. **The Table Wrapper (`.table-responsive`)**: Wrap the `table` inside a `flex: 1; overflow: auto;` container:
+```css
+.table-responsive {
+  flex: 1;
+  overflow: auto; /* Handles both horizontal and vertical scrolling context */
+  overscroll-behavior: contain;
+}
+```
+
+4. **HTML Structure:**
+```html
+<div class="panel">
+  <div class="panel-header">
+    <span>Warehouse Tally</span>
+    <button>Edit Stocks</button>
+  </div>
+  <div class="table-responsive">
+    <table>
+      <thead>
+        <tr>
+          <th>SKU</th>
+          <!-- ... -->
+        </tr>
+      </thead>
+      <tbody>
+        <!-- ... -->
+      </tbody>
+    </table>
+  </div>
+</div>
+```
+
 
