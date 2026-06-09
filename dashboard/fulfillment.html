@@ -977,6 +977,17 @@
     let sortDir = 'asc';
     let selectedCategories = new Set();
     let uniqueCategories = [];
+    let isCategoryInitialized = false;
+
+    window.selectAllCategories = function(selectActive, event) {
+      if (event) event.stopPropagation();
+      selectedCategories.clear();
+      if (selectActive) {
+        uniqueCategories.forEach(cat => selectedCategories.add(cat));
+      }
+      populateCategoryFilter();
+      renderInventorySummary();
+    };
 
     function populateCategoryFilter() {
       const cats = new Set();
@@ -989,11 +1000,19 @@
       if (!menu) return;
 
       // Initialize all categories as selected on first load
-      if (selectedCategories.size === 0) {
+      if (!isCategoryInitialized) {
         uniqueCategories.forEach(cat => selectedCategories.add(cat));
+        isCategoryInitialized = true;
       }
 
-      menu.innerHTML = uniqueCategories.map(cat => {
+      const headerHtml = `
+        <div style="display: flex; gap: 0.5rem; border-bottom: 1px solid var(--border); padding: 0.25rem 0.5rem 0.5rem; margin-bottom: 0.25rem; justify-content: space-between; align-items: center;">
+          <span style="color: var(--cyan-light); cursor: pointer; font-weight: 700; font-size: 0.72rem; text-transform: uppercase;" onclick="selectAllCategories(true, event)">All</span>
+          <span style="color: var(--text-muted); cursor: pointer; font-weight: 700; font-size: 0.72rem; text-transform: uppercase;" onclick="selectAllCategories(false, event)">None</span>
+        </div>
+      `;
+
+      const listHtml = uniqueCategories.map(cat => {
         const displayLabel = cat ? cat.replace(/_/g, ' ') : '(No Category)';
         const checked = selectedCategories.has(cat) ? 'checked' : '';
         return `
@@ -1003,6 +1022,8 @@
           </label>
         `;
       }).join('');
+
+      menu.innerHTML = headerHtml + listHtml;
     }
 
     window.toggleCategoryDropdown = function(event) {
