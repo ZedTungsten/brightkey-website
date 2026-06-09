@@ -48,7 +48,7 @@ Guidelines for styling, icons, modal alerts, and loading components to maintain 
 
 **Problem:** On macOS with a trackpad, scroll gestures may not work when the cursor is hovering over the *empty space* inside a scroll container (e.g. below the last table row). The browser's scroll-target heuristic picks the element directly under the pointer — if that element isn't the scroll container itself (e.g. the `<table>` is shorter than the container), scroll events fall through to the page body instead.
 
-**Fix Pattern — always apply these two rules to any custom scroll container:**
+**Fix Pattern — always apply these rules to any custom scroll container & table:**
 ```css
 /* The scroll container */
 .table-scroll {
@@ -59,6 +59,30 @@ Guidelines for styling, icons, modal alerts, and loading components to maintain 
 /* The content inside the scroll container */
 table {
   min-height: 100%; /* ensures the table always fills the container so the pointer always hits it */
+}
+
+/* Set row height to minimum so browser does not expand entries to fill empty space */
+tbody tr {
+  height: 1px;
+}
+```
+
+**To prevent rows stretching when there are few table entries**, always append a transparent auto-height spacer row at the end of the `tbody`:
+```html
+<tr class="table-spacer-row" style="height: auto; border: none; background: transparent !important;"><td colspan="[TOTAL_COLUMNS]" style="padding: 0; border: none; background: transparent !important; pointer-events: none;"></td></tr>
+```
+And style the spacer row in CSS:
+```css
+tr.table-spacer-row,
+tr.table-spacer-row:hover {
+  background: transparent !important;
+  border: none !important;
+  pointer-events: none !important;
+}
+tr.table-spacer-row td {
+  border: none !important;
+  pointer-events: none !important;
+  padding: 0 !important;
 }
 ```
 
