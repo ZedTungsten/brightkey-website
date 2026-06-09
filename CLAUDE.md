@@ -1,104 +1,60 @@
-# Project AI Guidelines
+# BrightKey Multi-Tenant ERP Security Architecture & Guidelines (`Claude.md`)
 
-* **UI/UX & Design Guidelines**: Always refer to [DESIGN.md](file:///Users/zeustaller/Claude/brightkey-website/DESIGN.md) for styling, alerts, icons, and loading state directives.
+This document outlines the security architecture and guidelines designed to ensure that the BrightKey ERP system is secure, resilient to injection attacks, and isolated for multi-tenant execution.
 
-## Supabase Initialization Rule
-**JavaScript Rule**: The Supabase client is initialized as `var sb = window.supabase.createClient(...)` inside `js/auth.js` (`var` is intentional — it avoids `SyntaxError: Identifier 'sb' already declared` when page-level inline scripts also declare their own `const sb`). `auth.js` is included on every page that requires authentication or database access, making `sb` available globally via `window.BKAuth.sb` and as a plain `sb` variable.
+---
 
-- **NEVER** redeclare `const sb` in `auth.js` — keep it as `var sb`. If changed to `const`, it will conflict with any page inline script that also has `const sb`, crashing the page with a fatal SyntaxError.
-- Page-level inline scripts MAY declare their own `const sb = window.supabase.createClient(...)` for convenience — this does NOT conflict with `auth.js`'s `var sb` because `var` is reassignable and `const` in a separate script tag occupies a separate lexical scope.
-- **ALWAYS** use the existing `sb` variable for all queries (e.g., `await sb.from(...)`). Do not create unnecessary extra Supabase clients.
+## 1. Secure & Isolated Multi-Tenancy (Row-Level Security)
+We employ Postgres Row-Level Security (RLS) on all tables to enforce strict data isolation between tenants. Users can never view, insert, update, or delete data belonging to another tenant.
 
-## Product Dropdown / Selection Rule
-- **Always use the product SKU** (formatted as `[SKU] Product Title` or sorted/identified by SKU) in any product dropdown or selection list in the UI.
-
-## Image Upload Compression Rule
-- **Always compress images client-side** before uploading them to Supabase Storage.
-- Convert the images to **WebP format at 80% quality** (`image/webp`) and resize them (recommended max width/height of `1200px` for general reviews or appropriate dimensions for specific content layout e.g. `650px x 950px` for portrait promotion popups) to save server space and bandwidth.
-
-## Git & Deployment Rule
-- **Always push to git live** immediately after refactoring, coding, or finalizing any changes in local.
-
-## Script Refactoring & Tab Creation Rule
-- **Prevent Duplicate Declarations**: When extending pages (such as adding new tabs, forms, or scripts), **never** duplicate let/const variables or key globals (e.g., `allProducts`, `allBusinesses`, `initialPromoState`). JavaScript throws a fatal compile-time `SyntaxError: Identifier 'x' has already been declared` if these are redeclared in the same scope, which crashes the script engine and renders tabs and elements unclickable. Always check the top of the file for existing variable and function declarations.
-
-## DOMContentLoaded & Script Load Order Rule
-
-**Understand the exact browser execution order for this codebase:**
-
-1. **Inline `<script>` blocks** — run immediately during HTML parsing, in document order.
-2. **`<script defer>`** (e.g. `auth.js`) — runs after the full HTML is parsed, **before** `DOMContentLoaded` fires.
-3. **`DOMContentLoaded` handlers** (e.g. `document.addEventListener('DOMContentLoaded', ...)`) — fire last, after all deferred scripts have run.
-
-**Rules to follow:**
-
-- **Never call DOM-querying functions (e.g. `renderXyz()`, `fetchData()`, `document.getElementById()`) at the top level of an inline script.** They must always be wrapped inside a `DOMContentLoaded` listener or placed after the relevant HTML in the file — otherwise the DOM elements don't exist yet and the calls silently fail.
-- **All data-fetching and render initialization must live inside `DOMContentLoaded`**, or be triggered by it (e.g. calling `fetchPromoData()` inside the listener). Never rely on inline script execution order to guarantee elements exist.
-- **Render functions must always be called unconditionally.** Do not gate a render call (e.g. `renderUpsellRules()`) behind a `if (!error && data)` check — if the DB row doesn't exist yet, the function never runs and the panel stays blank. Always call renders so empty-state messages appear.
-- **`auth.js` is `defer` and declares `const sb`.** Because it runs before `DOMContentLoaded`, `sb` and `window.BKAuth` are available inside any `DOMContentLoaded` handler. Do NOT redeclare `sb` in inline scripts on pages that also load `auth.js`.
-- **When adding new tabs or sections to a page with an existing `DOMContentLoaded` setup**, add initialization calls (renders, data loads) inside the existing listener — never create a second `DOMContentLoaded` listener on the same page. Multiple listeners fire in registration order but are easy to lose track of and cause race conditions.
-
-## HTML Nesting & Tag Closure Rule
-- **Always verify div and tag closures when adding tabs or layout components**: A missing closing tag (e.g. a missing `</div>`) can silently nest subsequent tabs/sections inside the unclosed container. This causes elements to disappear or display incorrectly when the parent element is hidden (`display: none` / active tab toggling).
-
-## Error Logging & Debugging Rule
-- **Always print or log errors**: For any data-fetching, database query, layout parsing, or critical function execution, **always** include comprehensive error catch blocks.
-  - Print descriptive errors in the browser console using `console.error('Context:', error)`.
-  - Where user/admin visibility is useful, render errors directly in the UI (e.g. inside tables or containers via `.innerHTML` or toast notifications) so problems are obvious and immediately diagnosed.
-
-## Unified Supabase Access Pattern
-- **Assign from `window.BKAuth.sb` within entry points**: Pages loading `auth.js` should declare `let sb` at the script level and assign `sb = window.BKAuth.sb` inside their entry function (e.g. `App.init()` or `DOMContentLoaded` listener) rather than recreating client instances. Pages that do not load `auth.js` must declare and create `const sb` locally.## Prevent Duplicate Script Loading
-- **Check for existing tags**: If a script is dynamically loaded via JavaScript (e.g. in `main.js`), always check if a script tag targeting that file already exists in the document (`document.querySelector('script[src*="filename.js"]')`) before appending it. This prevents race conditions, duplicate execution, and `SyntaxError` declarations.
-
-## Type-Safe UUID Queries (Supabase/Postgrest)
-- **Sanitize identifiers**: When querying a UUID column (like `id` in the `products` table) using `.in()` or `.or()`, filter out strings like `"undefined"` or `"null"`. Passing non-UUID strings to a UUID column query triggers a database type mismatch (`22P02` error) and returns a `400 (Bad Request)` response.
-
-## Database Schema Columns Selection
-- **Verify Column Names**: Always double-check actual database column names (either via schema migration files in `database/migrations/` or by running a quick select query in a test script) before reference declarations or executing query select statements. Do not guess column names (e.g. assuming `price` instead of `before_price` or `sale_price`), as referencing non-existent columns will result in a fatal `400 (Bad Request)` / `42703` column undefined error.
-
-## Direct SKU Extraction
-- **Cart SKU Fallback**: When checking for products inside the cart, do not rely solely on matching UUIDs (`id` property) and querying the database to resolve their SKUs. Cart items already hold their SKU on the `sku` property (e.g. `item.sku`). Always attempt to read `item.sku` directly to resolve cart items instantly.
-
-## Multi-Tenant Company ID Resolution Rule
-- **`BKAuth.checkRoleGate()` does NOT return `companyId`**: It returns `{ user, role, tenantId }`.
-- **Retrieve `companyId` dynamically**: To obtain the `company_id` for queries, use the `tenantId` to query the `companies` table:
-  ```javascript
-  const { data: companyData } = await sb.from('companies').select('id').eq('tenant_id', tenantId).limit(1);
-  const companyId = companyData?.[0]?.id;
+### Strict Data Isolation Rules
+- **RLS is Enabled by Default**: Every table containing sensitive configurations, orders, bookings, invoices, or third-party keys must have RLS explicitly enabled:
+  ```sql
+  ALTER TABLE public.<table_name> ENABLE ROW LEVEL SECURITY;
   ```
-- **Never guess `authInfo.companyId`**: Attempting to read `authInfo.companyId` directly returns `undefined`, which triggers a database type mismatch error (`invalid input syntax for type uuid: "undefined"`) when used in queries.
-- **Ensure Scoped Data Creation**: All new data entries and operations (inserts, updates, upserts) must explicitly include `company_id` (e.g. `company_id: currentCompanyId`) to ensure strict compliance with database Row-Level Security (RLS) policies. Failure to scope writes will cause silent write rejections or query failures.
-- **Enforce Authenticated Users in RLS Policies**: Database RLS policies for internal elements (like general journal, bookkeeping, audit logs, etc.) must explicitly include `auth.uid() IS NOT NULL` in the `USING` and `WITH CHECK` clauses. This prevents anonymous requests using the public anon key (`Bearer ${SB_ANON}`) from accessing or modifying restricted data.
-
-
-## Supabase REST API Auth Headers Rule
-- **Never read `sb.auth.headers` directly**: In newer versions of the Supabase JS SDK, `sb.auth.headers` is undefined. Accessing it will cause a crash or evaluate to `Bearer undefined`, which strips authentication and triggers database RLS failures.
-- **Retrieve access tokens dynamically**: When constructing custom fetch/REST calls requiring authorization (e.g. direct PostgREST fetch calls using custom headers), resolve the JWT session token dynamically via `sb.auth.getSession()`:
-  ```javascript
-  const { data: { session } } = await sb.auth.getSession();
-  const token = session ? session.access_token : sb.supabaseKey;
-  const H = { 'Authorization': `Bearer ${token}`, 'apikey': sb.supabaseKey, 'Content-Type': 'application/json' };
+- **Tenant Verification Policies**: RLS policies authenticate users based on their association in the `tenant_members` table matching the database user id (`auth.uid()`):
+  ```sql
+  CREATE POLICY "Allow company members read integrations" ON public.company_integrations
+    FOR SELECT USING (
+      company_id IN (
+        SELECT c.id FROM public.companies c
+        JOIN public.tenant_members tm ON c.tenant_id = tm.tenant_id
+        WHERE tm.user_id = auth.uid()
+      )
+    );
   ```
 
-## Toast Notification Stacking Rule
-- **Toast z-index must be `99999`**: To guarantee that toast notifications are visible over dark modal overlays, blur filters, and lateral drawers (which typically sit between `100` and `2000` z-index), always style `#toast-container` with `z-index: 99999`.
-- **Target `#toast-container` by ID**: Style rules must target `#toast-container` (ID selector) rather than `.toast-container` (class selector). This ensures page-specific overrides have the specificity required to override any rules inside the global `css/style.css` stylesheet.
+---
 
-## Button Styling Guidelines
+## 2. Industry Standard Multi-Tenant ERP Design
+To keep our multi-tenant architecture modular, extensible, and clean:
+- **No Shared Keys / Credentials**: All API keys, tokens, and payment portal configurations (e.g. Paymongo) are stored in dedicated integration tables (e.g., `company_integrations`) rather than hardcoded environment variables or global settings.
+- **Relational Integrity**: Records are bound directly to `companies.id` or `tenants.id`, cascade-deleted on tenant termination to avoid orphan/leak residues, and indexed for speed and security filters.
 
-## Database Currency & Pricing Rule
-- **Always store currency/pricing values as integers in centavos (cents)**: To prevent floating-point rounding errors during financial calculations and maintain database consistency, all price-related columns in the database (e.g., `sale_price`, `installation_price`, `subtotal`, `charges`, `deductions`, `grand_total`, `deposit_amount`, `balance_due`) must be stored as `INTEGER` representing centavos (e.g., `10000` = ₱100.00).
-- **Convert on frontend input/display**: Convert these integer values on the frontend by dividing by `100` for human-readable display (e.g., `(cents / 100).toLocaleString(...)`) and multiplying raw numeric user inputs by `100` (e.g., `Math.round(parseFloat(input) * 100)`) before submitting payloads to the database.
+---
 
-## Default Company ID Scoping
-- **Use BrightKey by default**: For any database operation, seed data, or query scoping where a company ID is required, always default to the **BrightKey** company (resolvable via the `'brightkey'` subdomain), unless explicitly stated otherwise.
+## 3. SQL & HTML Injection Prevention
+We enforce rigorous practices to prevent SQL injections (SQLi) and Cross-Site Scripting (XSS).
 
-## PostgREST Filter Special Characters Escaping Rule
-- **Escape special characters in `in.(...)` list filters**: When querying via PostgREST using `in.(...)` (e.g., filtering on `account` names with `in.(...)`), if any option contains spaces, commas, or parentheses `()`, wrap each item in double quotes and escape internal double quotes (e.g. `const escaped = item.replace(/"/g, '\\"'); return `"${escaped}"`;`). Otherwise, PostgREST will parse the parentheses as list delimiters or syntax errors, resulting in empty query results.
+### Database Layer: Parameterized Queries
+- **No Raw SQL Construction**: All database interactions from the client are routed through PostgREST (via Supabase Client), which natively uses parameterized execution on the server.
+- **Strict Data Types**: Database columns use precise types (`UUID` for keys, `INTEGER` for currency in centavos, `TIMESTAMPTZ` for timestamps, and checks on enum strings) rather than loose text containers.
 
-## Database Deletion & Scoping Rule
-- **Enforce `company_id` filter on all deletions**: When performing deletions (such as deleting journal entries or snapshots based on an `entry_number`), you MUST include a `company_id` filter (e.g. `entry_number=eq.N&company_id=eq.CID`). Since identifiers like `entry_number` are only unique per company, deleting by `entry_number` alone will dangerously delete corresponding entries across all other tenants/companies.
-- **Accurate Next Auto-Increment Queries**: When querying the next incrementing sequence number (like `entry_number`) from the database, always query using ordering and limits (e.g. `order=entry_number.desc&limit=1`) instead of loading all database records to calculate maximums client-side. This avoids client-side performance degradation and prevents duplicate key errors caused by API pagination limit truncations (like the default PostgREST 1000-row limit).
+### Frontend Layer: Output Scrubbing & Value Binding
+- **Direct Property Binding**: Never use `innerHTML` to render raw user-entered data or sensitive keys in the DOM. Always assign via `.value` or `.textContent`:
+  ```javascript
+  // SAFE: Browser handles escaping natively
+  document.getElementById('paymongo-public-key').value = integration.paymongo_public_key;
+  ```
+- **Sanitizing Injected Data**: When HTML templates are rendered dynamically, pass all values through escaping helper routines (e.g., `esc(value)`) to convert `<` and `>` into HTML entities.
 
+---
 
-
+## 4. Protected Profiles & Sensitive Key Obfuscation
+- **Credential Masking**: Input elements designed to store sensitive tokens use `type="password"` by default, preventing credentials from being read off-screen. Eyeball toggle icons allow controlled visibility.
+- **Obfuscated Key Storage**: Keys are hidden from public pages and are only pulled from Supabase inside auth-checked admin routes. No credentials are leaked to the public client storefront pages.
+- **Role Gating**: All dashboard route handlers run an auth-check gate matching the user's role:
+  ```javascript
+  const authInfo = await window.BKAuth.checkRoleGate(['owner', 'admin'], '../admin.html');
+  ```
+  This guarantees that non-admin and non-tenant accounts are booted before the browser can fetch or draw sensitive forms.
