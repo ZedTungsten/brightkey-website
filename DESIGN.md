@@ -170,4 +170,34 @@ function closeDrawer() {
     font-weight: 600;
   }
   ```
+  ```
+
+---
+
+## 10. Sticky Table Headers Scroll Clipping
+
+**Problem:** When using `position: sticky; top: 0;` on table headers (`thead th`) inside a scrollable container (e.g., `.table-scroll`), applying padding directly to that scrollable container causes scrolled body rows to scroll *above* the sticky headers, making them visible in the padding gap. This happens because the headers stick to the top of the scroll container's *content box* (which is inset by padding), while the scrolling rows scroll all the way to the top of the *padding box*.
+
+**Fix Pattern — Never put padding on the scrollable container itself:**
+```css
+/* ❌ AVOID this: padding on the scrollable container causes sticky header gaps */
+.table-scroll {
+  flex: 1;
+  overflow: auto;
+  padding: 1.5rem; /* ❌ Breaks sticky header clipping */
+}
+
+/*  DO this instead: remove padding from the scroll container... */
+.table-scroll {
+  flex: 1;
+  overflow: auto;
+}
+
+/* ...and apply the padding to the child wrapper/tab-panel instead */
+.tab-panel {
+  display: none;
+  height: 100%;
+  padding: 1.5rem; /*  Keeps layout spacing, allows correct sticky header alignment */
+}
 ```
+
