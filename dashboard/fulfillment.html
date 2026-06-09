@@ -380,6 +380,23 @@
       border-color: var(--cyan);
     }
 
+    thead th.sortable {
+      cursor: pointer;
+      user-select: none;
+      transition: background-color 0.15s, color 0.15s;
+    }
+    thead th.sortable:hover {
+      background: var(--border-hover) !important;
+      color: var(--text-primary);
+    }
+
+    /* Separator line between Available and other counts */
+    .tally-table th:nth-child(5),
+    .tally-table td:nth-child(5) {
+      border-left: 1.5px solid var(--border);
+      padding-left: 1.5rem;
+    }
+
     /* Toast styling */
     #toast-container { position: fixed; top: 1.5rem; right: 1.5rem; z-index: 99999; display: flex; flex-direction: column; gap: 0.5rem; }
     .toast { padding: 0.75rem 1rem; border-radius: 6px; font-size: 0.82rem; font-weight: 600; color: #fff; min-width: 250px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); animation: slideIn 0.2s ease-out; }
@@ -437,19 +454,30 @@
           <!-- Tab Panel: Inventory -->
           <div class="tab-panel active" id="panel-inventory">
             <div class="panel">
-              <div class="panel-header">Warehouse Tally</div>
-              <table class="ledger-table">
+              <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center;">
+                <span>Warehouse Tally</span>
+                <div style="display: flex; align-items: center; gap: 0.5rem; text-transform: none; font-weight: normal; font-size: 0.82rem;">
+                  <span style="color: var(--text-muted); font-size: 0.75rem; font-weight: 600; text-transform: uppercase;">Date Range:</span>
+                  <select id="date-range-select" class="form-select" style="width: auto; padding: 0.25rem 2rem 0.25rem 0.75rem; font-size: 0.82rem; height: 30px; border-radius: 6px;" onchange="handleDateRangeChange()">
+                    <option value="7" selected>7 Days</option>
+                    <option value="14">14 Days</option>
+                    <option value="30">30 Days</option>
+                    <option value="60">60 Days</option>
+                  </select>
+                </div>
+              </div>
+              <table class="ledger-table tally-table">
                 <thead>
                   <tr>
-                    <th>SKU</th>
-                    <th>Product Title</th>
-                    <th>Business</th>
-                    <th style="color:var(--success);">Available</th>
-                    <th style="color:var(--warning);">Reserved</th>
-                    <th style="color:var(--cyan-light);">Packed</th>
-                    <th>Dispatched</th>
-                    <th style="color:var(--danger);">Returned</th>
-                    <th style="color:#4b5563;">Cancelled</th>
+                    <th class="sortable" onclick="handleSort('sku')">SKU <span id="sort-icon-sku"></span></th>
+                    <th class="sortable" onclick="handleSort('title')">Product Title <span id="sort-icon-title"></span></th>
+                    <th class="sortable" onclick="handleSort('business')">Business <span id="sort-icon-business"></span></th>
+                    <th class="sortable" onclick="handleSort('available')" style="color:var(--success);">Available <span id="sort-icon-available"></span></th>
+                    <th class="sortable" onclick="handleSort('reserved')" style="color:var(--warning);">Reserved <span id="sort-icon-reserved"></span></th>
+                    <th class="sortable" onclick="handleSort('packed')" style="color:var(--cyan-light);">Packed <span id="sort-icon-packed"></span></th>
+                    <th class="sortable" onclick="handleSort('dispatched')">Dispatched <span id="sort-icon-dispatched"></span></th>
+                    <th class="sortable" onclick="handleSort('returned')" style="color:var(--danger);">Returned <span id="sort-icon-returned"></span></th>
+                    <th class="sortable" onclick="handleSort('cancelled')" style="color:#4b5563;">Cancelled <span id="sort-icon-cancelled"></span></th>
                   </tr>
                 </thead>
                 <tbody id="inventory-list">
@@ -885,6 +913,38 @@
       console.log('Auto-sync complete.');
     }
 
+    let sortCol = 'sku';
+    let sortDir = 'asc';
+
+    function updateSortIndicators() {
+      const cols = ['sku', 'title', 'business', 'available', 'reserved', 'packed', 'dispatched', 'returned', 'cancelled'];
+      cols.forEach(col => {
+        const span = document.getElementById(`sort-icon-${col}`);
+        if (!span) return;
+        if (sortCol === col) {
+          span.innerHTML = sortDir === 'asc' 
+            ? `<svg viewBox="0 0 24 24" width="10" height="10" stroke="currentColor" stroke-width="3" fill="none" style="vertical-align: middle; margin-left: 4px; color: var(--cyan);"><polyline points="18 15 12 9 6 15"></polyline></svg>` 
+            : `<svg viewBox="0 0 24 24" width="10" height="10" stroke="currentColor" stroke-width="3" fill="none" style="vertical-align: middle; margin-left: 4px; color: var(--cyan);"><polyline points="6 9 12 15 18 9"></polyline></svg>`;
+        } else {
+          span.innerHTML = `<svg viewBox="0 0 24 24" width="10" height="10" stroke="currentColor" stroke-width="2" fill="none" style="vertical-align: middle; margin-left: 4px; opacity: 0.3;"><polyline points="6 9 12 15 18 9"></polyline><polyline points="18 15 12 9 6 15"></polyline></svg>`;
+        }
+      });
+    }
+
+    window.handleSort = function(col) {
+      if (sortCol === col) {
+        sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+      } else {
+        sortCol = col;
+        sortDir = 'asc';
+      }
+      renderInventorySummary();
+    };
+
+    window.handleDateRangeChange = function() {
+      renderInventorySummary();
+    };
+
     // Render Tab 1: Inventory Summary
     function renderInventorySummary() {
       const tbody = document.getElementById('inventory-list');
@@ -895,22 +955,84 @@
         return;
       }
 
-      allProducts.forEach(p => {
-        const inv = allInventory[p.sku] || { available: 0, reserved: 0, packed: 0, dispatched: 0, returned: 0, cancelled: 0 };
+      // Get days filter
+      const daysSelect = document.getElementById('date-range-select');
+      const days = daysSelect ? parseInt(daysSelect.value) : 7;
+      
+      // Compute counts based on date range
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - days);
+      
+      const filteredCounts = {};
+      activeTransactions.forEach(t => {
+        const status = t.status;
+        if (!['reserved', 'packed', 'dispatched', 'returned', 'cancelled'].includes(status)) {
+          return;
+        }
+        let ts = null;
+        if (status === 'reserved') ts = t.timestamp_reserved;
+        else if (status === 'packed') ts = t.timestamp_packed;
+        else if (status === 'dispatched') ts = t.timestamp_dispatched;
+        else if (status === 'returned') ts = t.timestamp_returned;
+        else if (status === 'cancelled') ts = t.timestamp_cancelled;
+        
+        const dateVal = new Date(ts || t.updated_at || t.created_at);
+        if (dateVal >= cutoffDate) {
+          if (!filteredCounts[t.sku]) {
+            filteredCounts[t.sku] = { reserved: 0, packed: 0, dispatched: 0, returned: 0, cancelled: 0 };
+          }
+          filteredCounts[t.sku][status] = (filteredCounts[t.sku][status] || 0) + t.quantity;
+        }
+      });
+
+      // Sort
+      const sortedProducts = [...allProducts].sort((a, b) => {
+        let valA, valB;
+        if (sortCol === 'sku') {
+          valA = a.sku || '';
+          valB = b.sku || '';
+        } else if (sortCol === 'title') {
+          valA = a.title || '';
+          valB = b.title || '';
+        } else if (sortCol === 'business') {
+          valA = a.business || '';
+          valB = b.business || '';
+        } else if (sortCol === 'available') {
+          valA = (allInventory[a.sku]?.available) || 0;
+          valB = (allInventory[b.sku]?.available) || 0;
+        } else {
+          valA = (filteredCounts[a.sku]?.[sortCol]) || 0;
+          valB = (filteredCounts[b.sku]?.[sortCol]) || 0;
+        }
+
+        if (typeof valA === 'string') {
+          return sortDir === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+        } else {
+          return sortDir === 'asc' ? valA - valB : valB - valA;
+        }
+      });
+
+      // Render rows
+      sortedProducts.forEach(p => {
+        const baseInv = allInventory[p.sku] || { available: 0 };
+        const fInv = filteredCounts[p.sku] || { reserved: 0, packed: 0, dispatched: 0, returned: 0, cancelled: 0 };
+        
         tbody.innerHTML += `
           <tr>
             <td><strong>${p.sku}</strong></td>
             <td>${p.title}</td>
             <td><span class="badge-status dispatched" style="font-size: 0.72rem; padding: 0.15rem 0.4rem; background: var(--bg-elevated); border: 1px solid var(--border);">${p.business.replace(/_/g, ' ')}</span></td>
-            <td style="color:var(--success); font-weight:700;">${inv.available}</td>
-            <td style="color:var(--warning); font-weight:600;">${inv.reserved}</td>
-            <td style="color:var(--cyan-light); font-weight:600;">${inv.packed}</td>
-            <td style="font-weight:600;">${inv.dispatched}</td>
-            <td style="color:var(--danger);">${inv.returned}</td>
-            <td style="color:#4b5563;">${inv.cancelled}</td>
+            <td style="color:var(--success); font-weight:700;">${baseInv.available}</td>
+            <td style="color:var(--warning); font-weight:600;">${fInv.reserved}</td>
+            <td style="color:var(--cyan-light); font-weight:600;">${fInv.packed}</td>
+            <td style="font-weight:600;">${fInv.dispatched}</td>
+            <td style="color:var(--danger);">${fInv.returned}</td>
+            <td style="color:#4b5563;">${fInv.cancelled}</td>
           </tr>
         `;
       });
+
+      updateSortIndicators();
     }
 
     // Render Tab 3: Receive
