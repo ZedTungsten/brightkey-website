@@ -1617,11 +1617,14 @@
     // --- Load Data ---
     async function fetchPromoData() {
       try {
-        // 1. Fetch distinct businesses from products table
-        const { data: bizData } = await sb.from('products').select('business').not('business', 'is', null);
+        // 1. Fetch businesses from tenant_businesses table (canonical source)
+        const { data: bizData } = await sb
+          .from('tenant_businesses')
+          .select('id, name')
+          .eq('company_id', companyId)
+          .order('name', { ascending: true });
         if (bizData) {
-          const unique = [...new Set(bizData.map(p => p.business).filter(Boolean))];
-          allBusinesses = unique.map(name => ({ name, label: bizLabel(name) }));
+          allBusinesses = bizData.map(b => ({ name: b.name, label: bizLabel(b.name) }));
         }
 
         // 2. Load free shipping config
