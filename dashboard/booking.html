@@ -2186,6 +2186,60 @@
         receiptWindow.document.close();
       }
 
+      // --- Generate PDF blob from receiptHtml and upload to Supabase ---
+      try {
+        if (schedBtn) {
+          schedBtn.innerText = 'Uploading Receipt PDF...';
+          schedBtn.disabled = true;
+        }
+
+        // Create a temporary off-screen container to render the receipt for html2pdf
+        const pdfContainer = document.createElement('div');
+        pdfContainer.style.cssText = 'position:fixed;left:-9999px;top:0;width:794px;background:#fff;';
+        pdfContainer.innerHTML = receiptHtml.replace(/<!DOCTYPE[^>]*>/i, '').replace(/<html[^>]*>/i, '').replace(/<\/html>/i, '').replace(/<head>[\s\S]*?<\/head>/i, '').replace(/<body[^>]*>/i, '').replace(/<\/body>/i, '');
+        document.body.appendChild(pdfContainer);
+
+        const pdfOpt = {
+          margin: 0,
+          filename: `receipt-${receiptNo}.pdf`,
+          image: { type: 'jpeg', quality: 0.95 },
+          html2canvas: { scale: 2, useCORS: true, logging: false },
+          jsPDF: { unit: 'px', format: [794, 1123], orientation: 'portrait' }
+        };
+
+        const pdfBlob = await html2pdf().set(pdfOpt).from(pdfContainer).outputPdf('blob');
+        document.body.removeChild(pdfContainer);
+
+        // Convert blob to base64 for upload
+        const pdfBase64 = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(pdfBlob);
+        });
+
+        const pdfUrl = await uploadFileToSupabase(
+          pdfBase64,
+          `receipt-${receiptNo}.pdf`,
+          'installations',
+          folderRefId,
+          'receipt',
+          currentCompanyId
+        );
+
+        // Update the Supabase booking row with the receipt PDF URL
+        if (pdfUrl && savedBooking && savedBooking.id) {
+          await window.BKAuth.sb
+            .from('installation_bookings')
+            .update({ receipt_pdf_url: pdfUrl })
+            .eq('id', savedBooking.id);
+          console.log('Receipt PDF uploaded and saved:', pdfUrl);
+        }
+      } catch (pdfErr) {
+        console.warn('Receipt PDF upload failed (non-blocking):', pdfErr);
+      }
+      // ---------------------------------------------------------------
+
       // Clean up button state
       if (schedBtn) {
         schedBtn.innerText = originalBtnText;
