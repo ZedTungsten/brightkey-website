@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Integrations Settings — BrightKey Admin</title>
+  <link rel="preconnect" href="https://fonts.bunny.net" />
+  <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg?v=2" />
+
+  <style>
+    :root {
+      --bg-base: #FAFAFA;
+      --bg-surface: #FFFFFF;
+      --bg-elevated: #F4F4F5;
+      --bg-card: #FFFFFF;
+      --border: #E4E4E7;
+      --border-hover: #D4D4D8;
+      --text-primary: #09090B;
+      --text-secondary: #52525B;
+      --text-muted: #A1A1AA;
+      --cyan: #06B6D4;
+      --cyan-light: #0891B2;
+      --cyan-dim: rgba(6,182,212,0.12);
+      --cyan-border: rgba(6,182,212,0.25);
+      --success: #16A34A;
+      --danger: #DC2626;
+      --radius-sm: 6px;
+      --radius-md: 8px;
+      --radius-lg: 12px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg-base); color: var(--text-secondary); font-family: 'Commissioner', sans-serif; font-size: 0.9rem; }
+
+    /* Layout */
+    .page-wrap { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+    .top-bar { flex-shrink: 0; background: var(--bg-surface); border-bottom: 1px solid var(--border); padding: 0 1.5rem; display: flex; align-items: center; gap: 1rem; height: 56px; }
+    .top-bar-title { font-size: 1rem; font-weight: 800; color: var(--text-primary); letter-spacing: -0.03em; }
+
+    .content-area { display: flex; flex: 1; overflow: hidden; }
+
+    /* Main Panel */
+    .main-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+    .panel-header { padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border); background: var(--bg-surface); }
+    .panel-title { font-size: 1.1rem; font-weight: 800; color: var(--text-primary); letter-spacing: -0.02em; }
+    .panel-subtitle { font-size: 0.8rem; color: var(--text-muted); margin-top: 0.2rem; }
+
+    .panel-body { flex: 1; overflow-y: auto; padding: 2rem; display: flex; flex-direction: column; gap: 2rem; max-width: 800px; }
+
+    /* Cards */
+    .card { background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 2rem; }
+    .card-title { font-size: 0.95rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem; }
+    .card-desc { font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 1.5rem; line-height: 1.5; }
+
+    /* Form inputs with view toggler */
+    .form-group { display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 1.25rem; }
+    .form-label { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); }
+    .input-wrapper { position: relative; display: flex; align-items: center; }
+    .form-input { width: 100%; padding: 0.55rem 2.5rem 0.55rem 0.75rem; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 0.85rem; background: var(--bg-base); color: var(--text-primary); outline: none; transition: border 0.15s; font-family: inherit; }
+    .form-input:focus { border-color: var(--cyan); }
+    
+    .view-toggle { position: absolute; right: 0.75rem; background: none; border: none; cursor: pointer; color: var(--text-muted); display: flex; align-items: center; justify-content: center; padding: 0.25rem; transition: color 0.15s; }
+    .view-toggle:hover { color: var(--text-primary); }
+    .view-toggle svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+    /* Buttons */
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; padding: 0.55rem 1rem; border-radius: var(--radius-sm); font-size: 0.82rem; font-weight: 600; cursor: pointer; border: 1px solid transparent; transition: all 0.15s; }
+    .btn-primary { background: var(--cyan); color: #fff; border-color: var(--cyan); }
+    .btn-primary:hover:not(:disabled) { background: var(--cyan-light); border-color: var(--cyan-light); }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* Toast Container */
+    #toast-container { position: fixed; top: 1.5rem; right: 1.5rem; z-index: 99999; display: flex; flex-direction: column; gap: 0.5rem; }
+    .toast { padding: 0.75rem 1rem; border-radius: var(--radius-sm); font-size: 0.82rem; font-weight: 600; color: #fff; min-width: 250px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); animation: slideIn 0.2s cubic-bezier(0.16, 1, 0.3, 1); }
+    .toast-success { background: var(--success); }
+    .toast-error { background: var(--danger); }
+    @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+</head>
+<body style="display: none;">
+
+  <div id="toast-container"></div>
+
+  <div class="dash-layout">
+    <!-- Sidebar -->
+    <aside class="dash-sidebar" id="dash-sidebar"></aside>
+
+    <!-- Main Content -->
+    <div class="dash-main">
+      <!-- Top Bar -->
+      <div class="top-bar">
+        <div class="top-bar-title">Integrations</div>
+      </div>
+
+      <div class="content-area">
+        <div class="main-panel">
+          <div class="panel-header">
+            <h1 class="panel-title">Third-Party Integrations</h1>
+            <p class="panel-subtitle">Manage payment gateways, third-party credentials, and secure connection settings for your tenant account.</p>
+          </div>
+
+          <div class="panel-body">
+            <!-- Paymongo Gateway Settings -->
+            <div class="card">
+              <div class="card-title">
+                <svg viewBox="0 0 24 24" style="width: 20px; height: 20px; fill: none; stroke: var(--cyan); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;"><rect x="2" y="4" width="20" height="16" rx="2" ry="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+                <span>Paymongo Payment Gateway</span>
+              </div>
+              <p class="card-desc">
+                Configure your Paymongo API credentials to accept real-time payments through GCash, Maya, cards, and other channels. Your credentials are saved securely in your dedicated tenant space.
+              </p>
+
+              <div class="form-group">
+                <label class="form-label" for="paymongo-public-key">Paymongo Public Key</label>
+                <div class="input-wrapper">
+                  <input type="password" class="form-input" id="paymongo-public-key" placeholder="pk_live_..." autocomplete="off" />
+                  <button class="view-toggle" onclick="toggleVisibility('paymongo-public-key')" type="button" title="Toggle visibility">
+                    <svg class="eye-icon" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                  </button>
+                </div>
+              </div>
+
+              <div class="form-group" style="margin-bottom: 2rem;">
+                <label class="form-label" for="paymongo-secret-key">Paymongo Secret Key</label>
+                <div class="input-wrapper">
+                  <input type="password" class="form-input" id="paymongo-secret-key" placeholder="sk_live_..." autocomplete="off" />
+                  <button class="view-toggle" onclick="toggleVisibility('paymongo-secret-key')" type="button" title="Toggle visibility">
+                    <svg class="eye-icon" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                  </button>
+                </div>
+              </div>
+
+              <button class="btn btn-primary" id="btn-save" onclick="saveKeys()">Save Settings</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="../js/auth.js"></script>
+  <script src="../js/sidebar.js"></script>
+  <script src="../js/main.js"></script>
+  <script>
+    'use strict';
+
+    let currentCompanyId = null;
+    let integrationId = null;
+
+    // Toast helper
+    function toast(message, type = 'success') {
+      const container = document.getElementById('toast-container');
+      if (!container) return;
+      const el = document.createElement('div');
+      el.className = `toast toast-${type}`;
+      el.textContent = message;
+      container.appendChild(el);
+      setTimeout(() => el.remove(), 4000);
+    }
+
+    // Toggle Input visibility (eyeball icon click)
+    window.toggleVisibility = function(inputId) {
+      const input = document.getElementById(inputId);
+      if (!input) return;
+      if (input.type === 'password') {
+        input.type = 'text';
+      } else {
+        input.type = 'password';
+      }
+    };
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      // Role gate checking
+      const authInfo = await window.BKAuth.checkRoleGate(['owner', 'admin'], '../admin.html');
+      if (!authInfo) return;
+
+      document.body.style.display = 'block';
+
+      try {
+        // Fetch company id for the authorized tenant
+        const { data: companies, error: compErr } = await window.BKAuth.sb
+          .from('companies')
+          .select('id')
+          .eq('tenant_id', authInfo.tenantId)
+          .limit(1);
+
+        if (compErr) throw compErr;
+        if (!companies || companies.length === 0) {
+          toast('No company profile found for this tenant.', 'error');
+          return;
+        }
+
+        currentCompanyId = companies[0].id;
+
+        // Fetch existing credentials (injection-safe parameterized query)
+        const { data: integration, error: getErr } = await window.BKAuth.sb
+          .from('company_integrations')
+          .select('*')
+          .eq('company_id', currentCompanyId)
+          .maybeSingle();
+
+        if (getErr) throw getErr;
+
+        if (integration) {
+          integrationId = integration.id;
+          document.getElementById('paymongo-public-key').value = integration.paymongo_public_key || '';
+          document.getElementById('paymongo-secret-key').value = integration.paymongo_secret_key || '';
+        }
+      } catch (err) {
+        console.error('Integrations setup error:', err);
+        toast(`Failed to load settings: ${err.message}`, 'error');
+      }
+    });
+
+    // Save/Upsert payment settings
+    window.saveKeys = async function() {
+      if (!currentCompanyId) {
+        toast('Cannot save: Company ID is unresolved.', 'error');
+        return;
+      }
+
+      const saveBtn = document.getElementById('btn-save');
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Saving...';
+
+      const pubKey = document.getElementById('paymongo-public-key').value.trim();
+      const secKey = document.getElementById('paymongo-secret-key').value.trim();
+
+      const payload = {
+        company_id: currentCompanyId,
+        paymongo_public_key: pubKey || null,
+        paymongo_secret_key: secKey || null,
+        updated_at: new Date().toISOString()
+      };
+
+      try {
+        let res;
+        if (integrationId) {
+          // Update existing
+          res = await window.BKAuth.sb
+            .from('company_integrations')
+            .update(payload)
+            .eq('id', integrationId);
+        } else {
+          // Insert new
+          res = await window.BKAuth.sb
+            .from('company_integrations')
+            .insert([payload])
+            .select('id')
+            .maybeSingle();
+          if (res.data) {
+            integrationId = res.data.id;
+          }
+        }
+
+        if (res.error) throw res.error;
+
+        toast('Settings updated successfully!', 'success');
+      } catch (err) {
+        console.error('Save keys error:', err);
+        toast(`Failed to save settings: ${err.message}`, 'error');
+      } finally {
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save Settings';
+      }
+    };
+  </script>
+</body>
+</html>
