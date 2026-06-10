@@ -1206,61 +1206,6 @@
       const receiptNo = 'ORD-' + new Date().toISOString().slice(0,10).replace(/-/g,'') + '-' + Date.now().toString().slice(-3);
       const folderRefId = `${surname}-${receiptNo}`;
 
-      // Open the print/receipt tab immediately to prevent popup blocking
-      const receiptWindow = window.open('', '_blank');
-      if (receiptWindow) {
-        receiptWindow.document.write(`
-          <!DOCTYPE html>
-          <html lang="en">
-          <head>
-            <meta charset="UTF-8">
-            <title>Preparing Receipt - ${receiptNo}</title>
-            <style>
-              body {
-                display: flex;
-                flex-direction: column;
-                justify-content: center;
-                align-items: center;
-                height: 100vh;
-                margin: 0;
-                font-family: system-ui, -apple-system, sans-serif;
-                background: #f3f4f6;
-                color: #4b5563;
-              }
-              .spinner {
-                border: 4px solid rgba(0, 0, 0, 0.1);
-                width: 48px;
-                height: 48px;
-                border-radius: 50%;
-                border-left-color: #2563eb;
-                animation: spin 1s linear infinite;
-                margin-bottom: 16px;
-              }
-              @keyframes spin {
-                0% { transform: rotate(0deg); }
-                100% { transform: rotate(360deg); }
-              }
-              h2 {
-                margin: 0 0 8px 0;
-                font-size: 1.25rem;
-                color: #1f2937;
-              }
-              p {
-                margin: 0;
-                font-size: 0.875rem;
-              }
-            </style>
-          </head>
-          <body>
-            <div class="spinner"></div>
-            <h2>Processing Booking...</h2>
-            <p>Please do not close this window while we save your schedule and generate your receipt.</p>
-          </body>
-          </html>
-        `);
-        receiptWindow.document.close();
-      }
-
       // Set uploading state on button
       if (schedBtn) {
         schedBtn.innerText = "Uploading Media to Supabase Storage...";
@@ -2176,47 +2121,51 @@
         </html>
       `;
 
-      // Store in global scope so openReceiptTab() can reference it
-      window.latestReceiptHtml = receiptHtml;
-
-      // Write compiled receipt directly into open tab, triggering onload="window.print()"
-      if (receiptWindow) {
-        receiptWindow.document.open();
-        receiptWindow.document.write(receiptHtml);
-        receiptWindow.document.close();
+      // --- Generate PDF blob, upload to Supabase, keep blob for modal buttons ---
+      if (schedBtn) {
+        schedBtn.innerText = 'Generating Receipt PDF...';
+        schedBtn.disabled = true;
       }
 
-      // --- Generate PDF blob from receiptHtml and upload to Supabase ---
-      try {
-        if (schedBtn) {
-          schedBtn.innerText = 'Uploading Receipt PDF...';
-          schedBtn.disabled = true;
-        }
+      // Release any previously stored blob URL to free memory
+      if (window._receiptBlobUrl) {
+        URL.revokeObjectURL(window._receiptBlobUrl);
+        window._receiptBlobUrl = null;
+      }
 
-        // Create a temporary off-screen container to render the receipt for html2pdf
-        // Extract the <style> block from the receipt head so CSS renders correctly in the container
+      let receiptPdfUrl = null;
+
+      try {
+        // Extract CSS from receipt head
         const styleMatch = receiptHtml.match(/<style[^>]*>([\s\S]*?)<\/style>/i);
         const receiptCss = styleMatch ? styleMatch[1] : '';
 
-        // Extract body content only (strip doctype, html, head, body wrapper tags)
-        const bodyMatch = receiptHtml.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+        // Extract body content
+        const bodyMatch = receiptHtml.match(/<body[^>]*>([\s\S]*)<\/body>/i);
         const bodyContent = bodyMatch ? bodyMatch[1] : receiptHtml;
 
+        // Render in a hidden-but-painted div (position:absolute + opacity:0 lets
+        // html2canvas paint correctly — position:fixed off-screen does not)
         const pdfContainer = document.createElement('div');
-        pdfContainer.style.cssText = 'position:fixed;left:-9999px;top:0;width:794px;margin:0;padding:0;';
+        pdfContainer.style.cssText = 'position:absolute;top:0;left:0;width:794px;opacity:0;pointer-events:none;z-index:-1;';
         pdfContainer.innerHTML = `<style>
-          html,body,div{box-sizing:border-box;}
+          *{box-sizing:border-box;}
           ${receiptCss}
-          /* Ensure receipt-page fills container flush with no offset */
-          .receipt-preview-wrapper{padding:0!important;margin:0!important;}
+          .receipt-preview-wrapper{padding:0!important;margin:0!important;min-height:unset!important;background:transparent!important;}
           .receipt-page{margin:0!important;}
+          .receipt-actions{display:none!important;}
         </style>${bodyContent}`;
         document.body.appendChild(pdfContainer);
+
+        // Wait for fonts and images to fully paint before capturing
+        await new Promise(r => setTimeout(r, 500));
+
+        const receiptPageEl = pdfContainer.querySelector('.receipt-page') || pdfContainer;
 
         const pdfOpt = {
           margin: 0,
           filename: `receipt-${receiptNo}.pdf`,
-          image: { type: 'jpeg', quality: 0.95 },
+          image: { type: 'jpeg', quality: 0.97 },
           html2canvas: {
             scale: 2,
             useCORS: true,
@@ -2228,10 +2177,15 @@
           jsPDF: { unit: 'px', format: [794, 1123], orientation: 'portrait' }
         };
 
-        const pdfBlob = await html2pdf().set(pdfOpt).from(pdfContainer).outputPdf('blob');
+        const pdfBlob = await html2pdf().set(pdfOpt).from(receiptPageEl).outputPdf('blob');
         document.body.removeChild(pdfContainer);
 
-        // Convert blob to base64 for upload
+        // Store a blob URL for the modal's View + Download buttons
+        window._receiptBlobUrl = URL.createObjectURL(pdfBlob);
+        window._receiptFileName = `receipt-${receiptNo}.pdf`;
+
+        // Upload same blob to Supabase in parallel
+        schedBtn && (schedBtn.innerText = 'Uploading Receipt PDF...');
         const pdfBase64 = await new Promise((resolve, reject) => {
           const reader = new FileReader();
           reader.onload = () => resolve(reader.result);
@@ -2239,7 +2193,7 @@
           reader.readAsDataURL(pdfBlob);
         });
 
-        const pdfUrl = await uploadFileToSupabase(
+        receiptPdfUrl = await uploadFileToSupabase(
           pdfBase64,
           `receipt-${receiptNo}.pdf`,
           'installations',
@@ -2248,27 +2202,25 @@
           currentCompanyId
         );
 
-        // Update the Supabase booking row with the receipt PDF URL
-        if (pdfUrl && savedBooking && savedBooking.id) {
+        if (receiptPdfUrl && savedBooking && savedBooking.id) {
           await window.BKAuth.sb
             .from('installation_bookings')
-            .update({ receipt_pdf_url: pdfUrl })
+            .update({ receipt_pdf_url: receiptPdfUrl })
             .eq('id', savedBooking.id);
-          console.log('Receipt PDF uploaded and saved:', pdfUrl);
         }
       } catch (pdfErr) {
-        console.warn('Receipt PDF upload failed (non-blocking):', pdfErr);
+        console.warn('Receipt PDF generation failed:', pdfErr);
       }
       // ---------------------------------------------------------------
 
-      // Clean up button state
+      // Restore button
       if (schedBtn) {
         schedBtn.innerText = originalBtnText;
         schedBtn.disabled = false;
       }
 
       showNotification("Installation scheduled successfully!", 'success');
-      toggleReceiptModal(true);
+      toggleReceiptModal(true, receiptPdfUrl);
 
       } catch (err) {
         console.error('scheduleAndPrint error:', err);
@@ -2352,27 +2304,31 @@
       }
     }
 
-    function toggleReceiptModal(show) {
+    function toggleReceiptModal(show, supabaseUrl) {
       const modal = document.getElementById('receipt-modal');
       if (show) {
+        // Wire up view/download buttons with the fresh blob URL
+        const viewBtn = document.getElementById('receipt-btn-view');
+        const dlBtn = document.getElementById('receipt-btn-download');
+        if (viewBtn) {
+          // View: open the Supabase URL (persistent) if available, else blob URL
+          const viewUrl = supabaseUrl || window._receiptBlobUrl;
+          viewBtn.onclick = () => { if (viewUrl) window.open(viewUrl, '_blank'); };
+          viewBtn.disabled = !viewUrl;
+        }
+        if (dlBtn) {
+          dlBtn.onclick = () => {
+            if (!window._receiptBlobUrl) return;
+            const a = document.createElement('a');
+            a.href = window._receiptBlobUrl;
+            a.download = window._receiptFileName || 'receipt.pdf';
+            a.click();
+          };
+          dlBtn.disabled = !window._receiptBlobUrl;
+        }
         modal.classList.add('active');
       } else {
         modal.classList.remove('active');
-      }
-    }
-
-    function openReceiptTab() {
-      if (!window.latestReceiptHtml) {
-        showNotification("No receipt markup available.", 'error');
-        return;
-      }
-      const printWindow = window.open('', '_blank');
-      if (printWindow) {
-        printWindow.document.write(window.latestReceiptHtml);
-        printWindow.document.close();
-        toggleReceiptModal(false);
-      } else {
-        showNotification("Could not open receipt tab. Please allow popups.", 'error');
       }
     }
 
@@ -2563,20 +2519,29 @@
 
   <!-- Receipt Notification Modal -->
   <div class="modal-backdrop" id="receipt-modal">
-    <div class="modal-content" style="max-width: 450px; text-align: center; padding: 2.5rem 2rem;">
-      <div style="font-size: 3.5rem; margin-bottom: 1rem; color: var(--accent-primary);">📄</div>
-      <h3 style="margin-bottom: 0.5rem; font-weight: 700;">Installation Scheduled!</h3>
-      <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 2rem; line-height: 1.5;">
-        Your booking details are successfully saved. Click below to open the receipt tab, where you can print or save it to your local device.
+    <div class="modal-content" style="max-width: 420px; text-align: center; padding: 2.5rem 2rem;">
+      <div style="margin-bottom: 1.25rem;">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;">
+          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+        </svg>
+      </div>
+      <h3 style="margin-bottom: 0.4rem; font-weight: 800; color: var(--text-primary);">Installation Scheduled!</h3>
+      <p style="color: var(--text-secondary); font-size: 0.88rem; margin-bottom: 1.75rem; line-height: 1.6;">
+        Booking saved and receipt PDF is ready. Download a copy or view it directly in your browser.
       </p>
-      <div style="display: flex; flex-direction: column; gap: 0.75rem;">
-        <button onclick="openReceiptTab()" class="btn btn-primary" style="display: block; font-weight: 600; width: 100%;">
-          Open Receipt Page
+      <div style="display: flex; gap: 0.75rem; margin-bottom: 0.75rem;">
+        <button id="receipt-btn-download" class="btn btn-outline" style="flex:1; font-weight: 600; display:inline-flex; align-items:center; justify-content:center; gap:0.4rem;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Save PDF
         </button>
-        <button class="btn btn-outline" onclick="toggleReceiptModal(false)">
-          Close
+        <button id="receipt-btn-view" class="btn btn-primary" style="flex:1; font-weight: 600; display:inline-flex; align-items:center; justify-content:center; gap:0.4rem;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          View PDF
         </button>
       </div>
+      <button class="btn btn-outline" onclick="toggleReceiptModal(false)" style="width:100%;">
+        Close
+      </button>
     </div>
   </div>
 
