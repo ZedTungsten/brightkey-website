@@ -2166,37 +2166,38 @@
         const bodyMatch = receiptHtml.match(/<body[^>]*>([\s\S]*)<\/body>/i);
         const bodyContent = bodyMatch ? bodyMatch[1] : receiptHtml;
 
-        // Render in a hidden-but-painted div (position:absolute + opacity:0 lets
-        // html2canvas paint correctly — position:fixed off-screen does not)
+        // Render in a visibility:hidden fixed div at the viewport origin so
+        // html2canvas paints it at a known x:0,y:0 position with no offset issues
         const pdfContainer = document.createElement('div');
-        pdfContainer.style.cssText = 'position:absolute;top:0;left:0;width:794px;opacity:0;pointer-events:none;z-index:-1;';
+        pdfContainer.style.cssText = 'position:fixed;top:0;left:0;width:794px;visibility:hidden;pointer-events:none;z-index:-9999;';
         pdfContainer.innerHTML = `<style>
           *{box-sizing:border-box;}
           ${receiptCss}
-          .receipt-preview-wrapper{padding:0!important;margin:0!important;min-height:unset!important;background:transparent!important;}
-          .receipt-page{margin:0!important;}
+          .receipt-preview-wrapper{padding:0!important;margin:0!important;min-height:unset!important;background:#fff!important;}
+          .receipt-page{margin:0!important;width:794px!important;}
           .receipt-actions{display:none!important;}
         </style>${bodyContent}`;
         document.body.appendChild(pdfContainer);
 
         // Wait for fonts and images to fully paint before capturing
-        await new Promise(r => setTimeout(r, 500));
+        await new Promise(r => setTimeout(r, 600));
 
         const receiptPageEl = pdfContainer.querySelector('.receipt-page') || pdfContainer;
 
         const pdfOpt = {
           margin: 0,
           filename: `receipt-${receiptNo}.pdf`,
-          image: { type: 'jpeg', quality: 0.97 },
+          image: { type: 'jpeg', quality: 0.95 },
           html2canvas: {
-            scale: 2,
+            scale: 1,
             useCORS: true,
             logging: false,
+            width: 794,
             windowWidth: 794,
             scrollX: 0,
             scrollY: 0
           },
-          jsPDF: { unit: 'px', format: [794, 1123], orientation: 'portrait' }
+          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
         };
 
         const pdfBlob = await html2pdf().set(pdfOpt).from(receiptPageEl).outputPdf('blob');
