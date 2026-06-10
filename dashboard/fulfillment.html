@@ -507,6 +507,29 @@
               <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center;">
                 <span>Warehouse Tally</span>
                 <div style="display: flex; align-items: center; gap: 1rem; text-transform: none; font-weight: normal; font-size: 0.82rem;">
+
+                  <!-- Stock Filter Dropdown -->
+                  <div class="dropdown" id="stock-filter-container" style="position: relative;">
+                    <button type="button" id="stock-filter-btn" class="btn btn-outline" style="height: 30px; padding: 0.25rem 0.75rem; font-size: 0.82rem; display: inline-flex; align-items: center; gap: 0.35rem;" onclick="toggleStockFilterDropdown(event)">
+                      Stock Filter
+                      <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: middle;"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    </button>
+                    <div id="stock-filter-menu" style="display: none; position: absolute; top: 34px; left: 0; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); padding: 0.5rem; min-width: 200px; z-index: 1000;">
+                      <label style="display: flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0.5rem; font-size: 0.82rem; cursor: pointer; color: var(--text-secondary); user-select: none;">
+                        <input type="checkbox" value="with_stocks" checked onchange="handleStockFilterChange(this)" style="cursor: pointer;" />
+                        <span>With Stocks <span style="color:var(--text-muted); font-size:0.75rem;">(available &gt; 0)</span></span>
+                      </label>
+                      <label style="display: flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0.5rem; font-size: 0.82rem; cursor: pointer; color: var(--text-secondary); user-select: none;">
+                        <input type="checkbox" value="no_stocks" checked onchange="handleStockFilterChange(this)" style="cursor: pointer;" />
+                        <span>No Stocks <span style="color:var(--text-muted); font-size:0.75rem;">(available &lt; 1)</span></span>
+                      </label>
+                      <label style="display: flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0.5rem; font-size: 0.82rem; cursor: pointer; color: var(--text-secondary); user-select: none;">
+                        <input type="checkbox" value="with_dispatched" checked onchange="handleStockFilterChange(this)" style="cursor: pointer;" />
+                        <span>With Dispatched <span style="color:var(--text-muted); font-size:0.75rem;">(dispatched &gt; 0)</span></span>
+                      </label>
+                    </div>
+                  </div>
+
                   <!-- Edit Stocks Controls -->
                   <div id="edit-avail-actions" style="display: flex; align-items: center; gap: 0.5rem;">
                     <button type="button" id="btn-edit-avail" class="btn btn-outline" style="height: 30px; padding: 0.25rem 0.75rem; font-size: 0.82rem; display: inline-flex; align-items: center; gap: 0.35rem;" onclick="startEditingAvailable()">
@@ -1040,6 +1063,31 @@
     let uniqueCategories = [];
     let isCategoryInitialized = false;
 
+    // Stock filter state — all active by default (shows everything)
+    const activeStockFilters = new Set(['with_stocks', 'no_stocks', 'with_dispatched']);
+
+    window.toggleStockFilterDropdown = function(event) {
+      event.stopPropagation();
+      const menu = document.getElementById('stock-filter-menu');
+      if (!menu) return;
+      menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
+    };
+
+    window.handleStockFilterChange = function(cb) {
+      if (cb.checked) {
+        activeStockFilters.add(cb.value);
+      } else {
+        activeStockFilters.delete(cb.value);
+      }
+      // Update button label to show active count when not all selected
+      const btn = document.getElementById('stock-filter-btn');
+      if (btn) {
+        const allThree = activeStockFilters.size === 3;
+        btn.childNodes[0].textContent = allThree ? 'Stock Filter' : `Stock Filter (${activeStockFilters.size})`;
+      }
+      renderInventorySummary();
+    };
+
     window.selectAllCategories = function(selectActive, event) {
       if (event) event.stopPropagation();
       selectedCategories.clear();
@@ -1105,12 +1153,17 @@
       renderInventorySummary();
     };
 
-    // Close dropdown when clicking outside
+    // Close dropdowns when clicking outside
     document.addEventListener('click', (e) => {
-      const container = document.getElementById('category-dropdown-container');
-      const menu = document.getElementById('category-dropdown-menu');
-      if (menu && container && !container.contains(e.target)) {
-        menu.style.display = 'none';
+      const catContainer = document.getElementById('category-dropdown-container');
+      const catMenu = document.getElementById('category-dropdown-menu');
+      if (catMenu && catContainer && !catContainer.contains(e.target)) {
+        catMenu.style.display = 'none';
+      }
+      const stockContainer = document.getElementById('stock-filter-container');
+      const stockMenu = document.getElementById('stock-filter-menu');
+      if (stockMenu && stockContainer && !stockContainer.contains(e.target)) {
+        stockMenu.style.display = 'none';
       }
     });
 
@@ -1237,13 +1290,23 @@
       }
 
       // Filter products by selected categories
-      const filteredProducts = allProducts.filter(p => {
-        const cat = p.category || '';
-        return selectedCategories.has(cat);
+      const catFiltered = allProducts.filter(p => selectedCategories.has(p.category || ''));
+
+      // Apply stock filter (OR logic: show row if any checked condition matches)
+      const filteredProducts = catFiltered.filter(p => {
+        if (activeStockFilters.size === 3) return true; // all checked = show all
+        if (activeStockFilters.size === 0) return false;
+        const inv = allInventory[p.sku] || {};
+        const avail = inv.available || 0;
+        const dispatched = inv.dispatched || 0;
+        if (activeStockFilters.has('with_stocks') && avail > 0) return true;
+        if (activeStockFilters.has('no_stocks') && avail < 1) return true;
+        if (activeStockFilters.has('with_dispatched') && dispatched > 0) return true;
+        return false;
       });
 
       if (filteredProducts.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="10" class="text-center">No products match the selected categories.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="10" class="text-center">No products match the selected filters.</td></tr>`;
         updateSortIndicators();
         return;
       }
