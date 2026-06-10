@@ -579,7 +579,7 @@
       align-items: center;
       justify-content: center;
     }
-    #lightbox-img {
+    #lightbox-img, #lightbox-video {
       max-width: 90%;
       max-height: 80vh;
       border-radius: var(--radius-sm);
@@ -846,9 +846,56 @@
       </div>
     </div>
   </div>
+  <!-- Upload Media Modal -->
+  <div class="modal-overlay" id="upload-modal" onclick="closeUploadModal()">
+    <div class="modal-sheet" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h3 class="modal-title">Upload Media</h3>
+        <button class="modal-close" onclick="closeUploadModal()">✕</button>
+      </div>
+      <div class="modal-body" style="display:flex; flex-direction:column; gap:1.2rem; padding-bottom:1.5rem;">
+        <p style="font-size:0.9rem; color:var(--text-secondary);">Image and video (max 1 min.)</p>
+        
+        <!-- Guidelines -->
+        <div style="background:var(--bg-elevated); padding:1rem; border-radius:var(--radius-md); border:1px solid var(--border); font-size:0.85rem; color:var(--text-secondary); display:flex; flex-direction:column; gap:0.4rem;">
+          <strong style="color:var(--text-primary); font-size:0.9rem; margin-bottom:0.2rem;">Guidelines:</strong>
+          <div>1. Before and after installation photos.</div>
+          <div>2. Front view of the smart lock.</div>
+          <div>3. Bolts and strike plate (hamba).</div>
+          <div>4. Complete items handed over to the customer.</div>
+          <div>5. Videos showing the smart lock working properly.</div>
+          <div>6. Customer with the smart lock (with consent).</div>
+          <div>7. Proof of payment.</div>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:0.5rem;">
+          <label class="info-lbl">Select Files (Max 10 items, PNG/JPG/MP4/MOV)</label>
+          <input type="file" id="upload-file-input" multiple accept="image/png, image/jpeg, image/jpg, video/mp4, video/quicktime, .mov" style="display:none;" onchange="handleUploadFileSelect()" />
+          <button type="button" class="btn btn-outline" onclick="document.getElementById('upload-file-input').click()">Browse Files</button>
+        </div>
+
+        <!-- Selected files list -->
+        <div id="upload-files-preview" style="display:flex; flex-direction:column; gap:0.5rem; max-height:200px; overflow-y:auto;"></div>
+
+        <!-- Progress Container -->
+        <div id="upload-progress-container" style="display:none; flex-direction:column; gap:0.4rem;">
+          <div id="upload-progress-text" style="font-size:0.8rem; font-weight:600; color:var(--text-primary);">Uploading...</div>
+          <div style="width:100%; height:8px; background:var(--border); border-radius:4px; overflow:hidden;">
+            <div id="upload-progress-bar-fill" style="width:0%; height:100%; background:var(--cyan); transition:width 0.2s;"></div>
+          </div>
+        </div>
+
+        <div style="display:flex; justify-content:center; gap:0.75rem; margin-top:0.5rem;">
+          <button type="button" class="btn btn-outline" onclick="closeUploadModal()" style="width:auto; padding:0.5rem 1.5rem; font-size:0.9rem;">Cancel</button>
+          <button type="button" class="btn" id="btn-submit-upload" onclick="submitUploadMedia()" style="width:auto; padding:0.5rem 2rem; background:var(--success); color:#fff; border:none; font-size:0.9rem;" disabled>Upload</button>
+        </div>
+      </div>
+    </div>
+  </div>
   <!-- 4. LIGHTBOX MODAL -->
   <div class="modal-overlay" id="lightbox-modal" onclick="closeLightbox()">
-    <img id="lightbox-img" src="" alt="Fitted Preview" onclick="event.stopPropagation()" />
+    <img id="lightbox-img" src="" alt="Fitted Preview" style="display:none; max-width:90%; max-height:80vh; border-radius:var(--radius-sm); box-shadow: 0 10px 30px rgba(0,0,0,0.8);" onclick="event.stopPropagation()" />
+    <video id="lightbox-video" controls style="display:none; max-width:90%; max-height:80vh; border-radius:var(--radius-sm); box-shadow: 0 10px 30px rgba(0,0,0,0.8);" onclick="event.stopPropagation()"></video>
   </div>
 
   <script>
@@ -1295,7 +1342,12 @@
           let doneButtonHtml = '';
           if (isAssignedToThisDoor) {
             if (door?.completed) {
-              doneButtonHtml = `<span style="position: absolute; top: 0.85rem; right: 1rem; font-size: 0.83rem; font-weight: 700; background: var(--success); color: #fff; padding: 0.3rem 0.7rem; border-radius: var(--radius-sm); text-transform: uppercase;">✓ Completed</span>`;
+              doneButtonHtml = `
+                <div style="position: absolute; top: 0.85rem; right: 1rem; display: flex; flex-direction: column; gap: 0.4rem; align-items: flex-end;">
+                  <span style="font-size: 0.83rem; font-weight: 700; background: var(--success); color: #fff; padding: 0.3rem 0.7rem; border-radius: var(--radius-sm); text-transform: uppercase;">✓ Completed</span>
+                  <button type="button" class="btn btn-sm" style="width: auto; font-size: 0.83rem; padding: 0.3rem 0.7rem; border-radius: var(--radius-sm); background: var(--cyan); color: #fff; border: none; cursor: pointer;" onclick="openUploadModal(${i})">Upload</button>
+                </div>
+              `;
             } else {
               doneButtonHtml = `<button type="button" class="btn btn-sm" style="position: absolute; top: 0.85rem; right: 1rem; width: auto; font-size: 0.83rem; padding: 0.3rem 0.7rem; border-radius: var(--radius-sm); background: var(--success); color: #fff; border: none;" onclick="openChecklistModal(${i})">Done</button>`;
             }
@@ -1305,8 +1357,31 @@
           if (door?.completed && door.signature) {
             signatureHtml = `
               <div style="margin-top: 0.5rem; display: flex; flex-direction: column; gap: 0.2rem;">
-                <span class="info-lbl" style="font-size:0.6rem;">Signature Logged</span>
+                <span class="info-lbl" style="font-size:0.6rem;">Customer Signature Logged</span>
                 <img src="${door.signature}" alt="Customer Signature" style="max-height: 40px; width: auto; align-self: flex-start; background: #fff; border: 1px solid var(--border); border-radius: var(--radius-sm);" />
+              </div>
+            `;
+          }
+
+          let finishedMediaHtml = '';
+          if (door?.media_urls && door.media_urls.length > 0) {
+            finishedMediaHtml = `
+              <div style="margin-top: 0.5rem; display: flex; flex-direction: column; gap: 0.3rem;">
+                <span class="info-lbl" style="font-size:0.65rem;">Finished Installation Media</span>
+                <div class="photo-strip">
+                  ${door.media_urls.map(url => {
+                    const isVid = /\.(mp4|mov|webm)(\?|$)/i.test(url);
+                    if (isVid) {
+                      return `
+                        <div class="photo-thumb" style="display:flex; align-items:center; justify-content:center; background:#000; color:#fff; cursor:pointer; position:relative; width: 70px; height: 70px; border-radius: var(--radius-sm); border: 1px solid var(--border);" onclick="openLightbox('${url}')">
+                          <svg viewBox="0 0 24 24" style="width:24px;height:24px;fill:currentColor;stroke:none"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                        </div>
+                      `;
+                    } else {
+                      return `<img class="photo-thumb" src="${url}" alt="Finished Media" onclick="openLightbox('${url}')" />`;
+                    }
+                  }).join('')}
+                </div>
               </div>
             `;
           }
@@ -1332,6 +1407,7 @@
               </div>
               ${photosHtml}
               ${signatureHtml}
+              ${finishedMediaHtml}
             </div>
           `);
         }
@@ -1347,12 +1423,31 @@
     window.openLightbox = function(url) {
       const modal = document.getElementById('lightbox-modal');
       const img = document.getElementById('lightbox-img');
-      img.src = url;
+      const vid = document.getElementById('lightbox-video');
+      
+      const isVid = /\.(mp4|mov|webm)(\?|$)/i.test(url);
+      if (isVid) {
+        img.style.display = 'none';
+        img.src = '';
+        vid.src = url;
+        vid.style.display = 'block';
+      } else {
+        vid.style.display = 'none';
+        vid.src = '';
+        img.src = url;
+        img.style.display = 'block';
+      }
       modal.style.display = 'flex';
     };
 
     window.closeLightbox = function() {
-      document.getElementById('lightbox-modal').style.display = 'none';
+      const modal = document.getElementById('lightbox-modal');
+      modal.style.display = 'none';
+      const vid = document.getElementById('lightbox-video');
+      if (vid) {
+        vid.pause();
+        vid.src = '';
+      }
     };
 
     // --- Helper Formatters ---
@@ -1620,6 +1715,218 @@
       c.appendChild(el);
       setTimeout(() => el.remove(), 3500);
     }
+
+    // --- Media Upload Modal Logic ---
+    let selectedUploadFiles = [];
+    let uploadDoorIndex = null;
+
+    window.openUploadModal = function(doorIndex) {
+      uploadDoorIndex = doorIndex;
+      selectedUploadFiles = [];
+      document.getElementById('upload-files-preview').innerHTML = '';
+      document.getElementById('upload-file-input').value = '';
+      document.getElementById('btn-submit-upload').disabled = true;
+      document.getElementById('upload-progress-container').style.display = 'none';
+      
+      const detModal = document.getElementById('details-modal');
+      if (detModal) detModal.classList.add('stacked-under');
+      
+      document.getElementById('upload-modal').style.display = 'flex';
+    };
+
+    window.closeUploadModal = function() {
+      document.getElementById('upload-modal').style.display = 'none';
+      const detModal = document.getElementById('details-modal');
+      if (detModal) detModal.classList.remove('stacked-under');
+      uploadDoorIndex = null;
+    };
+
+    window.handleUploadFileSelect = function() {
+      const input = document.getElementById('upload-file-input');
+      const files = Array.from(input.files);
+
+      const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'video/mp4', 'video/quicktime', 'video/x-matroska', 'video/quicktime'];
+      
+      for (const f of files) {
+        if (selectedUploadFiles.length >= 10) {
+          showToast('Maximum 10 items allowed.', true);
+          break;
+        }
+
+        const lowerName = f.name.toLowerCase();
+        const isAllowedType = allowedTypes.includes(f.type) || 
+                              lowerName.endsWith('.png') || 
+                              lowerName.endsWith('.jpg') || 
+                              lowerName.endsWith('.jpeg') || 
+                              lowerName.endsWith('.mp4') || 
+                              lowerName.endsWith('.mov');
+                              
+        if (!isAllowedType) {
+          showToast(`${f.name} is not an allowed type.`, true);
+          continue;
+        }
+
+        // Video duration check (max 1 min)
+        if (f.type.startsWith('video/') || lowerName.endsWith('.mp4') || lowerName.endsWith('.mov')) {
+          const url = URL.createObjectURL(f);
+          const tempVideo = document.createElement('video');
+          tempVideo.preload = 'metadata';
+          tempVideo.src = url;
+          tempVideo.onloadedmetadata = function() {
+            URL.revokeObjectURL(url);
+            if (tempVideo.duration > 60) {
+              showToast(`${f.name} exceeds the 1-minute video limit.`, true);
+              selectedUploadFiles = selectedUploadFiles.filter(item => item !== f);
+              renderUploadPreviews();
+            }
+          };
+        }
+
+        selectedUploadFiles.push(f);
+      }
+
+      renderUploadPreviews();
+    };
+
+    function renderUploadPreviews() {
+      const preview = document.getElementById('upload-files-preview');
+      const submitBtn = document.getElementById('btn-submit-upload');
+      preview.innerHTML = '';
+
+      selectedUploadFiles.forEach((f, idx) => {
+        const item = document.createElement('div');
+        item.style.display = 'flex';
+        item.style.alignItems = 'center';
+        item.style.justifyContent = 'space-between';
+        item.style.padding = '0.5rem';
+        item.style.background = 'var(--bg-elevated)';
+        item.style.border = '1px solid var(--border)';
+        item.style.borderRadius = 'var(--radius-sm)';
+        item.style.fontSize = '0.82rem';
+
+        const nameSpan = document.createElement('span');
+        nameSpan.innerText = f.name;
+        nameSpan.style.overflow = 'hidden';
+        nameSpan.style.textOverflow = 'ellipsis';
+        nameSpan.style.whiteSpace = 'nowrap';
+        nameSpan.style.maxWidth = '75%';
+
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.innerText = '✕';
+        removeBtn.style.border = 'none';
+        removeBtn.style.background = 'none';
+        removeBtn.style.color = 'var(--danger)';
+        removeBtn.style.cursor = 'pointer';
+        removeBtn.style.padding = '0.2rem';
+        removeBtn.onclick = () => {
+          selectedUploadFiles.splice(idx, 1);
+          renderUploadPreviews();
+        };
+
+        item.appendChild(nameSpan);
+        item.appendChild(removeBtn);
+        preview.appendChild(item);
+      });
+
+      submitBtn.disabled = selectedUploadFiles.length === 0;
+    }
+
+    window.submitUploadMedia = async function() {
+      if (!selectedBooking || uploadDoorIndex === null || selectedUploadFiles.length === 0) return;
+
+      const submitBtn = document.getElementById('btn-submit-upload');
+      const progressContainer = document.getElementById('upload-progress-container');
+      const progressText = document.getElementById('upload-progress-text');
+      const progressBarFill = document.getElementById('upload-progress-bar-fill');
+
+      submitBtn.disabled = true;
+      progressContainer.style.display = 'flex';
+
+      let doorsArr = [];
+      if (typeof selectedBooking.doors === 'string') {
+        try { doorsArr = JSON.parse(selectedBooking.doors); } catch(_) {}
+      } else if (Array.isArray(selectedBooking.doors)) {
+        doorsArr = selectedBooking.doors;
+      }
+
+      const door = doorsArr[uploadDoorIndex];
+      if (!door) return;
+
+      const totalFiles = selectedUploadFiles.length;
+      const uploadedUrls = [];
+
+      // Create a clean folder name based on booking and customer info
+      const cleanCustomerName = (selectedBooking.customer_name || 'Customer').replace(/[^a-zA-Z0-9]/g, '_');
+      const folderName = `${selectedBooking.id}_${cleanCustomerName}`;
+
+      for (let i = 0; i < totalFiles; i++) {
+        const file = selectedUploadFiles[i];
+        progressText.innerText = `Uploading ${i + 1} of ${totalFiles}: ${file.name}`;
+        progressBarFill.style.width = `${Math.round((i / totalFiles) * 100)}%`;
+
+        const ext = file.name.split('.').pop();
+        const path = `finished_installations/${folderName}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+
+        try {
+          const { data, error } = await sb.storage.from('review-media').upload(path, file, {
+            cacheControl: '3600',
+            upsert: false
+          });
+
+          if (error) throw error;
+
+          const { data: { publicUrl } } = sb.storage.from('review-media').getPublicUrl(path);
+          uploadedUrls.push(publicUrl);
+        } catch (err) {
+          console.error(`Upload error for file ${file.name}:`, err);
+          showToast(`Upload failed for ${file.name}: ${err.message}`, true);
+          submitBtn.disabled = false;
+          progressContainer.style.display = 'none';
+          return;
+        }
+      }
+
+      progressBarFill.style.width = '100%';
+      progressText.innerText = 'Finalizing upload...';
+
+      // Save URLs to the door object
+      if (!door.media_urls) {
+        door.media_urls = [];
+      }
+      door.media_urls = [...door.media_urls, ...uploadedUrls];
+
+      try {
+        const { error } = await sb
+          .from('installation_bookings')
+          .update({ doors: doorsArr })
+          .eq('id', selectedBooking.id);
+
+        if (error) throw error;
+
+        // Update local memory
+        const idx = dbBookings.findIndex(b => b.id === selectedBooking.id);
+        if (idx !== -1) {
+          dbBookings[idx].doors = doorsArr;
+          selectedBooking.doors = doorsArr;
+        }
+
+        // Cache update
+        localStorage.setItem(`bk_cache_${currentInstaller.id}`, JSON.stringify({
+          data: dbBookings,
+          timestamp: new Date().toISOString()
+        }));
+
+        showToast('Finished installation media uploaded successfully.');
+        closeUploadModal();
+        openDetailsModal(selectedBooking.id); // Refresh details modal
+      } catch (err) {
+        console.error('Failed to save media URLs to database:', err);
+        showToast('Database update failed: ' + err.message, true);
+        submitBtn.disabled = false;
+        progressContainer.style.display = 'none';
+      }
+    };
   </script>
 </body>
 </html>
