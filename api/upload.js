@@ -60,7 +60,17 @@ export default async function handler(req, res) {
         folderPath = `${prefix}/installations/${safeRefId}`;
       }
     } else if (category === 'employees') {
-      folderPath = `${prefix}/employees/${safeRefId}`;
+      if (type === 'photo') {
+        folderPath = `${prefix}/employees/${safeRefId}/photo`;
+      } else if (type === 'govid') {
+        folderPath = `${prefix}/employees/${safeRefId}/govid`;
+      } else if (type === 'cv') {
+        folderPath = `${prefix}/employees/${safeRefId}/cv`;
+      } else if (type === 'id') {
+        folderPath = `${prefix}/employees/${safeRefId}/id`;
+      } else {
+        folderPath = `${prefix}/employees/${safeRefId}`;
+      }
     } else if (category === 'logos') {
       folderPath = `${prefix}/logos`;
     } else {
