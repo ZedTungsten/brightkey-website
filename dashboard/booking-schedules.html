@@ -583,6 +583,33 @@
     .btn-minimal.btn-danger {
       color: var(--danger) !important;
     }
+    .btn-danger-fill { background: var(--danger); color: #fff; border-color: var(--danger); }
+    .btn-danger-fill:hover { background: #b91c1c; border-color: #b91c1c; }
+
+    /* Aborted booking visual state */
+    .calendar-slot.aborted {
+      background: rgba(161,161,170,0.1) !important;
+      color: var(--text-muted) !important;
+      border-left-color: var(--text-muted) !important;
+      opacity: 0.55;
+    }
+    .list-card.aborted {
+      opacity: 0.5;
+      filter: grayscale(0.6);
+    }
+    .aborted-badge {
+      display: inline-block;
+      font-size: 0.68rem;
+      font-weight: 700;
+      padding: 1px 6px;
+      border-radius: 10px;
+      background: rgba(161,161,170,0.18);
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-left: 0.4rem;
+      vertical-align: middle;
+    }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 </head>
@@ -783,7 +810,9 @@
       </div>
       <div class="modal-footer">
         <button class="btn btn-outline" onclick="toggleDetailsModal(false)">Close</button>
-        <button class="btn btn-primary" onclick="openRescheduleModal()">Reschedule</button>
+        <div style="flex:1;"></div>
+        <button class="btn btn-danger-fill" id="btn-abort-booking" onclick="openAbortConfirmModal()">Abort</button>
+        <button class="btn btn-primary" id="btn-reschedule-booking" onclick="openRescheduleModal()">Reschedule</button>
       </div>
     </div>
   </div>
@@ -816,6 +845,26 @@
           <button type="submit" class="btn btn-primary">Save Changes</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- Abort Confirm Modal -->
+  <div class="modal-overlay" id="abort-confirm-modal" onclick="closeAbortConfirmModal(event)">
+    <div class="modal-card" style="width: 420px;" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <div class="modal-title" style="color: var(--danger);">Abort Booking</div>
+        <button class="modal-close" onclick="toggleAbortConfirmModal(false)">
+          <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body" style="gap: 1rem;">
+        <p style="font-size: 0.9rem; font-weight: 600; color: var(--text-primary);">Are you sure you want to abort this booking?</p>
+        <p style="font-size: 0.82rem; color: var(--text-secondary); line-height: 1.6;">Products reserved by this booking will be moved to <strong>Cancelled</strong> (fulfillment), regardless if reserved, packed, or fulfilled. The booking entry will remain but will be grayed out.</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="toggleAbortConfirmModal(false)">Cancel</button>
+        <button class="btn btn-danger-fill" id="btn-confirm-abort" onclick="confirmAbortBooking()">Abort</button>
+      </div>
     </div>
   </div>
 
@@ -1000,10 +1049,13 @@
           // Parse city from address or fallback
           const cityStr = getCityFromAddress(b.customer_address);
           const displayText = `${escapeHtml(b.customer_name)} (${escapeHtml(cityStr)})`;
-          const badgeHtml = b.installer_name ? `<span class="calendar-inst-badge">${escapeHtml(formatInstallerName(b.installer_name))}</span>` : '';
-          
+          const isAborted = b.status === 'aborted';
+          const badgeHtml = isAborted
+            ? `<span style="font-size:0.6rem;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Aborted</span>`
+            : (b.installer_name ? `<span class="calendar-inst-badge">${escapeHtml(formatInstallerName(b.installer_name))}</span>` : '');
+
           const slotHtml = `
-            <div class="calendar-slot ${isAfternoon(b.scheduled_time) ? 'pm' : 'am'}" title="${displayText}" onclick="showBookingDetails('${b.id}')">
+            <div class="calendar-slot ${isAfternoon(b.scheduled_time) ? 'pm' : 'am'}${isAborted ? ' aborted' : ''}" title="${displayText}" onclick="showBookingDetails('${b.id}')">
               <div style="font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; width:100%;">${displayText}</div>
               ${badgeHtml}
             </div>
@@ -1056,11 +1108,12 @@
         const cityStr = getCityFromAddress(b.customer_address);
         const formattedDate = b.scheduled_date ? formatDateFriendly(b.scheduled_date) : 'Unscheduled';
         const formattedProducts = b.product_names ? b.product_names.replace(/ \| /g, ', ') : 'No products';
-        
+        const isAborted = b.status === 'aborted';
+
         container.insertAdjacentHTML('beforeend', `
-          <div class="list-card" onclick="showBookingDetails('${b.id}')">
+          <div class="list-card${isAborted ? ' aborted' : ''}" onclick="showBookingDetails('${b.id}')">
             <div class="list-card-left">
-              <span class="list-card-name">${escapeHtml(b.customer_name)}</span>
+              <span class="list-card-name">${escapeHtml(b.customer_name)}${isAborted ? '<span class="aborted-badge">Aborted</span>' : ''}</span>
               <div class="list-card-details">
                 <span><strong>Location:</strong> ${escapeHtml(cityStr)}</span>
                 <span><strong>Products:</strong> ${escapeHtml(formattedProducts)}</span>
@@ -1108,6 +1161,13 @@
 
       toggleEditField('map-pin', false);
       toggleEditField('notes', false);
+
+      // Show/hide abort button based on current status
+      const isAborted = selectedBooking.status === 'aborted';
+      const abortBtn = document.getElementById('btn-abort-booking');
+      const reschedBtn = document.getElementById('btn-reschedule-booking');
+      if (abortBtn) abortBtn.style.display = isAborted ? 'none' : '';
+      if (reschedBtn) reschedBtn.disabled = isAborted;
 
       document.getElementById('det-date').innerText = selectedBooking.scheduled_date ? formatDateFriendly(selectedBooking.scheduled_date) : 'Unscheduled';
       document.getElementById('det-time').innerText = selectedBooking.scheduled_time || 'AM Slot';
@@ -1380,6 +1440,99 @@
       } catch (err) {
         console.error(err);
         showToast('Failed to reschedule: ' + err.message, true);
+      }
+    }
+
+    // Abort booking actions
+    function openAbortConfirmModal() {
+      if (!selectedBooking) return;
+      toggleAbortConfirmModal(true);
+    }
+
+    function toggleAbortConfirmModal(show) {
+      document.getElementById('abort-confirm-modal').classList.toggle('open', show);
+    }
+
+    function closeAbortConfirmModal(e) {
+      if (e.target.id === 'abort-confirm-modal') {
+        toggleAbortConfirmModal(false);
+      }
+    }
+
+    async function confirmAbortBooking() {
+      if (!selectedBooking) return;
+      const btn = document.getElementById('btn-confirm-abort');
+      btn.disabled = true;
+      btn.textContent = 'Aborting...';
+
+      try {
+        // 1. Mark booking as aborted
+        const { error: bookingErr } = await sb
+          .from('installation_bookings')
+          .update({ status: 'aborted' })
+          .eq('id', selectedBooking.id);
+        if (bookingErr) throw bookingErr;
+
+        // 2. Cancel all active inventory transactions for this order
+        const orderNo = selectedBooking.order_no;
+        if (orderNo) {
+          const { data: txs, error: txFetchErr } = await sb
+            .from('inventory_transactions')
+            .select('id, sku, quantity, status')
+            .eq('reference_id', orderNo)
+            .eq('type', 'customer_order')
+            .in('status', ['reserved', 'packed']);
+          if (txFetchErr) throw txFetchErr;
+
+          const now = new Date().toISOString();
+          for (const tx of (txs || [])) {
+            // Cancel the transaction
+            const { error: txErr } = await sb
+              .from('inventory_transactions')
+              .update({ status: 'cancelled', timestamp_cancelled: now })
+              .eq('id', tx.id);
+            if (txErr) throw txErr;
+
+            // Adjust inventory counts
+            const { data: invRows, error: invErr } = await sb
+              .from('inventory')
+              .select('*')
+              .eq('sku', tx.sku);
+            if (invErr) throw invErr;
+            if (invRows && invRows.length > 0) {
+              const inv = invRows[0];
+              const invUpdate = { cancelled: (inv.cancelled || 0) + tx.quantity };
+              if (tx.status === 'reserved') {
+                invUpdate.reserved = Math.max(0, (inv.reserved || 0) - tx.quantity);
+              } else if (tx.status === 'packed') {
+                invUpdate.packed = Math.max(0, (inv.packed || 0) - tx.quantity);
+              }
+              const { error: updErr } = await sb
+                .from('inventory')
+                .update(invUpdate)
+                .eq('sku', tx.sku);
+              if (updErr) throw updErr;
+            }
+          }
+        }
+
+        // Update local state
+        const bookingIndex = dbBookings.findIndex(b => b.id === selectedBooking.id);
+        if (bookingIndex !== -1) {
+          dbBookings[bookingIndex].status = 'aborted';
+          selectedBooking.status = 'aborted';
+        }
+
+        showToast('Booking aborted. Fulfillment items cancelled.');
+        toggleAbortConfirmModal(false);
+        toggleDetailsModal(false);
+        applyFilterAndRender();
+      } catch (err) {
+        console.error(err);
+        showToast('Failed to abort booking: ' + err.message, true);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Abort';
       }
     }
 
