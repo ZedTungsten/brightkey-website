@@ -1049,7 +1049,7 @@
           // Parse city from address or fallback
           const cityStr = getCityFromAddress(b.customer_address);
           const displayText = `${escapeHtml(b.customer_name)} (${escapeHtml(cityStr)})`;
-          const isAborted = b.status === 'aborted';
+          const isAborted = b.status === 'cancelled';
           const badgeHtml = isAborted
             ? `<span style="font-size:0.6rem;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Aborted</span>`
             : (b.installer_name ? `<span class="calendar-inst-badge">${escapeHtml(formatInstallerName(b.installer_name))}</span>` : '');
@@ -1108,7 +1108,7 @@
         const cityStr = getCityFromAddress(b.customer_address);
         const formattedDate = b.scheduled_date ? formatDateFriendly(b.scheduled_date) : 'Unscheduled';
         const formattedProducts = b.product_names ? b.product_names.replace(/ \| /g, ', ') : 'No products';
-        const isAborted = b.status === 'aborted';
+        const isAborted = b.status === 'cancelled';
 
         container.insertAdjacentHTML('beforeend', `
           <div class="list-card${isAborted ? ' aborted' : ''}" onclick="showBookingDetails('${b.id}')">
@@ -1163,7 +1163,7 @@
       toggleEditField('notes', false);
 
       // Show/hide abort button based on current status
-      const isAborted = selectedBooking.status === 'aborted';
+      const isAborted = selectedBooking.status === 'cancelled';
       const abortBtn = document.getElementById('btn-abort-booking');
       const reschedBtn = document.getElementById('btn-reschedule-booking');
       if (abortBtn) abortBtn.style.display = isAborted ? 'none' : '';
@@ -1466,10 +1466,10 @@
       btn.textContent = 'Aborting...';
 
       try {
-        // 1. Mark booking as aborted
+        // 1. Mark booking as cancelled (constraint-safe; fulfillment sync also picks this up)
         const { error: bookingErr } = await sb
           .from('installation_bookings')
-          .update({ status: 'aborted' })
+          .update({ status: 'cancelled' })
           .eq('id', selectedBooking.id);
         if (bookingErr) throw bookingErr;
 
@@ -1519,8 +1519,8 @@
         // Update local state
         const bookingIndex = dbBookings.findIndex(b => b.id === selectedBooking.id);
         if (bookingIndex !== -1) {
-          dbBookings[bookingIndex].status = 'aborted';
-          selectedBooking.status = 'aborted';
+          dbBookings[bookingIndex].status = 'cancelled';
+          selectedBooking.status = 'cancelled';
         }
 
         showToast('Booking aborted. Fulfillment items cancelled.');
