@@ -646,6 +646,17 @@
     .dir-table td.grp-docs {
       border-left: 2px solid rgba(99, 102, 241, 0.08);
     }
+    .doc-upload-wrap { display: flex; flex-direction: column; gap: 0.25rem; min-width: 160px; }
+    .doc-upload-row  { display: flex; gap: 0.3rem; align-items: center; }
+    .doc-upload-btn  {
+      display: inline-flex; align-items: center; justify-content: center;
+      padding: 0.3rem 0.45rem; border-radius: 5px; cursor: pointer; flex-shrink: 0;
+      background: var(--bg-elevated); border: 1px solid var(--border);
+      font-size: 0.72rem; font-weight: 600; color: var(--text-secondary);
+      transition: border-color 0.15s;
+    }
+    .doc-upload-btn:hover { border-color: var(--cyan-light); color: var(--cyan-light); }
+    .doc-upload-btn svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2; }
 
     .dir-table td.grp-leave {
       border-left: 2px solid rgba(239, 68, 68, 0.08);
@@ -1054,7 +1065,7 @@
             </thead>
             <tbody id="dir-tbody">
               <tr>
-                <td colspan="27" class="tbl-state">Loading employees…</td>
+                <td colspan="28" class="tbl-state">Loading employees…</td>
               </tr>
             </tbody>
           </table>
@@ -1190,6 +1201,12 @@
         const authInfo = await window.BKAuth.checkRoleGate(['owner', 'admin', 'hr'], '../admin.html');
         if (!authInfo) return;
 
+        // Fetch company ID for file uploads
+        try {
+          const { data: co } = await getSb().from('companies').select('id').eq('tenant_id', authInfo.tenantId).limit(1).maybeSingle();
+          this.companyId = co?.id || 'general';
+        } catch(e) { this.companyId = 'general'; }
+
         this.bindToolbar();
         this.bindEditMode();
         this.bindExport();
@@ -1215,7 +1232,7 @@
 
       /* ── Load from Supabase ── */
       async load() {
-        document.getElementById('dir-tbody').innerHTML = '<tr><td colspan="27" class="tbl-state">Loading employees…</td></tr>';
+        document.getElementById('dir-tbody').innerHTML = '<tr><td colspan="28" class="tbl-state">Loading employees…</td></tr>';
         try {
           const data = await sbGet();
           this.allEmployees = data;
@@ -1225,7 +1242,7 @@
           this.applyFilters();
           this.updateStats();
         } catch (err) {
-          document.getElementById('dir-tbody').innerHTML = `<tr><td colspan="27" class="tbl-state error">Failed to load: ${esc(err.message)}</td></tr>`;
+          document.getElementById('dir-tbody').innerHTML = `<tr><td colspan="28" class="tbl-state error">Failed to load: ${esc(err.message)}</td></tr>`;
           toast('Failed to load employees: ' + err.message, 'error');
         }
       },
@@ -1295,7 +1312,7 @@
         const tbody = document.getElementById('dir-tbody');
 
         if (slice.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="27" class="tbl-state">No employees found.</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="28" class="tbl-state">No employees found.</td></tr>';
           document.getElementById('footer-info').textContent = 'No results';
           document.getElementById('pagination').innerHTML = '';
           return;
@@ -1356,6 +1373,24 @@
           return `<td class="${grpClass}"><input type="url" class="cell-input" data-id="${esc(id)}" data-field="${esc(field)}" value="${esc(fmt(url))}" style="min-width:150px;"></td>`;
         };
 
+        // Document cell with file upload in edit mode
+        const cellDoc = (url, viewLabel, field, docType, accept = '*') => {
+          if (!isEdit) {
+            return url
+              ? `<td class="grp-docs cell-link"><a href="${esc(url)}" target="_blank">${esc(viewLabel)}</a></td>`
+              : `<td class="grp-docs cell-empty">—</td>`;
+          }
+          return `<td class="grp-docs"><div class="doc-upload-wrap">
+            <div class="doc-upload-row">
+              <label class="doc-upload-btn" title="Upload file">
+                <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                <input type="file" accept="${accept}" style="display:none;" onchange="App.uploadDocFile(this,'${esc(id)}','${esc(field)}','${esc(docType)}')">
+              </label>
+              <input type="url" class="cell-input" data-id="${esc(id)}" data-field="${esc(field)}" value="${esc(fmt(url))}" placeholder="URL" style="flex:1;min-width:110px;">
+            </div>
+          </div></td>`;
+        };
+
         const salaryCell = () => {
           if (!isEdit) {
             return emp.salary != null
@@ -1402,7 +1437,16 @@
               <span class="no-image-label">No Image</span>
             </div></td>`;
           }
-          return `<td class="grp-docs"><input type="url" class="cell-input" data-id="${esc(id)}" data-field="picture_link" value="${esc(fmt(url))}" style="min-width:150px;"></td>`;
+          // Edit mode: file upload + URL input
+          return `<td class="grp-docs"><div class="doc-upload-wrap">
+            <div class="doc-upload-row">
+              <label class="doc-upload-btn" title="Upload photo">
+                <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                <input type="file" accept="image/*" style="display:none;" onchange="App.uploadDocFile(this,'${esc(id)}','picture_link','photo')">
+              </label>
+              <input type="url" class="cell-input" data-id="${esc(id)}" data-field="picture_link" value="${esc(fmt(url))}" placeholder="URL" style="flex:1;min-width:110px;">
+            </div>
+          </div></td>`;
         };
 
         const actionBtns = isEdit
@@ -1437,8 +1481,9 @@
           ${cell(emp.pagibig, 'pagibig')}
           ${cell(emp.philhealth, 'philhealth')}
           ${cellPicture()}
-          ${cellLink(emp.cv_link, 'View CV', 'cv_link', 'grp-docs')}
-          ${cellLink(emp.id_link, 'View ID', 'id_link', 'grp-docs')}
+          ${cellDoc(emp.gov_id_link, 'View Gov\'t ID', 'gov_id_link', 'govid', 'image/*,.pdf')}
+          ${cellDoc(emp.cv_link,     'View CV',        'cv_link',     'cv',    '.pdf,.doc,.docx')}
+          ${cellDoc(emp.id_link,     'View ID',        'id_link',     'id',    'image/*,.pdf')}
           <td class="col-actions">${actionBtns}</td>
         </tr>`;
       },
@@ -1500,6 +1545,40 @@
       },
 
       /* ── Save all dirty rows ── */
+      async uploadDocFile(input, empId, field, docType) {
+        const file = input.files[0];
+        if (!file) return;
+        const label = input.closest('.doc-upload-btn');
+        const urlInput = input.closest('td').querySelector('.cell-input');
+        const origHtml = label ? label.innerHTML : '';
+        if (label) label.innerHTML = '<span style="font-size:0.7rem;padding:0 2px;">…</span>';
+        try {
+          const base64 = await new Promise((res, rej) => {
+            const reader = new FileReader();
+            reader.onload = () => res(reader.result);
+            reader.onerror = rej;
+            reader.readAsDataURL(file);
+          });
+          const r = await fetch('/api/upload', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fileBase64: base64, fileName: file.name, category: 'employees', refId: empId, type: docType, companyId: this.companyId || 'general' })
+          });
+          if (!r.ok) throw new Error('Upload failed');
+          const data = await r.json();
+          if (urlInput) {
+            urlInput.value = data.url;
+            urlInput.dispatchEvent(new Event('input', { bubbles: true }));
+          }
+          toast('File uploaded!', 'success');
+        } catch(e) {
+          toast('Upload error: ' + e.message, 'error');
+        } finally {
+          if (label) label.innerHTML = origHtml;
+          input.value = '';
+        }
+      },
+
       async saveAll() {
         const ids = Object.keys(this.dirty);
         const deletes = Array.from(this.pendingDeletes);
@@ -1756,6 +1835,7 @@
               pagibig: '',
               philhealth: '',
               picture_link: '',
+              gov_id_link: '',
               id_link: '',
               cv_link: '',
             };
@@ -1840,7 +1920,7 @@
             ['contact_number', 'Contact #'], ['emergency_contact_number', 'Emergency Contact'],
             ['email', 'Email'], ['tin', 'TIN'], ['sss', 'SSS'],
             ['pagibig', 'PAG-IBIG'], ['philhealth', 'PhilHealth'],
-            ['picture_link', 'Picture Link'], ['id_link', 'ID Link'], ['cv_link', 'CV Link'],
+            ['picture_link', 'Picture Link'], ['gov_id_link', "Gov't ID Link"], ['cv_link', 'CV Link'], ['id_link', 'ID Link'],
           ];
           const header = cols.map(c => `"${c[1]}"`).join(',');
           const rows = this.filtered.map(emp =>
