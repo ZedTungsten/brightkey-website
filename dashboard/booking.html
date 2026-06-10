@@ -409,15 +409,6 @@
                   <option value="Afternoon">Afternoon (PM Slot - 1:00 PM - 5:00 PM)</option>
                 </select>
               </div>
-              <div class="form-group" style="grid-column: span 2;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem;">
-                  <label class="form-label">Assign Installers (Optional, Max 5)</label>
-                  <button type="button" class="btn btn-outline btn-sm" id="btn-add-installer" onclick="addInstallerSelect()" style="padding: 0.2rem 0.5rem; font-size: 0.72rem;">+ Add Installer</button>
-                </div>
-                <div id="installers-list-container" style="display: flex; flex-direction: column; gap: 0.5rem;">
-                  <!-- Populated dynamically -->
-                </div>
-              </div>
             </div>
             <div class="form-group" style="margin-top: 1rem;">
               <label class="form-label">Installation Notes</label>
@@ -595,87 +586,48 @@
 
       addProductRow();
       adjustDoors(1); // Start with 1 door card
-      addInstallerSelect();
     });
 
-    function addInstallerSelect(selectedValue = '') {
-      const container = document.getElementById('installers-list-container');
-      const currentRows = container.querySelectorAll('.installer-row-item');
-      if (currentRows.length >= 5) {
-        showNotification('Maximum of 5 installers can be assigned.', 'error');
-        return;
-      }
-
-      const rowId = 'inst-row-' + Date.now() + Math.round(Math.random() * 1000);
-      
-      // Filter employees by role/position containing 'installer' or department containing 'operations' or 'logistics'
+    // Build <option> HTML for door installer dropdowns
+    function buildDoorInstallerOptions(selectedId = '') {
       const employeeSource = dbEmployees.length > 0 ? dbEmployees : MOCK_EMPLOYEES;
       const installers = employeeSource.filter(emp => {
         const title = (emp.position || emp.title || '').toLowerCase();
         return title.includes('installer') || title.includes('operations') || title.includes('field');
       });
-      
-      let optionsHtml = '<option value="">-- Select Installer --</option>';
+      let html = '<option value="">-- Unassigned --</option>';
       installers.forEach(inst => {
-        const isSelected = inst.id === selectedValue ? 'selected' : '';
         const lastInitial = inst.last_name ? ` ${inst.last_name.trim().charAt(0).toUpperCase()}.` : '';
         const displayName = `${inst.first_name}${lastInitial}`;
-        optionsHtml += `<option value="${inst.id}" ${isSelected}>${displayName} (${inst.employee_number || 'N/A'})</option>`;
+        const sel = inst.id === selectedId ? 'selected' : '';
+        html += `<option value="${inst.id}" ${sel}>${displayName} (${inst.employee_number || 'N/A'})</option>`;
       });
-
-      const rowHtml = `
-        <div class="installer-row-item" id="${rowId}" style="display:flex; gap:0.5rem; align-items:center;">
-          <select class="form-input installer-select-input" style="height:auto; padding:0.5rem;">
-            ${optionsHtml}
-          </select>
-          <button type="button" class="btn btn-outline" style="padding:0.5rem; color:var(--danger); border-color:var(--border);" onclick="removeInstallerSelect('${rowId}')">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-          </button>
-        </div>
-      `;
-      container.insertAdjacentHTML('beforeend', rowHtml);
-      updateAddInstallerButtonState();
+      return html;
     }
 
-    function removeInstallerSelect(rowId) {
-      const container = document.getElementById('installers-list-container');
-      const currentRows = container.querySelectorAll('.installer-row-item');
-      if (currentRows.length <= 1) {
-        showNotification('At least one installer slot must remain.', 'error');
-        return;
-      }
+    function addDoorInstaller(doorId) {
+      const container = document.getElementById(`${doorId}-installers`);
+      if (!container || container.querySelectorAll('.door-installer-select').length >= 2) return;
+      const rowId = `${doorId}-inst-2`;
+      container.insertAdjacentHTML('beforeend', `
+        <div id="${rowId}" style="display:flex; gap:0.4rem; align-items:center;">
+          <select class="form-input door-installer-select" style="height:auto; padding:0.4rem; flex:1;">
+            ${buildDoorInstallerOptions()}
+          </select>
+          <button type="button" class="btn btn-outline btn-sm"
+            style="padding:0.35rem 0.5rem; color:var(--danger); border-color:var(--border); flex-shrink:0;"
+            onclick="removeDoorInstaller('${rowId}','${doorId}')">✕</button>
+        </div>
+      `);
+      const addBtn = document.getElementById(`${doorId}-add-inst`);
+      if (addBtn) addBtn.style.display = 'none';
+    }
+
+    function removeDoorInstaller(rowId, doorId) {
       const el = document.getElementById(rowId);
       if (el) el.remove();
-      updateAddInstallerButtonState();
-    }
-
-    function updateAddInstallerButtonState() {
-      const container = document.getElementById('installers-list-container');
-      const currentRows = container.querySelectorAll('.installer-row-item');
-      const addBtn = document.getElementById('btn-add-installer');
-      if (addBtn) {
-        if (currentRows.length >= 5) {
-          addBtn.disabled = true;
-          addBtn.style.opacity = '0.5';
-          addBtn.style.cursor = 'not-allowed';
-        } else {
-          addBtn.disabled = false;
-          addBtn.style.opacity = '1';
-          addBtn.style.cursor = 'pointer';
-        }
-      }
-
-      // Enforce minimum 1: Hide delete button if only 1 installer select left
-      currentRows.forEach(row => {
-        const deleteBtn = row.querySelector('button');
-        if (deleteBtn) {
-          if (currentRows.length <= 1) {
-            deleteBtn.style.display = 'none';
-          } else {
-            deleteBtn.style.display = 'inline-flex';
-          }
-        }
-      });
+      const addBtn = document.getElementById(`${doorId}-add-inst`);
+      if (addBtn) addBtn.style.display = '';
     }
 
     // --- Dynamic Product Rows ---
@@ -787,6 +739,20 @@
             <label class="form-label" style="margin-top:1rem; display:block;">Jamb & Door Photos (Up to 5)</label>
             <div class="file-strip">
               ${fileInputs}
+            </div>
+
+            <div style="margin-top:0.75rem; border-top:1px dashed var(--border); padding-top:0.75rem;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.35rem;">
+                <label class="form-label">Installers (Optional)</label>
+                <button type="button" class="btn btn-outline btn-sm" id="${doorId}-add-inst"
+                  style="padding:0.2rem 0.5rem; font-size:0.72rem;"
+                  onclick="addDoorInstaller('${doorId}')">+ Add Installer</button>
+              </div>
+              <div id="${doorId}-installers" style="display:flex; flex-direction:column; gap:0.35rem;">
+                <select class="form-input door-installer-select" style="height:auto; padding:0.4rem;">
+                  ${buildDoorInstallerOptions()}
+                </select>
+              </div>
             </div>
           </div>
         `;
@@ -1235,11 +1201,12 @@
       const doorCards = document.querySelectorAll('.door-card');
       for (let i = 0; i < doorCards.length; i++) {
         const card = doorCards[i];
-        const selects = card.querySelectorAll('select');
-        const doorMaterial = selects[0]?.value || 'wood';
-        const jambMaterial = selects[1]?.value || 'wood';
-        const swing = selects[2]?.value || 'Left swing';
-        
+        // Use .form-row selects to get only material/swing (not installer dropdowns)
+        const specSelects = card.querySelectorAll('.form-row select');
+        const doorMaterial = specSelects[0]?.value || 'wood';
+        const jambMaterial = specSelects[1]?.value || 'wood';
+        const swing        = specSelects[2]?.value || 'Left swing';
+
         const photos = [];
         const wrappers = card.querySelectorAll('.file-input-wrapper');
         for (let j = 0; j < wrappers.length; j++) {
@@ -1250,13 +1217,27 @@
             photos.push(url);
           }
         }
-        
+
+        // Collect per-door installers
+        const doorInstallers = [];
+        card.querySelectorAll('.door-installer-select').forEach(sel => {
+          const empId = sel.value;
+          if (empId) {
+            const emp = (dbEmployees.length > 0 ? dbEmployees : MOCK_EMPLOYEES).find(e => e.id === empId);
+            if (emp) {
+              const lastInitial = emp.last_name ? ` ${emp.last_name.trim().charAt(0).toUpperCase()}.` : '';
+              doorInstallers.push({ id: emp.id, name: `${emp.first_name}${lastInitial}` });
+            }
+          }
+        });
+
         doors.push({
           index: i + 1,
-          doorMaterial: doorMaterial,
-          jambMaterial: jambMaterial,
-          swing: swing,
-          photos: photos
+          doorMaterial,
+          jambMaterial,
+          swing,
+          photos,
+          installers: doorInstallers
         });
       }
 
@@ -1276,23 +1257,23 @@
         }
       });
 
-      // Collect installers list
-      const installerSelects = document.querySelectorAll('.installer-select-input');
-      const installersList = [];
-      installerSelects.forEach(select => {
-        const empId = select.value;
-        if (empId) {
-          const emp = (dbEmployees.length > 0 ? dbEmployees : MOCK_EMPLOYEES).find(e => e.id === empId);
-          if (emp) {
-            const lastInitial = emp.last_name ? ` ${emp.last_name.trim().charAt(0).toUpperCase()}.` : '';
-            const displayName = `${emp.first_name}${lastInitial}`;
-            installersList.push({ id: emp.id, name: displayName });
+      // Collect installers per door, then aggregate unique installers for booking-level fields
+      const allInstallersMap = new Map();
+      document.querySelectorAll('.door-card').forEach(card => {
+        card.querySelectorAll('.door-installer-select').forEach(sel => {
+          const empId = sel.value;
+          if (empId && !allInstallersMap.has(empId)) {
+            const emp = (dbEmployees.length > 0 ? dbEmployees : MOCK_EMPLOYEES).find(e => e.id === empId);
+            if (emp) {
+              const lastInitial = emp.last_name ? ` ${emp.last_name.trim().charAt(0).toUpperCase()}.` : '';
+              allInstallersMap.set(empId, { id: emp.id, name: `${emp.first_name}${lastInitial}` });
+            }
           }
-        }
+        });
       });
-
-      const installerIdStr = installersList.length > 0 ? installersList.map(inst => inst.id).join(' | ') : null;
-      const installerNameStr = installersList.length > 0 ? installersList.map(inst => inst.name).join(' | ') : null;
+      const installersList = Array.from(allInstallersMap.values());
+      const installerIdStr   = installersList.length > 0 ? installersList.map(i => i.id).join(' | ')   : null;
+      const installerNameStr = installersList.length > 0 ? installersList.map(i => i.name).join(' | ') : null;
 
       // Save order info to localStorage for the installer page to retrieve dynamically!
       const orderData = {
@@ -1835,11 +1816,6 @@
       document.getElementById('sched-notes').value = '';
       document.getElementById('cust-map-pin').value = '';
       
-      const installersContainer = document.getElementById('installers-list-container');
-      if (installersContainer) {
-        installersContainer.innerHTML = '';
-        addInstallerSelect();
-      }
 
       // Clear map and frontage photos
       const mapWrapper = document.getElementById('cust-map-wrapper');
