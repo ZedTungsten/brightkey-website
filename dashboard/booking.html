@@ -547,15 +547,21 @@
             currentCompanyId = companyData[0].id;
           }
 
-          const [productsRes, inventoryRes, employeesRes] = await Promise.all([
+          const [productsRes, inventoryRes, employeesRes, assignmentsRes] = await Promise.all([
             sb.from('products').select('sku, title, image_main, installation_price, count_inventory'),
             sb.from('inventory').select('sku, available'),
-            sb.from('employees').select('id, employee_number, first_name, last_name, position, department')
+            sb.from('employees').select('id, employee_number, first_name, last_name, position, department, assignment'),
+            sb.from('employee_assignments').select('id, name, visibility').eq('company_id', currentCompanyId || '')
           ]);
 
           if (employeesRes.data) {
             dbEmployees = employeesRes.data;
           }
+
+          // Store installer-eligible assignment names (those with booking.door_specifications visibility)
+          window._installerAssignmentNames = (assignmentsRes.data || [])
+            .filter(a => Array.isArray(a.visibility) && a.visibility.includes('booking.door_specifications'))
+            .map(a => a.name);
 
           if (productsRes.data && productsRes.data.length > 0) {
             const invMap = {};
@@ -591,7 +597,13 @@
     // Build <option> HTML for door installer dropdowns
     function buildDoorInstallerOptions(selectedId = '') {
       const employeeSource = dbEmployees.length > 0 ? dbEmployees : MOCK_EMPLOYEES;
+      const installerNames = window._installerAssignmentNames || [];
       const installers = employeeSource.filter(emp => {
+        // Filter by assignment if assignments are configured
+        if (installerNames.length > 0) {
+          return emp.assignment && installerNames.includes(emp.assignment);
+        }
+        // Fallback: title-based filter for when assignments aren't set up yet
         const title = (emp.position || emp.title || '').toLowerCase();
         return title.includes('installer') || title.includes('operations') || title.includes('field');
       });

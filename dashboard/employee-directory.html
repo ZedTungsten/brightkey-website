@@ -1022,7 +1022,7 @@
               <tr class="col-groups">
                 <th colspan="1"><!-- emp # sticky --></th>
                 <th colspan="8" class="grp-personal">Personal Information</th>
-                <th colspan="9" class="grp-hr">HR / Employment</th>
+                <th colspan="10" class="grp-hr">HR / Employment</th>
                 <th colspan="4" class="grp-gov">Gov't Numbers</th>
                 <th colspan="4" class="grp-docs">Documents</th>
                 <th><!-- actions --></th>
@@ -1049,6 +1049,7 @@
                 <th class="grp-hr sortable" data-col="date_hired">Date Hired <span class="sort-arrow"></span></th>
                 <th class="grp-hr sortable" data-col="employment_status">Status <span class="sort-arrow"></span></th>
                 <th class="grp-hr sortable" data-col="salary">Salary <span class="sort-arrow"></span></th>
+                <th class="grp-hr sortable" data-col="assignment">Assignment <span class="sort-arrow"></span></th>
                 <!-- Gov't -->
                 <th class="grp-gov sortable" data-col="tin">TIN <span class="sort-arrow"></span></th>
                 <th class="grp-gov sortable" data-col="sss">SSS <span class="sort-arrow"></span></th>
@@ -1065,7 +1066,7 @@
             </thead>
             <tbody id="dir-tbody">
               <tr>
-                <td colspan="27" class="tbl-state">Loading employees…</td>
+                <td colspan="28" class="tbl-state">Loading employees…</td>
               </tr>
             </tbody>
           </table>
@@ -1191,7 +1192,8 @@
       page: 1,
       pageSize: 30,
       editMode: false,
-      dirty: {},        // { id: { field: newVal, ... } }
+      dirty: {},
+      assignments: [],  // [{ id, name, visibility[] }] loaded from employee_assignments
       pendingDeletes: new Set(),
       sortCol: 'employee_number',
       sortDir: 'asc',
@@ -1208,6 +1210,15 @@
           const { data: co } = await getSb().from('companies').select('id').eq('tenant_id', authInfo.tenantId).limit(1).maybeSingle();
           this.companyId = co?.id || null;
         } catch(e) { this.companyId = null; }
+
+        // Load assignments for the Assignment column dropdown
+        try {
+          const { data: aData } = await getSb().from('employee_assignments')
+            .select('id, name, visibility')
+            .eq('company_id', this.companyId || '')
+            .order('created_at', { ascending: true });
+          this.assignments = aData || [];
+        } catch(e) { this.assignments = []; }
 
         this.bindToolbar();
         this.bindEditMode();
@@ -1234,7 +1245,7 @@
 
       /* ── Load from Supabase ── */
       async load() {
-        document.getElementById('dir-tbody').innerHTML = '<tr><td colspan="27" class="tbl-state">Loading employees…</td></tr>';
+        document.getElementById('dir-tbody').innerHTML = '<tr><td colspan="28" class="tbl-state">Loading employees…</td></tr>';
         try {
           const data = await sbGet();
           this.allEmployees = data;
@@ -1244,7 +1255,7 @@
           this.applyFilters();
           this.updateStats();
         } catch (err) {
-          document.getElementById('dir-tbody').innerHTML = `<tr><td colspan="27" class="tbl-state error">Failed to load: ${esc(err.message)}</td></tr>`;
+          document.getElementById('dir-tbody').innerHTML = `<tr><td colspan="28" class="tbl-state error">Failed to load: ${esc(err.message)}</td></tr>`;
           toast('Failed to load employees: ' + err.message, 'error');
         }
       },
@@ -1314,7 +1325,7 @@
         const tbody = document.getElementById('dir-tbody');
 
         if (slice.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="27" class="tbl-state">No employees found.</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="28" class="tbl-state">No employees found.</td></tr>';
           document.getElementById('footer-info').textContent = 'No results';
           document.getElementById('pagination').innerHTML = '';
           return;
@@ -1402,6 +1413,19 @@
           return `<td><input type="number" step="0.01" class="cell-input" data-id="${esc(id)}" data-field="salary" value="${esc(emp.salary ?? '')}" style="max-width:110px;"></td>`;
         };
 
+        const assignmentCell = () => {
+          const val = emp.assignment || '';
+          if (!isEdit) {
+            return val ? `<td>${esc(val)}</td>` : `<td class="cell-empty">—</td>`;
+          }
+          const opts = App.assignments.map(a =>
+            `<option value="${esc(a.name)}" ${val === a.name ? 'selected' : ''}>${esc(a.name)}</option>`
+          ).join('');
+          return `<td><select class="cell-input cell-select" data-id="${esc(id)}" data-field="assignment">
+            <option value="">— None —</option>${opts}
+          </select></td>`;
+        };
+
         const statusCell = () => {
           const statusVal = emp.employment_status || 'Active';
           if (!isEdit) {
@@ -1478,6 +1502,7 @@
           ${cellDate(emp.date_hired, 'date_hired')}
           ${statusCell()}
           ${salaryCell()}
+          ${assignmentCell()}
           ${cell(emp.tin, 'tin', 'text', 'grp-gov')}
           ${cell(emp.sss, 'sss')}
           ${cell(emp.pagibig, 'pagibig')}
@@ -1824,6 +1849,7 @@
               department: '',
               title: '',
               work_email: '',
+              assignment: '',
               reporting_to: '',
               level: '',
               job_description: '',
@@ -1925,7 +1951,7 @@
             ['contact_number', 'Contact #'], ['emergency_contact_number', 'Emergency Contact'],
             ['email', 'Email'], ['tin', 'TIN'], ['sss', 'SSS'],
             ['pagibig', 'PAG-IBIG'], ['philhealth', 'PhilHealth'],
-            ['work_email', 'Work Email'], ['picture_link', 'Picture Link'], ['gov_id_link', "Gov't ID Link"], ['cv_link', 'CV Link'], ['id_link', 'ID Link'],
+            ['work_email', 'Work Email'], ['assignment', 'Assignment'], ['picture_link', 'Picture Link'], ['gov_id_link', "Gov't ID Link"], ['cv_link', 'CV Link'], ['id_link', 'ID Link'],
           ];
           const header = cols.map(c => `"${c[1]}"`).join(',');
           const rows = this.filtered.map(emp =>
