@@ -1567,16 +1567,30 @@
       const terms         = Array.isArray(cfg.terms) ? cfg.terms.filter(Boolean) : [];
 
       // Build items rows (one row per product)
+      const skus   = pipe(b.product_skus);
       const names  = pipe(b.product_names);
       const qtys   = pipe(b.product_qtys);
       const prices = pipe(b.product_unit_prices);
       const totals = pipe(b.product_totals);
       let itemsHtml = '';
-      const rowCount = Math.max(names.length, qtys.length);
+      const rowCount = Math.max(skus.length, names.length, qtys.length);
       if (rowCount > 0) {
         for (let i = 0; i < rowCount; i++) {
+          const sku  = (skus[i] || '').trim();
+          const name = (names[i] || '').trim();
+          // If name is empty or same as SKU (old booking), show SKU only
+          // If name already includes " - " and starts with SKU (new format), show as-is
+          // Otherwise combine "SKU - Name"
+          let particulars;
+          if (!name || name === sku) {
+            particulars = sku;
+          } else if (name.startsWith(sku + ' - ') || name.startsWith(sku + '-')) {
+            particulars = name;
+          } else {
+            particulars = sku ? `${sku} - ${name}` : name;
+          }
           itemsHtml += `<tr>
-            <td>${esc(names[i] || '')}</td>
+            <td>${esc(particulars)}</td>
             <td align="right">${fmtPHP(prices[i] || 0)}</td>
             <td align="center">${esc(qtys[i] || 1)}</td>
             <td align="right">${fmtPHP(totals[i] || 0)}</td>
