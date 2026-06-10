@@ -1201,11 +1201,13 @@
         const authInfo = await window.BKAuth.checkRoleGate(['owner', 'admin', 'hr'], '../admin.html');
         if (!authInfo) return;
 
-        // Fetch company ID for file uploads
+        this.tenantId = authInfo.tenantId;
+
+        // Fetch company ID for file uploads and RLS
         try {
           const { data: co } = await getSb().from('companies').select('id').eq('tenant_id', authInfo.tenantId).limit(1).maybeSingle();
-          this.companyId = co?.id || 'general';
-        } catch(e) { this.companyId = 'general'; }
+          this.companyId = co?.id || null;
+        } catch(e) { this.companyId = null; }
 
         this.bindToolbar();
         this.bindEditMode();
@@ -1627,6 +1629,9 @@
               for (const key of Object.keys(insertBody)) {
                 if (insertBody[key] === '') insertBody[key] = null;
               }
+              // Inject tenant/company IDs required by RLS policy
+              if (this.tenantId)  insertBody.tenant_id  = this.tenantId;
+              if (this.companyId) insertBody.company_id = this.companyId;
               // Required field fallbacks
               if (!insertBody.first_name)  insertBody.first_name  = '';
               if (!insertBody.last_name)   insertBody.last_name   = '';
