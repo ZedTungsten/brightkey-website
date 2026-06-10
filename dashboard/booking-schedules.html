@@ -884,6 +884,7 @@
     let currentCompanyId;
     let currentView = 'calendar'; // 'calendar' or 'list'
     let dbBookings = [];
+    let dbEmployees = [];
     let filteredBookings = [];
     let selectedBooking = null;
     let searchQuery = '';
@@ -937,15 +938,17 @@
     async function loadData() {
       renderSkeletons();
       try {
-        // Fetch bookings matching company_id
-        let { data, error } = await sb
-          .from('installation_bookings')
-          .select('*')
-          .eq('company_id', currentCompanyId);
+        // Fetch bookings matching company_id, employees, and assignments in parallel
+        const [bookingsRes, employeesRes, assignmentsRes] = await Promise.all([
+          sb.from('installation_bookings').select('*').eq('company_id', currentCompanyId),
+          sb.from('employees').select('id, employee_number, first_name, last_name, title, department, assignment'),
+          sb.from('employee_assignments').select('id, name, visibility').eq('company_id', currentCompanyId || '')
+        ]);
 
-        if (error) {
+        let data = bookingsRes.data;
+        if (bookingsRes.error) {
           // Fallback if company_id column does not exist in this database instance yet
-          if (error.message && error.message.includes('column') && error.message.includes('company_id')) {
+          if (bookingsRes.error.message && bookingsRes.error.message.includes('column') && bookingsRes.error.message.includes('company_id')) {
             console.warn('Fallback: company_id column missing on installation_bookings. Querying without filter.');
             const fallbackResult = await sb
               .from('installation_bookings')
@@ -953,10 +956,16 @@
             if (fallbackResult.error) throw fallbackResult.error;
             data = fallbackResult.data;
           } else {
-            throw error;
+            throw bookingsRes.error;
           }
         }
         dbBookings = data || [];
+        dbEmployees = employeesRes.data || [];
+        
+        window._installerAssignmentNames = (assignmentsRes.data || [])
+          .filter(a => Array.isArray(a.visibility) && a.visibility.includes('booking.door_specifications'))
+          .map(a => a.name);
+
         applyFilterAndRender();
       } catch (err) {
         console.error('Failed to load bookings:', err);
@@ -1253,7 +1262,11 @@
 
           // Parse multiple installers
           let installersHtml = 'None Assigned';
-          if (selectedBooking.installers && selectedBooking.installers.length > 0) {
+          if (doorsArr[i]?.installers && doorsArr[i].installers.length > 0) {
+            installersHtml = doorsArr[i].installers.map(inst => formatInstallerName(inst.name)).join(', ');
+          } else if (doorsArr[i]) {
+            installersHtml = 'None Assigned';
+          } else if (selectedBooking.installers && selectedBooking.installers.length > 0) {
             let list = [];
             if (typeof selectedBooking.installers === 'string') {
               try { list = JSON.parse(selectedBooking.installers); } catch(_) {}
@@ -1272,7 +1285,18 @@
               <td><strong>${escapeHtml(sku)}</strong><br/><span style="color:var(--text-muted);font-size:0.75rem;">${escapeHtml(title)}</span></td>
               <td>${doorTypeHtml}</td>
               <td>${photosHtml}</td>
-              <td>${escapeHtml(installersHtml)}</td>
+              <td>
+                ${doorsArr[i] ? `
+                  <div id="door-inst-container-${i}">
+                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;">
+                      <span id="door-inst-text-${i}">${escapeHtml(installersHtml)}</span>
+                      <button type="button" class="btn-minimal" onclick="editDoorInstallers(${i})" title="Edit Installers">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                      </button>
+                    </div>
+                  </div>
+                ` : escapeHtml(installersHtml)}
+              </td>
             </tr>
           `);
         }
@@ -1790,6 +1814,173 @@
         }
       }
     }
+
+    // Build <option> HTML for door installer dropdowns
+    function buildDoorInstallerOptions(selectedId = '') {
+      const installerNames = window._installerAssignmentNames || [];
+      const installers = dbEmployees.filter(emp => {
+        // Filter by assignment if assignments are configured
+        if (installerNames.length > 0) {
+          return emp.assignment && installerNames.includes(emp.assignment);
+        }
+        // Fallback: title/position/assignment-based filter for when assignments aren't set up yet
+        const title = (emp.title || emp.position || '').toLowerCase();
+        const assignment = (emp.assignment || '').toLowerCase();
+        return title.includes('installer') || title.includes('operations') || title.includes('field') || assignment.includes('installer');
+      });
+      let html = '<option value="">-- Unassigned --</option>';
+      installers.forEach(inst => {
+        const lastName = inst.last_name ? ` ${inst.last_name.trim()}` : '';
+        const displayName = `${inst.first_name}${lastName}`;
+        const sel = inst.id === selectedId ? 'selected' : '';
+        html += `<option value="${inst.id}" ${sel}>${displayName}</option>`;
+      });
+      return html;
+    }
+
+    window.editDoorInstallers = function(doorIndex) {
+      let doorsArr = [];
+      if (typeof selectedBooking.doors === 'string') {
+        try { doorsArr = JSON.parse(selectedBooking.doors); } catch(_) {}
+      } else if (Array.isArray(selectedBooking.doors)) {
+        doorsArr = selectedBooking.doors;
+      }
+      
+      const door = doorsArr[doorIndex];
+      if (!door) return;
+
+      const currentInstallers = door.installers || [];
+      const inst1 = currentInstallers[0]?.id || '';
+      const inst2 = currentInstallers[1]?.id || '';
+
+      const container = document.getElementById(`door-inst-container-${doorIndex}`);
+      if (!container) return;
+
+      container.innerHTML = `
+        <div style="display: flex; flex-direction: column; gap: 0.35rem;">
+          <div style="display: flex; gap: 0.35rem; align-items: center;">
+            <select class="form-input" style="height:auto; padding:0.35rem; font-size:0.8rem; flex:1;" id="edit-inst-${doorIndex}-1">
+              ${buildDoorInstallerOptions(inst1)}
+            </select>
+            <button type="button" class="btn-minimal btn-success" onclick="saveDoorInstallersEdit(${doorIndex})" title="Save">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            </button>
+            <button type="button" class="btn-minimal btn-danger" onclick="cancelDoorInstallersEdit(${doorIndex})" title="Cancel">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+          </div>
+          <div id="edit-inst-2-wrapper-${doorIndex}" style="display: ${inst2 ? 'flex' : 'none'}; gap: 0.35rem; align-items: center;">
+            <select class="form-input" style="height:auto; padding:0.35rem; font-size:0.8rem; flex:1;" id="edit-inst-${doorIndex}-2">
+              ${buildDoorInstallerOptions(inst2)}
+            </select>
+            <button type="button" class="btn-minimal btn-danger" onclick="removeSecondInstallerEdit(${doorIndex})" title="Remove">✕</button>
+          </div>
+          <button type="button" class="btn btn-outline btn-sm" id="btn-add-inst-edit-${doorIndex}" style="display: ${inst2 ? 'none' : 'inline-flex'}; font-size: 0.72rem; padding: 0.2rem 0.5rem;" onclick="addSecondInstallerEdit(${doorIndex})">+ Add Installer</button>
+        </div>
+      `;
+    };
+
+    window.addSecondInstallerEdit = function(doorIndex) {
+      const wrapper = document.getElementById(`edit-inst-2-wrapper-${doorIndex}`);
+      if (wrapper) wrapper.style.display = 'flex';
+      const addBtn = document.getElementById(`btn-add-inst-edit-${doorIndex}`);
+      if (addBtn) addBtn.style.display = 'none';
+    };
+
+    window.removeSecondInstallerEdit = function(doorIndex) {
+      const wrapper = document.getElementById(`edit-inst-2-wrapper-${doorIndex}`);
+      if (wrapper) wrapper.style.display = 'none';
+      const select2 = document.getElementById(`edit-inst-${doorIndex}-2`);
+      if (select2) select2.value = '';
+      const addBtn = document.getElementById(`btn-add-inst-edit-${doorIndex}`);
+      if (addBtn) addBtn.style.display = 'inline-flex';
+    };
+
+    window.cancelDoorInstallersEdit = function(doorIndex) {
+      showBookingDetails(selectedBooking.id);
+    };
+
+    window.saveDoorInstallersEdit = async function(doorIndex) {
+      if (!selectedBooking) return;
+
+      let doorsArr = [];
+      if (typeof selectedBooking.doors === 'string') {
+        try { doorsArr = JSON.parse(selectedBooking.doors); } catch(_) {}
+      } else if (Array.isArray(selectedBooking.doors)) {
+        doorsArr = selectedBooking.doors;
+      }
+
+      const door = doorsArr[doorIndex];
+      if (!door) return;
+
+      const sel1 = document.getElementById(`edit-inst-${doorIndex}-1`);
+      const sel2 = document.getElementById(`edit-inst-${doorIndex}-2`);
+      const wrapper2 = document.getElementById(`edit-inst-2-wrapper-${doorIndex}`);
+
+      const empId1 = sel1 ? sel1.value : '';
+      const empId2 = (sel2 && wrapper2 && wrapper2.style.display !== 'none') ? sel2.value : '';
+
+      const doorInstallers = [];
+      [empId1, empId2].forEach(empId => {
+        if (empId) {
+          const emp = dbEmployees.find(e => e.id === empId);
+          if (emp) {
+            const lastName = emp.last_name ? ` ${emp.last_name.trim()}` : '';
+            doorInstallers.push({ id: emp.id, name: `${emp.first_name}${lastName}` });
+          }
+        }
+      });
+
+      door.installers = doorInstallers;
+
+      const allInstallersMap = new Map();
+      doorsArr.forEach(d => {
+        const dInstallers = d.installers || [];
+        dInstallers.forEach(inst => {
+          if (inst.id && !allInstallersMap.has(inst.id)) {
+            allInstallersMap.set(inst.id, { id: inst.id, name: inst.name });
+          }
+        });
+      });
+
+      const installersList = Array.from(allInstallersMap.values());
+      const installerIdStr   = installersList.length > 0 ? installersList.map(i => i.id).join(' | ')   : null;
+      const installerNameStr = installersList.length > 0 ? installersList.map(i => i.name).join(' | ') : null;
+
+      try {
+        const { error } = await sb
+          .from('installation_bookings')
+          .update({
+            doors: doorsArr,
+            installer_id: installerIdStr,
+            installer_name: installerNameStr,
+            installers: installersList
+          })
+          .eq('id', selectedBooking.id);
+
+        if (error) throw error;
+
+        const bookingIndex = dbBookings.findIndex(b => b.id === selectedBooking.id);
+        if (bookingIndex !== -1) {
+          dbBookings[bookingIndex].doors = doorsArr;
+          dbBookings[bookingIndex].installer_id = installerIdStr;
+          dbBookings[bookingIndex].installer_name = installerNameStr;
+          dbBookings[bookingIndex].installers = installersList;
+
+          selectedBooking.doors = doorsArr;
+          selectedBooking.installer_id = installerIdStr;
+          selectedBooking.installer_name = installerNameStr;
+          selectedBooking.installers = installersList;
+        }
+
+        showToast('Installers updated successfully.');
+        showBookingDetails(selectedBooking.id);
+        applyFilterAndRender();
+      } catch (err) {
+        console.error('Failed to update door installers:', err);
+        showToast('Failed to update: ' + err.message, true);
+      }
+    };
   </script>
 </body>
 </html>
