@@ -1607,6 +1607,38 @@
       const grandTotalFormatted = document.getElementById('summary-grand-total').innerText;
       const receiptDate = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 
+      // Fetch company invoice_template config (same source as invoices.html)
+      let tplCfg = {};
+      try {
+        const { data: tplSetting } = await window.BKAuth.sb
+          .from('global_settings')
+          .select('value')
+          .eq('key', 'invoice_template')
+          .eq('company_id', currentCompanyId)
+          .maybeSingle();
+        if (tplSetting && tplSetting.value) tplCfg = tplSetting.value;
+      } catch(e) { console.warn('Could not load invoice template:', e); }
+
+      const tplLogo         = tplCfg.logo         || '../assets/og-image.png';
+      const tplCompanyName  = tplCfg.companyName   || 'Company Name';
+      const tplCompanyAddr  = (tplCfg.companyAddress || '').replace(/\n/g, '<br>');
+      const tplCompanyEmail = tplCfg.companyEmail  || '';
+      const tplHdrColor1    = tplCfg.headerColor1  || '#454545';
+      const tplHdrColor2    = tplCfg.headerColor2  || '#2d2d2d';
+      const tplTextColor    = tplCfg.textColor     || '#575757';
+      const tplLineColor    = tplCfg.lineColor     || '#9a9a9a';
+      const tplThankYou     = tplCfg.thankYouText  || 'THANK YOU FOR YOUR BUSINESS!';
+      const tplTerms        = Array.isArray(tplCfg.terms) ? tplCfg.terms.filter(Boolean) : [];
+      const tplTermsHtml    = tplTerms.length > 0
+        ? tplTerms.map(t => {
+            if (t.includes(':')) {
+              const [label, ...rest] = t.split(':');
+              return `<div class="term-line"><strong>${label}:</strong>${rest.join(':')}</div>`;
+            }
+            return `<div class="term-line">${t}</div>`;
+          }).join('')
+        : '<div class="term-line">No special terms specified.</div>';
+
       const receiptHtml = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1647,7 +1679,7 @@
               position: relative;
               height: 140px;
               padding: 0 48px;
-              background: #454545;
+              background: linear-gradient(135deg, ${tplHdrColor1} 55%, ${tplHdrColor2} 100%);
               display: flex;
               align-items: center;
               justify-content: space-between;
@@ -1898,7 +1930,7 @@
               }
 
               .header-bar {
-                background: #454545 !important;
+                background: linear-gradient(135deg, ${tplHdrColor1} 55%, ${tplHdrColor2} 100%) !important;
               }
             }
 
@@ -1968,16 +2000,10 @@
           <div class="receipt-preview-wrapper">
             <div class="receipt-page">
             <div class="header-bar">
-              <img
-                class="logo-image"
-                src="https://brightkey-assets.b-cdn.net/loock-cavite/logos/2026%20LOOCK%20Cavite%20PNG%20Exact.png?text=LOOCK+Cavite"
-                alt="LOOCK Cavite"
-              >
+              <img class="logo-image" src="${tplLogo}" alt="${tplCompanyName}">
               <div class="store-info">
-                <strong>LOOCK CAVITE</strong>
-                B2 L2, Baes St., Perpetual 7<br>
-                Bacoor, Cavite 4102<br>
-                info@opmmi.ph
+                <strong>${tplCompanyName}</strong>
+                ${tplCompanyAddr}<br>${tplCompanyEmail}
               </div>
             </div>
 
@@ -2068,42 +2094,11 @@
               </table>
 
               <div class="terms-section">
-                <div class="terms-title">
-                  TERMS & CONDITIONS
-                </div>
-                <div class="term-line">
-                  <strong>Non-refundable deposit:</strong>
-                  The deposit is non-refundable and secures your device and installation schedule.
-                </div>
-                <div class="term-line">
-                  <strong>Payment application and forfeiture:</strong>
-                  The deposit will be deducted from the total cost. If the order is cancelled or does not proceed, the deposit will be forfeited.
-                </div>
-                <div class="term-line">
-                  <strong>Full payment:</strong>
-                  The remaining balance must be paid in full upon installation. Payment of the deposit confirms your agreement to these terms.
-                </div>
-                <div class="term-line">
-                  <strong>Delivery and installation:</strong>
-                  Please allow up to one (1) week for delivery and installation based on your preferred date and time.
-                </div>
-                <div class="term-line">
-                  <strong>Rescheduling policy:</strong>
-                  One (1) reschedule is allowed free of charge. Any succeeding reschedule will incur a ₱250 fee, as installer availability is reserved in advance.
-                </div>
-                <div class="term-line">
-                  <strong>Warranty and support:</strong>
-                  All products come with at least a one-year warranty and technical support.
-                </div>
-                <div class="term-line">
-                  <strong>Shipping:</strong>
-                  Shipping fees are calculated based on the delivery location.
-                </div>
+                <div class="terms-title">TERMS &amp; CONDITIONS</div>
+                ${tplTermsHtml}
               </div>
 
-              <div class="thank-you">
-                THANK YOU FOR YOUR BUSINESS!
-              </div>
+              <div class="thank-you">${tplThankYou}</div>
             </div>
           </div>
           </div>
