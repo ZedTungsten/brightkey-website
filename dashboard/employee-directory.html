@@ -1107,40 +1107,28 @@
     /* ── Supabase ── */
     const SB_URL = (typeof SUPABASE_URL !== 'undefined') ? SUPABASE_URL : 'https://ymjlosnxuhsybkzkoofq.supabase.co';
     const SB_ANON = (typeof SUPABASE_ANON !== 'undefined') ? SUPABASE_ANON : 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inltamxvc254dWhzeWJremtvb2ZxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ0MDY1MzYsImV4cCI6MjA4OTk4MjUzNn0.srhk9SVvFuZRcfeRGbVDGPr5pYrFhs8vzcOiMK3A91w';
-    const H = {
-      'Content-Type': 'application/json',
-      'apikey': SB_ANON,
-      'Authorization': `Bearer ${SB_ANON}`,
-    };
+    const getSb = () => window.BKAuth.sb;
 
-    async function sbGet(path, extra = {}) {
-      const r = await fetch(`${SB_URL}/rest/v1/${path}`, { headers: { ...H, ...extra } });
-      if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.message || `HTTP ${r.status}`); }
-      return r.json();
+    async function sbGet() {
+      const { data, error } = await getSb()
+        .from('employees')
+        .select('*')
+        .order('employee_number', { ascending: true });
+      if (error) throw new Error(error.message);
+      return data;
     }
     async function sbPatch(id, body) {
-      const r = await fetch(`${SB_URL}/rest/v1/employees?id=eq.${encodeURIComponent(id)}`, {
-        method: 'PATCH',
-        headers: { ...H, 'Prefer': 'return=minimal' },
-        body: JSON.stringify(body),
-      });
-      if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.message || `Update failed ${r.status}`); }
+      const { error } = await getSb().from('employees').update(body).eq('id', id);
+      if (error) throw new Error(error.message || 'Update failed');
     }
     async function sbInsert(body) {
-      const r = await fetch(`${SB_URL}/rest/v1/employees`, {
-        method: 'POST',
-        headers: { ...H, 'Prefer': 'return=representation' },
-        body: JSON.stringify(body),
-      });
-      if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.message || `Insert failed ${r.status}`); }
-      return r.json();
+      const { data, error } = await getSb().from('employees').insert([body]).select();
+      if (error) throw new Error(error.message || 'Insert failed');
+      return data;
     }
     async function sbDelete(id) {
-      const r = await fetch(`${SB_URL}/rest/v1/employees?id=eq.${encodeURIComponent(id)}`, {
-        method: 'DELETE',
-        headers: { ...H, 'Prefer': 'return=minimal' },
-      });
-      if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.message || `Delete failed ${r.status}`); }
+      const { error } = await getSb().from('employees').delete().eq('id', id);
+      if (error) throw new Error(error.message || 'Delete failed');
     }
 
     /* ── Helpers ── */
@@ -1232,10 +1220,7 @@
       async load() {
         document.getElementById('dir-tbody').innerHTML = '<tr><td colspan="28" class="tbl-state">Loading employees…</td></tr>';
         try {
-          const data = await sbGet(
-            'employees?select=*&order=employee_number.asc',
-            { 'Prefer': 'count=exact' }
-          );
+          const data = await sbGet();
           this.allEmployees = data;
           this.dirty = {};
           this.pendingDeletes.clear();
