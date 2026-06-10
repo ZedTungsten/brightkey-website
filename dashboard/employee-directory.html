@@ -1624,10 +1624,11 @@
             if (String(id).startsWith('new_')) {
               // Perform INSERT
               const { id: _, isNewRow: __, ...insertBody } = merged;
-              // Convert empty strings to null — prevents "invalid input syntax for type uuid" errors
-              // on UUID foreign-key columns (e.g. reporting_to) and keeps the schema clean
-              for (const key of Object.keys(insertBody)) {
-                if (insertBody[key] === '') insertBody[key] = null;
+              // Only null out UUID/date/numeric columns when empty — text columns stay as ''
+              // to satisfy NOT NULL constraints on the table
+              const nullIfEmpty = ['reporting_to', 'date_of_birth', 'date_hired', 'salary'];
+              for (const key of nullIfEmpty) {
+                if (insertBody[key] === '' || insertBody[key] === undefined) insertBody[key] = null;
               }
               // Inject company_id required by RLS policy
               if (this.companyId) insertBody.company_id = this.companyId;
