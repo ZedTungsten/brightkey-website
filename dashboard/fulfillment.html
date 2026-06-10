@@ -987,7 +987,8 @@
       for (const booking of bookings) {
         const orderNo = booking.order_no;
         const address = booking.customer_address || '';
-        const city = address.split(',')[1]?.trim() || 'Pasig';
+        const addrParts = address.split(',');
+        const city = addrParts.length >= 2 ? addrParts[addrParts.length - 2].trim() : (addrParts[0]?.trim() || 'N/A');
 
         // Check if booking is cancelled
         if (booking.status === 'cancelled') {
@@ -997,6 +998,15 @@
             await handleCancellationProcess(tx.id, tx.sku, tx.quantity, tx.status);
           }
           continue;
+        }
+
+        // Patch customer_city on existing transactions that have a wrong value
+        const wrongCityTxs = activeTransactions.filter(t =>
+          t.reference_id === orderNo && t.customer_city !== city
+        );
+        for (const tx of wrongCityTxs) {
+          await sb.from('inventory_transactions').update({ customer_city: city }).eq('id', tx.id);
+          tx.customer_city = city; // update in-memory too
         }
 
         // If booking is active but has no transactions logged yet, reserve it
