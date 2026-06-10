@@ -557,7 +557,7 @@
           }
 
           const [productsRes, inventoryRes, employeesRes] = await Promise.all([
-            sb.from('products').select('sku, title, image_main, installation_price'),
+            sb.from('products').select('sku, title, image_main, installation_price, count_inventory'),
             sb.from('inventory').select('sku, available'),
             sb.from('employees').select('id, employee_number, first_name, last_name, position, department')
           ]);
@@ -580,7 +580,8 @@
               price: p.installation_price || 0,
               salePrice: null, // Always use installation price
               available: invMap[p.sku] || 0,
-              img: p.image_main || '../assets/og-image.png'
+              img: p.image_main || '../assets/og-image.png',
+              count_inventory: p.count_inventory !== false
             }));
           }
         } catch (e) {
@@ -1429,9 +1430,50 @@
       const savedBooking = await saveBookingToSupabase(supabasePayload);
       if (savedBooking) {
         console.log('Booking saved to Supabase:', savedBooking.id);
-        // Store the Supabase row ID in localStorage for future updates (e.g., receipt PDF URL)
         orderData.supabaseId = savedBooking.id;
         localStorage.setItem('latest_installation_order', JSON.stringify(orderData));
+      }
+
+      // Reserve inventory immediately at booking time
+      if (schedBtn) {
+        schedBtn.innerText = 'Reserving Inventory...';
+        schedBtn.disabled = true;
+      }
+      try {
+        const inventorySb = window.BKAuth.sb;
+        const reservedAt = new Date().toISOString();
+        for (const p of products) {
+          const prodMeta = dbProducts.find(mp => mp.sku === p.sku);
+          if (prodMeta && prodMeta.count_inventory === false) continue;
+
+          await inventorySb.from('inventory_transactions').insert([{
+            sku: p.sku,
+            quantity: p.qty,
+            type: 'customer_order',
+            status: 'reserved',
+            reference_id: receiptNo,
+            customer_name: name,
+            customer_city: city,
+            timestamp_reserved: reservedAt
+          }]);
+
+          const { data: invRow } = await inventorySb.from('inventory').select('*').eq('sku', p.sku);
+          if (invRow && invRow.length > 0) {
+            const inv = invRow[0];
+            await inventorySb.from('inventory').update({
+              available: inv.available - p.qty,
+              reserved: (inv.reserved || 0) + p.qty
+            }).eq('sku', p.sku);
+          } else {
+            await inventorySb.from('inventory').insert([{
+              sku: p.sku,
+              available: -p.qty,
+              reserved: p.qty
+            }]);
+          }
+        }
+      } catch (invErr) {
+        console.warn('Inventory reservation error (non-blocking):', invErr);
       }
 
       if (schedBtn) {
