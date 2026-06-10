@@ -1622,17 +1622,16 @@
             if (String(id).startsWith('new_')) {
               // Perform INSERT
               const { id: _, isNewRow: __, ...insertBody } = merged;
-              // Provide fallbacks to avoid null constraint violations
-              if (!insertBody.first_name) insertBody.first_name = '';
-              if (!insertBody.last_name) insertBody.last_name = '';
+              // Convert empty strings to null — prevents "invalid input syntax for type uuid" errors
+              // on UUID foreign-key columns (e.g. reporting_to) and keeps the schema clean
+              for (const key of Object.keys(insertBody)) {
+                if (insertBody[key] === '') insertBody[key] = null;
+              }
+              // Required field fallbacks
+              if (!insertBody.first_name)  insertBody.first_name  = '';
+              if (!insertBody.last_name)   insertBody.last_name   = '';
               if (!insertBody.date_of_birth) insertBody.date_of_birth = '2000-01-01';
-              if (!insertBody.address) insertBody.address = '';
-              if (!insertBody.contact_number) insertBody.contact_number = '';
-              if (!insertBody.emergency_contact_number) insertBody.emergency_contact_number = '';
-              if (!insertBody.email) insertBody.email = `${insertBody.employee_number.toLowerCase()}@brightkey.com`;
-              if (!insertBody.type) insertBody.type = 'Full-time';
-              if (!insertBody.department) insertBody.department = '';
-              if (!insertBody.title) insertBody.title = '';
+              if (!insertBody.email) insertBody.email = `${(insertBody.employee_number || 'emp').toLowerCase()}@brightkey.com`;
               if (!insertBody.date_hired) insertBody.date_hired = new Date().toISOString().split('T')[0];
 
               const insertedRows = await sbInsert(insertBody);
