@@ -2166,18 +2166,18 @@
         const bodyMatch = receiptHtml.match(/<body[^>]*>([\s\S]*)<\/body>/i);
         const bodyContent = bodyMatch ? bodyMatch[1] : receiptHtml;
 
-        // Render in a visibility:hidden fixed div at the viewport origin so
-        // html2canvas paints it at a known x:0,y:0 position with no offset issues
+        // Append to <html> (not <body>) so overflow-x:clip and overflow:hidden
+        // on .dash-layout / .dash-main cannot clip or offset the capture area
         const pdfContainer = document.createElement('div');
-        pdfContainer.style.cssText = 'position:fixed;top:0;left:0;width:794px;visibility:hidden;pointer-events:none;z-index:-9999;';
+        pdfContainer.style.cssText = 'position:absolute;top:0;left:0;width:794px;opacity:0.001;pointer-events:none;z-index:-99999;';
         pdfContainer.innerHTML = `<style>
           *{box-sizing:border-box;}
           ${receiptCss}
-          .receipt-preview-wrapper{padding:0!important;margin:0!important;min-height:unset!important;background:#fff!important;}
-          .receipt-page{margin:0!important;width:794px!important;}
+          .receipt-preview-wrapper{width:794px!important;padding:0!important;margin:0!important;min-height:unset!important;background:#fff!important;}
+          .receipt-page{width:794px!important;margin:0!important;}
           .receipt-actions{display:none!important;}
         </style>${bodyContent}`;
-        document.body.appendChild(pdfContainer);
+        document.documentElement.appendChild(pdfContainer);
 
         // Wait for fonts and images to fully paint before capturing
         await new Promise(r => setTimeout(r, 600));
@@ -2201,7 +2201,7 @@
         };
 
         const pdfBlob = await html2pdf().set(pdfOpt).from(receiptPageEl).outputPdf('blob');
-        document.body.removeChild(pdfContainer);
+        document.documentElement.removeChild(pdfContainer);
 
         // Store a blob URL for the modal's View + Download buttons
         window._receiptBlobUrl = URL.createObjectURL(pdfBlob);
