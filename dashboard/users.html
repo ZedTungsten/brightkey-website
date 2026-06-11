@@ -219,6 +219,19 @@
             <select id="invite-role" class="form-select" onchange="handleRoleChange(this.value)">
               <option value="" disabled selected>Loading roles...</option>
             </select>
+            <div id="invite-custom-access-container" style="display:none; flex-direction:column; gap:0.4rem; margin-top:0.5rem; padding:0.75rem; background:var(--bg-elevated); border:1px solid var(--border); border-radius:6px;">
+              <label class="form-label" style="margin-bottom:0.2rem;">Select Access Modules</label>
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; font-size:0.82rem;">
+                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="invite-custom-access" value="Products" /> Products</label>
+                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="invite-custom-access" value="Operations" /> Operations</label>
+                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="invite-custom-access" value="Marketing" /> Marketing</label>
+                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="invite-custom-access" value="Sales" /> Sales</label>
+                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="invite-custom-access" value="Customer Service" /> Customer Service</label>
+                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="invite-custom-access" value="Logistics" /> Logistics</label>
+                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="invite-custom-access" value="HR" /> HR</label>
+                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="invite-custom-access" value="Finance" /> Finance</label>
+              </div>
+            </div>
           </div>
 
           <!-- Warning Notice for Admin role -->
@@ -253,9 +266,22 @@
           </div>
           <div class="form-group" style="margin-top:0.5rem;">
             <label class="form-label" for="edit-role-select">Select New Role</label>
-            <select id="edit-role-select" class="form-select">
+            <select id="edit-role-select" class="form-select" onchange="handleEditRoleSelectChange(this.value)">
               <!-- Filled by JS -->
             </select>
+            <div id="edit-custom-access-container" style="display:none; flex-direction:column; gap:0.4rem; margin-top:0.5rem; padding:0.75rem; background:var(--bg-elevated); border:1px solid var(--border); border-radius:6px;">
+              <label class="form-label" style="margin-bottom:0.2rem;">Select Access Modules</label>
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; font-size:0.82rem;">
+                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="edit-custom-access" value="Products" /> Products</label>
+                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="edit-custom-access" value="Operations" /> Operations</label>
+                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="edit-custom-access" value="Marketing" /> Marketing</label>
+                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="edit-custom-access" value="Sales" /> Sales</label>
+                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="edit-custom-access" value="Customer Service" /> Customer Service</label>
+                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="edit-custom-access" value="Logistics" /> Logistics</label>
+                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="edit-custom-access" value="HR" /> HR</label>
+                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="edit-custom-access" value="Finance" /> Finance</label>
+              </div>
+            </div>
           </div>
         </div>
         <div class="modal-footer">
@@ -363,12 +389,13 @@
       
       if (dynamicRoles.length > 0) {
         dynamicRoles.forEach(r => {
-          if (r.name !== 'admin' && r.name !== 'owner') {
+          if (r.name !== 'admin' && r.name !== 'owner' && !r.name.startsWith('custom_')) {
             optionsHtml += `<option value="${escapeHtml(r.name)}">${escapeHtml(r.name)}</option>`;
           }
         });
       }
       
+      optionsHtml += '<option value="custom">Custom (Specify Accesses)</option>';
       optionsHtml += '<option value="">None / Employee Only (No Dashboard Access)</option>';
       select.innerHTML = optionsHtml;
       select.value = dynamicRoles.length > 0 ? (dynamicRoles[0].name === 'owner' ? 'admin' : dynamicRoles[0].name) : 'admin';
@@ -397,13 +424,20 @@
     function handleRoleChange(role) {
       const warning = document.getElementById('admin-warning');
       if (warning) {
-        if (role === 'admin') {
-          warning.style.display = 'block';
-        } else {
-          warning.style.display = 'none';
-        }
+        warning.style.display = (role === 'admin') ? 'block' : 'none';
+      }
+      const customContainer = document.getElementById('invite-custom-access-container');
+      if (customContainer) {
+        customContainer.style.display = (role === 'custom') ? 'flex' : 'none';
       }
     }
+
+    window.handleEditRoleSelectChange = function(role) {
+      const customContainer = document.getElementById('edit-custom-access-container');
+      if (customContainer) {
+        customContainer.style.display = (role === 'custom') ? 'flex' : 'none';
+      }
+    };
 
     // Helper to format Date Added
     function formatDateAdded(isoString) {
@@ -489,7 +523,24 @@
         const isSelf = row.user_id === currentUser.id;
         const isOwner = row.role === 'owner';
 
-        let displayName = row.role === 'admin' ? 'Administrator' : (row.role === 'owner' ? 'Owner' : (row.role || 'None'));
+        let displayName = '';
+        if (row.role === 'admin') {
+          displayName = 'Administrator';
+        } else if (row.role === 'owner') {
+          displayName = 'Owner';
+        } else if (!row.role) {
+          displayName = 'None';
+        } else if (row.role.startsWith('custom_') || !['admin', 'owner', 'operations', 'customer_service', 'marketing', 'logistics', 'products', 'accounting', 'hr'].includes(row.role)) {
+          const found = dynamicRoles.find(r => r.name === row.role);
+          if (found && Array.isArray(found.accessible_modules) && found.accessible_modules.length > 0) {
+            displayName = `Custom (${found.accessible_modules.join(', ')})`;
+          } else {
+            displayName = 'Custom (No Access)';
+          }
+        } else {
+          displayName = row.role.charAt(0).toUpperCase() + row.role.slice(1).replace('_', ' ');
+        }
+
         let badgeClass = row.role === 'owner' ? 'badge-cyan' : (row.role === 'admin' ? 'badge-cyan' : 'badge-gray');
 
         if (isOwner || isSelf) {
@@ -578,11 +629,39 @@
 
       const email = emailInput.value.trim().toLowerCase();
       const fullName = nameInput.value.trim();
-      const role = roleSelect.value;
+      let role = roleSelect.value;
       if (!email || !fullName) return;
 
       btn.disabled = true;
       btn.innerText = 'Inviting...';
+
+      if (role === 'custom') {
+        const checkedModules = Array.from(document.querySelectorAll('.invite-custom-access:checked')).map(cb => cb.value);
+        if (checkedModules.length === 0) {
+          showToast('Please check at least one access module for Custom role.', true);
+          btn.disabled = false;
+          btn.innerText = 'Send Invitation';
+          return;
+        }
+
+        const customRoleName = 'custom_' + Math.random().toString(36).substring(2, 10) + '_' + Date.now().toString().slice(-4);
+        try {
+          const { error: roleErr } = await sb.from('dashboard_roles').insert({
+            name: customRoleName,
+            accessible_modules: checkedModules
+          });
+          if (roleErr) throw roleErr;
+
+          dynamicRoles.push({ name: customRoleName, accessible_modules: checkedModules });
+          role = customRoleName;
+        } catch (err) {
+          console.error('Failed to create custom role:', err);
+          showToast('Failed to configure custom accesses.', true);
+          btn.disabled = false;
+          btn.innerText = 'Send Invitation';
+          return;
+        }
+      }
 
       try {
         const { data: { session } } = await sb.auth.getSession();
@@ -714,23 +793,46 @@
     }
 
     // --- Edit Role Modal Actions ---
+    let currentRoleEditingString = '';
+
     window.openEditRoleModal = function(memberId, email, name, currentRole) {
       document.getElementById('edit-role-member-id').value = memberId;
       document.getElementById('edit-role-member-name').innerText = name || '—';
       document.getElementById('edit-role-member-email').innerText = email;
+      currentRoleEditingString = currentRole || '';
 
       const select = document.getElementById('edit-role-select');
       if (select) {
         let optionsHtml = '';
         optionsHtml += '<option value="admin">Administrator</option>';
         dynamicRoles.forEach(r => {
-          if (r.name !== 'admin' && r.name !== 'owner') {
+          if (r.name !== 'admin' && r.name !== 'owner' && !r.name.startsWith('custom_')) {
             optionsHtml += `<option value="${escapeHtml(r.name)}">${escapeHtml(r.name)}</option>`;
           }
         });
+        optionsHtml += '<option value="custom">Custom (Specify Accesses)</option>';
         optionsHtml += '<option value="">None / Employee Only (No Access)</option>';
         select.innerHTML = optionsHtml;
-        select.value = currentRole;
+        
+        let isCustom = currentRole.startsWith('custom_') || (currentRole && !['admin', 'owner', 'operations', 'customer_service', 'marketing', 'logistics', 'products', 'accounting', 'hr', ''].includes(currentRole));
+        const customContainer = document.getElementById('edit-custom-access-container');
+
+        document.querySelectorAll('.edit-custom-access').forEach(cb => cb.checked = false);
+
+        if (isCustom) {
+          select.value = 'custom';
+          customContainer.style.display = 'flex';
+          const found = dynamicRoles.find(r => r.name === currentRole);
+          if (found && Array.isArray(found.accessible_modules)) {
+            found.accessible_modules.forEach(mod => {
+              const cb = document.querySelector(`.edit-custom-access[value="${mod}"]`);
+              if (cb) cb.checked = true;
+            });
+          }
+        } else {
+          select.value = currentRole;
+          customContainer.style.display = 'none';
+        }
       }
 
       document.getElementById('edit-role-modal').classList.add('open');
@@ -738,13 +840,49 @@
 
     window.closeEditRoleModal = function() {
       document.getElementById('edit-role-modal').classList.remove('open');
+      currentRoleEditingString = '';
     };
 
     window.submitEditRole = async function(e) {
       e.preventDefault();
       const memberId = document.getElementById('edit-role-member-id').value;
-      const newRole = document.getElementById('edit-role-select').value;
+      let newRole = document.getElementById('edit-role-select').value;
       
+      if (newRole === 'custom') {
+        const checkedModules = Array.from(document.querySelectorAll('.edit-custom-access:checked')).map(cb => cb.value);
+        if (checkedModules.length === 0) {
+          showToast('Please check at least one access module for Custom role.', true);
+          return;
+        }
+
+        let roleName = currentRoleEditingString;
+        if (!roleName || !roleName.startsWith('custom_')) {
+          roleName = 'custom_' + Math.random().toString(36).substring(2, 10) + '_' + Date.now().toString().slice(-4);
+        }
+
+        try {
+          const { error: roleErr } = await sb.from('dashboard_roles').upsert({
+            name: roleName,
+            accessible_modules: checkedModules
+          }, { onConflict: 'name' });
+
+          if (roleErr) throw roleErr;
+
+          const cacheIdx = dynamicRoles.findIndex(r => r.name === roleName);
+          if (cacheIdx !== -1) {
+            dynamicRoles[cacheIdx].accessible_modules = checkedModules;
+          } else {
+            dynamicRoles.push({ name: roleName, accessible_modules: checkedModules });
+          }
+
+          newRole = roleName;
+        } catch (err) {
+          console.error('Error upserting custom role:', err);
+          showToast('Failed to save custom access settings.', true);
+          return;
+        }
+      }
+
       try {
         const { error } = await sb
           .from('tenant_members')
