@@ -251,6 +251,10 @@
       background: var(--bg-elevated);
     }
 
+    tbody tr.no-border-bottom {
+      border-bottom: none !important;
+    }
+
     tbody td {
       padding: 0.75rem 1rem;
       color: var(--text-secondary);
@@ -1519,20 +1523,27 @@
       }
 
       let prevRefId = null;
-      packingQueue.forEach(t => {
+      packingQueue.forEach((t, idx) => {
         const isDuplicate = (t.reference_id && t.reference_id === prevRefId);
         prevRefId = t.reference_id;
         const p = allProducts.find(prod => prod.sku === t.sku) || { title: 'Unknown Product', image_main: '' };
         const date = t.timestamp_reserved ? new Date(t.timestamp_reserved).toLocaleString() : 'N/A';
         const isPacked = t.status === 'packed';
         
+        const nextItem = packingQueue[idx + 1];
+        const isFollowedBySameOrder = (nextItem && t.reference_id && nextItem.reference_id === t.reference_id);
+
         let imageSrc = p.image_main;
         if (!imageSrc || !imageSrc.match(/^https?:\/\//)) {
           imageSrc = '../../assets/og-image.png';
         }
 
+        const trClasses = [];
+        if (isFollowedBySameOrder) trClasses.push('no-border-bottom');
+        const trClassAttr = trClasses.length > 0 ? `class="${trClasses.join(' ')}"` : '';
+
         tbody.innerHTML += `
-          <tr ${isPacked ? 'style="opacity: 0.65; background: var(--bg-base);"' : ''}>
+          <tr ${trClassAttr} ${isPacked ? 'style="opacity: 0.65; background: var(--bg-base);"' : ''}>
             <td>
               <img src="${imageSrc}" alt="${t.sku}" style="width: 80px; height: 50px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-elevated); display: block;" />
             </td>
