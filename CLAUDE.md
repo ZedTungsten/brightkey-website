@@ -58,3 +58,22 @@ We enforce rigorous practices to prevent SQL injections (SQLi) and Cross-Site Sc
   const authInfo = await window.BKAuth.checkRoleGate(['owner', 'admin'], '../admin.html');
   ```
   This guarantees that non-admin and non-tenant accounts are booted before the browser can fetch or draw sensitive forms.
+
+---
+
+## 5. Critical Auth Gating: tenantId vs. companyId
+> [!IMPORTANT]
+> A common recurring bug is confusing `tenantId` with `companyId`. Always remember:
+> - **`window.BKAuth.checkRoleGate()` returns `tenantId`, NOT `companyId`**:
+>   ```javascript
+>   const authInfo = await window.BKAuth.checkRoleGate(['owner', 'admin', 'hr'], '../admin.html');
+>   // authInfo.tenantId is populated, but authInfo.companyId is UNDEFINED!
+>   ```
+> - **Always resolve `companyId` by querying the `companies` table**:
+>   Passing `undefined` (or the string `"undefined"`) into UUID-typed columns triggers a database UUID syntax error: `invalid input syntax for type uuid: "undefined"`.
+>   To get `companyId`, query the `companies` table using `tenantId`:
+>   ```javascript
+>   const { data: co } = await getSb().from('companies').select('id').eq('tenant_id', authInfo.tenantId).limit(1).maybeSingle();
+>   const companyId = co?.id || null;
+>   ```
+
