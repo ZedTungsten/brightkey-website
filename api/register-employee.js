@@ -87,16 +87,38 @@ export default async function handler(req, res) {
 
     // 4. Create employee record
     let employeeNumber = '';
-    const { data: numData, error: seqError } = await supabase.rpc('generate_employee_number');
-    if (!seqError && numData) {
-      employeeNumber = numData;
-    } else {
-      console.warn('generate_employee_number RPC failed, falling back to count check:', seqError);
-      const { count, error: countError } = await supabase
+    let isUnique = false;
+    let attempts = 0;
+
+    while (!isUnique && attempts < 100) {
+      attempts++;
+      const { data: numData, error: seqError } = await supabase.rpc('generate_employee_number');
+      let potentialNum = '';
+      if (!seqError && numData) {
+        potentialNum = numData;
+      } else {
+        console.warn('generate_employee_number RPC failed, falling back to count check:', seqError);
+        const { count } = await supabase
+          .from('employees')
+          .select('*', { count: 'exact', head: true });
+        potentialNum = 'BK-' + String((count ?? 0) + attempts).padStart(4, '0');
+      }
+
+      // Check if this employee number already exists in the database
+      const { data: existing, error: existError } = await supabase
         .from('employees')
-        .select('*', { count: 'exact', head: true });
-      const nextNum = (count ?? 0) + 1;
-      employeeNumber = 'BK-' + String(nextNum).padStart(4, '0');
+        .select('id')
+        .eq('employee_number', potentialNum)
+        .maybeSingle();
+
+      if (!existError && !existing) {
+        employeeNumber = potentialNum;
+        isUnique = true;
+      }
+    }
+
+    if (!employeeNumber) {
+      return res.status(500).json({ error: 'Failed to generate a unique employee number after multiple attempts.' });
     }
 
     const finalEmployeePayload = {
