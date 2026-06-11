@@ -511,11 +511,11 @@
     <!-- Page header -->
     <div class="page-header">
       <h1 class="page-title">Employee Registration</h1>
-      <p class="page-sub">Complete all required fields. Optional fields can be filled later by HR or Admin. Your employee number is auto-generated.</p>
+      <p class="page-sub">Complete all required fields. Optional fields can be filled later by HR or Admin.</p>
     </div>
 
     <!-- Employee number chip -->
-    <div class="emp-number-row">
+    <div class="emp-number-row" style="display: none;">
       <div class="emp-number-icon">
         <svg id="emp-icon" viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>
       </div>
@@ -893,27 +893,6 @@
     /* ── File store ────────────────────────────────────────────────────── */
     const files = { profile: null, govId: null, cv: null };
 
-    /* ── Auto-generate employee number ─────────────────────────────────── */
-    let generatedEmpNumber = null;
-
-    async function generateEmployeeNumber() {
-      try {
-        const { count, error } = await sb
-          .from('employees')
-          .select('*', { count: 'exact', head: true });
-
-        if (error) throw error;
-
-        const nextNum = (count ?? 0) + 1;
-        const formatted = 'BK-' + String(nextNum).padStart(4, '0');
-        return formatted;
-      } catch (err) {
-        console.warn('Could not fetch count, using timestamp fallback:', err.message);
-        const ts = Date.now().toString().slice(-4);
-        return 'BK-' + ts;
-      }
-    }
-
     (async function initEmpNumber() {
       // Validate secure invite link first
       const isValid = await validateInvitation();
@@ -947,9 +926,6 @@
       emailField.readOnly = true;
       emailField.style.cursor = 'not-allowed';
       emailField.style.opacity = '0.7';
-
-      generatedEmpNumber = await generateEmployeeNumber();
-      document.getElementById('emp-num-text').textContent = generatedEmpNumber;
     })();
 
     /* ── File size formatter ────────────────────────────────────────────── */
@@ -1094,7 +1070,7 @@
     }
 
     /* ── Supabase Storage upload helper ─────────────────────────────────────────── */
-    async function uploadToSupabase(file, employeeNumber, type, progressBarId) {
+    async function uploadToSupabase(file, refId, type, progressBarId) {
       const bar      = progressBarId ? document.getElementById(progressBarId) : null;
       const progress = progressBarId ? document.getElementById(progressBarId.replace('-bar','-progress')) : null;
 
@@ -1122,7 +1098,7 @@
                 fileBase64: e.target.result,
                 fileName:   finalFile.name,
                 category:   'employees',
-                refId:      employeeNumber.replace('-', '').toLowerCase(),
+                refId:      refId.toLowerCase(),
                 type:       type,
                 companyId:  inviteCompany
               }),
@@ -1267,13 +1243,13 @@
       document.getElementById('btn-submit-spinner').style.display = 'block';
 
       try {
-        const empNum = generatedEmpNumber || await generateEmployeeNumber();
+        const uploadFolderId = inviteEmail.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
 
         // Upload files
         const [profileUrl, govIdUrl, cvUrl] = await Promise.all([
-          uploadToSupabase(files.profile, empNum, 'profile', null),
-          uploadToSupabase(files.govId,   empNum, 'gov-id', 'govid-bar'),
-          files.cv ? uploadToSupabase(files.cv, empNum, 'cv', 'cv-bar') : Promise.resolve(null),
+          uploadToSupabase(files.profile, uploadFolderId, 'profile', null),
+          uploadToSupabase(files.govId,   uploadFolderId, 'gov-id', 'govid-bar'),
+          files.cv ? uploadToSupabase(files.cv, uploadFolderId, 'cv', 'cv-bar') : Promise.resolve(null),
         ]);
 
         const emergencyName = document.getElementById('emergency-contact-name').value.trim();
@@ -1281,7 +1257,6 @@
 
         // Construct payload
         const payload = {
-          employee_number:   empNum,
           company_id:        inviteCompany,
           first_name:        document.getElementById('first-name').value.trim(),
           middle_name:       document.getElementById('middle-name').value.trim() || null,

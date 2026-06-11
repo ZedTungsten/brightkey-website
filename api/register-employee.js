@@ -86,8 +86,22 @@ export default async function handler(req, res) {
     }
 
     // 4. Create employee record
+    let employeeNumber = '';
+    const { data: numData, error: seqError } = await supabase.rpc('generate_employee_number');
+    if (!seqError && numData) {
+      employeeNumber = numData;
+    } else {
+      console.warn('generate_employee_number RPC failed, falling back to count check:', seqError);
+      const { count, error: countError } = await supabase
+        .from('employees')
+        .select('*', { count: 'exact', head: true });
+      const nextNum = (count ?? 0) + 1;
+      employeeNumber = 'BK-' + String(nextNum).padStart(4, '0');
+    }
+
     const finalEmployeePayload = {
       ...employee_payload,
+      employee_number: employeeNumber,
       id: userId // Set public.employees ID to match the auth user ID for simple relation
     };
 
