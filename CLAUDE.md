@@ -82,3 +82,9 @@ We enforce rigorous practices to prevent SQL injections (SQLi) and Cross-Site Sc
 ## 6. Prohibited Browser Dialogs (alert, confirm, prompt)
 > [!IMPORTANT]
 > Standard browser dialogs (`alert()`, `confirm()`, `prompt()`) are strictly prohibited in the ERP dashboard. Always use custom-styled overlay modal components to provide a premium user experience and maintain unified design aesthetics.
+
+---
+
+## 7. No Emojis Policy
+> [!IMPORTANT]
+> Emojis are strictly prohibited as visual icons or decorative elements anywhere in the UI (HTML markup, template strings, or CSS). Always use custom-styled SVG paths or text indicators to maintain professional branding and design consistency.
