@@ -637,10 +637,10 @@
               <svg viewBox="0 0 24 24"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
               Choose photo
               <input type="file" id="profile-picture-input" name="profile_picture"
-                accept="image/jpeg,image/png,image/webp" style="position:absolute;inset:0;opacity:0;cursor:pointer;" />
+                accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif" style="position:absolute;inset:0;opacity:0;cursor:pointer;" />
             </label>
             <p class="profile-upload-info">
-              JPG, PNG, or WebP · Max 5 MB<br/>
+              JPG, PNG, WebP, or HEIC · Max 5 MB<br/>
               Minimum 300×300 px recommended
             </p>
             <div class="file-preview" id="profile-file-preview">
@@ -669,12 +669,12 @@
 
         <div class="upload-zone" id="gov-id-zone">
           <input type="file" id="gov-id-input" name="government_id"
-            accept="image/jpeg,image/png,image/webp,application/pdf" />
+            accept="image/jpeg,image/png,image/webp,application/pdf,image/heic,image/heif,.heic,.heif" />
           <div class="upload-zone__icon">
             <svg viewBox="0 0 24 24"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
           </div>
           <div class="upload-zone__label"><span>Click to upload</span> or drag and drop</div>
-          <div class="upload-zone__hint">JPG, PNG, WebP, or PDF · Max 10 MB · Both sides if applicable</div>
+          <div class="upload-zone__hint">JPG, PNG, WebP, HEIC, or PDF · Max 10 MB · Both sides if applicable</div>
         </div>
         <div class="file-preview" id="govid-file-preview" style="margin-top:0.75rem;">
           <span class="file-preview__icon"><svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg></span>
@@ -837,8 +837,9 @@
     </div>
   </div>
 
-  <!-- Supabase CDN -->
+  <!-- Supabase CDN & HEIC Converter -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
 
   <script>
     'use strict';
@@ -1079,15 +1080,37 @@
       if (bar)      bar.style.width = '20%';
 
       let finalFile = file;
-      if (file.type.startsWith('image/')) {
+
+      // Automatically convert HEIC/HEIF files to JPEG
+      if (file && (file.name.toLowerCase().endsWith('.heic') || file.name.toLowerCase().endsWith('.heif') || file.type === 'image/heic' || file.type === 'image/heif')) {
         try {
-          finalFile = await compressImageToWebP(file);
+          if (bar) bar.style.width = '30%';
+          if (typeof heic2any !== 'undefined') {
+            const conversionResult = await heic2any({
+              blob: file,
+              toType: 'image/jpeg',
+              quality: 0.8
+            });
+            const blob = Array.isArray(conversionResult) ? conversionResult[0] : conversionResult;
+            finalFile = new File([blob], file.name.replace(/\.(heic|heif)$/i, '.jpg'), {
+              type: 'image/jpeg',
+              lastModified: Date.now()
+            });
+          }
+        } catch (e) {
+          console.warn("HEIC/HEIF conversion failed, uploading original file.", e);
+        }
+      }
+
+      if (finalFile.type.startsWith('image/')) {
+        try {
+          finalFile = await compressImageToWebP(finalFile);
         } catch (e) {
           console.warn("Employee image compression bypassed.", e);
         }
       }
 
-      return new Promise((resolve, reject) => {
+      return new Promise((resolve, reject) =>>,StartLine:1081,TargetContent: {
         const reader = new FileReader();
         reader.onload = async e => {
           try {
