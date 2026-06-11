@@ -15,7 +15,33 @@
         </button>
       </div>
 
-      <a href="/dashboard" class="dash-nav-item" id="nav-item-home" style="margin-bottom: 0.5rem;">
+      <!-- Skeleton Loading State -->
+      <div id="sidebar-nav-skeleton" style="display: flex; flex-direction: column; gap: 0.5rem; padding: 0 0.25rem;">
+        <div style="display: flex; align-items: center; gap: 0.625rem; height: 38px; padding: 0.6rem 0.5rem;">
+          <div class="skeleton" style="width: 16px; height: 16px; flex-shrink: 0; border-radius: 4px;"></div>
+          <div class="skeleton dash-nav-text" style="width: 70px; height: 12px; border-radius: 4px;"></div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 0.625rem; height: 38px; padding: 0.6rem 0.5rem;">
+          <div class="skeleton" style="width: 16px; height: 16px; flex-shrink: 0; border-radius: 4px;"></div>
+          <div class="skeleton dash-nav-text" style="width: 100px; height: 12px; border-radius: 4px;"></div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 0.625rem; height: 38px; padding: 0.6rem 0.5rem;">
+          <div class="skeleton" style="width: 16px; height: 16px; flex-shrink: 0; border-radius: 4px;"></div>
+          <div class="skeleton dash-nav-text" style="width: 80px; height: 12px; border-radius: 4px;"></div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 0.625rem; height: 38px; padding: 0.6rem 0.5rem;">
+          <div class="skeleton" style="width: 16px; height: 16px; flex-shrink: 0; border-radius: 4px;"></div>
+          <div class="skeleton dash-nav-text" style="width: 95px; height: 12px; border-radius: 4px;"></div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 0.625rem; height: 38px; padding: 0.6rem 0.5rem;">
+          <div class="skeleton" style="width: 16px; height: 16px; flex-shrink: 0; border-radius: 4px;"></div>
+          <div class="skeleton dash-nav-text" style="width: 110px; height: 12px; border-radius: 4px;"></div>
+        </div>
+      </div>
+
+      <!-- Actual Sidebar Navigation Menu -->
+      <div id="sidebar-nav-content" style="display: none; flex-direction: column; gap: 0.15rem;">
+        <a href="/dashboard" class="dash-nav-item" id="nav-item-home" style="margin-bottom: 0.5rem;">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
         <span class="dash-nav-text">Home</span>
       </a>
@@ -138,6 +164,7 @@
           <a href="/dashboard/financial-statement" class="dash-nav-child" data-role="accounting">Financial Statements</a>
           <a href="/dashboard/ledgers" class="dash-nav-child" data-role="accounting">Ledgers</a>
         </div>
+      </div>
       </div>
 
       <div class="dash-sidebar-footer" style="position: relative;">
@@ -427,6 +454,11 @@
 
       } catch (err) {
         console.error('Sidebar RBAC error:', err);
+      } finally {
+        const skeletonEl = document.getElementById('sidebar-nav-skeleton');
+        const contentEl = document.getElementById('sidebar-nav-content');
+        if (skeletonEl) skeletonEl.style.display = 'none';
+        if (contentEl) contentEl.style.display = 'flex';
       }
     })();
   }
