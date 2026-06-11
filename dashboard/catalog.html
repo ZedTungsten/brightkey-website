@@ -1085,6 +1085,7 @@
   let lastPublishedAt = null;
   let hasUnpublishedChanges = false;
   let currentCompanyId = null;
+  let activeTab = 'basic';
 
   async function checkUnpublishedChanges() {
     try {
@@ -1498,7 +1499,7 @@
     document.getElementById('drawer-status').textContent = 'Loading…';
     document.getElementById('product-drawer').classList.add('open');
     document.getElementById('drawer-overlay').classList.add('open');
-    switchTab('basic');
+    switchTab(activeTab || 'basic');
 
     // Load features
     if (p && p.business && FEATURE_DEFS[p.business]) {
@@ -1757,6 +1758,7 @@
   // Tabs
   // ─────────────────────────────────────────────────────
   function switchTab(tabName) {
+    activeTab = tabName;
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tabName));
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === `tab-${tabName}`));
   }
@@ -2123,6 +2125,7 @@
     if (!el) return;
     el.value = el.value === 'x' ? '' : 'x';
     updateFeatureRow(col, el.value);
+    el.dispatchEvent(new Event('input', { bubbles: true }));
   }
 
   // ─────────────────────────────────────────────────────
@@ -2272,8 +2275,12 @@
     const div = document.createElement('div');
     div.innerHTML = getAPlusTemplate(type, data);
     const block = div.firstElementChild;
-    block.querySelector('.btn-remove-aplus').addEventListener('click', () => block.remove());
+    block.querySelector('.btn-remove-aplus').addEventListener('click', () => {
+      block.remove();
+      container.dispatchEvent(new Event('input', { bubbles: true }));
+    });
     container.appendChild(block);
+    container.dispatchEvent(new Event('input', { bubbles: true }));
   }
 
   function collectAPlusContent() {
@@ -3291,6 +3298,82 @@
       if (deleteCallback) await deleteCallback();
       deleteCallback = null;
     });
+
+    // ─────────────────────────────────────────────────────
+    // Autosave functionality
+    // ─────────────────────────────────────────────────────
+    let autosaveTimeout = null;
+    function triggerAutosave() {
+      if (!editingId || isBatchEditing) return;
+
+      if (autosaveTimeout) clearTimeout(autosaveTimeout);
+
+      const statusEl = document.getElementById('drawer-status');
+      if (statusEl) {
+        statusEl.textContent = 'Autosaving...';
+        statusEl.style.color = 'var(--text-secondary)';
+      }
+
+      autosaveTimeout = setTimeout(async () => {
+        try {
+          const payload = collectForm();
+          if (!payload.sku || !payload.title || !payload.business) return;
+
+          payload.id = editingId;
+          const { error } = await sbClient.from('products').update(payload).eq('id', editingId);
+          if (error) throw error;
+
+          const business = payload.business;
+          const featureDef = FEATURE_DEFS[business];
+          if (featureDef) {
+            const featData = collectFeatures(business);
+            featData.product_id = editingId;
+
+            if (editingFeatureId) {
+              await sbClient.from(featureDef.table).update(featData).eq('id', editingFeatureId);
+            } else {
+              const { data: existing } = await sbClient.from(featureDef.table).select('id').eq('product_id', editingId).single();
+              if (existing) {
+                await sbClient.from(featureDef.table).update(featData).eq('id', existing.id);
+              } else {
+                await sbClient.from(featureDef.table).insert(featData);
+              }
+            }
+          }
+
+          // Quietly refresh list
+          await fetchProducts();
+
+          if (statusEl) {
+            statusEl.textContent = 'Saved!';
+            statusEl.style.color = 'var(--success)';
+            setTimeout(() => {
+              if (statusEl.textContent === 'Saved!') statusEl.textContent = '';
+            }, 1500);
+          }
+        } catch (err) {
+          console.error('Autosave failed:', err);
+          if (statusEl) {
+            statusEl.textContent = `Autosave failed: ${err.message}`;
+            statusEl.style.color = 'var(--danger)';
+          }
+        }
+      }, 1000);
+    }
+
+    const drawerEl = document.getElementById('product-drawer');
+    if (drawerEl) {
+      const handleAutosaveEvent = (e) => {
+        if (!e.target) return;
+        if (e.target.matches('input, textarea, select')) {
+          if (e.target.id.startsWith('f-') || e.target.classList.contains('promo-tag-checkbox') || e.target.classList.contains('feature-input') || e.target.closest('.comparison-block') || e.target.closest('.aplus-block')) {
+            triggerAutosave();
+          }
+        }
+      };
+      drawerEl.addEventListener('input', handleAutosaveEvent);
+      drawerEl.addEventListener('change', handleAutosaveEvent);
+    }
   });
 
   // Expose for inline onclick
