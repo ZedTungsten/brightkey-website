@@ -161,6 +161,7 @@ CREATE TABLE public.installation_bookings (
   map_image_url       TEXT,
   frontage_image_url  TEXT,
   receipt_pdf_url     TEXT,
+  work_permit_image_url TEXT,
   
   -- Stored in centavos (integers)
   subtotal            INTEGER,

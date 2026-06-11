@@ -610,6 +610,17 @@
       margin-left: 0.4rem;
       vertical-align: middle;
     }
+    .bk-spinner {
+      width: 1.5rem;
+      height: 1.5rem;
+      border: 2px solid var(--text-muted);
+      border-top-color: var(--blue);
+      border-radius: 50%;
+      animation: bk-spin 0.8s linear infinite;
+    }
+    @keyframes bk-spin {
+      to { transform: rotate(360deg); }
+    }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 </head>
@@ -803,6 +814,30 @@
             <div class="img-preview-card" id="card-map">
               <img id="img-map" src="" alt="Google Pin Map" onclick="openLightbox(this.src)" />
               <div class="img-preview-label">Map / Location Guide</div>
+            </div>
+            <div class="img-preview-card" id="card-work-permit" style="position: relative;">
+              <!-- Upload state -->
+              <div id="upload-work-permit-container" style="height: 120px; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 2px dashed var(--border); border-radius: 4px; cursor: pointer; background: var(--bg-base); gap: 0.25rem;" onclick="triggerWorkPermitUpload()">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-upload-cloud">
+                  <polyline points="16 16 12 12 8 16"></polyline>
+                  <line x1="12" y1="12" x2="12" y2="21"></line>
+                  <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"></path>
+                  <polyline points="16 16 12 12 8 16"></polyline>
+                </svg>
+                <span style="font-size: 0.72rem; color: var(--text-secondary); font-weight: 600;">Attach Work Permit</span>
+              </div>
+              
+              <!-- Preview state -->
+              <div id="preview-work-permit-container" style="display: none; position: relative;">
+                <img id="img-work-permit" src="" alt="Work Permit" onclick="openLightbox(this.src)" style="width:100%; height:120px; object-fit:cover;" />
+                <button type="button" id="btn-remove-work-permit" style="position: absolute; top: 5px; right: 5px; background: rgba(239, 68, 68, 0.9); border: none; color: white; border-radius: 4px; padding: 2px 6px; font-size: 0.7rem; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center;" onclick="removeWorkPermit(event)">
+                  Delete
+                </button>
+              </div>
+
+              <!-- Hidden input file -->
+              <input type="file" id="input-work-permit" accept="image/*" style="display: none;" onchange="handleWorkPermitUpload(event)" />
+              <div class="img-preview-label">Work Permit</div>
             </div>
           </div>
         </div>
@@ -1321,8 +1356,140 @@
         mapCard.style.display = 'none';
       }
 
+      // Work permit UI state helper
+      updateWorkPermitUI();
+
       toggleDetailsModal(true);
     }
+
+    function updateWorkPermitUI() {
+      if (!selectedBooking) return;
+      const uploadContainer = document.getElementById('upload-work-permit-container');
+      const previewContainer = document.getElementById('preview-work-permit-container');
+      const imgElement = document.getElementById('img-work-permit');
+      
+      if (selectedBooking.work_permit_image_url) {
+        uploadContainer.style.display = 'none';
+        previewContainer.style.display = 'block';
+        imgElement.src = selectedBooking.work_permit_image_url;
+      } else {
+        uploadContainer.style.display = 'flex';
+        previewContainer.style.display = 'none';
+        imgElement.src = '';
+      }
+    }
+
+    window.triggerWorkPermitUpload = function() {
+      document.getElementById('input-work-permit').click();
+    };
+
+    window.handleWorkPermitUpload = async function(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const uploadContainer = document.getElementById('upload-work-permit-container');
+      const originalHtml = uploadContainer.innerHTML;
+      uploadContainer.innerHTML = `
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.5rem;">
+          <div class="bk-spinner"></div>
+          <span style="font-size: 0.72rem; color: var(--text-secondary); font-weight: 600;">Uploading...</span>
+        </div>
+      `;
+      uploadContainer.style.pointerEvents = 'none';
+
+      try {
+        const reader = new FileReader();
+        const base64Promise = new Promise((resolve, reject) => {
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = reject;
+        });
+        reader.readAsDataURL(file);
+        const fileBase64 = await base64Promise;
+
+        const response = await fetch('/api/upload', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            fileBase64,
+            fileName: file.name,
+            category: 'installations',
+            type: 'permit',
+            refId: selectedBooking.reference_id || selectedBooking.id,
+            companyId: currentCompanyId
+          })
+        });
+
+        const result = await response.json();
+        if (!response.ok || !result.success) {
+          throw new Error(result.error || 'Upload failed');
+        }
+
+        const imageUrl = result.url;
+
+        // Update in Supabase
+        const { error } = await sb
+          .from('installation_bookings')
+          .update({ work_permit_image_url: imageUrl })
+          .eq('id', selectedBooking.id);
+
+        if (error) throw error;
+
+        // Update local memory
+        const bookingIndex = dbBookings.findIndex(b => b.id === selectedBooking.id);
+        if (bookingIndex !== -1) {
+          dbBookings[bookingIndex].work_permit_image_url = imageUrl;
+        }
+        selectedBooking.work_permit_image_url = imageUrl;
+
+        showToast('Work permit uploaded successfully!');
+        updateWorkPermitUI();
+        applyFilterAndRender();
+      } catch (err) {
+        console.error(err);
+        showToast('Failed to upload work permit: ' + err.message, true);
+      } finally {
+        uploadContainer.innerHTML = originalHtml;
+        uploadContainer.style.pointerEvents = 'auto';
+        event.target.value = ''; // Reset input
+      }
+    };
+
+    window.removeWorkPermit = async function(event) {
+      event.stopPropagation();
+      if (!confirm('Are you sure you want to remove the work permit?')) return;
+
+      const btn = document.getElementById('btn-remove-work-permit');
+      const originalText = btn.innerText;
+      btn.innerText = 'Deleting...';
+      btn.disabled = true;
+
+      try {
+        const { error } = await sb
+          .from('installation_bookings')
+          .update({ work_permit_image_url: null })
+          .eq('id', selectedBooking.id);
+
+        if (error) throw error;
+
+        const bookingIndex = dbBookings.findIndex(b => b.id === selectedBooking.id);
+        if (bookingIndex !== -1) {
+          dbBookings[bookingIndex].work_permit_image_url = null;
+        }
+        selectedBooking.work_permit_image_url = null;
+
+        showToast('Work permit removed.');
+        updateWorkPermitUI();
+        applyFilterAndRender();
+      } catch (err) {
+        console.error(err);
+        showToast('Failed to remove work permit: ' + err.message, true);
+      } finally {
+        btn.innerText = originalText;
+        btn.disabled = false;
+      }
+    };
 
     window.toggleEditField = function(field, show) {
       if (field === 'map-pin') {
