@@ -559,6 +559,33 @@
       opacity: 1;
       transform: translateY(0);
     }
+
+    /* ── Draggable Headers grab styles ── */
+    .dept-header, .subteam-header {
+      cursor: grab;
+    }
+    .dept-header:active, .subteam-header:active {
+      cursor: grabbing;
+    }
+    .dept-header input, .dept-header button,
+    .subteam-header input, .subteam-header button {
+      cursor: auto;
+    }
+    .dept-header input[type="text"], .subteam-header input[type="text"] {
+      cursor: text;
+    }
+    .dept-header button, .subteam-header button {
+      cursor: pointer;
+    }
+
+    .branch-item.dragover {
+      outline: 2px dashed var(--cyan);
+      outline-offset: 4px;
+      border-radius: 8px;
+    }
+    .subteam-container.dragging-subteam, .branch-item.dragging-dept {
+      opacity: 0.5;
+    }
   </style>
 </head>
 <body>
@@ -734,11 +761,14 @@
       companyStructure.departments.forEach((dept, deptIdx) => {
         const deptNode = document.createElement('div');
         deptNode.className = 'branch-item';
+        deptNode.setAttribute('ondragover', 'allowDeptDrop(event)');
+        deptNode.setAttribute('ondragleave', 'clearDragOver(event)');
+        deptNode.setAttribute('ondrop', `handleDeptDrop(event, ${deptIdx})`);
         
         // Render Department structure
         deptNode.innerHTML = `
           <div class="department-box">
-            <div class="dept-header">
+            <div class="dept-header" draggable="true" ondragstart="handleDeptDragStart(event, ${deptIdx})">
               <input type="text" class="dept-title-input" value="${esc(dept.name)}" onchange="updateDeptName(${deptIdx}, this.value)" placeholder="Department Name" />
               <button class="btn-dept-delete" onclick="deleteDepartment(${deptIdx})" title="Delete Department">✕</button>
             </div>
@@ -746,7 +776,7 @@
             <div class="dept-manager-dropzone" id="drop-dept-mgr-${deptIdx}" ondragover="allowDrop(event)" ondragleave="clearDragOver(event)" ondrop="handleDeptManagerDrop(event, ${deptIdx})">
               <!-- Manager Card here -->
             </div>
-            <div class="subteams-row" id="subteams-${deptIdx}">
+            <div class="subteams-row" id="subteams-${deptIdx}" ondragover="allowSubteamDrop(event)" ondragleave="clearDragOver(event)" ondrop="handleSubteamsRowDrop(event, ${deptIdx})">
               <!-- Subteams go here -->
             </div>
             <button class="btn btn-outline btn-sm btn-add-subteam" onclick="createSubteam(${deptIdx})">
@@ -776,9 +806,12 @@
           dept.subteams.forEach((sub, subIdx) => {
             const subteamNode = document.createElement('div');
             subteamNode.className = 'subteam-container';
+            subteamNode.setAttribute('ondragover', 'allowSubteamDrop(event)');
+            subteamNode.setAttribute('ondragleave', 'clearDragOver(event)');
+            subteamNode.setAttribute('ondrop', `handleSubteamDrop(event, ${deptIdx}, ${subIdx})`);
             subteamNode.innerHTML = `
               <div class="subteam-meta">
-                <div class="subteam-header">
+                <div class="subteam-header" draggable="true" ondragstart="handleSubteamDragStart(event, ${deptIdx}, ${subIdx})">
                   <input type="text" class="subteam-title-input" value="${esc(sub.name)}" onchange="updateSubteamName(${deptIdx}, ${subIdx}, this.value)" placeholder="Subteam Name" />
                   <button class="btn-subteam-delete" onclick="deleteSubteam(${deptIdx}, ${subIdx})" title="Delete Subteam">✕</button>
                 </div>
@@ -982,6 +1015,113 @@
 
       renderStructure();
       renderEmployeePool();
+    };
+
+    // ── Department & Subteam Drag & Drop Handlers ──
+    window.handleDeptDragStart = function(e, deptIdx) {
+      if (e.target.tagName === 'INPUT' || e.target.closest('input')) {
+        e.preventDefault();
+        return;
+      }
+      e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'department', deptIdx }));
+      e.dataTransfer.effectAllowed = 'move';
+      e.currentTarget.closest('.branch-item')?.classList.add('dragging-dept');
+    };
+
+    window.allowDeptDrop = function(e) {
+      e.preventDefault();
+      e.currentTarget.classList.add('dragover');
+    };
+
+    window.handleDeptDrop = function(e, targetDeptIdx) {
+      e.preventDefault();
+      e.currentTarget.classList.remove('dragover');
+      try {
+        const raw = e.dataTransfer.getData('text/plain');
+        if (!raw) return;
+        const dragData = JSON.parse(raw);
+        if (dragData && dragData.type === 'department') {
+          const sourceDeptIdx = dragData.deptIdx;
+          if (sourceDeptIdx === targetDeptIdx) return;
+
+          const depts = companyStructure.departments;
+          const [movedDept] = depts.splice(sourceDeptIdx, 1);
+          depts.splice(targetDeptIdx, 0, movedDept);
+
+          renderStructure();
+          renderEmployeePool();
+        }
+      } catch (err) {
+        // Not a department drag
+      }
+    };
+
+    window.handleSubteamDragStart = function(e, deptIdx, subIdx) {
+      if (e.target.tagName === 'INPUT' || e.target.closest('input')) {
+        e.preventDefault();
+        return;
+      }
+      e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'subteam', deptIdx, subIdx }));
+      e.dataTransfer.effectAllowed = 'move';
+      e.currentTarget.closest('.subteam-container')?.classList.add('dragging-subteam');
+    };
+
+    window.allowSubteamDrop = function(e) {
+      e.preventDefault();
+      e.currentTarget.classList.add('dragover');
+    };
+
+    window.handleSubteamDrop = function(e, targetDeptIdx, targetSubIdx) {
+      e.preventDefault();
+      e.currentTarget.classList.remove('dragover');
+      try {
+        const raw = e.dataTransfer.getData('text/plain');
+        if (!raw) return;
+        const dragData = JSON.parse(raw);
+        if (dragData && dragData.type === 'subteam') {
+          const sourceDeptIdx = dragData.deptIdx;
+          const sourceSubIdx = dragData.subIdx;
+
+          const sourceDept = companyStructure.departments[sourceDeptIdx];
+          const targetDept = companyStructure.departments[targetDeptIdx];
+
+          const [movedSubteam] = sourceDept.subteams.splice(sourceSubIdx, 1);
+          if (!targetDept.subteams) targetDept.subteams = [];
+          targetDept.subteams.splice(targetSubIdx, 0, movedSubteam);
+
+          renderStructure();
+          renderEmployeePool();
+        }
+      } catch (err) {
+        // Not a subteam drag
+      }
+    };
+
+    window.handleSubteamsRowDrop = function(e, targetDeptIdx) {
+      if (e.target !== e.currentTarget) return;
+      e.preventDefault();
+      e.currentTarget.classList.remove('dragover');
+      try {
+        const raw = e.dataTransfer.getData('text/plain');
+        if (!raw) return;
+        const dragData = JSON.parse(raw);
+        if (dragData && dragData.type === 'subteam') {
+          const sourceDeptIdx = dragData.deptIdx;
+          const sourceSubIdx = dragData.subIdx;
+
+          const sourceDept = companyStructure.departments[sourceDeptIdx];
+          const targetDept = companyStructure.departments[targetDeptIdx];
+
+          const [movedSubteam] = sourceDept.subteams.splice(sourceSubIdx, 1);
+          if (!targetDept.subteams) targetDept.subteams = [];
+          targetDept.subteams.push(movedSubteam);
+
+          renderStructure();
+          renderEmployeePool();
+        }
+      } catch (err) {
+        // Not a subteam drag
+      }
     };
 
     window.handlePoolDrop = function(e) {
