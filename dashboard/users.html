@@ -523,6 +523,8 @@
         const isSelf = row.user_id === currentUser.id;
         const isOwner = row.role === 'owner';
 
+        let isCustom = false;
+        let customModules = [];
         let displayName = '';
         if (row.role === 'admin') {
           displayName = 'Administrator';
@@ -531,25 +533,40 @@
         } else if (!row.role) {
           displayName = 'None';
         } else if (row.role.startsWith('custom_') || !['admin', 'owner', 'operations', 'customer_service', 'marketing', 'logistics', 'products', 'accounting', 'hr'].includes(row.role)) {
+          isCustom = true;
           const found = dynamicRoles.find(r => r.name === row.role);
           if (found && Array.isArray(found.accessible_modules) && found.accessible_modules.length > 0) {
-            displayName = `Custom (${found.accessible_modules.join(', ')})`;
-          } else {
-            displayName = 'Custom (No Access)';
+            customModules = found.accessible_modules;
           }
         } else {
           displayName = row.role.charAt(0).toUpperCase() + row.role.slice(1).replace('_', ' ');
         }
 
-        let badgeClass = row.role === 'owner' ? 'badge-cyan' : (row.role === 'admin' ? 'badge-cyan' : 'badge-gray');
+        let roleInnerHtml = '';
+        if (isCustom) {
+          let listItems = customModules.map(m => `<li style="font-weight:400; color:var(--text-secondary); margin-bottom:0.1rem;">${escapeHtml(m)}</li>`).join('');
+          if (!listItems) listItems = '<li style="font-weight:400; color:var(--text-muted);">No Access</li>';
+          roleInnerHtml = `
+            <div>
+              <div style="font-weight:700; color:var(--text-primary);">Custom</div>
+              <ul style="margin:0.2rem 0 0 0.5rem; padding-left:0.75rem; list-style-type:disc; font-size:0.8rem;">
+                ${listItems}
+              </ul>
+            </div>
+          `;
+        } else {
+          let badgeClass = row.role === 'owner' ? 'badge-cyan' : (row.role === 'admin' ? 'badge-cyan' : 'badge-gray');
+          roleInnerHtml = `<span class="badge ${badgeClass}">${escapeHtml(displayName)}</span>`;
+        }
 
+        let roleCell = '';
         if (isOwner || isSelf) {
-          roleCell = `<span class="badge ${badgeClass}">${escapeHtml(displayName)}</span>`;
+          roleCell = roleInnerHtml;
         } else {
           roleCell = `
-            <div style="display:flex; align-items:center; justify-content:space-between; width:100%;">
-              <span class="badge ${badgeClass}">${escapeHtml(displayName)}</span>
-              <button type="button" style="background:none; border:none; color:var(--text-muted); cursor:pointer; display:inline-flex; align-items:center; padding:2px; vertical-align:middle; transition:color 0.15s;" onmouseover="this.style.color='var(--cyan-light)'" onmouseout="this.style.color='var(--text-muted)'" onclick="openEditRoleModal('${row.id}', '${escapeHtml(row.user_email)}', '${escapeHtml(row.full_name || '')}', '${escapeHtml(row.role || '')}')" title="Edit Role">
+            <div style="display:flex; align-items:flex-start; justify-content:space-between; width:100%; gap:0.5rem;">
+              ${roleInnerHtml}
+              <button type="button" style="background:none; border:none; color:var(--text-muted); cursor:pointer; display:inline-flex; align-items:center; padding:2px; margin-top:2px; vertical-align:middle; transition:color 0.15s;" onmouseover="this.style.color='var(--cyan-light)'" onmouseout="this.style.color='var(--text-muted)'" onclick="openEditRoleModal('${row.id}', '${escapeHtml(row.user_email)}', '${escapeHtml(row.full_name || '')}', '${escapeHtml(row.role || '')}')" title="Edit Role">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
               </button>
             </div>`;
@@ -596,13 +613,49 @@
       inviteData.forEach(row => {
         const tr = document.createElement('tr');
         tr.style.background = 'rgba(217,119,6,0.03)';
+
+        let isCustomInvite = false;
+        let customInviteModules = [];
+        let displayInviteName = '';
+        if (row.role === 'admin') {
+          displayInviteName = 'Administrator';
+        } else if (row.role === 'owner') {
+          displayInviteName = 'Owner';
+        } else if (!row.role) {
+          displayInviteName = 'None';
+        } else if (row.role.startsWith('custom_') || !['admin', 'owner', 'operations', 'customer_service', 'marketing', 'logistics', 'products', 'accounting', 'hr'].includes(row.role)) {
+          isCustomInvite = true;
+          const found = dynamicRoles.find(r => r.name === row.role);
+          if (found && Array.isArray(found.accessible_modules) && found.accessible_modules.length > 0) {
+            customInviteModules = found.accessible_modules;
+          }
+        } else {
+          displayInviteName = row.role.charAt(0).toUpperCase() + row.role.slice(1).replace('_', ' ');
+        }
+
+        let inviteRoleCell = '';
+        if (isCustomInvite) {
+          let listItems = customInviteModules.map(m => `<li style="font-weight:400; color:var(--text-secondary); margin-bottom:0.1rem;">${escapeHtml(m)}</li>`).join('');
+          if (!listItems) listItems = '<li style="font-weight:400; color:var(--text-muted);">No Access</li>';
+          inviteRoleCell = `
+            <div>
+              <div style="font-weight:700; color:var(--text-primary);">Custom</div>
+              <ul style="margin:0.2rem 0 0 0.5rem; padding-left:0.75rem; list-style-type:disc; font-size:0.8rem;">
+                ${listItems}
+              </ul>
+            </div>
+          `;
+        } else {
+          inviteRoleCell = `<span class="badge badge-gray">${escapeHtml(displayInviteName)}</span>`;
+        }
+
         tr.innerHTML = `
           <td>
             <div style="font-weight:600;">${row.email}</div>
             <div style="font-size:0.72rem;color:var(--text-muted);">Awaiting registration</div>
           </td>
           <td>${row.full_name || '—'}</td>
-          <td><span class="badge badge-gray">${row.role === 'admin' ? 'Administrator' : (row.role || 'None')}</span></td>
+          <td>${inviteRoleCell}</td>
           <td>${formatDateAdded(row.created_at)}</td>
           <td><span class="badge badge-orange">Invited</span></td>
           <td style="text-align:center;">
