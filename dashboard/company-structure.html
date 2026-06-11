@@ -567,7 +567,17 @@
         const authInfo = await window.BKAuth.checkRoleGate(['owner', 'admin', 'hr'], '../admin.html');
         if (!authInfo) return;
 
-        currentCompanyId = authInfo.companyId;
+        // Fetch company ID for RLS and settings lookup
+        try {
+          const { data: co } = await getSb().from('companies').select('id').eq('tenant_id', authInfo.tenantId).limit(1).maybeSingle();
+          currentCompanyId = co?.id || null;
+        } catch (e) {
+          currentCompanyId = null;
+        }
+
+        if (!currentCompanyId) {
+          throw new Error('No company found for your tenant.');
+        }
 
         // Fetch company detail to populate root node
         const { data: comp } = await getSb().from('companies').select('name').eq('id', currentCompanyId).single();
