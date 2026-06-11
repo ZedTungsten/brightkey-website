@@ -561,21 +561,22 @@
     }
 
     /* ── Draggable Headers grab styles ── */
-    .dept-header, .subteam-header {
+    .drag-handle {
       cursor: grab;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2px 4px;
+      color: var(--text-muted);
+      border-radius: 4px;
+      transition: background 0.15s, color 0.15s;
     }
-    .dept-header:active, .subteam-header:active {
+    .drag-handle:active {
       cursor: grabbing;
     }
-    .dept-header input, .dept-header button,
-    .subteam-header input, .subteam-header button {
-      cursor: auto;
-    }
-    .dept-header input[type="text"], .subteam-header input[type="text"] {
-      cursor: text;
-    }
-    .dept-header button, .subteam-header button {
-      cursor: pointer;
+    .drag-handle:hover {
+      background: var(--bg-elevated);
+      color: var(--text-primary);
     }
 
     .branch-item.dragover {
@@ -768,8 +769,13 @@
         // Render Department structure
         deptNode.innerHTML = `
           <div class="department-box">
-            <div class="dept-header" draggable="true" ondragstart="handleDeptDragStart(event, ${deptIdx})">
-              <input type="text" class="dept-title-input" value="${esc(dept.name)}" onchange="updateDeptName(${deptIdx}, this.value)" placeholder="Department Name" />
+            <div class="dept-header">
+              <div style="display:flex; align-items:center; gap:0.35rem; flex:1;">
+                <div class="drag-handle dept-drag-handle" draggable="true" ondragstart="handleDeptDragStart(event, ${deptIdx})" ondragend="handleDeptDragEnd(event)" title="Drag to reorder department">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="pointer-events: none;"><circle cx="9" cy="5" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="9" cy="19" r="1.5"/><circle cx="15" cy="5" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="15" cy="19" r="1.5"/></svg>
+                </div>
+                <input type="text" class="dept-title-input" value="${esc(dept.name)}" onchange="updateDeptName(${deptIdx}, this.value)" placeholder="Department Name" style="width:100%" />
+              </div>
               <button class="btn-dept-delete" onclick="deleteDepartment(${deptIdx})" title="Delete Department">✕</button>
             </div>
             <div class="slot-label" style="margin: 0.5rem 1rem 0 1rem;">Department Head / Manager</div>
@@ -811,8 +817,13 @@
             subteamNode.setAttribute('ondrop', `handleSubteamDrop(event, ${deptIdx}, ${subIdx})`);
             subteamNode.innerHTML = `
               <div class="subteam-meta">
-                <div class="subteam-header" draggable="true" ondragstart="handleSubteamDragStart(event, ${deptIdx}, ${subIdx})">
-                  <input type="text" class="subteam-title-input" value="${esc(sub.name)}" onchange="updateSubteamName(${deptIdx}, ${subIdx}, this.value)" placeholder="Subteam Name" />
+                <div class="subteam-header">
+                  <div style="display:flex; align-items:center; gap:0.25rem; flex:1;">
+                    <div class="drag-handle subteam-drag-handle" draggable="true" ondragstart="handleSubteamDragStart(event, ${deptIdx}, ${subIdx})" ondragend="handleSubteamDragEnd(event)" title="Drag to move subteam">
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="pointer-events: none;"><circle cx="9" cy="5" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="9" cy="19" r="1.5"/><circle cx="15" cy="5" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="15" cy="19" r="1.5"/></svg>
+                    </div>
+                    <input type="text" class="subteam-title-input" value="${esc(sub.name)}" onchange="updateSubteamName(${deptIdx}, ${subIdx}, this.value)" placeholder="Subteam Name" style="width:100%" />
+                  </div>
                   <button class="btn-subteam-delete" onclick="deleteSubteam(${deptIdx}, ${subIdx})" title="Delete Subteam">✕</button>
                 </div>
                 <input type="text" class="subteam-desc-input" value="${esc(sub.description)}" onchange="updateSubteamDesc(${deptIdx}, ${subIdx}, this.value)" placeholder="Add short desc..." maxlength="50" />
@@ -1019,13 +1030,13 @@
 
     // ── Department & Subteam Drag & Drop Handlers ──
     window.handleDeptDragStart = function(e, deptIdx) {
-      if (e.target.tagName === 'INPUT' || e.target.closest('input')) {
-        e.preventDefault();
-        return;
-      }
       e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'department', deptIdx }));
       e.dataTransfer.effectAllowed = 'move';
       e.currentTarget.closest('.branch-item')?.classList.add('dragging-dept');
+    };
+
+    window.handleDeptDragEnd = function(e) {
+      e.currentTarget.closest('.branch-item')?.classList.remove('dragging-dept');
     };
 
     window.allowDeptDrop = function(e) {
@@ -1057,13 +1068,13 @@
     };
 
     window.handleSubteamDragStart = function(e, deptIdx, subIdx) {
-      if (e.target.tagName === 'INPUT' || e.target.closest('input')) {
-        e.preventDefault();
-        return;
-      }
       e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'subteam', deptIdx, subIdx }));
       e.dataTransfer.effectAllowed = 'move';
       e.currentTarget.closest('.subteam-container')?.classList.add('dragging-subteam');
+    };
+
+    window.handleSubteamDragEnd = function(e) {
+      e.currentTarget.closest('.subteam-container')?.classList.remove('dragging-subteam');
     };
 
     window.allowSubteamDrop = function(e) {
