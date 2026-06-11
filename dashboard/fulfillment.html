@@ -1486,7 +1486,10 @@
       const tbody = document.getElementById('pack-list');
       tbody.innerHTML = '';
 
-      const packingQueue = activeTransactions.filter(t => t.status === 'reserved' && t.type === 'customer_order');
+      const packingQueue = activeTransactions.filter(t => 
+        (t.status === 'reserved' || t.status === 'packed') && 
+        t.type === 'customer_order'
+      );
 
       if (packingQueue.length === 0) {
         tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted" style="padding:2rem 0;">No orders currently in packing queue.</td></tr>`;
@@ -1499,8 +1502,10 @@
         prevRefId = t.reference_id;
         const p = allProducts.find(prod => prod.sku === t.sku) || { title: 'Unknown Product' };
         const date = t.timestamp_reserved ? new Date(t.timestamp_reserved).toLocaleString() : 'N/A';
+        const isPacked = t.status === 'packed';
+        
         tbody.innerHTML += `
-          <tr>
+          <tr ${isPacked ? 'style="opacity: 0.65; background: var(--bg-base);"' : ''}>
             <td><strong>${isDuplicate ? '' : (t.reference_id || 'N/A')}</strong></td>
             <td>${isDuplicate ? '' : (t.customer_name || 'N/A')}</td>
             <td>${isDuplicate ? '' : (t.customer_city || 'N/A')}</td>
@@ -1508,12 +1513,21 @@
             <td><strong>${t.quantity}</strong></td>
             <td>${date}</td>
             <td style="display:flex; gap:0.4rem; align-items:center;">
-              <button class="btn btn-cyan btn-sm" onclick="packItem(this, '${t.id}', '${t.sku}', ${t.quantity})">
-                <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: -2px; margin-right: 6px;"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>Packed
-              </button>
-              <button class="btn btn-danger btn-sm" onclick="cancelPackItem(this, '${t.id}', '${t.sku}', ${t.quantity})">
-                <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: -2px; margin-right: 4px;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>Remove
-              </button>
+              ${isPacked ? `
+                <button class="btn btn-cyan btn-sm" disabled style="opacity: 0.7; cursor: default; background: var(--border); color: var(--text-muted); border-color: var(--border);">
+                  <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: -2px; margin-right: 6px;"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>Packed
+                </button>
+                <button class="btn btn-outline btn-sm" onclick="unpackItem(this, '${t.id}', '${t.sku}', ${t.quantity})" title="Move back to unpacked">
+                  <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: -2px; margin-right: 4px;"><polyline points="12 19 5 12 12 5"/><line x1="19" y1="12" x2="5" y2="12"/></svg>Cancel
+                </button>
+              ` : `
+                <button class="btn btn-cyan btn-sm" onclick="packItem(this, '${t.id}', '${t.sku}', ${t.quantity})">
+                  <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: -2px; margin-right: 6px;"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>Packed
+                </button>
+                <button class="btn btn-danger btn-sm" onclick="cancelPackItem(this, '${t.id}', '${t.sku}', ${t.quantity})">
+                  <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: -2px; margin-right: 4px;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>Remove
+                </button>
+              `}
             </td>
           </tr>
         `;
@@ -2041,6 +2055,32 @@
       await wrapActionWithLoading(btn, async () => {
         await handleCancellationProcess(id, sku, qty, 'reserved');
         lastAction = { type: 'cancelPack', id, sku, qty };
+        updateUndoButtonState();
+        await refreshDashboard();
+      });
+    };
+
+    // ACTION: Unpack item (packed → reserved)
+    window.unpackItem = async function(btn, id, sku, qty) {
+      await wrapActionWithLoading(btn, async () => {
+        const { error: txErr } = await sb.from('inventory_transactions').update({
+          status: 'reserved',
+          timestamp_packed: null
+        }).eq('id', id);
+        if (txErr) throw txErr;
+
+        const { data: invRow, error: invErr } = await sb.from('inventory').select('*').eq('sku', sku);
+        if (invErr) throw invErr;
+        if (invRow && invRow.length > 0) {
+          const inv = invRow[0];
+          const { error: updErr } = await sb.from('inventory').update({
+            reserved: inv.reserved + qty,
+            packed: Math.max(0, inv.packed - qty)
+          }).eq('sku', sku);
+          if (updErr) throw updErr;
+        }
+
+        lastAction = null;
         updateUndoButtonState();
         await refreshDashboard();
       });
