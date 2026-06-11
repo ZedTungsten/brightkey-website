@@ -234,6 +234,38 @@
     </div>
   </div>
 
+  <!-- Edit Member Role Modal -->
+  <div class="modal-overlay" id="edit-role-modal">
+    <div class="modal-card" style="width: 400px; max-width: 90%;">
+      <div class="modal-header">
+        <div class="modal-title">Edit Member Role</div>
+        <button class="modal-close" onclick="closeEditRoleModal()">
+          <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <form id="edit-role-form" onsubmit="submitEditRole(event)">
+        <div class="modal-body">
+          <input type="hidden" id="edit-role-member-id" />
+          <div class="form-group">
+            <label class="form-label">Member</label>
+            <div id="edit-role-member-name" style="font-weight:600; color:var(--text-primary);"></div>
+            <div id="edit-role-member-email" style="font-size:0.8rem; color:var(--text-secondary); margin-top:0.25rem;"></div>
+          </div>
+          <div class="form-group" style="margin-top:0.5rem;">
+            <label class="form-label" for="edit-role-select">Select New Role</label>
+            <select id="edit-role-select" class="form-select">
+              <!-- Filled by JS -->
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" onclick="closeEditRoleModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Role</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- Custom Confirmation Dialog Modal -->
   <div class="modal-overlay" id="confirm-modal">
     <div class="modal-card" style="width: 400px; max-width: 90%;">
@@ -457,22 +489,19 @@
         const isSelf = row.user_id === currentUser.id;
         const isOwner = row.role === 'owner';
 
-        let roleCell = '';
-        if (isOwner || isSelf) {
-          roleCell = `<span class="badge badge-cyan">${row.role === 'owner' ? 'Owner' : (row.role === 'admin' ? 'Administrator' : (row.role || 'None'))}</span>`;
-        } else {
-          let options = `<option value="admin" ${row.role === 'admin' ? 'selected' : ''}>Administrator</option>`;
-          dynamicRoles.forEach(r => {
-            if (r.name !== 'admin' && r.name !== 'owner') {
-              options += `<option value="${escapeHtml(r.name)}" ${row.role === r.name ? 'selected' : ''}>${escapeHtml(r.name)}</option>`;
-            }
-          });
-          options += `<option value="" ${!row.role ? 'selected' : ''}>None / Employee Only (No Access)</option>`;
+        let displayName = row.role === 'admin' ? 'Administrator' : (row.role === 'owner' ? 'Owner' : (row.role || 'None'));
+        let badgeClass = row.role === 'owner' ? 'badge-cyan' : (row.role === 'admin' ? 'badge-cyan' : 'badge-gray');
 
+        if (isOwner || isSelf) {
+          roleCell = `<span class="badge ${badgeClass}">${escapeHtml(displayName)}</span>`;
+        } else {
           roleCell = `
-            <select class="form-select" style="padding: 0.25rem 0.5rem; font-size: 0.8rem; width: auto; display: inline-block;" onchange="updateMemberRole('${row.id}', this.value)">
-              ${options}
-            </select>`;
+            <div style="display:inline-flex; align-items:center; gap:0.5rem;">
+              <span class="badge ${badgeClass}">${escapeHtml(displayName)}</span>
+              <button type="button" style="background:none; border:none; color:var(--cyan-light); cursor:pointer; display:inline-flex; align-items:center; padding:2px; vertical-align:middle;" onclick="openEditRoleModal('${row.id}', '${escapeHtml(row.user_email)}', '${escapeHtml(row.full_name || '')}', '${escapeHtml(row.role || '')}')" title="Edit Role">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+              </button>
+            </div>`;
         }
 
         const actionsCell = (isOwner || isSelf)
@@ -683,6 +712,54 @@
       container.appendChild(el);
       setTimeout(() => el.remove(), 3500);
     }
+
+    // --- Edit Role Modal Actions ---
+    window.openEditRoleModal = function(memberId, email, name, currentRole) {
+      document.getElementById('edit-role-member-id').value = memberId;
+      document.getElementById('edit-role-member-name').innerText = name || '—';
+      document.getElementById('edit-role-member-email').innerText = email;
+
+      const select = document.getElementById('edit-role-select');
+      if (select) {
+        let optionsHtml = '';
+        optionsHtml += '<option value="admin">Administrator</option>';
+        dynamicRoles.forEach(r => {
+          if (r.name !== 'admin' && r.name !== 'owner') {
+            optionsHtml += `<option value="${escapeHtml(r.name)}">${escapeHtml(r.name)}</option>`;
+          }
+        });
+        optionsHtml += '<option value="">None / Employee Only (No Access)</option>';
+        select.innerHTML = optionsHtml;
+        select.value = currentRole;
+      }
+
+      document.getElementById('edit-role-modal').classList.add('open');
+    };
+
+    window.closeEditRoleModal = function() {
+      document.getElementById('edit-role-modal').classList.remove('open');
+    };
+
+    window.submitEditRole = async function(e) {
+      e.preventDefault();
+      const memberId = document.getElementById('edit-role-member-id').value;
+      const newRole = document.getElementById('edit-role-select').value;
+      
+      try {
+        const { error } = await sb
+          .from('tenant_members')
+          .update({ role: newRole ? newRole : null })
+          .eq('id', memberId);
+
+        if (error) throw error;
+        showToast('Member role updated.');
+        closeEditRoleModal();
+        loadAllMembers();
+      } catch (err) {
+        console.error('Error updating role:', err);
+        showToast('Failed to update member role.', true);
+      }
+    };
   </script>
 </body>
 </html>
