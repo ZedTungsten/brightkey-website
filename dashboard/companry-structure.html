@@ -1,0 +1,1011 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Company Structure — BrightKey HR</title>
+  <link rel="preconnect" href="https://fonts.bunny.net" />
+  <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg?v=2" />
+
+  <style>
+    /* ── Layout & Canvas ── */
+    .canvas-wrap {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      height: calc(100vh - 56px);
+      position: relative;
+      overflow: hidden;
+      background: var(--bg-base);
+    }
+
+    .canvas-toolbar {
+      padding: 0.75rem 1.5rem;
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      z-index: 10;
+    }
+
+    .structure-canvas {
+      flex: 1;
+      padding: 3rem 2rem;
+      overflow: auto;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 0;
+      position: relative;
+    }
+
+    /* ── Employee Pool (Lower Right) ── */
+    .employee-pool-panel {
+      position: absolute;
+      bottom: 20px;
+      right: 20px;
+      width: 300px;
+      max-height: 400px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.08);
+      display: flex;
+      flex-direction: column;
+      z-index: 50;
+      overflow: hidden;
+      transition: height 0.2s, width 0.2s;
+    }
+
+    .employee-pool-panel.minimized {
+      height: 48px;
+      width: 200px;
+    }
+
+    .pool-header {
+      padding: 0.75rem 1rem;
+      background: var(--bg-elevated);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .pool-title {
+      font-size: 0.8rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-primary);
+    }
+
+    .pool-badge {
+      background: var(--cyan);
+      color: #fff;
+      font-size: 0.7rem;
+      font-weight: 700;
+      padding: 0.15rem 0.4rem;
+      border-radius: 20px;
+    }
+
+    .pool-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 0.75rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      min-height: 100px;
+      background: var(--bg-surface);
+    }
+
+    /* ── Draggable Employee Card ── */
+    .employee-card {
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+      padding: 0.5rem 0.75rem;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      cursor: grab;
+      user-select: none;
+      transition: border-color 0.15s, box-shadow 0.15s, opacity 0.15s;
+      position: relative;
+    }
+
+    .employee-card:active {
+      cursor: grabbing;
+    }
+
+    .employee-card.dragging {
+      opacity: 0.4;
+      border-style: dashed;
+    }
+
+    .emp-avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      object-fit: cover;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: var(--text-secondary);
+    }
+
+    .emp-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .emp-name {
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .emp-role-tag {
+      font-size: 0.65rem;
+      color: var(--text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .emp-actions {
+      display: flex;
+      gap: 0.25rem;
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+
+    .employee-card:hover .emp-actions {
+      opacity: 1;
+    }
+
+    .btn-emp-action {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--text-muted);
+      padding: 2px;
+      border-radius: 3px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: color 0.15s, background 0.15s;
+    }
+
+    .btn-emp-action:hover {
+      background: var(--bg-elevated);
+      color: var(--text-primary);
+    }
+
+    .btn-emp-action.manager-crown:hover {
+      color: #EAB308; /* Yellow/Gold */
+    }
+
+    .employee-card.is-manager {
+      border-color: #EAB308;
+      box-shadow: 0 0 0 1px #EAB308;
+      background: rgba(234,179,8,0.02);
+    }
+
+    .employee-card.is-manager::after {
+      content: '👑';
+      position: absolute;
+      top: -6px;
+      right: -4px;
+      font-size: 0.75rem;
+    }
+
+    /* ── Tree Structure Styles ── */
+    .company-root {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 100%;
+    }
+
+    .root-node {
+      background: var(--text-primary);
+      color: var(--bg-surface);
+      padding: 0.65rem 1.5rem;
+      border-radius: 6px;
+      font-weight: 800;
+      font-size: 0.9rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      margin-bottom: 2rem;
+      position: relative;
+    }
+
+    .root-node::after {
+      content: '';
+      position: absolute;
+      bottom: -2rem;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 2px;
+      height: 2rem;
+      background: var(--border);
+    }
+
+    /* Horizontal branch container */
+    .branches-row {
+      display: flex;
+      gap: 3rem;
+      justify-content: center;
+      align-items: flex-start;
+      position: relative;
+      padding-top: 1.5rem;
+    }
+
+    /* Horizontal branch connecting lines */
+    .branches-row::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 1.5rem;
+      right: 1.5rem;
+      height: 2px;
+      background: var(--border);
+    }
+
+    /* Vertical branch connector line drop */
+    .branch-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      position: relative;
+      padding-top: 1rem;
+    }
+
+    .branch-item::before {
+      content: '';
+      position: absolute;
+      top: -1.5rem;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 2px;
+      height: 2.5rem;
+      background: var(--border);
+    }
+
+    /* ── Department Box ── */
+    .department-box {
+      width: 320px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.03);
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+
+    .dept-header {
+      padding: 0.85rem 1rem;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-elevated);
+      border-top-left-radius: 7px;
+      border-top-right-radius: 7px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .dept-title-input {
+      background: transparent;
+      border: none;
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      width: 70%;
+      outline: none;
+    }
+
+    .dept-title-input:focus {
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--cyan);
+    }
+
+    .btn-dept-delete {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 0.8rem;
+    }
+
+    .btn-dept-delete:hover {
+      color: var(--danger);
+    }
+
+    /* Subteams layout inside Department (Horizontal branches) */
+    .subteams-row {
+      display: flex;
+      gap: 1.5rem;
+      padding: 1.25rem 1rem;
+      overflow-x: auto;
+      background: var(--bg-surface);
+      border-bottom-left-radius: 8px;
+      border-bottom-right-radius: 8px;
+      min-height: 180px;
+    }
+
+    /* ── Subteam Container ── */
+    .subteam-container {
+      flex: 1;
+      min-width: 140px;
+      background: var(--bg-elevated);
+      border: 1px dashed var(--border);
+      border-radius: 6px;
+      display: flex;
+      flex-direction: column;
+      padding: 0.5rem;
+      position: relative;
+    }
+
+    .subteam-container.dragover {
+      border-color: var(--cyan);
+      background: var(--cyan-dim);
+    }
+
+    .subteam-meta {
+      margin-bottom: 0.5rem;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 0.4rem;
+    }
+
+    .subteam-title-input {
+      background: transparent;
+      border: none;
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      width: 100%;
+      outline: none;
+      margin-bottom: 0.15rem;
+    }
+
+    .subteam-desc-input {
+      background: transparent;
+      border: none;
+      font-size: 0.68rem;
+      color: var(--text-muted);
+      width: 100%;
+      outline: none;
+    }
+
+    .subteam-desc-input::placeholder {
+      font-style: italic;
+    }
+
+    /* vertical slots */
+    .subteam-slot {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+      min-height: 80px;
+    }
+
+    .slot-label {
+      font-size: 0.6rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-top: 0.25rem;
+      margin-bottom: 0.15rem;
+    }
+
+    .manager-dropzone {
+      border: 1px dashed rgba(234,179,8,0.4);
+      border-radius: 4px;
+      min-height: 44px;
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+      margin-bottom: 0.5rem;
+      background: rgba(234,179,8,0.01);
+    }
+
+    .manager-dropzone.dragover {
+      background: rgba(234,179,8,0.08);
+      border-color: #EAB308;
+    }
+
+    .colleagues-dropzone {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+      min-height: 60px;
+    }
+
+    .btn-add-subteam {
+      align-self: center;
+      margin: 0.5rem;
+      font-size: 0.72rem;
+      padding: 0.25rem 0.5rem;
+    }
+
+    .subteam-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .btn-subteam-delete {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 0.72rem;
+      padding: 0 2px;
+    }
+
+    .btn-subteam-delete:hover {
+      color: var(--danger);
+    }
+
+    /* Lightbox modal overlay for connection errors */
+    .toast-save {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: var(--text-primary);
+      color: var(--bg-surface);
+      padding: 0.75rem 1.5rem;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      z-index: 1000;
+      opacity: 0;
+      transform: translateY(-10px);
+      transition: opacity 0.3s, transform 0.3s;
+      pointer-events: none;
+    }
+    .toast-save.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="dash-layout">
+    <!-- Sidebar -->
+    <aside class="dash-sidebar" id="dash-sidebar"></aside>
+
+    <!-- Main Content -->
+    <div class="dash-main">
+
+      <!-- Top Bar -->
+      <div class="top-bar">
+        <span class="top-bar-title">Company Structure</span>
+        <div style="flex:1"></div>
+        <div style="display:flex; gap:0.5rem; align-items:center;">
+          <button class="btn btn-outline btn-sm" onclick="createDepartment()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14" /></svg>
+            Add Department
+          </button>
+          <button class="btn btn-primary btn-sm" id="btn-save-structure" onclick="saveStructure()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+            Save Structure
+          </button>
+        </div>
+      </div>
+
+      <!-- Canvas Wrap -->
+      <div class="canvas-wrap">
+        <!-- Structure Tree Canvas -->
+        <div class="structure-canvas" id="canvas">
+          <div class="company-root">
+            <div class="root-node" id="company-name-node">BrightKey Solutions</div>
+            <div class="branches-row" id="departments-container">
+              <!-- Departments and horizontal branches rendered here -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Employee Pool (Lower Right) -->
+        <div class="employee-pool-panel" id="employee-pool">
+          <div class="pool-header" onclick="togglePoolMin()">
+            <span class="pool-title">Unassigned Employees</span>
+            <div style="display:flex; gap:0.5rem; align-items:center;">
+              <span class="pool-badge" id="pool-count">0</span>
+              <svg id="pool-chevron" viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none" style="transition:transform 0.2s;"><polyline points="6 9 12 15 18 9"/></svg>
+            </div>
+          </div>
+          <div class="pool-list" id="pool-list" ondragover="allowDrop(event)" ondrop="handlePoolDrop(event)">
+            <!-- Unassigned employee cards rendered here -->
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="toast-save" id="save-toast">Structure saved successfully!</div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/sidebar.js"></script>
+  <script src="../js/main.js"></script>
+
+  <script>
+    'use strict';
+
+    let getSb = () => window.BKAuth.sb;
+    let currentCompanyId = null;
+
+    let employeesList = [];
+    let companyStructure = {
+      departments: []
+    };
+
+    // Initialize Page
+    document.addEventListener('DOMContentLoaded', async () => {
+      try {
+        // Enforce Authentication and check roles
+        const authInfo = await window.BKAuth.checkRoleGate(['owner', 'admin', 'hr'], '../admin.html');
+        if (!authInfo) return;
+
+        currentCompanyId = authInfo.companyId;
+
+        // Fetch company detail to populate root node
+        const { data: comp } = await getSb().from('companies').select('name').eq('id', currentCompanyId).single();
+        if (comp && comp.name) {
+          document.getElementById('company-name-node').textContent = comp.name;
+        }
+
+        // Fetch all employees in the directory
+        const { data: emps, error: empsErr } = await getSb()
+          .from('employees')
+          .select('*')
+          .eq('company_id', currentCompanyId);
+        
+        if (empsErr) throw empsErr;
+        employeesList = emps || [];
+
+        // Fetch saved company structure from global settings
+        const { data: settings } = await getSb()
+          .from('global_settings')
+          .select('value')
+          .eq('key', 'company_structure')
+          .eq('company_id', currentCompanyId)
+          .maybeSingle();
+
+        if (settings && settings.value) {
+          companyStructure = settings.value;
+          // Ensure structure compatibility
+          if (!companyStructure.departments) {
+            companyStructure = { departments: [] };
+          }
+        }
+
+        renderStructure();
+        renderEmployeePool();
+
+      } catch (err) {
+        console.error('Initialization error:', err);
+        showToast('Error loading company data: ' + err.message);
+      }
+    });
+
+    // ── Render Tree & Canvas ──
+    function renderStructure() {
+      const container = document.getElementById('departments-container');
+      container.innerHTML = '';
+
+      if (companyStructure.departments.length === 0) {
+        container.innerHTML = `<div style="color:var(--text-muted); font-size:0.85rem; padding: 2rem;">No departments created yet. Click "Add Department" to start.</div>`;
+        return;
+      }
+
+      companyStructure.departments.forEach((dept, deptIdx) => {
+        const deptNode = document.createElement('div');
+        deptNode.className = 'branch-item';
+        
+        // Render Department structure
+        deptNode.innerHTML = `
+          <div class="department-box">
+            <div class="dept-header">
+              <input type="text" class="dept-title-input" value="${esc(dept.name)}" onchange="updateDeptName(${deptIdx}, this.value)" placeholder="Department Name" />
+              <button class="btn-dept-delete" onclick="deleteDepartment(${deptIdx})" title="Delete Department">✕</button>
+            </div>
+            <div class="subteams-row" id="subteams-${deptIdx}">
+              <!-- Subteams go here -->
+            </div>
+            <button class="btn btn-outline btn-sm btn-add-subteam" onclick="createSubteam(${deptIdx})">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14" /></svg> Add Subteam
+            </button>
+          </div>
+        `;
+
+        container.appendChild(deptNode);
+
+        // Render Subteams within this Department
+        const subteamsContainer = document.getElementById(`subteams-${deptIdx}`);
+        subteamsContainer.innerHTML = '';
+
+        if (!dept.subteams || dept.subteams.length === 0) {
+          subteamsContainer.innerHTML = `<div style="color:var(--text-muted); font-size:0.75rem; text-align:center; width:100%; display:flex; align-items:center; justify-content:center; padding: 1rem;">No subteams.</div>`;
+        } else {
+          dept.subteams.forEach((sub, subIdx) => {
+            const subteamNode = document.createElement('div');
+            subteamNode.className = 'subteam-container';
+            subteamNode.innerHTML = `
+              <div class="subteam-meta">
+                <div class="subteam-header">
+                  <input type="text" class="subteam-title-input" value="${esc(sub.name)}" onchange="updateSubteamName(${deptIdx}, ${subIdx}, this.value)" placeholder="Subteam Name" />
+                  <button class="btn-subteam-delete" onclick="deleteSubteam(${deptIdx}, ${subIdx})" title="Delete Subteam">✕</button>
+                </div>
+                <input type="text" class="subteam-desc-input" value="${esc(sub.description)}" onchange="updateSubteamDesc(${deptIdx}, ${subIdx}, this.value)" placeholder="Add short desc..." maxlength="20" />
+              </div>
+              <div class="slot-label">Manager / Lead</div>
+              <div class="manager-dropzone" id="drop-mgr-${deptIdx}-${subIdx}" ondragover="allowDrop(event)" ondragleave="clearDragOver(event)" ondrop="handleMemberDrop(event, ${deptIdx}, ${subIdx}, 'manager')">
+                <!-- Manager Card here -->
+              </div>
+              <div class="slot-label">Colleagues</div>
+              <div class="colleagues-dropzone" id="drop-col-${deptIdx}-${subIdx}" ondragover="allowDrop(event)" ondragleave="clearDragOver(event)" ondrop="handleMemberDrop(event, ${deptIdx}, ${subIdx}, 'colleague')">
+                <!-- Colleague Cards stack vertically here -->
+              </div>
+            `;
+
+            subteamsContainer.appendChild(subteamNode);
+
+            // Populate Manager
+            const mgrZone = document.getElementById(`drop-mgr-${deptIdx}-${subIdx}`);
+            if (sub.managerId) {
+              const emp = employeesList.find(e => e.id === sub.managerId);
+              if (emp) {
+                mgrZone.appendChild(createEmployeeCardNode(emp, deptIdx, subIdx, 'manager'));
+              }
+            }
+
+            // Populate Colleagues
+            const colZone = document.getElementById(`drop-col-${deptIdx}-${subIdx}`);
+            if (sub.colleagueIds && Array.isArray(sub.colleagueIds)) {
+              sub.colleagueIds.forEach(id => {
+                const emp = employeesList.find(e => e.id === id);
+                if (emp) {
+                  colZone.appendChild(createEmployeeCardNode(emp, deptIdx, subIdx, 'colleague'));
+                }
+              });
+            }
+          });
+        }
+      });
+    }
+
+    // ── Render Employee Pool ──
+    function renderEmployeePool() {
+      const poolList = document.getElementById('pool-list');
+      poolList.innerHTML = '';
+
+      // Collect all assigned employee IDs
+      const assignedIds = new Set();
+      companyStructure.departments.forEach(dept => {
+        if (dept.subteams) {
+          dept.subteams.forEach(sub => {
+            if (sub.managerId) assignedIds.add(sub.managerId);
+            if (sub.colleagueIds) {
+              sub.colleagueIds.forEach(id => assignedIds.add(id));
+            }
+          });
+        }
+      });
+
+      // Filter unassigned active employees
+      const unassigned = employeesList.filter(e => !assignedIds.has(e.id) && e.employment_status !== 'Terminated');
+
+      document.getElementById('pool-count').textContent = unassigned.length;
+
+      if (unassigned.length === 0) {
+        poolList.innerHTML = `<div style="color:var(--text-muted); font-size:0.75rem; text-align:center; padding: 1.5rem 0;">All employees assigned!</div>`;
+        return;
+      }
+
+      unassigned.forEach(emp => {
+        poolList.appendChild(createEmployeeCardNode(emp, null, null, null));
+      });
+    }
+
+    // ── Card DOM Creation ──
+    function createEmployeeCardNode(emp, deptIdx, subIdx, role) {
+      const card = document.createElement('div');
+      card.className = 'employee-card';
+      if (role === 'manager') card.classList.add('is-manager');
+      card.draggable = true;
+      card.dataset.id = emp.id;
+
+      // Handle initials fallback
+      const initials = (emp.first_name?.[0] || '') + (emp.last_name?.[0] || '');
+      const avatarHtml = emp.profile_picture_url 
+        ? `<img class="emp-avatar" src="${emp.profile_picture_url}" alt="${esc(emp.first_name)}" />`
+        : `<div class="emp-avatar">${initials.toUpperCase()}</div>`;
+
+      const formattedName = `${emp.first_name} ${emp.last_name ? emp.last_name[0] + '.' : ''}`;
+
+      card.innerHTML = `
+        ${avatarHtml}
+        <div class="emp-info">
+          <div class="emp-name">${esc(formattedName)}</div>
+          <div class="emp-role-tag">${esc(emp.position || 'Employee')}</div>
+        </div>
+        <div class="emp-actions">
+          ${role ? `
+            <button class="btn-emp-action" onclick="unassignEmployee('${emp.id}')" title="Remove Assignment">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          ` : ''}
+        </div>
+      `;
+
+      // Drag and Drop Listeners
+      card.addEventListener('dragstart', (e) => {
+        card.classList.add('dragging');
+        e.dataTransfer.setData('text/plain', emp.id);
+        // If moving from a slot, store previous position data
+        if (role) {
+          e.dataTransfer.setData('prev-role', role);
+          e.dataTransfer.setData('prev-dept', String(deptIdx));
+          e.dataTransfer.setData('prev-sub', String(subIdx));
+        }
+      });
+
+      card.addEventListener('dragend', () => {
+        card.classList.remove('dragging');
+      });
+
+      return card;
+    }
+
+    // ── Drag & Drop Event Handlers ──
+    window.allowDrop = function(e) {
+      e.preventDefault();
+      const dropzone = e.currentTarget;
+      dropzone.classList.add('dragover');
+    };
+
+    window.clearDragOver = function(e) {
+      e.currentTarget.classList.remove('dragover');
+    };
+
+    window.handleMemberDrop = function(e, deptIdx, subIdx, role) {
+      e.preventDefault();
+      const dropzone = e.currentTarget;
+      dropzone.classList.remove('dragover');
+
+      const empId = e.dataTransfer.getData('text/plain');
+      const prevRole = e.dataTransfer.getData('prev-role');
+      const prevDept = e.dataTransfer.getData('prev-dept');
+      const prevSub = e.dataTransfer.getData('prev-sub');
+
+      if (!empId) return;
+
+      // 1. Remove from previous subteam position if existing
+      if (prevRole) {
+        removeEmpFromStructure(empId, parseInt(prevDept), parseInt(prevSub), prevRole);
+      }
+
+      // 2. Assign to new subteam position
+      const sub = companyStructure.departments[deptIdx].subteams[subIdx];
+      if (role === 'manager') {
+        // If there is already a manager, demote them to colleague
+        if (sub.managerId) {
+          const oldManager = sub.managerId;
+          sub.managerId = empId;
+          if (!sub.colleagueIds) sub.colleagueIds = [];
+          if (!sub.colleagueIds.includes(oldManager)) {
+            sub.colleagueIds.push(oldManager);
+          }
+        } else {
+          sub.managerId = empId;
+        }
+      } else if (role === 'colleague') {
+        if (!sub.colleagueIds) sub.colleagueIds = [];
+        if (!sub.colleagueIds.includes(empId)) {
+          sub.colleagueIds.push(empId);
+        }
+      }
+
+      renderStructure();
+      renderEmployeePool();
+    };
+
+    window.handlePoolDrop = function(e) {
+      e.preventDefault();
+      const dropzone = e.currentTarget;
+      dropzone.classList.remove('dragover');
+
+      const empId = e.dataTransfer.getData('text/plain');
+      const prevRole = e.dataTransfer.getData('prev-role');
+      const prevDept = e.dataTransfer.getData('prev-dept');
+      const prevSub = e.dataTransfer.getData('prev-sub');
+
+      if (!empId) return;
+
+      // Remove from structure to place back into pool
+      if (prevRole) {
+        removeEmpFromStructure(empId, parseInt(prevDept), parseInt(prevSub), prevRole);
+      }
+
+      renderStructure();
+      renderEmployeePool();
+    };
+
+    function removeEmpFromStructure(empId, deptIdx, subIdx, role) {
+      const sub = companyStructure.departments[deptIdx].subteams[subIdx];
+      if (role === 'manager') {
+        if (sub.managerId === empId) {
+          sub.managerId = null;
+        }
+      } else if (role === 'colleague') {
+        if (sub.colleagueIds) {
+          sub.colleagueIds = sub.colleagueIds.filter(id => id !== empId);
+        }
+      }
+    }
+
+    // ── Interactive Buttons Operations ──
+    window.createDepartment = function() {
+      const name = prompt('Enter Department Name:');
+      if (!name) return;
+      companyStructure.departments.push({
+        name: name,
+        subteams: []
+      });
+      renderStructure();
+    };
+
+    window.updateDeptName = function(deptIdx, name) {
+      if (companyStructure.departments[deptIdx]) {
+        companyStructure.departments[deptIdx].name = name;
+      }
+    };
+
+    window.deleteDepartment = function(deptIdx) {
+      if (confirm('Delete this Department and all of its subteams?')) {
+        companyStructure.departments.splice(deptIdx, 1);
+        renderStructure();
+        renderEmployeePool();
+      }
+    };
+
+    window.createSubteam = function(deptIdx) {
+      const name = prompt('Enter Subteam Name:');
+      if (!name) return;
+      const desc = prompt('Enter Subteam Description (20 chars max):');
+      if (desc && desc.length > 20) {
+        alert('Description must be 20 characters or less.');
+        return;
+      }
+      const dept = companyStructure.departments[deptIdx];
+      if (!dept.subteams) dept.subteams = [];
+      dept.subteams.push({
+        name: name,
+        description: desc || '',
+        managerId: null,
+        colleagueIds: []
+      });
+      renderStructure();
+    };
+
+    window.updateSubteamName = function(deptIdx, subIdx, name) {
+      const dept = companyStructure.departments[deptIdx];
+      if (dept && dept.subteams && dept.subteams[subIdx]) {
+        dept.subteams[subIdx].name = name;
+      }
+    };
+
+    window.updateSubteamDesc = function(deptIdx, subIdx, desc) {
+      if (desc && desc.length > 20) {
+        alert('Description must be 20 characters or less.');
+        renderStructure();
+        return;
+      }
+      const dept = companyStructure.departments[deptIdx];
+      if (dept && dept.subteams && dept.subteams[subIdx]) {
+        dept.subteams[subIdx].description = desc;
+      }
+    };
+
+    window.deleteSubteam = function(deptIdx, subIdx) {
+      if (confirm('Delete this subteam?')) {
+        companyStructure.departments[deptIdx].subteams.splice(subIdx, 1);
+        renderStructure();
+        renderEmployeePool();
+      }
+    };
+
+    window.unassignEmployee = function(empId) {
+      // Find where they are assigned and unassign
+      companyStructure.departments.forEach((dept, deptIdx) => {
+        if (dept.subteams) {
+          dept.subteams.forEach((sub, subIdx) => {
+            if (sub.managerId === empId) {
+              sub.managerId = null;
+            }
+            if (sub.colleagueIds) {
+              sub.colleagueIds = sub.colleagueIds.filter(id => id !== empId);
+            }
+          });
+        }
+      });
+      renderStructure();
+      renderEmployeePool();
+    };
+
+    // ── Minimize Employee Pool ──
+    window.togglePoolMin = function() {
+      const panel = document.getElementById('employee-pool');
+      const chevron = document.getElementById('pool-chevron');
+      panel.classList.toggle('minimized');
+      if (panel.classList.contains('minimized')) {
+        chevron.style.transform = 'rotate(-180deg)';
+      } else {
+        chevron.style.transform = 'rotate(0deg)';
+      }
+    };
+
+    // ── Save Structure to Database ──
+    window.saveStructure = async function() {
+      const btn = document.getElementById('btn-save-structure');
+      btn.disabled = true;
+      btn.textContent = 'Saving...';
+      try {
+        const { error } = await getSb()
+          .from('global_settings')
+          .upsert({
+            key: 'company_structure',
+            company_id: currentCompanyId,
+            value: companyStructure
+          });
+
+        if (error) throw error;
+        showSaveToast();
+      } catch (err) {
+        console.error('Failed to save structure:', err);
+        showToast('Error saving structure: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> Save Structure`;
+      }
+    };
+
+    function showSaveToast() {
+      const toast = document.getElementById('save-toast');
+      toast.classList.add('show');
+      setTimeout(() => {
+        toast.classList.remove('show');
+      }, 3000);
+    }
+
+    function showToast(msg) {
+      alert(msg);
+    }
+
+    function esc(s) {
+      return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+  </script>
+</body>
+</html>
