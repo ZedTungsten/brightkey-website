@@ -139,7 +139,7 @@
         </button>
         <div class="dash-nav-children">
           <a href="/dashboard/employee-directory" class="dash-nav-child" data-role="hr">Directory</a>
-          <a href="/dashboard/company-structure" class="dash-nav-child" data-role="hr">Structure</a>
+          <a href="/dashboard/company-structure" class="dash-nav-child" data-role="hr">Company Structure</a>
           <a href="/dashboard/onboarding" class="dash-nav-child" data-role="hr">Onboarding</a>
           <a class="dash-nav-child" data-role="hr" style="opacity: 0.5; cursor: not-allowed;">Company Events</a>
           <a class="dash-nav-child" data-role="hr" style="opacity: 0.5; cursor: not-allowed;">Announcements</a>
