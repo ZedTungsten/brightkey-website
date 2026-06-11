@@ -241,6 +241,12 @@ Instead of scrolling the whole panel, restrict vertical and horizontal scrolling
     </table>
   </div>
 </div>
+
+---
+
+## 11. Mobile-First Architecture (with Sidebar in Consideration)
+* **Always design for mobile first.**
+* When designing layout overrides, ensure that mobile viewports do not render collapsed or minimized sidebar states. The mobile drawer menu must always render in its fully-expanded state (or remain completely hidden off-screen) for optimal usability and premium experience.
 ```
 
 
