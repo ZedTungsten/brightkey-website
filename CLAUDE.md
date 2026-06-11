@@ -77,3 +77,8 @@ We enforce rigorous practices to prevent SQL injections (SQLi) and Cross-Site Sc
 >   const companyId = co?.id || null;
 >   ```
 
+---
+
+## 6. Prohibited Browser Dialogs (alert, confirm, prompt)
+> [!IMPORTANT]
+> Standard browser dialogs (`alert()`, `confirm()`, `prompt()`) are strictly prohibited in the ERP dashboard. Always use custom-styled overlay modal components to provide a premium user experience and maintain unified design aesthetics.

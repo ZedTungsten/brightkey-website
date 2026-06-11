@@ -544,6 +544,20 @@
 
   <div class="toast-save" id="save-toast">Structure saved successfully!</div>
 
+  <!-- Custom UI Dialog Box Modal -->
+  <div class="confirm-overlay" id="custom-dialog-overlay" role="dialog" aria-modal="true" style="display:none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 1000; align-items: center; justify-content: center;">
+    <div class="confirm-box" style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px; width: 400px; max-width: 90vw; padding: 1.5rem; box-shadow: 0 10px 25px rgba(0,0,0,0.15); display: flex; flex-direction: column; gap: 1rem;">
+      <div id="dialog-title" style="font-size: 0.95rem; font-weight: 700; color: var(--text-primary);">Dialog Title</div>
+      <div id="dialog-body" style="font-size: 0.82rem; color: var(--text-secondary);">
+        <!-- Content injected here -->
+      </div>
+      <div style="display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 0.5rem;">
+        <button class="btn btn-outline btn-sm" id="dialog-btn-cancel">Cancel</button>
+        <button class="btn btn-primary btn-sm" id="dialog-btn-confirm" style="background:var(--cyan); border-color:var(--cyan); color:#fff;">Confirm</button>
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <script src="../js/auth.js"></script>
   <script src="../js/sidebar.js"></script>
@@ -875,15 +889,130 @@
       }
     }
 
+    // ── Custom UI Dialog Modals Helper Functions ──
+    function showCustomConfirm(title, message, onConfirm) {
+      const overlay = document.getElementById('custom-dialog-overlay');
+      const titleEl = document.getElementById('dialog-title');
+      const bodyEl = document.getElementById('dialog-body');
+      const btnCancel = document.getElementById('dialog-btn-cancel');
+      const btnConfirm = document.getElementById('dialog-btn-confirm');
+
+      titleEl.textContent = title;
+      bodyEl.innerHTML = `<p style="line-height:1.4;">${esc(message)}</p>`;
+      
+      btnCancel.style.display = 'inline-flex';
+      btnConfirm.textContent = 'Confirm';
+      overlay.style.display = 'flex';
+
+      const cleanup = () => {
+        overlay.style.display = 'none';
+        btnConfirm.onclick = null;
+        btnCancel.onclick = null;
+      };
+
+      btnConfirm.onclick = () => {
+        cleanup();
+        onConfirm();
+      };
+      btnCancel.onclick = () => {
+        cleanup();
+      };
+    }
+
+    function showCustomPrompt(title, fields, onConfirm) {
+      const overlay = document.getElementById('custom-dialog-overlay');
+      const titleEl = document.getElementById('dialog-title');
+      const bodyEl = document.getElementById('dialog-body');
+      const btnCancel = document.getElementById('dialog-btn-cancel');
+      const btnConfirm = document.getElementById('dialog-btn-confirm');
+
+      titleEl.textContent = title;
+      
+      let html = '<div style="display:flex; flex-direction:column; gap:0.75rem;">';
+      fields.forEach(f => {
+        html += `
+          <div style="display:flex; flex-direction:column; gap:0.25rem;">
+            <label style="font-size:0.75rem; font-weight:600; color:var(--text-muted);">${esc(f.label)}</label>
+            <input id="prompt-input-${f.id}" type="${f.type || 'text'}" class="form-input" placeholder="${esc(f.placeholder || '')}" value="${esc(f.value || '')}" ${f.maxLength ? `maxlength="${f.maxLength}"` : ''} style="width:100%; font-size:0.82rem; padding:0.4rem 0.75rem; border:1px solid var(--border); border-radius:6px; background:var(--bg-surface); color:var(--text-primary); outline:none;" />
+          </div>
+        `;
+      });
+      html += '</div>';
+      bodyEl.innerHTML = html;
+
+      btnCancel.style.display = 'inline-flex';
+      btnConfirm.textContent = 'Confirm';
+      overlay.style.display = 'flex';
+
+      setTimeout(() => {
+        document.getElementById(`prompt-input-${fields[0].id}`)?.focus();
+      }, 50);
+
+      const cleanup = () => {
+        overlay.style.display = 'none';
+        btnConfirm.onclick = null;
+        btnCancel.onclick = null;
+      };
+
+      btnConfirm.onclick = () => {
+        const results = {};
+        let valid = true;
+        fields.forEach(f => {
+          const inp = document.getElementById(`prompt-input-${f.id}`);
+          const val = inp.value.trim();
+          if (f.required && !val) {
+            valid = false;
+            inp.style.borderColor = 'var(--danger)';
+          } else {
+            results[f.id] = val;
+          }
+        });
+        if (!valid) return;
+
+        cleanup();
+        onConfirm(results);
+      };
+
+      btnCancel.onclick = () => {
+        cleanup();
+      };
+    }
+
+    function showCustomAlert(title, message) {
+      const overlay = document.getElementById('custom-dialog-overlay');
+      const titleEl = document.getElementById('dialog-title');
+      const bodyEl = document.getElementById('dialog-body');
+      const btnCancel = document.getElementById('dialog-btn-cancel');
+      const btnConfirm = document.getElementById('dialog-btn-confirm');
+
+      titleEl.textContent = title;
+      bodyEl.innerHTML = `<p style="line-height:1.4;">${esc(message)}</p>`;
+      
+      btnCancel.style.display = 'none';
+      btnConfirm.textContent = 'OK';
+      overlay.style.display = 'flex';
+
+      const cleanup = () => {
+        overlay.style.display = 'none';
+        btnConfirm.onclick = null;
+      };
+
+      btnConfirm.onclick = () => {
+        cleanup();
+      };
+    }
+
     // ── Interactive Buttons Operations ──
     window.createDepartment = function() {
-      const name = prompt('Enter Department Name:');
-      if (!name) return;
-      companyStructure.departments.push({
-        name: name,
-        subteams: []
+      showCustomPrompt('Add Department', [
+        { id: 'name', label: 'Department Name', placeholder: 'e.g. Operations', required: true }
+      ], (res) => {
+        companyStructure.departments.push({
+          name: res.name,
+          subteams: []
+        });
+        renderStructure();
       });
-      renderStructure();
     };
 
     window.updateDeptName = function(deptIdx, name) {
@@ -893,30 +1022,29 @@
     };
 
     window.deleteDepartment = function(deptIdx) {
-      if (confirm('Delete this Department and all of its subteams?')) {
+      const dept = companyStructure.departments[deptIdx];
+      showCustomConfirm('Delete Department', `Delete department "${dept.name}" and all of its subteams?`, () => {
         companyStructure.departments.splice(deptIdx, 1);
         renderStructure();
         renderEmployeePool();
-      }
+      });
     };
 
     window.createSubteam = function(deptIdx) {
-      const name = prompt('Enter Subteam Name:');
-      if (!name) return;
-      const desc = prompt('Enter Subteam Description (20 chars max):');
-      if (desc && desc.length > 20) {
-        alert('Description must be 20 characters or less.');
-        return;
-      }
-      const dept = companyStructure.departments[deptIdx];
-      if (!dept.subteams) dept.subteams = [];
-      dept.subteams.push({
-        name: name,
-        description: desc || '',
-        managerId: null,
-        colleagueIds: []
+      showCustomPrompt('Add Subteam', [
+        { id: 'name', label: 'Subteam Name', placeholder: 'e.g. Technical Support', required: true },
+        { id: 'desc', label: 'Description (20 chars max)', placeholder: 'Short team summary...', maxLength: 20 }
+      ], (res) => {
+        const dept = companyStructure.departments[deptIdx];
+        if (!dept.subteams) dept.subteams = [];
+        dept.subteams.push({
+          name: res.name,
+          description: res.desc || '',
+          managerId: null,
+          colleagueIds: []
+        });
+        renderStructure();
       });
-      renderStructure();
     };
 
     window.updateSubteamName = function(deptIdx, subIdx, name) {
@@ -928,7 +1056,7 @@
 
     window.updateSubteamDesc = function(deptIdx, subIdx, desc) {
       if (desc && desc.length > 20) {
-        alert('Description must be 20 characters or less.');
+        showCustomAlert('Invalid Input', 'Description must be 20 characters or less.');
         renderStructure();
         return;
       }
@@ -939,11 +1067,12 @@
     };
 
     window.deleteSubteam = function(deptIdx, subIdx) {
-      if (confirm('Delete this subteam?')) {
+      const sub = companyStructure.departments[deptIdx].subteams[subIdx];
+      showCustomConfirm('Delete Subteam', `Delete subteam "${sub.name}"?`, () => {
         companyStructure.departments[deptIdx].subteams.splice(subIdx, 1);
         renderStructure();
         renderEmployeePool();
-      }
+      });
     };
 
     window.unassignEmployee = function(empId) {
@@ -1010,7 +1139,7 @@
     }
 
     function showToast(msg) {
-      alert(msg);
+      showCustomAlert('Error', msg);
     }
 
     function esc(s) {
