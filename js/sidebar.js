@@ -398,7 +398,9 @@
 
         let displayRole = 'Employee';
         if (userRole) {
-          if (userRole.toLowerCase() === 'hr') {
+          if (userRole.startsWith('custom_')) {
+            displayRole = 'User';
+          } else if (userRole.toLowerCase() === 'hr') {
             displayRole = 'HR';
           } else if (userRole.toLowerCase() === 'crm') {
             displayRole = 'CRM';
