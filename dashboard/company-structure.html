@@ -21,6 +21,69 @@
       background: var(--bg-base);
     }
 
+    /* ── Zoom Controls ── */
+    .zoom-controls {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.75rem 0.5rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.75rem;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+      z-index: 60;
+    }
+
+    .btn-zoom {
+      width: 28px;
+      height: 28px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: var(--text-primary);
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .btn-zoom:hover {
+      background: var(--text-primary);
+      color: var(--bg-surface);
+      border-color: var(--text-primary);
+    }
+
+    .zoom-slider-wrap {
+      height: 100px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.25rem 0;
+    }
+
+    #zoom-slider {
+      -webkit-appearance: slider-vertical;
+      writing-mode: bt-lr;
+      writing-mode: vertical-lr;
+      width: 8px;
+      height: 100px;
+      background: var(--border);
+      outline: none;
+    }
+
+    .zoom-pct {
+      font-size: 0.68rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      width: 36px;
+      text-align: center;
+    }
+
     .canvas-toolbar {
       padding: 0.75rem 1.5rem;
       background: var(--bg-surface);
@@ -297,7 +360,9 @@
 
     /* ── Department Box ── */
     .department-box {
-      width: 320px;
+      min-width: 320px;
+      width: max-content;
+      max-width: 900px;
       background: var(--bg-surface);
       border: 1px solid var(--border);
       border-radius: 8px;
@@ -350,7 +415,7 @@
       display: flex;
       gap: 1.5rem;
       padding: 1.25rem 1rem;
-      overflow-x: auto;
+      overflow-x: visible;
       background: var(--bg-surface);
       border-bottom-left-radius: 8px;
       border-bottom-right-radius: 8px;
@@ -360,8 +425,8 @@
     /* ── Subteam Container ── */
     .subteam-container {
       flex: 1;
-      min-width: 140px;
-      background: var(--bg-elevated);
+      min-width: 220px;
+      background: #FAFAFA;
       border: 1px dashed var(--border);
       border-radius: 6px;
       display: flex;
@@ -538,6 +603,20 @@
 
       <!-- Canvas Wrap -->
       <div class="canvas-wrap">
+        <!-- Zoom Controls (Upper Right) -->
+        <div class="zoom-controls">
+          <button class="btn-zoom" onclick="zoomIn()" title="Zoom In">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+          <div class="zoom-slider-wrap">
+            <input type="range" id="zoom-slider" min="0.3" max="2" step="0.05" value="1" oninput="setZoom(this.value)" />
+          </div>
+          <button class="btn-zoom" onclick="zoomOut()" title="Zoom Out">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+          <div class="zoom-pct" id="zoom-pct">100%</div>
+        </div>
+
         <!-- Structure Tree Canvas -->
         <div class="structure-canvas" id="canvas">
           <div class="company-root">
@@ -800,8 +879,8 @@
 
       // Handle initials fallback
       const initials = (emp.first_name?.[0] || '') + (emp.last_name?.[0] || '');
-      const avatarHtml = emp.profile_picture_url 
-         ? `<img class="emp-avatar" src="${emp.profile_picture_url}" alt="${esc(emp.first_name)}" />`
+      const avatarHtml = emp.picture_link 
+         ? `<img class="emp-avatar" src="${emp.picture_link}" alt="${esc(emp.first_name)}" />`
          : `<div class="emp-avatar">${initials.toUpperCase()}</div>`;
 
       const formattedName = `${emp.first_name} ${emp.last_name ? emp.last_name[0] + '.' : ''}`;
@@ -1226,6 +1305,76 @@
     function esc(s) {
       return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
+
+    // ── Zoom and Pan Canvas Functionality ──
+    let currentZoom = 1;
+
+    function applyZoom() {
+      const rootNode = document.querySelector('.company-root');
+      if (rootNode) {
+        rootNode.style.transform = `scale(${currentZoom})`;
+        rootNode.style.transformOrigin = 'top center';
+      }
+      const slider = document.getElementById('zoom-slider');
+      if (slider) slider.value = currentZoom;
+      const pct = document.getElementById('zoom-pct');
+      if (pct) pct.textContent = `${Math.round(currentZoom * 100)}%`;
+    }
+
+    window.zoomIn = function() {
+      currentZoom = Math.min(2, currentZoom + 0.1);
+      applyZoom();
+    };
+
+    window.zoomOut = function() {
+      currentZoom = Math.max(0.3, currentZoom - 0.1);
+      applyZoom();
+    };
+
+    window.setZoom = function(val) {
+      currentZoom = parseFloat(val);
+      applyZoom();
+    };
+
+    // Drag to pan setup
+    document.addEventListener('DOMContentLoaded', () => {
+      const canvasViewport = document.getElementById('canvas');
+      let isPanning = false;
+      let startX, startY, scrollLeft, scrollTop;
+
+      canvasViewport.addEventListener('mousedown', (e) => {
+        if (e.target.closest('.employee-card') || e.target.closest('input') || e.target.closest('button')) {
+          return;
+        }
+        isPanning = true;
+        canvasViewport.style.cursor = 'grabbing';
+        startX = e.pageX - canvasViewport.offsetLeft;
+        startY = e.pageY - canvasViewport.offsetTop;
+        scrollLeft = canvasViewport.scrollLeft;
+        scrollTop = canvasViewport.scrollTop;
+      });
+
+      canvasViewport.addEventListener('mouseleave', () => {
+        isPanning = false;
+        canvasViewport.style.cursor = 'default';
+      });
+
+      canvasViewport.addEventListener('mouseup', () => {
+        isPanning = false;
+        canvasViewport.style.cursor = 'default';
+      });
+
+      canvasViewport.addEventListener('mousemove', (e) => {
+        if (!isPanning) return;
+        e.preventDefault();
+        const x = e.pageX - canvasViewport.offsetLeft;
+        const y = e.pageY - canvasViewport.offsetTop;
+        const walkX = (x - startX);
+        const walkY = (y - startY);
+        canvasViewport.scrollLeft = scrollLeft - walkX;
+        canvasViewport.scrollTop = scrollTop - walkY;
+      });
+    });
   </script>
 </body>
 </html>
