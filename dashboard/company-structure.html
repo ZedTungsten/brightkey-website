@@ -430,6 +430,22 @@
       border-color: #EAB308;
     }
 
+    .dept-manager-dropzone {
+      border: 1px dashed rgba(234,179,8,0.4);
+      border-radius: 4px;
+      min-height: 44px;
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+      margin: 0.5rem 1rem;
+      background: rgba(234,179,8,0.01);
+    }
+
+    .dept-manager-dropzone.dragover {
+      background: rgba(234,179,8,0.08);
+      border-color: #EAB308;
+    }
+
     .colleagues-dropzone {
       display: flex;
       flex-direction: column;
@@ -654,6 +670,10 @@
               <input type="text" class="dept-title-input" value="${esc(dept.name)}" onchange="updateDeptName(${deptIdx}, this.value)" placeholder="Department Name" />
               <button class="btn-dept-delete" onclick="deleteDepartment(${deptIdx})" title="Delete Department">✕</button>
             </div>
+            <div class="slot-label" style="margin: 0.5rem 1rem 0 1rem;">Department Head / Manager</div>
+            <div class="dept-manager-dropzone" id="drop-dept-mgr-${deptIdx}" ondragover="allowDrop(event)" ondragleave="clearDragOver(event)" ondrop="handleDeptManagerDrop(event, ${deptIdx})">
+              <!-- Manager Card here -->
+            </div>
             <div class="subteams-row" id="subteams-${deptIdx}">
               <!-- Subteams go here -->
             </div>
@@ -664,6 +684,15 @@
         `;
 
         container.appendChild(deptNode);
+
+        // Populate Department Head
+        const deptMgrZone = document.getElementById(`drop-dept-mgr-${deptIdx}`);
+        if (dept.managerId) {
+          const emp = employeesList.find(e => e.id === dept.managerId);
+          if (emp) {
+            deptMgrZone.appendChild(createEmployeeCardNode(emp, deptIdx, null, 'dept_manager'));
+          }
+        }
 
         // Render Subteams within this Department
         const subteamsContainer = document.getElementById(`subteams-${deptIdx}`);
@@ -727,6 +756,7 @@
       // Collect all assigned employee IDs
       const assignedIds = new Set();
       companyStructure.departments.forEach(dept => {
+        if (dept.managerId) assignedIds.add(dept.managerId);
         if (dept.subteams) {
           dept.subteams.forEach(sub => {
             if (sub.managerId) assignedIds.add(sub.managerId);
@@ -756,15 +786,15 @@
     function createEmployeeCardNode(emp, deptIdx, subIdx, role) {
       const card = document.createElement('div');
       card.className = 'employee-card';
-      if (role === 'manager') card.classList.add('is-manager');
+      if (role === 'manager' || role === 'dept_manager') card.classList.add('is-manager');
       card.draggable = true;
       card.dataset.id = emp.id;
 
       // Handle initials fallback
       const initials = (emp.first_name?.[0] || '') + (emp.last_name?.[0] || '');
       const avatarHtml = emp.profile_picture_url 
-        ? `<img class="emp-avatar" src="${emp.profile_picture_url}" alt="${esc(emp.first_name)}" />`
-        : `<div class="emp-avatar">${initials.toUpperCase()}</div>`;
+         ? `<img class="emp-avatar" src="${emp.profile_picture_url}" alt="${esc(emp.first_name)}" />`
+         : `<div class="emp-avatar">${initials.toUpperCase()}</div>`;
 
       const formattedName = `${emp.first_name} ${emp.last_name ? emp.last_name[0] + '.' : ''}`;
 
@@ -791,7 +821,9 @@
         if (role) {
           e.dataTransfer.setData('prev-role', role);
           e.dataTransfer.setData('prev-dept', String(deptIdx));
-          e.dataTransfer.setData('prev-sub', String(subIdx));
+          if (subIdx !== null && subIdx !== undefined) {
+            e.dataTransfer.setData('prev-sub', String(subIdx));
+          }
         }
       });
 
@@ -825,9 +857,9 @@
 
       if (!empId) return;
 
-      // 1. Remove from previous subteam position if existing
+      // 1. Remove from previous position if existing
       if (prevRole) {
-        removeEmpFromStructure(empId, parseInt(prevDept), parseInt(prevSub), prevRole);
+        removeEmpFromStructure(empId, parseInt(prevDept), (prevSub && prevSub !== 'undefined' && prevSub !== 'null') ? parseInt(prevSub) : null, prevRole);
       }
 
       // 2. Assign to new subteam position
@@ -855,6 +887,31 @@
       renderEmployeePool();
     };
 
+    window.handleDeptManagerDrop = function(e, deptIdx) {
+      e.preventDefault();
+      const dropzone = e.currentTarget;
+      dropzone.classList.remove('dragover');
+
+      const empId = e.dataTransfer.getData('text/plain');
+      const prevRole = e.dataTransfer.getData('prev-role');
+      const prevDept = e.dataTransfer.getData('prev-dept');
+      const prevSub = e.dataTransfer.getData('prev-sub');
+
+      if (!empId) return;
+
+      // 1. Remove from previous position if existing
+      if (prevRole) {
+        removeEmpFromStructure(empId, parseInt(prevDept), (prevSub && prevSub !== 'undefined' && prevSub !== 'null') ? parseInt(prevSub) : null, prevRole);
+      }
+
+      // 2. Assign to department manager position
+      const dept = companyStructure.departments[deptIdx];
+      dept.managerId = empId;
+
+      renderStructure();
+      renderEmployeePool();
+    };
+
     window.handlePoolDrop = function(e) {
       e.preventDefault();
       const dropzone = e.currentTarget;
@@ -869,7 +926,7 @@
 
       // Remove from structure to place back into pool
       if (prevRole) {
-        removeEmpFromStructure(empId, parseInt(prevDept), parseInt(prevSub), prevRole);
+        removeEmpFromStructure(empId, parseInt(prevDept), (prevSub && prevSub !== 'undefined' && prevSub !== 'null') ? parseInt(prevSub) : null, prevRole);
       }
 
       renderStructure();
@@ -877,14 +934,22 @@
     };
 
     function removeEmpFromStructure(empId, deptIdx, subIdx, role) {
-      const sub = companyStructure.departments[deptIdx].subteams[subIdx];
-      if (role === 'manager') {
-        if (sub.managerId === empId) {
-          sub.managerId = null;
+      if (role === 'dept_manager') {
+        const dept = companyStructure.departments[deptIdx];
+        if (dept && dept.managerId === empId) {
+          dept.managerId = null;
         }
-      } else if (role === 'colleague') {
-        if (sub.colleagueIds) {
-          sub.colleagueIds = sub.colleagueIds.filter(id => id !== empId);
+      } else {
+        const sub = companyStructure.departments[deptIdx]?.subteams?.[subIdx];
+        if (!sub) return;
+        if (role === 'manager') {
+          if (sub.managerId === empId) {
+            sub.managerId = null;
+          }
+        } else if (role === 'colleague') {
+          if (sub.colleagueIds) {
+            sub.colleagueIds = sub.colleagueIds.filter(id => id !== empId);
+          }
         }
       }
     }
@@ -1078,6 +1143,9 @@
     window.unassignEmployee = function(empId) {
       // Find where they are assigned and unassign
       companyStructure.departments.forEach((dept, deptIdx) => {
+        if (dept.managerId === empId) {
+          dept.managerId = null;
+        }
         if (dept.subteams) {
           dept.subteams.forEach((sub, subIdx) => {
             if (sub.managerId === empId) {
