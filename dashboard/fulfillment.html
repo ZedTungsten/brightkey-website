@@ -472,6 +472,9 @@
           <span class="top-bar-title">Fulfillment & Inventory Ledger</span>
           <div style="flex:1;"></div>
           <div style="display:flex; gap:0.5rem; align-items:center;">
+            <button id="btn-undo" class="btn btn-outline" style="display: none; border-color: var(--warning); color: var(--warning);" onclick="undoLastAction(this)">
+              <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: -2px; margin-right: 6px;"><path d="M3 7v6h6M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg>Undo
+            </button>
             <button id="btn-logs" class="btn btn-outline" onclick="toggleLogs()">
               <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none" style="vertical-align: -2px; margin-right: 6px;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>Logs
             </button>
@@ -851,6 +854,16 @@
     let isEditingAvailable = false;
     let activeTransactions = [];
     let bookings = [];
+
+    // Last action for Undo
+    let lastAction = null;
+
+    function updateUndoButtonState() {
+      const undoBtn = document.getElementById('btn-undo');
+      if (undoBtn) {
+        undoBtn.style.display = lastAction ? 'inline-flex' : 'none';
+      }
+    }
 
     // Supplier Order State
     let supplierOrderSearch = "";
@@ -1480,14 +1493,17 @@
         return;
       }
 
+      let prevRefId = null;
       packingQueue.forEach(t => {
+        const isDuplicate = (t.reference_id && t.reference_id === prevRefId);
+        prevRefId = t.reference_id;
         const p = allProducts.find(prod => prod.sku === t.sku) || { title: 'Unknown Product' };
         const date = t.timestamp_reserved ? new Date(t.timestamp_reserved).toLocaleString() : 'N/A';
         tbody.innerHTML += `
           <tr>
-            <td><strong>${t.reference_id || 'N/A'}</strong></td>
-            <td>${t.customer_name || 'N/A'}</td>
-            <td>${t.customer_city || 'N/A'}</td>
+            <td><strong>${isDuplicate ? '' : (t.reference_id || 'N/A')}</strong></td>
+            <td>${isDuplicate ? '' : (t.customer_name || 'N/A')}</td>
+            <td>${isDuplicate ? '' : (t.customer_city || 'N/A')}</td>
             <td><code>${t.sku}</code></td>
             <td><strong>${t.quantity}</strong></td>
             <td>${date}</td>
@@ -1496,7 +1512,7 @@
                 <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: -2px; margin-right: 6px;"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>Packed
               </button>
               <button class="btn btn-danger btn-sm" onclick="cancelPackItem(this, '${t.id}', '${t.sku}', ${t.quantity})">
-                <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: -2px; margin-right: 4px;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>Cancel
+                <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: -2px; margin-right: 4px;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>Remove
               </button>
             </td>
           </tr>
@@ -1516,14 +1532,17 @@
         return;
       }
 
+      let prevRefId = null;
       dispatchQueue.forEach(t => {
+        const isDuplicate = (t.reference_id && t.reference_id === prevRefId);
+        prevRefId = t.reference_id;
         const p = allProducts.find(prod => prod.sku === t.sku) || { title: 'Unknown Product' };
         const date = t.timestamp_packed ? new Date(t.timestamp_packed).toLocaleString() : 'N/A';
         tbody.innerHTML += `
           <tr>
-            <td><strong>${t.reference_id || 'N/A'}</strong></td>
-            <td>${t.customer_name || 'N/A'}</td>
-            <td>${t.customer_city || 'N/A'}</td>
+            <td><strong>${isDuplicate ? '' : (t.reference_id || 'N/A')}</strong></td>
+            <td>${isDuplicate ? '' : (t.customer_name || 'N/A')}</td>
+            <td>${isDuplicate ? '' : (t.customer_city || 'N/A')}</td>
             <td><code>${t.sku}</code></td>
             <td><strong>${t.quantity}</strong></td>
             <td>${date}</td>
@@ -1549,14 +1568,17 @@
         return;
       }
 
+      let prevRefId = null;
       dispatched.forEach(t => {
+        const isDuplicate = (t.reference_id && t.reference_id === prevRefId);
+        prevRefId = t.reference_id;
         const p = allProducts.find(prod => prod.sku === t.sku) || { title: 'Unknown' };
         const date = t.timestamp_dispatched ? new Date(t.timestamp_dispatched).toLocaleString() : 'N/A';
         tbody.innerHTML += `
           <tr>
-            <td><strong>${t.reference_id || 'N/A'}</strong></td>
-            <td>${t.customer_name || 'N/A'}</td>
-            <td>${t.customer_city || 'N/A'}</td>
+            <td><strong>${isDuplicate ? '' : (t.reference_id || 'N/A')}</strong></td>
+            <td>${isDuplicate ? '' : (t.customer_name || 'N/A')}</td>
+            <td>${isDuplicate ? '' : (t.customer_city || 'N/A')}</td>
             <td><code>${t.sku}</code></td>
             <td><strong>${t.quantity}</strong></td>
             <td>${date}</td>
@@ -1988,6 +2010,8 @@
           if (updErr) throw updErr;
         }
 
+        lastAction = { type: 'pack', id, sku, qty };
+        updateUndoButtonState();
         await refreshDashboard();
       });
     };
@@ -1996,6 +2020,8 @@
     window.cancelPackItem = async function(btn, id, sku, qty) {
       await wrapActionWithLoading(btn, async () => {
         await handleCancellationProcess(id, sku, qty, 'reserved');
+        lastAction = { type: 'cancelPack', id, sku, qty };
+        updateUndoButtonState();
         await refreshDashboard();
       });
     };
@@ -2022,6 +2048,8 @@
           if (updErr) throw updErr;
         }
 
+        lastAction = { type: 'dispatch', id, sku, qty };
+        updateUndoButtonState();
         await refreshDashboard();
       });
     };
@@ -2048,6 +2076,8 @@
           if (updErr) throw updErr;
         }
 
+        lastAction = { type: 'return', id, sku, qty };
+        updateUndoButtonState();
         await refreshDashboard();
         showToast('Order marked as Returned. Warehouse must confirm receipt under the Receive tab.');
       });
@@ -2057,6 +2087,8 @@
     window.cancelQueueItem = async function(btn, id, sku, qty, prevStatus) {
       await wrapActionWithLoading(btn, async () => {
         await handleCancellationProcess(id, sku, qty, prevStatus);
+        lastAction = { type: 'cancelPack', id, sku, qty };
+        updateUndoButtonState();
         await refreshDashboard();
         showToast('Order cancelled. Items sent to Receive tab to be re-shelved.');
       });
@@ -2085,6 +2117,103 @@
         if (updErr) throw updErr;
       }
     }
+
+    // ACTION: Undo Last Action
+    window.undoLastAction = async function(btn) {
+      if (!lastAction) {
+        showToast('No action to undo.', true);
+        return;
+      }
+
+      await wrapActionWithLoading(btn, async () => {
+        const { type, id, sku, qty } = lastAction;
+
+        if (type === 'pack') {
+          // undo pack (change packed back to reserved)
+          const { error: txErr } = await sb.from('inventory_transactions').update({
+            status: 'reserved',
+            timestamp_packed: null
+          }).eq('id', id);
+          if (txErr) throw txErr;
+
+          const { data: invRow, error: invErr } = await sb.from('inventory').select('*').eq('sku', sku);
+          if (invErr) throw invErr;
+          if (invRow && invRow.length > 0) {
+            const inv = invRow[0];
+            const { error: updErr } = await sb.from('inventory').update({
+              reserved: inv.reserved + qty,
+              packed: Math.max(0, inv.packed - qty)
+            }).eq('sku', sku);
+            if (updErr) throw updErr;
+          }
+          showToast('Undone: Item marked back as reserved.');
+        } 
+        else if (type === 'cancelPack') {
+          // undo cancelPack (change cancelled back to reserved)
+          const { error: txErr } = await sb.from('inventory_transactions').update({
+            status: 'reserved',
+            timestamp_cancelled: null
+          }).eq('id', id);
+          if (txErr) throw txErr;
+
+          const { data: invRow, error: invErr } = await sb.from('inventory').select('*').eq('sku', sku);
+          if (invErr) throw invErr;
+          if (invRow && invRow.length > 0) {
+            const inv = invRow[0];
+            const { error: updErr } = await sb.from('inventory').update({
+              reserved: inv.reserved + qty,
+              cancelled: Math.max(0, inv.cancelled - qty)
+            }).eq('sku', sku);
+            if (updErr) throw updErr;
+          }
+          showToast('Undone: Cancelled item restored back to Pack queue.');
+        }
+        else if (type === 'dispatch') {
+          // undo dispatch (change dispatched back to packed)
+          const { error: txErr } = await sb.from('inventory_transactions').update({
+            status: 'packed',
+            timestamp_dispatched: null
+          }).eq('id', id);
+          if (txErr) throw txErr;
+
+          const { data: invRow, error: invErr } = await sb.from('inventory').select('*').eq('sku', sku);
+          if (invErr) throw invErr;
+          if (invRow && invRow.length > 0) {
+            const inv = invRow[0];
+            const { error: updErr } = await sb.from('inventory').update({
+              packed: inv.packed + qty,
+              dispatched: Math.max(0, inv.dispatched - qty)
+            }).eq('sku', sku);
+            if (updErr) throw updErr;
+          }
+          showToast('Undone: Dispatched item moved back to Dispatch queue.');
+        }
+        else if (type === 'return') {
+          // undo return (change returned back to dispatched)
+          const { error: txErr } = await sb.from('inventory_transactions').update({
+            status: 'dispatched',
+            timestamp_returned: null
+          }).eq('id', id);
+          if (txErr) throw txErr;
+
+          const { data: invRow, error: invErr } = await sb.from('inventory').select('*').eq('sku', sku);
+          if (invErr) throw invErr;
+          if (invRow && invRow.length > 0) {
+            const inv = invRow[0];
+            const { error: updErr } = await sb.from('inventory').update({
+              dispatched: inv.dispatched + qty,
+              returned: Math.max(0, inv.returned - qty)
+            }).eq('sku', sku);
+            if (updErr) throw updErr;
+          }
+          showToast('Undone: Returned item marked back as dispatched.');
+        }
+
+        lastAction = null;
+        updateUndoButtonState();
+        await refreshDashboard();
+      });
+    };
 
     // Trigger explicit booking sync on demand
     document.getElementById('btn-sync').addEventListener('click', async () => {
