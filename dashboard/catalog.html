@@ -3182,21 +3182,34 @@
           file = await compressImageToWebP(file);
         }
 
-        const cleanName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-        const safeCompanyId = (currentCompanyId || 'general').replace(/[^a-zA-Z0-9.\-_]/g, '_');
-        const filePath = `companies/${safeCompanyId}/products/${sku}/${Date.now()}_${cleanName}`;
+        const reader = new FileReader();
+        const base64Promise = new Promise((resolve, reject) => {
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = reject;
+        });
+        reader.readAsDataURL(file);
+        const fileBase64 = await base64Promise;
 
-        const { data, error } = await window.BKAuth.sb.storage
-          .from('brightkey-assets')
-          .upload(filePath, file, { upsert: true });
+        const response = await fetch('/api/upload', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            fileBase64,
+            fileName: file.name,
+            category: 'products',
+            refId: sku,
+            companyId: currentCompanyId
+          })
+        });
 
-        if (error) throw error;
+        const result = await response.json();
+        if (!response.ok || !result.success) {
+          throw new Error(result.error || 'Upload failed');
+        }
 
-        const { data: urlData } = window.BKAuth.sb.storage
-          .from('brightkey-assets')
-          .getPublicUrl(filePath);
-
-        currentUploadTarget.value = urlData.publicUrl;
+        currentUploadTarget.value = result.url;
         currentUploadTarget.dispatchEvent(new Event('input'));
         
         toast("File uploaded securely!", "success");
