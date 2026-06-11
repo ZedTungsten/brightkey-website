@@ -3,10 +3,10 @@
 
   // 1. Sidebar HTML Template (absolute links starting with "/")
   const sidebarHTML = `
-      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem; flex-shrink: 0; min-height: 32px;">
+      <div class="dash-logo-container" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem; flex-shrink: 0; min-height: 32px;">
         <a href="/dashboard" class="dash-logo" style="padding: 0.5rem 0.25rem; display: flex; align-items: center; gap: 0.25rem;">
-          <span style="font-weight: 800; color: var(--text-primary); flex-shrink: 0;">B<span style="color: var(--blue);">K</span></span>
-          <span class="dash-logo-text" style="font-weight: 800; color: var(--text-primary);">right<span>Key</span></span>
+          <img src="/assets/logo.svg" class="logo-extended" alt="BrightKey" style="height: 24px; display: block;" />
+          <img src="/assets/favicon.svg" class="logo-contracted" alt="BrightKey" style="height: 24px; display: none;" />
         </a>
         <button id="sidebar-toggle" title="Toggle Sidebar">
           <svg id="toggle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 16px; height: 16px;">
