@@ -1525,7 +1525,17 @@
       const tbody = document.getElementById('dispatch-list');
       tbody.innerHTML = '';
 
-      const dispatchQueue = activeTransactions.filter(t => t.status === 'packed');
+      const dispatchQueue = activeTransactions.filter(t => {
+        if (t.status !== 'packed') return false;
+        if (t.reference_id) {
+          const hasUnpacked = activeTransactions.some(other => 
+            other.reference_id === t.reference_id && 
+            other.status === 'reserved'
+          );
+          if (hasUnpacked) return false;
+        }
+        return true;
+      });
 
       if (dispatchQueue.length === 0) {
         tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted" style="padding:2rem 0;">No packed items ready to dispatch.</td></tr>`;
@@ -1672,7 +1682,17 @@
     function updateBadgeCounts() {
       const receiveCount = activeTransactions.filter(t => ['ordered', 'returned', 'cancelled'].includes(t.status)).length;
       const packCount = activeTransactions.filter(t => t.status === 'reserved' && t.type === 'customer_order').length;
-      const dispatchCount = activeTransactions.filter(t => t.status === 'packed').length;
+      const dispatchCount = activeTransactions.filter(t => {
+        if (t.status !== 'packed') return false;
+        if (t.reference_id) {
+          const hasUnpacked = activeTransactions.some(other => 
+            other.reference_id === t.reference_id && 
+            other.status === 'reserved'
+          );
+          if (hasUnpacked) return false;
+        }
+        return true;
+      }).length;
 
       const badgeRec = document.getElementById('badge-count-receive');
       const badgePck = document.getElementById('badge-count-pack');
