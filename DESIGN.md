@@ -247,6 +247,26 @@ Instead of scrolling the whole panel, restrict vertical and horizontal scrolling
 ## 11. Mobile-First Architecture (with Sidebar in Consideration)
 * **Always design for mobile first.**
 * When designing layout overrides, ensure that mobile viewports do not render collapsed or minimized sidebar states. The mobile drawer menu must always render in its fully-expanded state (or remain completely hidden off-screen) for optimal usability and premium experience.
-```
+
+---
+
+## 12. Dynamic Viewport Heights on Mobile (100dvh)
+* **Problem**: Standard `100vh` or `height: 100vh` on mobile viewports (e.g., iOS Chrome/Safari) includes the dynamic address bar and native browser navigation bars. This makes the layout taller than the actual visible area, causing bottom buttons or indicators to be clipped or covered.
+* **Rule**: Always use `100dvh` (Dynamic Viewport Height) for full-screen layout wrappers and fixed overlays on mobile:
+  ```css
+  .element {
+    min-height: 100vh; /* fallback */
+    min-height: 100dvh;
+  }
+  ```
+  Or for elements that should span exactly the viewport height without scrolling:
+  ```css
+  .element {
+    height: 100vh; /* fallback */
+    height: 100dvh;
+  }
+  ```
+* Ensure that media query overrides (e.g., `@media (max-width: 768px)`) do not inadvertently override the root layout container's `min-height: 100dvh` with a standard `100vh` declaration.
+
 
 
