@@ -214,39 +214,52 @@
 
     sidebarContainer.innerHTML = sidebarHTML;
 
-    // Prepend hamburger menu button to .top-bar on mobile
-    const topBar = document.querySelector('.top-bar');
-    if (topBar && !document.getElementById('mobile-menu-toggle')) {
-      const toggle = document.createElement('button');
-      toggle.id = 'mobile-menu-toggle';
-      toggle.title = 'Open Menu';
-      toggle.innerHTML = `
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 20px; height: 20px; display: block;">
-          <line x1="3" y1="12" x2="21" y2="12"></line>
-          <line x1="3" y1="6" x2="21" y2="6"></line>
-          <line x1="3" y1="18" x2="21" y2="18"></line>
-        </svg>
-      `;
-      toggle.style.background = 'none';
-      toggle.style.border = 'none';
-      toggle.style.color = 'var(--text-primary)';
-      toggle.style.cursor = 'pointer';
-      toggle.style.padding = '0.5rem';
-      toggle.style.marginRight = '0.5rem';
-      topBar.prepend(toggle);
-
-      toggle.addEventListener('click', (e) => {
+    // Create mobile floating favicon button at lower left
+    if (!document.getElementById('mobile-floating-favicon')) {
+      const btn = document.createElement('button');
+      btn.id = 'mobile-floating-favicon';
+      btn.title = 'Open Menu';
+      btn.innerHTML = `<img src="/assets/favicon.svg" alt="Menu" style="width: 24px; height: 24px; display: block;" />`;
+      
+      btn.style.position = 'fixed';
+      btn.style.bottom = '20px';
+      btn.style.left = '20px';
+      btn.style.width = '48px';
+      btn.style.height = '48px';
+      btn.style.borderRadius = '50%';
+      btn.style.background = 'var(--bg-surface, #ffffff)';
+      btn.style.border = '1px solid var(--border, #E4E4E7)';
+      btn.style.boxShadow = '0 4px 14px rgba(0,0,0,0.12)';
+      btn.style.cursor = 'pointer';
+      btn.style.display = 'none'; // displayed via CSS media query
+      btn.style.alignItems = 'center';
+      btn.style.justifyContent = 'center';
+      btn.style.zIndex = '190';
+      btn.style.transition = 'transform 0.2s, box-shadow 0.2s';
+      
+      btn.addEventListener('mouseenter', () => {
+        btn.style.transform = 'scale(1.05)';
+        btn.style.boxShadow = '0 6px 20px rgba(0,0,0,0.16)';
+      });
+      btn.addEventListener('mouseleave', () => {
+        btn.style.transform = 'scale(1)';
+        btn.style.boxShadow = '0 4px 14px rgba(0,0,0,0.12)';
+      });
+      
+      btn.addEventListener('click', (e) => {
         e.stopPropagation();
         const sidebarEl = document.getElementById('dash-sidebar');
         if (sidebarEl) {
           sidebarEl.classList.toggle('mobile-open');
         }
       });
+      
+      document.body.appendChild(btn);
     }
 
     document.addEventListener('click', (e) => {
       const sidebarEl = document.getElementById('dash-sidebar');
-      const toggle = document.getElementById('mobile-menu-toggle');
+      const toggle = document.getElementById('mobile-floating-favicon');
       if (sidebarEl && sidebarEl.classList.contains('mobile-open')) {
         if (!sidebarEl.contains(e.target) && (!toggle || !toggle.contains(e.target))) {
           sidebarEl.classList.remove('mobile-open');
