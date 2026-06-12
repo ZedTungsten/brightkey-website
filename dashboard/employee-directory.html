@@ -1123,7 +1123,7 @@
                 <th class="grp-docs">CV</th>
                 <th class="grp-docs">ID Link</th>
                 <!-- Actions -->
-                <th class="col-actions"></th>
+                <th class="col-actions" style="text-align:center;">Actions</th>
               </tr>
             </thead>
             <tbody id="dir-tbody">
@@ -1164,6 +1164,50 @@
   </div>
 
   <div id="toast-container" aria-live="polite"></div>
+
+  <!-- Invite Modal Overlay -->
+  <div class="confirm-overlay" id="invite-modal-overlay" role="dialog" aria-modal="true">
+    <div class="confirm-box" style="max-width: 480px;">
+      <div class="confirm-box__title" style="margin-bottom: 1rem;">Invite Organization Member</div>
+      <form id="invite-form" onsubmit="App.submitInvite(event)">
+        <div style="display: flex; flex-direction: column; gap: 1rem; margin-bottom: 1.5rem; text-align: left;">
+          <div style="display: flex; flex-direction: column; gap: 0.4rem;">
+            <label style="font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary);">Email Address</label>
+            <input type="email" id="invite-email" class="cell-input" style="max-width: 100%; height: auto; padding: 0.55rem 0.75rem;" readonly disabled />
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 0.4rem;">
+            <label style="font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary);">Full Name</label>
+            <input type="text" id="invite-name" class="cell-input" style="max-width: 100%; height: auto; padding: 0.55rem 0.75rem;" readonly disabled />
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 0.4rem;">
+            <label style="font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary);">Assign Role</label>
+            <select id="invite-role" class="cell-input cell-select" style="max-width: 100%; min-height: 36px; height: auto; padding: 0.55rem 0.75rem;" onchange="App.handleInviteRoleChange(this.value)">
+              <!-- Populated by JS -->
+            </select>
+          </div>
+          
+          <div id="invite-custom-access-container" style="display:none; flex-direction:column; gap:0.4rem; padding:0.75rem; background:var(--bg-elevated); border:1px solid var(--border); border-radius:6px;">
+            <label style="font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); margin-bottom:0.2rem;">Select Access Modules</label>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; font-size:0.82rem;">
+              <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="invite-custom-access" value="Products" /> Products</label>
+              <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="invite-custom-access" value="Operations" /> Operations</label>
+              <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="invite-custom-access" value="Marketing" /> Marketing</label>
+              <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="invite-custom-access" value="Sales" /> Sales</label>
+              <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="invite-custom-access" value="Customer Service" /> Customer Service</label>
+              <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="invite-custom-access" value="Logistics" /> Logistics</label>
+              <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="invite-custom-access" value="HR" /> HR</label>
+              <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="invite-custom-access" value="Finance" /> Finance</label>
+            </div>
+          </div>
+        </div>
+        
+        <div class="confirm-box__actions">
+          <button type="button" class="btn btn-discard btn-sm" onclick="App.closeInviteModal()">Cancel</button>
+          <button type="submit" class="btn btn-sm btn-save" id="btn-submit-invite">Send Invitation</button>
+        </div>
+      </form>
+    </div>
+  </div>
 
     </div>
   </div>
@@ -1261,6 +1305,138 @@
       sortDir: 'asc',
       pendingDeleteId: null,
 
+      openInviteModal(email, name) {
+        document.getElementById('invite-email').value = email;
+        document.getElementById('invite-name').value = name;
+        
+        const select = document.getElementById('invite-role');
+        if (select) {
+          let optionsHtml = '';
+          optionsHtml += '<option value="admin">Administrator</option>';
+          if (Array.isArray(this.dynamicRoles)) {
+            this.dynamicRoles.forEach(r => {
+              if (r.name !== 'admin' && r.name !== 'owner' && !r.name.startsWith('custom_')) {
+                optionsHtml += `<option value="${esc(r.name)}">${esc(r.name)}</option>`;
+              }
+            });
+          }
+          optionsHtml += '<option value="custom">Custom (Specify Accesses)</option>';
+          optionsHtml += '<option value="">None / Employee Only (No Dashboard Access)</option>';
+          select.innerHTML = optionsHtml;
+          select.value = 'admin';
+        }
+        
+        this.handleInviteRoleChange('admin');
+        document.getElementById('invite-modal-overlay').classList.add('open');
+      },
+
+      closeInviteModal() {
+        document.getElementById('invite-modal-overlay').classList.remove('open');
+      },
+
+      handleInviteRoleChange(role) {
+        const customContainer = document.getElementById('invite-custom-access-container');
+        if (customContainer) {
+          customContainer.style.display = (role === 'custom') ? 'flex' : 'none';
+        }
+      },
+
+      async submitInvite(e) {
+        e.preventDefault();
+        const email = document.getElementById('invite-email').value;
+        const name = document.getElementById('invite-name').value;
+        const roleSelect = document.getElementById('invite-role');
+        const btn = document.getElementById('btn-submit-invite');
+
+        if (!email || !name) return;
+
+        btn.disabled = true;
+        const origText = btn.innerText;
+        btn.innerText = 'Inviting...';
+
+        let role = roleSelect.value;
+
+        if (role === 'custom') {
+          const checkedModules = Array.from(document.querySelectorAll('.invite-custom-access:checked')).map(cb => cb.value);
+          if (checkedModules.length === 0) {
+            toast('Please check at least one access module for Custom role.', 'error');
+            btn.disabled = false;
+            btn.innerText = origText;
+            return;
+          }
+
+          const existingRole = (this.dynamicRoles || []).find(r => {
+            if (!Array.isArray(r.accessible_modules) || r.accessible_modules.length !== checkedModules.length) return false;
+            const set = new Set(r.accessible_modules);
+            return checkedModules.every(mod => set.has(mod));
+          });
+
+          if (existingRole) {
+            role = existingRole.name;
+          } else {
+            const customRoleName = 'custom_' + Math.random().toString(36).substring(2, 10) + '_' + Date.now().toString().slice(-4);
+            try {
+              const { error: roleErr } = await getSb().from('dashboard_roles').insert({
+                name: customRoleName,
+                accessible_modules: checkedModules,
+                company_id: this.companyId
+              });
+              if (roleErr) throw roleErr;
+
+              this.dynamicRoles.push({ name: customRoleName, accessible_modules: checkedModules });
+              role = customRoleName;
+            } catch (err) {
+              console.error('Failed to create custom role:', err);
+              toast('Failed to configure custom accesses.', 'error');
+              btn.disabled = false;
+              btn.innerText = origText;
+              return;
+            }
+          }
+        }
+
+        try {
+          const { data: { session } } = await getSb().auth.getSession();
+          const token = session?.access_token;
+
+          const res = await fetch('/api/send-invitation', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+              tenant_id: this.tenantId,
+              company_id: this.companyId,
+              email: email,
+              full_name: name,
+              role: role,
+              invited_by: session?.user?.id
+            })
+          });
+
+          const data = await res.json();
+          if (!res.ok) {
+            toast(data.error || 'Invitation failed.', 'error');
+            return;
+          }
+
+          if (data.email_sent) {
+            toast(`Invitation email sent to ${email}.`, 'success');
+          } else {
+            toast(`Member invited! Acceptance link generated.`, 'success');
+          }
+          this.closeInviteModal();
+          await this.load();
+        } catch (err) {
+          console.error('Invitation error:', err);
+          toast('System error sending invitation.', 'error');
+        } finally {
+          btn.disabled = false;
+          btn.innerText = origText;
+        }
+      },
+
       async init() {
         const authInfo = await window.BKAuth.checkRoleGate(['owner', 'admin', 'hr'], '../admin.html');
         if (!authInfo) return;
@@ -1326,6 +1502,47 @@
             this.companyStructure = { departments: [] };
           }
           this.buildReportingToMap();
+
+          this.activeUserEmails = new Set();
+          this.invitedEmails = new Set();
+          try {
+            const { data: tmData } = await getSb()
+              .from('tenant_members')
+              .select('user_email')
+              .eq('tenant_id', this.tenantId);
+            if (tmData) {
+              tmData.forEach(m => {
+                if (m.user_email) this.activeUserEmails.add(m.user_email.toLowerCase().trim());
+              });
+            }
+          } catch (e) {
+            console.error('Failed to fetch active member emails:', e);
+          }
+
+          try {
+            const { data: invData } = await getSb()
+              .from('company_invitations')
+              .select('email')
+              .eq('tenant_id', this.tenantId);
+            if (invData) {
+              invData.forEach(i => {
+                if (i.email) this.invitedEmails.add(i.email.toLowerCase().trim());
+              });
+            }
+          } catch (e) {
+            console.error('Failed to fetch pending invitation emails:', e);
+          }
+
+          try {
+            const { data: dRoles } = await getSb()
+              .from('dashboard_roles')
+              .select('*')
+              .order('name', { ascending: true });
+            this.dynamicRoles = dRoles || [];
+          } catch (e) {
+            console.error('Failed to fetch dashboard roles:', e);
+            this.dynamicRoles = [];
+          }
 
           const data = await sbGet();
           this.allEmployees = data;
@@ -1619,13 +1836,26 @@
           </div></td>`;
         };
 
-        const actionBtns = isEdit
-          ? `<div class="row-actions">
+        let actionBtns = '';
+        if (isEdit) {
+          actionBtns = `<div class="row-actions">
               <button class="btn-row btn-delete" data-id="${esc(id)}" data-name="${esc(fullName(emp) || emp.employee_number)}" title="Delete employee record">
                 <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
               </button>
-            </div>`
-          : `<div class="row-actions"></div>`;
+            </div>`;
+        } else {
+          const emailLower = (emp.email || '').toLowerCase().trim();
+          const isUser = emailLower && (this.activeUserEmails.has(emailLower) || this.invitedEmails.has(emailLower));
+          if (emailLower && !isUser) {
+            actionBtns = `<div class="row-actions" style="justify-content: center;">
+                <button class="btn-row" style="color: var(--cyan-light); border-color: var(--cyan-border); background: var(--cyan-dim); padding: 0.35rem 0.65rem;" onclick="App.openInviteModal('${esc(emailLower)}', '${esc(fullName(emp))}')">
+                  Invite as user
+                </button>
+              </div>`;
+          } else {
+            actionBtns = `<div class="row-actions" style="justify-content: center;"><span style="color: var(--text-muted); font-size: 0.75rem;">—</span></div>`;
+          }
+        }
 
         return `<tr data-id="${esc(id)}" class="${isDirty ? 'row-dirty' : ''}">
           ${cellEmpNum()}
