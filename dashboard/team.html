@@ -738,7 +738,7 @@
                       <th style="width: 35%;">Details</th>
                       <th style="width: 12%;">Deadline</th>
                       <th style="width: 13%;">Created / Done</th>
-                      <th style="width: 10%; text-align: center;" class="th-actions">Actions</th>
+                      <th style="width: 10%; text-align: center;" class="th-milestones-actions">Actions</th>
                     </tr>
                   </thead>
                   <tbody id="milestones-tbody">
@@ -1327,6 +1327,13 @@
           el.style.display = this.hasEditAccess ? '' : 'none';
         });
 
+        // Show/hide milestones actions column based on edit access OR if viewing own milestones
+        const showMilestonesActions = this.hasEditAccess || (this.currentUser && this.selectedEmployeeId === this.currentUser.id);
+        const thMilestonesActions = document.querySelectorAll('.th-milestones-actions');
+        thMilestonesActions.forEach(el => {
+          el.style.display = showMilestonesActions ? '' : 'none';
+        });
+
         // Top bar controls element for Edit Mode (no longer used, clear it)
         const controls = document.getElementById('edit-mode-controls');
         if (controls) {
@@ -1905,8 +1912,11 @@
             ? `<svg class="drag-handle" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="cursor: grab; color: var(--text-muted); margin-right: 0.5rem; vertical-align: middle;"><circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/></svg>`
             : '';
 
-          const actionsTd = this.hasEditAccess
-            ? `<td style="text-align: center; vertical-align: middle;">
+          const isAssignee = this.currentUser && this.selectedEmployeeId === this.currentUser.id;
+
+          let actionsTd = '';
+          if (this.hasEditAccess) {
+            actionsTd = `<td style="text-align: center; vertical-align: middle;">
                 <div style="display: flex; gap: 0.5rem; justify-content: center; align-items: center;">
                   <button class="btn-check-link ${isCompleted ? 'active' : ''}" onclick="App.toggleMilestoneCompletion('${esc(ms.id)}', ${!isCompleted})" title="${isCompleted ? 'Mark Active' : 'Mark Done'}">
                     <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
@@ -1918,8 +1928,16 @@
                     <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
                   </button>
                 </div>
-               </td>`
-            : '';
+               </td>`;
+          } else if (isAssignee) {
+            actionsTd = `<td style="text-align: center; vertical-align: middle;">
+                <div style="display: flex; gap: 0.5rem; justify-content: center; align-items: center;">
+                  <button class="btn-check-link ${isCompleted ? 'active' : ''}" onclick="App.toggleMilestoneCompletion('${esc(ms.id)}', ${!isCompleted})" title="${isCompleted ? 'Mark Active' : 'Mark Done'}">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  </button>
+                </div>
+               </td>`;
+          }
 
           const draggableAttr = this.hasEditAccess ? `draggable="true" ondragstart="App.handleDragStart(event, '${esc(ms.id)}')" ondragover="App.handleDragOver(event)" ondragleave="App.handleDragLeave(event)" ondragend="App.handleDragEnd(event)" ondrop="App.handleDrop(event, '${esc(ms.id)}')"` : '';
 
@@ -1946,11 +1964,13 @@
         };
 
         let rowsHtml = '';
+        const showMilestonesActions = this.hasEditAccess || (this.currentUser && this.selectedEmployeeId === this.currentUser.id);
 
         // Render Groups and their children
         groups.forEach(group => {
-          const groupHeaderCols = this.hasEditAccess
-            ? `<td colspan="4" style="vertical-align: middle; padding: 0.65rem 1rem;">
+          let groupHeaderCols = '';
+          if (this.hasEditAccess) {
+            groupHeaderCols = `<td colspan="4" style="vertical-align: middle; padding: 0.65rem 1rem;">
                 <div style="display: flex; align-items: center; gap: 0.5rem;">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="color: var(--cyan-light);"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
                   <span style="font-weight: 700; color: var(--text-primary); font-size: 0.85rem;">${esc(group.title)}</span>
@@ -1965,13 +1985,16 @@
                     <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
                   </button>
                 </div>
-              </td>`
-            : `<td colspan="4" style="vertical-align: middle; padding: 0.65rem 1rem;">
+              </td>`;
+          } else {
+            const colspan = showMilestonesActions ? 5 : 4;
+            groupHeaderCols = `<td colspan="${colspan}" style="vertical-align: middle; padding: 0.65rem 1rem;">
                 <div style="display: flex; align-items: center; gap: 0.5rem;">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="color: var(--cyan-light);"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
                   <span style="font-weight: 700; color: var(--text-primary); font-size: 0.85rem;">${esc(group.title)}</span>
                 </div>
               </td>`;
+          }
 
           rowsHtml += `<tr style="background: var(--bg-elevated); border-bottom: 1px solid var(--border);">${groupHeaderCols}</tr>`;
 
@@ -1987,13 +2010,8 @@
 
         // Render Root/General Milestones (if any)
         if (rootMilestones.length > 0) {
-          const rootHeaderCols = this.hasEditAccess
-            ? `<td colspan="5" style="vertical-align: middle; padding: 0.65rem 1rem; background: var(--bg-elevated); border-bottom: 1px solid var(--border);">
-                <div style="display: flex; align-items: center; gap: 0.5rem;">
-                  <span style="font-weight: 700; color: var(--text-secondary); font-size: 0.85rem;">General Milestones</span>
-                </div>
-              </td>`
-            : `<td colspan="4" style="vertical-align: middle; padding: 0.65rem 1rem; background: var(--bg-elevated); border-bottom: 1px solid var(--border);">
+          const colspan = showMilestonesActions ? 5 : 4;
+          const rootHeaderCols = `<td colspan="${colspan}" style="vertical-align: middle; padding: 0.65rem 1rem; background: var(--bg-elevated); border-bottom: 1px solid var(--border);">
                 <div style="display: flex; align-items: center; gap: 0.5rem;">
                   <span style="font-weight: 700; color: var(--text-secondary); font-size: 0.85rem;">General Milestones</span>
                 </div>
