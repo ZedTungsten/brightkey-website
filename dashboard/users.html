@@ -800,22 +800,33 @@
           return;
         }
 
-        const customRoleName = 'custom_' + Math.random().toString(36).substring(2, 10) + '_' + Date.now().toString().slice(-4);
-        try {
-          const { error: roleErr } = await sb.from('dashboard_roles').insert({
-            name: customRoleName,
-            accessible_modules: checkedModules
-          });
-          if (roleErr) throw roleErr;
+        // Check if an existing role has the exact same modules
+        const existingRole = dynamicRoles.find(r => {
+          if (!Array.isArray(r.accessible_modules) || r.accessible_modules.length !== checkedModules.length) return false;
+          const set = new Set(r.accessible_modules);
+          return checkedModules.every(mod => set.has(mod));
+        });
 
-          dynamicRoles.push({ name: customRoleName, accessible_modules: checkedModules });
-          role = customRoleName;
-        } catch (err) {
-          console.error('Failed to create custom role:', err);
-          showToast('Failed to configure custom accesses.', true);
-          btn.disabled = false;
-          btn.innerText = 'Send Invitation';
-          return;
+        if (existingRole) {
+          role = existingRole.name;
+        } else {
+          const customRoleName = 'custom_' + Math.random().toString(36).substring(2, 10) + '_' + Date.now().toString().slice(-4);
+          try {
+            const { error: roleErr } = await sb.from('dashboard_roles').insert({
+              name: customRoleName,
+              accessible_modules: checkedModules
+            });
+            if (roleErr) throw roleErr;
+
+            dynamicRoles.push({ name: customRoleName, accessible_modules: checkedModules });
+            role = customRoleName;
+          } catch (err) {
+            console.error('Failed to create custom role:', err);
+            showToast('Failed to configure custom accesses.', true);
+            btn.disabled = false;
+            btn.innerText = 'Send Invitation';
+            return;
+          }
         }
       }
 
@@ -1011,31 +1022,32 @@
           return;
         }
 
-        let roleName = currentRoleEditingString;
-        if (!roleName || !roleName.startsWith('custom_')) {
-          roleName = 'custom_' + Math.random().toString(36).substring(2, 10) + '_' + Date.now().toString().slice(-4);
-        }
+        // Check if an existing role has the exact same modules
+        const existingRole = dynamicRoles.find(r => {
+          if (!Array.isArray(r.accessible_modules) || r.accessible_modules.length !== checkedModules.length) return false;
+          const set = new Set(r.accessible_modules);
+          return checkedModules.every(mod => set.has(mod));
+        });
 
-        try {
-          const { error: roleErr } = await sb.from('dashboard_roles').upsert({
-            name: roleName,
-            accessible_modules: checkedModules
-          }, { onConflict: 'name' });
+        if (existingRole) {
+          newRole = existingRole.name;
+        } else {
+          const roleName = 'custom_' + Math.random().toString(36).substring(2, 10) + '_' + Date.now().toString().slice(-4);
+          try {
+            const { error: roleErr } = await sb.from('dashboard_roles').insert({
+              name: roleName,
+              accessible_modules: checkedModules
+            });
 
-          if (roleErr) throw roleErr;
+            if (roleErr) throw roleErr;
 
-          const cacheIdx = dynamicRoles.findIndex(r => r.name === roleName);
-          if (cacheIdx !== -1) {
-            dynamicRoles[cacheIdx].accessible_modules = checkedModules;
-          } else {
             dynamicRoles.push({ name: roleName, accessible_modules: checkedModules });
+            newRole = roleName;
+          } catch (err) {
+            console.error('Error creating custom role:', err);
+            showToast('Failed to save custom access settings.', true);
+            return;
           }
-
-          newRole = roleName;
-        } catch (err) {
-          console.error('Error upserting custom role:', err);
-          showToast('Failed to save custom access settings.', true);
-          return;
         }
       }
 
