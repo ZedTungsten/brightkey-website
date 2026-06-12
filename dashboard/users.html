@@ -639,6 +639,26 @@
       let activeData = [];
       let inviteData = [];
 
+      // Fetch Employees for company mapping
+      let employeeUserIds = new Set();
+      let employeeEmails = new Set();
+      try {
+        const { data: empData, error: empErr } = await sb
+          .from('employees')
+          .select('id, email')
+          .eq('company_id', currentCompanyId);
+        if (!empErr && empData) {
+          empData.forEach(e => {
+            if (e.id) employeeUserIds.add(e.id);
+            if (e.email) employeeEmails.add(e.email.toLowerCase().trim());
+          });
+        } else if (empErr) {
+          console.error('Error fetching employees mapping:', empErr);
+        }
+      } catch (err) {
+        console.error('Failed to query employees for mapping:', err);
+      }
+
       // 1. Fetch Active Members — try with full_name, fallback without
       try {
         const { data, error } = await sb
@@ -756,9 +776,18 @@
             </div>`;
         }
 
-        const actionsCell = (isOwner || isSelf)
-          ? '<span style="color:var(--text-muted);font-size:0.75rem;">—</span>'
-          : `<button class="btn btn-danger" onclick="removeMember('${row.id}')">Remove</button>`;
+        const isEmployee = (row.user_id && employeeUserIds.has(row.user_id)) || (row.user_email && employeeEmails.has(row.user_email.toLowerCase().trim()));
+
+        let actionsCellHtml = '';
+        if (!isEmployee) {
+          actionsCellHtml += `<button class="btn btn-outline btn-sm" style="color: var(--cyan-light); border-color: var(--cyan-border); margin-right: 0.5rem; padding: 0.35rem 0.65rem;" onclick="addToDirectory('${row.user_id || ''}', '${escapeHtml(row.user_email || '')}', '${escapeHtml(row.full_name || '')}')">Add to Directory</button>`;
+        }
+        if (!isOwner && !isSelf) {
+          actionsCellHtml += `<button class="btn btn-danger" style="padding: 0.35rem 0.65rem;" onclick="removeMember('${row.id}')">Remove</button>`;
+        }
+        if (actionsCellHtml === '') {
+          actionsCellHtml = '<span style="color:var(--text-muted);font-size:0.75rem;">—</span>';
+        }
 
         tr.innerHTML = `
           <td>
@@ -769,7 +798,7 @@
           <td>${roleCell}</td>
           <td>${formatDateAdded(row.created_at)}</td>
           <td><span class="badge badge-green">Active</span></td>
-          <td style="text-align:center;">${actionsCell}</td>
+          <td style="text-align:center; white-space:nowrap;">${actionsCellHtml}</td>
           <td style="text-align:center;"><span style="color:var(--text-muted);font-size:0.75rem;">—</span></td>
         `;
         tbody.appendChild(tr);
@@ -1023,6 +1052,71 @@
         }
       });
     }
+
+    // --- Add Member to Employee Directory ---
+    window.addToDirectory = async function(userId, email, fullName) {
+      if (!email) {
+        showToast('Cannot add member: Email is missing.', true);
+        return;
+      }
+      
+      const parts = (fullName || '').trim().split(/\s+/);
+      const lastName = parts.pop() || '';
+      const firstName = parts.join(' ') || '';
+
+      try {
+        showToast('Adding employee to directory...');
+        
+        // 1. Generate employee number
+        let empNum = '';
+        try {
+          const { data, error: seqError } = await sb.rpc('generate_employee_number');
+          if (!seqError && data) {
+            empNum = data;
+          }
+        } catch (seqErr) {
+          console.warn('RPC generate_employee_number failed, trying fallback:', seqErr);
+        }
+
+        if (!empNum) {
+          const { count, error: countErr } = await sb
+            .from('employees')
+            .select('*', { count: 'exact', head: true });
+          if (countErr) throw countErr;
+          empNum = 'BK-' + String((count || 0) + 1).padStart(4, '0');
+        }
+
+        // 2. Insert into employees table
+        const insertPayload = {
+          email: email.toLowerCase().trim(),
+          first_name: firstName || 'N/A',
+          last_name: lastName || 'N/A',
+          employee_number: empNum,
+          company_id: currentCompanyId || null,
+          employment_status: 'Active',
+          date_of_birth: '1970-01-01',
+          address: 'N/A',
+          contact_number: 'N/A',
+          emergency_contact_number: 'N/A'
+        };
+
+        if (userId) {
+          insertPayload.id = userId;
+        }
+
+        const { error: insertErr } = await sb
+          .from('employees')
+          .insert([insertPayload]);
+
+        if (insertErr) throw insertErr;
+
+        showToast('Successfully added to Employee Directory!');
+        await loadAllMembers();
+      } catch (err) {
+        console.error('Error adding to directory:', err);
+        showToast('Failed to add employee: ' + err.message, true);
+      }
+    };
 
     function escapeHtml(str) {
       if (!str) return '';
