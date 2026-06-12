@@ -95,6 +95,26 @@
     body, .dash-main {
       background: #ffffff !important;
     }
+
+    /* ── Attendance Status CSS ── */
+    .status-btn {
+      transition: opacity 0.2s;
+    }
+    .status-btn:hover {
+      opacity: 0.8;
+    }
+    .status-btn .status-circle {
+      transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s, border-color 0.2s;
+    }
+    .status-btn.active .status-circle {
+      transform: scale(1.25);
+      box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.1);
+      border-color: #09090b !important;
+    }
+    .status-btn.active .status-label {
+      font-weight: 700 !important;
+      color: var(--text-primary) !important;
+    }
   </style>
 </head>
 <body>
@@ -285,7 +305,44 @@
     <!-- Main -->
     <div class="dash-main">
       <div class="dash-content">
-        <h1 style="font-size: 1.5rem; font-weight: 600; color: var(--text-primary); margin-bottom: 2rem;">Welcome back, <span id="welcome-name"></span></h1>
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 2rem; flex-wrap: wrap; gap: 1.5rem;">
+          <div>
+            <h1 style="font-size: 1.5rem; font-weight: 600; color: var(--text-primary); margin: 0;">Welcome back, <span id="welcome-name"></span></h1>
+          </div>
+          <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 0.75rem;">
+            <!-- Date and Time -->
+            <div style="text-align: right; font-family: 'Commissioner', sans-serif;">
+              <div id="current-date" style="font-size: 0.95rem; font-weight: 700; color: var(--text-primary);"></div>
+              <div id="current-time" style="font-size: 1.25rem; font-weight: 800; color: var(--text-primary); margin-top: 0.1rem; letter-spacing: -0.02em;"></div>
+            </div>
+            
+            <!-- Status Container -->
+            <div style="background: #ffffff; border: 1px solid var(--border); border-radius: 20px; padding: 0.65rem 1.25rem; box-shadow: 0 4px 12px rgba(0,0,0,0.03); display: flex; flex-direction: column; align-items: center; min-width: 220px;">
+              <span style="font-size: 0.68rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.05em; margin-bottom: 0.5rem; align-self: flex-start; margin-left: 0.25rem;">Status</span>
+              <div style="display: flex; gap: 1.25rem; align-items: center; justify-content: center; width: 100%;">
+                
+                <!-- Available (Green) -->
+                <button id="status-btn-available" class="status-btn" onclick="App.setStatus('available')" style="background: none; border: none; padding: 0; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 0.35rem; width: 52px; outline: none;">
+                  <div class="status-circle" style="width: 24px; height: 24px; border-radius: 50%; background: #22c55e; border: 2px solid transparent; box-sizing: border-box;"></div>
+                  <span class="status-label" style="font-size: 0.65rem; font-weight: 600; color: var(--text-secondary);">Available</span>
+                </button>
+                
+                <!-- On Break (Orange) -->
+                <button id="status-btn-break" class="status-btn" onclick="App.setStatus('break')" style="background: none; border: none; padding: 0; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 0.35rem; width: 52px; outline: none;">
+                  <div class="status-circle" style="width: 24px; height: 24px; border-radius: 50%; background: #f97316; border: 2px solid transparent; box-sizing: border-box;"></div>
+                  <span class="status-label" style="font-size: 0.65rem; font-weight: 600; color: var(--text-secondary);">On Break</span>
+                </button>
+                
+                <!-- Offline (Red) -->
+                <button id="status-btn-offline" class="status-btn" onclick="App.setStatus('offline')" style="background: none; border: none; padding: 0; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 0.35rem; width: 52px; outline: none;">
+                  <div class="status-circle" style="width: 24px; height: 24px; border-radius: 50%; background: #ef4444; border: 2px solid transparent; box-sizing: border-box;"></div>
+                  <span class="status-label" style="font-size: 0.65rem; font-weight: 600; color: var(--text-secondary);">Offline</span>
+                </button>
+                
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
     </div>
@@ -300,13 +357,128 @@
   <script src="js/sidebar.js"></script>
   <script>
     'use strict';
-    (async function init() {
-      const user = await BKAuth.requireAuth('admin.html');
-      if (!user) return;
-      const name = user.user_metadata?.full_name || user.email.split('@')[0];
-      const welcomeName = document.getElementById('welcome-name');
-      if (welcomeName) welcomeName.textContent = name;
-    })();
+    
+    function updateDateTime() {
+      const dateEl = document.getElementById('current-date');
+      const timeEl = document.getElementById('current-time');
+      if (!dateEl || !timeEl) return;
+      
+      const d = new Date();
+      const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      
+      const dayName = days[d.getDay()];
+      const monthName = months[d.getMonth()];
+      const dayNum = String(d.getDate()).padStart(2, '0');
+      const year = d.getFullYear();
+      
+      dateEl.textContent = `${dayName} ${monthName} ${dayNum}, ${year}`;
+      
+      let hours = d.getHours();
+      const minutes = String(d.getMinutes()).padStart(2, '0');
+      const ampm = hours >= 12 ? 'PM' : 'AM';
+      hours = hours % 12;
+      hours = hours ? hours : 12;
+      const hoursStr = String(hours).padStart(2, '0');
+      
+      timeEl.textContent = `${hoursStr}:${minutes} ${ampm}`;
+    }
+
+    function toast(msg, type = 'success') {
+      const container = document.getElementById('toast-container');
+      const el = document.createElement('div');
+      el.className = `toast toast-${type}`;
+      el.textContent = msg;
+      container.appendChild(el);
+      setTimeout(() => el.remove(), 3500);
+    }
+
+    const App = {
+      currentUser: null,
+      companyId: null,
+      employeeId: null,
+      currentStatus: 'offline',
+
+      async init() {
+        updateDateTime();
+        setInterval(updateDateTime, 1000);
+
+        try {
+          this.currentUser = await BKAuth.requireAuth('admin.html');
+          if (!this.currentUser) return;
+
+          const name = this.currentUser.user_metadata?.full_name || this.currentUser.email.split('@')[0];
+          const welcomeName = document.getElementById('welcome-name');
+          if (welcomeName) welcomeName.textContent = name;
+
+          const roleInfo = await BKAuth.getUserRole();
+          if (!roleInfo) return;
+
+          const { data: co } = await BKAuth.sb.from('companies').select('id').eq('tenant_id', roleInfo.tenantId).limit(1).maybeSingle();
+          this.companyId = co?.id;
+          if (!this.companyId) return;
+
+          const { data: emp } = await BKAuth.sb.from('employees').select('id').eq('email_address', this.currentUser.email).limit(1).maybeSingle();
+          this.employeeId = emp?.id;
+          if (!this.employeeId) return;
+
+          const { data: latestLog } = await BKAuth.sb
+            .from('attendance_logs')
+            .select('status')
+            .eq('employee_id', this.employeeId)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          this.currentStatus = latestLog?.status || 'offline';
+          this.updateStatusUI(this.currentStatus);
+
+        } catch (err) {
+          console.error('Initialization error:', err);
+        }
+      },
+
+      updateStatusUI(status) {
+        document.querySelectorAll('.status-btn').forEach(btn => {
+          btn.classList.remove('active');
+        });
+
+        const activeBtn = document.getElementById(`status-btn-${status === 'break' ? 'break' : status}`);
+        if (activeBtn) {
+          activeBtn.classList.add('active');
+        }
+      },
+
+      async setStatus(status) {
+        if (!this.employeeId || !this.companyId) {
+          toast('Cannot set status: Employee profile not found in directory.', 'error');
+          return;
+        }
+
+        if (status === this.currentStatus) return;
+
+        try {
+          const payload = {
+            company_id: this.companyId,
+            employee_id: this.employeeId,
+            status: status
+          };
+
+          const { error } = await BKAuth.sb.from('attendance_logs').insert([payload]);
+          if (error) throw error;
+
+          this.currentStatus = status;
+          this.updateStatusUI(status);
+          toast(`Status updated to ${status === 'break' ? 'On Break' : status.charAt(0).toUpperCase() + status.slice(1)}.`, 'success');
+        } catch (err) {
+          toast('Error updating status: ' + err.message, 'error');
+        }
+      }
+    };
+
+    document.addEventListener('DOMContentLoaded', () => {
+      App.init();
+    });
   </script>
 
 <script defer src="/_vercel/speed-insights/script.js"></script>
