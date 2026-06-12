@@ -490,6 +490,8 @@
       <!-- Top Bar -->
       <div class="top-bar">
         <span class="top-bar-title">Team Tasks & Milestones</span>
+        <div style="flex: 1;"></div>
+        <div id="edit-mode-controls" style="display: flex; gap: 0.5rem; align-items: center;"></div>
       </div>
 
       <div class="content-area">
@@ -525,7 +527,7 @@
             <div class="section-card">
               <div class="section-header">
                 <div class="section-title">Daily Tasks</div>
-                <button class="btn btn-primary btn-sm btn-add-task-cls" style="display: none;" onclick="App.openTaskModal('', 'daily')">+ Add Task</button>
+                <button class="btn btn-primary btn-sm btn-add-task-cls" style="display: none;" onclick="App.addTaskInline('daily')">+ Add Task</button>
               </div>
               <div class="table-wrap">
                 <table class="task-table">
@@ -548,7 +550,7 @@
             <div class="section-card">
               <div class="section-header">
                 <div class="section-title">Weekly Tasks</div>
-                <button class="btn btn-primary btn-sm btn-add-task-cls" style="display: none;" onclick="App.openTaskModal('', 'weekly')">+ Add Task</button>
+                <button class="btn btn-primary btn-sm btn-add-task-cls" style="display: none;" onclick="App.addTaskInline('weekly')">+ Add Task</button>
               </div>
               <div class="table-wrap">
                 <table class="task-table">
@@ -571,7 +573,7 @@
             <div class="section-card">
               <div class="section-header">
                 <div class="section-title">Monthly Tasks</div>
-                <button class="btn btn-primary btn-sm btn-add-task-cls" style="display: none;" onclick="App.openTaskModal('', 'monthly')">+ Add Task</button>
+                <button class="btn btn-primary btn-sm btn-add-task-cls" style="display: none;" onclick="App.addTaskInline('monthly')">+ Add Task</button>
               </div>
               <div class="table-wrap">
                 <table class="task-table">
@@ -597,7 +599,7 @@
             <div class="section-card">
               <div class="section-header">
                 <div class="section-title">Milestones</div>
-                <button class="btn btn-primary btn-sm" id="btn-add-milestone" style="display: none;" onclick="App.openMilestoneModal()">+ Add Milestone</button>
+                <button class="btn btn-primary btn-sm" id="btn-add-milestone" style="display: none;" onclick="App.addMilestoneInline()">+ Add Milestone</button>
               </div>
               <div class="table-wrap">
                 <table class="task-table">
@@ -747,12 +749,17 @@
       subordinates: [], // [{ id, first_name, last_name, employee_number }]
       selectedEmployeeId: null,
       hasEditAccess: false,
+      memberRoles: {}, // user_id -> role
 
-      // Current view states
+      // Current view states & inline editing trackers
       activeMainTab: 'tasks', // 'tasks', 'milestones'
       tasks: [],
       milestones: [],
-      confirmCallback: null,
+      editMode: false,
+      dirtyTasks: {}, // id -> { title, description, kpi, task_type, isNew }
+      dirtyMilestones: {}, // id -> { title, description, isNew }
+      deletedTaskIds: new Set(),
+      deletedMilestoneIds: new Set(),
 
       async init() {
         const authInfo = await window.BKAuth.checkRoleGate(['owner', 'admin', 'director', 'manager', 'employee', 'hr'], '../login.html');
@@ -783,6 +790,19 @@
         if (!this.loggedInEmployee && !this.isOwnerOrAdmin) {
           toast('Error: Employee profile not found.', 'error');
           return;
+        }
+
+        // Fetch all tenant member roles to verify superior/subordinate levels
+        try {
+          const { data: members } = await this.sb.from('tenant_members').select('user_id, role').eq('tenant_id', authInfo.tenantId);
+          this.memberRoles = {};
+          if (members) {
+            members.forEach(m => {
+              this.memberRoles[m.user_id] = m.role;
+            });
+          }
+        } catch(e) {
+          this.memberRoles = {};
         }
 
         // Fetch company structure settings to determine subordinates
@@ -899,8 +919,123 @@
         }
       },
 
+      isSuperior(A_Id, B_Id) {
+        if (!A_Id || !B_Id || A_Id === B_Id) return false;
+
+        // 1. Check Owner/Admin role
+        const roleA = this.memberRoles[A_Id] || '';
+        const roleB = this.memberRoles[B_Id] || '';
+        const isOwnerAdminA = ['owner', 'admin'].includes(roleA);
+        const isOwnerAdminB = ['owner', 'admin'].includes(roleB);
+
+        if (isOwnerAdminA && !isOwnerAdminB) return true;
+        if (!isOwnerAdminA && isOwnerAdminB) return false;
+        if (isOwnerAdminA && isOwnerAdminB) return false; // Equal rank
+
+        // 2. Check company structure
+        const struct = this.companyStructure || { departments: [] };
+        let deptAIdx = -1;
+        let deptBIdx = -1;
+        let isDeptHeadA = false;
+        let isDeptHeadB = false;
+        let isManagerA = false;
+        let isManagerB = false;
+
+        struct.departments.forEach((dept, dIdx) => {
+          if (dept.managerId === A_Id) {
+            deptAIdx = dIdx;
+            isDeptHeadA = true;
+          }
+          if (dept.managerId === B_Id) {
+            deptBIdx = dIdx;
+            isDeptHeadB = true;
+          }
+
+          if (dept.subteams) {
+            dept.subteams.forEach(sub => {
+              if (sub.managerId === A_Id) {
+                deptAIdx = dIdx;
+                isManagerA = true;
+              }
+              if (sub.managerId === B_Id) {
+                deptBIdx = dIdx;
+                isManagerB = true;
+              }
+              if (sub.colleagueIds) {
+                if (sub.colleagueIds.includes(A_Id)) deptAIdx = dIdx;
+                if (sub.colleagueIds.includes(B_Id)) deptBIdx = dIdx;
+              }
+            });
+          }
+        });
+
+        // If they are in different departments, they don't have direct superiority unless one is Admin
+        if (deptAIdx !== deptBIdx || deptAIdx === -1) {
+          return false;
+        }
+
+        // Same department hierarchy: Dept Head (3) > Subteam Manager (2) > Colleague (1)
+        let tierA = 1;
+        if (isDeptHeadA) tierA = 3;
+        else if (isManagerA) tierA = 2;
+
+        let tierB = 1;
+        if (isDeptHeadB) tierB = 3;
+        else if (isManagerB) tierB = 2;
+
+        return tierA > tierB;
+      },
+
+      canEditTask(task) {
+        if (!task) return false;
+        // If task is not saved yet (newly created in UI), it can always be edited by the creator (the logged-in user)
+        if (task.id && (task.id.startsWith('temp_') || !task.created_at)) {
+          return true;
+        }
+
+        const loggedId = this.currentUser.id;
+
+        // Owners and Admins can edit everything
+        if (this.isOwnerOrAdmin) {
+          return true;
+        }
+
+        // You cannot edit tasks assigned to yourself unless you are Owner/Admin
+        if (task.assigned_to === loggedId) {
+          return false;
+        }
+
+        // Is the assignee a subordinate of the logged-in user?
+        const isAssigneeSubordinate = this.isSuperior(loggedId, task.assigned_to);
+        if (!isAssigneeSubordinate) {
+          return false;
+        }
+
+        // Is the creator a superior of the logged-in user?
+        const isCreatorSuperior = this.isSuperior(task.assigned_by, loggedId);
+        if (isCreatorSuperior) {
+          return false;
+        }
+
+        return true;
+      },
+
       async selectEmployee(empId) {
+        if (this.editMode && (Object.keys(this.dirtyTasks).length > 0 || Object.keys(this.dirtyMilestones).length > 0 || this.deletedTaskIds.size > 0 || this.deletedMilestoneIds.size > 0)) {
+          toast('Saving current changes...', 'info');
+          const success = await this.saveAllChanges(true);
+          if (!success) {
+            // Keep selection on the old employee if save failed
+            document.getElementById('select-employee').value = this.selectedEmployeeId;
+            return;
+          }
+        }
         this.selectedEmployeeId = empId;
+        // Reset local modification states for the new employee
+        this.dirtyTasks = {};
+        this.dirtyMilestones = {};
+        this.deletedTaskIds = new Set();
+        this.deletedMilestoneIds = new Set();
         await this.loadEmployeeData();
       },
 
@@ -957,25 +1092,55 @@
         const btnAddTasks = document.querySelectorAll('.btn-add-task-cls');
         const btnAddMilestone = document.getElementById('btn-add-milestone');
         
-        if (this.hasEditAccess) {
+        // Show/hide actions column header based on edit mode state
+        const thActions = document.querySelectorAll('.th-actions');
+        thActions.forEach(el => {
+          el.style.display = this.editMode ? '' : 'none';
+        });
+
+        // Top bar controls element for Edit Mode
+        const controls = document.getElementById('edit-mode-controls');
+        if (controls) {
+          if (!this.hasEditAccess) {
+            controls.innerHTML = '';
+          } else {
+            if (this.editMode) {
+              controls.innerHTML = `
+                <button class="btn btn-primary btn-sm" onclick="App.saveAllChanges()">Save Changes</button>
+                <button class="btn btn-outline btn-sm" onclick="App.discardChanges()">Discard</button>
+              `;
+            } else {
+              controls.innerHTML = `
+                <button class="btn btn-outline btn-sm" onclick="App.enterEditMode()">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 0.2rem;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                  Edit Mode
+                </button>
+              `;
+            }
+          }
+        }
+
+        if (this.hasEditAccess && this.editMode) {
           if (editInd) editInd.style.display = 'flex';
           if (viewInd) viewInd.style.display = 'none';
           btnAddTasks.forEach(btn => btn.style.display = 'inline-flex');
           if (btnAddMilestone) btnAddMilestone.style.display = 'inline-flex';
-          // Show actions column
-          document.querySelectorAll('.th-actions').forEach(el => el.style.display = '');
         } else {
           if (editInd) editInd.style.display = 'none';
           if (viewInd) viewInd.style.display = 'flex';
           btnAddTasks.forEach(btn => btn.style.display = 'none');
           if (btnAddMilestone) btnAddMilestone.style.display = 'none';
-          // Hide actions column
-          document.querySelectorAll('.th-actions').forEach(el => el.style.display = 'none');
         }
       },
 
       async loadEmployeeData() {
         this.determinePermissions();
+        
+        // Force-exit editMode if permissions no longer allow edit access for this employee
+        if (!this.hasEditAccess) {
+          this.editMode = false;
+        }
+
         this.updateUIIndicators();
         
         // Clear tasks tables
@@ -1026,11 +1191,218 @@
         }
       },
 
+      enterEditMode() {
+        this.editMode = true;
+        this.dirtyTasks = {};
+        this.dirtyMilestones = {};
+        this.deletedTaskIds = new Set();
+        this.deletedMilestoneIds = new Set();
+        this.renderTasks();
+        this.renderMilestones();
+      },
+
+      discardChanges() {
+        this.editMode = false;
+        this.dirtyTasks = {};
+        this.dirtyMilestones = {};
+        this.deletedTaskIds = new Set();
+        this.deletedMilestoneIds = new Set();
+        this.loadEmployeeData();
+      },
+
+      trackTaskChange(id, field, value) {
+        if (!this.dirtyTasks[id]) {
+          const task = this.tasks.find(t => t.id === id);
+          this.dirtyTasks[id] = {
+            title: task?.title ?? '',
+            description: task?.description ?? '',
+            kpi: task?.kpi ?? '',
+            task_type: task?.task_type ?? 'daily',
+            isNew: !task
+          };
+        }
+        this.dirtyTasks[id][field] = value;
+      },
+
+      trackMilestoneChange(id, field, value) {
+        if (!this.dirtyMilestones[id]) {
+          const ms = this.milestones.find(m => m.id === id);
+          this.dirtyMilestones[id] = {
+            title: ms?.title ?? '',
+            description: ms?.description ?? '',
+            isNew: !ms
+          };
+        }
+        this.dirtyMilestones[id][field] = value;
+      },
+
+      addTaskInline(type) {
+        // Automatically activate editMode if not already on
+        if (!this.editMode) {
+          this.enterEditMode();
+        }
+        const tempId = 'temp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        const newTask = {
+          id: tempId,
+          title: '',
+          description: '',
+          kpi: '',
+          task_type: type,
+          assigned_to: this.selectedEmployeeId,
+          assigned_by: this.currentUser.id
+        };
+        this.tasks.push(newTask);
+        this.trackTaskChange(tempId, 'title', '');
+        this.renderTasks();
+      },
+
+      addMilestoneInline() {
+        // Automatically activate editMode if not already on
+        if (!this.editMode) {
+          this.enterEditMode();
+        }
+        const tempId = 'temp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        const newMs = {
+          id: tempId,
+          title: '',
+          description: '',
+          assigned_to: this.selectedEmployeeId,
+          assigned_by: this.currentUser.id
+        };
+        this.milestones.push(newMs);
+        this.trackMilestoneChange(tempId, 'title', '');
+        this.renderMilestones();
+      },
+
+      deleteTaskInline(id) {
+        if (id.startsWith('temp_')) {
+          this.tasks = this.tasks.filter(t => t.id !== id);
+          delete this.dirtyTasks[id];
+        } else {
+          this.deletedTaskIds.add(id);
+        }
+        this.renderTasks();
+      },
+
+      deleteMilestoneInline(id) {
+        if (id.startsWith('temp_')) {
+          this.milestones = this.milestones.filter(m => m.id !== id);
+          delete this.dirtyMilestones[id];
+        } else {
+          this.deletedMilestoneIds.add(id);
+        }
+        this.renderMilestones();
+      },
+
+      async saveAllChanges(isSwitchingEmployee = false) {
+        // Validation check for empty titles/descriptions
+        for (const id in this.dirtyTasks) {
+          const task = this.dirtyTasks[id];
+          if (!task.title.trim()) {
+            toast('Task title cannot be empty.', 'error');
+            return false;
+          }
+          if (!task.description.trim()) {
+            toast('Task description cannot be empty.', 'error');
+            return false;
+          }
+        }
+        for (const id in this.dirtyMilestones) {
+          const ms = this.dirtyMilestones[id];
+          if (!ms.title.trim()) {
+            toast('Milestone title cannot be empty.', 'error');
+            return false;
+          }
+          if (!ms.description.trim()) {
+            toast('Milestone description cannot be empty.', 'error');
+            return false;
+          }
+        }
+
+        try {
+          // Deletes
+          if (this.deletedTaskIds.size > 0) {
+            const { error } = await this.sb.from('team_tasks').delete().in('id', Array.from(this.deletedTaskIds));
+            if (error) throw error;
+          }
+          if (this.deletedMilestoneIds.size > 0) {
+            const { error } = await this.sb.from('team_milestones').delete().in('id', Array.from(this.deletedMilestoneIds));
+            if (error) throw error;
+          }
+
+          // Updates & Inserts
+          const tasksToInsert = [];
+          for (const id in this.dirtyTasks) {
+            const task = this.dirtyTasks[id];
+            const payload = {
+              company_id: this.companyId,
+              assigned_to: this.selectedEmployeeId,
+              assigned_by: this.currentUser.id,
+              title: task.title.trim(),
+              description: task.description.trim(),
+              kpi: task.kpi.trim() || null,
+              task_type: task.task_type
+            };
+
+            if (task.isNew) {
+              tasksToInsert.push(payload);
+            } else {
+              const { error } = await this.sb.from('team_tasks').update(payload).eq('id', id);
+              if (error) throw error;
+            }
+          }
+
+          if (tasksToInsert.length > 0) {
+            const { error } = await this.sb.from('team_tasks').insert(tasksToInsert);
+            if (error) throw error;
+          }
+
+          const milestonesToInsert = [];
+          for (const id in this.dirtyMilestones) {
+            const ms = this.dirtyMilestones[id];
+            const payload = {
+              company_id: this.companyId,
+              assigned_to: this.selectedEmployeeId,
+              assigned_by: this.currentUser.id,
+              title: ms.title.trim(),
+              description: ms.description.trim()
+            };
+
+            if (ms.isNew) {
+              milestonesToInsert.push(payload);
+            } else {
+              const { error } = await this.sb.from('team_milestones').update(payload).eq('id', id);
+              if (error) throw error;
+            }
+          }
+
+          if (milestonesToInsert.length > 0) {
+            const { error } = await this.sb.from('team_milestones').insert(milestonesToInsert);
+            if (error) throw error;
+          }
+
+          toast('All changes saved successfully.', 'success');
+
+          if (!isSwitchingEmployee) {
+            this.editMode = false;
+            this.dirtyTasks = {};
+            this.dirtyMilestones = {};
+            this.deletedTaskIds = new Set();
+            this.deletedMilestoneIds = new Set();
+            await this.loadEmployeeData();
+          }
+          return true;
+        } catch (err) {
+          toast('Error saving changes: ' + err.message, 'error');
+          return false;
+        }
+      },
+
       renderTasks() {
         const types = ['daily', 'weekly', 'monthly'];
         types.forEach(type => {
           const tbody = document.getElementById(`${type}-tbody`);
-          const activeTasks = this.tasks.filter(t => t.task_type === type);
+          const activeTasks = this.tasks.filter(t => t.task_type === type && !this.deletedTaskIds.has(t.id));
 
           if (activeTasks.length === 0) {
             tbody.innerHTML = `<tr><td colspan="4" class="empty-row">No ${type} tasks assigned.</td></tr>`;
@@ -1038,262 +1410,105 @@
           }
 
           tbody.innerHTML = activeTasks.map(task => {
-            const actionsHtml = this.hasEditAccess 
-              ? `<td style="text-align: center;">
-                  <div style="display: flex; gap: 0.35rem; justify-content: center;">
-                    <button class="btn-edit-link" onclick="App.openTaskModal('${esc(task.id)}', '${esc(type)}')" title="Edit Task">
-                      <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                    </button>
-                    <button class="btn-danger-link" onclick="App.confirmDeleteTask('${esc(task.id)}')" title="Delete Task">
-                      <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
-                    </button>
-                  </div>
-                 </td>`
-              : '';
+            const editable = this.editMode && this.canEditTask(task);
             
-            return `<tr data-task-id="${esc(task.id)}">
-              <td style="font-weight: 700;">${esc(task.title)}</td>
-              <td style="white-space: pre-wrap; line-height: 1.4;">${formatTextWithLinks(task.description)}</td>
-              <td>${task.kpi ? esc(task.kpi) : '<span style="color:var(--text-muted); font-style:italic;">None</span>'}</td>
-              ${actionsHtml}
-            </tr>`;
+            if (editable) {
+              const titleVal = this.dirtyTasks[task.id]?.title ?? task.title;
+              const descVal = this.dirtyTasks[task.id]?.description ?? task.description;
+              const kpiVal = this.dirtyTasks[task.id]?.kpi ?? (task.kpi || '');
+              
+              return `<tr data-task-id="${esc(task.id)}">
+                <td>
+                  <input type="text" class="form-input" value="${esc(titleVal)}" 
+                    oninput="App.trackTaskChange('${esc(task.id)}', 'title', this.value)" 
+                    placeholder="Task Title" style="width: 100%; box-sizing: border-box;" />
+                </td>
+                <td>
+                  <textarea class="form-textarea" rows="2" 
+                    oninput="App.trackTaskChange('${esc(task.id)}', 'description', this.value)" 
+                    placeholder="Description / Links" style="width: 100%; box-sizing: border-box; min-height: 50px;">${esc(descVal)}</textarea>
+                </td>
+                <td>
+                  <input type="text" class="form-input" value="${esc(kpiVal)}" 
+                    oninput="App.trackTaskChange('${esc(task.id)}', 'kpi', this.value)" 
+                    placeholder="KPI (optional)" style="width: 100%; box-sizing: border-box;" />
+                </td>
+                <td style="text-align: center; vertical-align: middle;">
+                  <button class="btn-danger-link" onclick="App.deleteTaskInline('${esc(task.id)}')" title="Remove Task">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                  </button>
+                </td>
+              </tr>`;
+            } else {
+              const actionsHtml = this.editMode
+                ? `<td style="text-align: center; color: var(--text-muted); font-size: 0.75rem; font-style: italic; vertical-align: middle;">Read Only</td>`
+                : '';
+              
+              return `<tr data-task-id="${esc(task.id)}">
+                <td style="font-weight: 700; vertical-align: middle;">${esc(task.title)}</td>
+                <td style="white-space: pre-wrap; line-height: 1.4; vertical-align: middle;">${formatTextWithLinks(task.description)}</td>
+                <td style="vertical-align: middle;">${task.kpi ? esc(task.kpi) : '<span style="color:var(--text-muted); font-style:italic;">None</span>'}</td>
+                ${actionsHtml}
+              </tr>`;
+            }
           }).join('');
         });
 
-        // Apply correct display state on render
         this.updateUIIndicators();
       },
 
       renderMilestones() {
         const tbody = document.getElementById('milestones-tbody');
+        const activeMilestones = this.milestones.filter(ms => !this.deletedMilestoneIds.has(ms.id));
 
-        if (this.milestones.length === 0) {
+        if (activeMilestones.length === 0) {
           tbody.innerHTML = `<tr><td colspan="3" class="empty-row">No milestones registered.</td></tr>`;
           return;
         }
 
-        tbody.innerHTML = this.milestones.map(ms => {
-          const actionsHtml = this.hasEditAccess 
-            ? `<td style="text-align: center;">
-                <div style="display: flex; gap: 0.35rem; justify-content: center;">
-                  <button class="btn-edit-link" onclick="App.openMilestoneModal('${esc(ms.id)}')" title="Edit Milestone">
-                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                  </button>
-                  <button class="btn-danger-link" onclick="App.confirmDeleteMilestone('${esc(ms.id)}')" title="Delete Milestone">
-                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
-                  </button>
-                </div>
-               </td>`
-            : '';
+        tbody.innerHTML = activeMilestones.map(ms => {
+          const editable = this.editMode && this.canEditTask(ms);
 
-          return `<tr data-milestone-id="${esc(ms.id)}">
-            <td style="font-weight: 700;">${esc(ms.title)}</td>
-            <td style="white-space: pre-wrap; line-height: 1.4;">${formatTextWithLinks(ms.description)}</td>
-            ${actionsHtml}
-          </tr>`;
+          if (editable) {
+            const titleVal = this.dirtyMilestones[ms.id]?.title ?? ms.title;
+            const descVal = this.dirtyMilestones[ms.id]?.description ?? ms.description;
+
+            return `<tr data-milestone-id="${esc(ms.id)}">
+              <td>
+                <input type="text" class="form-input" value="${esc(titleVal)}" 
+                  oninput="App.trackMilestoneChange('${esc(ms.id)}', 'title', this.value)" 
+                  placeholder="Milestone Title" style="width: 100%; box-sizing: border-box;" />
+              </td>
+              <td>
+                <textarea class="form-textarea" rows="2" 
+                  oninput="App.trackMilestoneChange('${esc(ms.id)}', 'description', this.value)" 
+                  placeholder="Description / Links" style="width: 100%; box-sizing: border-box; min-height: 50px;">${esc(descVal)}</textarea>
+              </td>
+              <td style="text-align: center; vertical-align: middle;">
+                <button class="btn-danger-link" onclick="App.deleteMilestoneInline('${esc(ms.id)}')" title="Remove Milestone">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                </button>
+              </td>
+            </tr>`;
+          } else {
+            const actionsHtml = this.editMode
+              ? `<td style="text-align: center; color: var(--text-muted); font-size: 0.75rem; font-style: italic; vertical-align: middle;">Read Only</td>`
+              : '';
+
+            return `<tr data-milestone-id="${esc(ms.id)}">
+              <td style="font-weight: 700; vertical-align: middle;">${esc(ms.title)}</td>
+              <td style="white-space: pre-wrap; line-height: 1.4; vertical-align: middle;">${formatTextWithLinks(ms.description)}</td>
+              ${actionsHtml}
+            </tr>`;
+          }
         }).join('');
 
         this.updateUIIndicators();
-      },
-
-      // ── Task Modal Actions ──
-      openTaskModal(taskId = '', type = 'daily') {
-        const modal = document.getElementById('task-modal');
-        const titleEl = document.getElementById('task-modal-title');
-        const idInput = document.getElementById('task-id');
-        const typeInput = document.getElementById('task-type');
-        const titleInput = document.getElementById('task-title-input');
-        const descInput = document.getElementById('task-desc-input');
-        const kpiInput = document.getElementById('task-kpi-input');
-
-        idInput.value = taskId;
-        typeInput.value = type;
-
-        if (taskId) {
-          titleEl.textContent = `Edit ${type.charAt(0).toUpperCase() + type.slice(1)} Task`;
-          const task = this.tasks.find(t => t.id === taskId);
-          if (task) {
-            titleInput.value = task.title;
-            descInput.value = task.description;
-            kpiInput.value = task.kpi || '';
-          }
-        } else {
-          titleEl.textContent = `Add New ${type.charAt(0).toUpperCase() + type.slice(1)} Task`;
-          titleInput.value = '';
-          descInput.value = '';
-          kpiInput.value = '';
-        }
-
-        modal.classList.add('open');
-      },
-
-      closeTaskModal() {
-        document.getElementById('task-modal').classList.remove('open');
-      },
-
-      async saveTask(e) {
-        e.preventDefault();
-        const id = document.getElementById('task-id').value;
-        const type = document.getElementById('task-type').value;
-        const title = document.getElementById('task-title-input').value.trim();
-        const description = document.getElementById('task-desc-input').value.trim();
-        const kpi = document.getElementById('task-kpi-input').value.trim();
-
-        if (!title || !description) return;
-
-        const btn = document.getElementById('btn-save-task');
-        btn.disabled = true;
-
-        const body = {
-          company_id: this.companyId,
-          assigned_to: this.selectedEmployeeId,
-          assigned_by: this.currentUser.id,
-          title,
-          description,
-          kpi: kpi || null,
-          task_type: type
-        };
-
-        try {
-          if (id) {
-            const { error } = await this.sb.from('team_tasks').update(body).eq('id', id);
-            if (error) throw error;
-            toast('Task updated successfully.', 'success');
-          } else {
-            const { error } = await this.sb.from('team_tasks').insert([body]);
-            if (error) throw error;
-            toast('Task added successfully.', 'success');
-          }
-          this.closeTaskModal();
-          await this.loadEmployeeData();
-        } catch(err) {
-          toast('Error saving task: ' + err.message, 'error');
-        } finally {
-          btn.disabled = false;
-        }
-      },
-
-      confirmDeleteTask(id) {
-        const task = this.tasks.find(t => t.id === id);
-        if (!task) return;
-        
-        this.openConfirmModal(`Are you sure you want to delete the task "${task.title}"?`, async () => {
-          try {
-            const { error } = await this.sb.from('team_tasks').delete().eq('id', id);
-            if (error) throw error;
-            toast('Task deleted.', 'success');
-            await this.loadEmployeeData();
-          } catch(err) {
-            toast('Error deleting task: ' + err.message, 'error');
-          }
-        });
-      },
-
-      // ── Milestone Modal Actions ──
-      openMilestoneModal(msId = '') {
-        const modal = document.getElementById('milestone-modal');
-        const titleEl = document.getElementById('milestone-modal-title');
-        const idInput = document.getElementById('milestone-id');
-        const titleInput = document.getElementById('milestone-title-input');
-        const descInput = document.getElementById('milestone-desc-input');
-
-        idInput.value = msId;
-
-        if (msId) {
-          titleEl.textContent = 'Edit Milestone';
-          const ms = this.milestones.find(m => m.id === msId);
-          if (ms) {
-            titleInput.value = ms.title;
-            descInput.value = ms.description;
-          }
-        } else {
-          titleEl.textContent = 'Add New Milestone';
-          titleInput.value = '';
-          descInput.value = '';
-        }
-
-        modal.classList.add('open');
-      },
-
-      closeMilestoneModal() {
-        document.getElementById('milestone-modal').classList.remove('open');
-      },
-
-      async saveMilestone(e) {
-        e.preventDefault();
-        const id = document.getElementById('milestone-id').value;
-        const title = document.getElementById('milestone-title-input').value.trim();
-        const description = document.getElementById('milestone-desc-input').value.trim();
-
-        if (!title || !description) return;
-
-        const btn = document.getElementById('btn-save-milestone');
-        btn.disabled = true;
-
-        const body = {
-          company_id: this.companyId,
-          assigned_to: this.selectedEmployeeId,
-          assigned_by: this.currentUser.id,
-          title,
-          description
-        };
-
-        try {
-          if (id) {
-            const { error } = await this.sb.from('team_milestones').update(body).eq('id', id);
-            if (error) throw error;
-            toast('Milestone updated successfully.', 'success');
-          } else {
-            const { error } = await this.sb.from('team_milestones').insert([body]);
-            if (error) throw error;
-            toast('Milestone added successfully.', 'success');
-          }
-          this.closeMilestoneModal();
-          await this.loadEmployeeData();
-        } catch(err) {
-          toast('Error saving milestone: ' + err.message, 'error');
-        } finally {
-          btn.disabled = false;
-        }
-      },
-
-      confirmDeleteMilestone(id) {
-        const ms = this.milestones.find(m => m.id === id);
-        if (!ms) return;
-
-        this.openConfirmModal(`Are you sure you want to delete the milestone "${ms.title}"?`, async () => {
-          try {
-            const { error } = await this.sb.from('team_milestones').delete().eq('id', id);
-            if (error) throw error;
-            toast('Milestone deleted.', 'success');
-            await this.loadEmployeeData();
-          } catch(err) {
-            toast('Error deleting milestone: ' + err.message, 'error');
-          }
-        });
-      },
-
-      // ── Custom Confirm Modal ──
-      openConfirmModal(msg, onYes) {
-        document.getElementById('confirm-message').textContent = msg;
-        this.confirmCallback = onYes;
-        document.getElementById('confirm-modal').classList.add('open');
-      },
-
-      closeConfirmModal() {
-        document.getElementById('confirm-modal').classList.remove('open');
-        this.confirmCallback = null;
       }
     };
 
     document.addEventListener('DOMContentLoaded', () => {
       App.init();
-
-      // Hook up confirm modal yes button
-      document.getElementById('btn-confirm-yes').addEventListener('click', () => {
-        if (App.confirmCallback) App.confirmCallback();
-        App.closeConfirmModal();
-      });
     });
 
     /* ── Nav (from main.js) ── */
