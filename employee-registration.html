@@ -507,6 +507,18 @@
     <a href="/admin" class="btn-primary" style="text-decoration:none; display:inline-flex; align-items:center; justify-content:center; margin:0 auto; padding:0.75rem 1.75rem; border-radius:var(--radius-sm); font-weight:700; color:#fff; background:var(--cyan); box-shadow:0 2px 12px rgba(6,182,212,0.25);">Sign In</a>
   </div>
 
+  <!-- Invitation Expired State (Hidden by default) -->
+  <div id="invitation-expired-state" class="container text-center" style="display:none; padding: 4rem 2rem; max-width: 600px; margin: 50px auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-md); text-align: center;">
+    <div style="width: 64px; height: 64px; margin: 0 auto 1.5rem; border-radius: 50%; background: rgba(245,158,11,0.08); border: 1.5px solid rgba(245,158,11,0.25); display: grid; place-items: center; color: var(--warning);">
+      <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin: 0 auto;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    </div>
+    <h2 style="font-size: 1.5rem; font-weight: 800; color: var(--text-1); margin-bottom: 0.5rem;">Invitation Expired</h2>
+    <p style="font-size: 0.95rem; line-height: 1.7; color: var(--text-2); margin-bottom: 1.75rem;">
+      This invitation has expired. Invitations expire exactly 3 days (72 hours) after they are issued. Please contact your administrator to receive a new invitation link.
+    </p>
+    <a href="index.html" class="btn-primary" style="text-decoration:none; display:inline-flex; align-items:center; justify-content:center; margin:0 auto; padding:0.75rem 1.75rem; border-radius:var(--radius-sm); font-weight:700; color:#fff; background:var(--cyan); box-shadow:0 2px 12px rgba(6,182,212,0.25);">Back to Homepage</a>
+  </div>
+
   <div class="page" id="registration-page">
 
     <!-- Page header -->
@@ -876,7 +888,7 @@
         inviteCompany = params.get('company') || '00000000-0000-0000-0000-000000000000';
         inviteRole = params.get('role') || 'hr';
         inviteEmail = params.get('email') || 'dev.test@brightkey.com';
-        return true;
+        return { valid: true };
       }
 
       inviteTenant = params.get('tenant') || '';
@@ -885,11 +897,28 @@
       inviteEmail = params.get('email') || '';
 
       if (!inviteTenant || !inviteCompany || !inviteRole || !inviteEmail || !sig) {
-        return false;
+        return { valid: false, reason: 'missing_params' };
       }
 
       const expectedSig = await generateSignature(inviteTenant, inviteCompany, inviteRole, inviteEmail);
-      return sig === expectedSig;
+      if (sig !== expectedSig) {
+        return { valid: false, reason: 'invalid_signature' };
+      }
+
+      // Check with backend to verify if it exists and has not expired (within 3 days)
+      try {
+        const url = `/api/verify-invitation?tenant=${encodeURIComponent(inviteTenant)}&company=${encodeURIComponent(inviteCompany)}&role=${encodeURIComponent(inviteRole)}&email=${encodeURIComponent(inviteEmail)}&sig=${encodeURIComponent(sig)}`;
+        const res = await fetch(url);
+        if (res.ok) {
+          const data = await res.json();
+          return data; // returns { valid: true } or { valid: false, reason: 'expired' | 'invalid_signature' | 'not_found' }
+        }
+      } catch (err) {
+        console.error('Failed to contact verify-invitation API:', err);
+      }
+
+      // Fallback if API is offline or returns error
+      return { valid: true };
     }
 
     /* ── File store ────────────────────────────────────────────────────── */
@@ -897,10 +926,14 @@
 
     (async function initEmpNumber() {
       // Validate secure invite link first
-      const isValid = await validateInvitation();
-      if (!isValid) {
+      const inviteStatus = await validateInvitation();
+      if (!inviteStatus.valid) {
         document.getElementById('registration-page').style.display = 'none';
-        document.getElementById('access-denied-state').style.display = 'block';
+        if (inviteStatus.reason === 'expired') {
+          document.getElementById('invitation-expired-state').style.display = 'block';
+        } else {
+          document.getElementById('access-denied-state').style.display = 'block';
+        }
         return;
       }
 

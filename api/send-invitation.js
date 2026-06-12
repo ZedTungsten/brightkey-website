@@ -97,7 +97,7 @@ export default async function handler(req, res) {
               <div style="font-family: sans-serif; padding: 24px; color: #374151; max-width: 600px; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 8px; background-color: #ffffff;">
                 <h2 style="color: #0891b2; font-weight: bold; margin-bottom: 20px; text-align: center;">Join BrightKey Solutions</h2>
                 <p>Hello ${full_name},</p>
-                <p>You have been invited to join the BrightKey Solutions workspace for your organization${role ? ` as a <strong>${role.replace('_', ' ')}</strong>` : ''}.</p>
+                <p>You have been invited to join the BrightKey Solutions workspace for your organization${role ? ` as a <strong>${role.replace('_', ' ')}</strong>` : ''}. Please note that this secure invitation link will expire in 3 days (72 hours).</p>
                 <p style="margin-top: 24px; text-align: center;">
                   <a href="${inviteLink}" style="background-color: #06b6d4; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">
                     Accept Invitation & Set Up Account
