@@ -865,17 +865,23 @@
       deletedMilestoneIds: new Set(),
 
       async init() {
-        const authInfo = await window.BKAuth.checkRoleGate(['owner', 'admin', 'director', 'manager', 'employee', 'hr'], '../login.html');
-        if (!authInfo) return;
+        const user = await window.BKAuth.requireAuth('../login.html');
+        if (!user) return;
+
+        const roleInfo = await window.BKAuth.getUserRole();
+        if (!roleInfo) {
+          window.location.href = '../login.html';
+          return;
+        }
 
         this.sb = window.BKAuth.sb;
-        this.currentUser = authInfo.user;
-        this.userRole = authInfo.role;
+        this.currentUser = user;
+        this.userRole = roleInfo.role;
         this.isOwnerOrAdmin = ['owner', 'admin'].includes(this.userRole);
 
         // Fetch company details
         try {
-          const { data: co } = await this.sb.from('companies').select('id').eq('tenant_id', authInfo.tenantId).limit(1).maybeSingle();
+          const { data: co } = await this.sb.from('companies').select('id').eq('tenant_id', roleInfo.tenantId).limit(1).maybeSingle();
           this.companyId = co?.id || null;
         } catch(e) { this.companyId = null; }
 
