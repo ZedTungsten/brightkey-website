@@ -1309,6 +1309,24 @@
       async load() {
         document.getElementById('dir-tbody').innerHTML = '<tr><td colspan="28" class="tbl-state">Loading employees…</td></tr>';
         try {
+          if (this.companyId) {
+            try {
+              const { data: settings } = await getSb()
+                .from('global_settings')
+                .select('value')
+                .eq('key', 'company_structure')
+                .eq('company_id', this.companyId)
+                .maybeSingle();
+              this.companyStructure = settings?.value || { departments: [] };
+            } catch (e) {
+              console.error('Failed to load company structure settings:', e);
+              this.companyStructure = { departments: [] };
+            }
+          } else {
+            this.companyStructure = { departments: [] };
+          }
+          this.buildReportingToMap();
+
           const data = await sbGet();
           this.allEmployees = data;
           this.dirty = {};
@@ -1320,6 +1338,48 @@
           document.getElementById('dir-tbody').innerHTML = `<tr><td colspan="28" class="tbl-state error">Failed to load: ${esc(err.message)}</td></tr>`;
           toast('Failed to load employees: ' + err.message, 'error');
         }
+      },
+
+      buildReportingToMap() {
+        this.reportingToMap = {};
+        this.employeeDeptMap = {};
+        const struct = this.companyStructure || { departments: [] };
+        if (!struct.departments) return;
+        struct.departments.forEach(dept => {
+          const deptHeadId = dept.managerId;
+          const deptName = dept.name;
+          if (deptHeadId) {
+            this.employeeDeptMap[deptHeadId] = deptName;
+          }
+          if (dept.subteams) {
+            dept.subteams.forEach(sub => {
+              const subteamManagerId = sub.managerId;
+              if (subteamManagerId) {
+                this.employeeDeptMap[subteamManagerId] = deptName;
+                if (deptHeadId) {
+                  this.reportingToMap[subteamManagerId] = deptHeadId;
+                }
+                if (sub.colleagueIds) {
+                  sub.colleagueIds.forEach(colId => {
+                    this.reportingToMap[colId] = subteamManagerId;
+                    this.employeeDeptMap[colId] = deptName;
+                  });
+                }
+              } else {
+                if (deptHeadId && sub.colleagueIds) {
+                  sub.colleagueIds.forEach(colId => {
+                    this.reportingToMap[colId] = deptHeadId;
+                    this.employeeDeptMap[colId] = deptName;
+                  });
+                } else if (sub.colleagueIds) {
+                  sub.colleagueIds.forEach(colId => {
+                    this.employeeDeptMap[colId] = deptName;
+                  });
+                }
+              }
+            });
+          }
+        });
       },
 
       /* ── Department filter options ── */
@@ -1500,6 +1560,28 @@
           </select></td>`;
         };
 
+        const departmentCell = () => {
+          const deptName = (this.employeeDeptMap && this.employeeDeptMap[id]) || emp.department || '';
+          if (!isEdit) {
+            return deptName
+              ? `<td class="grp-hr">${esc(deptName)}</td>`
+              : `<td class="grp-hr cell-empty">—</td>`;
+          }
+          return `<td class="grp-hr"><input type="text" class="cell-input" data-id="${esc(id)}" data-field="department" value="${esc(deptName)}"></td>`;
+        };
+
+        const reportingToCell = () => {
+          const mgrId = (this.reportingToMap && this.reportingToMap[id]) || emp.reporting_to;
+          if (mgrId) {
+            const mgr = this.allEmployees.find(e => e.id === mgrId);
+            if (mgr) {
+              const formattedName = `${mgr.first_name} ${mgr.last_name ? mgr.last_name[0] + '.' : ''}`;
+              return `<td class="grp-hr">${esc(formattedName)}</td>`;
+            }
+          }
+          return `<td class="grp-hr cell-empty">—</td>`;
+        };
+
         /* Employee number cell — editable in edit mode */
         const cellEmpNum = () => {
           if (!isEdit) {
@@ -1555,10 +1637,10 @@
           ${cell(emp.contact_number, 'contact_number', 'text', 'grp-personal')}
           ${cell(emp.emergency_contact_number, 'emergency_contact_number', 'text', 'grp-personal')}
           ${cell(emp.email, 'email', 'text', 'grp-personal')}
-          ${cell(emp.department, 'department', 'text', 'grp-hr')}
+          ${departmentCell()}
           ${cell(emp.title, 'title')}
           ${cell(emp.work_email, 'work_email')}
-          ${cell(emp.reporting_to, 'reporting_to')}
+          ${reportingToCell()}
           ${cell(emp.level, 'level')}
           ${cell(emp.job_description, 'job_description')}
           ${cellDate(emp.date_hired, 'date_hired')}
@@ -2018,7 +2100,23 @@
           const header = cols.map(c => `"${c[1]}"`).join(',');
           const rows = this.filtered.map(emp =>
             cols.map(([k]) => {
-              const v = emp[k] ?? '';
+              let v = emp[k] ?? '';
+              if (k === 'department') {
+                const deptName = (this.employeeDeptMap && this.employeeDeptMap[emp.id]) || emp.department || '';
+                v = deptName;
+              } else if (k === 'reporting_to') {
+                const mgrId = (this.reportingToMap && this.reportingToMap[emp.id]) || emp.reporting_to;
+                if (mgrId) {
+                  const mgr = this.allEmployees.find(e => e.id === mgrId);
+                  if (mgr) {
+                    v = `${mgr.first_name} ${mgr.last_name ? mgr.last_name[0] + '.' : ''}`;
+                  } else {
+                    v = '';
+                  }
+                } else {
+                  v = '';
+                }
+              }
               return `"${String(v).replace(/"/g, '""')}"`;
             }).join(',')
           );
