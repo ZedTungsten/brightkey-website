@@ -321,6 +321,28 @@
       background: var(--cyan-dim);
     }
 
+    .btn-check-link {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 0.2rem;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 4px;
+      transition: color 0.15s, background 0.15s;
+    }
+
+    .btn-check-link:hover {
+      color: var(--success);
+      background: rgba(22, 163, 74, 0.08);
+    }
+
+    .btn-check-link.active {
+      color: var(--success);
+    }
+
     /* ── Modals ── */
     .modal-overlay {
       display: none;
@@ -703,16 +725,19 @@
             <div class="section-card">
               <div class="section-header">
                 <div class="section-title">Milestones</div>
-                <button class="btn btn-primary btn-sm" id="btn-add-milestone" style="display: none;" onclick="App.openMilestoneModal(null)">+ Add Milestone</button>
+                <div style="display: flex; gap: 0.5rem;">
+                  <button class="btn btn-outline btn-sm" id="btn-create-group" style="display: none;" onclick="App.openGroupModal(null)">+ Create Group</button>
+                  <button class="btn btn-primary btn-sm" id="btn-add-milestone" style="display: none;" onclick="App.openMilestoneModal(null)">+ Add Milestone</button>
+                </div>
               </div>
               <div class="table-wrap">
                 <table class="task-table">
                   <thead>
                     <tr>
-                      <th style="width: 30%;">Milestone Title</th>
-                      <th style="width: 35%;">Description / Links</th>
+                      <th style="width: 30%;">Title</th>
+                      <th style="width: 35%;">Details</th>
                       <th style="width: 12%;">Deadline</th>
-                      <th style="width: 13%;">Dates (Created/Done)</th>
+                      <th style="width: 13%;">Created / Done</th>
                       <th style="width: 10%; text-align: center;" class="th-actions">Actions</th>
                     </tr>
                   </thead>
@@ -774,10 +799,6 @@
       <form onsubmit="App.saveMilestone(event)">
         <input type="hidden" id="milestone-modal-id" />
         <div class="modal-body">
-          <div class="form-group" style="flex-direction: row; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem;">
-            <input type="checkbox" id="milestone-modal-is-group" onchange="App.toggleMilestoneGroupFields()" style="width: auto; cursor: pointer;" />
-            <label class="form-label" for="milestone-modal-is-group" style="text-transform: none; font-size: 0.8rem; cursor: pointer; user-select: none; margin-bottom: 0;">Create as Group / Category</label>
-          </div>
           <div class="form-group">
             <label class="form-label" for="milestone-modal-title-input">Milestone Title</label>
             <input type="text" id="milestone-modal-title-input" class="form-input" placeholder="e.g. Project Delivery Phase 1" required />
@@ -802,6 +823,31 @@
         <div class="modal-footer">
           <button type="button" class="btn btn-outline" onclick="App.closeMilestoneModal()">Cancel</button>
           <button type="submit" class="btn btn-primary" id="btn-submit-milestone">Save Milestone</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Group Dialog Modal -->
+  <div class="modal-overlay" id="group-modal">
+    <div class="modal-card" style="width: 400px; max-width: 90%;">
+      <div class="modal-header">
+        <div class="modal-title" id="group-modal-title">Create Milestone Group</div>
+        <button class="modal-close" onclick="App.closeGroupModal()">
+          <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <form onsubmit="App.saveGroup(event)">
+        <input type="hidden" id="group-modal-id" />
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label" for="group-modal-name-input">Group Name</label>
+            <input type="text" id="group-modal-name-input" class="form-input" placeholder="e.g. Phase 1 - Core Setup" required />
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" onclick="App.closeGroupModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-submit-group">Save Group</button>
         </div>
       </form>
     </div>
@@ -1273,6 +1319,7 @@
       updateUIIndicators() {
         const btnAddTasks = document.querySelectorAll('.btn-add-task-cls');
         const btnAddMilestone = document.getElementById('btn-add-milestone');
+        const btnCreateGroup = document.getElementById('btn-create-group');
         
         // Show/hide actions column header based on edit access state
         const thActions = document.querySelectorAll('.th-actions');
@@ -1289,9 +1336,11 @@
         if (this.hasEditAccess) {
           btnAddTasks.forEach(btn => btn.style.display = 'inline-flex');
           if (btnAddMilestone) btnAddMilestone.style.display = 'inline-flex';
+          if (btnCreateGroup) btnCreateGroup.style.display = 'inline-flex';
         } else {
           btnAddTasks.forEach(btn => btn.style.display = 'none');
           if (btnAddMilestone) btnAddMilestone.style.display = 'none';
+          if (btnCreateGroup) btnCreateGroup.style.display = 'none';
         }
       },
 
@@ -1433,16 +1482,6 @@
         }
       },
 
-      toggleMilestoneGroupFields() {
-        const isGroup = document.getElementById('milestone-modal-is-group').checked;
-        const nonGroupFields = document.getElementById('milestone-non-group-fields');
-        if (isGroup) {
-          nonGroupFields.style.display = 'none';
-        } else {
-          nonGroupFields.style.display = 'flex';
-        }
-      },
-
       populateMilestoneParentSelect(selectedParentId = null, excludeId = null) {
         const select = document.getElementById('milestone-modal-parent-input');
         if (!select) return;
@@ -1464,7 +1503,6 @@
         const titleInput = document.getElementById('milestone-modal-title-input');
         const descInput = document.getElementById('milestone-modal-desc-input');
         const deadlineInput = document.getElementById('milestone-modal-deadline-input');
-        const isGroupCheckbox = document.getElementById('milestone-modal-is-group');
         const modalTitle = document.getElementById('milestone-modal-title');
 
         if (id) {
@@ -1473,7 +1511,6 @@
           titleInput.value = ms?.title || '';
           descInput.value = ms?.description || '';
           deadlineInput.value = ms?.deadline || '';
-          isGroupCheckbox.checked = ms?.is_group || false;
           
           this.populateMilestoneParentSelect(ms?.parent_id || null, id);
         } else {
@@ -1481,12 +1518,10 @@
           titleInput.value = '';
           descInput.value = '';
           deadlineInput.value = '';
-          isGroupCheckbox.checked = false;
           
           this.populateMilestoneParentSelect(null, null);
         }
 
-        this.toggleMilestoneGroupFields();
         document.getElementById('milestone-modal').classList.add('open');
       },
 
@@ -1498,10 +1533,9 @@
         e.preventDefault();
         const id = document.getElementById('milestone-modal-id').value;
         const title = document.getElementById('milestone-modal-title-input').value.trim();
-        const isGroup = document.getElementById('milestone-modal-is-group').checked;
-        const description = isGroup ? null : document.getElementById('milestone-modal-desc-input').value.trim();
-        const deadline = isGroup ? null : (document.getElementById('milestone-modal-deadline-input').value || null);
-        const parent_id = isGroup ? null : (document.getElementById('milestone-modal-parent-input').value || null);
+        const description = document.getElementById('milestone-modal-desc-input').value.trim();
+        const deadline = document.getElementById('milestone-modal-deadline-input').value || null;
+        const parent_id = document.getElementById('milestone-modal-parent-input').value || null;
 
         if (!title) return;
 
@@ -1518,7 +1552,7 @@
           description: description,
           deadline: deadline,
           parent_id: parent_id,
-          is_group: isGroup
+          is_group: false
         };
 
         try {
@@ -1565,21 +1599,158 @@
         }
       },
 
-      async renameGroupInline(id, currentTitle) {
-        const newTitle = prompt('Rename Group:', currentTitle);
-        if (newTitle === null) return; // cancelled
-        const trimmed = newTitle.trim();
-        if (!trimmed) {
-          toast('Group name cannot be empty.', 'error');
-          return;
+      openGroupModal(id = null) {
+        document.getElementById('group-modal-id').value = id || '';
+        const nameInput = document.getElementById('group-modal-name-input');
+        const modalTitle = document.getElementById('group-modal-title');
+        
+        if (id) {
+          modalTitle.textContent = 'Rename Milestone Group';
+          const group = this.milestones.find(m => m.id === id);
+          nameInput.value = group?.title || '';
+        } else {
+          modalTitle.textContent = 'Create Milestone Group';
+          nameInput.value = '';
         }
+        document.getElementById('group-modal').classList.add('open');
+      },
+
+      closeGroupModal() {
+        document.getElementById('group-modal').classList.remove('open');
+      },
+
+      async saveGroup(e) {
+        e.preventDefault();
+        const id = document.getElementById('group-modal-id').value;
+        const name = document.getElementById('group-modal-name-input').value.trim();
+        if (!name) return;
+
+        const btn = document.getElementById('btn-submit-group');
+        btn.disabled = true;
+        const origText = btn.innerText;
+        btn.innerText = 'Saving...';
+
         try {
-          const { error } = await this.sb.from('team_milestones').update({ title: trimmed }).eq('id', id);
-          if (error) throw error;
-          toast('Group renamed successfully.', 'success');
+          if (id) {
+            const { error } = await this.sb.from('team_milestones').update({ title: name }).eq('id', id);
+            if (error) throw error;
+            toast('Group renamed successfully.', 'success');
+          } else {
+            const payload = {
+              company_id: this.companyId,
+              assigned_to: this.selectedEmployeeId,
+              assigned_by: this.currentUser.id,
+              title: name,
+              is_group: true
+            };
+            const { error } = await this.sb.from('team_milestones').insert([payload]);
+            if (error) throw error;
+            toast('Group created successfully.', 'success');
+          }
+          this.closeGroupModal();
           await this.refreshTasksAndMilestones();
         } catch (err) {
-          toast('Error renaming group: ' + err.message, 'error');
+          toast('Error saving group: ' + err.message, 'error');
+        } finally {
+          btn.disabled = false;
+          btn.innerText = origText;
+        }
+      },
+
+      async renameGroupInline(id, currentTitle) {
+        this.openGroupModal(id);
+      },
+
+      handleDragStart(e, id) {
+        if (!this.hasEditAccess) return;
+        e.dataTransfer.setData('text/plain', id);
+        e.dataTransfer.effectAllowed = 'move';
+        const row = document.querySelector(`tr[data-milestone-id="${id}"]`);
+        if (row) {
+          row.style.opacity = '0.4';
+        }
+      },
+
+      handleDragOver(e) {
+        if (!this.hasEditAccess) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        const row = e.target.closest('tr');
+        if (row && row.dataset.milestoneId) {
+          row.style.borderTop = '2px solid var(--cyan)';
+        }
+      },
+
+      handleDragLeave(e) {
+        if (!this.hasEditAccess) return;
+        const row = e.target.closest('tr');
+        if (row) {
+          row.style.borderTop = '';
+        }
+      },
+
+      handleDragEnd(e) {
+        if (!this.hasEditAccess) return;
+        const rows = document.querySelectorAll('tr[data-milestone-id]');
+        rows.forEach(row => {
+          row.style.opacity = '';
+          row.style.borderTop = '';
+        });
+      },
+
+      async handleDrop(e, targetId) {
+        if (!this.hasEditAccess) return;
+        e.preventDefault();
+        const draggedId = e.dataTransfer.getData('text/plain');
+        if (!draggedId || draggedId === targetId) return;
+
+        const draggedItem = this.milestones.find(m => m.id === draggedId);
+        const targetItem = this.milestones.find(m => m.id === targetId);
+        if (!draggedItem || !targetItem) return;
+
+        // We only allow reordering within the same group (same parent_id)
+        if (draggedItem.parent_id !== targetItem.parent_id) {
+          toast('Cannot move milestones between different groups.', 'error');
+          return;
+        }
+
+        // Get all items in this group
+        const groupItems = this.milestones.filter(m => !m.is_group && m.parent_id === draggedItem.parent_id);
+        
+        // Sort them by current positions/scores
+        const getSortScore = (ms) => {
+          if (ms.completed_at) return 1e15 + (1e12 - new Date(ms.completed_at).getTime());
+          if (ms.deadline) return new Date(ms.deadline).getTime();
+          return 1e14;
+        };
+        groupItems.sort((a, b) => {
+          const posA = a.position || 0;
+          const posB = b.position || 0;
+          if (posA !== posB) return posA - posB;
+          return getSortScore(a) - getSortScore(b);
+        });
+
+        const draggedIndex = groupItems.findIndex(m => m.id === draggedId);
+        const targetIndex = groupItems.findIndex(m => m.id === targetId);
+
+        if (draggedIndex === -1 || targetIndex === -1) return;
+
+        // Remove from old position and insert at new position
+        groupItems.splice(draggedIndex, 1);
+        groupItems.splice(targetIndex, 0, draggedItem);
+
+        // Update positions local + DB
+        const updates = groupItems.map((item, index) => {
+          item.position = index; // locally update
+          return this.sb.from('team_milestones').update({ position: index }).eq('id', item.id);
+        });
+
+        try {
+          await Promise.all(updates);
+          toast('Order updated.', 'success');
+          this.renderMilestones();
+        } catch (err) {
+          toast('Failed to save ordering: ' + err.message, 'error');
         }
       },
 
@@ -1596,6 +1767,7 @@
             .from('team_milestones')
             .select('*')
             .eq('assigned_to', this.selectedEmployeeId)
+            .order('position', { ascending: true })
             .order('created_at', { ascending: true });
           this.milestones = msData || [];
 
@@ -1656,11 +1828,11 @@
           if (!dateStr) return '';
           if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
             const parts = dateStr.split('-');
-            const year = parseInt(parts[0], 10);
+            const year = parts[0];
             const monthVal = parseInt(parts[1], 10) - 1;
-            const dayVal = parseInt(parts[2], 10);
+            const dayVal = parts[2];
             const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-            return `${months[monthVal]} ${String(dayVal).padStart(2, '0')}, ${year}`;
+            return `${months[monthVal]} ${dayVal}, ${year}`;
           }
           const d = new Date(dateStr);
           if (isNaN(d.getTime())) return '';
@@ -1681,6 +1853,13 @@
           return 1e14;
         };
 
+        const sortMilestones = (a, b) => {
+          const posA = a.position || 0;
+          const posB = b.position || 0;
+          if (posA !== posB) return posA - posB;
+          return getSortScore(a) - getSortScore(b);
+        };
+
         const groups = this.milestones.filter(m => m.is_group);
         const childrenMap = {};
         const rootMilestones = [];
@@ -1697,7 +1876,7 @@
 
         // Sort children inside each group
         Object.keys(childrenMap).forEach(groupId => {
-          childrenMap[groupId].sort((a, b) => getSortScore(a) - getSortScore(b));
+          childrenMap[groupId].sort(sortMilestones);
         });
 
         // Sort groups by their nearest incomplete child deadline
@@ -1710,7 +1889,7 @@
         });
 
         // Sort root milestones
-        rootMilestones.sort((a, b) => getSortScore(a) - getSortScore(b));
+        rootMilestones.sort(sortMilestones);
 
         const todayString = new Date().toISOString().slice(0, 10);
 
@@ -1722,9 +1901,16 @@
           const textDecor = isCompleted ? 'text-decoration: line-through;' : '';
           const titleStyle = isOverdue ? 'color: var(--danger); font-weight: 700;' : 'font-weight: 700;';
 
+          const dragHandleHtml = this.hasEditAccess
+            ? `<svg class="drag-handle" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="cursor: grab; color: var(--text-muted); margin-right: 0.5rem; vertical-align: middle;"><circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/></svg>`
+            : '';
+
           const actionsTd = this.hasEditAccess
             ? `<td style="text-align: center; vertical-align: middle;">
                 <div style="display: flex; gap: 0.5rem; justify-content: center; align-items: center;">
+                  <button class="btn-check-link ${isCompleted ? 'active' : ''}" onclick="App.toggleMilestoneCompletion('${esc(ms.id)}', ${!isCompleted})" title="${isCompleted ? 'Mark Active' : 'Mark Done'}">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  </button>
                   <button class="btn-edit-link" onclick="App.openMilestoneModal('${esc(ms.id)}')" title="Edit Milestone">
                     <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                   </button>
@@ -1735,10 +1921,12 @@
                </td>`
             : '';
 
-          return `<tr data-milestone-id="${esc(ms.id)}" style="${rowStyle}">
+          const draggableAttr = this.hasEditAccess ? `draggable="true" ondragstart="App.handleDragStart(event, '${esc(ms.id)}')" ondragover="App.handleDragOver(event)" ondragleave="App.handleDragLeave(event)" ondragend="App.handleDragEnd(event)" ondrop="App.handleDrop(event, '${esc(ms.id)}')"` : '';
+
+          return `<tr data-milestone-id="${esc(ms.id)}" style="${rowStyle} transition: border-top 0.15s;" ${draggableAttr}>
             <td style="vertical-align: middle;">
-              <div style="display: flex; align-items: center; gap: 0.5rem; padding-left: ${isSub ? '1.5rem' : '0'};">
-                <input type="checkbox" ${isCompleted ? 'checked' : ''} onchange="App.toggleMilestoneCompletion('${esc(ms.id)}', this.checked)" style="width: auto; cursor: pointer; transform: scale(1.1);" />
+              <div style="display: flex; align-items: center; gap: 0.25rem; padding-left: ${isSub ? '1.5rem' : '0'};">
+                ${dragHandleHtml}
                 <span style="${titleStyle} ${textDecor}">${esc(ms.title)}</span>
               </div>
             </td>
@@ -1747,8 +1935,7 @@
               ${ms.deadline ? formatDate(ms.deadline) : '<span style="color:var(--text-muted); font-style:italic;">None</span>'}
             </td>
             <td style="font-size: 0.72rem; color: var(--text-secondary); vertical-align: middle; line-height: 1.3;">
-              <div>${formatDate(ms.created_at)}</div>
-              ${isCompleted ? `<div style="margin-top: 0.2rem; font-weight: 600;">Done: ${formatDate(ms.completed_at)}</div>` : ''}
+              ${isCompleted ? `<div style="font-weight: 600;">Done: ${formatDate(ms.completed_at)}</div>` : `<div style="font-style: italic; color: var(--text-muted);">In Progress</div>`}
             </td>
             ${actionsTd}
           </tr>`;
