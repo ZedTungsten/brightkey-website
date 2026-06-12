@@ -823,6 +823,7 @@
           CURRENT_PRODUCT.price = v.price;
           CURRENT_PRODUCT.image = v.image;
           CURRENT_PRODUCT.slug  = v.slug;
+          if (window.initDeliveryEstimate) window.initDeliveryEstimate();
         };
       </script>
     
@@ -1400,13 +1401,28 @@
         const config  = data.value;
         const business = (window.CURRENT_PRODUCT && window.CURRENT_PRODUCT.business) || '';
 
+        const badge = document.querySelector('[data-template="status-badge"]');
+        const isBackorder = badge ? (badge.textContent.trim().toLowerCase() === 'backorder') : false;
+
         let fromVal, fromUnit, toVal, toUnit;
-        const bizCfg = (config.businesses || []).find(b => b.name === business && b.enabled);
-        if (bizCfg) {
-          ({ from_value: fromVal, from_unit: fromUnit, to_value: toVal, to_unit: toUnit } = bizCfg);
-        } else if (config.storewide_enabled) {
-          ({ from_value: fromVal, from_unit: fromUnit, to_value: toVal, to_unit: toUnit } = config);
-        } else { return; }
+
+        if (isBackorder && config.backorder_enabled) {
+          fromVal = config.backorder_from_value ?? 3;
+          fromUnit = config.backorder_from_unit || 'weeks';
+          toVal = config.backorder_to_value ?? 4;
+          toUnit = config.backorder_to_unit || 'weeks';
+        } else {
+          const bizCfg = (config.businesses || []).find(b => b.name === business && b.enabled);
+          if (bizCfg) {
+            ({ from_value: fromVal, from_unit: fromUnit, to_value: toVal, to_unit: toUnit } = bizCfg);
+          } else if (config.storewide_enabled) {
+            ({ from_value: fromVal, from_unit: fromUnit, to_value: toVal, to_unit: toUnit } = config);
+          } else {
+            const box = document.getElementById('delivery-box');
+            if (box) box.style.display = 'none';
+            return;
+          }
+        }
 
         function addTime(date, value, unit) {
           const d = new Date(date);

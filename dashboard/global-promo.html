@@ -398,8 +398,28 @@
 
             <button id="lt-add-btn" class="btn btn-outline btn-sm" style="margin-top:0.75rem;" onclick="showLtAddRow()">+ Add Business Override</button>
 
+            <hr style="border:none; border-top:1px solid var(--border); margin:1.5rem 0;" />
+
+            <h3 style="border-bottom:none; margin-bottom:0.75rem; padding-bottom:0; font-size:0.95rem; text-transform:uppercase; letter-spacing:0.02em; color:var(--text-secondary);">Backorder / Out of Stock</h3>
+            <div style="display:flex; align-items:center; gap:0.75rem; padding:0.65rem 0.75rem; background:var(--bg-elevated); border:1px solid var(--border); border-radius:var(--radius-sm); margin-bottom:1rem; flex-wrap:wrap;">
+              <input type="checkbox" id="lt-backorder" style="width:16px; height:16px; cursor:pointer; flex-shrink:0;" onchange="checkDirty();" />
+              <label for="lt-backorder" style="font-weight:600; font-size:0.9rem; flex:1; min-width:100px; cursor:pointer;">Use Backorder Lead Time</label>
+              <div style="display:flex; align-items:center; gap:0.4rem; flex-wrap:wrap;">
+                <span style="font-size:0.8rem; color:var(--text-secondary);">From</span>
+                <input type="number" id="lt-backorder-from-val" class="form-input" style="width:58px;" min="0" step="1" value="3" oninput="checkDirty();" />
+                <select id="lt-backorder-from-unit" class="form-select" style="width:95px;" onchange="checkDirty();">
+                  <option value="days">Days</option><option value="weeks" selected>Weeks</option><option value="months">Months</option>
+                </select>
+                <span style="font-size:0.8rem; color:var(--text-secondary);">To</span>
+                <input type="number" id="lt-backorder-to-val" class="form-input" style="width:58px;" min="0" step="1" value="4" oninput="checkDirty();" />
+                <select id="lt-backorder-to-unit" class="form-select" style="width:95px;" onchange="checkDirty();">
+                  <option value="days">Days</option><option value="weeks" selected>Weeks</option><option value="months">Months</option>
+                </select>
+              </div>
+            </div>
+
             <div style="margin-top:1.25rem; padding-top:1rem; border-top:1px solid var(--border);">
-              <div class="form-hint" style="margin-bottom:0;">Business overrides override the storewide lead time. Customers see "Get item in [date range]" on the product page.</div>
+              <div class="form-hint" style="margin-bottom:0;">Business overrides override the storewide lead time. If a product variant is out of stock (Backorder), the customer sees the Backorder estimate range.</div>
             </div>
           </div>
         </div>
@@ -1311,6 +1331,12 @@
       const ltFromUnit = document.getElementById('lt-storewide-from-unit');
       const ltToVal = document.getElementById('lt-storewide-to-val');
       const ltToUnit = document.getElementById('lt-storewide-to-unit');
+
+      const ltBackorder = document.getElementById('lt-backorder');
+      const ltBackorderFromVal = document.getElementById('lt-backorder-from-val');
+      const ltBackorderFromUnit = document.getElementById('lt-backorder-from-unit');
+      const ltBackorderToVal = document.getElementById('lt-backorder-to-val');
+      const ltBackorderToUnit = document.getElementById('lt-backorder-to-unit');
       
       const announceActive = document.getElementById('announcement-active');
       const announceText = document.getElementById('announcement-text');
@@ -1318,7 +1344,7 @@
       const announceSec = document.getElementById('announcement-sec');
       const announceBg = document.getElementById('announcement-bg');
       const announceTextColor = document.getElementById('announcement-text-color');
-
+      
       const popupActive = document.getElementById('popup-active');
       const popupImageUrl = document.getElementById('popup-image-url');
       const popupTitle = document.getElementById('popup-title');
@@ -1347,6 +1373,11 @@
         lt_from_unit: ltFromUnit ? ltFromUnit.value : 'days',
         lt_to_value: ltToVal ? ltToVal.value : '',
         lt_to_unit: ltToUnit ? ltToUnit.value : 'days',
+        lt_backorder_enabled: ltBackorder ? ltBackorder.checked : false,
+        lt_backorder_from_value: ltBackorderFromVal ? ltBackorderFromVal.value : '',
+        lt_backorder_from_unit: ltBackorderFromUnit ? ltBackorderFromUnit.value : 'weeks',
+        lt_backorder_to_value: ltBackorderToVal ? ltBackorderToVal.value : '',
+        lt_backorder_to_unit: ltBackorderToUnit ? ltBackorderToUnit.value : 'weeks',
         lt_businesses: ltBusiness.map(b => ({ name: b.name, enabled: b.enabled, from_value: b.from_value, from_unit: b.from_unit, to_value: b.to_value, to_unit: b.to_unit })),
 
         fg_rules: fgRules.map(r => ({ trigger_sku: r.trigger_sku, gift_sku: r.gift_sku, enabled: r.enabled })),
@@ -1433,6 +1464,13 @@
         const ltFromUnit = document.getElementById('lt-storewide-from-unit').value;
         const ltToVal = parseInt(document.getElementById('lt-storewide-to-val').value)||0;
         const ltToUnit = document.getElementById('lt-storewide-to-unit').value;
+
+        const ltBackorder = document.getElementById('lt-backorder').checked;
+        const ltBackorderFromVal = parseInt(document.getElementById('lt-backorder-from-val').value)||0;
+        const ltBackorderFromUnit = document.getElementById('lt-backorder-from-unit').value;
+        const ltBackorderToVal = parseInt(document.getElementById('lt-backorder-to-val').value)||0;
+        const ltBackorderToUnit = document.getElementById('lt-backorder-to-unit').value;
+
         promises.push(
           sb.from('global_settings').upsert({
             key: 'delivery_lead_time',
@@ -1443,6 +1481,11 @@
               from_unit:  ltFromUnit,
               to_value:   ltToVal,
               to_unit:    ltToUnit,
+              backorder_enabled: ltBackorder,
+              backorder_from_value: ltBackorderFromVal,
+              backorder_from_unit: ltBackorderFromUnit,
+              backorder_to_value: ltBackorderToVal,
+              backorder_to_unit: ltBackorderToUnit,
               businesses: ltBusiness.map(b => ({ name: b.name, label: b.label, enabled: b.enabled, from_value: b.from_value, from_unit: b.from_unit, to_value: b.to_value, to_unit: b.to_unit }))
             }
           })
@@ -1669,6 +1712,14 @@
           document.getElementById('lt-storewide-to-val').value   = val.to_value   ?? 3;
           setSelectVal('lt-storewide-from-unit', val.from_unit || 'days');
           setSelectVal('lt-storewide-to-unit',   val.to_unit   || 'days');
+
+          // Load Backorder lead time fields
+          document.getElementById('lt-backorder').checked = val.backorder_enabled || false;
+          document.getElementById('lt-backorder-from-val').value = val.backorder_from_value ?? 3;
+          document.getElementById('lt-backorder-to-val').value   = val.backorder_to_value   ?? 4;
+          setSelectVal('lt-backorder-from-unit', val.backorder_from_unit || 'weeks');
+          setSelectVal('lt-backorder-to-unit',   val.backorder_to_unit   || 'weeks');
+
           ltBusiness = (val.businesses || [])
             .filter(b => b.enabled || b.from_value > 0 || b.to_value > 0)
             .map(b => ({ name: b.name, label: bizLabel(b.name), enabled: b.enabled, from_value: b.from_value ?? 2, from_unit: b.from_unit || 'days', to_value: b.to_value ?? 3, to_unit: b.to_unit || 'days' }));

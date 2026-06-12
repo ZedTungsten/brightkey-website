@@ -1074,6 +1074,7 @@ async function buildProducts() {
           CURRENT_PRODUCT.price = v.price;
           CURRENT_PRODUCT.image = v.image;
           CURRENT_PRODUCT.slug  = v.slug;
+          if (window.initDeliveryEstimate) window.initDeliveryEstimate();
         };
       </script>
     `;
