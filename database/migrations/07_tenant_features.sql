@@ -1,6 +1,15 @@
--- Migration 41: Create tenant_businesses and business_features tables
+-- =============================================================================
+-- BrightKey Consolidated Tenant Features Schema (07_tenant_features.sql)
+-- Consolidates tenant_businesses, business_features, column syncing function/triggers, and initial seed data.
+-- =============================================================================
 
-CREATE TABLE IF NOT EXISTS public.tenant_businesses (
+DROP TRIGGER IF EXISTS sync_features_columns_trg ON public.business_features;
+DROP FUNCTION IF EXISTS public.sync_features_columns_fn();
+DROP TABLE IF EXISTS public.business_features CASCADE;
+DROP TABLE IF EXISTS public.tenant_businesses CASCADE;
+
+-- ── 1. Tenant Businesses Table ────────────────────────────────────────────────
+CREATE TABLE public.tenant_businesses (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   company_id  UUID REFERENCES public.companies(id) ON DELETE CASCADE NOT NULL,
   name        TEXT NOT NULL, -- e.g. 'Smart Lock', 'CCTV', 'Solar Power', 'Fire Extinguisher'
@@ -8,7 +17,8 @@ CREATE TABLE IF NOT EXISTS public.tenant_businesses (
   CONSTRAINT unique_company_business UNIQUE (company_id, name)
 );
 
-CREATE TABLE IF NOT EXISTS public.business_features (
+-- ── 2. Business Features Table ─────────────────────────────────────────────────
+CREATE TABLE public.business_features (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   business_id UUID REFERENCES public.tenant_businesses(id) ON DELETE CASCADE NOT NULL,
   name        TEXT NOT NULL, -- e.g. 'pin_unlock', 'night_vision'
@@ -20,7 +30,8 @@ CREATE TABLE IF NOT EXISTS public.business_features (
 ALTER TABLE public.tenant_businesses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.business_features ENABLE ROW LEVEL SECURITY;
 
--- Select policies
+-- ── 3. Row Level Security Policies ───────────────────────────────────────────
+
 CREATE POLICY "Allow select tenant_businesses" ON public.tenant_businesses
   FOR SELECT USING (
     company_id IN (
@@ -40,7 +51,6 @@ CREATE POLICY "Allow select business_features" ON public.business_features
     )
   );
 
--- Write policies
 CREATE POLICY "Allow manage tenant_businesses" ON public.tenant_businesses
   FOR ALL USING (
     company_id IN (
@@ -60,7 +70,56 @@ CREATE POLICY "Allow manage business_features" ON public.business_features
     )
   );
 
--- Seed initial businesses & features for BrightKey company
+-- ── 4. Automatic Column Syncing Trigger ───────────────────────────────────────
+
+CREATE OR REPLACE FUNCTION public.sync_features_columns_fn()
+RETURNS TRIGGER AS $$
+DECLARE
+  v_biz_name TEXT;
+  v_table_name TEXT;
+  v_column_exists BOOLEAN;
+BEGIN
+  -- 1. Find business name
+  IF TG_OP = 'INSERT' THEN
+    SELECT name INTO v_biz_name FROM public.tenant_businesses WHERE id = NEW.business_id;
+  ELSIF TG_OP = 'DELETE' THEN
+    SELECT name INTO v_biz_name FROM public.tenant_businesses WHERE id = OLD.business_id;
+  END IF;
+
+  -- 2. Map business name to features table
+  CASE v_biz_name
+    WHEN 'Smart Lock' THEN v_table_name := 'smartlock_features';
+    WHEN 'Solar Power' THEN v_table_name := 'solarpower_features';
+    WHEN 'CCTV' THEN v_table_name := 'cctv_features';
+    WHEN 'Fire Extinguisher' THEN v_table_name := 'fireextinguisher_features';
+    ELSE RETURN NULL;
+  END CASE;
+
+  -- 3. Execute ALTER TABLE
+  IF TG_OP = 'INSERT' THEN
+    -- Add column if not exists
+    EXECUTE 'ALTER TABLE public.' || quote_ident(v_table_name) || ' ADD COLUMN IF NOT EXISTS ' || quote_ident(NEW.name) || ' TEXT DEFAULT NULL';
+  ELSIF TG_OP = 'DELETE' THEN
+    -- Drop column if exists (safety check to not delete core metadata columns)
+    IF OLD.name NOT IN ('id', 'product_id', 'created_at') THEN
+      EXECUTE 'ALTER TABLE public.' || quote_ident(v_table_name) || ' DROP COLUMN IF EXISTS ' || quote_ident(OLD.name);
+    END IF;
+  END IF;
+
+  RETURN NULL;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE WARNING 'Error in sync_features_columns_fn: %', SQLERRM;
+    RETURN NULL;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE TRIGGER sync_features_columns_trg
+AFTER INSERT OR DELETE ON public.business_features
+FOR EACH ROW EXECUTE FUNCTION public.sync_features_columns_fn();
+
+-- ── 5. Seed Initial Businesses & Features for BrightKey ───────────────────────
+
 DO $$
 DECLARE
   v_company_id UUID;

@@ -6,6 +6,7 @@
 -- =============================================================================
 
 -- Drop elements if they exist
+DROP TABLE IF EXISTS public.attendance_logs CASCADE;
 DROP TABLE IF EXISTS public.employees CASCADE;
 DROP SEQUENCE IF EXISTS employee_counter_seq;
 
@@ -94,6 +95,25 @@ ALTER TABLE public.employees ENABLE ROW LEVEL SECURITY;
 
 -- Company-scoped: only tenant members can read/write employees of their company
 CREATE POLICY "Company staff employees access" ON public.employees
+  FOR ALL USING (
+    company_id IN (
+      SELECT id FROM public.companies
+      WHERE tenant_id IN (SELECT public.get_user_tenants(auth.uid()))
+    )
+  );
+
+-- ── Attendance Logs Table ───────────────────────────────────────────────────
+CREATE TABLE public.attendance_logs (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id   UUID REFERENCES public.companies(id) ON DELETE CASCADE,
+  employee_id  UUID REFERENCES public.employees(id) ON DELETE CASCADE NOT NULL,
+  status       VARCHAR(20) NOT NULL CHECK (status IN ('available', 'break', 'offline')),
+  created_at   TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE public.attendance_logs ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Company attendance logs access" ON public.attendance_logs
   FOR ALL USING (
     company_id IN (
       SELECT id FROM public.companies

@@ -66,10 +66,14 @@ CREATE TABLE public.customer_profiles (
 -- ── 6. Dashboard Roles Table ──────────────────────────────────────────────────
 CREATE TABLE public.dashboard_roles (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  name        TEXT NOT NULL UNIQUE,
+  company_id  UUID REFERENCES public.companies(id) ON DELETE CASCADE,
+  name        TEXT NOT NULL,
   accessible_modules TEXT[] NOT NULL DEFAULT '{}',
   created_at  TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+CREATE UNIQUE INDEX dashboard_roles_global_name_idx ON public.dashboard_roles (name) WHERE company_id IS NULL;
+CREATE UNIQUE INDEX dashboard_roles_company_name_idx ON public.dashboard_roles (company_id, name) WHERE company_id IS NOT NULL;
 
 -- ── 7. Helper Functions ───────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION public.get_user_tenants(usr_id UUID)
@@ -171,12 +175,23 @@ CREATE POLICY "Customers can view own profile." ON public.customer_profiles
   );
 
 -- Dashboard Roles Policies
-CREATE POLICY "Allow public read dashboard_roles" ON public.dashboard_roles
-  FOR SELECT USING (true);
+CREATE POLICY "Allow select dashboard_roles" ON public.dashboard_roles
+  FOR SELECT USING (
+    company_id IS NULL OR
+    company_id IN (
+      SELECT c.id FROM public.companies c
+      JOIN public.tenant_members tm ON c.tenant_id = tm.tenant_id
+      WHERE tm.user_id = auth.uid()
+    )
+  );
 
-CREATE POLICY "Allow johnzeustaller manage dashboard_roles" ON public.dashboard_roles
+CREATE POLICY "Allow manage dashboard_roles" ON public.dashboard_roles
   FOR ALL USING (
-    auth.jwt() ->> 'email' = 'johnzeustaller@gmail.com'
+    company_id IN (
+      SELECT c.id FROM public.companies c
+      JOIN public.tenant_members tm ON c.tenant_id = tm.tenant_id
+      WHERE tm.user_id = auth.uid() AND tm.role IN ('owner', 'admin')
+    )
   );
 
 -- ── 9. Initial Seed Data ──────────────────────────────────────────────────────

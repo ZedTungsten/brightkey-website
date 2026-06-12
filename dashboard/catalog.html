@@ -3187,13 +3187,24 @@
             const ctx = canvas.getContext('2d');
             ctx.drawImage(img, 0, 0, width, height);
             canvas.toBlob((blob) => {
-              if (!blob) return resolve(file);
-              const nameWithoutExt = file.name.substring(0, file.name.lastIndexOf('.')) || 'image';
-              const webpFile = new File([blob], `${nameWithoutExt}.webp`, {
-                type: 'image/webp',
-                lastModified: Date.now()
-              });
-              resolve(webpFile);
+              try {
+                if (!blob) return resolve(file);
+                const nameWithoutExt = file.name.substring(0, file.name.lastIndexOf('.')) || 'image';
+                const webpFile = new File([blob], `${nameWithoutExt}.webp`, {
+                  type: 'image/webp',
+                  lastModified: Date.now()
+                });
+                resolve(webpFile);
+              } catch (err) {
+                console.warn("File constructor error (expected on some Safari versions), falling back to blob decoration:", err);
+                try {
+                  const nameWithoutExt = file.name.substring(0, file.name.lastIndexOf('.')) || 'image';
+                  blob.name = `${nameWithoutExt}.webp`;
+                  resolve(blob);
+                } catch (fallbackErr) {
+                  resolve(file);
+                }
+              }
             }, 'image/webp', quality);
           };
           img.onerror = () => resolve(file);
@@ -3249,7 +3260,15 @@
           })
         });
 
-        const result = await response.json();
+        let result;
+        try {
+          result = await response.json();
+        } catch (jsonErr) {
+          if (response.status === 413) {
+            throw new Error('File is too large. Please select a smaller file (under 4.5MB).');
+          }
+          throw new Error(`Upload failed with status ${response.status}`);
+        }
         if (!response.ok || !result.success) {
           throw new Error(result.error || 'Upload failed');
         }

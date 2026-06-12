@@ -959,6 +959,7 @@
       const emailField = document.getElementById('email-address');
       emailField.value = inviteEmail;
       emailField.readOnly = true;
+      emailField.disabled = true;
       emailField.style.cursor = 'not-allowed';
       emailField.style.opacity = '0.7';
     })();
@@ -1087,13 +1088,24 @@
             const ctx = canvas.getContext('2d');
             ctx.drawImage(img, 0, 0, width, height);
             canvas.toBlob((blob) => {
-              if (!blob) return resolve(file);
-              const nameWithoutExt = file.name.substring(0, file.name.lastIndexOf('.')) || 'image';
-              const webpFile = new File([blob], `${nameWithoutExt}.webp`, {
-                type: 'image/webp',
-                lastModified: Date.now()
-              });
-              resolve(webpFile);
+              try {
+                if (!blob) return resolve(file);
+                const nameWithoutExt = file.name.substring(0, file.name.lastIndexOf('.')) || 'image';
+                const webpFile = new File([blob], `${nameWithoutExt}.webp`, {
+                  type: 'image/webp',
+                  lastModified: Date.now()
+                });
+                resolve(webpFile);
+              } catch (err) {
+                console.warn("File constructor error (expected on some Safari versions), falling back to blob decoration:", err);
+                try {
+                  const nameWithoutExt = file.name.substring(0, file.name.lastIndexOf('.')) || 'image';
+                  blob.name = `${nameWithoutExt}.webp`;
+                  resolve(blob);
+                } catch (fallbackErr) {
+                  resolve(file);
+                }
+              }
             }, 'image/webp', quality);
           };
           img.onerror = () => resolve(file);
@@ -1106,6 +1118,7 @@
 
     /* ── Supabase Storage upload helper ─────────────────────────────────────────── */
     async function uploadToSupabase(file, refId, type, progressBarId) {
+      if (!file) return null;
       const bar      = progressBarId ? document.getElementById(progressBarId) : null;
       const progress = progressBarId ? document.getElementById(progressBarId.replace('-bar','-progress')) : null;
 
@@ -1160,7 +1173,15 @@
                 companyId:  inviteCompany
               }),
             });
-            const data = await res.json();
+            let data;
+            try {
+              data = await res.json();
+            } catch (jsonErr) {
+              if (res.status === 413) {
+                throw new Error('File is too large. Please select a smaller file (under 4.5MB).');
+              }
+              throw new Error(`Upload failed with status ${res.status}`);
+            }
             if (bar) bar.style.width = '100%';
             setTimeout(() => { if (progress) progress.classList.remove('visible'); }, 400);
             if (!res.ok) throw new Error(data.error || 'Upload failed');
@@ -1322,7 +1343,7 @@
           address:           document.getElementById('address').value.trim(),
           contact_number:    document.getElementById('contact-number').value.trim(),
           emergency_contact_number: `${emergencyName} — ${emergencyNumber}`,
-          email:             document.getElementById('email-address').value.trim(),
+          email:             inviteEmail,
           picture_link:      profileUrl,
           gov_id_link:       govIdUrl,
           cv_link:           cvUrl,

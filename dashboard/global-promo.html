@@ -2373,13 +2373,24 @@
             ctx.drawImage(img, x, y, w, h);
             
             canvas.toBlob((blob) => {
-              if (!blob) return resolve(file);
-              const nameWithoutExt = file.name.substring(0, file.name.lastIndexOf('.'));
-              const compressedFile = new File([blob], `${nameWithoutExt}.webp`, {
-                type: 'image/webp',
-                lastModified: Date.now()
-              });
-              resolve(compressedFile);
+              try {
+                if (!blob) return resolve(file);
+                const nameWithoutExt = file.name.substring(0, file.name.lastIndexOf('.')) || 'image';
+                const compressedFile = new File([blob], `${nameWithoutExt}.webp`, {
+                  type: 'image/webp',
+                  lastModified: Date.now()
+                });
+                resolve(compressedFile);
+              } catch (err) {
+                console.warn("File constructor error (expected on some Safari versions), falling back to blob decoration:", err);
+                try {
+                  const nameWithoutExt = file.name.substring(0, file.name.lastIndexOf('.')) || 'image';
+                  blob.name = `${nameWithoutExt}.webp`;
+                  resolve(blob);
+                } catch (fallbackErr) {
+                  resolve(file);
+                }
+              }
             }, 'image/webp', quality);
           };
           img.onerror = () => resolve(file);

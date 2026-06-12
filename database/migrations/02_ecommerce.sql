@@ -50,6 +50,13 @@ CREATE TABLE public.products (
   
   -- Promo Tags
   promo_tags          TEXT[],
+  tags                TEXT[] DEFAULT '{}'::TEXT[],
+
+  -- Settings Toggles
+  show_on_ecommerce   BOOLEAN NOT NULL DEFAULT TRUE,
+  count_inventory     BOOLEAN NOT NULL DEFAULT TRUE,
+  show_features       BOOLEAN NOT NULL DEFAULT TRUE,
+  show_specs          BOOLEAN NOT NULL DEFAULT TRUE,
 
   -- Specifications
   spec_warranty       TEXT,

@@ -5,6 +5,8 @@
 -- =============================================================================
 
 -- Drop tables and views in dependency order
+DROP TABLE IF EXISTS public.team_tasks CASCADE;
+DROP TABLE IF EXISTS public.team_milestones CASCADE;
 DROP TABLE IF EXISTS public.support_messages CASCADE;
 DROP TABLE IF EXISTS public.support_tickets CASCADE;
 DROP TABLE IF EXISTS public.installation_bookings CASCADE;
@@ -335,3 +337,80 @@ CREATE POLICY "Company staff support messages access" ON public.support_messages
       )
     )
   );
+
+-- ── 8. Team Tasks Table ──────────────────────────────────────────────────────
+CREATE TABLE public.team_tasks (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id   UUID REFERENCES public.companies(id) ON DELETE CASCADE,
+  assigned_to  UUID REFERENCES public.employees(id) ON DELETE CASCADE NOT NULL,
+  assigned_by  UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  title        TEXT NOT NULL,
+  description  VARCHAR(500),
+  kpi          TEXT,
+  task_type    TEXT NOT NULL CHECK (task_type IN ('daily', 'weekly', 'monthly')),
+  created_at   TIMESTAMPTZ DEFAULT NOW(),
+  updated_at   TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ── 9. Team Milestones Table ─────────────────────────────────────────────────
+CREATE TABLE public.team_milestones (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id   UUID REFERENCES public.companies(id) ON DELETE CASCADE,
+  assigned_to  UUID REFERENCES public.employees(id) ON DELETE CASCADE NOT NULL,
+  assigned_by  UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  title        TEXT NOT NULL,
+  description  VARCHAR(500),
+  completed_at TIMESTAMPTZ DEFAULT NULL,
+  deadline     DATE DEFAULT NULL,
+  parent_id    UUID REFERENCES public.team_milestones(id) ON DELETE CASCADE,
+  is_group     BOOLEAN NOT NULL DEFAULT FALSE,
+  position     INTEGER DEFAULT 0,
+  created_at   TIMESTAMPTZ DEFAULT NOW(),
+  updated_at   TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Enable RLS
+ALTER TABLE public.team_tasks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.team_milestones ENABLE ROW LEVEL SECURITY;
+
+-- Scoped access policies
+CREATE POLICY "Company team tasks access" ON public.team_tasks
+  FOR ALL USING (
+    company_id IN (
+      SELECT id FROM public.companies
+      WHERE tenant_id IN (SELECT public.get_user_tenants(auth.uid()))
+    )
+  );
+
+CREATE POLICY "Company team milestones access" ON public.team_milestones
+  FOR ALL USING (
+    company_id IN (
+      SELECT id FROM public.companies
+      WHERE tenant_id IN (SELECT public.get_user_tenants(auth.uid()))
+    )
+  );
+
+-- Auto-update updated_at triggers
+CREATE OR REPLACE FUNCTION update_team_tasks_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE TRIGGER trg_team_tasks_updated_at
+  BEFORE UPDATE ON public.team_tasks
+  FOR EACH ROW EXECUTE FUNCTION update_team_tasks_updated_at();
+
+CREATE OR REPLACE FUNCTION update_team_milestones_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE TRIGGER trg_team_milestones_updated_at
+  BEFORE UPDATE ON public.team_milestones
+  FOR EACH ROW EXECUTE FUNCTION update_team_milestones_updated_at();

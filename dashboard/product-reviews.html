@@ -1265,13 +1265,24 @@
             const ctx = canvas.getContext('2d');
             ctx.drawImage(img, 0, 0, width, height);
             canvas.toBlob((blob) => {
-              if (!blob) return resolve(file);
-              const nameWithoutExt = file.name.substring(0, file.name.lastIndexOf('.'));
-              const compressedFile = new File([blob], `${nameWithoutExt}.webp`, {
-                type: 'image/webp',
-                lastModified: Date.now()
-              });
-              resolve(compressedFile);
+              try {
+                if (!blob) return resolve(file);
+                const nameWithoutExt = file.name.substring(0, file.name.lastIndexOf('.'));
+                const compressedFile = new File([blob], `${nameWithoutExt}.webp`, {
+                  type: 'image/webp',
+                  lastModified: Date.now()
+                });
+                resolve(compressedFile);
+              } catch (err) {
+                console.warn("File constructor error, falling back to blob decoration:", err);
+                try {
+                  const nameWithoutExt = file.name.substring(0, file.name.lastIndexOf('.'));
+                  blob.name = `${nameWithoutExt}.webp`;
+                  resolve(blob);
+                } catch (fallbackErr) {
+                  resolve(file);
+                }
+              }
             }, 'image/webp', quality);
           };
           img.onerror = () => resolve(file);
