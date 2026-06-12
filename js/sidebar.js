@@ -370,17 +370,21 @@
         const isOwnerOrAdmin = ['owner', 'admin'].includes(userRole);
 
         if (!isOwnerOrAdmin && userRole) {
-          try {
-            const { data: dbRole } = await window.BKAuth.sb
-              .from('dashboard_roles')
-              .select('accessible_modules')
-              .eq('name', userRole)
-              .maybeSingle();
-            if (dbRole && Array.isArray(dbRole.accessible_modules)) {
-              accessibleModules = dbRole.accessible_modules;
+          if (userRole.startsWith('access:')) {
+            accessibleModules = userRole.substring(7).split(',').map(s => s.trim());
+          } else {
+            try {
+              const { data: dbRole } = await window.BKAuth.sb
+                .from('dashboard_roles')
+                .select('accessible_modules')
+                .eq('name', userRole)
+                .maybeSingle();
+              if (dbRole && Array.isArray(dbRole.accessible_modules)) {
+                accessibleModules = dbRole.accessible_modules;
+              }
+            } catch (err) {
+              console.error('Sidebar dynamic role fetch error:', err);
             }
-          } catch (err) {
-            console.error('Sidebar dynamic role fetch error:', err);
           }
         }
 
@@ -455,7 +459,7 @@
 
         let displayRole = 'Employee';
         if (userRole) {
-          if (userRole.startsWith('custom_')) {
+          if (userRole.startsWith('custom_') || userRole.startsWith('access:')) {
             displayRole = 'User';
           } else if (userRole.toLowerCase() === 'hr') {
             displayRole = 'HR';

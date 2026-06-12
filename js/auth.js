@@ -123,13 +123,22 @@
 
     // 3. Dynamic role lookup
     try {
-      const { data: dbRole, error } = await sb
-        .from('dashboard_roles')
-        .select('accessible_modules')
-        .eq('name', userRole)
-        .maybeSingle();
+      let accessible_modules = [];
+      if (userRole && userRole.startsWith('access:')) {
+        accessible_modules = userRole.substring(7).split(',').map(s => s.trim());
+      } else {
+        const { data: dbRole, error } = await sb
+          .from('dashboard_roles')
+          .select('accessible_modules')
+          .eq('name', userRole)
+          .maybeSingle();
 
-      if (!error && dbRole && Array.isArray(dbRole.accessible_modules)) {
+        if (!error && dbRole && Array.isArray(dbRole.accessible_modules)) {
+          accessible_modules = dbRole.accessible_modules;
+        }
+      }
+
+      if (accessible_modules && accessible_modules.length > 0) {
         const MODULE_GATE_MAP = {
           'Products': ['products'],
           'Operations': ['operations'],
@@ -142,7 +151,7 @@
         };
 
         const allowedKeys = new Set();
-        dbRole.accessible_modules.forEach(mod => {
+        accessible_modules.forEach(mod => {
           const keys = MODULE_GATE_MAP[mod];
           if (keys) keys.forEach(k => allowedKeys.add(k));
         });

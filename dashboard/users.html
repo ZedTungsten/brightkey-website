@@ -736,11 +736,15 @@
           displayName = 'Owner';
         } else if (!row.role) {
           displayName = 'None';
-        } else if (row.role.startsWith('custom_') || !['admin', 'owner', 'operations', 'customer_service', 'marketing', 'logistics', 'products', 'accounting', 'hr'].includes(row.role)) {
+        } else if (row.role.startsWith('access:') || row.role.startsWith('custom_') || !['admin', 'owner', 'operations', 'customer_service', 'marketing', 'logistics', 'products', 'accounting', 'hr'].includes(row.role)) {
           isCustom = true;
-          const found = dynamicRoles.find(r => r.name === row.role);
-          if (found && Array.isArray(found.accessible_modules) && found.accessible_modules.length > 0) {
-            customModules = found.accessible_modules;
+          if (row.role.startsWith('access:')) {
+            customModules = row.role.substring(7).split(',').map(s => s.trim());
+          } else {
+            const found = dynamicRoles.find(r => r.name === row.role);
+            if (found && Array.isArray(found.accessible_modules) && found.accessible_modules.length > 0) {
+              customModules = found.accessible_modules;
+            }
           }
         } else {
           displayName = row.role.charAt(0).toUpperCase() + row.role.slice(1).replace('_', ' ');
@@ -838,11 +842,15 @@
           displayInviteName = 'Owner';
         } else if (!row.role) {
           displayInviteName = 'None';
-        } else if (row.role.startsWith('custom_') || !['admin', 'owner', 'operations', 'customer_service', 'marketing', 'logistics', 'products', 'accounting', 'hr'].includes(row.role)) {
+        } else if (row.role.startsWith('access:') || row.role.startsWith('custom_') || !['admin', 'owner', 'operations', 'customer_service', 'marketing', 'logistics', 'products', 'accounting', 'hr'].includes(row.role)) {
           isCustomInvite = true;
-          const found = dynamicRoles.find(r => r.name === row.role);
-          if (found && Array.isArray(found.accessible_modules) && found.accessible_modules.length > 0) {
-            customInviteModules = found.accessible_modules;
+          if (row.role.startsWith('access:')) {
+            customInviteModules = row.role.substring(7).split(',').map(s => s.trim());
+          } else {
+            const found = dynamicRoles.find(r => r.name === row.role);
+            if (found && Array.isArray(found.accessible_modules) && found.accessible_modules.length > 0) {
+              customInviteModules = found.accessible_modules;
+            }
           }
         } else {
           displayInviteName = row.role.charAt(0).toUpperCase() + row.role.slice(1).replace('_', ' ');
@@ -911,35 +919,7 @@
           btn.innerText = 'Send Invitation';
           return;
         }
-
-        // Check if an existing role has the exact same modules
-        const existingRole = dynamicRoles.find(r => {
-          if (!Array.isArray(r.accessible_modules) || r.accessible_modules.length !== checkedModules.length) return false;
-          const set = new Set(r.accessible_modules);
-          return checkedModules.every(mod => set.has(mod));
-        });
-
-        if (existingRole) {
-          role = existingRole.name;
-        } else {
-          const customRoleName = 'custom_' + Math.random().toString(36).substring(2, 10) + '_' + Date.now().toString().slice(-4);
-          try {
-            const { error: roleErr } = await sb.from('dashboard_roles').insert({
-              name: customRoleName,
-              accessible_modules: checkedModules
-            });
-            if (roleErr) throw roleErr;
-
-            dynamicRoles.push({ name: customRoleName, accessible_modules: checkedModules });
-            role = customRoleName;
-          } catch (err) {
-            console.error('Failed to create custom role:', err);
-            showToast('Failed to configure custom accesses.', true);
-            btn.disabled = false;
-            btn.innerText = 'Send Invitation';
-            return;
-          }
-        }
+        role = 'access:' + checkedModules.join(',');
       }
 
       try {
@@ -1158,7 +1138,7 @@
         optionsHtml += '<option value="">None / Employee Only (No Access)</option>';
         select.innerHTML = optionsHtml;
         
-        let isCustom = currentRole.startsWith('custom_') || (currentRole && !['admin', 'owner', 'operations', 'customer_service', 'marketing', 'logistics', 'products', 'accounting', 'hr', ''].includes(currentRole));
+        let isCustom = currentRole.startsWith('access:') || currentRole.startsWith('custom_') || (currentRole && !['admin', 'owner', 'operations', 'customer_service', 'marketing', 'logistics', 'products', 'accounting', 'hr', ''].includes(currentRole));
         const customContainer = document.getElementById('edit-custom-access-container');
 
         document.querySelectorAll('.edit-custom-access').forEach(cb => cb.checked = false);
@@ -1166,12 +1146,20 @@
         if (isCustom) {
           select.value = 'custom';
           customContainer.style.display = 'flex';
-          const found = dynamicRoles.find(r => r.name === currentRole);
-          if (found && Array.isArray(found.accessible_modules)) {
-            found.accessible_modules.forEach(mod => {
+          if (currentRole.startsWith('access:')) {
+            const mods = currentRole.substring(7).split(',').map(s => s.trim());
+            mods.forEach(mod => {
               const cb = document.querySelector(`.edit-custom-access[value="${mod}"]`);
               if (cb) cb.checked = true;
             });
+          } else {
+            const found = dynamicRoles.find(r => r.name === currentRole);
+            if (found && Array.isArray(found.accessible_modules)) {
+              found.accessible_modules.forEach(mod => {
+                const cb = document.querySelector(`.edit-custom-access[value="${mod}"]`);
+                if (cb) cb.checked = true;
+              });
+            }
           }
         } else {
           select.value = currentRole;
@@ -1198,34 +1186,7 @@
           showToast('Please check at least one access module for Custom role.', true);
           return;
         }
-
-        // Check if an existing role has the exact same modules
-        const existingRole = dynamicRoles.find(r => {
-          if (!Array.isArray(r.accessible_modules) || r.accessible_modules.length !== checkedModules.length) return false;
-          const set = new Set(r.accessible_modules);
-          return checkedModules.every(mod => set.has(mod));
-        });
-
-        if (existingRole) {
-          newRole = existingRole.name;
-        } else {
-          const roleName = 'custom_' + Math.random().toString(36).substring(2, 10) + '_' + Date.now().toString().slice(-4);
-          try {
-            const { error: roleErr } = await sb.from('dashboard_roles').insert({
-              name: roleName,
-              accessible_modules: checkedModules
-            });
-
-            if (roleErr) throw roleErr;
-
-            dynamicRoles.push({ name: roleName, accessible_modules: checkedModules });
-            newRole = roleName;
-          } catch (err) {
-            console.error('Error creating custom role:', err);
-            showToast('Failed to save custom access settings.', true);
-            return;
-          }
-        }
+        newRole = 'access:' + checkedModules.join(',');
       }
 
       try {
