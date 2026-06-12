@@ -88,3 +88,55 @@ We enforce rigorous practices to prevent SQL injections (SQLi) and Cross-Site Sc
 ## 7. No Emojis Policy
 > [!IMPORTANT]
 > Emojis are strictly prohibited as visual icons or decorative elements anywhere in the UI (HTML markup, template strings, or CSS). Always use custom-styled SVG paths or text indicators to maintain professional branding and design consistency.
+
+---
+
+## 8. Tabs Component Design
+When creating tabs in BrightKey Portal dashboards, follow the tabs design from `/dashboard/fulfillment`:
+
+### HTML Structure
+```html
+<div class="drawer-tabs">
+  <button class="tab-btn active" onclick="switchTab('tab1')">Tab One</button>
+  <button class="tab-btn" onclick="switchTab('tab2')">Tab Two</button>
+  <button class="tab-btn" onclick="switchTab('tab3')">Tab Three</button>
+</div>
+```
+
+### CSS Styling
+Ensure the tabs container and buttons use the following premium styling tokens:
+```css
+/* ── Tab Container Bar ── */
+.drawer-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  overflow-x: auto;
+  background: var(--bg-surface);
+}
+
+/* ── Tab Buttons ── */
+.tab-btn {
+  padding: 0.9rem 1.25rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  border: none;
+  background: none;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+
+/* ── Active Tab Styling ── */
+.tab-btn.active {
+  color: var(--cyan-light);
+  border-bottom-color: var(--cyan);
+}
+
+/* ── Hover State ── */
+.tab-btn:hover:not(.active) {
+  color: var(--text-secondary);
+}
+```
