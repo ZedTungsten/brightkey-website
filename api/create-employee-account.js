@@ -26,10 +26,10 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Missing required parameters.' });
   }
 
-  // Password validation: min 8 chars, 1 uppercase, 1 number
-  const passwordRegex = /^(?=.*[A-Z])(?=.*\d).{8,}$/;
+  // Password validation: min 8 chars, 1 uppercase, 1 lowercase, 1 number, 1 special character
+  const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/;
   if (!passwordRegex.test(password)) {
-    return res.status(400).json({ error: 'Password does not meet validation requirements (min 8 characters, at least 1 uppercase letter, and at least 1 number).' });
+    return res.status(400).json({ error: 'Password does not meet validation requirements (at least 8 characters long, contain at least 1 uppercase letter, 1 lowercase letter, 1 number, and 1 special character).' });
   }
 
   // Initialize service client
