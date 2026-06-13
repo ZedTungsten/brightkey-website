@@ -618,7 +618,7 @@
         container.innerHTML += `
           <div class="term-row">
             <span style="font-size:0.8rem; font-weight:700; width:60px;">Item ${i}:</span>
-            <input type="text" class="form-input term-input" style="padding:0.4rem; font-size:0.82rem;" placeholder="e.g. Non-refundable deposit: secures schedule" oninput="compilePreviewTemplate()" />
+            <input type="text" class="form-input term-input" style="padding:0.4rem; font-size:0.82rem;" placeholder="e.g. Non-refundable deposit: secures schedule" oninput="compileReceipt()" />
           </div>
         `;
       }
@@ -1166,11 +1166,60 @@
       doc.write(outputHtml);
       doc.close();
 
+      // Adjust preview scaling
+      if (typeof window.adjustPreviewScale === 'function') {
+        window.adjustPreviewScale();
+      }
+
       // Store in window for printing / saving
       window.compiledReceiptHtml = outputHtml;
       window.invoiceFilename = `${orderno}.pdf`;
       if (typeof checkChanges === 'function') checkChanges();
     };
+
+    window.adjustPreviewScale = function() {
+      const iframe = document.getElementById('preview-iframe');
+      if (!iframe || iframe.style.display === 'none') return;
+      const doc = iframe.contentDocument || iframe.contentWindow.document;
+      const wrapper = doc.querySelector('.receipt-preview-wrapper');
+      const element = doc.querySelector('.receipt-page');
+      if (!element || !wrapper) return;
+
+      const containerWidth = iframe.clientWidth;
+      const containerHeight = iframe.clientHeight;
+      const pageWidth = 794;
+      const pageHeight = 1123;
+
+      const scaleX = (containerWidth - 24) / pageWidth;
+      const scaleY = (containerHeight - 24) / pageHeight;
+      const scale = Math.min(scaleX, scaleY, 1);
+
+      element.style.transform = `scale(${scale})`;
+      element.style.transformOrigin = 'top center';
+      element.style.boxShadow = '0 10px 25px rgba(0,0,0,0.2)';
+      element.style.borderRadius = '2px';
+      
+      wrapper.style.display = 'flex';
+      wrapper.style.alignItems = 'flex-start';
+      wrapper.style.justifyContent = 'center';
+      wrapper.style.minHeight = '100%';
+      wrapper.style.height = '100%';
+      wrapper.style.padding = '12px 0';
+      wrapper.style.boxSizing = 'border-box';
+      wrapper.style.background = '#333335';
+      wrapper.style.overflow = 'hidden';
+      
+      doc.body.style.background = '#333335';
+      doc.body.style.margin = '0';
+      doc.body.style.height = '100%';
+      doc.body.style.overflow = 'hidden';
+    };
+
+    window.addEventListener('resize', () => {
+      if (typeof window.adjustPreviewScale === 'function') {
+        window.adjustPreviewScale();
+      }
+    });
 
     // Color picker ↔ hex text sync
     window.syncColor = function(pickerId, txtId) {
