@@ -24,7 +24,7 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Supabase configuration is missing on server.' });
   }
 
-  const { tenant_id, company_id, email, full_name, role, invited_by } = req.body;
+  const { tenant_id, company_id, email, full_name, role, invited_by, invite_type } = req.body;
   if (!tenant_id || !company_id || !email || !full_name) {
     return res.status(400).json({ error: 'Missing required parameters.' });
   }
@@ -77,7 +77,8 @@ export default async function handler(req, res) {
 
     // 5. Construct invite URL
     const origin = req.headers.referer ? new URL(req.headers.referer).origin : 'https://www.brightkeysolutions.com';
-    const inviteLink = `${origin}/employee-registration?tenant=${encodeURIComponent(tenant_id)}&company=${encodeURIComponent(company_id)}&role=${encodeURIComponent(role || '')}&email=${encodeURIComponent(email.toLowerCase().trim())}&sig=${signature}`;
+    const pagePath = invite_type === 'directory' ? 'employee-directory-registration.html' : 'employee-registration';
+    const inviteLink = `${origin}/${pagePath}?tenant=${encodeURIComponent(tenant_id)}&company=${encodeURIComponent(company_id)}&role=${encodeURIComponent(role || '')}&email=${encodeURIComponent(email.toLowerCase().trim())}&sig=${signature}`;
 
     // 6. Send email via Resend
     let emailSent = false;

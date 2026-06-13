@@ -34,7 +34,7 @@ export default async function handler(req, res) {
     employee_payload
   } = req.body;
 
-  if (!tenant_id || !company_id || !email || !signature || !password || !employee_payload) {
+  if (!tenant_id || !company_id || !email || !signature || !password) {
     return res.status(400).json({ error: 'Missing required registration parameters.' });
   }
 
@@ -71,13 +71,31 @@ export default async function handler(req, res) {
       }
     }
 
+    // 1c. Fetch existing employee by email to reuse their information if they exist
+    const { data: existingEmp, error: empFetchErr } = await supabase
+      .from('employees')
+      .select('*')
+      .eq('email', email.toLowerCase().trim())
+      .maybeSingle();
+
+    let firstName = 'N/A';
+    let lastName = 'N/A';
+    if (existingEmp) {
+      firstName = existingEmp.first_name || 'N/A';
+      lastName = existingEmp.last_name || 'N/A';
+    } else if (employee_payload) {
+      firstName = employee_payload.first_name || 'N/A';
+      lastName = employee_payload.last_name || 'N/A';
+    }
+    const fullName = `${firstName} ${lastName}`.trim();
+
     // 2. Create auth user with service role client and the user's chosen password
     const { data: authData, error: authError } = await supabase.auth.admin.createUser({
       email: email,
       password: password,
       email_confirm: true,
       user_metadata: {
-        full_name: `${employee_payload.first_name} ${employee_payload.last_name}`,
+        full_name: fullName,
         needs_password_reset: false
       }
     });
@@ -95,7 +113,7 @@ export default async function handler(req, res) {
       user_id: userId,
       role: role ? role : null,
       user_email: email,
-      full_name: `${employee_payload.first_name} ${employee_payload.last_name}`
+      full_name: fullName
     });
 
     if (tmError) {
@@ -105,55 +123,86 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: `Database Error (tenant_members): ${tmError.message}` });
     }
 
-    // 4. Create employee record
-    let employeeNumber = '';
-    let isUnique = false;
-    let attempts = 0;
-
-    while (!isUnique && attempts < 100) {
-      attempts++;
-      const { data: numData, error: seqError } = await supabase.rpc('generate_employee_number');
-      let potentialNum = '';
-      if (!seqError && numData) {
-        potentialNum = numData;
-      } else {
-        console.warn('generate_employee_number RPC failed, falling back to count check:', seqError);
-        const { count } = await supabase
-          .from('employees')
-          .select('*', { count: 'exact', head: true });
-        potentialNum = 'BK-' + String((count ?? 0) + attempts).padStart(4, '0');
-      }
-
-      // Check if this employee number already exists in the database
-      const { data: existing, error: existError } = await supabase
+    // 4. Update or Create employee record
+    if (existingEmp) {
+      // Update existing employee ID to match the auth user ID
+      const { error: empUpdateErr } = await supabase
         .from('employees')
-        .select('id')
-        .eq('employee_number', potentialNum)
-        .maybeSingle();
+        .update({ id: userId })
+        .eq('id', existingEmp.id);
 
-      if (!existError && !existing) {
-        employeeNumber = potentialNum;
-        isUnique = true;
+      if (empUpdateErr) {
+        console.error('Failed to link existing employee ID:', empUpdateErr);
+        // Rollback
+        await supabase.from('tenant_members').delete().eq('user_id', userId);
+        await supabase.auth.admin.deleteUser(userId);
+        return res.status(500).json({ error: `Database Error (linking employee): ${empUpdateErr.message}` });
       }
-    }
+    } else {
+      let employeeNumber = '';
+      let isUnique = false;
+      let attempts = 0;
 
-    if (!employeeNumber) {
-      return res.status(500).json({ error: 'Failed to generate a unique employee number after multiple attempts.' });
-    }
+      while (!isUnique && attempts < 100) {
+        attempts++;
+        const { data: numData, error: seqError } = await supabase.rpc('generate_employee_number');
+        let potentialNum = '';
+        if (!seqError && numData) {
+          potentialNum = numData;
+        } else {
+          console.warn('generate_employee_number RPC failed, falling back to count check:', seqError);
+          const { count } = await supabase
+            .from('employees')
+            .select('*', { count: 'exact', head: true });
+          potentialNum = 'BK-' + String((count ?? 0) + attempts).padStart(4, '0');
+        }
 
-    const finalEmployeePayload = {
-      ...employee_payload,
-      employee_number: employeeNumber,
-      id: userId // Set public.employees ID to match the auth user ID for simple relation
-    };
+        // Check if this employee number already exists in the database
+        const { data: existing, error: existError } = await supabase
+          .from('employees')
+          .select('id')
+          .eq('employee_number', potentialNum)
+          .maybeSingle();
 
-    const { error: empError } = await supabase.from('employees').insert(finalEmployeePayload);
-    if (empError) {
-      console.error('Employee Insert Error:', empError);
-      // Rollback tenant member and auth user
-      await supabase.from('tenant_members').delete().eq('user_id', userId);
-      await supabase.auth.admin.deleteUser(userId);
-      return res.status(500).json({ error: `Database Error (employees): ${empError.message}` });
+        if (!existError && !existing) {
+          employeeNumber = potentialNum;
+          isUnique = true;
+        }
+      }
+
+      if (!employeeNumber) {
+        // Rollback
+        await supabase.from('tenant_members').delete().eq('user_id', userId);
+        await supabase.auth.admin.deleteUser(userId);
+        return res.status(500).json({ error: 'Failed to generate a unique employee number after multiple attempts.' });
+      }
+
+      const finalEmployeePayload = employee_payload ? {
+        ...employee_payload,
+        employee_number: employeeNumber,
+        id: userId
+      } : {
+        id: userId,
+        company_id: company_id,
+        email: email.toLowerCase().trim(),
+        first_name: firstName,
+        last_name: lastName,
+        employee_number: employeeNumber,
+        employment_status: 'Active',
+        date_of_birth: '1970-01-01',
+        address: 'N/A',
+        contact_number: 'N/A',
+        emergency_contact_number: 'N/A'
+      };
+
+      const { error: empError } = await supabase.from('employees').insert(finalEmployeePayload);
+      if (empError) {
+        console.error('Employee Insert Error:', empError);
+        // Rollback tenant member and auth user
+        await supabase.from('tenant_members').delete().eq('user_id', userId);
+        await supabase.auth.admin.deleteUser(userId);
+        return res.status(500).json({ error: `Database Error (employees): ${empError.message}` });
+      }
     }
 
     // 5. Delete the pending invitation since user has successfully registered
