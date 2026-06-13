@@ -728,9 +728,11 @@
 
       // Populate products
       const initialProducts = [];
+      const savedUnitPrices = data.product_unit_prices ? data.product_unit_prices.split('|').map(s => Math.round(parseFloat(s.trim()) * 100)) : [];
       if (data.products && Array.isArray(data.products)) {
-        data.products.forEach(p => {
-          addInvoiceProductRow(p.sku, p.qty);
+        data.products.forEach((p, idx) => {
+          const savedPrice = savedUnitPrices[idx] !== undefined && !isNaN(savedUnitPrices[idx]) ? savedUnitPrices[idx] : null;
+          addInvoiceProductRow(p.sku, p.qty, savedPrice);
           initialProducts.push({ sku: p.sku, qty: p.qty });
         });
       }
@@ -834,9 +836,19 @@
     }
 
     // --- Dynamic Invoice Row Generators ---
-    window.addInvoiceProductRow = function(selectedSku = '', selectedQty = 1) {
+    window.addInvoiceProductRow = function(selectedSku = '', selectedQty = 1, customPrice = null) {
       const container = document.getElementById('inv-products-container');
       const rowId = 'inv-prod-row-' + Date.now() + Math.random().toString(36).substr(2, 5);
+
+      let initialPrice = 0;
+      if (customPrice !== null) {
+        initialPrice = customPrice;
+      } else if (selectedSku) {
+        const p = dbProducts.find(prod => prod.sku === selectedSku);
+        if (p) {
+          initialPrice = p.installation_price || 0;
+        }
+      }
 
       const options = dbProducts.map(p => {
         const activePrice = p.installation_price || 0;
@@ -848,10 +860,14 @@
       const html = `
         <div class="product-row" id="${rowId}">
           <div style="flex:2;">
-            <select class="form-input" style="padding:0.4rem; font-size:0.85rem; height:auto;" onchange="compileReceipt()" id="${rowId}-select">
+            <select class="form-input" style="padding:0.4rem; font-size:0.85rem; height:auto;" onchange="updateProductRowPrice('${rowId}'); compileReceipt();" id="${rowId}-select">
               <option value="" data-price="0">-- Select product --</option>
               ${options}
             </select>
+          </div>
+          <div style="flex:0.75; display:flex; align-items:center; gap:0.25rem;">
+            <span style="font-size:0.85rem; color:var(--text-secondary);">₱</span>
+            <input type="number" class="form-input price-input" style="padding:0.4rem; font-size:0.85rem;" placeholder="0.00" value="${(initialPrice / 100).toFixed(2)}" oninput="compileReceipt()" id="${rowId}-price" step="0.01" />
           </div>
           <div style="flex:0.5;">
             <input type="number" class="form-input" style="padding:0.4rem; font-size:0.85rem;" min="1" value="${selectedQty}" oninput="compileReceipt()" id="${rowId}-qty" />
@@ -861,6 +877,17 @@
       `;
       container.insertAdjacentHTML('beforeend', html);
       compileReceipt();
+    };
+
+    window.updateProductRowPrice = function(rowId) {
+      const select = document.getElementById(rowId + '-select');
+      const priceInput = document.getElementById(rowId + '-price');
+      if (!select || !priceInput) return;
+      const selectedOption = select.options[select.selectedIndex];
+      if (selectedOption) {
+        const rawPrice = parseFloat(selectedOption.getAttribute('data-price')) || 0;
+        priceInput.value = (rawPrice / 100).toFixed(2);
+      }
     };
 
     window.addInvoiceChargeRow = function(labelVal = 'Credit card fee', amountVal = '') {
@@ -988,15 +1015,18 @@
       } else {
         document.querySelectorAll('#inv-products-container .product-row').forEach(row => {
           const select = row.querySelector('select');
-          const qtyInput = row.querySelector('input[type="number"]');
+          const priceInput = row.querySelector('.price-input');
+          const qtyInput = row.querySelector('input[type="number"]:not(.price-input)');
           const selectedOption = select.options[select.selectedIndex];
 
           if (selectedOption && selectedOption.value) {
             const sku = selectedOption.value;
-            const price = parseFloat(selectedOption.getAttribute('data-price')) || 0;
+            const price = Math.round((parseFloat(priceInput.value) || 0) * 100);
             const qty = parseInt(qtyInput.value) || 1;
             const lineTotal = price * qty;
-            const title = selectedOption.text.split(' (')[0];
+            
+            const p = dbProducts.find(prod => prod.sku === sku);
+            const title = p ? p.title : sku;
 
             subtotal += lineTotal;
             itemsHtml += `
@@ -1669,15 +1699,18 @@
 
         document.querySelectorAll('#inv-products-container .product-row').forEach(row => {
           const select = row.querySelector('select');
-          const qtyInput = row.querySelector('input[type="number"]');
+          const priceInput = row.querySelector('.price-input');
+          const qtyInput = row.querySelector('input[type="number"]:not(.price-input)');
           const selectedOption = select.options[select.selectedIndex];
           
           if (selectedOption && selectedOption.value) {
             const sku = selectedOption.value;
-            const price = parseFloat(selectedOption.getAttribute('data-price')) || 0;
+            const price = Math.round((parseFloat(priceInput.value) || 0) * 100);
             const qty = parseInt(qtyInput.value) || 1;
             const lineTotal = price * qty;
-            const title = selectedOption.text.split(' (')[0];
+            
+            const p = dbProducts.find(prod => prod.sku === sku);
+            const title = p ? p.title : sku;
             
             subtotalCents += lineTotal;
             productsList.push({ sku, title, name: title, qty, price, lineTotal });
