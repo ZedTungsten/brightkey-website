@@ -268,5 +268,19 @@ Instead of scrolling the whole panel, restrict vertical and horizontal scrolling
   ```
 * Ensure that media query overrides (e.g., `@media (max-width: 768px)`) do not inadvertently override the root layout container's `min-height: 100dvh` with a standard `100vh` declaration.
 
+---
+
+## 13. Dropdown Select Placeholder Behavior
+* **Rule**: When using `<select>` dropdown menus with a default placeholder choice (e.g. `Hour`, `Min`, `AM/PM`), always mark the placeholder `<option>` as `disabled` and `hidden` (with optional `selected` attribute dynamically bound when no value exists).
+* **Why**: This displays the placeholder text when no selection has been made, but prevents it from appearing as a selectable option in the list once the user opens the dropdown.
+* **Example**:
+  ```html
+  <select>
+    <option value="" disabled selected hidden>AM/PM</option>
+    <option value="AM">AM</option>
+    <option value="PM">PM</option>
+  </select>
+  ```
+
 
 
