@@ -1334,6 +1334,67 @@
       }
     };
 
+    // Automatically cancels removed products from inventory transactions and updates inventory counts.
+    async function checkAndCancelRemovedProducts(orderNo, newProducts) {
+      if (!loadedBookingState || !loadedBookingState.products) return;
+      const oldSkus = loadedBookingState.products.map(p => p.sku);
+      const newSkus = newProducts.map(p => p.sku);
+      const removedSkus = oldSkus.filter(sku => !newSkus.includes(sku));
+
+      if (removedSkus.length > 0) {
+        console.log('Detected removed SKUs:', removedSkus);
+        try {
+          const { data: txs, error: txsErr } = await sb.from('inventory_transactions')
+            .select('*')
+            .eq('reference_id', orderNo)
+            .eq('type', 'customer_order')
+            .in('sku', removedSkus)
+            .in('status', ['reserved', 'packed', 'dispatched']);
+          
+          if (txsErr) throw txsErr;
+
+          if (txs && txs.length > 0) {
+            const now = new Date().toISOString();
+            for (const tx of txs) {
+              const { error: txErr } = await sb.from('inventory_transactions')
+                .update({
+                  status: 'cancelled',
+                  timestamp_cancelled: now
+                })
+                .eq('id', tx.id);
+              if (txErr) console.error('Error cancelling transaction:', txErr);
+
+              // Update inventory counts
+              const { data: invRows, error: invErr } = await sb.from('inventory')
+                .select('*')
+                .eq('sku', tx.sku);
+              if (invErr) {
+                console.error('Error querying inventory for SKU:', tx.sku, invErr);
+                continue;
+              }
+              if (invRows && invRows.length > 0) {
+                const inv = invRows[0];
+                const updates = { cancelled: (inv.cancelled || 0) + tx.quantity };
+                if (tx.status === 'reserved') {
+                  updates.reserved = Math.max(0, (inv.reserved || 0) - tx.quantity);
+                } else if (tx.status === 'packed') {
+                  updates.packed = Math.max(0, (inv.packed || 0) - tx.quantity);
+                } else if (tx.status === 'dispatched') {
+                  updates.dispatched = Math.max(0, (inv.dispatched || 0) - tx.quantity);
+                }
+                const { error: updErr } = await sb.from('inventory')
+                  .update(updates)
+                  .eq('sku', tx.sku);
+                if (updErr) console.error('Error updating inventory counts:', updErr);
+              }
+            }
+          }
+        } catch (err) {
+          console.error('Error processing removed products cancellation:', err);
+        }
+      }
+    }
+
     // Update fields and financials in installation_bookings table
     async function updateBookingInDatabase() {
       if (!selectedBookingId) {
@@ -1400,6 +1461,11 @@
       const grandTotal = subtotal + totalCharges - totalDeductions;
 
       try {
+        const orderNo = document.getElementById('inv-orderno').value;
+        if (orderNo) {
+          await checkAndCancelRemovedProducts(orderNo, products);
+        }
+
         const { error } = await sb.from('installation_bookings').update({
           customer_name: fullname,
           customer_phone: contact,
@@ -1419,6 +1485,9 @@
         }).eq('id', selectedBookingId);
 
         if (error) throw error;
+        if (loadedBookingState) {
+          loadedBookingState.products = products.map(p => ({ sku: p.sku, qty: p.qty }));
+        }
         showNotification('Database entry updated successfully!', 'success');
         return true;
       } catch (err) {
@@ -1790,6 +1859,10 @@
           grand_total:         grandTotalCents,
           balance_due:         balanceCents
         };
+
+        if (orderNo) {
+          await checkAndCancelRemovedProducts(orderNo, productsList);
+        }
 
         const { error } = await sb.from('installation_bookings').update(updatePayload).eq('id', selectedBookingId);
         if (error) throw error;
