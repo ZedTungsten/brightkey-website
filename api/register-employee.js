@@ -89,23 +89,48 @@ export default async function handler(req, res) {
     }
     const fullName = `${firstName} ${lastName}`.trim();
 
-    // 2. Create auth user with service role client and the user's chosen password
-    const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-      email: email,
-      password: password,
-      email_confirm: true,
-      user_metadata: {
-        full_name: fullName,
-        needs_password_reset: false
-      }
-    });
-
-    if (authError) {
-      console.error('Auth User Creation Error:', authError);
-      return res.status(400).json({ error: `Auth Error: ${authError.message}` });
+    // 1d. Check if user already exists in auth.users
+    const { data: { users }, error: listError } = await supabase.auth.admin.listUsers();
+    let existingAuthUser = null;
+    if (!listError && users) {
+      existingAuthUser = users.find(u => u.email.toLowerCase() === email.toLowerCase().trim());
     }
 
-    const userId = authData.user.id;
+    let userId = null;
+
+    if (existingAuthUser) {
+      userId = existingAuthUser.id;
+      // Update existing auth user with new password and metadata
+      const { error: updateError } = await supabase.auth.admin.updateUserById(userId, {
+        password: password,
+        user_metadata: {
+          full_name: fullName,
+          needs_password_reset: false
+        }
+      });
+      if (updateError) {
+        console.error('Auth User Update Error:', updateError);
+        return res.status(400).json({ error: `Auth Error: ${updateError.message}` });
+      }
+    } else {
+      // 2. Create auth user with service role client and the user's chosen password
+      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+        email: email,
+        password: password,
+        email_confirm: true,
+        user_metadata: {
+          full_name: fullName,
+          needs_password_reset: false
+        }
+      });
+
+      if (authError) {
+        console.error('Auth User Creation Error:', authError);
+        return res.status(400).json({ error: `Auth Error: ${authError.message}` });
+      }
+
+      userId = authData.user.id;
+    }
 
     // 3. Create tenant member record
     const { error: tmError } = await supabase.from('tenant_members').insert({
