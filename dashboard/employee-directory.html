@@ -1459,32 +1459,16 @@
       return f + l || '?';
     }
 
-    function generateTimeOptions(selectedValue) {
-      const options = [];
-      options.push('<option value="">—</option>');
-      const periods = ['AM', 'PM'];
-      const minutes = ['00', '15', '30', '45'];
-      const standardValues = new Set();
-      
-      for (let p = 0; p < 2; p++) {
-        const period = periods[p];
-        for (let h = 1; h <= 12; h++) {
-          const hrStr = String(h).padStart(2, '0');
-          for (let m = 0; m < 4; m++) {
-            const minStr = minutes[m];
-            const val = `${hrStr}:${minStr} ${period}`;
-            standardValues.add(val);
-            const selected = (selectedValue === val) ? 'selected' : '';
-            options.push(`<option value="${val}" ${selected}>${val}</option>`);
-          }
-        }
-      }
-      
-      if (selectedValue && !standardValues.has(selectedValue)) {
-        options.push(`<option value="${selectedValue}" selected>${selectedValue}</option>`);
-      }
-      
-      return options.join('');
+    function parseTimeParts(timeStr) {
+      if (!timeStr) return { h: '', m: '', p: '' };
+      timeStr = timeStr.trim().toUpperCase();
+      const match = timeStr.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/);
+      if (!match) return { h: '', m: '', p: '' };
+      return {
+        h: String(parseInt(match[1], 10)),
+        m: match[2],
+        p: match[3]
+      };
     }
 
     /* ── Toast ── */
@@ -1537,13 +1521,28 @@
 
       updateTimeRange(timeInput, id, fieldName) {
         const row = timeInput.closest('tr');
-        const startEl = row.querySelector(`.time-start[data-field="${fieldName}"]`);
-        const endEl = row.querySelector(`.time-end[data-field="${fieldName}"]`);
         const mainInput = row.querySelector(`input.main-time-input[data-field="${fieldName}"]`);
-        if (!startEl || !endEl || !mainInput) return;
+        if (!mainInput) return;
         
-        const startVal = startEl.value;
-        const endVal = endEl.value;
+        const getTimeStr = (prefix) => {
+          const wraps = row.querySelectorAll(`.time-part-wrap[data-prefix="${prefix}"]`);
+          let correctWrap = null;
+          wraps.forEach(w => {
+            const hSel = w.querySelector('.time-h');
+            if (hSel && hSel.dataset.field === fieldName) {
+              correctWrap = w;
+            }
+          });
+          if (!correctWrap) return '';
+          const h = correctWrap.querySelector('.time-h').value;
+          const m = correctWrap.querySelector('.time-m').value;
+          const p = correctWrap.querySelector('.time-p').value;
+          if (!h || !m || !p) return '';
+          return `${String(h).padStart(2, '0')}:${m} ${p}`;
+        };
+        
+        const startVal = getTimeStr('start');
+        const endVal = getTimeStr('end');
         
         if (startVal && endVal) {
           mainInput.value = startVal + ' - ' + endVal;
@@ -2060,21 +2059,32 @@
           }
           
           const parts = val.split('-').map(s => s.trim());
-          const startVal = parts[0] || '';
-          const endVal = parts[1] || '';
+          const startParts = parseTimeParts(parts[0] || '');
+          const endParts = parseTimeParts(parts[1] || '');
           
-          const startOpts = generateTimeOptions(startVal);
-          const endOpts = generateTimeOptions(endVal);
+          const renderTimeSelects = (prefix, p) => {
+            const hrs = ['1','2','3','4','5','6','7','8','9','10','11','12'];
+            const mins = ['00','15','30','45'];
+            const periods = ['AM','PM'];
+            
+            const hOpts = ['<option value="">Hour</option>', ...hrs.map(h => `<option value="${h}" ${p.h === h ? 'selected' : ''}>${h}</option>`)].join('');
+            const mOpts = ['<option value="">Min</option>', ...mins.map(m => `<option value="${m}" ${p.m === m ? 'selected' : ''}>${m}</option>`)].join('');
+            const pOpts = ['<option value="">AM/PM</option>', ...periods.map(pe => `<option value="${pe}" ${p.p === pe ? 'selected' : ''}>${pe}</option>`)].join('');
+            
+            return `
+              <div class="time-part-wrap" data-prefix="${prefix}" style="display:inline-flex; gap:2px;">
+                <select class="cell-input cell-select time-h" data-field="${fieldName}" onchange="App.updateTimeRange(this, '${esc(id)}', '${fieldName}')" style="min-width: 65px; padding-right: 1.1rem; background-position: right 0.25rem center;">${hOpts}</select>
+                <select class="cell-input cell-select time-m" data-field="${fieldName}" onchange="App.updateTimeRange(this, '${esc(id)}', '${fieldName}')" style="min-width: 65px; padding-right: 1.1rem; background-position: right 0.25rem center;">${mOpts}</select>
+                <select class="cell-input cell-select time-p" data-field="${fieldName}" onchange="App.updateTimeRange(this, '${esc(id)}', '${fieldName}')" style="min-width: 65px; padding-right: 1.1rem; background-position: right 0.25rem center;">${pOpts}</select>
+              </div>
+            `;
+          };
           
           return `<td class="grp-hr">
-            <div class="time-range-wrap">
-              <select class="cell-input cell-select time-start" data-field="${fieldName}" onchange="App.updateTimeRange(this, '${esc(id)}', '${fieldName}')" style="min-width: 105px;">
-                ${startOpts}
-              </select>
+            <div class="time-range-wrap" style="gap: 0.25rem;">
+              ${renderTimeSelects('start', startParts)}
               <span class="time-range-sep">to</span>
-              <select class="cell-input cell-select time-end" data-field="${fieldName}" onchange="App.updateTimeRange(this, '${esc(id)}', '${fieldName}')" style="min-width: 105px;">
-                ${endOpts}
-              </select>
+              ${renderTimeSelects('end', endParts)}
             </div>
             <input type="hidden" class="cell-input main-time-input" data-id="${esc(id)}" data-field="${fieldName}" value="${esc(val)}">
           </td>`;
