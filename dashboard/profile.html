@@ -84,11 +84,12 @@
 
     .cover-actions-wrapper {
       position: absolute;
-      top: 1.5rem;
+      bottom: 1.5rem;
       right: 1.5rem;
       z-index: 5;
       display: flex;
       gap: 0.75rem;
+      align-items: center;
     }
 
     .btn-cover-action {
@@ -111,6 +112,30 @@
       transform: translateY(-1px);
     }
 
+    /* Round color theme picker buttons */
+    .theme-circle {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      cursor: pointer;
+      border: 2px solid transparent;
+      box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.4);
+      transition: transform 0.15s, border-color 0.15s;
+    }
+    .theme-circle:hover {
+      transform: scale(1.15);
+    }
+    .theme-circle.active {
+      border-color: var(--cyan);
+      box-shadow: 0 0 0 1px #fff;
+    }
+    .theme-circle-white {
+      background-color: #ffffff;
+    }
+    .theme-circle-black {
+      background-color: #09090b;
+    }
+
     .cover-info-overlay {
       position: relative;
       z-index: 2;
@@ -127,6 +152,9 @@
     .cover-text.text-black {
       color: #09090B !important;
     }
+    .cover-text.text-black .cover-datetime {
+      opacity: 0.75;
+    }
     
     .cover-greeting {
       font-size: 1.65rem;
@@ -140,6 +168,14 @@
       font-weight: 500;
       opacity: 0.9;
       margin-top: 0.25rem;
+    }
+
+    .cover-datetime-wrapper {
+      text-align: right;
+      color: #ffffff;
+    }
+    .cover-text.text-black + .cover-datetime-wrapper {
+      color: #09090B !important;
     }
 
     /* ── Columns Grid ── */
@@ -494,8 +530,22 @@
       
       <!-- Cover Banner -->
       <div class="profile-cover-banner" id="cover-banner">
-        <div class="cover-overlay"></div>
+        <div class="cover-overlay" style="position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.4) 100%); z-index: 1;"></div>
         
+        <!-- Top Right Info (Datetime and Theme dots) -->
+        <div style="position: absolute; top: 1.5rem; right: 1.5rem; z-index: 5; display: flex; flex-direction: column; align-items: flex-end; gap: 0.5rem;">
+          <div class="cover-datetime-wrapper" style="text-align: right; font-family: var(--font);">
+            <div id="cover-current-date" style="font-size: 0.95rem; font-weight: 700;"></div>
+            <div id="cover-current-time" style="font-size: 1.25rem; font-weight: 800; margin-top: 0.1rem; letter-spacing: -0.02em;"></div>
+          </div>
+          <!-- Tiny round color theme togglers below datetime -->
+          <div style="display: flex; gap: 0.4rem; align-items: center; margin-top: 0.2rem;">
+            <div class="theme-circle theme-circle-white" id="btn-text-white" onclick="App.setTextColorPreference('white')" title="White text"></div>
+            <div class="theme-circle theme-circle-black" id="btn-text-black" onclick="App.setTextColorPreference('black')" title="Black text"></div>
+          </div>
+        </div>
+
+        <!-- Lower Right Action Button -->
         <div class="cover-actions-wrapper">
           <label class="btn-cover-action" title="Upload Cover Photo">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
@@ -506,8 +556,7 @@
 
         <div class="cover-info-overlay">
           <div class="cover-text" id="cover-text-elements">
-            <div class="cover-greeting" id="cover-greeting">Welcome back!</div>
-            <div class="cover-datetime" id="cover-datetime">—</div>
+            <div class="cover-greeting" id="cover-greeting" style="font-size: 1.6rem; font-weight: 800; margin: 0; letter-spacing: -0.03em; line-height: 1.2;">Welcome back!</div>
           </div>
         </div>
       </div>
@@ -542,17 +591,6 @@
                 <button class="btn btn-outline btn-sm" onclick="App.cancelStatus()">Cancel</button>
                 <button class="btn btn-primary btn-sm" onclick="App.saveStatus()">Save</button>
               </div>
-            </div>
-          </div>
-
-          <div class="divider"></div>
-
-          <!-- Preference Toggles -->
-          <div class="preference-toggle-section">
-            <span class="status-label">Greeting Text Color</span>
-            <div style="display:flex; gap:0.5rem; margin-top:0.4rem;">
-              <button class="btn btn-outline btn-sm" id="btn-text-white" onclick="App.setTextColorPreference('white')">White</button>
-              <button class="btn btn-outline btn-sm" id="btn-text-black" onclick="App.setTextColorPreference('black')">Black</button>
             </div>
           </div>
         </div>
@@ -661,8 +699,9 @@
     }
 
     function formatDateTime() {
-      const el = document.getElementById('cover-datetime');
-      if (!el) return;
+      const dateEl = document.getElementById('cover-current-date');
+      const timeEl = document.getElementById('cover-current-time');
+      if (!dateEl || !timeEl) return;
       const d = new Date();
       const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
       const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -671,13 +710,16 @@
       const dayNum = String(d.getDate()).padStart(2, '0');
       const year = d.getFullYear();
       
+      dateEl.textContent = `${dayName} ${monthName} ${dayNum}, ${year}`;
+      
       let hours = d.getHours();
       const minutes = String(d.getMinutes()).padStart(2, '0');
       const ampm = hours >= 12 ? 'PM' : 'AM';
       hours = hours % 12;
       hours = hours ? hours : 12;
+      const hoursStr = String(hours).padStart(2, '0');
       
-      el.textContent = `${dayName}, ${monthName} ${dayNum}, ${year} | ${String(hours).padStart(2, '0')}:${minutes} ${ampm}`;
+      timeEl.textContent = `${hoursStr}:${minutes} ${ampm}`;
     }
 
     const App = {
