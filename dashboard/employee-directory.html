@@ -944,6 +944,41 @@
       color: var(--text-primary) !important;
     }
 
+    /* Tab styles */
+    .tabs-nav {
+      display: flex;
+      gap: 1rem;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 1px;
+    }
+    .tab-btn {
+      padding: 0.6rem 1rem;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      border: none;
+      background: none;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: all 0.15s;
+    }
+    .tab-btn.active {
+      color: var(--cyan-light);
+      border-bottom-color: var(--cyan);
+    }
+
+    /* Yellow cell highlight for pending request updates */
+    .dir-table td.cell-pending-highlight {
+      background-color: #fef08a !important; /* light yellow bg */
+      border: 1px solid #eab308 !important;   /* yellow border */
+      color: #854d0e !important;            /* dark yellow text */
+      cursor: pointer !important;
+      font-weight: 600 !important;
+    }
+    .dir-table tr:hover td.cell-pending-highlight {
+      background-color: #fef08a !important;
+    }
+
     @media (max-width: 768px) {
       .int-wrap {
         padding: 1rem 0.75rem 3rem;
@@ -1009,10 +1044,15 @@
       <main style="overflow-y: auto; flex: 1;">
         <div class="int-wrap">
 
+          <!-- Tabs Nav (Visible to HR/Admin/Owners) -->
+          <div class="tabs-nav" id="directory-tabs" style="display:none; margin-bottom: 1.5rem;">
+            <button class="tab-btn active" id="tab-btn-directory" onclick="App.switchTab('directory')">Directory</button>
+            <button class="tab-btn" id="tab-btn-requests" onclick="App.switchTab('requests')">Update Requests <span id="requests-count-badge" style="background:var(--cyan); color:#fff; font-size:0.72rem; padding:1px 6.5px; border-radius:10px; margin-left:4px; display:none;">0</span></button>
+          </div>
 
-
-      <!-- Stats strip (Total & Active only) -->
-      <div class="stats-strip" id="stats-strip">
+          <div id="directory-panel">
+            <!-- Stats strip (Total & Active only) -->
+            <div class="stats-strip" id="stats-strip">
         <div class="stat-cell">
           <span class="stat-cell__val" id="stat-total">—</span>
           <span class="stat-cell__lbl">Total Employees</span>
@@ -1139,9 +1179,34 @@
           <span class="table-footer__info" id="footer-info"></span>
           <div class="pagination" id="pagination"></div>
         </div>
-      </div>
+      </div> <!-- Close table-card -->
+    </div> <!-- Close directory-panel -->
 
+    <!-- Update Requests Panel -->
+    <div id="requests-panel" style="display:none; margin-bottom: 2rem;">
+      <div class="table-card">
+        <div class="table-wrap">
+          <table class="dir-table" style="min-width:100%;">
+            <thead>
+              <tr style="background:var(--bg-elevated); border-bottom:1px solid var(--border);">
+                <th style="padding:0.75rem 1rem; text-align:left;">Employee</th>
+                <th style="padding:0.75rem 1rem; text-align:left;">Email</th>
+                <th style="padding:0.75rem 1rem; text-align:left;">Fields Requested</th>
+                <th style="padding:0.75rem 1rem; text-align:left;">Date Submitted</th>
+                <th style="padding:0.75rem 1rem; text-align:center; width:120px;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="requests-tbody">
+              <tr>
+                <td colspan="5" style="text-align:center; padding:2rem; color:var(--text-muted);">No pending requests.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
+
+    </div> <!-- Close int-wrap -->
   </main>
 
   <!-- Confirm delete dialog -->
@@ -1206,10 +1271,52 @@
           <button type="submit" class="btn btn-sm btn-save" id="btn-submit-invite">Send Invitation</button>
         </div>
       </form>
+  <!-- Review Update Request Modal Overlay -->
+  <div class="confirm-overlay" id="review-modal-overlay" role="dialog" aria-modal="true" style="display:none;">
+    <div class="confirm-box" style="max-width: 540px; border-radius:12px; text-align: left;">
+      <div class="confirm-box__title" style="margin-bottom: 1rem; text-align:center;">Review Profile Update Request</div>
+      
+      <div style="display:flex; flex-direction:column; align-items:center; gap:0.5rem; margin-bottom:1.5rem;">
+        <div id="review-avatar-wrap" style="width:80px; height:80px; border-radius:50%; background:var(--bg-elevated); border:2px solid var(--border); overflow:hidden; display:flex; align-items:center; justify-content:center; font-size:1.8rem; font-weight:800; color:var(--cyan);">?</div>
+        <div id="review-fullname" style="font-size:1.1rem; font-weight:700; color:var(--text-primary);">Employee Name</div>
+        <div id="review-email" style="font-size:0.8rem; color:var(--text-secondary);">employee@email.com</div>
+      </div>
+
+      <div style="max-height: 250px; overflow-y: auto; margin-bottom: 1.5rem; border:1px solid var(--border); border-radius:8px;">
+        <table style="width:100%; border-collapse:collapse; font-size:0.8rem; text-align:left;">
+          <thead>
+            <tr style="background:var(--bg-elevated); border-bottom:1px solid var(--border);">
+              <th style="padding:0.6rem 0.85rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; font-size:0.68rem;">Field</th>
+              <th style="padding:0.6rem 0.85rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; font-size:0.68rem;">Original Value</th>
+              <th style="padding:0.6rem 0.85rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; font-size:0.68rem;">Requested Value</th>
+            </tr>
+          </thead>
+          <tbody id="review-comparison-tbody">
+            <!-- Populated dynamically -->
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Reject Input Box (Hidden initially) -->
+      <div id="review-reject-box" style="display:none; flex-direction:column; gap:0.5rem; margin-bottom:1.5rem; text-align:left;">
+        <label style="font-size: 0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-secondary);">Reason for Rejection (150 chars max)</label>
+        <textarea id="review-reject-reason" maxlength="150" placeholder="Type rejection reason here..." style="width:100%; height:60px; padding:0.5rem; border:1px solid var(--border); border-radius:6px; font-family:var(--font); font-size:0.8rem; resize:none; outline:none;"></textarea>
+      </div>
+
+      <div class="confirm-box__actions" id="review-modal-actions" style="display:flex; justify-content:flex-end; gap:0.75rem;">
+        <button class="btn btn-ghost btn-sm" onclick="App.closeReviewModal()">Cancel</button>
+        <button class="btn btn-sm" id="btn-review-reject-init" onclick="App.initiateRejection()" style="background:#ef4444; color:#fff; border-color:#ef4444;">Reject</button>
+        <button class="btn btn-sm" id="btn-review-approve" onclick="App.approveRequest()" style="background:#10b981; color:#fff; border-color:#10b981;">Approve</button>
+      </div>
+      
+      <div class="confirm-box__actions" id="review-reject-actions" style="display:none; justify-content:flex-end; gap:0.75rem;">
+        <button class="btn btn-ghost btn-sm" onclick="App.cancelRejection()">Back</button>
+        <button class="btn btn-sm" onclick="App.submitRejection()" style="background:#ef4444; color:#fff; border-color:#ef4444;">Confirm Rejection</button>
+      </div>
     </div>
   </div>
 
-    </div>
+  </div>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -1509,6 +1616,25 @@
             this.dynamicRoles = [];
           }
 
+          // Fetch pending update requests
+          this.pendingRequests = [];
+          this.pendingRequestsByEmployee = {};
+          try {
+            const { data: reqs, error: reqsErr } = await getSb()
+              .from('employee_update_requests')
+              .select('*, employees(first_name, last_name, email, picture_link)')
+              .eq('status', 'pending')
+              .order('created_at', { ascending: false });
+            if (!reqsErr && reqs) {
+              this.pendingRequests = reqs;
+              reqs.forEach(r => {
+                this.pendingRequestsByEmployee[r.employee_id] = r;
+              });
+            }
+          } catch(e) {
+            console.error('Failed to fetch update requests:', e);
+          }
+
           const data = await sbGet();
           this.allEmployees = data;
           this.dirty = {};
@@ -1516,6 +1642,13 @@
           this.updateDeptFilter();
           this.applyFilters();
           this.updateStats();
+          this.renderRequestsTab();
+
+          // Show tab navigation if user is HR/Admin/Owner
+          const tabNav = document.getElementById('directory-tabs');
+          if (tabNav) {
+            tabNav.style.display = 'flex';
+          }
         } catch (err) {
           document.getElementById('dir-tbody').innerHTML = `<tr><td colspan="28" class="tbl-state error">Failed to load: ${esc(err.message)}</td></tr>`;
           toast('Failed to load employees: ' + err.message, 'error');
@@ -1655,13 +1788,20 @@
           'Resigned': 'status-resigned', 'Terminated': 'status-terminated',
         }[emp.employment_status] || 'status-inactive';
 
+        // Check if there's a pending change request for this field
+        const req = this.pendingRequestsByEmployee[id];
+        const isPending = (field) => req && req.requested_data && req.requested_data.hasOwnProperty(field);
+
         // Cell helper: plain or editable
         const cell = (val, field, type = 'text', grpClass = '') => {
           const raw = fmt(val);
+          const pendingCls = isPending(field) ? 'cell-pending-highlight' : '';
+          const pendingTitle = isPending(field) ? ' title="Pending update request. Click to view comparison."' : '';
+          
           if (!isEdit) {
             return raw
-              ? `<td class="${grpClass}">${esc(raw)}</td>`
-              : `<td class="${grpClass} cell-empty">—</td>`;
+              ? `<td class="${grpClass} ${pendingCls}"${pendingTitle} data-field-click="${esc(field)}" data-emp-id="${esc(id)}">${esc(raw)}</td>`
+              : `<td class="${grpClass} ${pendingCls} cell-empty"${pendingTitle} data-field-click="${esc(field)}" data-emp-id="${esc(id)}">—</td>`;
           }
           // editable
           if (type === 'date') {
@@ -1675,8 +1815,11 @@
 
         const cellDate = (val, field, grpClass = '') => {
           const raw = fmt(val);
+          const pendingCls = isPending(field) ? 'cell-pending-highlight' : '';
+          const pendingTitle = isPending(field) ? ' title="Pending update request. Click to view comparison."' : '';
+
           if (!isEdit) {
-            return raw ? `<td class="${grpClass}">${esc(fmtDate(raw))}</td>` : `<td class="${grpClass} cell-empty">—</td>`;
+            return raw ? `<td class="${grpClass} ${pendingCls}"${pendingTitle} data-field-click="${esc(field)}" data-emp-id="${esc(id)}">${esc(fmtDate(raw))}</td>` : `<td class="${grpClass} ${pendingCls} cell-empty"${pendingTitle} data-field-click="${esc(field)}" data-emp-id="${esc(id)}">—</td>`;
           }
           return `<td class="${grpClass}"><input type="date" class="cell-input" data-id="${esc(id)}" data-field="${esc(field)}" value="${esc(isoDate(raw))}"></td>`;
         };
@@ -1871,6 +2014,17 @@
           };
           inp.addEventListener('input', track);
           inp.addEventListener('change', track);
+        });
+
+        // Bind clicks on pending cell highlights
+        document.querySelectorAll('[data-field-click]').forEach(cell => {
+          cell.addEventListener('click', () => {
+            const empId = cell.dataset.empId;
+            const req = this.pendingRequestsByEmployee[empId];
+            if (req) {
+              this.openReviewModal(req);
+            }
+          });
         });
       },
 
@@ -2321,6 +2475,195 @@
           toast('CSV exported.', 'success');
         });
       },
+
+      /* ── Tabs Management ── */
+      switchTab(tab) {
+        document.getElementById('tab-btn-directory').classList.toggle('active', tab === 'directory');
+        document.getElementById('tab-btn-requests').classList.toggle('active', tab === 'requests');
+        
+        document.getElementById('directory-panel').style.display = (tab === 'directory') ? 'block' : 'none';
+        document.getElementById('requests-panel').style.display = (tab === 'requests') ? 'block' : 'none';
+      },
+
+      renderRequestsTab() {
+        const tbody = document.getElementById('requests-tbody');
+        const badge = document.getElementById('requests-count-badge');
+        
+        if (this.pendingRequests.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:2rem; color:var(--text-muted);">No pending requests.</td></tr>';
+          if (badge) badge.style.display = 'none';
+          return;
+        }
+
+        if (badge) {
+          badge.textContent = this.pendingRequests.length;
+          badge.style.display = 'inline-block';
+        }
+
+        tbody.innerHTML = this.pendingRequests.map(r => {
+          const emp = r.employees || {};
+          const name = `${emp.first_name || ''} ${emp.last_name || ''}`.trim() || 'Unknown Employee';
+          const fields = Object.keys(r.requested_data || {}).map(f => {
+            return f.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+          }).join(', ');
+
+          return `
+            <tr style="border-bottom:1px solid var(--border);">
+              <td style="padding:0.75rem 1rem; font-weight:600; color:var(--text-primary);">${esc(name)}</td>
+              <td style="padding:0.75rem 1rem;">${esc(emp.email || '')}</td>
+              <td style="padding:0.75rem 1rem; color:var(--text-secondary); max-width:250px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(fields)}</td>
+              <td style="padding:0.75rem 1rem;">${esc(fmtDate(r.created_at))}</td>
+              <td style="padding:0.75rem 1rem; text-align:center;">
+                <button class="btn btn-cyan btn-sm" onclick="App.openReviewModalById('${esc(r.id)}')" style="padding:0.3rem 0.6rem; font-size:0.75rem;">Review</button>
+              </td>
+            </tr>
+          `;
+        }).join('');
+      },
+
+      openReviewModalById(id) {
+        const req = this.pendingRequests.find(r => r.id === id);
+        if (req) {
+          this.openReviewModal(req);
+        }
+      },
+
+      /* ── Review Update Requests Modal ── */
+      openReviewModal(req) {
+        this.currentReviewRequest = req;
+        const emp = req.employees || {};
+        const name = `${emp.first_name || ''} ${emp.last_name || ''}`.trim() || 'Unknown Employee';
+        
+        document.getElementById('review-fullname').textContent = name;
+        document.getElementById('review-email').textContent = emp.email || '';
+        
+        const avatarWrap = document.getElementById('review-avatar-wrap');
+        if (emp.picture_link) {
+          avatarWrap.innerHTML = `<img src="${emp.picture_link}" alt="${name}" style="width:100%; height:100%; object-fit:cover; border-radius:50%;" />`;
+        } else {
+          const initials = name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || '?';
+          avatarWrap.innerHTML = initials;
+        }
+
+        // Render comparison table
+        const tbody = document.getElementById('review-comparison-tbody');
+        const dbEmp = this.allEmployees.find(e => e.id === req.employee_id) || {};
+        
+        tbody.innerHTML = Object.keys(req.requested_data || {}).map(field => {
+          const label = field.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+          let originalVal = dbEmp[field] ?? '—';
+          let requestedVal = req.requested_data[field] ?? '—';
+          
+          if (field === 'date_of_birth') {
+            if (originalVal !== '—') originalVal = fmtDate(originalVal);
+            if (requestedVal !== '—') requestedVal = fmtDate(requestedVal);
+          }
+
+          return `
+            <tr style="border-bottom:1px solid var(--border);">
+              <td style="padding:0.6rem 0.85rem; font-weight:600; color:var(--text-primary);">${esc(label)}</td>
+              <td style="padding:0.6rem 0.85rem; color:var(--text-muted);">${esc(originalVal)}</td>
+              <td style="padding:0.6rem 0.85rem; color:var(--cyan-light); font-weight:600;">${esc(requestedVal)}</td>
+            </tr>
+          `;
+        }).join('');
+
+        // Reset rejection inputs
+        document.getElementById('review-reject-box').style.display = 'none';
+        document.getElementById('review-reject-reason').value = '';
+        document.getElementById('review-modal-actions').style.display = 'flex';
+        document.getElementById('review-reject-actions').style.display = 'none';
+
+        document.getElementById('review-modal-overlay').style.display = 'flex';
+        document.getElementById('review-modal-overlay').classList.add('open');
+      },
+
+      closeReviewModal() {
+        const overlay = document.getElementById('review-modal-overlay');
+        overlay.classList.remove('open');
+        setTimeout(() => overlay.style.display = 'none', 200);
+        this.currentReviewRequest = null;
+      },
+
+      initiateRejection() {
+        document.getElementById('review-reject-box').style.display = 'flex';
+        document.getElementById('review-modal-actions').style.display = 'none';
+        document.getElementById('review-reject-actions').style.display = 'flex';
+        document.getElementById('review-reject-reason').focus();
+      },
+
+      cancelRejection() {
+        document.getElementById('review-reject-box').style.display = 'none';
+        document.getElementById('review-modal-actions').style.display = 'flex';
+        document.getElementById('review-reject-actions').style.display = 'none';
+      },
+
+      async submitRejection() {
+        const reason = document.getElementById('review-reject-reason').value.trim();
+        if (!reason) {
+          toast('Please write a reason for rejection.', 'error');
+          return;
+        }
+
+        if (reason.length > 150) {
+          toast('Rejection reason cannot exceed 150 characters.', 'error');
+          return;
+        }
+
+        const req = this.currentReviewRequest;
+        if (!req) return;
+
+        try {
+          const { error } = await getSb()
+            .from('employee_update_requests')
+            .update({
+              status: 'rejected',
+              rejected_reason: reason,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', req.id);
+
+          if (error) throw error;
+
+          toast('Update request rejected.', 'info');
+          this.closeReviewModal();
+          await this.load();
+        } catch (err) {
+          toast('Failed to reject: ' + err.message, 'error');
+        }
+      },
+
+      async approveRequest() {
+        const req = this.currentReviewRequest;
+        if (!req) return;
+
+        try {
+          // 1. Update the employee's official record
+          const { error: empError } = await getSb()
+            .from('employees')
+            .update(req.requested_data)
+            .eq('id', req.employee_id);
+
+          if (empError) throw empError;
+
+          // 2. Mark the update request as approved
+          const { error: reqError } = await getSb()
+            .from('employee_update_requests')
+            .update({
+              status: 'approved',
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', req.id);
+
+          if (reqError) throw reqError;
+
+          toast('Update request approved and applied successfully.', 'success');
+          this.closeReviewModal();
+          await this.load();
+        } catch (err) {
+          toast('Failed to approve request: ' + err.message, 'error');
+        }
+      }
     };
 
     /* ── Boot ── */
