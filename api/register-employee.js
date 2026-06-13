@@ -209,7 +209,7 @@ export default async function handler(req, res) {
     await supabase.from('company_invitations')
       .delete()
       .eq('tenant_id', tenant_id)
-      .eq('email', email);
+      .eq('email', email.toLowerCase().trim());
 
     // 6. Send welcome email via Resend
     let emailSent = false;
