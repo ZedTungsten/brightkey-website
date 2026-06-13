@@ -1459,36 +1459,32 @@
       return f + l || '?';
     }
 
-    function parseTime12h(timeStr) {
-      if (!timeStr) return '';
-      timeStr = timeStr.trim().toUpperCase();
-      const match = timeStr.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/);
-      if (!match) return '';
-      let [_, hrs, mins, ampm] = match;
-      let h = parseInt(hrs, 10);
-      if (ampm === 'PM' && h < 12) h += 12;
-      if (ampm === 'AM' && h === 12) h = 0;
-      return String(h).padStart(2, '0') + ':' + mins;
-    }
-    function parseTimeRange(rangeStr) {
-      if (!rangeStr) return { start: '', end: '' };
-      const parts = rangeStr.split('-');
-      if (parts.length !== 2) return { start: '', end: '' };
-      return {
-        start: parseTime12h(parts[0]),
-        end: parseTime12h(parts[1])
-      };
-    }
-    function formatTime12h(time24) {
-      if (!time24) return '';
-      const parts = time24.split(':');
-      if (parts.length < 2) return '';
-      let h = parseInt(parts[0], 10);
-      const m = parts[1];
-      const ampm = h >= 12 ? 'PM' : 'AM';
-      h = h % 12;
-      if (h === 0) h = 12;
-      return String(h).padStart(2, '0') + ':' + m + ' ' + ampm;
+    function generateTimeOptions(selectedValue) {
+      const options = [];
+      options.push('<option value="">—</option>');
+      const periods = ['AM', 'PM'];
+      const minutes = ['00', '15', '30', '45'];
+      const standardValues = new Set();
+      
+      for (let p = 0; p < 2; p++) {
+        const period = periods[p];
+        for (let h = 1; h <= 12; h++) {
+          const hrStr = String(h).padStart(2, '0');
+          for (let m = 0; m < 4; m++) {
+            const minStr = minutes[m];
+            const val = `${hrStr}:${minStr} ${period}`;
+            standardValues.add(val);
+            const selected = (selectedValue === val) ? 'selected' : '';
+            options.push(`<option value="${val}" ${selected}>${val}</option>`);
+          }
+        }
+      }
+      
+      if (selectedValue && !standardValues.has(selectedValue)) {
+        options.push(`<option value="${selectedValue}" selected>${selectedValue}</option>`);
+      }
+      
+      return options.join('');
     }
 
     /* ── Toast ── */
@@ -1550,7 +1546,7 @@
         const endVal = endEl.value;
         
         if (startVal && endVal) {
-          mainInput.value = formatTime12h(startVal) + ' - ' + formatTime12h(endVal);
+          mainInput.value = startVal + ' - ' + endVal;
         } else {
           mainInput.value = '';
         }
@@ -2063,13 +2059,22 @@
             return val ? `<td class="grp-hr cell-num">${esc(val)}</td>` : `<td class="grp-hr cell-empty">—</td>`;
           }
           
-          const parsed = parseTimeRange(val);
+          const parts = val.split('-').map(s => s.trim());
+          const startVal = parts[0] || '';
+          const endVal = parts[1] || '';
+          
+          const startOpts = generateTimeOptions(startVal);
+          const endOpts = generateTimeOptions(endVal);
           
           return `<td class="grp-hr">
             <div class="time-range-wrap">
-              <input type="time" class="cell-time-input time-start" data-field="${fieldName}" value="${esc(parsed.start)}" onchange="App.updateTimeRange(this, '${esc(id)}', '${fieldName}')">
+              <select class="cell-input cell-select time-start" data-field="${fieldName}" onchange="App.updateTimeRange(this, '${esc(id)}', '${fieldName}')" style="min-width: 105px;">
+                ${startOpts}
+              </select>
               <span class="time-range-sep">to</span>
-              <input type="time" class="cell-time-input time-end" data-field="${fieldName}" value="${esc(parsed.end)}" onchange="App.updateTimeRange(this, '${esc(id)}', '${fieldName}')">
+              <select class="cell-input cell-select time-end" data-field="${fieldName}" onchange="App.updateTimeRange(this, '${esc(id)}', '${fieldName}')" style="min-width: 105px;">
+                ${endOpts}
+              </select>
             </div>
             <input type="hidden" class="cell-input main-time-input" data-id="${esc(id)}" data-field="${fieldName}" value="${esc(val)}">
           </td>`;
