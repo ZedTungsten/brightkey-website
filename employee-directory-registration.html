@@ -217,7 +217,7 @@
     <a href="index.html" class="btn-primary" style="text-decoration:none;">Back to Homepage</a>
   </div>
 
-  <div class="page" id="registration-page">
+  <div class="page" id="registration-page" style="display: none;">
     <div class="page-header">
       <h1 class="page-title">Create Account</h1>
       <p class="page-sub">Set up a secure password to activate your workspace account.</p>
@@ -289,13 +289,22 @@
     let inviteSig = '';
 
     async function generateSignature(tenant, company, role, email) {
-      const msg = `${tenant}:${company}:${role}:${email}:brightkey_invite_salt`;
-      const encoder = new TextEncoder();
-      const data = encoder.encode(msg);
-      const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-      const hashArray = Array.from(new Uint8Array(hashBuffer));
-      const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-      return hashHex;
+      try {
+        const msg = `${tenant}:${company}:${role}:${email}:brightkey_invite_salt`;
+        const encoder = new TextEncoder();
+        const data = encoder.encode(msg);
+        if (typeof crypto === 'undefined' || !crypto.subtle) {
+          console.warn("crypto.subtle is not supported in this browser context.");
+          return '';
+        }
+        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        return hashHex;
+      } catch (err) {
+        console.error('Signature generation failed:', err);
+        return '';
+      }
     }
 
     async function validateInvitation() {
@@ -321,7 +330,7 @@
       }
 
       const expectedSig = await generateSignature(inviteTenant, inviteCompany, inviteRole, inviteEmail);
-      if (sig !== expectedSig) {
+      if (!expectedSig || sig !== expectedSig) {
         return { valid: false, reason: 'invalid_signature' };
       }
 
@@ -339,37 +348,45 @@
     }
 
     (async function initForm() {
-      const inviteStatus = await validateInvitation();
-      if (!inviteStatus.valid) {
-        document.getElementById('registration-page').style.display = 'none';
-        if (inviteStatus.reason === 'expired') {
-          document.getElementById('invitation-expired-state').style.display = 'block';
-        } else {
-          document.getElementById('access-denied-state').style.display = 'block';
-        }
-        return;
-      }
-
       try {
-        const { data: member, error } = await sb
-          .from('tenant_members')
-          .select('id')
-          .eq('user_email', inviteEmail.toLowerCase().trim())
-          .eq('tenant_id', inviteTenant)
-          .limit(1);
-
-        if (!error && member && member.length > 0) {
+        const inviteStatus = await validateInvitation();
+        if (!inviteStatus.valid) {
           document.getElementById('registration-page').style.display = 'none';
-          document.getElementById('already-registered-state').style.display = 'block';
+          if (inviteStatus.reason === 'expired') {
+            document.getElementById('invitation-expired-state').style.display = 'block';
+          } else {
+            document.getElementById('access-denied-state').style.display = 'block';
+          }
           return;
         }
-      } catch (err) {
-        console.error('Error checking existing membership:', err);
-      }
 
-      const emailField = document.getElementById('email-address-locked');
-      if (emailField) {
-        emailField.value = inviteEmail;
+        try {
+          const { data: member, error } = await sb
+            .from('tenant_members')
+            .select('id')
+            .eq('user_email', inviteEmail.toLowerCase().trim())
+            .eq('tenant_id', inviteTenant)
+            .limit(1);
+
+          if (!error && member && member.length > 0) {
+            document.getElementById('registration-page').style.display = 'none';
+            document.getElementById('already-registered-state').style.display = 'block';
+            return;
+          }
+        } catch (err) {
+          console.error('Error checking existing membership:', err);
+        }
+
+        const emailField = document.getElementById('email-address-locked');
+        if (emailField) {
+          emailField.value = inviteEmail;
+        }
+
+        // Show page only after successfully populating
+        document.getElementById('registration-page').style.display = 'block';
+      } catch (globalErr) {
+        console.error('Error during form initialization:', globalErr);
+        document.getElementById('access-denied-state').style.display = 'block';
       }
     })();
 
