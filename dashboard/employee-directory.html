@@ -1198,7 +1198,7 @@
               <tr class="col-groups">
                 <th colspan="1"><!-- emp # sticky --></th>
                 <th colspan="8" class="grp-personal">Personal Information</th>
-                <th colspan="13" class="grp-hr">HR / Employment</th>
+                <th colspan="12" class="grp-hr">HR / Employment</th>
                 <th colspan="4" class="grp-gov">Gov't Numbers</th>
                 <th colspan="4" class="grp-docs">Documents</th>
                 <th><!-- actions --></th>
@@ -1227,8 +1227,7 @@
                 <th class="grp-hr sortable" data-col="salary">Salary <span class="sort-arrow"></span></th>
                 <th class="grp-hr sortable" data-col="assignment">Assignment <span class="sort-arrow"></span></th>
                 <th class="grp-hr sortable" data-col="shift_days">Shift Days <span class="sort-arrow"></span></th>
-                <th class="grp-hr sortable" data-col="shift_time_1">Shift 1 <span class="sort-arrow"></span></th>
-                <th class="grp-hr sortable" data-col="shift_time_2">Shift 2 <span class="sort-arrow"></span></th>
+                <th class="grp-hr sortable" data-col="shift_time_1">Shift Range <span class="sort-arrow"></span></th>
                 <!-- Gov't -->
                 <th class="grp-gov sortable" data-col="tin">TIN <span class="sort-arrow"></span></th>
                 <th class="grp-gov sortable" data-col="sss">SSS <span class="sort-arrow"></span></th>
@@ -1245,7 +1244,7 @@
             </thead>
             <tbody id="dir-tbody">
               <tr>
-                <td colspan="31" class="tbl-state">Loading employees…</td>
+                <td colspan="30" class="tbl-state">Loading employees…</td>
               </tr>
             </tbody>
           </table>
@@ -1552,6 +1551,31 @@
         mainInput.dispatchEvent(new Event('change', { bubbles: true }));
       },
 
+      showSecondShift(btn, id) {
+        const td = btn.closest('td');
+        const wrap2 = td.querySelector('.second-shift-inputs-wrap');
+        if (wrap2) {
+          wrap2.style.display = 'flex';
+          btn.style.display = 'none';
+        }
+      },
+      
+      hideSecondShift(btn, id) {
+        const td = btn.closest('td');
+        const wrap2 = td.querySelector('.second-shift-inputs-wrap');
+        const mainInput2 = td.querySelector('input.main-time-input[data-field="shift_time_2"]');
+        if (wrap2) {
+          wrap2.style.display = 'none';
+          wrap2.querySelectorAll('select').forEach(sel => sel.value = '');
+          if (mainInput2) {
+            mainInput2.value = '';
+            mainInput2.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+          const addBtn = td.querySelector('.add-shift-btn');
+          if (addBtn) addBtn.style.display = 'inline-flex';
+        }
+      },
+
       openInviteModal(email, name) {
         document.getElementById('invite-email').value = email;
         document.getElementById('invite-name').value = name;
@@ -1790,7 +1814,7 @@
             tabNav.style.display = 'flex';
           }
         } catch (err) {
-          document.getElementById('dir-tbody').innerHTML = `<tr><td colspan="31" class="tbl-state error">Failed to load: ${esc(err.message)}</td></tr>`;
+          document.getElementById('dir-tbody').innerHTML = `<tr><td colspan="30" class="tbl-state error">Failed to load: ${esc(err.message)}</td></tr>`;
           toast('Failed to load employees: ' + err.message, 'error');
         }
       },
@@ -1902,7 +1926,7 @@
         const tbody = document.getElementById('dir-tbody');
 
         if (slice.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="31" class="tbl-state">No employees found.</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="30" class="tbl-state">No employees found.</td></tr>';
           document.getElementById('footer-info').textContent = 'No results';
           document.getElementById('pagination').innerHTML = '';
           return;
@@ -2050,19 +2074,27 @@
           </td>`;
         };
 
-        const shiftTimeCell = (num) => {
-          const fieldName = `shift_time_${num}`;
-          const val = emp[fieldName] || '';
+        const shiftTimeCell = () => {
+          const val1 = emp.shift_time_1 || '';
+          const val2 = emp.shift_time_2 || '';
           
           if (!isEdit) {
-            return val ? `<td class="grp-hr cell-num">${esc(val)}</td>` : `<td class="grp-hr cell-empty">—</td>`;
+            if (!val1 && !val2) return `<td class="grp-hr cell-empty">—</td>`;
+            let html = '';
+            if (val1) html += `<div style="font-variant-numeric: tabular-nums;">${esc(val1)}</div>`;
+            if (val2) html += `<div style="font-size: 0.72rem; color: var(--text-muted); font-variant-numeric: tabular-nums;">${esc(val2)}</div>`;
+            return `<td class="grp-hr"><div style="display:flex; flex-direction:column; gap:2px;">${html}</div></td>`;
           }
           
-          const parts = val.split('-').map(s => s.trim());
-          const startParts = parseTimeParts(parts[0] || '');
-          const endParts = parseTimeParts(parts[1] || '');
+          const parts1 = val1.split('-').map(s => s.trim());
+          const startParts1 = parseTimeParts(parts1[0] || '');
+          const endParts1 = parseTimeParts(parts1[1] || '');
           
-          const renderTimeSelects = (prefix, p) => {
+          const parts2 = val2.split('-').map(s => s.trim());
+          const startParts2 = parseTimeParts(parts2[0] || '');
+          const endParts2 = parseTimeParts(parts2[1] || '');
+          
+          const renderTimeSelects = (fieldName, prefix, p) => {
             const hrs = ['1','2','3','4','5','6','7','8','9','10','11','12'];
             const mins = ['00','15','30','45'];
             const periods = ['AM','PM'];
@@ -2073,20 +2105,44 @@
             
             return `
               <div class="time-part-wrap" data-prefix="${prefix}" style="display:inline-flex; gap:2px;">
-                <select class="cell-input cell-select time-h" data-field="${fieldName}" onchange="App.updateTimeRange(this, '${esc(id)}', '${fieldName}')" style="min-width: 65px; padding-right: 1.1rem; background-position: right 0.25rem center;">${hOpts}</select>
-                <select class="cell-input cell-select time-m" data-field="${fieldName}" onchange="App.updateTimeRange(this, '${esc(id)}', '${fieldName}')" style="min-width: 65px; padding-right: 1.1rem; background-position: right 0.25rem center;">${mOpts}</select>
-                <select class="cell-input cell-select time-p" data-field="${fieldName}" onchange="App.updateTimeRange(this, '${esc(id)}', '${fieldName}')" style="min-width: 65px; padding-right: 1.1rem; background-position: right 0.25rem center;">${pOpts}</select>
+                <select class="cell-input cell-select time-h" data-field="${fieldName}" onchange="App.updateTimeRange(this, '${esc(id)}', '${fieldName}')" style="min-width: 62px; padding-right: 1.1rem; background-position: right 0.25rem center; font-size: 0.78rem;">${hOpts}</select>
+                <select class="cell-input cell-select time-m" data-field="${fieldName}" onchange="App.updateTimeRange(this, '${esc(id)}', '${fieldName}')" style="min-width: 58px; padding-right: 1.1rem; background-position: right 0.25rem center; font-size: 0.78rem;">${mOpts}</select>
+                <select class="cell-input cell-select time-p" data-field="${fieldName}" onchange="App.updateTimeRange(this, '${esc(id)}', '${fieldName}')" style="min-width: 68px; padding-right: 1.1rem; background-position: right 0.25rem center; font-size: 0.78rem;">${pOpts}</select>
               </div>
             `;
           };
           
-          return `<td class="grp-hr">
-            <div class="time-range-wrap" style="gap: 0.25rem;">
-              ${renderTimeSelects('start', startParts)}
-              <span class="time-range-sep">to</span>
-              ${renderTimeSelects('end', endParts)}
+          const hasSecondShift = !!val2;
+          
+          return `<td class="grp-hr" style="max-width: 480px; min-width: 440px;">
+            <div style="display:flex; flex-direction:column; gap:6px; width: 100%;">
+              <!-- Shift 1 -->
+              <div class="time-range-wrap" style="gap: 0.25rem; display:flex; align-items:center;">
+                <span style="font-size:0.7rem; font-weight:700; color:var(--text-muted); min-width:40px;">Shift 1:</span>
+                ${renderTimeSelects('shift_time_1', 'start', startParts1)}
+                <span class="time-range-sep">to</span>
+                ${renderTimeSelects('shift_time_1', 'end', endParts1)}
+              </div>
+              <input type="hidden" class="cell-input main-time-input" data-id="${esc(id)}" data-field="shift_time_1" value="${esc(val1)}">
+              
+              <!-- Shift 2 Wrap -->
+              <div class="second-shift-inputs-wrap" style="display: ${hasSecondShift ? 'flex' : 'none'}; align-items:center; gap: 0.25rem;">
+                <span style="font-size:0.7rem; font-weight:700; color:var(--text-muted); min-width:40px;">Shift 2:</span>
+                ${renderTimeSelects('shift_time_2', 'start', startParts2)}
+                <span class="time-range-sep">to</span>
+                ${renderTimeSelects('shift_time_2', 'end', endParts2)}
+                <button type="button" class="btn-row btn-delete" onclick="App.hideSecondShift(this, '${esc(id)}')" title="Remove 2nd shift" style="margin-left:4px; padding:2px 4px; height:24px; display:inline-flex; align-items:center; justify-content:center;">
+                  <svg viewBox="0 0 24 24" style="width:12px; height:12px;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+              </div>
+              <input type="hidden" class="cell-input main-time-input" data-id="${esc(id)}" data-field="shift_time_2" value="${esc(val2)}">
+              
+              <!-- Add Shift Button -->
+              <button type="button" class="add-shift-btn btn-row" onclick="App.showSecondShift(this, '${esc(id)}')" style="display: ${hasSecondShift ? 'none' : 'inline-flex'}; align-items:center; gap:4px; width:fit-content; color:var(--cyan-light); border-color:var(--cyan-border); background:var(--cyan-dim); padding:0.2rem 0.5rem; font-size:0.72rem; border-radius:4px; cursor:pointer;">
+                <svg viewBox="0 0 24 24" style="width:10px; height:10px;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Add 2nd shift
+              </button>
             </div>
-            <input type="hidden" class="cell-input main-time-input" data-id="${esc(id)}" data-field="${fieldName}" value="${esc(val)}">
           </td>`;
         };
 
@@ -2200,8 +2256,7 @@
           ${salaryCell()}
           ${assignmentCell()}
           ${shiftDaysCell()}
-          ${shiftTimeCell(1)}
-          ${shiftTimeCell(2)}
+          ${shiftTimeCell()}
           ${cell(emp.tin, 'tin', 'text', 'grp-gov')}
           ${cell(emp.sss, 'sss')}
           ${cell(emp.pagibig, 'pagibig')}
@@ -2664,7 +2719,7 @@
             ['contact_number', 'Contact #'], ['emergency_contact_number', 'Emergency Contact'],
             ['email', 'Email'], ['tin', 'TIN'], ['sss', 'SSS'],
             ['pagibig', 'PAG-IBIG'], ['philhealth', 'PhilHealth'],
-            ['work_email', 'Work Email'], ['assignment', 'Assignment'], ['shift_days', 'Shift Days'], ['shift_time_1', 'Shift 1'], ['shift_time_2', 'Shift 2'], ['picture_link', 'Picture Link'], ['gov_id_link', "Gov't ID Link"], ['cv_link', 'CV Link'], ['id_link', 'ID Link'],
+            ['work_email', 'Work Email'], ['assignment', 'Assignment'], ['shift_days', 'Shift Days'], ['shift_time_1', 'Shift 1 Range'], ['shift_time_2', 'Shift 2 Range'], ['picture_link', 'Picture Link'], ['gov_id_link', "Gov't ID Link"], ['cv_link', 'CV Link'], ['id_link', 'ID Link'],
           ];
           const header = cols.map(c => `"${c[1]}"`).join(',');
           const rows = this.filtered.map(emp =>
