@@ -1008,6 +1008,80 @@
         padding: 0.35rem 0.5rem !important;
         font-size: 0.75rem !important;
       }
+    /* ── Shift Days & Times ── */
+    .day-pills-wrap, .day-selectors-wrap {
+      display: inline-flex;
+      gap: 3px;
+      align-items: center;
+    }
+    .day-pill {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      font-size: 0.65rem;
+      font-weight: 700;
+      background: var(--bg-elevated);
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+    }
+    .day-pill.active {
+      background: var(--cyan-dim);
+      color: var(--cyan);
+      border-color: var(--cyan-border);
+    }
+    .day-selector-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      font-size: 0.65rem;
+      font-weight: 700;
+      background: var(--bg-surface);
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+      cursor: pointer;
+      transition: all 0.12s;
+      outline: none;
+      padding: 0;
+    }
+    .day-selector-btn:hover {
+      border-color: var(--cyan);
+      color: var(--cyan);
+    }
+    .day-selector-btn.active {
+      background: var(--cyan);
+      color: #fff;
+      border-color: var(--cyan);
+    }
+    .time-range-wrap {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+    .cell-time-input {
+      padding: 0.22rem 0.35rem;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-family: var(--font-sans);
+      font-size: 0.78rem;
+      background: var(--bg-surface);
+      color: var(--text-primary);
+      outline: none;
+      width: 75px;
+    }
+    .cell-time-input:focus {
+      border-color: var(--cyan);
+      box-shadow: 0 0 0 2px rgba(6, 182, 212, 0.1);
+    }
+    .time-range-sep {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+    }
     }
   </style>
 </head>
@@ -1124,7 +1198,7 @@
               <tr class="col-groups">
                 <th colspan="1"><!-- emp # sticky --></th>
                 <th colspan="8" class="grp-personal">Personal Information</th>
-                <th colspan="10" class="grp-hr">HR / Employment</th>
+                <th colspan="13" class="grp-hr">HR / Employment</th>
                 <th colspan="4" class="grp-gov">Gov't Numbers</th>
                 <th colspan="4" class="grp-docs">Documents</th>
                 <th><!-- actions --></th>
@@ -1152,6 +1226,9 @@
                 <th class="grp-hr sortable" data-col="employment_status">Status <span class="sort-arrow"></span></th>
                 <th class="grp-hr sortable" data-col="salary">Salary <span class="sort-arrow"></span></th>
                 <th class="grp-hr sortable" data-col="assignment">Assignment <span class="sort-arrow"></span></th>
+                <th class="grp-hr sortable" data-col="shift_days">Shift Days <span class="sort-arrow"></span></th>
+                <th class="grp-hr sortable" data-col="shift_time_1">Shift 1 <span class="sort-arrow"></span></th>
+                <th class="grp-hr sortable" data-col="shift_time_2">Shift 2 <span class="sort-arrow"></span></th>
                 <!-- Gov't -->
                 <th class="grp-gov sortable" data-col="tin">TIN <span class="sort-arrow"></span></th>
                 <th class="grp-gov sortable" data-col="sss">SSS <span class="sort-arrow"></span></th>
@@ -1168,7 +1245,7 @@
             </thead>
             <tbody id="dir-tbody">
               <tr>
-                <td colspan="28" class="tbl-state">Loading employees…</td>
+                <td colspan="31" class="tbl-state">Loading employees…</td>
               </tr>
             </tbody>
           </table>
@@ -1382,6 +1459,38 @@
       return f + l || '?';
     }
 
+    function parseTime12h(timeStr) {
+      if (!timeStr) return '';
+      timeStr = timeStr.trim().toUpperCase();
+      const match = timeStr.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/);
+      if (!match) return '';
+      let [_, hrs, mins, ampm] = match;
+      let h = parseInt(hrs, 10);
+      if (ampm === 'PM' && h < 12) h += 12;
+      if (ampm === 'AM' && h === 12) h = 0;
+      return String(h).padStart(2, '0') + ':' + mins;
+    }
+    function parseTimeRange(rangeStr) {
+      if (!rangeStr) return { start: '', end: '' };
+      const parts = rangeStr.split('-');
+      if (parts.length !== 2) return { start: '', end: '' };
+      return {
+        start: parseTime12h(parts[0]),
+        end: parseTime12h(parts[1])
+      };
+    }
+    function formatTime12h(time24) {
+      if (!time24) return '';
+      const parts = time24.split(':');
+      if (parts.length < 2) return '';
+      let h = parseInt(parts[0], 10);
+      const m = parts[1];
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      h = h % 12;
+      if (h === 0) h = 12;
+      return String(h).padStart(2, '0') + ':' + m + ' ' + ampm;
+    }
+
     /* ── Toast ── */
     function toast(msg, type = 'success') {
       const icons = {
@@ -1411,6 +1520,42 @@
       sortCol: 'employee_number',
       sortDir: 'asc',
       pendingDeleteId: null,
+
+      toggleShiftDay(btn, id, day) {
+        const row = btn.closest('tr');
+        const input = row.querySelector(`input[data-field="shift_days"]`);
+        if (!input) return;
+        let days = input.value ? input.value.split(',').map(d => d.trim()).filter(Boolean) : [];
+        if (days.includes(day)) {
+          days = days.filter(d => d !== day);
+          btn.classList.remove('active');
+        } else {
+          days.push(day);
+          btn.classList.add('active');
+        }
+        const order = ['M', 'T', 'W', 'Th', 'F', 'S', 'Su'];
+        days.sort((a, b) => order.indexOf(a) - order.indexOf(b));
+        input.value = days.join(',');
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      },
+
+      updateTimeRange(timeInput, id, fieldName) {
+        const row = timeInput.closest('tr');
+        const startEl = row.querySelector(`.time-start[data-field="${fieldName}"]`);
+        const endEl = row.querySelector(`.time-end[data-field="${fieldName}"]`);
+        const mainInput = row.querySelector(`input.main-time-input[data-field="${fieldName}"]`);
+        if (!startEl || !endEl || !mainInput) return;
+        
+        const startVal = startEl.value;
+        const endVal = endEl.value;
+        
+        if (startVal && endVal) {
+          mainInput.value = formatTime12h(startVal) + ' - ' + formatTime12h(endVal);
+        } else {
+          mainInput.value = '';
+        }
+        mainInput.dispatchEvent(new Event('change', { bubbles: true }));
+      },
 
       openInviteModal(email, name) {
         document.getElementById('invite-email').value = email;
@@ -1650,7 +1795,7 @@
             tabNav.style.display = 'flex';
           }
         } catch (err) {
-          document.getElementById('dir-tbody').innerHTML = `<tr><td colspan="28" class="tbl-state error">Failed to load: ${esc(err.message)}</td></tr>`;
+          document.getElementById('dir-tbody').innerHTML = `<tr><td colspan="31" class="tbl-state error">Failed to load: ${esc(err.message)}</td></tr>`;
           toast('Failed to load employees: ' + err.message, 'error');
         }
       },
@@ -1762,7 +1907,7 @@
         const tbody = document.getElementById('dir-tbody');
 
         if (slice.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="28" class="tbl-state">No employees found.</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="31" class="tbl-state">No employees found.</td></tr>';
           document.getElementById('footer-info').textContent = 'No results';
           document.getElementById('pagination').innerHTML = '';
           return;
@@ -1871,6 +2016,51 @@
           return `<td><select class="cell-input cell-select" data-id="${esc(id)}" data-field="assignment">
             <option value="">— None —</option>${opts}
           </select></td>`;
+        };
+
+        const shiftDaysCell = () => {
+          const val = emp.shift_days || '';
+          const daysList = val ? val.split(',').map(d => d.trim()).filter(Boolean) : [];
+          
+          if (!isEdit) {
+            const dayLabels = ['M', 'T', 'W', 'Th', 'F', 'S', 'Su'];
+            const pills = dayLabels.map(d => {
+              const active = daysList.includes(d);
+              return `<span class="day-pill ${active ? 'active' : ''}">${d}</span>`;
+            }).join('');
+            return `<td class="grp-hr"><div class="day-pills-wrap">${pills}</div></td>`;
+          }
+          
+          const dayLabels = ['M', 'T', 'W', 'Th', 'F', 'S', 'Su'];
+          const selectors = dayLabels.map(d => {
+            const active = daysList.includes(d);
+            return `<button type="button" class="day-selector-btn ${active ? 'active' : ''}" onclick="App.toggleShiftDay(this, '${esc(id)}', '${d}')">${d}</button>`;
+          }).join('');
+          
+          return `<td class="grp-hr">
+            <div class="day-selectors-wrap">${selectors}</div>
+            <input type="hidden" class="cell-input" data-id="${esc(id)}" data-field="shift_days" value="${esc(val)}">
+          </td>`;
+        };
+
+        const shiftTimeCell = (num) => {
+          const fieldName = `shift_time_${num}`;
+          const val = emp[fieldName] || '';
+          
+          if (!isEdit) {
+            return val ? `<td class="grp-hr cell-num">${esc(val)}</td>` : `<td class="grp-hr cell-empty">—</td>`;
+          }
+          
+          const parsed = parseTimeRange(val);
+          
+          return `<td class="grp-hr">
+            <div class="time-range-wrap">
+              <input type="time" class="cell-time-input time-start" data-field="${fieldName}" value="${esc(parsed.start)}" onchange="App.updateTimeRange(this, '${esc(id)}', '${fieldName}')">
+              <span class="time-range-sep">to</span>
+              <input type="time" class="cell-time-input time-end" data-field="${fieldName}" value="${esc(parsed.end)}" onchange="App.updateTimeRange(this, '${esc(id)}', '${fieldName}')">
+            </div>
+            <input type="hidden" class="cell-input main-time-input" data-id="${esc(id)}" data-field="${fieldName}" value="${esc(val)}">
+          </td>`;
         };
 
         const statusCell = () => {
@@ -1982,6 +2172,9 @@
           ${statusCell()}
           ${salaryCell()}
           ${assignmentCell()}
+          ${shiftDaysCell()}
+          ${shiftTimeCell(1)}
+          ${shiftTimeCell(2)}
           ${cell(emp.tin, 'tin', 'text', 'grp-gov')}
           ${cell(emp.sss, 'sss')}
           ${cell(emp.pagibig, 'pagibig')}
@@ -2359,6 +2552,9 @@
               gov_id_link: '',
               id_link: '',
               cv_link: '',
+              shift_days: '',
+              shift_time_1: '',
+              shift_time_2: '',
             };
 
             // 3. Prepend to list
@@ -2441,7 +2637,7 @@
             ['contact_number', 'Contact #'], ['emergency_contact_number', 'Emergency Contact'],
             ['email', 'Email'], ['tin', 'TIN'], ['sss', 'SSS'],
             ['pagibig', 'PAG-IBIG'], ['philhealth', 'PhilHealth'],
-            ['work_email', 'Work Email'], ['assignment', 'Assignment'], ['picture_link', 'Picture Link'], ['gov_id_link', "Gov't ID Link"], ['cv_link', 'CV Link'], ['id_link', 'ID Link'],
+            ['work_email', 'Work Email'], ['assignment', 'Assignment'], ['shift_days', 'Shift Days'], ['shift_time_1', 'Shift 1'], ['shift_time_2', 'Shift 2'], ['picture_link', 'Picture Link'], ['gov_id_link', "Gov't ID Link"], ['cv_link', 'CV Link'], ['id_link', 'ID Link'],
           ];
           const header = cols.map(c => `"${c[1]}"`).join(',');
           const rows = this.filtered.map(emp =>
