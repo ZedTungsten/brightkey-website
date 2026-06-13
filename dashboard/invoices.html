@@ -1395,6 +1395,63 @@
       }
     }
 
+    // Automatically creates inventory transactions and updates inventory counts for newly added products.
+    async function checkAndAddNewProducts(orderNo, newProducts) {
+      if (!loadedBookingState || !loadedBookingState.products) return;
+      const oldSkus = loadedBookingState.products.map(p => p.sku);
+      const newProductsToAdd = newProducts.filter(p => !oldSkus.includes(p.sku));
+
+      if (newProductsToAdd.length > 0) {
+        console.log('Detected new products to add:', newProductsToAdd);
+        try {
+          const address = document.getElementById('inv-address').value || '';
+          const addrParts = address.split(',');
+          const city = addrParts.length >= 2 ? addrParts[addrParts.length - 2].trim() : (addrParts[0]?.trim() || 'N/A');
+          const customerName = document.getElementById('inv-fullname').value;
+          
+          for (const item of newProductsToAdd) {
+            // Create transaction record
+            const txPayload = {
+              sku: item.sku,
+              quantity: item.qty,
+              type: 'customer_order',
+              status: 'reserved',
+              reference_id: orderNo,
+              customer_name: customerName,
+              customer_city: city,
+              timestamp_reserved: new Date().toISOString()
+            };
+            if (typeof currentCompanyId !== 'undefined' && currentCompanyId) {
+              txPayload.company_id = currentCompanyId;
+            }
+            
+            const { error: insTxErr } = await sb.from('inventory_transactions').insert([txPayload]);
+            if (insTxErr) {
+              console.error('Error inserting transaction for new product:', insTxErr);
+              continue;
+            }
+
+            // Update inventory totals
+            const { data: invRow, error: invErr } = await sb.from('inventory').select('*').eq('sku', item.sku);
+            if (invErr) {
+              console.error('Error querying inventory for SKU:', item.sku, invErr);
+              continue;
+            }
+            if (invRow && invRow.length > 0) {
+              const current = invRow[0];
+              const { error: updErr } = await sb.from('inventory').update({
+                available: Math.max(0, (current.available || 0) - item.qty),
+                reserved: (current.reserved || 0) + item.qty
+              }).eq('sku', item.sku);
+              if (updErr) console.error('Error updating inventory for added product:', updErr);
+            }
+          }
+        } catch (err) {
+          console.error('Error processing new products creation:', err);
+        }
+      }
+    }
+
     // Update fields and financials in installation_bookings table
     async function updateBookingInDatabase() {
       if (!selectedBookingId) {
@@ -1464,6 +1521,7 @@
         const orderNo = document.getElementById('inv-orderno').value;
         if (orderNo) {
           await checkAndCancelRemovedProducts(orderNo, products);
+          await checkAndAddNewProducts(orderNo, products);
         }
 
         const { error } = await sb.from('installation_bookings').update({
@@ -1862,6 +1920,7 @@
 
         if (orderNo) {
           await checkAndCancelRemovedProducts(orderNo, productsList);
+          await checkAndAddNewProducts(orderNo, productsList);
         }
 
         const { error } = await sb.from('installation_bookings').update(updatePayload).eq('id', selectedBookingId);
