@@ -297,36 +297,89 @@
       margin-bottom: 0.5rem;
       display: block;
     }
-    .status-display-box {
+    .status-display-wrapper {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
       background: var(--bg-elevated);
       border-radius: var(--radius-sm);
       padding: 0.85rem 1rem;
+      min-height: 50px;
+      gap: 0.75rem;
+    }
+    .status-display-text {
       font-size: 0.85rem;
       color: var(--text-secondary);
       line-height: 1.5;
       word-break: break-word;
-      min-height: 50px;
+      flex: 1;
+    }
+    .status-edit-trigger-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--text-muted);
+      padding: 2px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: color 0.15s;
+    }
+    .status-edit-trigger-btn:hover {
+      color: var(--cyan);
     }
     
     .status-edit-box {
       display: none;
-      flex-direction: column;
+      align-items: center;
       gap: 0.5rem;
       width: 100%;
+      background: var(--bg-elevated);
+      border-radius: var(--radius-sm);
+      padding: 0.5rem 0.75rem;
     }
     .status-textarea {
-      width: 100%;
-      height: 70px;
-      padding: 0.6rem 0.8rem;
+      flex: 1;
+      height: 40px;
+      padding: 0.4rem 0.6rem;
       border: 1px solid var(--border);
       border-radius: var(--radius-sm);
       font-family: var(--font);
       font-size: 0.82rem;
       resize: none;
       outline: none;
+      background: var(--bg-surface);
     }
     .status-textarea:focus {
       border-color: var(--cyan);
+    }
+    .status-edit-actions {
+      display: flex;
+      gap: 0.25rem;
+    }
+    .status-btn-action {
+      background: none;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      transition: background 0.15s;
+    }
+    .status-btn-action-confirm {
+      color: var(--success);
+    }
+    .status-btn-action-confirm:hover {
+      background: rgba(16, 185, 129, 0.08);
+    }
+    .status-btn-action-cancel {
+      color: var(--danger);
+    }
+    .status-btn-action-cancel:hover {
+      background: rgba(239, 68, 68, 0.08);
     }
     
     /* Text Color Preference toggler */
@@ -583,14 +636,27 @@
           <!-- Status Section -->
           <div class="status-section">
             <span class="status-label">What's on your mind?</span>
-            <div class="status-display-box" id="status-display-box" onclick="App.editStatus()">
-              Click here to write status message…
+            
+            <!-- Read-only display mode -->
+            <div class="status-display-wrapper" id="status-display-wrapper">
+              <span class="status-display-text" id="status-display-box">"Click here to write status message…"</span>
+              <button class="status-edit-trigger-btn" onclick="App.editStatus()" title="Edit Status">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+              </button>
             </div>
+            
+            <!-- Inline Edit mode -->
             <div class="status-edit-box" id="status-edit-box">
               <textarea class="status-textarea" id="status-textarea" maxlength="150" placeholder="What are you up to? (150 chars max)"></textarea>
-              <div style="display:flex; justify-content:flex-end; gap:0.5rem;">
-                <button class="btn btn-outline btn-sm" onclick="App.cancelStatus()">Cancel</button>
-                <button class="btn btn-primary btn-sm" onclick="App.saveStatus()">Save</button>
+              <div class="status-edit-actions">
+                <!-- Check mark confirm -->
+                <button class="status-btn-action status-btn-action-confirm" onclick="App.saveStatus()" title="Confirm changes">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                </button>
+                <!-- X mark cancel -->
+                <button class="status-btn-action status-btn-action-cancel" onclick="App.cancelStatus()" title="Cancel">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
               </div>
             </div>
           </div>
@@ -792,10 +858,10 @@
 
           const statusDisplay = document.getElementById('status-display-box');
           if (emp.status_text) {
-            statusDisplay.textContent = emp.status_text;
+            statusDisplay.textContent = `"${emp.status_text}"`;
             statusDisplay.style.fontStyle = 'normal';
           } else {
-            statusDisplay.textContent = 'Click here to write status message…';
+            statusDisplay.textContent = '"Click here to write status message…"';
             statusDisplay.style.fontStyle = 'italic';
           }
 
@@ -850,7 +916,7 @@
 
       /* ── Direct updates (no approval needed) ── */
       editStatus() {
-        document.getElementById('status-display-box').style.display = 'none';
+        document.getElementById('status-display-wrapper').style.display = 'none';
         const textarea = document.getElementById('status-textarea');
         textarea.value = this.employeeData.status_text || '';
         document.getElementById('status-edit-box').style.display = 'flex';
@@ -859,7 +925,7 @@
 
       cancelStatus() {
         document.getElementById('status-edit-box').style.display = 'none';
-        document.getElementById('status-display-box').style.display = 'block';
+        document.getElementById('status-display-wrapper').style.display = 'flex';
       },
 
       async saveStatus() {
@@ -875,7 +941,7 @@
           this.employeeData.status_text = newStatus;
           const display = document.getElementById('status-display-box');
           if (newStatus) {
-            display.textContent = newStatus;
+            display.textContent = `"${newStatus}"`;
             display.style.fontStyle = 'normal';
           } else {
             display.textContent = 'Click here to write status message…';
