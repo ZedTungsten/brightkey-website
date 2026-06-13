@@ -45,13 +45,9 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
           <span class="dash-nav-text">Home</span>
         </a>
-        <a href="/dashboard/team" class="dash-nav-item" id="nav-item-team" style="margin-bottom: 0.25rem;">
+        <a href="/dashboard/team" class="dash-nav-item" id="nav-item-team" style="margin-bottom: 0.5rem;">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
           <span class="dash-nav-text">Team</span>
-        </a>
-        <a href="/dashboard/profile" class="dash-nav-item" id="nav-item-profile" style="margin-bottom: 0.5rem;">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-          <span class="dash-nav-text">Profile</span>
         </a>
 
       <!-- Products -->
@@ -346,14 +342,6 @@
         teamBtn.classList.add('active');
       } else {
         teamBtn.classList.remove('active');
-      }
-    }
-    const profileBtn = document.getElementById('nav-item-profile');
-    if (profileBtn) {
-      if (currentPath === '/dashboard/profile' || currentPath === '/dashboard/profile.html') {
-        profileBtn.classList.add('active');
-      } else {
-        profileBtn.classList.remove('active');
       }
     }
 
