@@ -169,6 +169,51 @@
       color: var(--text-secondary);
     }
 
+    /* ── Warehouse Level-1 Tabs ── */
+    .wh-tabs {
+      display: flex;
+      border-bottom: 2px solid var(--border);
+      flex-shrink: 0;
+      overflow-x: auto;
+      background: var(--bg-elevated);
+      padding: 0 0.5rem;
+    }
+    .wh-tab-btn {
+      padding: 0.7rem 1.1rem;
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      border: none;
+      background: none;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -2px;
+      white-space: nowrap;
+      transition: all 0.15s;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .wh-tab-btn.active {
+      color: var(--cyan-light);
+      border-bottom-color: var(--cyan);
+      background: var(--bg-surface);
+    }
+    .wh-tab-btn:hover:not(.active) {
+      color: var(--text-secondary);
+    }
+    .wh-tab-btn .wh-inactive-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--text-muted);
+      display: inline-block;
+      flex-shrink: 0;
+    }
+    .wh-tab-btn.active .wh-inactive-dot {
+      background: var(--cyan);
+    }
+
+
     /* ── Table & Panels ── */
     .table-scroll {
       flex: 1;
@@ -499,7 +544,12 @@
       <!-- Left Workspace (Tables & Stats) -->
       <div class="main-workspace">
 
-        <!-- Tab Bar -->
+        <!-- Warehouse Level-1 Tab Bar (hidden when only 1 warehouse) -->
+        <div class="wh-tabs" id="wh-tab-bar" style="display:none;">
+          <!-- Populated dynamically by loadWarehouseTabs() -->
+        </div>
+
+        <!-- Level-2 Operation Tab Bar -->
         <div class="drawer-tabs">
           <button class="tab-btn active" onclick="switchTab('inventory')">Inventory Summary</button>
           <button class="tab-btn" onclick="switchTab('dispatch')">Dispatch <span id="badge-count-dispatch" style="display:none; background:var(--cyan); color:white; font-size:0.75rem; padding:1px 6px; border-radius:10px; margin-left:4px;">0</span></button>
@@ -912,6 +962,7 @@
         if (!authInfo) return;
         sb = BKAuth.sb;
 
+        await loadWarehouseTabs(authInfo.tenantId);
         showLoadingState();
         await loadCoreData();
         await runAutoSync();
@@ -930,6 +981,65 @@
         showToast('Error loading fulfillment data: ' + err.message, true);
       }
     }
+
+    // ── Warehouse Level-1 Tabs ──
+    let fulfillmentWarehouses = [];
+    let activeWarehouseId = null;
+
+    async function loadWarehouseTabs(tenantId) {
+      try {
+        const { data, error } = await sb
+          .from('warehouses')
+          .select('id, name, is_active')
+          .eq('tenant_id', tenantId)
+          .order('created_at', { ascending: true });
+
+        if (error) throw error;
+        fulfillmentWarehouses = (data || []).filter(w => w.is_active);
+
+        const bar = document.getElementById('wh-tab-bar');
+        if (!bar) return;
+
+        if (fulfillmentWarehouses.length <= 1) {
+          // Single (or zero) warehouse — hide L1 bar, set active to first
+          bar.style.display = 'none';
+          activeWarehouseId = fulfillmentWarehouses[0]?.id || null;
+          return;
+        }
+
+        // Multiple warehouses — show L1 tab bar
+        bar.style.display = 'flex';
+        bar.innerHTML = fulfillmentWarehouses.map((wh, idx) => `
+          <button
+            class="wh-tab-btn${idx === 0 ? ' active' : ''}"
+            id="wh-tab-${wh.id}"
+            onclick="switchWarehouse('${wh.id}')"
+          >
+            <span class="wh-inactive-dot"></span>
+            ${escFulfillment(wh.name)}
+          </button>
+        `).join('');
+
+        activeWarehouseId = fulfillmentWarehouses[0]?.id || null;
+      } catch (err) {
+        console.warn('Could not load warehouse tabs:', err.message);
+      }
+    }
+
+    function escFulfillment(str) {
+      if (!str) return '';
+      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    window.switchWarehouse = function(whId) {
+      activeWarehouseId = whId;
+      document.querySelectorAll('.wh-tab-btn').forEach(btn => btn.classList.remove('active'));
+      const btn = document.getElementById(`wh-tab-${whId}`);
+      if (btn) btn.classList.add('active');
+      // Refresh data for the selected warehouse context (future: filter by warehouse)
+      refreshDashboard();
+    };
+
 
     function showToast(msg, isError = false) {
       const container = document.getElementById('toast-container');
