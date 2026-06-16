@@ -567,7 +567,7 @@
           <div class="tab-panel active" id="panel-inventory">
             <div class="panel">
               <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center;">
-                <span>Warehouse Tally</span>
+                <span>Warehouse Tally <span id="panel-wh-name" style="font-weight:400; color:var(--text-muted); font-size:0.85em; margin-left:0.4rem;"></span></span>
                 <div style="display: flex; align-items: center; gap: 1rem; text-transform: none; font-weight: normal; font-size: 0.82rem;">
 
                   <!-- Stock Filter Dropdown -->
@@ -1000,14 +1000,13 @@
         const bar = document.getElementById('wh-tab-bar');
         if (!bar) return;
 
-        if (fulfillmentWarehouses.length <= 1) {
-          // Single (or zero) warehouse — hide L1 bar, set active to first
+        if (fulfillmentWarehouses.length === 0) {
           bar.style.display = 'none';
-          activeWarehouseId = fulfillmentWarehouses[0]?.id || null;
+          activeWarehouseId = null;
           return;
         }
 
-        // Multiple warehouses — show L1 tab bar
+        // Always show warehouse tab bar (even for 1 warehouse)
         bar.style.display = 'flex';
         bar.innerHTML = fulfillmentWarehouses.map((wh, idx) => `
           <button
@@ -1074,19 +1073,38 @@
     }
 
     async function refreshDashboard() {
-      // 2. Fetch inventory snapshot
-      const { data: invData, error: invErr } = await sb.from('inventory').select('*');
+      // 2. Fetch inventory snapshot — scoped to active warehouse
+      let invQuery = sb.from('inventory').select('*');
+      if (activeWarehouseId) {
+        invQuery = invQuery.eq('warehouse_id', activeWarehouseId);
+      } else {
+        invQuery = invQuery.is('warehouse_id', null);
+      }
+      const { data: invData, error: invErr } = await invQuery;
       if (invErr) throw invErr;
-      
+
       allInventory = {};
       (invData || []).forEach(row => {
         allInventory[row.sku] = row;
       });
 
-      // 3. Fetch transactions
-      const { data: txData, error: txErr } = await sb.from('inventory_transactions').select('*').order('created_at', { ascending: false });
+      // 3. Fetch transactions — scoped to active warehouse
+      let txQuery = sb.from('inventory_transactions').select('*').order('created_at', { ascending: false });
+      if (activeWarehouseId) {
+        txQuery = txQuery.eq('warehouse_id', activeWarehouseId);
+      } else {
+        txQuery = txQuery.is('warehouse_id', null);
+      }
+      const { data: txData, error: txErr } = await txQuery;
       if (txErr) throw txErr;
       activeTransactions = txData || [];
+
+      // Update warehouse name label in the inventory panel header
+      const whNameEl = document.getElementById('panel-wh-name');
+      if (whNameEl) {
+        const wh = fulfillmentWarehouses.find(w => w.id === activeWarehouseId);
+        whNameEl.textContent = wh ? wh.name : 'All Inventory';
+      }
 
       // Render all tabs
       renderInventorySummary();
@@ -1169,8 +1187,8 @@
               continue;
             }
             console.log(`Syncing reserved item: ${item.qty}x ${item.sku} for order ${orderNo}`);
-            
-            // Create transaction record
+
+            // Create transaction record (scoped to active warehouse)
             const txPayload = {
               sku: item.sku,
               quantity: item.qty,
@@ -1179,25 +1197,30 @@
               reference_id: orderNo,
               customer_name: booking.customer_name,
               customer_city: city,
-              timestamp_reserved: booking.created_at || new Date().toISOString()
+              timestamp_reserved: booking.created_at || new Date().toISOString(),
+              warehouse_id: activeWarehouseId || null
             };
             const { error: insTxErr } = await sb.from('inventory_transactions').insert([txPayload]);
             if (insTxErr) console.error('Error inserting transaction during sync:', insTxErr);
 
-            // Update inventory totals
-            const { data: invRow } = await sb.from('inventory').select('*').eq('sku', item.sku);
+            // Update inventory totals for this warehouse
+            let invQ = sb.from('inventory').select('*').eq('sku', item.sku);
+            if (activeWarehouseId) invQ = invQ.eq('warehouse_id', activeWarehouseId);
+            else invQ = invQ.is('warehouse_id', null);
+            const { data: invRow } = await invQ;
             if (invRow && invRow.length > 0) {
               const current = invRow[0];
               await sb.from('inventory').update({
                 available: current.available - item.qty,
                 reserved: current.reserved + item.qty
-              }).eq('sku', item.sku);
+              }).eq('id', current.id);
             } else {
-              // Create default row
+              // Create new inventory row for this warehouse
               await sb.from('inventory').insert([{
                 sku: item.sku,
                 available: -item.qty,
-                reserved: item.qty
+                reserved: item.qty,
+                warehouse_id: activeWarehouseId || null
               }]);
             }
           }
@@ -1396,15 +1419,15 @@
 
         const promises = updates.map(async (upd) => {
           if (allInventory[upd.sku]) {
-            // Update existing
+            // Update existing row by id (warehouse-scoped)
             const { error } = await sb.from('inventory')
               .update({ available: upd.available })
-              .eq('sku', upd.sku);
+              .eq('id', allInventory[upd.sku].id);
             if (error) throw error;
           } else {
-            // Insert new
+            // Insert new row for this warehouse
             const { error } = await sb.from('inventory')
-              .insert([{ sku: upd.sku, available: upd.available }]);
+              .insert([{ sku: upd.sku, available: upd.available, warehouse_id: activeWarehouseId || null }]);
             if (error) throw error;
           }
         });
@@ -2134,23 +2157,27 @@
             quantity: item.qty,
             type: 'supplier_order',
             status: 'ordered',
-            timestamp_ordered: new Date().toISOString()
+            timestamp_ordered: new Date().toISOString(),
+            warehouse_id: activeWarehouseId || null
           }));
 
           // Bulk insert into Supabase
           const { error: txErr } = await sb.from('inventory_transactions').insert(payloads);
           if (txErr) throw txErr;
 
-          // Ensure inventory rows exist for these SKUs in bulk
+          // Ensure inventory rows exist for these SKUs in this warehouse
           const uniqueSkus = [...new Set(items.map(i => i.sku))];
-          const { data: existingRows, error: checkErr } = await sb.from('inventory').select('sku').in('sku', uniqueSkus);
+          let existQ = sb.from('inventory').select('sku').in('sku', uniqueSkus);
+          if (activeWarehouseId) existQ = existQ.eq('warehouse_id', activeWarehouseId);
+          else existQ = existQ.is('warehouse_id', null);
+          const { data: existingRows, error: checkErr } = await existQ;
           if (checkErr) throw checkErr;
-          
+
           const existingSkus = new Set((existingRows || []).map(r => r.sku));
           const newInventoryRows = uniqueSkus
             .filter(sku => !existingSkus.has(sku))
-            .map(sku => ({ sku: sku, available: 0 }));
-          
+            .map(sku => ({ sku, available: 0, warehouse_id: activeWarehouseId || null }));
+
           if (newInventoryRows.length > 0) {
             const { error: insErr } = await sb.from('inventory').insert(newInventoryRows);
             if (insErr) throw insErr;
@@ -2183,10 +2210,13 @@
         }).eq('id', id);
         if (txErr) throw txErr;
 
-        // Get current inventory row
-        const { data: invRow, error: invErr } = await sb.from('inventory').select('*').eq('sku', sku);
+        // Get current inventory row for this warehouse
+        let invQ = sb.from('inventory').select('*').eq('sku', sku);
+        if (activeWarehouseId) invQ = invQ.eq('warehouse_id', activeWarehouseId);
+        else invQ = invQ.is('warehouse_id', null);
+        const { data: invRow, error: invErr } = await invQ;
         if (invErr || !invRow || invRow.length === 0) {
-          throw new Error('Error fetching inventory item');
+          throw new Error('Error fetching inventory item for this warehouse');
         }
 
         const inv = invRow[0];
@@ -2199,7 +2229,7 @@
           updates.cancelled = Math.max(0, inv.cancelled - qty);
         }
 
-        const { error: updErr } = await sb.from('inventory').update(updates).eq('sku', sku);
+        const { error: updErr } = await sb.from('inventory').update(updates).eq('id', inv.id);
         if (updErr) throw updErr;
 
         await refreshDashboard();
@@ -2217,14 +2247,17 @@
         }).eq('id', id);
         if (txErr) throw txErr;
 
-        const { data: invRow, error: invErr } = await sb.from('inventory').select('*').eq('sku', sku);
+        let invQPack = sb.from('inventory').select('*').eq('sku', sku);
+        if (activeWarehouseId) invQPack = invQPack.eq('warehouse_id', activeWarehouseId);
+        else invQPack = invQPack.is('warehouse_id', null);
+        const { data: invRow, error: invErr } = await invQPack;
         if (invErr) throw invErr;
         if (invRow && invRow.length > 0) {
           const inv = invRow[0];
           const { error: updErr } = await sb.from('inventory').update({
             reserved: Math.max(0, inv.reserved - qty),
             packed: inv.packed + qty
-          }).eq('sku', sku);
+          }).eq('id', inv.id);
           if (updErr) throw updErr;
         }
 
@@ -2253,14 +2286,17 @@
         }).eq('id', id);
         if (txErr) throw txErr;
 
-        const { data: invRow, error: invErr } = await sb.from('inventory').select('*').eq('sku', sku);
+        let invQUnpack = sb.from('inventory').select('*').eq('sku', sku);
+        if (activeWarehouseId) invQUnpack = invQUnpack.eq('warehouse_id', activeWarehouseId);
+        else invQUnpack = invQUnpack.is('warehouse_id', null);
+        const { data: invRow, error: invErr } = await invQUnpack;
         if (invErr) throw invErr;
         if (invRow && invRow.length > 0) {
           const inv = invRow[0];
           const { error: updErr } = await sb.from('inventory').update({
             reserved: inv.reserved + qty,
             packed: Math.max(0, inv.packed - qty)
-          }).eq('sku', sku);
+          }).eq('id', inv.id);
           if (updErr) throw updErr;
         }
 
@@ -2281,14 +2317,17 @@
         }).eq('id', id);
         if (txErr) throw txErr;
 
-        const { data: invRow, error: invErr } = await sb.from('inventory').select('*').eq('sku', sku);
+        let invQDisp = sb.from('inventory').select('*').eq('sku', sku);
+        if (activeWarehouseId) invQDisp = invQDisp.eq('warehouse_id', activeWarehouseId);
+        else invQDisp = invQDisp.is('warehouse_id', null);
+        const { data: invRow, error: invErr } = await invQDisp;
         if (invErr) throw invErr;
         if (invRow && invRow.length > 0) {
           const inv = invRow[0];
           const { error: updErr } = await sb.from('inventory').update({
             packed: Math.max(0, inv.packed - qty),
             dispatched: inv.dispatched + qty
-          }).eq('sku', sku);
+          }).eq('id', inv.id);
           if (updErr) throw updErr;
         }
 
@@ -2309,14 +2348,17 @@
         }).eq('id', id);
         if (txErr) throw txErr;
 
-        const { data: invRow, error: invErr } = await sb.from('inventory').select('*').eq('sku', sku);
+        let invQRet = sb.from('inventory').select('*').eq('sku', sku);
+        if (activeWarehouseId) invQRet = invQRet.eq('warehouse_id', activeWarehouseId);
+        else invQRet = invQRet.is('warehouse_id', null);
+        const { data: invRow, error: invErr } = await invQRet;
         if (invErr) throw invErr;
         if (invRow && invRow.length > 0) {
           const inv = invRow[0];
           const { error: updErr } = await sb.from('inventory').update({
             dispatched: Math.max(0, inv.dispatched - qty),
             returned: inv.returned + qty
-          }).eq('sku', sku);
+          }).eq('id', inv.id);
           if (updErr) throw updErr;
         }
 
@@ -2347,7 +2389,10 @@
       }).eq('id', id);
       if (txErr) throw txErr;
 
-      const { data: invRow, error: invErr } = await sb.from('inventory').select('*').eq('sku', sku);
+      let invQCancel = sb.from('inventory').select('*').eq('sku', sku);
+      if (activeWarehouseId) invQCancel = invQCancel.eq('warehouse_id', activeWarehouseId);
+      else invQCancel = invQCancel.is('warehouse_id', null);
+      const { data: invRow, error: invErr } = await invQCancel;
       if (invErr) throw invErr;
       if (invRow && invRow.length > 0) {
         const inv = invRow[0];
@@ -2357,7 +2402,7 @@
         } else if (prevStatus === 'packed') {
           updates.packed = Math.max(0, inv.packed - qty);
         }
-        const { error: updErr } = await sb.from('inventory').update(updates).eq('sku', sku);
+        const { error: updErr } = await sb.from('inventory').update(updates).eq('id', inv.id);
         if (updErr) throw updErr;
       }
     }
@@ -2380,14 +2425,17 @@
           }).eq('id', id);
           if (txErr) throw txErr;
 
-          const { data: invRow, error: invErr } = await sb.from('inventory').select('*').eq('sku', sku);
+          let invQU1 = sb.from('inventory').select('*').eq('sku', sku);
+          if (activeWarehouseId) invQU1 = invQU1.eq('warehouse_id', activeWarehouseId);
+          else invQU1 = invQU1.is('warehouse_id', null);
+          const { data: invRow, error: invErr } = await invQU1;
           if (invErr) throw invErr;
           if (invRow && invRow.length > 0) {
             const inv = invRow[0];
             const { error: updErr } = await sb.from('inventory').update({
               reserved: inv.reserved + qty,
               packed: Math.max(0, inv.packed - qty)
-            }).eq('sku', sku);
+            }).eq('id', inv.id);
             if (updErr) throw updErr;
           }
           showToast('Undone: Item marked back as reserved.');
@@ -2400,14 +2448,17 @@
           }).eq('id', id);
           if (txErr) throw txErr;
 
-          const { data: invRow, error: invErr } = await sb.from('inventory').select('*').eq('sku', sku);
+          let invQU2 = sb.from('inventory').select('*').eq('sku', sku);
+          if (activeWarehouseId) invQU2 = invQU2.eq('warehouse_id', activeWarehouseId);
+          else invQU2 = invQU2.is('warehouse_id', null);
+          const { data: invRow, error: invErr } = await invQU2;
           if (invErr) throw invErr;
           if (invRow && invRow.length > 0) {
             const inv = invRow[0];
             const { error: updErr } = await sb.from('inventory').update({
               reserved: inv.reserved + qty,
               cancelled: Math.max(0, inv.cancelled - qty)
-            }).eq('sku', sku);
+            }).eq('id', inv.id);
             if (updErr) throw updErr;
           }
           showToast('Undone: Cancelled item restored back to Pack queue.');
@@ -2420,14 +2471,17 @@
           }).eq('id', id);
           if (txErr) throw txErr;
 
-          const { data: invRow, error: invErr } = await sb.from('inventory').select('*').eq('sku', sku);
+          let invQU3 = sb.from('inventory').select('*').eq('sku', sku);
+          if (activeWarehouseId) invQU3 = invQU3.eq('warehouse_id', activeWarehouseId);
+          else invQU3 = invQU3.is('warehouse_id', null);
+          const { data: invRow, error: invErr } = await invQU3;
           if (invErr) throw invErr;
           if (invRow && invRow.length > 0) {
             const inv = invRow[0];
             const { error: updErr } = await sb.from('inventory').update({
               packed: inv.packed + qty,
               dispatched: Math.max(0, inv.dispatched - qty)
-            }).eq('sku', sku);
+            }).eq('id', inv.id);
             if (updErr) throw updErr;
           }
           showToast('Undone: Dispatched item moved back to Dispatch queue.');
@@ -2440,14 +2494,17 @@
           }).eq('id', id);
           if (txErr) throw txErr;
 
-          const { data: invRow, error: invErr } = await sb.from('inventory').select('*').eq('sku', sku);
+          let invQU4 = sb.from('inventory').select('*').eq('sku', sku);
+          if (activeWarehouseId) invQU4 = invQU4.eq('warehouse_id', activeWarehouseId);
+          else invQU4 = invQU4.is('warehouse_id', null);
+          const { data: invRow, error: invErr } = await invQU4;
           if (invErr) throw invErr;
           if (invRow && invRow.length > 0) {
             const inv = invRow[0];
             const { error: updErr } = await sb.from('inventory').update({
               dispatched: inv.dispatched + qty,
               returned: Math.max(0, inv.returned - qty)
-            }).eq('sku', sku);
+            }).eq('id', inv.id);
             if (updErr) throw updErr;
           }
           showToast('Undone: Returned item marked back as dispatched.');
