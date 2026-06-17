@@ -606,15 +606,10 @@
       <div class="top-bar">
         <span class="top-bar-title">Org Map</span>
         <div style="flex:1"></div>
-        <div style="display:flex; gap:0.5rem; align-items:center;">
-          <button class="btn btn-outline btn-sm" onclick="createDepartment()">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14" /></svg>
-            Add Department
-          </button>
-          <button class="btn btn-primary btn-sm" id="btn-save-structure" onclick="saveStructure()">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-            Save Structure
-          </button>
+        <button class="btn btn-outline btn-sm" onclick="createDepartment()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14" /></svg>
+          Add Department
+        </button>
         </div>
       </div>
 
@@ -662,7 +657,7 @@
     </div>
   </div>
 
-  <div class="toast-save" id="save-toast">Structure saved successfully!</div>
+  <div class="toast-save" id="save-toast">Autosaved</div>
 
   <!-- Custom UI Dialog Box Modal -->
   <div class="confirm-overlay" id="custom-dialog-overlay" role="dialog" aria-modal="true" style="display:none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 1000; align-items: center; justify-content: center;">
@@ -745,6 +740,7 @@
         }
 
         renderStructure();
+        _initialRenderDone = true; // mark initial load complete so autosave starts firing
         renderEmployeePool();
 
       } catch (err) {
@@ -753,10 +749,20 @@
       }
     });
 
+    // ── Autosave ──
+    let _autosaveTimer = null;
+    let _initialRenderDone = false;
+    function scheduleAutosave() {
+      if (!_initialRenderDone) return; // skip first render (page load)
+      clearTimeout(_autosaveTimer);
+      _autosaveTimer = setTimeout(saveStructure, 800);
+    }
+
     // ── Render Tree & Canvas ──
     function renderStructure() {
       const container = document.getElementById('departments-container');
       container.innerHTML = '';
+      scheduleAutosave();
 
       if (companyStructure.departments.length === 0) {
         container.innerHTML = `<div style="color:var(--text-muted); font-size:0.85rem; padding: 2rem;">No departments created yet. Click "Add Department" to start.</div>`;
@@ -1400,11 +1406,7 @@
       }
     };
 
-    // ── Save Structure to Database ──
     window.saveStructure = async function() {
-      const btn = document.getElementById('btn-save-structure');
-      btn.disabled = true;
-      btn.textContent = 'Saving...';
       try {
         const { error } = await getSb()
           .from('global_settings')
@@ -1413,15 +1415,10 @@
             company_id: currentCompanyId,
             value: companyStructure
           });
-
         if (error) throw error;
         showSaveToast();
       } catch (err) {
         console.error('Failed to save structure:', err);
-        showToast('Error saving structure: ' + err.message);
-      } finally {
-        btn.disabled = false;
-        btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> Save Structure`;
       }
     };
 
