@@ -7,6 +7,8 @@
   <link rel="preconnect" href="https://fonts.bunny.net" />
   <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="../css/style.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
   <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg?v=2" />
 
   <style>
@@ -566,6 +568,15 @@
       flex-direction: column;
       gap: 1.25rem;
     }
+    /* Cropper circle override */
+    .cropper-view-box,
+    .cropper-face {
+      border-radius: 50%;
+      outline: initial;
+    }
+    .cropper-view-box {
+      box-shadow: 0 0 0 1px #39f;
+    }
   </style>
 </head>
 <body>
@@ -792,6 +803,27 @@
 
       </div>
 
+    </div>
+  </div>
+
+  <!-- Avatar Crop Modal -->
+  <div class="modal-overlay" id="crop-modal">
+    <div class="modal-box" style="width: 450px; max-width: 95%;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+        <h3 style="font-size: 1.15rem; font-weight: 700; color: var(--text-primary);">Crop Profile Picture</h3>
+        <button type="button" style="background: none; border: none; font-size: 1.25rem; cursor: pointer; color: var(--text-muted);" onclick="App.closeCropModal()">✕</button>
+      </div>
+      <div style="width: 100%; height: 300px; background: #000; border-radius: var(--radius-sm); overflow: hidden; position: relative;">
+        <img id="crop-image" style="max-width: 100%; max-height: 100%; display: block;" />
+      </div>
+      <div style="display: flex; gap: 0.75rem; align-items: center; justify-content: center; margin-top: 1rem;">
+        <button type="button" class="btn btn-outline btn-sm" onclick="App.cropper.zoom(0.1)" style="padding: 0.4rem 0.6rem;">Zoom In</button>
+        <button type="button" class="btn btn-outline btn-sm" onclick="App.cropper.zoom(-0.1)" style="padding: 0.4rem 0.6rem;">Zoom Out</button>
+      </div>
+      <div style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1rem;">
+        <button type="button" class="btn btn-outline" onclick="App.closeCropModal()">Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="App.saveCroppedAvatar()">Upload</button>
+      </div>
     </div>
   </div>
 
@@ -1051,35 +1083,92 @@
         }
       },
 
+      cropper: null,
+      cropFileExt: 'png',
+
       async uploadAvatar(input) {
         if (!input.files || input.files.length === 0) return;
         const file = input.files[0];
-        const fileExt = file.name.split('.').pop();
-        const filePath = `avatars/${this.currentUser.id}-${Date.now()}.${fileExt}`;
-
-        try {
-          showToast('Uploading profile picture...');
-          const { error: uploadError } = await this.sb.storage
-            .from('brightkey-assets')
-            .upload(filePath, file);
-
-          if (uploadError) throw uploadError;
-
-          const publicUrl = `${this.sb.storage.from('brightkey-assets').getPublicUrl(filePath).data.publicUrl}`;
+        this.cropFileExt = file.name.split('.').pop();
+        
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const cropImg = document.getElementById('crop-image');
+          cropImg.src = e.target.result;
           
-          const { error: dbErr } = await this.sb
-            .from('employees')
-            .update({ picture_link: publicUrl })
-            .eq('id', this.currentUser.id);
+          document.getElementById('crop-modal').classList.add('open');
+          
+          if (this.cropper) {
+            this.cropper.destroy();
+          }
+          
+          this.cropper = new Cropper(cropImg, {
+            aspectRatio: 1,
+            viewMode: 1,
+            dragMode: 'move',
+            autoCropArea: 1,
+            restore: false,
+            guides: false,
+            center: false,
+            highlight: false,
+            cropBoxMovable: false,
+            cropBoxResizable: false,
+            toggleDragModeOnDblclick: false,
+          });
+        };
+        reader.readAsDataURL(file);
+        input.value = '';
+      },
 
-          if (dbErr) throw dbErr;
-
-          showToast('Profile picture updated!');
-          await this.loadProfile();
-        } catch (err) {
-          console.error(err);
-          showToast('Upload failed: ' + err.message, true);
+      closeCropModal() {
+        document.getElementById('crop-modal').classList.remove('open');
+        if (this.cropper) {
+          this.cropper.destroy();
+          this.cropper = null;
         }
+      },
+
+      async saveCroppedAvatar() {
+        if (!this.cropper) return;
+        
+        const canvas = this.cropper.getCroppedCanvas({
+          width: 300,
+          height: 300
+        });
+        
+        canvas.toBlob(async (blob) => {
+          if (!blob) {
+            showToast('Failed to crop image.', true);
+            return;
+          }
+          
+          this.closeCropModal();
+          const filePath = `avatars/${this.currentUser.id}-${Date.now()}.${this.cropFileExt}`;
+          
+          try {
+            showToast('Uploading cropped profile picture...');
+            const { error: uploadError } = await this.sb.storage
+              .from('brightkey-assets')
+              .upload(filePath, blob);
+
+            if (uploadError) throw uploadError;
+
+            const publicUrl = `${this.sb.storage.from('brightkey-assets').getPublicUrl(filePath).data.publicUrl}`;
+            
+            const { error: dbErr } = await this.sb
+              .from('employees')
+              .update({ picture_link: publicUrl })
+              .eq('id', this.currentUser.id);
+
+            if (dbErr) throw dbErr;
+
+            showToast('Profile picture updated!');
+            await this.loadProfile();
+          } catch (err) {
+            console.error(err);
+            showToast('Upload failed: ' + err.message, true);
+          }
+        }, `image/${this.cropFileExt === 'jpg' ? 'jpeg' : this.cropFileExt}`);
       },
 
       async uploadCoverPhoto(input) {
