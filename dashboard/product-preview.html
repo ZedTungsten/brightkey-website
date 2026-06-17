@@ -1617,19 +1617,30 @@
           
           try {
             const db = window.createSupabaseClient();
-            // 1. Save to the legacy marketing_audience table
+            const bucketName = config.audience_bucket || 'Customer';
+
+            // Resolve audience first to get company_id for both inserts
+            let audienceId = null;
+            let audienceCompanyId = null;
+            const audRows = await db.select('email_marketing_audiences', `name=eq.${encodeURIComponent(bucketName)}`);
+            if (audRows && audRows.length > 0) {
+              audienceId = audRows[0].id;
+              audienceCompanyId = audRows[0].company_id || null;
+            }
+
+            // 1. Save to the legacy marketing_audience table (now company-scoped)
             await db.insert('marketing_audience', { 
               email: emailVal, 
               source: 'promo_popup',
-              audience: config.audience_bucket || 'Customer'
+              audience: bucketName,
+              company_id: audienceCompanyId
             });
 
             // 2. Save to the new email_marketing_audience_members table
-            const bucketName = config.audience_bucket || 'Customer';
-            const audRows = await db.select('email_marketing_audiences', `name=eq.${encodeURIComponent(bucketName)}`);
-            if (audRows && audRows.length > 0) {
+            if (audienceId) {
               await db.insert('email_marketing_audience_members', {
-                audience_id: audRows[0].id,
+                audience_id: audienceId,
+                company_id: audienceCompanyId,
                 email: emailVal,
                 source: 'promo_popup'
               });
