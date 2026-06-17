@@ -662,6 +662,7 @@
         <div class="profile-card-right">
           <div class="tabs-header">
             <button class="profile-tab active" id="tab-btn-settings" onclick="App.switchTab('settings')">Account Settings</button>
+            <button class="profile-tab" id="tab-btn-employment" onclick="App.switchTab('employment')">Employment Details</button>
           </div>
 
           <div class="tab-content" id="tab-content-settings">
@@ -735,6 +736,52 @@
                 <button type="submit" class="btn btn-primary" id="btn-submit" style="display:none;">Request to Update</button>
               </div>
             </form>
+          </div>
+
+          <div class="tab-content" id="tab-content-employment" style="display: none;">
+            <div class="details-form-grid">
+              
+              <div class="form-group">
+                <label class="form-label">Department - Title/Position</label>
+                <input type="text" id="emp-dept-position" class="form-input" disabled />
+              </div>
+              
+              <div class="form-group">
+                <label class="form-label">Reporting To</label>
+                <input type="text" id="emp-reporting-to" class="form-input" disabled />
+              </div>
+              
+              <div class="form-group">
+                <label class="form-label">Salary</label>
+                <input type="text" id="emp-salary" class="form-input" disabled />
+              </div>
+              
+              <div class="form-group">
+                <label class="form-label">Date Hired</label>
+                <input type="text" id="emp-date-hired" class="form-input" disabled />
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Shift Days / Time Range</label>
+                <input type="text" id="emp-shift" class="form-input" disabled />
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Work Email</label>
+                <input type="text" id="emp-work-email" class="form-input" disabled />
+              </div>
+
+              <div class="form-group" style="grid-column: span 2;">
+                <label class="form-label">Job Description</label>
+                <textarea id="emp-job-desc" class="form-input" style="height: 100px; resize: vertical;" disabled></textarea>
+              </div>
+
+              <div class="form-group" style="grid-column: span 2;" id="emp-id-link-group">
+                <label class="form-label">ID Link</label>
+                <div id="emp-id-link-container" style="padding: 0.5rem 0;">-</div>
+              </div>
+
+            </div>
           </div>
         </div>
 
@@ -873,6 +920,46 @@
           document.getElementById('inp-sss').value = emp.sss || '';
           document.getElementById('inp-philhealth').value = emp.philhealth || '';
           document.getElementById('inp-pagibig').value = emp.pagibig || '';
+
+          // Populate employment form inputs
+          const dept = emp.department || '';
+          const pos = emp.position || '';
+          document.getElementById('emp-dept-position').value = (dept && pos) ? `${dept} - ${pos}` : (dept || pos || 'N/A');
+          document.getElementById('emp-reporting-to').value = emp.reporting_to || 'N/A';
+          document.getElementById('emp-salary').value = emp.salary != null ? `₱ ${parseFloat(emp.salary).toLocaleString('en-PH', { minimumFractionDigits: 2 })}` : 'N/A';
+          
+          let dateHiredStr = 'N/A';
+          if (emp.date_hired) {
+            const date = new Date(emp.date_hired);
+            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            dateHiredStr = `${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
+          }
+          document.getElementById('emp-date-hired').value = dateHiredStr;
+
+          let shiftStr = 'Not Scheduled';
+          if (emp.shift_days) {
+            const time1 = emp.shift_time_1 ? ` (${emp.shift_time_1})` : '';
+            const time2 = emp.shift_time_2 ? ` / (${emp.shift_time_2})` : '';
+            shiftStr = `${emp.shift_days}${time1}${time2}`;
+          }
+          document.getElementById('emp-shift').value = shiftStr;
+          document.getElementById('emp-work-email').value = emp.work_email || 'N/A';
+          document.getElementById('emp-job-desc').value = emp.job_description || 'N/A';
+
+          const idLinkContainer = document.getElementById('emp-id-link-container');
+          if (emp.id_link) {
+            idLinkContainer.innerHTML = '';
+            const a = document.createElement('a');
+            a.href = emp.id_link;
+            a.target = '_blank';
+            a.style.color = 'var(--cyan-light)';
+            a.style.fontWeight = '600';
+            a.style.textDecoration = 'none';
+            a.textContent = 'View ID Card ↗';
+            idLinkContainer.appendChild(a);
+          } else {
+            idLinkContainer.textContent = 'No ID uploaded';
+          }
 
         } catch (err) {
           console.error(err);
@@ -1139,6 +1226,20 @@
 
       switchTab(tab) {
         this.activeTab = tab;
+        
+        // Update tab button classes
+        document.querySelectorAll('.profile-tab').forEach(btn => {
+          btn.classList.remove('active');
+        });
+        const activeBtn = document.getElementById(`tab-btn-${tab}`);
+        if (activeBtn) activeBtn.classList.add('active');
+
+        // Update tab content visibility
+        document.querySelectorAll('.tab-content').forEach(content => {
+          content.style.display = 'none';
+        });
+        const activeContent = document.getElementById(`tab-content-${tab}`);
+        if (activeContent) activeContent.style.display = 'block';
       }
     };
 
