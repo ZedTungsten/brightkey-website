@@ -790,7 +790,7 @@
           <table class="prod-table">
             <thead>
               <tr>
-                <th>Product Code</th>
+                <th>Product</th>
                 <th>Door Type</th>
                 <th>Door Pics</th>
                 <th>Installer Assigned</th>
@@ -807,12 +807,53 @@
         <div>
           <h4 style="margin-bottom: 0.75rem; color: var(--text-primary); font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;">Attachments</h4>
           <div class="img-preview-row">
-            <div class="img-preview-card" id="card-frontage">
-              <img id="img-frontage" src="" alt="House Frontage" onclick="openLightbox(this.src)" />
+            <div class="img-preview-card" id="card-frontage" style="position: relative;">
+              <!-- Upload state -->
+              <div id="upload-frontage-container" style="height: 120px; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 2px dashed var(--border); border-radius: 4px; cursor: pointer; background: var(--bg-base); gap: 0.25rem;" onclick="triggerFrontageUpload()">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-upload-cloud">
+                  <polyline points="16 16 12 12 8 16"></polyline>
+                  <line x1="12" y1="12" x2="12" y2="21"></line>
+                  <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"></path>
+                  <polyline points="16 16 12 12 8 16"></polyline>
+                </svg>
+                <span style="font-size: 0.72rem; color: var(--text-secondary); font-weight: 600;">Attach Frontage</span>
+              </div>
+              
+              <!-- Preview state -->
+              <div id="preview-frontage-container" style="display: none; position: relative;">
+                <img id="img-frontage" src="" alt="House Frontage" onclick="openLightbox(this.src)" style="width:100%; height:120px; object-fit:cover;" />
+                <button type="button" id="btn-remove-frontage" style="position: absolute; top: 5px; right: 5px; background: rgba(239, 68, 68, 0.9); border: none; color: white; border-radius: 4px; padding: 2px 6px; font-size: 0.7rem; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center;" onclick="removeFrontage(event)">
+                  Delete
+                </button>
+              </div>
+
+              <!-- Hidden input file -->
+              <input type="file" id="input-frontage" accept="image/*" style="display: none;" onchange="handleFrontageUpload(event)" />
               <div class="img-preview-label">House Frontage</div>
             </div>
-            <div class="img-preview-card" id="card-map">
-              <img id="img-map" src="" alt="Google Pin Map" onclick="openLightbox(this.src)" />
+
+            <div class="img-preview-card" id="card-map" style="position: relative;">
+              <!-- Upload state -->
+              <div id="upload-map-container" style="height: 120px; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 2px dashed var(--border); border-radius: 4px; cursor: pointer; background: var(--bg-base); gap: 0.25rem;" onclick="triggerMapUpload()">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-upload-cloud">
+                  <polyline points="16 16 12 12 8 16"></polyline>
+                  <line x1="12" y1="12" x2="12" y2="21"></line>
+                  <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"></path>
+                  <polyline points="16 16 12 12 8 16"></polyline>
+                </svg>
+                <span style="font-size: 0.72rem; color: var(--text-secondary); font-weight: 600;">Attach Map</span>
+              </div>
+              
+              <!-- Preview state -->
+              <div id="preview-map-container" style="display: none; position: relative;">
+                <img id="img-map" src="" alt="Google Pin Map" onclick="openLightbox(this.src)" style="width:100%; height:120px; object-fit:cover;" />
+                <button type="button" id="btn-remove-map" style="position: absolute; top: 5px; right: 5px; background: rgba(239, 68, 68, 0.9); border: none; color: white; border-radius: 4px; padding: 2px 6px; font-size: 0.7rem; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center;" onclick="removeMap(event)">
+                  Delete
+                </button>
+              </div>
+
+              <!-- Hidden input file -->
+              <input type="file" id="input-map" accept="image/*" style="display: none;" onchange="handleMapUpload(event)" />
               <div class="img-preview-label">Map / Location Guide</div>
             </div>
             <div class="img-preview-card" id="card-work-permit" style="position: relative;">
@@ -1289,10 +1330,24 @@
 
           // Door photos thumbnails
           let photosHtml = 'N/A';
-          if (doorsArr[i]?.photos && doorsArr[i].photos.length > 0) {
-            photosHtml = doorsArr[i].photos.map(url => `
-              <img class="door-thumbnail" src="${url}" alt="Door Pic" onclick="openLightbox('${url}')" />
-            `).join(' ');
+          if (doorsArr[i]) {
+            const photos = doorsArr[i].photos || [];
+            let thumbs = 'No pics';
+            if (photos.length > 0) {
+              thumbs = photos.map(url => `
+                <img class="door-thumbnail" src="${url}" alt="Door Pic" onclick="openLightbox('${url}')" style="vertical-align: middle; margin-right: 4px;" />
+              `).join('');
+            }
+            photosHtml = `
+              <div id="door-pics-container-${i}">
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; min-width: 120px;">
+                  <div id="door-pics-list-${i}" style="display: flex; flex-wrap: wrap; gap: 4px; align-items: center;">${thumbs}</div>
+                  <button type="button" class="btn-minimal" onclick="editDoorPics(${i})" title="Edit Door Pics" style="margin-left: auto;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                  </button>
+                </div>
+              </div>
+            `;
           }
 
           // Parse multiple installers
@@ -1317,7 +1372,7 @@
 
           tbody.insertAdjacentHTML('beforeend', `
             <tr>
-              <td><strong>${escapeHtml(sku)}</strong><br/><span style="color:var(--text-muted);font-size:0.75rem;">${escapeHtml(title)}</span></td>
+              <td><strong>${escapeHtml(title)}</strong><br/><span style="color:var(--text-muted);font-size:0.75rem;">${escapeHtml(sku)}</span></td>
               <td>${doorTypeHtml}</td>
               <td>${photosHtml}</td>
               <td>
@@ -1337,24 +1392,8 @@
         }
       }
 
-      // Attachments frontage & map
-      const frontageCard = document.getElementById('card-frontage');
-      const frontageImg = document.getElementById('img-frontage');
-      if (selectedBooking.frontage_image_url) {
-        frontageCard.style.display = 'block';
-        frontageImg.src = selectedBooking.frontage_image_url;
-      } else {
-        frontageCard.style.display = 'none';
-      }
-
-      const mapCard = document.getElementById('card-map');
-      const mapImg = document.getElementById('img-map');
-      if (selectedBooking.map_image_url) {
-        mapCard.style.display = 'block';
-        mapImg.src = selectedBooking.map_image_url;
-      } else {
-        mapCard.style.display = 'none';
-      }
+      updateFrontageUI();
+      updateMapUI();
 
       // Work permit UI state helper
       updateWorkPermitUI();
@@ -1378,6 +1417,466 @@
         imgElement.src = '';
       }
     }
+
+    function updateFrontageUI() {
+      if (!selectedBooking) return;
+      const uploadContainer = document.getElementById('upload-frontage-container');
+      const previewContainer = document.getElementById('preview-frontage-container');
+      const imgElement = document.getElementById('img-frontage');
+      
+      if (selectedBooking.frontage_image_url) {
+        uploadContainer.style.display = 'none';
+        previewContainer.style.display = 'block';
+        imgElement.src = selectedBooking.frontage_image_url;
+      } else {
+        uploadContainer.style.display = 'flex';
+        previewContainer.style.display = 'none';
+        imgElement.src = '';
+      }
+    }
+
+    function updateMapUI() {
+      if (!selectedBooking) return;
+      const uploadContainer = document.getElementById('upload-map-container');
+      const previewContainer = document.getElementById('preview-map-container');
+      const imgElement = document.getElementById('img-map');
+      
+      if (selectedBooking.map_image_url) {
+        uploadContainer.style.display = 'none';
+        previewContainer.style.display = 'block';
+        imgElement.src = selectedBooking.map_image_url;
+      } else {
+        uploadContainer.style.display = 'flex';
+        previewContainer.style.display = 'none';
+        imgElement.src = '';
+      }
+    }
+
+    window.triggerFrontageUpload = function() {
+      document.getElementById('input-frontage').click();
+    };
+
+    window.handleFrontageUpload = async function(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const uploadContainer = document.getElementById('upload-frontage-container');
+      const originalHtml = uploadContainer.innerHTML;
+      uploadContainer.innerHTML = `
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.5rem;">
+          <div class="bk-spinner"></div>
+          <span style="font-size: 0.72rem; color: var(--text-secondary); font-weight: 600;">Uploading...</span>
+        </div>
+      `;
+      uploadContainer.style.pointerEvents = 'none';
+
+      try {
+        const reader = new FileReader();
+        const base64Promise = new Promise((resolve, reject) => {
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = reject;
+        });
+        reader.readAsDataURL(file);
+        const fileBase64 = await base64Promise;
+
+        const response = await fetch('/api/upload', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            fileBase64,
+            fileName: file.name,
+            category: 'installations',
+            type: 'site',
+            refId: selectedBooking.reference_id || selectedBooking.id,
+            companyId: currentCompanyId
+          })
+        });
+
+        const result = await response.json();
+        if (!response.ok || !result.success) {
+          throw new Error(result.error || 'Upload failed');
+        }
+
+        const imageUrl = result.url;
+
+        // Update in Supabase
+        const { error } = await sb
+          .from('installation_bookings')
+          .update({ frontage_image_url: imageUrl })
+          .eq('id', selectedBooking.id);
+
+        if (error) throw error;
+
+        // Update local memory
+        const bookingIndex = dbBookings.findIndex(b => b.id === selectedBooking.id);
+        if (bookingIndex !== -1) {
+          dbBookings[bookingIndex].frontage_image_url = imageUrl;
+        }
+        selectedBooking.frontage_image_url = imageUrl;
+
+        showToast('House frontage uploaded successfully!');
+        updateFrontageUI();
+        applyFilterAndRender();
+      } catch (err) {
+        console.error(err);
+        showToast('Failed to upload frontage: ' + err.message, true);
+      } finally {
+        uploadContainer.innerHTML = originalHtml;
+        uploadContainer.style.pointerEvents = 'auto';
+        event.target.value = ''; // Reset input
+      }
+    };
+
+    window.removeFrontage = async function(event) {
+      event.stopPropagation();
+      const ok = await BKDialog.ask({
+        title: 'Remove House Frontage',
+        message: 'This will remove the uploaded frontage photo from the booking.',
+        okText: 'Remove',
+        danger: true
+      });
+      if (!ok) return;
+
+      const btn = document.getElementById('btn-remove-frontage');
+      const originalText = btn.innerText;
+      btn.innerText = 'Deleting...';
+      btn.disabled = true;
+
+      try {
+        const { error } = await sb
+          .from('installation_bookings')
+          .update({ frontage_image_url: null })
+          .eq('id', selectedBooking.id);
+
+        if (error) throw error;
+
+        const bookingIndex = dbBookings.findIndex(b => b.id === selectedBooking.id);
+        if (bookingIndex !== -1) {
+          dbBookings[bookingIndex].frontage_image_url = null;
+        }
+        selectedBooking.frontage_image_url = null;
+
+        showToast('House frontage removed.');
+        updateFrontageUI();
+        applyFilterAndRender();
+      } catch (err) {
+        console.error(err);
+        showToast('Failed to remove frontage: ' + err.message, true);
+      } finally {
+        btn.innerText = originalText;
+        btn.disabled = false;
+      }
+    };
+
+    window.triggerMapUpload = function() {
+      document.getElementById('input-map').click();
+    };
+
+    window.handleMapUpload = async function(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const uploadContainer = document.getElementById('upload-map-container');
+      const originalHtml = uploadContainer.innerHTML;
+      uploadContainer.innerHTML = `
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.5rem;">
+          <div class="bk-spinner"></div>
+          <span style="font-size: 0.72rem; color: var(--text-secondary); font-weight: 600;">Uploading...</span>
+        </div>
+      `;
+      uploadContainer.style.pointerEvents = 'none';
+
+      try {
+        const reader = new FileReader();
+        const base64Promise = new Promise((resolve, reject) => {
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = reject;
+        });
+        reader.readAsDataURL(file);
+        const fileBase64 = await base64Promise;
+
+        const response = await fetch('/api/upload', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            fileBase64,
+            fileName: file.name,
+            category: 'installations',
+            type: 'site',
+            refId: selectedBooking.reference_id || selectedBooking.id,
+            companyId: currentCompanyId
+          })
+        });
+
+        const result = await response.json();
+        if (!response.ok || !result.success) {
+          throw new Error(result.error || 'Upload failed');
+        }
+
+        const imageUrl = result.url;
+
+        // Update in Supabase
+        const { error } = await sb
+          .from('installation_bookings')
+          .update({ map_image_url: imageUrl })
+          .eq('id', selectedBooking.id);
+
+        if (error) throw error;
+
+        // Update local memory
+        const bookingIndex = dbBookings.findIndex(b => b.id === selectedBooking.id);
+        if (bookingIndex !== -1) {
+          dbBookings[bookingIndex].map_image_url = imageUrl;
+        }
+        selectedBooking.map_image_url = imageUrl;
+
+        showToast('Map/location guide uploaded successfully!');
+        updateMapUI();
+        applyFilterAndRender();
+      } catch (err) {
+        console.error(err);
+        showToast('Failed to upload map: ' + err.message, true);
+      } finally {
+        uploadContainer.innerHTML = originalHtml;
+        uploadContainer.style.pointerEvents = 'auto';
+        event.target.value = ''; // Reset input
+      }
+    };
+
+    window.removeMap = async function(event) {
+      event.stopPropagation();
+      const ok = await BKDialog.ask({
+        title: 'Remove Map/Location Guide',
+        message: 'This will remove the uploaded map/location guide from the booking.',
+        okText: 'Remove',
+        danger: true
+      });
+      if (!ok) return;
+
+      const btn = document.getElementById('btn-remove-map');
+      const originalText = btn.innerText;
+      btn.innerText = 'Deleting...';
+      btn.disabled = true;
+
+      try {
+        const { error } = await sb
+          .from('installation_bookings')
+          .update({ map_image_url: null })
+          .eq('id', selectedBooking.id);
+
+        if (error) throw error;
+
+        const bookingIndex = dbBookings.findIndex(b => b.id === selectedBooking.id);
+        if (bookingIndex !== -1) {
+          dbBookings[bookingIndex].map_image_url = null;
+        }
+        selectedBooking.map_image_url = null;
+
+        showToast('Map/location guide removed.');
+        updateMapUI();
+        applyFilterAndRender();
+      } catch (err) {
+        console.error(err);
+        showToast('Failed to remove map: ' + err.message, true);
+      } finally {
+        btn.innerText = originalText;
+        btn.disabled = false;
+      }
+    };
+
+    window.editDoorPics = function(doorIndex) {
+      let doorsArr = [];
+      if (typeof selectedBooking.doors === 'string') {
+        try { doorsArr = JSON.parse(selectedBooking.doors); } catch(_) {}
+      } else if (Array.isArray(selectedBooking.doors)) {
+        doorsArr = selectedBooking.doors;
+      }
+      
+      const door = doorsArr[doorIndex];
+      if (!door) return;
+
+      const photos = door.photos || [];
+
+      const container = document.getElementById(`door-pics-container-${doorIndex}`);
+      if (!container) return;
+
+      let thumbsHtml = '';
+      photos.forEach((url, idx) => {
+        thumbsHtml += `
+          <div style="position: relative; display: inline-block; width: 44px; height: 44px;">
+            <img class="door-thumbnail" src="${url}" alt="Door Pic" style="width: 44px; height: 44px; margin: 0;" />
+            <button type="button" onclick="deleteDoorPic(${doorIndex}, ${idx})" style="position: absolute; top: -4px; right: -4px; background: var(--danger); border: none; color: white; border-radius: 50%; width: 14px; height: 14px; font-size: 8px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; line-height: 1;" title="Delete">x</button>
+          </div>
+        `;
+      });
+
+      let uploadBtnHtml = '';
+      if (photos.length < 5) {
+        uploadBtnHtml = `
+          <div style="position: relative; display: inline-block; width: 44px; height: 44px; border: 2px dashed var(--border); border-radius: 4px; background: var(--bg-base); cursor: pointer; display: flex; align-items: center; justify-content: center;" onclick="triggerDoorPicUpload(${doorIndex})" title="Upload Photo (Max 5)">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            <input type="file" id="input-door-pic-${doorIndex}" accept="image/*" style="display: none;" onchange="handleDoorPicUpload(event, ${doorIndex})" />
+          </div>
+        `;
+      }
+
+      container.innerHTML = `
+        <div style="display: flex; flex-direction: column; gap: 0.5rem; background: var(--bg-elevated); padding: 0.5rem; border-radius: 6px; border: 1px solid var(--border);">
+          <div style="display: flex; flex-wrap: wrap; gap: 6px; align-items: center;">
+            ${thumbsHtml}
+            ${uploadBtnHtml}
+          </div>
+          <div style="display: flex; justify-content: flex-end; gap: 0.35rem;">
+            <button type="button" class="btn btn-outline btn-xs" onclick="cancelDoorPicsEdit(${doorIndex})" style="padding: 2px 6px; font-size: 0.72rem;">Done</button>
+          </div>
+        </div>
+      `;
+    };
+
+    window.triggerDoorPicUpload = function(doorIndex) {
+      document.getElementById(`input-door-pic-${doorIndex}`).click();
+    };
+
+    window.handleDoorPicUpload = async function(event, doorIndex) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      let doorsArr = [];
+      if (typeof selectedBooking.doors === 'string') {
+        try { doorsArr = JSON.parse(selectedBooking.doors); } catch(_) {}
+      } else if (Array.isArray(selectedBooking.doors)) {
+        doorsArr = selectedBooking.doors;
+      }
+
+      const door = doorsArr[doorIndex];
+      if (!door) return;
+
+      const photos = door.photos || [];
+      if (photos.length >= 5) {
+        showToast('Maximum of 5 photos allowed per door.', true);
+        return;
+      }
+
+      // Show spinner or loading state
+      const container = document.getElementById(`door-pics-container-${doorIndex}`);
+      const originalHtml = container.innerHTML;
+      container.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem;">
+          <div class="bk-spinner" style="width: 1rem; height: 1rem;"></div>
+          <span style="font-size: 0.75rem;">Uploading pic...</span>
+        </div>
+      `;
+
+      try {
+        const reader = new FileReader();
+        const base64Promise = new Promise((resolve, reject) => {
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = reject;
+        });
+        reader.readAsDataURL(file);
+        const fileBase64 = await base64Promise;
+
+        const response = await fetch('/api/upload', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            fileBase64,
+            fileName: file.name,
+            category: 'installations',
+            type: 'doors',
+            refId: selectedBooking.reference_id || selectedBooking.id,
+            companyId: currentCompanyId
+          })
+        });
+
+        const result = await response.json();
+        if (!response.ok || !result.success) {
+          throw new Error(result.error || 'Upload failed');
+        }
+
+        const imageUrl = result.url;
+
+        // Push to local array
+        if (!door.photos) door.photos = [];
+        door.photos.push(imageUrl);
+
+        // Update in Supabase
+        const { error } = await sb
+          .from('installation_bookings')
+          .update({ doors: doorsArr })
+          .eq('id', selectedBooking.id);
+
+        if (error) throw error;
+
+        // Update local memory
+        const bookingIndex = dbBookings.findIndex(b => b.id === selectedBooking.id);
+        if (bookingIndex !== -1) {
+          dbBookings[bookingIndex].doors = doorsArr;
+        }
+        selectedBooking.doors = doorsArr;
+
+        showToast('Door photo uploaded successfully!');
+        editDoorPics(doorIndex); // refresh edit view
+      } catch (err) {
+        console.error(err);
+        showToast('Failed to upload photo: ' + err.message, true);
+        container.innerHTML = originalHtml;
+      }
+    };
+
+    window.deleteDoorPic = async function(doorIndex, photoIndex) {
+      let doorsArr = [];
+      if (typeof selectedBooking.doors === 'string') {
+        try { doorsArr = JSON.parse(selectedBooking.doors); } catch(_) {}
+      } else if (Array.isArray(selectedBooking.doors)) {
+        doorsArr = selectedBooking.doors;
+      }
+
+      const door = doorsArr[doorIndex];
+      if (!door) return;
+
+      const ok = await BKDialog.ask({
+        title: 'Delete Photo',
+        message: 'Are you sure you want to remove this door photo?',
+        okText: 'Delete',
+        danger: true
+      });
+      if (!ok) return;
+
+      door.photos.splice(photoIndex, 1);
+
+      try {
+        const { error } = await sb
+          .from('installation_bookings')
+          .update({ doors: doorsArr })
+          .eq('id', selectedBooking.id);
+
+        if (error) throw error;
+
+        // Update local memory
+        const bookingIndex = dbBookings.findIndex(b => b.id === selectedBooking.id);
+        if (bookingIndex !== -1) {
+          dbBookings[bookingIndex].doors = doorsArr;
+        }
+        selectedBooking.doors = doorsArr;
+
+        showToast('Door photo removed.');
+        editDoorPics(doorIndex); // refresh edit view
+      } catch (err) {
+        console.error(err);
+        showToast('Failed to remove photo: ' + err.message, true);
+      }
+    };
+
+    window.cancelDoorPicsEdit = function(doorIndex) {
+      showBookingDetails(selectedBooking.id);
+    };
 
     window.triggerWorkPermitUpload = function() {
       document.getElementById('input-work-permit').click();
