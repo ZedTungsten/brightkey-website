@@ -212,6 +212,10 @@
             <div class="dash-user-name" id="user-name">Loading…</div>
             <div class="dash-user-role" id="user-role"></div>
             <div class="dash-user-email" id="user-email"></div>
+            <div id="user-status-container" style="display: flex; align-items: center; gap: 0.35rem; margin-top: 0.25rem;">
+              <span id="user-status-dot" style="width: 8px; height: 8px; border-radius: 50%; display: inline-block; background-color: #71717a;"></span>
+              <span id="user-status-text" style="font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted);">Offline</span>
+            </div>
           </div>
         </div>
       </div>
@@ -482,6 +486,41 @@
         if (nameEl) nameEl.textContent = name;
         if (roleEl) roleEl.textContent = displayRole;
         if (emailEl) emailEl.textContent = currentUser.email;
+
+        // Fetch current user status
+        let currentStatus = 'offline';
+        try {
+          const { data: latestLog } = await window.BKAuth.sb
+            .from('attendance_logs')
+            .select('status')
+            .eq('employee_id', currentUser.id)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          if (latestLog && latestLog.status) {
+            currentStatus = latestLog.status;
+          }
+        } catch (err) {
+          console.error('Sidebar status fetch error:', err);
+        }
+
+        const statusDot = document.getElementById('user-status-dot');
+        const statusText = document.getElementById('user-status-text');
+        if (statusDot && statusText) {
+          if (currentStatus === 'available') {
+            statusDot.style.backgroundColor = '#22c55e'; // Green
+            statusText.textContent = 'Online';
+            statusText.style.color = '#22c55e';
+          } else if (currentStatus === 'break') {
+            statusDot.style.backgroundColor = '#eab308'; // Yellow/Orange
+            statusText.textContent = 'Away';
+            statusText.style.color = '#eab308';
+          } else {
+            statusDot.style.backgroundColor = '#71717a'; // Gray
+            statusText.textContent = 'Offline';
+            statusText.style.color = '#71717a';
+          }
+        }
 
       } catch (err) {
         console.error('Sidebar RBAC error:', err);
