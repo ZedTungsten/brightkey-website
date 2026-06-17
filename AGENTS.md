@@ -140,3 +140,17 @@ Ensure the tabs container and buttons use the following premium styling tokens:
   color: var(--text-secondary);
 }
 ```
+
+---
+
+## 9. Product Page Build Policy
+> [!IMPORTANT]
+> Do not run `npm run build` or regenerate `products/*.html` as a routine pre-push step. Product pages are static generated output and rebuilding them touches many files, which wastes time and review budget when unrelated dashboard or backend changes are being pushed.
+
+Only run `npm run build` when one of the following is true:
+- The user explicitly asks to update or rebuild product pages.
+- Changes were made to `dashboard/product-preview.html`.
+- Changes were made to `scripts/build-products.js`.
+- The requested work directly affects generated product pages under `products/*.html`.
+
+For ordinary dashboard, JavaScript, CSS, migration, or non-product-page changes, prefer targeted checks instead of rebuilding product pages.
