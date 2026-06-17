@@ -50,9 +50,9 @@ async function fixDescriptions() {
       .eq('id', product.id);
 
     if (updateError) {
-      console.error(`  ✗ Failed to update [${product.slug}]:`, updateError.message);
+      console.error(`  Failed to update [${product.slug}]:`, updateError.message);
     } else {
-      console.log(`  ✓ Updated [${product.slug}]`);
+      console.log(`  Updated [${product.slug}]`);
     }
   }
 

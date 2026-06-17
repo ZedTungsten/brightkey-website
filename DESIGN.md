@@ -129,8 +129,8 @@ function closeDrawer() {
 
 **What NOT to do:**
 ```css
-/* ❌ This container sits at z-index: 99999 fixed on the page */
-/* ❌ Even when empty, it can block scroll/hover on elements below */
+/* Bad: This container sits at z-index: 99999 fixed on the page */
+/* Bad: Even when empty, it can block scroll/hover on elements below */
 #toast-container {
   position: fixed;
   top: 1.5rem;
@@ -281,6 +281,5 @@ Instead of scrolling the whole panel, restrict vertical and horizontal scrolling
     <option value="PM">PM</option>
   </select>
   ```
-
 
 

@@ -189,7 +189,7 @@ function injectCartDrawer() {
     <div class="cart-drawer" role="dialog" aria-modal="true" aria-label="Shopping Cart Drawer">
       <div class="cart-drawer__header">
         <h3 class="cart-drawer__title">Shopping Cart</h3>
-        <button class="cart-drawer__close" aria-label="Close cart" onclick="closeCartDrawer()">&times;</button>
+        <button class="cart-drawer__close" aria-label="Close cart" onclick="closeCartDrawer()"><svg aria-hidden="true" viewBox="0 0 24 24" style="width:1em;height:1em;display:block;fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
       </div>
       <!-- Free Shipping Progress Bar -->
       <div id="fs-bar-wrap" style="display:none; padding: 0.75rem 1.25rem; border-bottom: 1px solid var(--border);">
@@ -826,7 +826,7 @@ async function applyActiveCouponIfExists() {
         <div style="background:var(--bg-base, rgba(120, 120, 120, 0.1)); border:1px solid var(--border); border-radius:4px; padding:0.25rem 0.5rem; display:inline-flex; align-items:center; gap:0.35rem; font-size:0.8rem; font-weight:600; color:var(--text-primary); text-transform:uppercase; margin-top:0.4rem;">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="opacity:0.7;"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line></svg>
           <span>${code}</span>
-          <button onclick="removeCartCoupon();" style="background:none; border:none; padding:0; cursor:pointer; font-size:14px; font-weight:bold; color:var(--text-secondary); display:inline-flex; align-items:center; justify-content:center; width:14px; height:14px; margin-left:0.2rem;" aria-label="Remove coupon">&times;</button>
+          <button onclick="removeCartCoupon();" style="background:none; border:none; padding:0; cursor:pointer; font-size:14px; font-weight:bold; color:var(--text-secondary); display:inline-flex; align-items:center; justify-content:center; width:14px; height:14px; margin-left:0.2rem;" aria-label="Remove coupon"><svg aria-hidden="true" viewBox="0 0 24 24" style="width:1em;height:1em;display:block;fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
         </div>
       `;
     }
@@ -1362,4 +1362,3 @@ function upgradeCartItem(triggerSku, targetProd, adjustmentCentavos) {
     saveCart(cart);
   }
 }
-
