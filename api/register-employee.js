@@ -133,10 +133,22 @@ export default async function handler(req, res) {
     }
 
     // 3. Create tenant member record
+    // Decode the role/access format from the invitation URL:
+    //   'admin'            → role='admin', accessible_modules=[]
+    //   'access:Mod1,Mod2' → role=null, accessible_modules=['Mod1','Mod2']
+    let memberRole = null;
+    let memberModules = [];
+    if (role === 'admin') {
+      memberRole = 'admin';
+    } else if (role && role.startsWith('access:')) {
+      memberModules = role.substring(7).split(',').map(s => s.trim()).filter(Boolean);
+    }
+
     const { error: tmError } = await supabase.from('tenant_members').insert({
       tenant_id: tenant_id,
       user_id: userId,
-      role: role ? role : null,
+      role: memberRole,
+      accessible_modules: memberModules,
       user_email: email,
       full_name: fullName
     });

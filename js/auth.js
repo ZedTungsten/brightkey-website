@@ -80,93 +80,71 @@
   }
 
   /**
-   * Get the role of the current user in their tenant.
+   * Get the current user's membership info.
+   * Returns { role, tenantId, modules } or null.
+   *   role    — 'owner' | 'admin' | null
+   *   tenantId — UUID of the user's tenant
+   *   modules — string[] of accessible modules (empty for owner/admin; they bypass checks)
    */
   async function getUserRole() {
     const { data: { session } } = await sb.auth.getSession();
     if (!session) return null;
-    
+
     const { data, error } = await sb
       .from('tenant_members')
-      .select('role, tenant_id')
+      .select('role, tenant_id, accessible_modules')
       .eq('user_id', session.user.id)
-      .limit(1);
-      
-    if (error || !data || data.length === 0) return null;
-    return { role: data[0].role, tenantId: data[0].tenant_id };
+      .limit(1)
+      .maybeSingle();
+
+    if (error || !data) return null;
+    return {
+      role: data.role,
+      tenantId: data.tenant_id,
+      modules: data.accessible_modules || []
+    };
   }
 
   /**
-   * Gate access based on allowed roles. Redirects if unauthorized.
+   * Gate access based on required modules.
+   *
+   * - owner / admin always pass regardless of requiredModules.
+   * - Other users pass if their accessible_modules contains at least one of requiredModules.
+   * - Pass an empty array [] to restrict the page to owner/admin only.
+   *
+   * Returns { user, role, tenantId, modules } on success, or redirects and returns null.
    */
-  async function checkRoleGate(allowedRoles, redirectTo = '../../admin.html') {
+  async function checkRoleGate(requiredModules = [], redirectTo = '../../admin.html') {
     const user = await requireAuth(redirectTo);
     if (!user) return null;
-    
-    const roleInfo = await getUserRole();
-    if (!roleInfo) {
+
+    const memberInfo = await getUserRole();
+    if (!memberInfo) {
       window.location.href = redirectTo;
       return null;
     }
 
-    const userRole = roleInfo.role;
+    const { role, tenantId, modules } = memberInfo;
 
-    // 1. Owner & Admin always have access
-    if (userRole === 'owner' || userRole === 'admin') {
-      return { user, role: userRole, tenantId: roleInfo.tenantId };
+    // Owners and admins always have full access
+    if (role === 'owner' || role === 'admin') {
+      return { user, role, tenantId, modules };
     }
 
-    // 2. Direct static role check
-    if (allowedRoles.includes(userRole)) {
-      return { user, role: userRole, tenantId: roleInfo.tenantId };
+    // No modules required = owner/admin only
+    if (requiredModules.length === 0) {
+      window.location.href = redirectTo;
+      return null;
     }
 
-    // 3. Dynamic role lookup
-    try {
-      let accessible_modules = [];
-      if (userRole && userRole.startsWith('access:')) {
-        accessible_modules = userRole.substring(7).split(',').map(s => s.trim());
-      } else {
-        const { data: dbRole, error } = await sb
-          .from('dashboard_roles')
-          .select('accessible_modules')
-          .eq('name', userRole)
-          .maybeSingle();
-
-        if (!error && dbRole && Array.isArray(dbRole.accessible_modules)) {
-          accessible_modules = dbRole.accessible_modules;
-        }
-      }
-
-      if (accessible_modules && accessible_modules.length > 0) {
-        const MODULE_GATE_MAP = {
-          'Products': ['products'],
-          'Operations': ['operations'],
-          'Marketing': ['marketing'],
-          'Sales': ['sales'],
-          'Customer Service': ['customer_service'],
-          'Logistics': ['logistics'],
-          'HR': ['hr'],
-          'Finance': ['accounting']
-        };
-
-        const allowedKeys = new Set();
-        accessible_modules.forEach(mod => {
-          const keys = MODULE_GATE_MAP[mod];
-          if (keys) keys.forEach(k => allowedKeys.add(k));
-        });
-
-        const hasAccess = allowedRoles.some(roleKey => allowedKeys.has(roleKey));
-        if (hasAccess) {
-          return { user, role: userRole, tenantId: roleInfo.tenantId };
-        }
-      }
-    } catch (err) {
-      console.error('Error verifying dynamic role gate:', err);
+    // Check if the user has at least one of the required modules
+    const hasAccess = requiredModules.some(mod => modules.includes(mod));
+    if (!hasAccess) {
+      window.location.href = redirectTo;
+      return null;
     }
-    
-    window.location.href = redirectTo;
-    return null;
+
+    return { user, role, tenantId, modules };
   }
 
   // Export everything through window.BKAuth — the only global this file touches

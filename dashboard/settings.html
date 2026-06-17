@@ -492,7 +492,7 @@
     let currentTenantId;
     let currentUser;
     let currentCompanyId = '';
-    let dynamicRoles = [];
+
     let confirmCallback = null;
     let allTeamMembers = [];
 
@@ -506,7 +506,7 @@
     let activeWarehouseId = null; // warehouse being assigned to
 
     document.addEventListener('DOMContentLoaded', async () => {
-      const authInfo = await BKAuth.checkRoleGate(['owner', 'admin'], '../admin.html');
+      const authInfo = await BKAuth.checkRoleGate([], '../admin.html');
       if (!authInfo) return;
 
       sb = BKAuth.sb;
@@ -520,7 +520,6 @@
         console.error('Error fetching company:', err);
       }
 
-      await loadDynamicRoles();
       loadAllMembers();
       loadRolesDropdown();
       await loadAssignments();
@@ -546,15 +545,7 @@
       confirmCallback = null;
     }
 
-    // ── Dynamic Roles ──
-    async function loadDynamicRoles() {
-      try {
-        const { data, error } = await sb.from('dashboard_roles').select('*').order('name', { ascending: true });
-        if (!error && data) dynamicRoles = data;
-      } catch (err) {
-        console.error('Error fetching dynamic roles:', err);
-      }
-    }
+
 
     async function loadRolesDropdown() {
       const select = document.getElementById('invite-role');
@@ -587,8 +578,8 @@
 
     window.handleEditRoleSelectChange = function(role) {
       const customContainer = document.getElementById('edit-custom-access-container');
-      if (customContainer) customContainer.style.display = (role === 'custom') ? 'flex' : 'none';
-      document.querySelectorAll('.edit-custom-access').forEach(cb => cb.checked = (role === 'admin'));
+      if (customContainer) customContainer.style.display = (role === 'user') ? 'flex' : 'none';
+      document.querySelectorAll('.edit-custom-access').forEach(cb => cb.checked = false);
     };
 
     function formatDateAdded(isoString) {
@@ -619,9 +610,9 @@
       } catch (err) { console.error('Failed to query employees for mapping:', err); }
 
       try {
-        const { data, error } = await sb.from('tenant_members').select('id, user_email, full_name, role, user_id, created_at').eq('tenant_id', currentTenantId);
+        const { data, error } = await sb.from('tenant_members').select('id, user_email, full_name, role, user_id, created_at, accessible_modules').eq('tenant_id', currentTenantId);
         if (error && error.message && error.message.includes('full_name')) {
-          const { data: d2 } = await sb.from('tenant_members').select('id, user_email, role, user_id, created_at').eq('tenant_id', currentTenantId);
+          const { data: d2 } = await sb.from('tenant_members').select('id, user_email, role, user_id, created_at, accessible_modules').eq('tenant_id', currentTenantId);
           activeData = (d2 || []).map(r => ({ ...r, full_name: null }));
         } else if (error) {
           console.error('tenant_members error:', error.message);
@@ -661,39 +652,26 @@
         const isSelf = row.user_id === currentUser.id;
         const isOwner = row.role === 'owner';
 
-        let isCustom = false;
-        let customModules = [];
-        let displayName = '';
-        if (row.role === 'admin') { displayName = 'Administrator'; }
-        else if (row.role === 'owner') { displayName = 'Owner'; }
-        else if (!row.role) { displayName = 'None'; }
-        else if (row.role.startsWith('access:') || row.role.startsWith('custom_') || !['admin', 'owner', 'operations', 'customer_service', 'marketing', 'logistics', 'products', 'accounting', 'hr'].includes(row.role)) {
-          isCustom = true;
-          if (row.role.startsWith('access:')) {
-            customModules = row.role.substring(7).split(',').map(s => s.trim());
-          } else {
-            const found = dynamicRoles.find(r => r.name === row.role);
-            if (found && Array.isArray(found.accessible_modules) && found.accessible_modules.length > 0) customModules = found.accessible_modules;
-          }
-        } else {
-          displayName = row.role.charAt(0).toUpperCase() + row.role.slice(1).replace('_', ' ');
-        }
-
+        // Build role display from accessible_modules (new system)
+        const rowModules = Array.isArray(row.accessible_modules) ? row.accessible_modules : [];
         let roleInnerHtml = '';
-        if (isCustom) {
-          let listItems = customModules.map(m => `<li style="font-weight:400; color:var(--text-secondary); margin-bottom:0.1rem;">${escapeHtml(m)}</li>`).join('');
-          if (!listItems) listItems = '<li style="font-weight:400; color:var(--text-muted);">No Access</li>';
-          roleInnerHtml = `<div><div style="font-weight:700; color:var(--text-primary);">User</div><ul style="margin:0.2rem 0 0 0.5rem; padding-left:0.75rem; list-style-type:disc; font-size:0.8rem;">${listItems}</ul></div>`;
+        if (row.role === 'owner') {
+          roleInnerHtml = `<span class="badge badge-cyan">Owner</span>`;
+        } else if (row.role === 'admin') {
+          roleInnerHtml = `<span class="badge badge-cyan">Administrator</span>`;
         } else {
-          let badgeClass = (row.role === 'owner' || row.role === 'admin') ? 'badge-cyan' : 'badge-gray';
-          roleInnerHtml = `<span class="badge ${badgeClass}">${escapeHtml(displayName)}</span>`;
+          const listItems = rowModules.length
+            ? rowModules.map(m => `<li style="font-weight:400; color:var(--text-secondary); margin-bottom:0.1rem;">${escapeHtml(m)}</li>`).join('')
+            : '<li style="font-weight:400; color:var(--text-muted);">No Access</li>';
+          roleInnerHtml = `<div><div style="font-weight:700; color:var(--text-primary);">User</div><ul style="margin:0.2rem 0 0 0.5rem; padding-left:0.75rem; list-style-type:disc; font-size:0.8rem;">${listItems}</ul></div>`;
         }
 
         let roleCell = '';
         if (isOwner || isSelf) {
           roleCell = roleInnerHtml;
         } else {
-          roleCell = `<div style="display:flex; align-items:flex-start; justify-content:space-between; width:100%; gap:0.5rem;">${roleInnerHtml}<button type="button" style="background:none; border:none; color:var(--text-muted); cursor:pointer; display:inline-flex; align-items:center; padding:2px; margin-top:2px; vertical-align:middle; transition:color 0.15s;" onmouseover="this.style.color='var(--cyan-light)'" onmouseout="this.style.color='var(--text-muted)'" onclick="openEditRoleModal('${row.id}', '${escapeHtml(row.user_email)}', '${escapeHtml(row.full_name || '')}', '${escapeHtml(row.role || '')}')" title="Edit Role"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg></button></div>`;
+          const modulesEncoded = encodeURIComponent(JSON.stringify(rowModules));
+          roleCell = `<div style="display:flex; align-items:flex-start; justify-content:space-between; width:100%; gap:0.5rem;">${roleInnerHtml}<button type="button" style="background:none; border:none; color:var(--text-muted); cursor:pointer; display:inline-flex; align-items:center; padding:2px; margin-top:2px; vertical-align:middle; transition:color 0.15s;" onmouseover="this.style.color='var(--cyan-light)'" onmouseout="this.style.color='var(--text-muted)'" onclick="openEditRoleModal('${row.id}', '${escapeHtml(row.user_email)}', '${escapeHtml(row.full_name || '')}', '${escapeHtml(row.role || '')}', decodeURIComponent('${modulesEncoded}'))" title="Edit Access"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg></button></div>`;
         }
 
         const isEmployee = (row.user_id && employeeUserIds.has(row.user_id)) || (row.user_email && employeeEmails.has(row.user_email.toLowerCase().trim()));
@@ -902,34 +880,26 @@
       setTimeout(() => el.remove(), 3500);
     }
 
-    let currentRoleEditingString = '';
-    window.openEditRoleModal = function(memberId, email, name, currentRole) {
+    window.openEditRoleModal = function(memberId, email, name, currentRole, modulesJson) {
       document.getElementById('edit-role-member-id').value = memberId;
       document.getElementById('edit-role-member-name').innerText = name || '—';
       document.getElementById('edit-role-member-email').innerText = email;
-      currentRoleEditingString = currentRole || '';
+      const currentModules = (() => { try { return JSON.parse(modulesJson || '[]'); } catch(e) { return []; } })();
       const select = document.getElementById('edit-role-select');
       if (select) {
-        select.innerHTML = '<option value="admin">Admin</option><option value="custom">User</option>';
-        let isCustom = currentRole.startsWith('access:') || currentRole.startsWith('custom_') || (currentRole && !['admin', 'owner', 'operations', 'customer_service', 'marketing', 'logistics', 'products', 'accounting', 'hr', ''].includes(currentRole));
+        select.innerHTML = '<option value="admin">Administrator</option><option value="user">User (Custom Modules)</option>';
         const customContainer = document.getElementById('edit-custom-access-container');
         document.querySelectorAll('.edit-custom-access').forEach(cb => cb.checked = false);
-        if (isCustom) {
-          select.value = 'custom';
-          customContainer.style.display = 'flex';
-          if (currentRole.startsWith('access:')) {
-            const mods = currentRole.substring(7).split(',').map(s => s.trim());
-            mods.forEach(mod => { const cb = document.querySelector(`.edit-custom-access[value="${mod}"]`); if (cb) cb.checked = true; });
-          } else {
-            const found = dynamicRoles.find(r => r.name === currentRole);
-            if (found && Array.isArray(found.accessible_modules)) {
-              found.accessible_modules.forEach(mod => { const cb = document.querySelector(`.edit-custom-access[value="${mod}"]`); if (cb) cb.checked = true; });
-            }
-          }
-        } else {
+        if (currentRole === 'admin') {
           select.value = 'admin';
           customContainer.style.display = 'none';
-          document.querySelectorAll('.edit-custom-access').forEach(cb => cb.checked = true);
+        } else {
+          select.value = 'user';
+          customContainer.style.display = 'flex';
+          currentModules.forEach(mod => {
+            const cb = document.querySelector(`.edit-custom-access[value="${mod}"]`);
+            if (cb) cb.checked = true;
+          });
         }
       }
       document.getElementById('edit-role-modal').classList.add('open');
@@ -937,20 +907,25 @@
 
     window.closeEditRoleModal = function() {
       document.getElementById('edit-role-modal').classList.remove('open');
-      currentRoleEditingString = '';
     };
 
     window.submitEditRole = async function(e) {
       e.preventDefault();
       const memberId = document.getElementById('edit-role-member-id').value;
-      let newRole = document.getElementById('edit-role-select').value;
-      if (newRole === 'custom') {
-        const checkedModules = Array.from(document.querySelectorAll('.edit-custom-access:checked')).map(cb => cb.value);
-        if (checkedModules.length === 0) { showToast('Please check at least one access module for Custom role.', true); return; }
-        newRole = 'access:' + checkedModules.join(',');
+      const selectedAccess = document.getElementById('edit-role-select').value;
+      let newRole = null;
+      let newModules = [];
+      if (selectedAccess === 'admin') {
+        newRole = 'admin';
+      } else {
+        newModules = Array.from(document.querySelectorAll('.edit-custom-access:checked')).map(cb => cb.value);
+        if (newModules.length === 0) { showToast('Please check at least one access module.', true); return; }
       }
       try {
-        const { error } = await sb.from('tenant_members').update({ role: newRole ? newRole : null }).eq('id', memberId);
+        const { error } = await sb.from('tenant_members').update({
+          role: newRole,
+          accessible_modules: newModules
+        }).eq('id', memberId);
         if (error) throw error;
         showToast('Member access updated.');
         closeEditRoleModal();
