@@ -283,3 +283,58 @@ Instead of scrolling the whole panel, restrict vertical and horizontal scrolling
   ```
 
 
+---
+
+## 14. Sticky Columns in `border-collapse: collapse` Tables
+
+**Problem:** When a table uses `border-collapse: collapse` (the browser default), both `border-right` and `box-shadow` on `position: sticky` cells are unreliable:
+
+- `border-right` is **merged/swallowed** by the adjacent cell's left border — so dividers between sticky columns disappear.
+- `box-shadow` on the sticky cell itself is **clipped** by the table's stacking context and does not visually overflow into the scrolling area.
+
+This means the typical approach of adding `border-right` and `box-shadow` to a sticky `<td>` or `<th>` produces no visible result once the table is scrolled.
+
+**Fix Pattern:**
+
+1. **Column dividers** — use **inset `box-shadow`** instead of `border-right`. An inset shadow paints *inside* the cell's own box and is not subject to border collapsing:
+   ```css
+   .col-num,
+   .col-first-name,
+   .col-middle-name {
+     box-shadow: inset -1px 0 0 var(--border);
+   }
+   ```
+
+2. **Right-edge shadow** (depth effect after the last sticky column) — use a **`::after` pseudo-element** positioned absolutely to the right of the cell. Because it is absolutely placed, it renders *over* the scrolling content instead of being contained in the table's stacking context:
+   ```css
+   .col-last-name {
+     /* stronger divider on the final sticky column */
+     box-shadow: inset -1.5px 0 0 var(--border-hover);
+   }
+
+   .dir-table th.col-last-name::after,
+   .dir-table td.col-last-name::after {
+     content: '';
+     position: absolute;
+     top: 0;
+     right: -10px;    /* hangs outside the cell into the scroll area */
+     width: 10px;
+     height: 100%;
+     background: linear-gradient(to right, rgba(0,0,0,0.08), transparent);
+     pointer-events: none;
+     z-index: 1;
+   }
+   ```
+
+**Prerequisites:**
+- The sticky cells must have `position: relative` (or `sticky`) so that `::after` is positioned relative to them. Ensure `position: relative` is set on all `th` and `td` in the table.
+- The scroll container must **not** have `overflow: hidden` in the axis where the `::after` shadow should be visible (otherwise it gets clipped). `overflow-x: auto` is fine.
+
+**What NOT to do:**
+```css
+/* These do NOT work with border-collapse: collapse on sticky cells */
+.col-last-name {
+  border-right: 2px solid var(--border);   /* swallowed by border collapsing */
+  box-shadow: 4px 0 8px rgba(0,0,0,0.1);  /* clipped by table stacking context */
+}
+```
