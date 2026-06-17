@@ -1396,8 +1396,29 @@
             `;
           }
 
-          const doorInstallers = door?.installers || [];
-          const isAssignedToThisDoor = doorInstallers.some(inst => inst.id === currentInstaller.id);
+          let doorInstallers = door?.installers || [];
+          if (doorInstallers.length === 0) {
+            if (b.installers) {
+              if (typeof b.installers === 'string') {
+                try { doorInstallers = JSON.parse(b.installers); } catch(_) {}
+              } else if (Array.isArray(b.installers)) {
+                doorInstallers = b.installers;
+              }
+            } else if (b.installer_name) {
+              doorInstallers = b.installer_name.split(' | ').map(name => ({ name }));
+            }
+          }
+          const assignedText = doorInstallers.length > 0 
+            ? doorInstallers.map(inst => formatInstallerName(inst.name || inst)).join(', ') 
+            : 'Unassigned';
+
+          const isAssignedToThisDoor = doorInstallers.some(inst => {
+            if (inst.id === currentInstaller.id) return true;
+            const cleanInstallerName = `${currentInstaller.first_name} ${currentInstaller.last_name}`.trim().toLowerCase();
+            const cleanInstName = (inst.name || '').trim().toLowerCase();
+            if (cleanInstName && (cleanInstallerName.includes(cleanInstName) || cleanInstName.includes(cleanInstallerName))) return true;
+            return false;
+          });
           const doorCardClass = isAssignedToThisDoor ? 'door-specs-card assigned' : 'door-specs-card unassigned';
 
           let doneButtonHtml = '';
@@ -1451,6 +1472,9 @@
           doorsContainer.insertAdjacentHTML('beforeend', `
             <div class="${doorCardClass}">
               ${doneButtonHtml}
+              <div style="font-size: 0.68rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.25rem; letter-spacing: 0.05em;">
+                ${escapeHtml(assignedText)}
+              </div>
               <h5>Door ${i + 1}: ${escapeHtml(sku)}</h5>
               ${showTitle ? `<div style="font-size:0.8rem; color:var(--text-secondary); margin-bottom:0.4rem;">${escapeHtml(title)}</div>` : ''}
               <div class="door-details-grid">
