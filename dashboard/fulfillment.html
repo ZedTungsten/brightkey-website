@@ -558,6 +558,7 @@
           <button class="tab-btn" onclick="switchTab('order')">Order Supplier</button>
           <button class="tab-btn" onclick="switchTab('cancel')">Cancel</button>
           <button class="tab-btn" onclick="switchTab('return')">Return</button>
+          <button class="tab-btn" onclick="switchTab('transfer')">Transfer</button>
         </div>
 
         <!-- Table Scroll workspace -->
@@ -873,6 +874,109 @@
             </div>
           </div>
 
+          <!-- Tab Panel: Transfer -->
+          <div class="tab-panel" id="panel-transfer">
+            
+            <!-- Section 1: Requests by other warehouse managers -->
+            <div class="panel" style="margin-bottom: 1.5rem;">
+              <div class="panel-header">Requests (by other warehouse managers)</div>
+              <div class="table-responsive">
+                <table class="ledger-table">
+                  <thead>
+                    <tr>
+                      <th>SKU</th>
+                      <th>Product</th>
+                      <th>Quantity</th>
+                      <th>Requester Warehouse</th>
+                      <th>Requested By</th>
+                      <th>Date</th>
+                      <th style="text-align:right;">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="transfer-requests-list">
+                    <tr><td colspan="7" class="text-center text-muted" style="padding:2rem 0;">No pending transfer requests.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Side by side: Direct Transfer and Request Transfer -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; align-items: start;">
+              
+              <!-- Section 2: Direct Transfer -->
+              <div class="panel" style="display: flex; flex-direction: column;">
+                <div class="panel-header">Transfer Stock (Direct)</div>
+                <div style="padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem;">
+                  <div class="form-group">
+                    <label class="form-label">Select Item</label>
+                    <select class="form-input" id="direct-transfer-sku" style="height: auto; padding: 0.5rem;"></select>
+                  </div>
+                  <div style="display: flex; gap: 1rem;">
+                    <div class="form-group" style="flex: 1;">
+                      <label class="form-label">Quantity</label>
+                      <input type="number" class="form-input" id="direct-transfer-qty" min="1" value="1" />
+                    </div>
+                    <div class="form-group" style="flex: 2;">
+                      <label class="form-label">Target Warehouse</label>
+                      <select class="form-input" id="direct-transfer-target-wh" style="height: auto; padding: 0.5rem;"></select>
+                    </div>
+                  </div>
+                  <div style="text-align: right;">
+                    <button class="btn btn-outline btn-sm" onclick="addDirectTransferItem()">+ Add Product</button>
+                  </div>
+
+                  <!-- Added products list table -->
+                  <div style="border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; margin-top: 0.5rem;">
+                    <table class="ledger-table" style="font-size: 0.82rem; margin: 0; width: 100%;">
+                      <thead>
+                        <tr>
+                          <th>SKU</th>
+                          <th>Qty</th>
+                          <th>Target</th>
+                          <th style="text-align:right;">Remove</th>
+                        </tr>
+                      </thead>
+                      <tbody id="direct-transfer-items-list">
+                        <tr><td colspan="4" class="text-center text-muted" style="padding: 1rem 0;">No products added yet.</td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div style="margin-top: 1rem; text-align: right;">
+                    <button id="btn-submit-direct-transfer" class="btn btn-cyan" onclick="submitDirectTransfer()" disabled>Transfer</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Section 3: Request Transfer -->
+              <div class="panel" style="display: flex; flex-direction: column;">
+                <div class="panel-header">Request Transfer (From another warehouse)</div>
+                <div style="padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem;">
+                  <div class="form-group">
+                    <label class="form-label">Select Item</label>
+                    <select class="form-input" id="request-transfer-sku" style="height: auto; padding: 0.5rem;"></select>
+                  </div>
+                  <div style="display: flex; gap: 1rem;">
+                    <div class="form-group" style="flex: 1;">
+                      <label class="form-label">Quantity</label>
+                      <input type="number" class="form-input" id="request-transfer-qty" min="1" value="1" />
+                    </div>
+                    <div class="form-group" style="flex: 2;">
+                      <label class="form-label">Source Warehouse</label>
+                      <select class="form-input" id="request-transfer-source-wh" style="height: auto; padding: 0.5rem;"></select>
+                    </div>
+                  </div>
+
+                  <div style="margin-top: 1rem; text-align: right;">
+                    <button id="btn-submit-transfer-request" class="btn btn-cyan" onclick="submitTransferRequest()">Request Transfer</button>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+          </div>
+
         </div>
 
       </div>
@@ -919,6 +1023,9 @@
     let isEditingAvailable = false;
     let activeTransactions = [];
     let bookings = [];
+    let warehouseTransfers = [];
+    let allEmployees = [];
+    let companyId = null;
 
     // Last action for Undo
     let lastAction = null;
@@ -961,6 +1068,10 @@
         const authInfo = await BKAuth.checkRoleGate(['owner', 'admin', 'logistics'], '../admin.html');
         if (!authInfo) return;
         sb = BKAuth.sb;
+
+        // Resolve company_id using tenant_id
+        const { data: co } = await sb.from('companies').select('id').eq('tenant_id', authInfo.tenantId).limit(1).maybeSingle();
+        companyId = co?.id || null;
 
         await loadWarehouseTabs(authInfo.tenantId);
         showLoadingState();
@@ -1070,6 +1181,14 @@
       if (pErr) throw pErr;
       allProducts = pData || [];
       populateCategoryFilter();
+
+      // Fetch employees
+      try {
+        const { data: empData } = await sb.from('employees').select('id, first_name, last_name');
+        allEmployees = empData || [];
+      } catch (e) {
+        console.warn('Could not load employees:', e);
+      }
     }
 
     async function refreshDashboard() {
@@ -1106,6 +1225,18 @@
         whNameEl.textContent = wh ? wh.name : 'All Inventory';
       }
 
+      // Fetch warehouse transfers
+      if (companyId) {
+        try {
+          const { data: transData, error: transErr } = await sb.from('warehouse_transfers').select('*');
+          if (!transErr) {
+            warehouseTransfers = transData || [];
+          }
+        } catch (e) {
+          console.error('Failed to fetch warehouse transfers:', e);
+        }
+      }
+
       // Render all tabs
       renderInventorySummary();
       renderSupplierOrderTab();
@@ -1114,6 +1245,7 @@
       renderDispatchTab();
       renderReturnTab();
       renderCancelTab();
+      renderTransferTab();
       renderActivityFeed();
       updateBadgeCounts();
     }
@@ -1599,9 +1731,10 @@
       tbody.innerHTML = '';
 
       const pending = activeTransactions.filter(t => ['ordered', 'returned', 'cancelled'].includes(t.status));
+      const incomingTransfers = warehouseTransfers.filter(t => t.status === 'approved' && t.to_warehouse_id === activeWarehouseId);
       
-      if (pending.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted" style="padding:2rem 0;">No incoming shipments or returns to receive.</td></tr>`;
+      if (pending.length === 0 && incomingTransfers.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted" style="padding:2rem 0;">No incoming shipments, returns, or transfers to receive.</td></tr>`;
         return;
       }
 
@@ -1638,6 +1771,34 @@
             <td>
               <button class="btn btn-cyan btn-sm" onclick="receiveItem(this, '${t.id}', '${t.sku}', ${t.quantity}, '${t.status}')">
                 <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: -2px; margin-right: 6px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Received
+              </button>
+            </td>
+          </tr>
+        `;
+      });
+
+      incomingTransfers.forEach(tr => {
+        const p = allProducts.find(prod => prod.sku === tr.sku) || { title: 'Unknown Product', image_main: '' };
+        const sourceWh = fulfillmentWarehouses.find(w => w.id === tr.from_warehouse_id) || { name: 'Unknown Warehouse' };
+
+        let imageSrc = p.image_main;
+        if (!imageSrc || !imageSrc.match(/^https?:\/\//)) {
+          imageSrc = '../../assets/og-image.png';
+        }
+
+        tbody.innerHTML += `
+          <tr>
+            <td>
+              <img src="${imageSrc}" alt="${tr.sku}" style="width: 80px; height: 50px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-elevated); display: block;" />
+            </td>
+            <td><strong>Warehouse Transfer</strong></td>
+            <td><code>${tr.sku}</code></td>
+            <td>${p.title}</td>
+            <td><strong>${tr.quantity}</strong></td>
+            <td><span class="badge-status badge-ordered" style="background-color: var(--cyan); color: white;">from ${sourceWh.name}</span></td>
+            <td>
+              <button class="btn btn-cyan btn-sm" onclick="receiveTransfer(this, '${tr.id}', '${tr.sku}', ${tr.quantity})">
+                <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: -2px; margin-right: 6px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Receive Transfer
               </button>
             </td>
           </tr>
@@ -2546,6 +2707,402 @@
         btn.classList.add('active');
         localStorage.setItem('logs_drawer_open', 'true');
       }
+    };
+
+    // ── WAREHOUSE TRANSFER TAB FUNCTIONALITY ──
+    let directTransferDraft = [];
+
+    window.populateTransferDropdowns = function() {
+      const activeWh = fulfillmentWarehouses.find(w => w.id === activeWarehouseId);
+      const skuDirectSelect = document.getElementById('direct-transfer-sku');
+      const skuRequestSelect = document.getElementById('request-transfer-sku');
+      const targetWhSelect = document.getElementById('direct-transfer-target-wh');
+      const sourceWhSelect = document.getElementById('request-transfer-source-wh');
+
+      if (!skuDirectSelect || !skuRequestSelect || !targetWhSelect || !sourceWhSelect) return;
+
+      // Populate SKUs
+      // 1. Direct Transfer SKU needs available stock in activeWarehouseId
+      let directSkuOptions = '';
+      let requestSkuOptions = '';
+
+      allProducts.forEach(p => {
+        if (p.count_inventory === false) return; // Skip service/non-stocked items
+        const inv = allInventory[p.sku];
+        const avail = inv ? inv.available : 0;
+        
+        // Show SKU, title and available quantity
+        const optText = `[${p.sku}] ${p.title} (Avail: ${avail})`;
+        
+        requestSkuOptions += `<option value="${escFulfillment(p.sku)}">${escFulfillment(optText)}</option>`;
+        if (avail > 0) {
+          directSkuOptions += `<option value="${escFulfillment(p.sku)}">${escFulfillment(optText)}</option>`;
+        }
+      });
+
+      skuDirectSelect.innerHTML = directSkuOptions || '<option value="" disabled>No stocked items available</option>';
+      skuRequestSelect.innerHTML = requestSkuOptions || '<option value="" disabled>No products available</option>';
+
+      // Populate Warehouses
+      let targetWhOptions = '<option value="" disabled selected>Select Target Warehouse</option>';
+      let sourceWhOptions = '<option value="" disabled selected>Select Source Warehouse</option>';
+
+      fulfillmentWarehouses.forEach(w => {
+        if (w.id === activeWarehouseId) return; // Exclude active warehouse
+        const optHtml = `<option value="${escFulfillment(w.id)}">${escFulfillment(w.name)}</option>`;
+        targetWhOptions += optHtml;
+        sourceWhOptions += optHtml;
+      });
+
+      targetWhSelect.innerHTML = targetWhOptions;
+      sourceWhSelect.innerHTML = sourceWhOptions;
+
+      // If activeWarehouseId is null (All Inventory), disable controls
+      const inputs = [
+        skuDirectSelect, skuRequestSelect, targetWhSelect, sourceWhSelect,
+        document.getElementById('direct-transfer-qty'),
+        document.getElementById('request-transfer-qty'),
+        document.getElementById('btn-submit-transfer-request')
+      ];
+      const addProdBtn = document.querySelector('button[onclick="addDirectTransferItem()"]');
+      if (addProdBtn) inputs.push(addProdBtn);
+
+      if (!activeWarehouseId) {
+        inputs.forEach(el => { if (el) el.disabled = true; });
+        showToast('Please select a specific warehouse to transfer or request stock.', true);
+      } else {
+        inputs.forEach(el => { if (el && el !== document.getElementById('btn-submit-transfer-request')) el.disabled = false; });
+        // Enable request button as well
+        const reqBtn = document.getElementById('btn-submit-transfer-request');
+        if (reqBtn) reqBtn.disabled = false;
+      }
+    };
+
+    window.addDirectTransferItem = function() {
+      if (!activeWarehouseId) return;
+      const skuSelect = document.getElementById('direct-transfer-sku');
+      const qtyInput = document.getElementById('direct-transfer-qty');
+      const targetWhSelect = document.getElementById('direct-transfer-target-wh');
+
+      if (!skuSelect || !qtyInput || !targetWhSelect) return;
+
+      const sku = skuSelect.value;
+      const qty = parseInt(qtyInput.value) || 0;
+      const targetWhId = targetWhSelect.value;
+
+      if (!sku) {
+        showToast('Please select an item.', true);
+        return;
+      }
+      if (qty <= 0) {
+        showToast('Quantity must be greater than 0.', true);
+        return;
+      }
+      if (!targetWhId) {
+        showToast('Please select a target warehouse.', true);
+        return;
+      }
+
+      // Check available stock in activeWarehouseId
+      const inv = allInventory[sku];
+      const avail = inv ? inv.available : 0;
+      
+      // Calculate current total quantity of this SKU in draft
+      const draftTotal = directTransferDraft
+        .filter(item => item.sku === sku)
+        .reduce((sum, item) => sum + item.quantity, 0);
+
+      if (avail < draftTotal + qty) {
+        showToast(`Insufficient stock of ${sku}. Available: ${avail}, currently in draft: ${draftTotal}`, true);
+        return;
+      }
+
+      const targetWh = fulfillmentWarehouses.find(w => w.id === targetWhId);
+
+      // Add or merge into draft
+      const existing = directTransferDraft.find(item => item.sku === sku && item.targetWarehouseId === targetWhId);
+      if (existing) {
+        existing.quantity += qty;
+      } else {
+        directTransferDraft.push({
+          sku,
+          quantity: qty,
+          targetWarehouseId: targetWhId,
+          targetWarehouseName: targetWh ? targetWh.name : 'Unknown'
+        });
+      }
+
+      qtyInput.value = 1;
+      renderDirectTransferItemsList();
+    };
+
+    window.removeDirectTransferItem = function(idx) {
+      directTransferDraft.splice(idx, 1);
+      renderDirectTransferItemsList();
+    };
+
+    window.renderDirectTransferItemsList = function() {
+      const tbody = document.getElementById('direct-transfer-items-list');
+      const submitBtn = document.getElementById('btn-submit-direct-transfer');
+      if (!tbody) return;
+
+      if (directTransferDraft.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="4" class="text-center text-muted" style="padding: 1rem 0;">No products added yet.</td></tr>`;
+        if (submitBtn) submitBtn.disabled = true;
+        return;
+      }
+
+      tbody.innerHTML = directTransferDraft.map((item, idx) => `
+        <tr>
+          <td><code>${escFulfillment(item.sku)}</code></td>
+          <td><strong>${item.quantity}</strong></td>
+          <td>${escFulfillment(item.targetWarehouseName)}</td>
+          <td style="text-align:right;">
+            <button class="btn btn-danger btn-sm" style="padding: 0.15rem 0.4rem; font-size: 0.75rem;" onclick="removeDirectTransferItem(${idx})">Remove</button>
+          </td>
+        </tr>
+      `).join('');
+
+      if (submitBtn) submitBtn.disabled = false;
+    };
+
+    window.submitDirectTransfer = async function() {
+      const btn = document.getElementById('btn-submit-direct-transfer');
+      if (!btn || btn.disabled || directTransferDraft.length === 0) return;
+
+      await wrapActionWithLoading(btn, async () => {
+        if (!companyId) throw new Error('Company context is not initialized.');
+
+        const { data: { user } } = await sb.auth.getSession();
+
+        // 1. Process each item in draft
+        for (const item of directTransferDraft) {
+          // Double-check stock in active warehouse
+          let invQ = sb.from('inventory').select('*').eq('sku', item.sku).eq('warehouse_id', activeWarehouseId);
+          const { data: invRow, error: invErr } = await invQ;
+          if (invErr || !invRow || invRow.length === 0) {
+            throw new Error(`Inventory record not found for SKU ${item.sku} in current warehouse.`);
+          }
+
+          const currentInv = invRow[0];
+          if (currentInv.available < item.quantity) {
+            throw new Error(`Insufficient stock for SKU ${item.sku}. Available: ${currentInv.available}, requested: ${item.quantity}`);
+          }
+
+          // Deduct from source warehouse
+          const { error: updErr } = await sb.from('inventory').update({
+            available: currentInv.available - item.quantity
+          }).eq('id', currentInv.id);
+          if (updErr) throw updErr;
+
+          // Insert approved warehouse_transfer row
+          const { error: insErr } = await sb.from('warehouse_transfers').insert([{
+            company_id: companyId,
+            from_warehouse_id: activeWarehouseId,
+            to_warehouse_id: item.targetWarehouseId,
+            sku: item.sku,
+            quantity: item.quantity,
+            status: 'approved',
+            requested_by: user?.id || null,
+            approved_by: user?.id || null,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          }]);
+          if (insErr) throw insErr;
+        }
+
+        showToast('Stocks transferred and shipped successfully!');
+        directTransferDraft = [];
+        renderDirectTransferItemsList();
+        await refreshDashboard();
+      });
+    };
+
+    window.submitTransferRequest = async function() {
+      const btn = document.getElementById('btn-submit-transfer-request');
+      if (!btn || btn.disabled || !activeWarehouseId) return;
+
+      const skuSelect = document.getElementById('request-transfer-sku');
+      const qtyInput = document.getElementById('request-transfer-qty');
+      const sourceWhSelect = document.getElementById('request-transfer-source-wh');
+
+      if (!skuSelect || !qtyInput || !sourceWhSelect) return;
+
+      const sku = skuSelect.value;
+      const qty = parseInt(qtyInput.value) || 0;
+      const sourceWhId = sourceWhSelect.value;
+
+      if (!sku) {
+        showToast('Please select an item.', true);
+        return;
+      }
+      if (qty <= 0) {
+        showToast('Quantity must be greater than 0.', true);
+        return;
+      }
+      if (!sourceWhId) {
+        showToast('Please select a source warehouse.', true);
+        return;
+      }
+
+      await wrapActionWithLoading(btn, async () => {
+        if (!companyId) throw new Error('Company context is not initialized.');
+
+        const { data: { user } } = await sb.auth.getSession();
+
+        // Insert pending warehouse_transfer row (requested_by is current user, target is activeWarehouseId, source is sourceWhId)
+        const { error: insErr } = await sb.from('warehouse_transfers').insert([{
+          company_id: companyId,
+          from_warehouse_id: sourceWhId,
+          to_warehouse_id: activeWarehouseId,
+          sku: sku,
+          quantity: qty,
+          status: 'pending',
+          requested_by: user?.id || null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }]);
+        if (insErr) throw insErr;
+
+        showToast('Transfer request submitted successfully!');
+        qtyInput.value = 1;
+        await refreshDashboard();
+      });
+    };
+
+    window.approveTransfer = async function(reqId, btn) {
+      await wrapActionWithLoading(btn, async () => {
+        const transfer = warehouseTransfers.find(t => t.id === reqId);
+        if (!transfer) throw new Error('Transfer request not found');
+
+        // Check stock in the source warehouse
+        let invQ = sb.from('inventory').select('*').eq('sku', transfer.sku).eq('warehouse_id', transfer.from_warehouse_id);
+        const { data: invRow, error: invErr } = await invQ;
+        if (invErr || !invRow || invRow.length === 0) {
+          throw new Error('Stock record not found in source warehouse');
+        }
+
+        const currentAvail = invRow[0].available;
+        if (currentAvail < transfer.quantity) {
+          throw new Error(`Insufficient stock in source warehouse. Available: ${currentAvail}`);
+        }
+
+        // Deduct from source warehouse
+        const { error: updErr } = await sb.from('inventory').update({
+          available: currentAvail - transfer.quantity
+        }).eq('id', invRow[0].id);
+        if (updErr) throw updErr;
+
+        // Mark as approved and approved_by
+        const { data: { user } } = await sb.auth.getSession();
+        const { error: trErr } = await sb.from('warehouse_transfers').update({
+          status: 'approved',
+          approved_by: user?.id || null,
+          updated_at: new Date().toISOString()
+        }).eq('id', reqId);
+        if (trErr) throw trErr;
+
+        showToast('Transfer request approved and shipped!');
+        await refreshDashboard();
+      });
+    };
+
+    window.declineTransfer = async function(reqId, btn) {
+      await wrapActionWithLoading(btn, async () => {
+        const { error: trErr } = await sb.from('warehouse_transfers').update({
+          status: 'declined',
+          updated_at: new Date().toISOString()
+        }).eq('id', reqId);
+        if (trErr) throw trErr;
+
+        showToast('Transfer request declined.');
+        await refreshDashboard();
+      });
+    };
+
+    window.receiveTransfer = async function(btn, transferId, sku, qty) {
+      await wrapActionWithLoading(btn, async () => {
+        const transfer = warehouseTransfers.find(t => t.id === transferId);
+        if (!transfer) throw new Error('Transfer record not found');
+
+        const now = new Date().toISOString();
+
+        // Mark as received
+        const { error: trErr } = await sb.from('warehouse_transfers').update({
+          status: 'received',
+          updated_at: now
+        }).eq('id', transferId);
+        if (trErr) throw trErr;
+
+        // Increment inventory in target warehouse
+        let invQ = sb.from('inventory').select('*').eq('sku', sku).eq('warehouse_id', transfer.to_warehouse_id);
+        const { data: invRow, error: invErr } = await invQ;
+        if (invErr) throw invErr;
+
+        if (invRow && invRow.length > 0) {
+          const current = invRow[0];
+          const { error: updErr } = await sb.from('inventory').update({
+            available: current.available + qty
+          }).eq('id', current.id);
+          if (updErr) throw updErr;
+        } else {
+          // Insert new row if it doesn't exist
+          const { error: insErr } = await sb.from('inventory').insert([{
+            sku: sku,
+            available: qty,
+            reserved: 0,
+            packed: 0,
+            dispatched: 0,
+            returned: 0,
+            cancelled: 0,
+            warehouse_id: transfer.to_warehouse_id
+          }]);
+          if (insErr) throw insErr;
+        }
+
+        showToast('Transfer received successfully!');
+        await refreshDashboard();
+      });
+    };
+
+    window.renderTransferTab = function() {
+      const tbody = document.getElementById('transfer-requests-list');
+      if (!tbody) return;
+
+      // Filter transfers where from_warehouse_id matches activeWarehouseId and status is pending
+      const pendingTransfers = warehouseTransfers.filter(tr =>
+        tr.from_warehouse_id === activeWarehouseId && tr.status === 'pending'
+      );
+
+      if (pendingTransfers.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted" style="padding:2rem 0;">No pending transfer requests.</td></tr>`;
+      } else {
+        tbody.innerHTML = pendingTransfers.map(tr => {
+          const p = allProducts.find(prod => prod.sku === tr.sku) || { title: 'Unknown Product' };
+          const targetWh = fulfillmentWarehouses.find(w => w.id === tr.to_warehouse_id) || { name: 'Unknown Warehouse' };
+          const requesterEmp = allEmployees.find(e => e.id === tr.requested_by);
+          const requesterName = requesterEmp ? `${requesterEmp.first_name} ${requesterEmp.last_name}` : 'Warehouse Manager';
+          const dateStr = tr.created_at ? new Date(tr.created_at).toLocaleString() : 'N/A';
+
+          return `
+            <tr>
+              <td><code>${escFulfillment(tr.sku)}</code></td>
+              <td>${escFulfillment(p.title)}</td>
+              <td><strong>${tr.quantity}</strong></td>
+              <td>${escFulfillment(targetWh.name)}</td>
+              <td>${escFulfillment(requesterName)}</td>
+              <td>${escFulfillment(dateStr)}</td>
+              <td style="text-align:right;">
+                <button class="btn btn-cyan btn-sm" onclick="approveTransfer('${tr.id}', this)">Approve</button>
+                <button class="btn btn-danger btn-sm" style="margin-left:0.5rem;" onclick="declineTransfer('${tr.id}', this)">Decline</button>
+              </td>
+            </tr>
+          `;
+        }).join('');
+      }
+
+      // Re-populate dropdown lists
+      populateTransferDropdowns();
     };
 
     // Run Initial Load
