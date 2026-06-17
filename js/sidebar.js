@@ -512,13 +512,13 @@
             statusText.textContent = 'Online';
             statusText.style.color = '#22c55e';
           } else if (currentStatus === 'break') {
-            statusDot.style.backgroundColor = '#eab308'; // Yellow/Orange
+            statusDot.style.backgroundColor = '#f97316'; // Orange
             statusText.textContent = 'Away';
-            statusText.style.color = '#eab308';
+            statusText.style.color = '#f97316';
           } else {
-            statusDot.style.backgroundColor = '#71717a'; // Gray
+            statusDot.style.backgroundColor = '#ef4444'; // Red
             statusText.textContent = 'Offline';
-            statusText.style.color = '#71717a';
+            statusText.style.color = '#ef4444';
           }
         }
 
