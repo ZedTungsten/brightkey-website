@@ -9,6 +9,17 @@
 -- anon audience name lookups on product pages and checkout).
 -- =============================================================================
 
+-- ── 0. Defensively ensure company_id columns exist on all three tables ────────
+--    (Production may predate migration 05 which first added these columns.)
+ALTER TABLE public.marketing_audience
+  ADD COLUMN IF NOT EXISTS company_id UUID REFERENCES public.companies(id) ON DELETE CASCADE;
+
+ALTER TABLE public.email_marketing_audiences
+  ADD COLUMN IF NOT EXISTS company_id UUID REFERENCES public.companies(id) ON DELETE CASCADE;
+
+ALTER TABLE public.email_marketing_audience_members
+  ADD COLUMN IF NOT EXISTS company_id UUID REFERENCES public.companies(id) ON DELETE CASCADE;
+
 -- ── 1. marketing_audience — drop the three dangerous public/over-broad policies ─
 DROP POLICY IF EXISTS "Allow public update"          ON public.marketing_audience;
 DROP POLICY IF EXISTS "Allow public select"          ON public.marketing_audience;
@@ -95,6 +106,7 @@ CREATE POLICY "Staff read audience members"
         WHERE tm.user_id = auth.uid()
       )
     )
+    OR company_id IS NULL
   );
 
 -- Staff ALL (update/delete/select again for completeness): same scoping
