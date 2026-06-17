@@ -547,27 +547,30 @@
         const container = document.getElementById('logs-container');
         document.getElementById('month-display').textContent = `${this.MONTH_NAMES[this.selectedMonth]} ${this.selectedYear}`;
         
-        if (!this.employee) {
-          container.innerHTML = '<div style="text-align:center; padding:3rem; color:var(--text-muted);">Employee record missing.</div>';
-          return;
-        }
-
         container.innerHTML = '<div style="text-align:center; padding:3rem; color:var(--text-muted);"><div class="bk-spinner" style="margin: 0 auto 1rem;"></div>Loading shift logs…</div>';
 
+        let logs = [];
+        if (this.employee) {
+          try {
+            const sb = window.BKAuth.sb;
+            const startOfMonth = new Date(this.selectedYear, this.selectedMonth, 1).toISOString();
+            const endOfMonth = new Date(this.selectedYear, this.selectedMonth + 1, 1).toISOString();
+
+            const { data, error } = await sb.from('attendance_logs')
+              .select('*')
+              .eq('employee_id', this.employee.id)
+              .gte('created_at', startOfMonth)
+              .lt('created_at', endOfMonth)
+              .order('created_at', { ascending: true });
+
+            if (error) throw error;
+            logs = data || [];
+          } catch (err) {
+            console.error(err);
+          }
+        }
+
         try {
-          const sb = window.BKAuth.sb;
-          const startOfMonth = new Date(this.selectedYear, this.selectedMonth, 1).toISOString();
-          const endOfMonth = new Date(this.selectedYear, this.selectedMonth + 1, 1).toISOString();
-
-          const { data: logs, error } = await sb.from('attendance_logs')
-            .select('*')
-            .eq('employee_id', this.employee.id)
-            .gte('created_at', startOfMonth)
-            .lt('created_at', endOfMonth)
-            .order('created_at', { ascending: true });
-
-          if (error) throw error;
-
           // Parse and group by Date
           const dayGroups = {};
           logs.forEach(log => {
@@ -580,8 +583,17 @@
 
           // Reconstruct Date rows
           const listRows = [];
-          const numDays = new Date(this.selectedYear, this.selectedMonth + 1, 0).getDate();
           
+          // Determine the range of days to display
+          const now = new Date();
+          let maxDay = new Date(this.selectedYear, this.selectedMonth + 1, 0).getDate();
+          if (this.selectedYear === now.getFullYear() && this.selectedMonth === now.getMonth()) {
+            maxDay = now.getDate();
+          } else if (this.selectedYear > now.getFullYear() || (this.selectedYear === now.getFullYear() && this.selectedMonth > now.getMonth())) {
+            // Future months: don't show any rows
+            maxDay = 0;
+          }
+
           // Parse shifts
           // Default shift is 09:00 AM to 06:00 PM
           let shiftStartHour = 9;
@@ -589,32 +601,34 @@
           let shiftEndHour = 18;
           let shiftEndMin = 0;
 
-          if (this.employee.shift_time_1) {
-            const match = this.employee.shift_time_1.match(/(\d+):(\d+)\s*(AM|PM)/i);
-            if (match) {
-              let h = parseInt(match[1], 10);
-              const m = parseInt(match[2], 10);
-              const ampm = match[3].toUpperCase();
-              if (ampm === 'PM' && h < 12) h += 12;
-              if (ampm === 'AM' && h === 12) h = 0;
-              shiftStartHour = h;
-              shiftStartMin = m;
+          if (this.employee) {
+            if (this.employee.shift_time_1) {
+              const match = this.employee.shift_time_1.match(/(\d+):(\d+)\s*(AM|PM)/i);
+              if (match) {
+                let h = parseInt(match[1], 10);
+                const m = parseInt(match[2], 10);
+                const ampm = match[3].toUpperCase();
+                if (ampm === 'PM' && h < 12) h += 12;
+                if (ampm === 'AM' && h === 12) h = 0;
+                shiftStartHour = h;
+                shiftStartMin = m;
+              }
             }
-          }
-          if (this.employee.shift_time_2) {
-            const match = this.employee.shift_time_2.match(/(\d+):(\d+)\s*(AM|PM)/i);
-            if (match) {
-              let h = parseInt(match[1], 10);
-              const m = parseInt(match[2], 10);
-              const ampm = match[3].toUpperCase();
-              if (ampm === 'PM' && h < 12) h += 12;
-              if (ampm === 'AM' && h === 12) h = 0;
-              shiftEndHour = h;
-              shiftEndMin = m;
+            if (this.employee.shift_time_2) {
+              const match = this.employee.shift_time_2.match(/(\d+):(\d+)\s*(AM|PM)/i);
+              if (match) {
+                let h = parseInt(match[1], 10);
+                const m = parseInt(match[2], 10);
+                const ampm = match[3].toUpperCase();
+                if (ampm === 'PM' && h < 12) h += 12;
+                if (ampm === 'AM' && h === 12) h = 0;
+                shiftEndHour = h;
+                shiftEndMin = m;
+              }
             }
           }
 
-          for (let d = 1; d <= numDays; d++) {
+          for (let d = 1; d <= maxDay; d++) {
             const currentDateObj = new Date(this.selectedYear, this.selectedMonth, d);
             const dateStr = currentDateObj.toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' });
             const dayLogs = dayGroups[dateStr] || [];
