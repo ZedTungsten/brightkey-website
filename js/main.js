@@ -151,6 +151,93 @@ const Modal = (() => {
 
 window.Modal = Modal;
 
+// ── Styled decision dialogs ─────────────────────────────────
+const BKDialog = (() => {
+  let overlay;
+  let activeResolve;
+
+  function ensure() {
+    if (overlay) return overlay;
+    overlay = document.createElement('div');
+    overlay.id = 'bk-dialog-overlay';
+    overlay.style.cssText = 'display:none;position:fixed;inset:0;z-index:10000;background:rgba(9,9,11,0.48);backdrop-filter:blur(4px);align-items:center;justify-content:center;padding:1rem;';
+    overlay.innerHTML = `
+      <div role="dialog" aria-modal="true" aria-labelledby="bk-dialog-title" style="background:var(--bg-surface,#fff);border:1px solid var(--border,#e5e7eb);border-radius:8px;box-shadow:var(--shadow-lg,0 24px 48px rgba(15,23,42,0.18));width:min(420px,100%);overflow:hidden;">
+        <div style="padding:1.25rem 1.5rem;border-bottom:1px solid var(--border,#e5e7eb);">
+          <div id="bk-dialog-title" style="font-size:0.95rem;font-weight:700;color:var(--text-primary,#09090b);"></div>
+        </div>
+        <div style="padding:1.25rem 1.5rem;display:flex;flex-direction:column;gap:1rem;">
+          <div id="bk-dialog-message" style="font-size:0.86rem;line-height:1.55;color:var(--text-secondary,#52525b);white-space:pre-line;"></div>
+          <input id="bk-dialog-input" type="text" style="display:none;width:100%;padding:0.65rem 0.75rem;border:1px solid var(--border,#d4d4d8);border-radius:6px;background:#fff;color:#09090b;font-size:0.9rem;outline:none;" />
+        </div>
+        <div style="padding:1rem 1.5rem;border-top:1px solid var(--border,#e5e7eb);background:var(--bg-elevated,#f8fafc);display:flex;justify-content:flex-end;gap:0.75rem;">
+          <button type="button" id="bk-dialog-cancel" class="btn btn-outline">Cancel</button>
+          <button type="button" id="bk-dialog-ok" class="btn btn-primary">Continue</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    overlay.addEventListener('click', e => {
+      if (e.target === overlay) finish(null);
+    });
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape' && overlay.style.display === 'flex') finish(null);
+    });
+    overlay.querySelector('#bk-dialog-cancel').addEventListener('click', () => finish(null));
+    overlay.querySelector('#bk-dialog-ok').addEventListener('click', () => {
+      const input = overlay.querySelector('#bk-dialog-input');
+      finish(input.style.display === 'none' ? true : input.value);
+    });
+    return overlay;
+  }
+
+  function finish(value) {
+    if (!overlay || overlay.style.display === 'none') return;
+    overlay.style.display = 'none';
+    document.body.style.overflow = '';
+    const resolve = activeResolve;
+    activeResolve = null;
+    if (resolve) resolve(value);
+  }
+
+  function open({ title, message, okText = 'Continue', cancelText = 'Cancel', defaultValue = '', input = false, danger = false }) {
+    const el = ensure();
+    el.querySelector('#bk-dialog-title').textContent = title || 'Confirm Action';
+    el.querySelector('#bk-dialog-message').textContent = message || '';
+    const inputEl = el.querySelector('#bk-dialog-input');
+    inputEl.style.display = input ? 'block' : 'none';
+    inputEl.value = defaultValue || '';
+    const cancelBtn = el.querySelector('#bk-dialog-cancel');
+    const okBtn = el.querySelector('#bk-dialog-ok');
+    cancelBtn.textContent = cancelText;
+    okBtn.textContent = okText;
+    okBtn.style.background = danger ? 'var(--danger,#dc2626)' : '';
+    okBtn.style.borderColor = danger ? 'var(--danger,#dc2626)' : '';
+    okBtn.style.color = danger ? '#fff' : '';
+    el.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+    if (input) setTimeout(() => inputEl.focus(), 0);
+    return new Promise(resolve => {
+      activeResolve = resolve;
+    });
+  }
+
+  return {
+    notice(message, title = 'Notice') {
+      return open({ title, message, okText: 'OK', cancelText: 'Close' });
+    },
+    async ask({ title = 'Confirm Action', message = '', okText = 'Continue', cancelText = 'Cancel', danger = false } = {}) {
+      return (await open({ title, message, okText, cancelText, danger })) === true;
+    },
+    async input({ title = 'Enter Value', message = '', defaultValue = '', okText = 'Save', cancelText = 'Cancel' } = {}) {
+      const value = await open({ title, message, defaultValue, okText, cancelText, input: true });
+      return typeof value === 'string' ? value : null;
+    }
+  };
+})();
+
+window.BKDialog = BKDialog;
+
 // ── Smooth anchor scrolling ─────────────────────────────────
 document.querySelectorAll('a[href^="#"]').forEach(anchor => {
   anchor.addEventListener('click', e => {
@@ -304,4 +391,3 @@ if (yearEl) yearEl.textContent = new Date().getFullYear();
   script.src = pathPrefix + 'js/cart.js';
   document.head.appendChild(script);
 })();
-

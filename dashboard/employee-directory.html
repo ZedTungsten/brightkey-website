@@ -2674,7 +2674,7 @@
         const bar = document.getElementById('edit-mode-bar');
         const toggleBtn = document.getElementById('btn-edit-toggle');
 
-        toggleBtn.addEventListener('click', () => {
+        toggleBtn.addEventListener('click', async () => {
           this.editMode = !this.editMode;
           bar.classList.toggle('active', this.editMode);
           toggleBtn.classList.toggle('btn-edit-active', this.editMode);
@@ -2682,7 +2682,13 @@
           else {
             // Confirm discard if dirty or has pending deletes
             if (Object.keys(this.dirty).length > 0 || this.pendingDeletes.size > 0) {
-              if (!confirm('Discard all unsaved changes?')) {
+              const ok = await BKDialog.ask({
+                title: 'Discard Changes',
+                message: 'Discard all unsaved changes?',
+                okText: 'Discard',
+                danger: true
+              });
+              if (!ok) {
                 this.editMode = true;
                 bar.classList.add('active');
                 toggleBtn.classList.add('btn-edit-active');
@@ -2697,8 +2703,16 @@
 
         document.getElementById('btn-save-edit').addEventListener('click', () => this.saveAll());
 
-        document.getElementById('btn-cancel-edit').addEventListener('click', () => {
-          if ((Object.keys(this.dirty).length > 0 || this.pendingDeletes.size > 0) && !confirm('Discard all unsaved changes?')) return;
+        document.getElementById('btn-cancel-edit').addEventListener('click', async () => {
+          if (Object.keys(this.dirty).length > 0 || this.pendingDeletes.size > 0) {
+            const ok = await BKDialog.ask({
+              title: 'Discard Changes',
+              message: 'Discard all unsaved changes?',
+              okText: 'Discard',
+              danger: true
+            });
+            if (!ok) return;
+          }
           this.dirty = {};
           this.pendingDeletes.clear();
           this.editMode = false;

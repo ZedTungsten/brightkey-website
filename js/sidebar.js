@@ -192,7 +192,7 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
             <span>Integrations</span>
           </a>
-          <a href="#" class="dash-nav-item" data-role="management-only" style="border-radius:0; padding: 0.45rem 1rem;" onclick="alert('Subscription settings coming soon!')">
+          <a href="#" class="dash-nav-item" data-role="management-only" style="border-radius:0; padding: 0.45rem 1rem;" onclick="event.preventDefault(); if (window.BKDialog) BKDialog.notice('Subscription settings coming soon.');">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2" ry="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
             <span>Subscription</span>
           </a>
