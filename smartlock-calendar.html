@@ -1213,7 +1213,6 @@
       dayBookings.forEach(b => {
         const addressParts = (b.customer_address || '').split(',');
         const cityStr = addressParts.length >= 2 ? addressParts[addressParts.length - 2].trim() : 'N/A';
-        const formattedProducts = b.product_names ? b.product_names.replace(/ \| /g, ', ') : 'Smart Lock Service';
         const timeVal = b.scheduled_time || 'AM Slot';
 
         let doorsArr = [];
@@ -1222,6 +1221,62 @@
         } else if (Array.isArray(b.doors)) {
           doorsArr = b.doors;
         }
+
+        let productsArr = [];
+        if (typeof b.products === 'string') {
+          try { productsArr = JSON.parse(b.products); } catch(_) {}
+        } else if (Array.isArray(b.products)) {
+          productsArr = b.products;
+        }
+        const skus = (b.product_skus || '').split(' | ');
+        const names = (b.product_names || '').split(' | ');
+        const rowCount = Math.max(doorsArr.length, productsArr.length, skus.length);
+
+        const installerSkus = {};
+        const unassignedSkus = [];
+
+        for (let i = 0; i < rowCount; i++) {
+          const door = doorsArr[i];
+          const sku = (productsArr[i]?.sku || skus[i] || 'N/A').trim();
+
+          let doorInstallers = door?.installers || [];
+          if (doorInstallers.length === 0) {
+            if (b.installers) {
+              if (typeof b.installers === 'string') {
+                try { doorInstallers = JSON.parse(b.installers); } catch(_) {}
+              } else if (Array.isArray(b.installers)) {
+                doorInstallers = b.installers;
+              }
+            } else if (b.installer_name) {
+              doorInstallers = b.installer_name.split(' | ').map(name => ({ name }));
+            }
+          }
+
+          if (doorInstallers.length > 0) {
+            doorInstallers.forEach(inst => {
+              const formattedName = formatInstallerName(inst.name || inst);
+              if (!installerSkus[formattedName]) {
+                installerSkus[formattedName] = [];
+              }
+              if (!installerSkus[formattedName].includes(sku)) {
+                installerSkus[formattedName].push(sku);
+              }
+            });
+          } else {
+            if (!unassignedSkus.includes(sku)) {
+              unassignedSkus.push(sku);
+            }
+          }
+        }
+
+        const lines = [];
+        for (const [name, skusList] of Object.entries(installerSkus)) {
+          lines.push(`${escapeHtml(name)} - ${escapeHtml(skusList.join(', '))}`);
+        }
+        if (unassignedSkus.length > 0) {
+          lines.push(`Unassigned - ${escapeHtml(unassignedSkus.join(', '))}`);
+        }
+        const installerSkuListHtml = lines.length > 0 ? lines.join('<br>') : 'Smart Lock Service';
 
         const isDone = doorsArr.length > 0 && doorsArr.every(d => d.completed);
         const hasMedia = doorsArr.some(d => d.media_urls && d.media_urls.length > 0);
@@ -1263,7 +1318,7 @@
               ${escapeHtml(cityStr)}
             </div>
             <div class="booking-details-summary">
-              ${escapeHtml(formattedProducts)}
+              ${installerSkuListHtml}
             </div>
           </div>
         `);
