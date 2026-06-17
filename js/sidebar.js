@@ -382,27 +382,8 @@
         const roleInfo = await window.BKAuth.getUserRole();
         const userRole = roleInfo?.role || null;
 
-        let accessibleModules = [];
+        let accessibleModules = roleInfo?.modules || [];
         const isOwnerOrAdmin = ['owner', 'admin'].includes(userRole);
-
-        if (!isOwnerOrAdmin && userRole) {
-          if (userRole.startsWith('access:')) {
-            accessibleModules = userRole.substring(7).split(',').map(s => s.trim());
-          } else {
-            try {
-              const { data: dbRole } = await window.BKAuth.sb
-                .from('dashboard_roles')
-                .select('accessible_modules')
-                .eq('name', userRole)
-                .maybeSingle();
-              if (dbRole && Array.isArray(dbRole.accessible_modules)) {
-                accessibleModules = dbRole.accessible_modules;
-              }
-            } catch (err) {
-              console.error('Sidebar dynamic role fetch error:', err);
-            }
-          }
-        }
 
         // Filter top-level groups based on dynamic role modules
         const GROUP_MODULE_MAP = {
