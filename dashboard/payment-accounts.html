@@ -21,60 +21,6 @@
       letter-spacing: -0.04em; line-height: 1.1; margin-top: 0.4rem;
     }
     
-    /* ── Metrics Grid ── */
-    .payment-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-      gap: 1.25rem;
-      margin-bottom: 2rem;
-    }
-    .payment-card {
-      background: var(--bg-surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-md);
-      padding: 1.5rem;
-      box-shadow: var(--shadow-sm);
-      display: flex;
-      flex-direction: column;
-      gap: 0.75rem;
-      position: relative;
-      overflow: hidden;
-    }
-    .payment-card::before {
-      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
-    }
-    .payment-card.card-credit_card::before { background: var(--cyan); }
-    .payment-card.card-debit::before { background: var(--blue, #2563eb); }
-    .payment-card.card-cash_account::before { background: var(--emerald, #10b981); }
-    .payment-card.card-e_wallet::before { background: var(--amber, #f59e0b); }
-    .payment-card.card-other_payment_account::before { background: var(--text-muted); }
-    
-    .payment-card__header {
-      display: flex; align-items: center; justify-content: space-between;
-    }
-    .payment-card__type {
-      font-size: 0.65rem; font-weight: 800; text-transform: uppercase;
-      letter-spacing: 0.08em; color: var(--text-muted);
-    }
-    .payment-card__status {
-      font-size: 0.65rem; font-weight: 700; text-transform: uppercase;
-      padding: 2px 6px; border-radius: 4px;
-    }
-    .payment-card__status.active { background: rgba(16,185,129,0.1); color: #10b981; }
-    .payment-card__status.inactive { background: rgba(239,68,68,0.1); color: #ef4444; }
-    
-    .payment-card__name {
-      font-size: 1.15rem; font-weight: 800; color: var(--text-primary);
-      letter-spacing: -0.03em; margin: 0.25rem 0;
-    }
-    .payment-card__meta {
-      display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.78rem; color: var(--text-secondary);
-    }
-    .payment-card__meta-item {
-      display: flex; align-items: center; justify-content: space-between;
-    }
-    .payment-card__meta-label { color: var(--text-muted); font-weight: 500; }
-    .payment-card__meta-value { font-weight: 600; color: var(--text-primary); }
     
     /* ── Table styles ── */
     .table-wrap {
@@ -180,10 +126,6 @@
             </button>
           </div>
 
-          <!-- Quick Cards Grid -->
-          <div class="payment-grid" id="quick-cards-grid">
-            <!-- Rendered via JS -->
-          </div>
 
           <!-- Datatable -->
           <div class="table-wrap">
@@ -402,11 +344,9 @@
 
       renderList() {
         const tbody = document.getElementById('accounts-tbody');
-        const grid = document.getElementById('quick-cards-grid');
         
         if (!this.accounts.length) {
           tbody.innerHTML = '<tr><td colspan="10" class="tbl-state" style="padding: 100px 0;">No payment accounts configured yet.</td></tr>';
-          grid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: var(--text-muted); font-size: 0.88rem; padding: 2rem;">No card, bank, or wallet widgets to display.</div>';
           return;
         }
 
@@ -446,72 +386,6 @@
             </tr>
           `;
         }).join('');
-
-        // 2. Render Widgets/Cards (focus on Credit Cards, E-wallets, Banks)
-        grid.innerHTML = this.accounts.map(acc => {
-          const limitPesos = acc.credit_limit ? (acc.credit_limit / 100) : null;
-          const activeClass = acc.is_active ? 'active' : 'inactive';
-          
-          let cardDetails = '';
-          if (acc.payment_account_type === 'credit_card') {
-            cardDetails = `
-              <div class="payment-card__meta-item">
-                <span class="payment-card__meta-label">Credit Limit</span>
-                <span class="payment-card__meta-value">${php(limitPesos)}</span>
-              </div>
-              <div class="payment-card__meta-item">
-                <span class="payment-card__meta-label">Statement Date</span>
-                <span class="payment-card__meta-value">Every ${acc.statement_date || '—'}</span>
-              </div>
-              <div class="payment-card__meta-item">
-                <span class="payment-card__meta-label">Due Date</span>
-                <span class="payment-card__meta-value">Every ${acc.due_date || '—'}</span>
-              </div>
-            `;
-          } else {
-            cardDetails = `
-              <div class="payment-card__meta-item">
-                <span class="payment-card__meta-label">Bank</span>
-                <span class="payment-card__meta-value">${esc(acc.bank || '—')}</span>
-              </div>
-              <div class="payment-card__meta-item">
-                <span class="payment-card__meta-label">Account Code</span>
-                <span class="payment-card__meta-value">${esc(acc.account_code)}</span>
-              </div>
-            `;
-          }
-
-          const cardNo = acc.card_number_last_4 ? `•••• •••• •••• ${acc.card_number_last_4}` : 'No Card Linked';
-
-          return `
-            <div class="payment-card card-${acc.payment_account_type}">
-              <div class="payment-card__header">
-                <span class="payment-card__type">${esc(formatPaymentType(acc.payment_account_type))}</span>
-                <span class="payment-card__status ${activeClass}">${acc.is_active ? 'Active' : 'Disabled'}</span>
-              </div>
-              <div class="payment-card__name">${esc(acc.account_name)}</div>
-              
-              <div style="font-family:monospace; font-size:0.85rem; color:var(--text-muted); margin: 0.25rem 0 0.5rem;">
-                ${cardNo}
-              </div>
-
-              <div class="payment-card__meta">
-                ${cardDetails}
-                ${acc.card_holder_name ? `
-                  <div class="payment-card__meta-item">
-                    <span class="payment-card__meta-label">Holder</span>
-                    <span class="payment-card__meta-value">${esc(acc.card_holder_name)}</span>
-                  </div>
-                ` : ''}
-                ${acc.rewards ? `
-                  <div class="payment-card__meta-item" style="border-top:1px dashed var(--border); padding-top:0.4rem; margin-top:0.2rem;">
-                    <span class="payment-card__meta-label">Rewards</span>
-                    <span class="payment-card__meta-value" style="color:var(--cyan); font-size:0.75rem;">${esc(acc.rewards)}</span>
-                  </div>
-                ` : ''}
-              </div>
-            </div>
-          `;
         }).join('');
       },
 
