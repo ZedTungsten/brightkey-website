@@ -462,11 +462,19 @@
 
       async init() {
         if (!window.BKAuth) return;
-        const authInfo = await window.BKAuth.checkRoleGate(['HR', 'Finance', 'Operations', 'Marketing', 'Sales', 'Customer Service', 'Logistics'], '../admin.html');
-        if (!authInfo) return;
+        
+        // Accessible by all authenticated company members/employees
+        const user = await window.BKAuth.requireAuth('../admin.html');
+        if (!user) return;
+        
+        const roleInfo = await window.BKAuth.getUserRole();
+        if (!roleInfo) {
+          window.location.href = '../admin.html';
+          return;
+        }
 
-        this.currentUser = authInfo.user;
-        this.companyId = await this.getCompanyId(authInfo.tenantId);
+        this.currentUser = user;
+        this.companyId = await this.getCompanyId(roleInfo.tenantId);
         
         if (this.companyId) {
           await this.loadEmployeeProfile();
