@@ -1040,21 +1040,25 @@
                 const item = this.stagedAttachments[i];
                 const ext = item.name.split('.').pop().toLowerCase();
                 const filename = `${bookkeepingId}-${String(i + 1).padStart(2, '0')}.${ext}`;
-                const path = `${this.companyId}/bookkeeping/${filename}`;
+                const path = `companies/${this.companyId}/bookkeeping/${filename}`;
                 
                 const { error } = await supabaseClient.storage
-                  .from('brightkey-assets')
+                  .from('brightkey-internal')
                   .upload(path, item.file, { upsert: true });
                   
                 if (error) throw new Error(`File upload failed: ${error.message}`);
-                
-                const { data: { publicUrl } } = supabaseClient.storage
-                  .from('brightkey-assets')
-                  .getPublicUrl(path);
+
+                // Private bucket: generate a long-lived signed URL (10 years)
+                const TEN_YEARS = 315360000;
+                const { data: signedData, error: signErr } = await supabaseClient.storage
+                  .from('brightkey-internal')
+                  .createSignedUrl(path, TEN_YEARS);
+                if (signErr) throw new Error(`Signing failed: ${signErr.message}`);
+                const fileUrl = signedData.signedUrl;
                   
                 await sbPost('bookkeeping_attachments', {
                   bookkeeping_id: bookkeepingId,
-                  file_url: publicUrl,
+                  file_url: fileUrl,
                   file_name: item.name
                 });
               }

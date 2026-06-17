@@ -77,7 +77,10 @@ export default async function handler(req, res) {
       folderPath = `${prefix}/uploads/general`;
     }
 
-    const bucketName = 'brightkey-assets';
+    // Sensitive employee documents go to the private bucket; everything else stays public
+    const SENSITIVE_TYPES = ['govid', 'cv', 'id'];
+    const isInternal = category === 'employees' && SENSITIVE_TYPES.includes(type);
+    const bucketName = isInternal ? 'brightkey-internal' : 'brightkey-assets';
     const filePath = `${folderPath}/${safeFileName}`;
 
     // Upload buffer directly to Supabase storage bucket
@@ -92,13 +95,25 @@ export default async function handler(req, res) {
       throw error;
     }
 
-    // Construct the public access URL
-    const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${bucketName}/${filePath}`;
+    // For private (internal) files: return a long-lived signed URL (10 years).
+    // For public files: return a direct public URL.
+    let fileUrl;
+    if (isInternal) {
+      const TEN_YEARS_SECONDS = 315360000;
+      const { data: signedData, error: signErr } = await supabase.storage
+        .from(bucketName)
+        .createSignedUrl(filePath, TEN_YEARS_SECONDS);
+      if (signErr) throw signErr;
+      fileUrl = signedData.signedUrl;
+    } else {
+      fileUrl = `${SUPABASE_URL}/storage/v1/object/public/${bucketName}/${filePath}`;
+    }
 
     return res.status(200).json({
       success: true,
-      url: publicUrl,
-      path: filePath
+      url: fileUrl,
+      path: filePath,
+      bucket: bucketName
     });
 
   } catch (error) {
