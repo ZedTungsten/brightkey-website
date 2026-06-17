@@ -352,6 +352,22 @@
 
   </div>
 
+  <!-- Custom Confirmation Modal -->
+  <div class="modal-overlay" id="confirm-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(9, 9, 11, 0.4); backdrop-filter: blur(4px); z-index: 1000; align-items: center; justify-content: center;">
+    <div class="modal-card" style="background: var(--bg-surface, #ffffff); border: 1px solid var(--border, #e4e4e7); border-radius: 12px; width: 420px; max-width: 90%; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04); overflow: hidden; display: flex; flex-direction: column;">
+      <div class="modal-header" style="padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border, #e4e4e7); display: flex; justify-content: space-between; align-items: center;">
+        <div class="modal-title" style="font-size: 1rem; font-weight: 700; color: var(--text-primary, #09090b);">Confirm Shift Action</div>
+      </div>
+      <div class="modal-body" style="padding: 1.5rem; color: var(--text-secondary, #52525b); font-size: 0.88rem; line-height: 1.5;" id="confirm-modal-message">
+        Do you want to action?
+      </div>
+      <div class="modal-footer" style="padding: 1rem 1.5rem; border-top: 1px solid var(--border, #e4e4e7); background: var(--bg-elevated, #f4f4f5); display: flex; justify-content: flex-end; gap: 0.75rem;">
+        <button class="btn btn-outline" id="confirm-modal-cancel" style="background: #ffffff; border: 1px solid var(--border, #e4e4e7); padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-size: 0.82rem; font-weight: 600; outline: none;">Cancel</button>
+        <button class="btn btn-primary" id="confirm-modal-ok" style="background: var(--cyan, #06b6d4); color: #ffffff; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-size: 0.82rem; font-weight: 600; outline: none;">Confirm</button>
+      </div>
+    </div>
+  </div>
+
   <div id="toast-container" aria-live="polite"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -421,9 +437,12 @@
           this.companyId = co?.id;
           if (!this.companyId) return;
 
-          const { data: emp } = await BKAuth.sb.from('employees').select('id, cover_photo_link, cover_text_color, status_text').eq('email', this.currentUser.email).limit(1).maybeSingle();
+          const { data: emp } = await BKAuth.sb.from('employees').select('id, cover_photo_link, cover_text_color, status_text, shift_time_1, shift_time_2').eq('email', this.currentUser.email).limit(1).maybeSingle();
           this.employeeId = emp?.id;
           if (!this.employeeId) return;
+
+          this.shiftTime1 = emp?.shift_time_1 || null;
+          this.shiftTime2 = emp?.shift_time_2 || null;
 
           // Apply cover photo if it exists
           if (emp.cover_photo_link) {
@@ -475,6 +494,55 @@
         }
       },
 
+      parseShiftTime(timeStr) {
+        if (!timeStr) return null;
+        const match = timeStr.match(/(\d+):(\d+)\s*(AM|PM)/i);
+        if (!match) return null;
+        let h = parseInt(match[1], 10);
+        const m = parseInt(match[2], 10);
+        const ampm = match[3].toUpperCase();
+        if (ampm === 'PM' && h < 12) h += 12;
+        if (ampm === 'AM' && h === 12) h = 0;
+        const d = new Date();
+        d.setHours(h, m, 0, 0);
+        return d;
+      },
+
+      formatTimeAway(diffMins) {
+        if (diffMins >= 60) {
+          const hrs = (diffMins / 60).toFixed(1);
+          return `${hrs} hour${hrs === '1.0' ? '' : 's'}`;
+        } else {
+          return `${diffMins} minute${diffMins === 1 ? '' : 's'}`;
+        }
+      },
+
+      showConfirmModal(message, onConfirm) {
+        const modal = document.getElementById('confirm-modal');
+        const msgEl = document.getElementById('confirm-modal-message');
+        const okBtn = document.getElementById('confirm-modal-ok');
+        const cancelBtn = document.getElementById('confirm-modal-cancel');
+        
+        if (!modal || !msgEl || !okBtn || !cancelBtn) return;
+        
+        msgEl.textContent = message;
+        modal.style.display = 'flex';
+        
+        const close = () => {
+          modal.style.display = 'none';
+          okBtn.onclick = null;
+          cancelBtn.onclick = null;
+        };
+        
+        okBtn.onclick = () => {
+          close();
+          onConfirm();
+        };
+        cancelBtn.onclick = () => {
+          close();
+        };
+      },
+
       async setStatus(status) {
         if (!this.employeeId || !this.companyId) {
           toast('Cannot set status: Employee profile not found in directory.', 'error');
@@ -483,6 +551,39 @@
 
         if (status === this.currentStatus) return;
 
+        // Check for 30 mins early or more from starting shift when going available
+        const now = new Date();
+        if (status === 'available' && this.shiftTime1) {
+          const shiftStart = this.parseShiftTime(this.shiftTime1);
+          if (shiftStart) {
+            const diffMins = Math.floor((shiftStart - now) / 60000);
+            if (diffMins >= 30) {
+              const formattedTime = this.formatTimeAway(diffMins);
+              const msg = `Do you want to time-in for today? You are ${formattedTime} away from your shift.`;
+              this.showConfirmModal(msg, () => this.executeSetStatus(status));
+              return;
+            }
+          }
+        }
+        
+        // Check for 30 mins early or more from end shift when going offline
+        if (status === 'offline' && this.shiftTime2) {
+          const shiftEnd = this.parseShiftTime(this.shiftTime2);
+          if (shiftEnd) {
+            const diffMins = Math.floor((shiftEnd - now) / 60000);
+            if (diffMins >= 30) {
+              const formattedTime = this.formatTimeAway(diffMins);
+              const msg = `Do you want to time-out for today? You are ${formattedTime} away from your shift.`;
+              this.showConfirmModal(msg, () => this.executeSetStatus(status));
+              return;
+            }
+          }
+        }
+
+        await this.executeSetStatus(status);
+      },
+
+      async executeSetStatus(status) {
         try {
           const payload = {
             company_id: this.companyId,
