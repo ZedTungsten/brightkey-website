@@ -1191,7 +1191,7 @@
 
       <div style="margin-top:1.5rem;padding:1rem;background:var(--bg-elevated);border-radius:8px;border:1px solid var(--border)">
         <div style="font-size:0.75rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:0.5rem">Storage Usage</div>
-        <div style="font-size:0.82rem;color:var(--text-secondary)">Media uploads are stored in Supabase Storage under the <code style="background:var(--bg-base);padding:0.1rem 0.35rem;border-radius:3px;font-size:0.75rem">review-media</code> bucket.</div>
+        <div style="font-size:0.82rem;color:var(--text-secondary)">Media uploads are stored in Supabase Storage under the <code style="background:var(--bg-base);padding:0.1rem 0.35rem;border-radius:3px;font-size:0.75rem">brightkey-assets</code> bucket at <code style="background:var(--bg-base);padding:0.1rem 0.35rem;border-radius:3px;font-size:0.75rem">companies/{company_id}/reviews/</code>.</div>
         <div style="margin-top:0.5rem;font-size:0.75rem;color:var(--text-muted)">Limits: 3 images x 5 MB · 1 video x 50 MB per review</div>
       </div>
 
@@ -1226,9 +1226,10 @@
     'use strict';
 
     let sb;
+    let companyId = null;
 
     // ─── Constants ───────────────────────────────────────────────────────────
-    const STORAGE_BUCKET    = 'review-media';
+    const STORAGE_BUCKET    = 'brightkey-assets';
     const MAX_IMAGE_MB      = 5;
     const MAX_VIDEO_MB      = 50;
     const MAX_VIDEO_SECONDS = 30;
@@ -1530,6 +1531,10 @@
         sb = window.BKAuth.sb;
         const authInfo = await BKAuth.checkRoleGate(['owner', 'admin', 'customer_service', 'marketing'], '../admin.html');
         if (!authInfo) return;
+
+        // Resolve companyId from tenantId
+        const { data: co } = await sb.from('companies').select('id').eq('tenant_id', authInfo.tenantId).limit(1).maybeSingle();
+        companyId = co?.id || null;
 
         // Init uploaders
         this.replyUploader = new MediaUploadManager(
@@ -1845,7 +1850,7 @@
         btn.textContent = 'Uploading…';
 
         try {
-          const folder = `replies/${this.activeReplyId}`;
+          const folder = `companies/${companyId}/reviews/replies/${this.activeReplyId}`;
           const mediaUrls = await this.replyUploader.uploadAll(sb, folder);
 
           btn.textContent = 'Saving…';
@@ -1909,7 +1914,7 @@
         btn.textContent = 'Uploading…';
  
         try {
-          const folder = `reviews/${productId}`;
+          const folder = `companies/${companyId}/reviews/products/${productId}`;
           const mediaUrls = await this.arUploader.uploadAll(sb, folder);
  
           btn.textContent = 'Saving…';
