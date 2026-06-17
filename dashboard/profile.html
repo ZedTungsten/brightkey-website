@@ -971,10 +971,90 @@
           document.getElementById('inp-sss').value = emp.sss || '';
           document.getElementById('inp-philhealth').value = emp.philhealth || '';
           document.getElementById('inp-pagibig').value = emp.pagibig || '';
-          // Populate employment form inputs
-          document.getElementById('emp-department').textContent = emp.department || 'N/A';
+          // Populate employment form inputs dynamically from the Org Map structure
+          let resolvedDept = emp.department || 'N/A';
+          let resolvedReportingTo = emp.reporting_to || 'N/A';
+
+          if (this.companyId) {
+            try {
+              const { data: settings } = await this.sb
+                .from('global_settings')
+                .select('value')
+                .eq('key', 'company_structure')
+                .eq('company_id', this.companyId)
+                .maybeSingle();
+              const struct = settings?.value || { departments: [] };
+
+              // Build reportingToMap and employeeDeptMap
+              const reportingToMap = {};
+              const employeeDeptMap = {};
+              if (struct.departments) {
+                struct.departments.forEach(dept => {
+                  const deptHeadId = dept.managerId;
+                  const deptName = dept.name;
+                  if (deptHeadId) {
+                    employeeDeptMap[deptHeadId] = deptName;
+                  }
+                  if (dept.subteams) {
+                    dept.subteams.forEach(sub => {
+                      const subteamManagerId = sub.managerId;
+                      if (subteamManagerId) {
+                        employeeDeptMap[subteamManagerId] = deptName;
+                        if (deptHeadId) {
+                          reportingToMap[subteamManagerId] = deptHeadId;
+                        }
+                        if (sub.colleagueIds) {
+                          sub.colleagueIds.forEach(colId => {
+                            reportingToMap[colId] = subteamManagerId;
+                            employeeDeptMap[colId] = deptName;
+                          });
+                        }
+                      } else {
+                        if (deptHeadId && sub.colleagueIds) {
+                          sub.colleagueIds.forEach(colId => {
+                            reportingToMap[colId] = deptHeadId;
+                            employeeDeptMap[colId] = deptName;
+                          });
+                        } else if (sub.colleagueIds) {
+                          sub.colleagueIds.forEach(colId => {
+                            employeeDeptMap[colId] = deptName;
+                          });
+                        }
+                      }
+                    });
+                  }
+                });
+              }
+
+              const dynamicDept = employeeDeptMap[emp.id];
+              if (dynamicDept) {
+                resolvedDept = dynamicDept;
+              }
+
+              const mgrId = reportingToMap[emp.id] || emp.reporting_to;
+              if (mgrId) {
+                const { data: mgr } = await this.sb
+                  .from('employees')
+                  .select('first_name, last_name')
+                  .eq('id', mgrId)
+                  .maybeSingle();
+                if (mgr) {
+                  const initial = mgr.last_name ? ` ${mgr.last_name.trim().charAt(0).toUpperCase()}.` : '';
+                  resolvedReportingTo = `${mgr.first_name || ''}${initial}`.trim();
+                } else {
+                  resolvedReportingTo = 'N/A';
+                }
+              } else {
+                resolvedReportingTo = 'N/A';
+              }
+            } catch (e) {
+              console.error('Failed to load company structure settings:', e);
+            }
+          }
+
+          document.getElementById('emp-department').textContent = resolvedDept;
           document.getElementById('emp-position').textContent = emp.title || 'N/A';
-          document.getElementById('emp-reporting-to').textContent = emp.reporting_to || 'N/A';
+          document.getElementById('emp-reporting-to').textContent = resolvedReportingTo;
           document.getElementById('emp-salary').textContent = emp.salary != null ? `₱ ${parseFloat(emp.salary).toLocaleString('en-PH', { minimumFractionDigits: 2 })}` : 'N/A';
           
           let dateHiredStr = 'N/A';
