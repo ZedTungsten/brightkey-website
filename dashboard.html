@@ -808,10 +808,18 @@
 
           const container = document.getElementById('chat-members-container');
           if (!container) return;
-          container.innerHTML = '';
 
           this.teammatesList = emps || [];
           const latestMsgMap = await this.updateUnreadIndicators();
+
+          // Clean up any old elements that are no longer in the active list
+          const activeIds = new Set(this.teammatesList.map(e => e.id));
+          Array.from(container.children).forEach(child => {
+            const childId = child.getAttribute('data-id');
+            if (childId && !activeIds.has(childId)) {
+              child.remove();
+            }
+          });
 
           const myFullName = `${this.firstName || ''} ${this.lastName || ''}`.trim().toLowerCase();
           const myManagerName = (this.reportingTo || '').trim().toLowerCase();
@@ -852,91 +860,126 @@
             const statusColor = status === 'available' ? '#22c55e' : status === 'break' ? '#f97316' : '#ef4444';
             const fullName = `${emp.first_name} ${emp.last_name}`;
             
-            const div = document.createElement('div');
-            div.className = 'chat-member-item';
-            div.onclick = () => this.openPrivateChat(emp, status);
-            
-            const avatarWrap = document.createElement('div');
-            avatarWrap.style.position = 'relative';
-            avatarWrap.style.flexShrink = '0';
-            
-            const avatar = document.createElement('div');
-            avatar.style.width = '32px';
-            avatar.style.height = '32px';
-            avatar.style.borderRadius = '50%';
-            avatar.style.display = 'flex';
-            avatar.style.alignItems = 'center';
-            avatar.style.justifyContent = 'center';
-            avatar.style.fontWeight = '700';
-            avatar.style.fontSize = '0.78rem';
-
-            if (emp.picture_link) {
-              avatar.style.backgroundImage = `url('${emp.picture_link}')`;
-              avatar.style.backgroundSize = 'cover';
-              avatar.style.backgroundPosition = 'center';
-            } else {
-              avatar.style.background = 'var(--cyan-dim, #ecfeff)';
-              avatar.style.color = 'var(--cyan, #06b6d4)';
-              avatar.textContent = emp.first_name[0] + emp.last_name[0];
-            }
-
-            const dot = document.createElement('div');
-            dot.style.position = 'absolute';
-            dot.style.bottom = '0';
-            dot.style.right = '0';
-            dot.style.width = '10px';
-            dot.style.height = '10px';
-            dot.style.borderRadius = '50%';
-            dot.style.border = '2px solid var(--bg-surface, #ffffff)';
-            dot.style.backgroundColor = statusColor;
-
-            avatarWrap.appendChild(avatar);
-            avatarWrap.appendChild(dot);
-
-            const info = document.createElement('div');
-            info.style.flex = '1';
-            info.style.minWidth = '0';
-
             const lastReadStr = localStorage.getItem(`chat_read_${this.employeeId}_${emp.id}`);
             const lastRead = lastReadStr ? new Date(lastReadStr).getTime() : 0;
             const hasUnread = latestMsgMap[emp.id] && latestMsgMap[emp.id] > lastRead;
 
-            const nameEl = document.createElement('div');
-            nameEl.style.fontSize = '0.78rem';
-            nameEl.style.fontWeight = '500';
-            nameEl.style.color = 'var(--text-primary, #09090b)';
-            nameEl.style.whiteSpace = 'nowrap';
-            nameEl.style.overflow = 'hidden';
-            nameEl.style.textOverflow = 'ellipsis';
-            nameEl.style.display = 'flex';
-            nameEl.style.alignItems = 'center';
-            nameEl.style.gap = '0.35rem';
-            nameEl.textContent = fullName;
+            let div = container.querySelector(`[data-id="${emp.id}"]`);
+            if (div) {
+              div.onclick = () => this.openPrivateChat(emp, status);
+              
+              const dot = div.querySelector('.status-dot');
+              if (dot) dot.style.backgroundColor = statusColor;
 
-            if (hasUnread) {
-              const unreadDot = document.createElement('span');
-              unreadDot.style.display = 'inline-block';
-              unreadDot.style.width = '8px';
-              unreadDot.style.height = '8px';
-              unreadDot.style.borderRadius = '50%';
-              unreadDot.style.backgroundColor = '#ef4444';
-              unreadDot.style.flexShrink = '0';
-              nameEl.appendChild(unreadDot);
+              const nameEl = div.querySelector('.member-name');
+              if (nameEl) {
+                nameEl.innerHTML = '';
+                nameEl.textContent = fullName;
+                if (hasUnread) {
+                  const unreadDot = document.createElement('span');
+                  unreadDot.style.display = 'inline-block';
+                  unreadDot.style.width = '8px';
+                  unreadDot.style.height = '8px';
+                  unreadDot.style.borderRadius = '50%';
+                  unreadDot.style.backgroundColor = '#ef4444';
+                  unreadDot.style.flexShrink = '0';
+                  nameEl.appendChild(unreadDot);
+                }
+              }
+
+              const textStatus = div.querySelector('.status-text');
+              if (textStatus) {
+                textStatus.textContent = emp.status_text || '';
+              }
+            } else {
+              div = document.createElement('div');
+              div.className = 'chat-member-item';
+              div.setAttribute('data-id', emp.id);
+              div.onclick = () => this.openPrivateChat(emp, status);
+              
+              const avatarWrap = document.createElement('div');
+              avatarWrap.style.position = 'relative';
+              avatarWrap.style.flexShrink = '0';
+              
+              const avatar = document.createElement('div');
+              avatar.style.width = '32px';
+              avatar.style.height = '32px';
+              avatar.style.borderRadius = '50%';
+              avatar.style.display = 'flex';
+              avatar.style.alignItems = 'center';
+              avatar.style.justifyContent = 'center';
+              avatar.style.fontWeight = '700';
+              avatar.style.fontSize = '0.78rem';
+
+              if (emp.picture_link) {
+                avatar.style.backgroundImage = `url('${emp.picture_link}')`;
+                avatar.style.backgroundSize = 'cover';
+                avatar.style.backgroundPosition = 'center';
+              } else {
+                avatar.style.backgroundImage = 'none';
+                avatar.style.background = 'var(--cyan-dim, #ecfeff)';
+                avatar.style.color = 'var(--cyan, #06b6d4)';
+                avatar.textContent = emp.first_name[0] + (emp.last_name ? emp.last_name[0] : '');
+              }
+
+              const dot = document.createElement('div');
+              dot.className = 'status-dot';
+              dot.style.position = 'absolute';
+              dot.style.bottom = '0';
+              dot.style.right = '0';
+              dot.style.width = '10px';
+              dot.style.height = '10px';
+              dot.style.borderRadius = '50%';
+              dot.style.border = '2px solid var(--bg-surface, #ffffff)';
+              dot.style.backgroundColor = statusColor;
+
+              avatarWrap.appendChild(avatar);
+              avatarWrap.appendChild(dot);
+
+              const info = document.createElement('div');
+              info.style.flex = '1';
+              info.style.minWidth = '0';
+
+              const nameEl = document.createElement('div');
+              nameEl.className = 'member-name';
+              nameEl.style.fontSize = '0.78rem';
+              nameEl.style.fontWeight = '500';
+              nameEl.style.color = 'var(--text-primary, #09090b)';
+              nameEl.style.whiteSpace = 'nowrap';
+              nameEl.style.overflow = 'hidden';
+              nameEl.style.textOverflow = 'ellipsis';
+              nameEl.style.display = 'flex';
+              nameEl.style.alignItems = 'center';
+              nameEl.style.gap = '0.35rem';
+              nameEl.textContent = fullName;
+
+              if (hasUnread) {
+                const unreadDot = document.createElement('span');
+                unreadDot.style.display = 'inline-block';
+                unreadDot.style.width = '8px';
+                unreadDot.style.height = '8px';
+                unreadDot.style.borderRadius = '50%';
+                unreadDot.style.backgroundColor = '#ef4444';
+                unreadDot.style.flexShrink = '0';
+                nameEl.appendChild(unreadDot);
+              }
+
+              const textStatus = document.createElement('div');
+              textStatus.className = 'status-text';
+              textStatus.style.fontSize = '0.65rem';
+              textStatus.style.color = 'var(--text-secondary, #52525b)';
+              textStatus.style.whiteSpace = 'nowrap';
+              textStatus.style.overflow = 'hidden';
+              textStatus.style.textOverflow = 'ellipsis';
+              textStatus.textContent = emp.status_text || '';
+
+              info.appendChild(nameEl);
+              info.appendChild(textStatus);
+
+              div.appendChild(avatarWrap);
+              div.appendChild(info);
             }
 
-            const textStatus = document.createElement('div');
-            textStatus.style.fontSize = '0.65rem';
-            textStatus.style.color = 'var(--text-secondary, #52525b)';
-            textStatus.style.whiteSpace = 'nowrap';
-            textStatus.style.overflow = 'hidden';
-            textStatus.style.textOverflow = 'ellipsis';
-            textStatus.textContent = emp.status_text || '';
-
-            info.appendChild(nameEl);
-            info.appendChild(textStatus);
-
-            div.appendChild(avatarWrap);
-            div.appendChild(info);
             container.appendChild(div);
           });
 
