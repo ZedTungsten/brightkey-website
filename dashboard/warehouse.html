@@ -560,6 +560,7 @@
           <button class="tab-btn active" onclick="switchTab('inventory')">Inventory Summary</button>
           <button class="tab-btn" onclick="switchTab('dispatch')">Dispatch <span id="badge-count-dispatch" style="display:none; background:var(--cyan); color:white; font-size:0.75rem; padding:1px 6px; border-radius:10px; margin-left:4px;">0</span></button>
           <button class="tab-btn" onclick="switchTab('pack')">Pack <span id="badge-count-pack" style="display:none; background:var(--cyan); color:white; font-size:0.75rem; padding:1px 6px; border-radius:10px; margin-left:4px;">0</span></button>
+          <button class="tab-btn" onclick="switchTab('inspect')">Inspect <span id="badge-count-inspect" style="display:none; background:var(--cyan); color:white; font-size:0.75rem; padding:1px 6px; border-radius:10px; margin-left:4px;">0</span></button>
           <button class="tab-btn" onclick="switchTab('receive')">Receive <span id="badge-count-receive" style="display:none; background:var(--cyan); color:white; font-size:0.75rem; padding:1px 6px; border-radius:10px; margin-left:4px;">0</span></button>
           <button class="tab-btn" onclick="switchTab('order')">Order Supplier</button>
           <button class="tab-btn" onclick="switchTab('cancel')">Cancel</button>
@@ -638,6 +639,7 @@
                       <th class="sortable" onclick="handleSort('business')">Business <span id="sort-icon-business"></span></th>
                       <th class="sortable" onclick="handleSort('available')" style="text-align: center;">Available <span id="sort-icon-available"></span></th>
                       <th class="sortable" onclick="handleSort('reserved')" style="text-align: center; color:var(--warning);">Reserved <span id="sort-icon-reserved"></span></th>
+                      <th class="sortable" onclick="handleSort('inspect')" style="text-align: center; color:#a855f7;">Inspect <span id="sort-icon-inspect"></span></th>
                       <th class="sortable" onclick="handleSort('packed')" style="text-align: center; color:var(--cyan-light);">Packed <span id="sort-icon-packed"></span></th>
                       <th class="sortable" onclick="handleSort('returned')" style="text-align: center; color:var(--danger);">Returned <span id="sort-icon-returned"></span></th>
                       <th class="sortable" onclick="handleSort('cancelled')" style="text-align: center; color:var(--danger);">Cancelled <span id="sort-icon-cancelled"></span></th>
@@ -645,7 +647,7 @@
                   </thead>
                   <tbody id="inventory-list">
                     <tr>
-                      <td colspan="10">
+                      <td colspan="11">
                         <div class="loading-wrapper">
                           <div class="spinner-cyan"></div>
                           <span>Syncing and loading stock snapshot...</span>
@@ -786,6 +788,32 @@
                   </thead>
                   <tbody id="pack-list">
                     <tr><td colspan="8" class="text-center text-muted" style="padding:2rem 0;">No items waiting to be packed.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab Panel: Inspect -->
+          <div class="tab-panel" id="panel-inspect">
+            <div class="panel">
+              <div class="panel-header">Orders to Inspect</div>
+              <div class="table-responsive">
+                <table class="ledger-table">
+                  <thead>
+                    <tr>
+                      <th>Image</th>
+                      <th>Ref Order</th>
+                      <th>Customer</th>
+                      <th>City</th>
+                      <th>SKU</th>
+                      <th>Qty</th>
+                      <th>Inspect Date</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody id="inspect-list">
+                    <tr><td colspan="8" class="text-center text-muted" style="padding:2rem 0;">No items waiting to be inspected.</td></tr>
                   </tbody>
                 </table>
               </div>
@@ -1323,6 +1351,7 @@
       renderSupplierOrderTab();
       renderReceiveTab();
       renderPackTab();
+      renderInspectTab();
       renderDispatchTab();
       renderReturnTab();
       renderCancelTab();
@@ -1399,18 +1428,18 @@
               console.log(`Skipping inventory update for service/non-stocked item: ${item.sku}`);
               continue;
             }
-            console.log(`Syncing reserved item: ${item.qty}x ${item.sku} for order ${orderNo}`);
+            console.log(`Syncing inspect item: ${item.qty}x ${item.sku} for order ${orderNo}`);
 
             // Create transaction record (scoped to active warehouse)
             const txPayload = {
               sku: item.sku,
               quantity: item.qty,
               type: 'customer_order',
-              status: 'reserved',
+              status: 'inspect',
               reference_id: orderNo,
               customer_name: booking.customer_name,
               customer_city: city,
-              timestamp_reserved: booking.created_at || new Date().toISOString(),
+              timestamp_inspect: booking.created_at || new Date().toISOString(),
               warehouse_id: activeWarehouseId || null
             };
             const { error: insTxErr } = await sb.from('inventory_transactions').insert([txPayload]);
@@ -1425,14 +1454,14 @@
               const current = invRow[0];
               await sb.from('inventory').update({
                 available: current.available - item.qty,
-                reserved: current.reserved + item.qty
+                inspect: (current.inspect || 0) + item.qty
               }).eq('id', current.id);
             } else {
               // Create new inventory row for this warehouse
               await sb.from('inventory').insert([{
                 sku: item.sku,
                 available: -item.qty,
-                reserved: item.qty,
+                inspect: item.qty,
                 warehouse_id: activeWarehouseId || null
               }]);
             }
@@ -1553,7 +1582,7 @@
     });
 
     function updateSortIndicators() {
-      const cols = ['sku', 'title', 'category', 'business', 'available', 'reserved', 'packed', 'returned', 'cancelled'];
+      const cols = ['sku', 'title', 'category', 'business', 'available', 'reserved', 'inspect', 'packed', 'returned', 'cancelled'];
       cols.forEach(col => {
         const span = document.getElementById(`sort-icon-${col}`);
         if (!span) return;
@@ -1722,7 +1751,7 @@
 
       // Render rows
       sortedProducts.forEach(p => {
-        const inv = allInventory[p.sku] || { available: 0, reserved: 0, packed: 0, returned: 0, cancelled: 0 };
+        const inv = allInventory[p.sku] || { available: 0, reserved: 0, inspect: 0, packed: 0, returned: 0, cancelled: 0 };
         
         const avail = inv.available || 0;
         let availColor = 'var(--text-primary)'; // default black/dark
@@ -1733,6 +1762,7 @@
         const isStocked = p.count_inventory !== false;
         const styleAvail = isStocked ? `color:${availColor}; font-weight:700;` : 'color:var(--text-muted) !important; opacity:0.4;';
         const styleReserved = isStocked ? 'color:var(--warning); font-weight:600;' : 'color:var(--text-muted) !important; opacity:0.4;';
+        const styleInspect = isStocked ? 'color:#a855f7; font-weight:600;' : 'color:var(--text-muted) !important; opacity:0.4;';
         const stylePacked = isStocked ? 'color:var(--cyan-light); font-weight:600;' : 'color:var(--text-muted) !important; opacity:0.4;';
         const styleReturned = isStocked ? 'color:var(--danger);' : 'color:var(--text-muted) !important; opacity:0.4;';
         const styleCancelled = isStocked ? 'color:var(--danger);' : 'color:var(--text-muted) !important; opacity:0.4;';
@@ -1755,6 +1785,7 @@
               ${isEditingAvailable && isStocked ? `<input type="number" class="edit-avail-input" data-sku="${p.sku}" value="${avail}" style="width: 70px; text-align: center; padding: 2px 5px; font-size: 0.82rem; font-weight: bold; border: 1px solid var(--border); border-radius: 4px; background: var(--bg-surface); color: ${availColor};" />` : avail}
             </td>
             <td style="text-align: center; ${styleReserved}">${inv.reserved || 0}</td>
+            <td style="text-align: center; ${styleInspect}">${inv.inspect || 0}</td>
             <td style="text-align: center; ${stylePacked}">${inv.packed || 0}</td>
             <td style="text-align: center; ${styleReturned}">${inv.returned || 0}</td>
             <td style="text-align: center; ${styleCancelled}">${inv.cancelled || 0}</td>
@@ -1762,7 +1793,7 @@
         `;
       });
 
-      tbody.innerHTML += `<tr class="table-spacer-row" style="height: auto; border: none; background: transparent !important;"><td colspan="10" style="padding: 0; border: none; background: transparent !important; pointer-events: none;"></td></tr>`;
+      tbody.innerHTML += `<tr class="table-spacer-row" style="height: auto; border: none; background: transparent !important;"><td colspan="11" style="padding: 0; border: none; background: transparent !important; pointer-events: none;"></td></tr>`;
 
       updateSortIndicators();
     }
@@ -1925,6 +1956,78 @@
                   <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: -2px; margin-right: 6px;"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>Pack Order
                 </button>
               `}
+            </td>
+          </tr>
+        `;
+      });
+    }
+
+    // Render Tab: Inspect
+    function renderInspectTab() {
+      const tbody = document.getElementById('inspect-list');
+      if (!tbody) return;
+      tbody.innerHTML = '';
+
+      const inspectQueue = activeTransactions.filter(t => 
+        t.status === 'inspect' && 
+        t.type === 'customer_order'
+      );
+
+      if (inspectQueue.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted" style="padding:2rem 0;">No orders currently in inspection queue.</td></tr>`;
+        return;
+      }
+
+      // Group by reference_id
+      const groups = {};
+      inspectQueue.forEach(t => {
+        const refId = t.reference_id || 'N/A';
+        if (!groups[refId]) {
+          groups[refId] = {
+            reference_id: refId,
+            customer_name: t.customer_name || 'N/A',
+            customer_city: t.customer_city || 'N/A',
+            timestamp_inspect: t.timestamp_inspect || t.created_at,
+            items: []
+          };
+        }
+        groups[refId].items.push(t);
+        if (t.timestamp_inspect && (!groups[refId].timestamp_inspect || new Date(t.timestamp_inspect) < new Date(groups[refId].timestamp_inspect))) {
+          groups[refId].timestamp_inspect = t.timestamp_inspect;
+        }
+      });
+
+      const orderGroups = Object.values(groups);
+
+      orderGroups.forEach(group => {
+        const skusHtml = group.items.map(t => `<code>${t.sku}</code>`).join('<br/>');
+        const qtysHtml = group.items.map(t => `<strong>${t.quantity}</strong>`).join('<br/>');
+        const date = group.timestamp_inspect ? new Date(group.timestamp_inspect).toLocaleString() : 'N/A';
+
+        const imagesHtml = group.items.map(t => {
+          const p = allProducts.find(prod => prod.sku === t.sku) || { image_main: '' };
+          let imageSrc = p.image_main;
+          if (!imageSrc || !imageSrc.match(/^https?:\/\//)) {
+            imageSrc = '../../assets/og-image.png';
+          }
+          return `<img src="${imageSrc}" alt="${t.sku}" style="width: 50px; height: 32px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border); background: var(--bg-elevated); margin-right: 4px; vertical-align: middle;" />`;
+        }).join('');
+
+        tbody.innerHTML += `
+          <tr>
+            <td>
+              <div style="display: flex; flex-wrap: wrap; gap: 4px; max-width: 160px;">${imagesHtml}</div>
+            </td>
+            <td><strong>${group.reference_id}</strong></td>
+            <td>${group.customer_name}</td>
+            <td>${group.customer_city}</td>
+            <td>${skusHtml}</td>
+            <td>${qtysHtml}</td>
+            <td>${date}</td>
+            <td>
+              <button class="btn btn-cyan btn-sm" onclick="qaInspectOrder(this, '${group.reference_id}')">
+                <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: -2px; margin-right: 6px;"><polyline points="20 6 9 17 4 12"/></svg>QA Inspected
+              </button>
             </td>
           </tr>
         `;
@@ -2121,6 +2224,7 @@
     function updateBadgeCounts() {
       const receiveCount = activeTransactions.filter(t => ['ordered', 'returned', 'cancelled'].includes(t.status)).length;
       const packCount = [...new Set(activeTransactions.filter(t => t.status === 'reserved' && t.type === 'customer_order').map(t => t.reference_id))].length;
+      const inspectCount = [...new Set(activeTransactions.filter(t => t.status === 'inspect' && t.type === 'customer_order').map(t => t.reference_id))].length;
       const dispatchCount = activeTransactions.filter(t => {
         if (t.status !== 'packed') return false;
         if (t.reference_id) {
@@ -2136,6 +2240,7 @@
       const badgeRec = document.getElementById('badge-count-receive');
       const badgePck = document.getElementById('badge-count-pack');
       const badgeDsp = document.getElementById('badge-count-dispatch');
+      const badgeInsp = document.getElementById('badge-count-inspect');
 
       if (receiveCount > 0) { badgeRec.innerText = receiveCount; badgeRec.style.display = 'inline-block'; }
       else badgeRec.style.display = 'none';
@@ -2145,6 +2250,11 @@
 
       if (dispatchCount > 0) { badgeDsp.innerText = dispatchCount; badgeDsp.style.display = 'inline-block'; }
       else badgeDsp.style.display = 'none';
+
+      if (badgeInsp) {
+        if (inspectCount > 0) { badgeInsp.innerText = inspectCount; badgeInsp.style.display = 'inline-block'; }
+        else badgeInsp.style.display = 'none';
+      }
     }
 
     // Render Tab 2: Supplier Order Catalog
@@ -2683,6 +2793,44 @@
         confirmBtn.disabled = false;
         confirmBtn.innerHTML = 'Confirm';
       }
+    };
+
+    window.qaInspectOrder = async function(btn, referenceId) {
+      await wrapActionWithLoading(btn, async () => {
+        const now = new Date().toISOString();
+        const txsToInspect = activeTransactions.filter(t => 
+          t.reference_id === referenceId && 
+          t.status === 'inspect' && 
+          t.type === 'customer_order'
+        );
+
+        if (txsToInspect.length === 0) return;
+
+        for (const tx of txsToInspect) {
+          const { error: txErr } = await sb.from('inventory_transactions').update({
+            status: 'reserved',
+            timestamp_reserved: now
+          }).eq('id', tx.id);
+          if (txErr) throw txErr;
+
+          let invQPack = sb.from('inventory').select('*').eq('sku', tx.sku);
+          if (activeWarehouseId) invQPack = invQPack.eq('warehouse_id', activeWarehouseId);
+          else invQPack = invQPack.is('warehouse_id', null);
+          const { data: invRow, error: invErr } = await invQPack;
+          if (invErr) throw invErr;
+          if (invRow && invRow.length > 0) {
+            const inv = invRow[0];
+            const { error: updErr } = await sb.from('inventory').update({
+              inspect: Math.max(0, (inv.inspect || 0) - tx.quantity),
+              reserved: (inv.reserved || 0) + tx.quantity
+            }).eq('id', inv.id);
+            if (updErr) throw updErr;
+          }
+        }
+
+        await refreshDashboard();
+        showToast('Order QA inspected. Moved to Pack.');
+      });
     };
 
     // ACTION: Unpack entire order (packed → reserved)

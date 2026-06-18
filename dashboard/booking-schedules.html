@@ -2193,7 +2193,7 @@
             .select('id, sku, quantity, status')
             .eq('reference_id', orderNo)
             .eq('type', 'customer_order')
-            .in('status', ['reserved', 'packed']);
+            .in('status', ['inspect', 'reserved', 'packed']);
           if (txFetchErr) throw txFetchErr;
 
           const now = new Date().toISOString();
@@ -2214,7 +2214,9 @@
             if (invRows && invRows.length > 0) {
               const inv = invRows[0];
               const invUpdate = { cancelled: (inv.cancelled || 0) + tx.quantity };
-              if (tx.status === 'reserved') {
+              if (tx.status === 'inspect') {
+                invUpdate.inspect = Math.max(0, (inv.inspect || 0) - tx.quantity);
+              } else if (tx.status === 'reserved') {
                 invUpdate.reserved = Math.max(0, (inv.reserved || 0) - tx.quantity);
               } else if (tx.status === 'packed') {
                 invUpdate.packed = Math.max(0, (inv.packed || 0) - tx.quantity);

@@ -1352,7 +1352,7 @@
             .eq('reference_id', orderNo)
             .eq('type', 'customer_order')
             .in('sku', removedSkus)
-            .in('status', ['reserved', 'packed', 'dispatched']);
+            .in('status', ['inspect', 'reserved', 'packed', 'dispatched']);
           
           if (txsErr) throw txsErr;
 
@@ -1378,7 +1378,9 @@
               if (invRows && invRows.length > 0) {
                 const inv = invRows[0];
                 const updates = { cancelled: (inv.cancelled || 0) + tx.quantity };
-                if (tx.status === 'reserved') {
+                if (tx.status === 'inspect') {
+                  updates.inspect = Math.max(0, (inv.inspect || 0) - tx.quantity);
+                } else if (tx.status === 'reserved') {
                   updates.reserved = Math.max(0, (inv.reserved || 0) - tx.quantity);
                 } else if (tx.status === 'packed') {
                   updates.packed = Math.max(0, (inv.packed || 0) - tx.quantity);
@@ -1418,11 +1420,11 @@
               sku: item.sku,
               quantity: item.qty,
               type: 'customer_order',
-              status: 'reserved',
+              status: 'inspect',
               reference_id: orderNo,
               customer_name: customerName,
               customer_city: city,
-              timestamp_reserved: new Date().toISOString()
+              timestamp_inspect: new Date().toISOString()
             };
             if (typeof currentCompanyId !== 'undefined' && currentCompanyId) {
               txPayload.company_id = currentCompanyId;
@@ -1444,7 +1446,7 @@
               const current = invRow[0];
               const { error: updErr } = await sb.from('inventory').update({
                 available: Math.max(0, (current.available || 0) - item.qty),
-                reserved: (current.reserved || 0) + item.qty
+                inspect: (current.inspect || 0) + item.qty
               }).eq('sku', item.sku);
               if (updErr) console.error('Error updating inventory for added product:', updErr);
             }
