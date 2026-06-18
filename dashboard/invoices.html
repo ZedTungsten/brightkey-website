@@ -1337,11 +1337,11 @@
       }
     };
 
-    // Automatically cancels removed products from inventory transactions and updates inventory counts.
+     // Automatically cancels removed products from inventory transactions and updates inventory counts.
     async function checkAndCancelRemovedProducts(orderNo, newProducts) {
       if (!loadedBookingState || !loadedBookingState.products) return;
-      const oldSkus = loadedBookingState.products.map(p => p.sku);
-      const newSkus = newProducts.map(p => p.sku);
+      const oldSkus = loadedBookingState.products.filter(p => !p.cancelled).map(p => p.sku);
+      const newSkus = newProducts.filter(p => !p.cancelled).map(p => p.sku);
       const removedSkus = oldSkus.filter(sku => !newSkus.includes(sku));
 
       if (removedSkus.length > 0) {
@@ -1401,8 +1401,8 @@
     // Automatically creates inventory transactions and updates inventory counts for newly added products.
     async function checkAndAddNewProducts(orderNo, newProducts) {
       if (!loadedBookingState || !loadedBookingState.products) return;
-      const oldSkus = loadedBookingState.products.map(p => p.sku);
-      const newProductsToAdd = newProducts.filter(p => !oldSkus.includes(p.sku));
+      const oldSkus = loadedBookingState.products.filter(p => !p.cancelled).map(p => p.sku);
+      const newProductsToAdd = newProducts.filter(p => !p.cancelled && !oldSkus.includes(p.sku));
 
       if (newProductsToAdd.length > 0) {
         console.log('Detected new products to add:', newProductsToAdd);
@@ -1485,6 +1485,21 @@
           products.push({ sku, name: title, qty });
         }
       });
+
+      // Append previously existing products that are now cancelled
+      if (loadedBookingState && loadedBookingState.products) {
+        loadedBookingState.products.forEach(oldP => {
+          const isActive = products.some(p => p.sku === oldP.sku);
+          if (!isActive) {
+            products.push({
+              sku: oldP.sku,
+              name: oldP.name || oldP.title || oldP.sku,
+              qty: oldP.qty || 1,
+              cancelled: true
+            });
+          }
+        });
+      }
 
       // Charges lists
       const cLabels = [], cValues = [];
@@ -1761,7 +1776,9 @@
       const currentDate = document.getElementById('inv-date').value;
 
       // Compare helper
-      const matchProducts = JSON.stringify(currentProducts) === JSON.stringify(loadedBookingState.products);
+      const matchProducts = JSON.stringify(currentProducts) === JSON.stringify(
+        loadedBookingState.products.filter(p => !p.cancelled).map(p => ({ sku: p.sku, qty: p.qty }))
+      );
       const matchCharges = JSON.stringify(currentCharges) === JSON.stringify(loadedBookingState.charges);
       const matchDeductions = JSON.stringify(currentDeductions) === JSON.stringify(loadedBookingState.deductions);
       const matchMetadata = currentFullName === loadedBookingState.customer_name &&
@@ -1851,6 +1868,26 @@
             prodTotals.push((lineTotal / 100).toFixed(2));
           }
         });
+
+        // Append previously existing products that are now cancelled
+        if (loadedBookingState && loadedBookingState.products) {
+          loadedBookingState.products.forEach(oldP => {
+            const isActive = productsList.some(p => p.sku === oldP.sku);
+            if (!isActive) {
+              const pMeta = dbProducts.find(prod => prod.sku === oldP.sku);
+              const title = pMeta ? pMeta.title : (oldP.title || oldP.name || oldP.sku);
+              productsList.push({
+                sku: oldP.sku,
+                title: title,
+                name: title,
+                qty: oldP.qty || 1,
+                price: oldP.price || 0,
+                lineTotal: oldP.lineTotal || 0,
+                cancelled: true
+              });
+            }
+          });
+        }
 
         // Gather charges
         const cLabels = [];
