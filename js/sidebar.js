@@ -135,6 +135,7 @@
         </button>
         <div class="dash-nav-children">
           <a href="/dashboard/warehouse" class="dash-nav-child" data-role="logistics">Warehouse</a>
+          <a href="/dashboard/delivery" class="dash-nav-child" data-role="logistics">Delivery</a>
           <a href="/dashboard/shipping-rates" class="dash-nav-child" data-role="logistics">Shipping Rates</a>
         </div>
       </div>
