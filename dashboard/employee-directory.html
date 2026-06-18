@@ -1211,11 +1211,10 @@
         <div class="table-wrap">
           <table class="dir-table" id="dir-table">
             <thead>
-              <!-- Column group labels (colspan counts: 1 sticky + groups + 1 actions) -->
               <tr class="col-groups">
                 <th colspan="1"><!-- emp # sticky --></th>
                 <th colspan="8" class="grp-personal">Personal Information</th>
-                <th colspan="12" class="grp-hr">HR / Employment</th>
+                <th colspan="13" class="grp-hr">HR / Employment</th>
                 <th colspan="4" class="grp-gov">Gov't Numbers</th>
                 <th colspan="4" class="grp-docs">Documents</th>
                 <th><!-- actions --></th>
@@ -1234,6 +1233,7 @@
                 <th class="grp-personal sortable" data-col="email">Email <span class="sort-arrow"></span></th>
                 <!-- HR (no Full Name; Work Email after Title) -->
                 <th class="grp-hr sortable" data-col="department">Department <span class="sort-arrow"></span></th>
+                <th class="grp-hr">Team</th>
                 <th class="grp-hr sortable" data-col="title">Title / Position <span class="sort-arrow"></span></th>
                 <th class="grp-hr sortable" data-col="work_email">Work Email <span class="sort-arrow"></span></th>
                 <th class="grp-hr sortable" data-col="reporting_to">Reporting To <span class="sort-arrow"></span></th>
@@ -1261,7 +1261,7 @@
             </thead>
             <tbody id="dir-tbody">
               <tr>
-                <td colspan="30" class="tbl-state">Loading employees…</td>
+                <td colspan="31" class="tbl-state">Loading employees…</td>
               </tr>
             </tbody>
           </table>
@@ -1839,6 +1839,7 @@
       buildReportingToMap() {
         this.reportingToMap = {};
         this.employeeDeptMap = {};
+        this.employeeTeamsMap = {};
         const struct = this.companyStructure || { departments: [] };
         if (!struct.departments) return;
         struct.departments.forEach(dept => {
@@ -1850,8 +1851,11 @@
           if (dept.subteams) {
             dept.subteams.forEach(sub => {
               const subteamManagerId = sub.managerId;
+              const subteamName = sub.name;
               if (subteamManagerId) {
                 this.employeeDeptMap[subteamManagerId] = deptName;
+                if (!this.employeeTeamsMap[subteamManagerId]) this.employeeTeamsMap[subteamManagerId] = [];
+                if (!this.employeeTeamsMap[subteamManagerId].includes(subteamName)) this.employeeTeamsMap[subteamManagerId].push(subteamName);
                 if (deptHeadId) {
                   this.reportingToMap[subteamManagerId] = deptHeadId;
                 }
@@ -1859,6 +1863,8 @@
                   sub.colleagueIds.forEach(colId => {
                     this.reportingToMap[colId] = subteamManagerId;
                     this.employeeDeptMap[colId] = deptName;
+                    if (!this.employeeTeamsMap[colId]) this.employeeTeamsMap[colId] = [];
+                    if (!this.employeeTeamsMap[colId].includes(subteamName)) this.employeeTeamsMap[colId].push(subteamName);
                   });
                 }
               } else {
@@ -1866,10 +1872,14 @@
                   sub.colleagueIds.forEach(colId => {
                     this.reportingToMap[colId] = deptHeadId;
                     this.employeeDeptMap[colId] = deptName;
+                    if (!this.employeeTeamsMap[colId]) this.employeeTeamsMap[colId] = [];
+                    if (!this.employeeTeamsMap[colId].includes(subteamName)) this.employeeTeamsMap[colId].push(subteamName);
                   });
                 } else if (sub.colleagueIds) {
                   sub.colleagueIds.forEach(colId => {
                     this.employeeDeptMap[colId] = deptName;
+                    if (!this.employeeTeamsMap[colId]) this.employeeTeamsMap[colId] = [];
+                    if (!this.employeeTeamsMap[colId].includes(subteamName)) this.employeeTeamsMap[colId].push(subteamName);
                   });
                 }
               }
@@ -1903,9 +1913,11 @@
           if (dept && emp.department !== dept) return false;
           if (status && (emp.employment_status || 'Active') !== status) return false;
           if (q) {
+            const resolvedDept = (this.employeeDeptMap && this.employeeDeptMap[emp.id]) || emp.department || '';
+            const resolvedTeams = ((this.employeeTeamsMap && this.employeeTeamsMap[emp.id]) || []).join(' ');
             const hay = [
               emp.employee_number, emp.first_name, emp.middle_name, emp.last_name,
-              emp.department, emp.title, emp.email, emp.contact_number,
+              resolvedDept, resolvedTeams, emp.title, emp.email, emp.contact_number,
             ].join(' ').toLowerCase();
             if (!hay.includes(q)) return false;
           }
@@ -2182,6 +2194,13 @@
             : `<td class="grp-hr cell-empty">—</td>`;
         };
 
+        const teamsCell = () => {
+          const teamsList = (this.employeeTeamsMap && this.employeeTeamsMap[id]) || [];
+          return teamsList.length > 0
+            ? `<td class="grp-hr">${esc(teamsList.join(', '))}</td>`
+            : `<td class="grp-hr cell-empty">—</td>`;
+        };
+
         const reportingToCell = () => {
           const mgrId = (this.reportingToMap && this.reportingToMap[id]) || emp.reporting_to;
           if (mgrId) {
@@ -2263,6 +2282,7 @@
           ${cell(emp.emergency_contact_number, 'emergency_contact_number', 'text', 'grp-personal')}
           ${cell(emp.email, 'email', 'text', 'grp-personal')}
           ${departmentCell()}
+          ${teamsCell()}
           ${cell(emp.title, 'title')}
           ${cell(emp.work_email, 'work_email')}
           ${reportingToCell()}
@@ -2742,7 +2762,7 @@
       bindExport() {
         document.getElementById('btn-export').addEventListener('click', () => {
           const cols = [
-            ['employee_number', 'Emp #'], ['department', 'Department'], ['title', 'Title'],
+            ['employee_number', 'Emp #'], ['department', 'Department'], ['team', 'Team'], ['title', 'Title'],
             ['reporting_to', 'Reporting To'], ['level', 'Level'], ['job_description', 'Job Description'],
             ['date_hired', 'Date Hired'], ['employment_status', 'Status'], ['salary', 'Salary'],
             ['first_name', 'First Name'], ['middle_name', 'Middle Name'], ['last_name', 'Last Name'],
@@ -2759,6 +2779,9 @@
               if (k === 'department') {
                 const deptName = (this.employeeDeptMap && this.employeeDeptMap[emp.id]) || emp.department || '';
                 v = deptName;
+              } else if (k === 'team') {
+                const teamsList = (this.employeeTeamsMap && this.employeeTeamsMap[emp.id]) || [];
+                v = teamsList.join(', ');
               } else if (k === 'reporting_to') {
                 const mgrId = (this.reportingToMap && this.reportingToMap[emp.id]) || emp.reporting_to;
                 if (mgrId) {
