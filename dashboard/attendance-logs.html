@@ -166,6 +166,7 @@
           <select id="employee-select" class="form-select" style="width: 220px; height: 32px; padding: 0 0.5rem; font-size: 0.82rem; font-weight: 600;" onchange="AttendanceLogsApp.onEmployeeChange()">
             <option value="">Select Employee...</option>
           </select>
+          <button id="btn-edit-mode" class="btn btn-outline btn-sm" style="height: 32px; padding: 0 1rem; font-size: 0.82rem; font-weight: 600; display: none;" onclick="AttendanceLogsApp.toggleEditMode()">Edit</button>
         </div>
       </div>
 
@@ -253,6 +254,8 @@
         }
       },
 
+      editMode: false,
+
       async loadEmployeesList() {
         try {
           const sb = window.BKAuth.sb;
@@ -271,6 +274,8 @@
           if (this.employees.length > 0) {
             select.value = this.employees[0].id;
             this.employee = this.employees[0];
+            const btn = document.getElementById('btn-edit-mode');
+            if (btn) btn.style.display = 'inline-flex';
             await this.loadLogs();
           }
         } catch (err) {
@@ -282,7 +287,40 @@
         const select = document.getElementById('employee-select');
         const empId = select.value;
         this.employee = this.employees.find(emp => emp.id === empId) || null;
+
+        // Reset edit mode on employee change
+        this.editMode = false;
+        const btn = document.getElementById('btn-edit-mode');
+        if (btn) {
+          btn.textContent = 'Edit';
+          btn.classList.remove('btn-cyan');
+          btn.classList.add('btn-outline');
+          if (this.employee) {
+            btn.style.display = 'inline-flex';
+          } else {
+            btn.style.display = 'none';
+          }
+        }
+
         await this.loadLogs();
+      },
+
+      toggleEditMode() {
+        if (!this.employee) return;
+        this.editMode = !this.editMode;
+        const btn = document.getElementById('btn-edit-mode');
+        if (btn) {
+          if (this.editMode) {
+            btn.textContent = 'Exit Edit';
+            btn.classList.remove('btn-outline');
+            btn.classList.add('btn-cyan');
+          } else {
+            btn.textContent = 'Edit';
+            btn.classList.remove('btn-cyan');
+            btn.classList.add('btn-outline');
+          }
+        }
+        this.loadLogs();
       },
 
       changeMonth(dir) {
@@ -328,14 +366,18 @@
         }
 
         try {
-          // Parse and group by Date
+          // Parse and group by Date Key (YYYY-MM-DD)
           const dayGroups = {};
           logs.forEach(log => {
-            const dateStr = new Date(log.created_at).toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' });
-            if (!dayGroups[dateStr]) {
-              dayGroups[dateStr] = [];
+            const dObj = new Date(log.created_at);
+            const yr = dObj.getFullYear();
+            const mo = String(dObj.getMonth() + 1).padStart(2, '0');
+            const dy = String(dObj.getDate()).padStart(2, '0');
+            const dateKey = `${yr}-${mo}-${dy}`;
+            if (!dayGroups[dateKey]) {
+              dayGroups[dateKey] = [];
             }
-            dayGroups[dateStr].push(log);
+            dayGroups[dateKey].push(log);
           });
 
           // Reconstruct Date rows
@@ -399,21 +441,31 @@
               currentWeekNum++;
             }
 
-            const dateStr = currentDateObj.toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' });
-            const dayLogs = dayGroups[dateStr] || [];
-
-
+            const yr = currentDateObj.getFullYear();
+            const mo = String(currentDateObj.getMonth() + 1).padStart(2, '0');
+            const dy = String(currentDateObj.getDate()).padStart(2, '0');
+            const dateKey = `${yr}-${mo}-${dy}`;
+            const dayLogs = dayGroups[dateKey] || [];
 
             let timeInStr = '—';
             let timeOutStr = '—';
             let lateStr = '—';
             let earlyOutStr = '—';
+            let timeInVal = '';
+            let timeOutVal = '';
+            let timeInLogId = '';
+            let timeOutLogId = '';
 
             // Find first available log of the day
             const availableLogs = dayLogs.filter(l => l.status === 'available');
             if (availableLogs.length > 0) {
               const checkInTime = new Date(availableLogs[0].created_at);
               timeInStr = checkInTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+              
+              const h = String(checkInTime.getHours()).padStart(2, '0');
+              const m = String(checkInTime.getMinutes()).padStart(2, '0');
+              timeInVal = `${h}:${m}`;
+              timeInLogId = availableLogs[0].id;
               
               // Calculate Late
               const shiftStart = new Date(checkInTime);
@@ -432,6 +484,11 @@
             if (offlineLogs.length > 0) {
               const checkOutTime = new Date(offlineLogs[offlineLogs.length - 1].created_at);
               timeOutStr = checkOutTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+
+              const h = String(checkOutTime.getHours()).padStart(2, '0');
+              const m = String(checkOutTime.getMinutes()).padStart(2, '0');
+              timeOutVal = `${h}:${m}`;
+              timeOutLogId = offlineLogs[offlineLogs.length - 1].id;
 
               // Calculate Early Out
               const shiftEnd = new Date(checkOutTime);
@@ -461,9 +518,14 @@
 
             currentWeekDays.push({
               dayNum: d,
+              dateKey: dateKey,
               dateFriendly: currentDateObj.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }),
               timeIn: timeInStr,
               timeOut: timeOutStr,
+              timeInVal: timeInVal,
+              timeOutVal: timeOutVal,
+              timeInLogId: timeInLogId,
+              timeOutLogId: timeOutLogId,
               late: lateStr,
               earlyOut: earlyOutStr,
               totalHours: totalHoursStr
@@ -506,8 +568,20 @@
                     ${w.days.slice().reverse().map(r => `
                       <tr>
                         <td><strong>${r.dateFriendly}</strong></td>
-                        <td><span style="font-weight:600; color:var(--text-primary);">${r.timeIn}</span></td>
-                        <td><span style="font-weight:600; color:var(--text-primary);">${r.timeOut}</span></td>
+                        <td>
+                          ${this.editMode ? `
+                            <input type="time" class="form-input" style="width: 110px; height: 28px; padding: 0 0.5rem; font-size: 0.82rem; font-weight: 600;"
+                              value="${r.timeInVal}"
+                              onchange="AttendanceLogsApp.saveRowTime('${r.dateKey}', 'available', this.value, '${r.timeInLogId}')" />
+                          ` : `<span style="font-weight:600; color:var(--text-primary);">${r.timeIn}</span>`}
+                        </td>
+                        <td>
+                          ${this.editMode ? `
+                            <input type="time" class="form-input" style="width: 110px; height: 28px; padding: 0 0.5rem; font-size: 0.82rem; font-weight: 600;"
+                              value="${r.timeOutVal}"
+                              onchange="AttendanceLogsApp.saveRowTime('${r.dateKey}', 'offline', this.value, '${r.timeOutLogId}')" />
+                          ` : `<span style="font-weight:600; color:var(--text-primary);">${r.timeOut}</span>`}
+                        </td>
                         <td><span style="color:${r.late !== '—' ? 'var(--warning)' : 'var(--text-secondary)'}; font-weight:600;">${r.late}</span></td>
                         <td><span style="color:${r.earlyOut !== '—' ? 'var(--danger)' : 'var(--text-secondary)'}; font-weight:600;">${r.earlyOut}</span></td>
                         <td><span style="font-weight:600; color:var(--text-primary);">${r.totalHours}</span></td>
@@ -523,6 +597,49 @@
         } catch (err) {
           console.error(err);
           container.innerHTML = `<div style="text-align:center; padding:3rem; color:var(--danger);">Failed to load logs: ${err.message}</div>`;
+        }
+      },
+
+      async saveRowTime(dateKey, status, newTimeVal, existingLogId) {
+        if (!this.employee || !this.companyId) return;
+        try {
+          const sb = window.BKAuth.sb;
+          
+          if (!newTimeVal) {
+            if (existingLogId && existingLogId !== 'undefined' && existingLogId !== '') {
+              const { error } = await sb.from('attendance_logs')
+                .delete()
+                .eq('id', existingLogId);
+              if (error) throw error;
+              Toast.success('Log cleared successfully.');
+            }
+          } else {
+            const [hours, mins] = newTimeVal.split(':').map(Number);
+            const [yr, mo, dy] = dateKey.split('-').map(Number);
+            const targetDate = new Date(yr, mo - 1, dy, hours, mins, 0);
+            const newTimestampStr = targetDate.toISOString();
+
+            if (existingLogId && existingLogId !== 'undefined' && existingLogId !== '') {
+              const { error } = await sb.from('attendance_logs')
+                .update({ created_at: newTimestampStr })
+                .eq('id', existingLogId);
+              if (error) throw error;
+            } else {
+              const { error } = await sb.from('attendance_logs')
+                .insert([{
+                  company_id: this.companyId,
+                  employee_id: this.employee.id,
+                  status: status,
+                  created_at: newTimestampStr
+                }]);
+              if (error) throw error;
+            }
+            Toast.success('Attendance updated successfully.');
+          }
+          await this.loadLogs();
+        } catch (err) {
+          console.error(err);
+          Toast.error('Failed to update attendance: ' + err.message);
         }
       }
     };
