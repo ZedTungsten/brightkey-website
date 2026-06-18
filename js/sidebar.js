@@ -510,13 +510,19 @@
         try {
           const { data: latestLog } = await window.BKAuth.sb
             .from('attendance_logs')
-            .select('status')
+            .select('status, created_at')
             .eq('employee_id', currentUser.id)
             .order('created_at', { ascending: false })
             .limit(1)
             .maybeSingle();
           if (latestLog && latestLog.status) {
-            currentStatus = latestLog.status;
+            const logTime = new Date(latestLog.created_at);
+            const twelveHoursAgo = new Date(Date.now() - 12 * 60 * 60 * 1000);
+            if (logTime < twelveHoursAgo) {
+              currentStatus = 'offline';
+            } else {
+              currentStatus = latestLog.status;
+            }
           }
         } catch (err) {
           console.error('Sidebar status fetch error:', err);
