@@ -153,7 +153,15 @@
           <a class="dash-nav-child" data-role="hr" style="opacity: 0.5; cursor: not-allowed;">Company Events</a>
           <a class="dash-nav-child" data-role="hr" style="opacity: 0.5; cursor: not-allowed;">Announcements</a>
           <a class="dash-nav-child" data-role="hr" style="opacity: 0.5; cursor: not-allowed;">KPI</a>
-          <a href="/dashboard/payout-tracker.html" class="dash-nav-child" data-role="hr">Payout Tracker</a>
+          <a href="/dashboard/payout-tracker.html" class="dash-nav-child" data-role="hr" style="display: flex; justify-content: space-between; align-items: center;">
+            <span>Payout Tracker</span>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.6; margin-left: 0.5rem;" title="Shared with other roles">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+              <circle cx="9" cy="7" r="4"></circle>
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+              <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+            </svg>
+          </a>
           <a class="dash-nav-child" data-role="hr" style="opacity: 0.5; cursor: not-allowed;">Inbox</a>
           <a class="dash-nav-child" data-role="hr" style="opacity: 0.5; cursor: not-allowed;">Resources</a>
           <a class="dash-nav-child" data-role="hr" style="opacity: 0.5; cursor: not-allowed;">Reports</a>
@@ -173,6 +181,15 @@
           <a href="/dashboard/general-journal" class="dash-nav-child" data-role="accounting">General Journal</a>
           <a href="/dashboard/financial-statement" class="dash-nav-child" data-role="accounting">Financial Statements</a>
           <a href="/dashboard/ledgers" class="dash-nav-child" data-role="accounting">Ledgers</a>
+          <a href="/dashboard/payout-tracker.html" class="dash-nav-child" data-role="accounting" style="display: flex; justify-content: space-between; align-items: center;">
+            <span>Payout Tracker</span>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.6; margin-left: 0.5rem;" title="Shared with other roles">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+              <circle cx="9" cy="7" r="4"></circle>
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+              <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+            </svg>
+          </a>
         </div>
       </div>
       </div>
