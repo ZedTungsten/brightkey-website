@@ -539,6 +539,13 @@
           <div style="font-size: 0.72rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.05em; margin-bottom: 0.25rem;">KPI</div>
           <div id="modal-task-kpi" style="font-weight: 600; color: var(--text-primary); word-break: break-word;"></div>
         </div>
+        <!-- Milestone Done Checkbox (Only visible for milestones) -->
+        <div id="modal-milestone-check-container" style="display: none; align-items: center; gap: 0.5rem; margin-top: 0.5rem; border-top: 1px dashed var(--border); padding-top: 1rem;">
+          <button id="modal-milestone-check-btn" onclick="App.toggleModalMilestoneCompletion()" style="display: flex; align-items: center; gap: 0.5rem; background: none; border: 1px solid var(--border); border-radius: 6px; padding: 0.5rem 1rem; font-size: 0.82rem; font-weight: 600; cursor: pointer; color: var(--text-primary); transition: all 0.15s; outline: none;">
+            <svg id="modal-milestone-check-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-muted);"><polyline points="20 6 9 17 4 12"/></svg>
+            <span id="modal-milestone-check-label">Mark as Done</span>
+          </button>
+        </div>
       </div>
       <div class="modal-footer" style="padding: 1rem 1.5rem; border-top: 1px solid var(--border, #e4e4e7); background: var(--bg-elevated, #f4f4f5); display: flex; justify-content: flex-end;">
         <button class="btn btn-primary" onclick="document.getElementById('task-detail-modal').style.display='none'" style="background: var(--cyan, #06b6d4); color: #ffffff; border: none; padding: 0.5rem 1.25rem; border-radius: 6px; cursor: pointer; font-size: 0.82rem; font-weight: 600; outline: none;">Close</button>
@@ -613,6 +620,7 @@
       presenceInterval: null,
       tasks: [],
       milestones: [],
+      activeModalMilestoneId: null,
 
       async init() {
         updateDateTime();
@@ -746,6 +754,8 @@
         const task = this.tasks.find(t => t.id === taskId);
         if (!task) return;
 
+        this.activeModalMilestoneId = null;
+
         const modal = document.getElementById('task-detail-modal');
         const modalHeader = document.getElementById('task-detail-header');
         const modalTitle = document.getElementById('modal-task-title');
@@ -762,6 +772,11 @@
           modalKpiLabel.textContent = 'KPI';
         }
         modalKpi.textContent = task.kpi || 'None';
+
+        const checkContainer = document.getElementById('modal-milestone-check-container');
+        if (checkContainer) {
+          checkContainer.style.display = 'none';
+        }
 
         modal.style.display = 'flex';
       },
@@ -843,6 +858,8 @@
         const ms = this.milestones.find(m => m.id === milestoneId);
         if (!ms) return;
 
+        this.activeModalMilestoneId = milestoneId;
+
         const modal = document.getElementById('task-detail-modal');
         const modalHeader = document.getElementById('task-detail-header');
         const modalTitle = document.getElementById('modal-task-title');
@@ -868,7 +885,54 @@
         };
         modalKpi.textContent = isCompleted ? 'Completed' : ms.deadline ? 'Due ' + formatDate(ms.deadline) : 'Active';
 
+        const checkContainer = document.getElementById('modal-milestone-check-container');
+        const checkBtn = document.getElementById('modal-milestone-check-btn');
+        const checkIcon = document.getElementById('modal-milestone-check-icon');
+        const checkLabel = document.getElementById('modal-milestone-check-label');
+
+        if (checkContainer && checkBtn && checkIcon && checkLabel) {
+          checkContainer.style.display = 'flex';
+          if (isCompleted) {
+            checkBtn.style.background = 'rgba(16, 185, 129, 0.1)';
+            checkBtn.style.borderColor = 'rgba(16, 185, 129, 0.3)';
+            checkBtn.style.color = 'var(--success, #10b981)';
+            checkIcon.style.color = 'var(--success, #10b981)';
+            checkLabel.textContent = 'Completed';
+          } else {
+            checkBtn.style.background = 'none';
+            checkBtn.style.borderColor = 'var(--border)';
+            checkBtn.style.color = 'var(--text-primary)';
+            checkIcon.style.color = 'var(--text-muted)';
+            checkLabel.textContent = 'Mark as Done';
+          }
+        }
+
         modal.style.display = 'flex';
+      },
+
+      async toggleModalMilestoneCompletion() {
+        if (!this.activeModalMilestoneId) return;
+        const ms = this.milestones.find(m => m.id === this.activeModalMilestoneId);
+        if (!ms) return;
+
+        const newCompletedAt = ms.completed_at ? null : new Date().toISOString();
+
+        try {
+          const { error } = await BKAuth.sb
+            .from('team_milestones')
+            .update({ completed_at: newCompletedAt })
+            .eq('id', ms.id);
+
+          if (error) throw error;
+
+          ms.completed_at = newCompletedAt;
+          this.renderMyMilestones();
+          this.showMilestoneDetailModal(ms.id);
+          showToast(newCompletedAt ? 'Milestone marked as completed' : 'Milestone marked as active', 'success');
+        } catch (err) {
+          console.error('Error toggling milestone:', err);
+          showToast('Failed to update milestone status: ' + err.message, 'danger');
+        }
       },
 
       parseShiftStartTime(rangeStr) {
@@ -1058,6 +1122,8 @@
         }
       }
     };
+
+    window.App = App;
 
     document.addEventListener('DOMContentLoaded', () => {
       App.init();

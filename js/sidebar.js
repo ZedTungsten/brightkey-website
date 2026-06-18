@@ -1004,54 +1004,62 @@
           const container = document.getElementById('chat-messages-container');
           if (!container) return;
 
-          const lastMsgCount = container.children.length;
-          container.innerHTML = '';
+          // Remove any pending placeholders
+          const pendingRows = container.querySelectorAll('.chat-pending-message');
+          pendingRows.forEach(row => row.remove());
+
+          let addedNew = false;
 
           (data || []).forEach(msg => {
-            const isSelf = msg.sender_id === this.employeeId;
-            
-            const msgRow = document.createElement('div');
-            msgRow.style.display = 'flex';
-            msgRow.style.flexDirection = 'column';
-            msgRow.style.alignItems = isSelf ? 'flex-end' : 'flex-start';
-            msgRow.style.width = '100%';
+            let msgRow = container.querySelector(`[data-msg-id="${msg.id}"]`);
+            if (!msgRow) {
+              const isSelf = msg.sender_id === this.employeeId;
+              
+              msgRow = document.createElement('div');
+              msgRow.setAttribute('data-msg-id', msg.id);
+              msgRow.style.display = 'flex';
+              msgRow.style.flexDirection = 'column';
+              msgRow.style.alignItems = isSelf ? 'flex-end' : 'flex-start';
+              msgRow.style.width = '100%';
 
-            const bubble = document.createElement('div');
-            bubble.style.padding = '0.45rem 0.75rem';
-            bubble.style.borderRadius = '16px';
-            bubble.style.fontSize = '0.76rem';
-            bubble.style.lineHeight = '1.4';
-            bubble.style.maxWidth = '75%';
-            bubble.style.wordBreak = 'break-word';
+              const bubble = document.createElement('div');
+              bubble.style.padding = '0.45rem 0.75rem';
+              bubble.style.borderRadius = '16px';
+              bubble.style.fontSize = '0.76rem';
+              bubble.style.lineHeight = '1.4';
+              bubble.style.maxWidth = '75%';
+              bubble.style.wordBreak = 'break-word';
 
-            if (isSelf) {
-              bubble.style.background = 'var(--cyan, #06b6d4)';
-              bubble.style.color = '#ffffff';
-              bubble.style.borderBottomRightRadius = '4px';
-            } else {
-              bubble.style.background = 'var(--bg-elevated, #e4e4e7)';
-              bubble.style.color = 'var(--text-primary, #09090b)';
-              bubble.style.borderBottomLeftRadius = '4px';
+              if (isSelf) {
+                bubble.style.background = 'var(--cyan, #06b6d4)';
+                bubble.style.color = '#ffffff';
+                bubble.style.borderBottomRightRadius = '4px';
+              } else {
+                bubble.style.background = 'var(--bg-elevated, #e4e4e7)';
+                bubble.style.color = 'var(--text-primary, #09090b)';
+                bubble.style.borderBottomLeftRadius = '4px';
+              }
+              bubble.textContent = msg.message;
+
+              const timeEl = document.createElement('div');
+              timeEl.style.fontSize = '0.58rem';
+              timeEl.style.color = 'var(--text-muted, #71717a)';
+              timeEl.style.marginTop = '0.2rem';
+              timeEl.style.padding = '0 0.25rem';
+              
+              const d = new Date(msg.created_at);
+              const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+              const dateStr = d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+              timeEl.textContent = `${dateStr}, ${timeStr}`;
+
+              msgRow.appendChild(bubble);
+              msgRow.appendChild(timeEl);
+              container.appendChild(msgRow);
+              addedNew = true;
             }
-            bubble.textContent = msg.message;
-
-            const timeEl = document.createElement('div');
-            timeEl.style.fontSize = '0.58rem';
-            timeEl.style.color = 'var(--text-muted, #71717a)';
-            timeEl.style.marginTop = '0.2rem';
-            timeEl.style.padding = '0 0.25rem';
-            
-            const d = new Date(msg.created_at);
-            const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            const dateStr = d.toLocaleDateString([], { month: 'short', day: 'numeric' });
-            timeEl.textContent = `${dateStr}, ${timeStr}`;
-
-            msgRow.appendChild(bubble);
-            msgRow.appendChild(timeEl);
-            container.appendChild(msgRow);
           });
 
-          if (data && data.length !== lastMsgCount) {
+          if (addedNew) {
             container.scrollTop = container.scrollHeight;
           }
 
