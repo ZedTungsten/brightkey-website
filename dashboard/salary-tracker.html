@@ -238,6 +238,10 @@
       font-variant-numeric: tabular-nums;
     }
 
+    .payout-val.overdue {
+      color: var(--danger) !important;
+    }
+
     /* Checkbox / Gray-out style */
     .payout-checkbox {
       width: 15px;
@@ -411,6 +415,16 @@
       <!-- Top Bar -->
       <div class="top-bar">
         <span class="top-bar-title">Salary Tracker</span>
+        <div style="flex:1"></div>
+        <button class="btn btn-outline btn-sm" onclick="SalaryApp.confirmClearAll()" style="color: var(--danger); border-color: rgba(220, 38, 38, 0.25); display: flex; align-items: center; gap: 0.4rem; border-radius: 6px; font-weight: 600; font-size: 0.8rem;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+            <line x1="10" y1="11" x2="10" y2="17"></line>
+            <line x1="14" y1="11" x2="14" y2="17"></line>
+          </svg>
+          Clear All
+        </button>
       </div>
 
       <!-- BrightKey Dashboard Tabs -->
@@ -542,6 +556,18 @@
 
         </div>
       </main>
+    </div>
+  </div>
+
+  <!-- Clear All Confirmation Modal -->
+  <div class="modal-overlay" id="clear-all-modal">
+    <div class="modal" style="max-width: 400px; padding: 2rem;">
+      <h3 style="font-size: 1.1rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.5rem;">Confirm Action</h3>
+      <p style="font-size: 0.88rem; color: var(--text-secondary); margin-bottom: 1.5rem; line-height: 1.5;">Clear all adjustments and checkboxes?</p>
+      <div style="display: flex; justify-content: flex-end; gap: 0.75rem;">
+        <button class="btn btn-outline btn-sm" onclick="SalaryApp.closeClearModal()">No</button>
+        <button class="btn btn-cyan btn-sm" onclick="SalaryApp.clearAllState()" style="background: var(--danger); border-color: var(--danger); color: #fff;">Clear</button>
+      </div>
     </div>
   </div>
 
@@ -1032,6 +1058,14 @@
           `;
         }).join('');
 
+        // Check if date is past day of payout
+        const payoutDayStr = colIdx.split('_')[1];
+        const payoutDay = parseInt(payoutDayStr, 10);
+        const currentDay = new Date().getDate();
+        const isPast = !isNaN(payoutDay) && currentDay > payoutDay;
+        const isOverdue = isPast && !cell.checked;
+        const overdueClass = isOverdue ? 'overdue' : '';
+
         return `
           <div class="payout-cell-container ${grayClass}" data-col-idx="${colIdx}" style="display:flex; flex-direction:column; gap:0.35rem; align-items:stretch; min-width:210px; margin: 0 auto;">
             <div class="adj-lines-list" style="display:flex; flex-direction:column; gap:0.25rem;">
@@ -1039,7 +1073,7 @@
             </div>
             <div style="display:flex; align-items:center; justify-content:space-between; gap:0.4rem; margin-top:0.2rem; border-top:1px dashed var(--border); padding-top:0.25rem;">
               <button class="btn-outline btn-sm" style="padding: 1px 4px; font-size: 0.68rem; height: auto; font-weight: bold; border-color: rgba(6,182,212,0.3); color: var(--cyan);" onclick="SalaryApp.addAdjustmentLine('${esc(empId)}', '${colIdx}', ${baseVal}, '${type}')">+ Add</button>
-              <span class="payout-val" style="min-width: 65px; font-weight: 700; color: var(--text-primary); text-align: right; font-variant-numeric: tabular-nums;">${esc(php(displayVal))}</span>
+              <span class="payout-val ${overdueClass}" style="min-width: 65px; font-weight: 700; color: var(--text-primary); text-align: right; font-variant-numeric: tabular-nums;">${esc(php(displayVal))}</span>
               <input type="checkbox" class="payout-checkbox" ${checkedAttr} onchange="SalaryApp.toggleAdjustmentCheck('${esc(empId)}', '${colIdx}', ${baseVal}, this.checked)">
             </div>
           </div>
@@ -1140,8 +1174,74 @@
         const container = document.querySelector(`tr[data-emp-id="${empId}"] .payout-cell-container[data-col-idx="${colIdx}"]`);
         if (container) {
           container.classList.toggle('grayed-out', checked);
+
+          // Update overdue class on the payout value span
+          const valText = container.querySelector('.payout-val');
+          if (valText) {
+            const payoutDay = parseInt(colIdx.split('_')[1], 10);
+            const currentDay = new Date().getDate();
+            const isPast = !isNaN(payoutDay) && currentDay > payoutDay;
+            const isOverdue = isPast && !checked;
+            valText.classList.toggle('overdue', isOverdue);
+          }
         }
         this.debouncedSave();
+      },
+
+      confirmClearAll() {
+        const modal = document.getElementById('clear-all-modal');
+        if (modal) {
+          modal.classList.add('open');
+        }
+      },
+
+      closeClearModal() {
+        const modal = document.getElementById('clear-all-modal');
+        if (modal) {
+          modal.classList.remove('open');
+        }
+      },
+
+      async clearAllState() {
+        this.closeClearModal();
+        
+        // Reset all adjustments and checkboxes
+        this.trackerState = {};
+
+        const statusEl = document.getElementById('save-status');
+        if (statusEl) {
+          statusEl.textContent = 'Saving changes...';
+        }
+
+        try {
+          const { error } = await getSb()
+            .from('global_settings')
+            .upsert({
+              key: 'salary_tracker_state',
+              company_id: this.companyId,
+              value: this.trackerState
+            });
+          if (error) throw error;
+          
+          toast('All adjustments and checkboxes have been cleared.');
+          if (statusEl) {
+            statusEl.textContent = 'All changes saved';
+            setTimeout(() => {
+              if (statusEl.textContent === 'All changes saved') {
+                statusEl.textContent = '';
+              }
+            }, 3000);
+          }
+
+          // Full re-render of tracker to update inputs and checkboxes
+          this.renderTracker();
+        } catch (e) {
+          console.error(e);
+          toast('Clear failed: ' + e.message, 'error');
+          if (statusEl) {
+            statusEl.textContent = 'Save failed';
+          }
+        }
       },
 
       saveTimeout: null,
