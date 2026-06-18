@@ -374,17 +374,13 @@
   </div>
 
   <!-- Floating Chat Button -->
-  <button id="chat-fab" onclick="App.toggleChat()" style="position: fixed; bottom: 2rem; right: 2rem; width: 56px; height: 56px; border-radius: 50%; background: var(--cyan, #06b6d4); border: none; box-shadow: 0 4px 14px rgba(6, 182, 212, 0.4); color: #ffffff; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 1000; transition: transform 0.2s, background-color 0.2s, box-shadow 0.2s; outline: none;">
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-      <circle cx="9" cy="7" r="4" />
-      <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-    </svg>
+  <button id="chat-fab" onclick="App.toggleChat()" style="position: fixed; bottom: 2rem; right: 2rem; border-radius: 9999px; background: var(--cyan, #06b6d4); border: none; box-shadow: 0 4px 14px rgba(6, 182, 212, 0.4); color: #ffffff; display: flex; align-items: center; justify-content: center; gap: 0.35rem; padding: 0.6rem 1.25rem; font-size: 0.85rem; font-weight: 700; cursor: pointer; z-index: 1000; transition: transform 0.2s, background-color 0.2s, box-shadow 0.2s; outline: none;">
+    <span>Chat</span>
+    <span id="chat-fab-dot" style="display: none; width: 8px; height: 8px; border-radius: 50%; background-color: #ef4444;"></span>
   </button>
 
   <!-- Floating Chat Window -->
-  <div id="chat-window" style="display: none; position: fixed; bottom: 6rem; right: 2rem; width: 290px; height: 460px; background: var(--bg-surface, #ffffff); border: 1px solid var(--border, #e4e4e7); border-radius: 12px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1); z-index: 1000; flex-direction: column; overflow: hidden; font-family: var(--font, sans-serif);">
+  <div id="chat-window" style="position: fixed; bottom: 6rem; right: 2rem; width: 290px; height: 460px; background: var(--bg-surface, #ffffff); border: 1px solid var(--border, #e4e4e7); border-radius: 12px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1); z-index: 1000; display: flex; flex-direction: column; overflow: hidden; font-family: var(--font, sans-serif); opacity: 0; visibility: hidden; transform: translateY(20px) scale(0.95); transition: opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1), transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.25s; pointer-events: none;">
     
     <!-- View 1: Teammate List -->
     <div id="chat-list-view" style="display: flex; flex-direction: column; height: 100%;">
@@ -419,7 +415,7 @@
           </div>
           <div style="min-width: 0; flex: 1;">
             <div id="chat-header-name" style="font-size: 0.78rem; font-weight: 700; color: var(--text-primary, #09090b); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"></div>
-            <div id="chat-header-status-text" style="font-size: 0.62rem; color: var(--text-muted, #71717a); font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"></div>
+            <div id="chat-header-status-text" style="font-size: 0.62rem; color: var(--text-secondary, #52525b); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"></div>
           </div>
         </div>
         <button onclick="App.toggleChat()" style="background: none; border: none; cursor: pointer; padding: 0.25rem; color: var(--text-muted, #71717a); display: flex; align-items: center; justify-content: center; outline: none; flex-shrink: 0; margin-left: 0.5rem;">
@@ -578,6 +574,12 @@
 
           this.currentStatus = latestLog?.status || 'offline';
           this.updateStatusUI(this.currentStatus);
+
+          // Start background unread indicators check
+          this.updateUnreadIndicators();
+          this.unreadPollingInterval = setInterval(() => {
+            this.updateUnreadIndicators();
+          }, 5000);
 
         } catch (err) {
           console.error('Initialization error:', err);
@@ -808,6 +810,9 @@
           if (!container) return;
           container.innerHTML = '';
 
+          this.teammatesList = emps || [];
+          const latestMsgMap = await this.updateUnreadIndicators();
+
           const myFullName = `${this.firstName || ''} ${this.lastName || ''}`.trim().toLowerCase();
           const myManagerName = (this.reportingTo || '').trim().toLowerCase();
           const myDept = (this.department || '').trim().toLowerCase();
@@ -892,6 +897,10 @@
             info.style.flex = '1';
             info.style.minWidth = '0';
 
+            const lastReadStr = localStorage.getItem(`chat_read_${this.employeeId}_${emp.id}`);
+            const lastRead = lastReadStr ? new Date(lastReadStr).getTime() : 0;
+            const hasUnread = latestMsgMap[emp.id] && latestMsgMap[emp.id] > lastRead;
+
             const nameEl = document.createElement('div');
             nameEl.style.fontSize = '0.78rem';
             nameEl.style.fontWeight = '500';
@@ -899,16 +908,29 @@
             nameEl.style.whiteSpace = 'nowrap';
             nameEl.style.overflow = 'hidden';
             nameEl.style.textOverflow = 'ellipsis';
+            nameEl.style.display = 'flex';
+            nameEl.style.alignItems = 'center';
+            nameEl.style.gap = '0.35rem';
             nameEl.textContent = fullName;
+
+            if (hasUnread) {
+              const unreadDot = document.createElement('span');
+              unreadDot.style.display = 'inline-block';
+              unreadDot.style.width = '8px';
+              unreadDot.style.height = '8px';
+              unreadDot.style.borderRadius = '50%';
+              unreadDot.style.backgroundColor = '#ef4444';
+              unreadDot.style.flexShrink = '0';
+              nameEl.appendChild(unreadDot);
+            }
 
             const textStatus = document.createElement('div');
             textStatus.style.fontSize = '0.65rem';
-            textStatus.style.color = 'var(--text-muted, #71717a)';
+            textStatus.style.color = 'var(--text-secondary, #52525b)';
             textStatus.style.whiteSpace = 'nowrap';
             textStatus.style.overflow = 'hidden';
             textStatus.style.textOverflow = 'ellipsis';
-            textStatus.style.fontStyle = 'italic';
-            textStatus.textContent = emp.status_text ? `"${emp.status_text}"` : '';
+            textStatus.textContent = emp.status_text || '';
 
             info.appendChild(nameEl);
             info.appendChild(textStatus);
@@ -927,6 +949,9 @@
         this.activeReceiver = teammate;
         this.activeReceiverStatus = status;
 
+        localStorage.setItem(`chat_read_${this.employeeId}_${teammate.id}`, new Date().toISOString());
+        this.updateUnreadIndicators();
+
         document.getElementById('chat-list-view').style.display = 'none';
         document.getElementById('chat-message-view').style.display = 'flex';
 
@@ -934,7 +959,7 @@
         nameEl.textContent = `${teammate.first_name} ${teammate.last_name}`;
 
         const statusText = document.getElementById('chat-header-status-text');
-        statusText.textContent = teammate.status_text ? `"${teammate.status_text}"` : '';
+        statusText.textContent = teammate.status_text || '';
 
         const avatarEl = document.getElementById('chat-header-avatar');
         avatarEl.innerHTML = '';
@@ -971,21 +996,81 @@
       toggleChat() {
         const win = document.getElementById('chat-window');
         if (!win) return;
-        const isOpen = win.style.display === 'flex';
+        const isOpen = win.classList.contains('open');
         
         if (isOpen) {
-          win.style.display = 'none';
+          win.classList.remove('open');
+          win.style.opacity = '0';
+          win.style.visibility = 'hidden';
+          win.style.transform = 'translateY(20px) scale(0.95)';
+          win.style.pointerEvents = 'none';
           this.stopMessagePolling();
           this.stopTeammatePolling();
         } else {
-          win.style.display = 'flex';
+          win.classList.add('open');
+          win.style.opacity = '1';
+          win.style.visibility = 'visible';
+          win.style.transform = 'translateY(0) scale(1)';
+          win.style.pointerEvents = 'auto';
           this.showChatList();
           this.startTeammatePolling();
         }
       },
 
+      async updateUnreadIndicators() {
+        try {
+          if (!this.teammatesList || this.teammatesList.length === 0) {
+            const { data: emps } = await BKAuth.sb
+              .from('employees')
+              .select('id')
+              .eq('company_id', this.companyId)
+              .eq('employment_status', 'Active')
+              .neq('id', this.employeeId);
+            this.teammatesList = emps || [];
+          }
+
+          const { data: recentMsgs } = await BKAuth.sb
+            .from('employee_chats')
+            .select('sender_id, created_at')
+            .eq('receiver_id', this.employeeId);
+
+          const latestMsgMap = {};
+          if (recentMsgs) {
+            recentMsgs.forEach(m => {
+              const t = new Date(m.created_at).getTime();
+              if (!latestMsgMap[m.sender_id] || t > latestMsgMap[m.sender_id]) {
+                latestMsgMap[m.sender_id] = t;
+              }
+            });
+          }
+
+          let anyUnread = false;
+          if (this.teammatesList) {
+            this.teammatesList.forEach(emp => {
+              const lastReadStr = localStorage.getItem(`chat_read_${this.employeeId}_${emp.id}`);
+              const lastRead = lastReadStr ? new Date(lastReadStr).getTime() : 0;
+              if (latestMsgMap[emp.id] && latestMsgMap[emp.id] > lastRead) {
+                anyUnread = true;
+              }
+            });
+          }
+          const fabDot = document.getElementById('chat-fab-dot');
+          if (fabDot) {
+            fabDot.style.display = anyUnread ? 'inline-block' : 'none';
+          }
+          return latestMsgMap;
+        } catch (e) {
+          console.error(e);
+          return {};
+        }
+      },
+
       async fetchMessages() {
         if (!this.activeReceiver) return;
+
+        localStorage.setItem(`chat_read_${this.employeeId}_${this.activeReceiver.id}`, new Date().toISOString());
+        this.updateUnreadIndicators();
+
         try {
           const { data, error } = await BKAuth.sb
             .from('employee_chats')
@@ -1099,6 +1184,8 @@
         this.presenceInterval = setInterval(() => {
           if (!this.activeReceiver) {
             this.loadTeammates();
+          } else {
+            this.updateUnreadIndicators();
           }
         }, 4000);
       },
