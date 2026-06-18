@@ -529,8 +529,663 @@
         const contentEl = document.getElementById('sidebar-nav-content');
         if (skeletonEl) skeletonEl.style.display = 'none';
         if (contentEl) contentEl.style.display = 'flex';
+        initChat();
       }
     })();
+  }
+
+  async function initChat() {
+    if (document.getElementById('chat-fab')) return; // already loaded
+
+    // 1. Create and inject chat FAB
+    const fab = document.createElement('button');
+    fab.id = 'chat-fab';
+    fab.style.cssText = 'position: fixed; bottom: 2rem; right: 2rem; border-radius: 9999px; background: var(--cyan, #06b6d4); border: none; box-shadow: 0 4px 14px rgba(6, 182, 212, 0.4); color: #ffffff; display: flex; align-items: center; justify-content: center; gap: 0.35rem; padding: 0.6rem 1.25rem; font-size: 0.85rem; font-weight: 700; cursor: pointer; z-index: 1000; transition: transform 0.2s, background-color 0.2s, box-shadow 0.2s; outline: none;';
+    fab.innerHTML = `<span>Chat</span><span id="chat-fab-dot" style="display: none; width: 8px; height: 8px; border-radius: 50%; background-color: #ef4444;"></span>`;
+    document.body.appendChild(fab);
+
+    // 2. Create and inject chat Window
+    const win = document.createElement('div');
+    win.id = 'chat-window';
+    win.style.cssText = 'position: fixed; bottom: 6rem; right: 2rem; width: 290px; height: 460px; background: var(--bg-surface, #ffffff); border: 1px solid var(--border, #e4e4e7); border-radius: 12px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1); z-index: 1000; display: flex; flex-direction: column; overflow: hidden; font-family: var(--font, sans-serif); opacity: 0; visibility: hidden; transform: translateY(20px) scale(0.95); transition: opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1), transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.25s; pointer-events: none;';
+    win.innerHTML = `
+      <!-- View 1: Teammate List -->
+      <div id="chat-list-view" style="display: flex; flex-direction: column; height: 100%;">
+        <!-- Header -->
+        <div style="padding: 0.65rem 0.85rem; border-bottom: 1px solid var(--border, #e4e4e7); display: flex; justify-content: space-between; align-items: center; background: var(--bg-elevated, #f4f4f5);">
+          <span style="font-size: 0.82rem; font-weight: 700; color: var(--text-primary, #09090b);">Team Members</span>
+          <button id="chat-close-btn-1" style="background: none; border: none; cursor: pointer; padding: 0.25rem; color: var(--text-muted, #71717a); display: flex; align-items: center; justify-content: center; outline: none;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+          </button>
+        </div>
+        <!-- Members List -->
+        <div id="chat-members-container" style="flex: 1; overflow-y: auto; padding: 0.5rem 0;">
+        </div>
+      </div>
+
+      <!-- View 2: Private Chat Message Window -->
+      <div id="chat-message-view" style="display: none; flex-direction: column; height: 100%;">
+        <!-- Header -->
+        <div style="padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border, #e4e4e7); display: flex; align-items: center; justify-content: space-between; background: var(--bg-elevated, #f4f4f5);">
+          <div style="display: flex; align-items: center; gap: 0.5rem; min-width: 0; flex: 1;">
+            <button id="chat-back-btn" style="background: none; border: none; cursor: pointer; padding: 0.25rem; color: var(--text-muted, #71717a); display: flex; align-items: center; justify-content: center; outline: none; margin-right: 0.25rem; flex-shrink: 0;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="19" y1="12" x2="5" y2="12" />
+                <polyline points="12 19 5 12 12 5" />
+              </svg>
+            </button>
+            <div style="position: relative; flex-shrink: 0;">
+              <div id="chat-header-avatar" style="width: 32px; height: 32px; border-radius: 50%; background: var(--cyan-dim, #ecfeff); color: var(--cyan, #06b6d4); font-size: 0.8rem; font-weight: 700; display: flex; align-items: center; justify-content: center; background-size: cover; background-position: center;"></div>
+              <div id="chat-header-status-dot" style="position: absolute; bottom: 0; right: 0; width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--bg-surface, #ffffff); background: #ef4444;"></div>
+            </div>
+            <div style="min-width: 0; flex: 1;">
+              <div id="chat-header-name" style="font-size: 0.78rem; font-weight: 700; color: var(--text-primary, #09090b); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"></div>
+              <div id="chat-header-status-text" style="font-size: 0.62rem; color: var(--text-secondary, #52525b); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"></div>
+            </div>
+          </div>
+          <button id="chat-close-btn-2" style="background: none; border: none; cursor: pointer; padding: 0.25rem; color: var(--text-muted, #71717a); display: flex; align-items: center; justify-content: center; outline: none; flex-shrink: 0; margin-left: 0.5rem;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+          </button>
+        </div>
+        <!-- Messages List -->
+        <div id="chat-messages-container" style="flex: 1; overflow-y: auto; padding: 1rem; display: flex; flex-direction: column; gap: 0.75rem; background: var(--bg-base, #fafafa);">
+        </div>
+        <!-- Footer Input Area -->
+        <form id="chat-input-form" style="padding: 0.5rem 0.75rem; border-top: 1px solid var(--border, #e4e4e7); display: flex; gap: 0.4rem; background: var(--bg-surface, #ffffff); align-items: center;">
+          <input type="text" id="chat-message-input" placeholder="Type a message..." autocomplete="off" style="flex: 1; border: 1px solid var(--border, #e4e4e7); border-radius: 20px; padding: 0.4rem 0.75rem; font-size: 0.76rem; outline: none; background: var(--bg-surface, #ffffff); color: var(--text-primary, #09090b); transition: border-color 0.2s;" />
+          <button type="submit" style="background: var(--cyan, #06b6d4); border: none; color: #ffffff; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; outline: none; flex-shrink: 0; transition: background-color 0.2s;">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="transform: rotate(45deg); margin-right: 2px; margin-top: -1px;">
+              <line x1="22" y1="2" x2="11" y2="13" />
+              <polygon points="22 2 15 22 11 13 2 9 22 2" />
+            </svg>
+          </button>
+        </form>
+      </div>
+    `;
+    document.body.appendChild(win);
+
+    // 3. Setup event listeners
+    fab.onclick = () => window.BKChat.toggleChat();
+    document.getElementById('chat-close-btn-1').onclick = () => window.BKChat.toggleChat();
+    document.getElementById('chat-close-btn-2').onclick = () => window.BKChat.toggleChat();
+    document.getElementById('chat-back-btn').onclick = () => window.BKChat.showChatList();
+    document.getElementById('chat-input-form').onsubmit = (e) => window.BKChat.sendChatMessage(e);
+
+    // 4. Initialize chat manager object
+    window.BKChat = {
+      currentUser: null,
+      companyId: null,
+      employeeId: null,
+      activeReceiver: null,
+      chatInterval: null,
+      presenceInterval: null,
+      teammatesList: [],
+
+      async init() {
+        try {
+          const authUser = await window.BKAuth.sb.auth.getUser();
+          this.currentUser = authUser?.data?.user;
+          if (!this.currentUser) return;
+
+          const roleInfo = await window.BKAuth.getUserRole();
+          if (!roleInfo) return;
+
+          const { data: co } = await window.BKAuth.sb.from('companies').select('id').eq('tenant_id', roleInfo.tenantId).limit(1).maybeSingle();
+          this.companyId = co?.id;
+          if (!this.companyId) return;
+
+          const { data: emp } = await window.BKAuth.sb.from('employees').select('id, first_name, last_name, department, reporting_to').eq('email', this.currentUser.email).limit(1).maybeSingle();
+          this.employeeId = emp?.id;
+          if (!this.employeeId) return;
+
+          this.firstName = emp?.first_name || '';
+          this.lastName = emp?.last_name || '';
+          this.department = emp?.department || '';
+          this.reportingTo = emp?.reporting_to || '';
+
+          // Start background unread indicators check
+          this.updateUnreadIndicators();
+          this.unreadPollingInterval = setInterval(() => {
+            this.updateUnreadIndicators();
+          }, 5000);
+
+        } catch (err) {
+          console.error('Chat init error:', err);
+        }
+      },
+
+      showChatList() {
+        this.stopMessagePolling();
+        this.activeReceiver = null;
+        document.getElementById('chat-message-view').style.display = 'none';
+        document.getElementById('chat-list-view').style.display = 'flex';
+        this.loadTeammates();
+      },
+
+      toggleChat() {
+        const chatWin = document.getElementById('chat-window');
+        if (!chatWin) return;
+        const isOpen = chatWin.classList.contains('open');
+        
+        if (isOpen) {
+          chatWin.classList.remove('open');
+          chatWin.style.opacity = '0';
+          chatWin.style.visibility = 'hidden';
+          chatWin.style.transform = 'translateY(20px) scale(0.95)';
+          chatWin.style.pointerEvents = 'none';
+          this.stopMessagePolling();
+          this.stopTeammatePolling();
+        } else {
+          chatWin.classList.add('open');
+          chatWin.style.opacity = '1';
+          chatWin.style.visibility = 'visible';
+          chatWin.style.transform = 'translateY(0) scale(1)';
+          chatWin.style.pointerEvents = 'auto';
+          this.showChatList();
+          this.startTeammatePolling();
+        }
+      },
+
+      async loadTeammates() {
+        try {
+          const { data: emps, error: err } = await window.BKAuth.sb
+            .from('employees')
+            .select('id, first_name, last_name, picture_link, status_text, department, reporting_to')
+            .eq('company_id', this.companyId)
+            .eq('employment_status', 'Active')
+            .neq('id', this.employeeId);
+          
+          if (err) throw err;
+
+          const { data: presence } = await window.BKAuth.sb
+            .from('employee_presence')
+            .select('*');
+
+          const presenceMap = {};
+          if (presence) {
+            presence.forEach(p => {
+              presenceMap[p.employee_id] = p.status;
+            });
+          }
+
+          const container = document.getElementById('chat-members-container');
+          if (!container) return;
+
+          this.teammatesList = emps || [];
+          const latestMsgMap = await this.updateUnreadIndicators();
+
+          // Clean up any old elements that are no longer in the active list
+          const activeIds = new Set(this.teammatesList.map(e => e.id));
+          Array.from(container.children).forEach(child => {
+            const childId = child.getAttribute('data-id');
+            if (childId && !activeIds.has(childId)) {
+              child.remove();
+            }
+          });
+
+          const myFullName = `${this.firstName || ''} ${this.lastName || ''}`.trim().toLowerCase();
+          const myManagerName = (this.reportingTo || '').trim().toLowerCase();
+          const myDept = (this.department || '').trim().toLowerCase();
+
+          const getRelevance = (emp) => {
+            let score = 0;
+            const empName = `${emp.first_name || ''} ${emp.last_name || ''}`.trim().toLowerCase();
+            const empManager = (emp.reporting_to || '').trim().toLowerCase();
+            const empDept = (emp.department || '').trim().toLowerCase();
+
+            if (myManagerName && empName === myManagerName) {
+              score += 20;
+            }
+            if (empManager && empManager === myFullName) {
+              score += 20;
+            }
+            if (myDept && empDept === myDept) {
+              score += 10;
+            }
+            return score;
+          };
+
+          const statusOrder = { 'available': 0, 'break': 1, 'offline': 2 };
+          const getStatusValue = (id) => statusOrder[presenceMap[id] || 'offline'];
+
+          const sortedEmps = (emps || []).sort((a, b) => {
+            const relA = getRelevance(a);
+            const relB = getRelevance(b);
+            if (relA !== relB) {
+              return relB - relA;
+            }
+            return getStatusValue(a.id) - getStatusValue(b.id);
+          });
+
+          sortedEmps.forEach(emp => {
+            const status = presenceMap[emp.id] || 'offline';
+            const statusColor = status === 'available' ? '#22c55e' : status === 'break' ? '#f97316' : '#ef4444';
+            const fullName = `${emp.first_name} ${emp.last_name}`;
+            
+            const lastReadStr = localStorage.getItem(`chat_read_${this.employeeId}_${emp.id}`);
+            const lastRead = lastReadStr ? new Date(lastReadStr).getTime() : 0;
+            const hasUnread = latestMsgMap[emp.id] && latestMsgMap[emp.id] > lastRead;
+
+            let div = container.querySelector(`[data-id="${emp.id}"]`);
+            if (div) {
+              div.onclick = () => this.openPrivateChat(emp, status);
+              
+              const dot = div.querySelector('.status-dot');
+              if (dot) dot.style.backgroundColor = statusColor;
+
+              const nameEl = div.querySelector('.member-name');
+              if (nameEl) {
+                nameEl.innerHTML = '';
+                nameEl.textContent = fullName;
+                if (hasUnread) {
+                  const unreadDot = document.createElement('span');
+                  unreadDot.style.display = 'inline-block';
+                  unreadDot.style.width = '8px';
+                  unreadDot.style.height = '8px';
+                  unreadDot.style.borderRadius = '50%';
+                  unreadDot.style.backgroundColor = '#ef4444';
+                  unreadDot.style.flexShrink = '0';
+                  nameEl.appendChild(unreadDot);
+                }
+              }
+
+              const textStatus = div.querySelector('.status-text');
+              if (textStatus) {
+                textStatus.textContent = emp.status_text || '';
+              }
+            } else {
+              div = document.createElement('div');
+              div.className = 'chat-member-item';
+              div.setAttribute('data-id', emp.id);
+              div.onclick = () => this.openPrivateChat(emp, status);
+              
+              div.style.cssText = 'display: flex; align-items: center; gap: 0.65rem; padding: 0.5rem 0.85rem; cursor: pointer; transition: background 0.15s; border-radius: 8px; margin: 0 0.5rem 0.25rem;';
+              div.addEventListener('mouseenter', () => div.style.background = 'var(--bg-elevated, #f4f4f5)');
+              div.addEventListener('mouseleave', () => div.style.background = 'none');
+
+              const avatarWrap = document.createElement('div');
+              avatarWrap.style.position = 'relative';
+              avatarWrap.style.flexShrink = '0';
+              
+              const avatar = document.createElement('div');
+              avatar.style.width = '32px';
+              avatar.style.height = '32px';
+              avatar.style.borderRadius = '50%';
+              avatar.style.display = 'flex';
+              avatar.style.alignItems = 'center';
+              avatar.style.justifyContent = 'center';
+              avatar.style.fontWeight = '700';
+              avatar.style.fontSize = '0.78rem';
+
+              if (emp.picture_link) {
+                avatar.style.backgroundImage = `url('${emp.picture_link}')`;
+                avatar.style.backgroundSize = 'cover';
+                avatar.style.backgroundPosition = 'center';
+              } else {
+                avatar.style.backgroundImage = 'none';
+                avatar.style.background = 'var(--cyan-dim, #ecfeff)';
+                avatar.style.color = 'var(--cyan, #06b6d4)';
+                avatar.textContent = emp.first_name[0] + (emp.last_name ? emp.last_name[0] : '');
+              }
+
+              const dot = document.createElement('div');
+              dot.className = 'status-dot';
+              dot.style.position = 'absolute';
+              dot.style.bottom = '0';
+              dot.style.right = '0';
+              dot.style.width = '10px';
+              dot.style.height = '10px';
+              dot.style.borderRadius = '50%';
+              dot.style.border = '2px solid var(--bg-surface, #ffffff)';
+              dot.style.backgroundColor = statusColor;
+
+              avatarWrap.appendChild(avatar);
+              avatarWrap.appendChild(dot);
+
+              const info = document.createElement('div');
+              info.style.flex = '1';
+              info.style.minWidth = '0';
+
+              const nameEl = document.createElement('div');
+              nameEl.className = 'member-name';
+              nameEl.style.fontSize = '0.78rem';
+              nameEl.style.fontWeight = '500';
+              nameEl.style.color = 'var(--text-primary, #09090b)';
+              nameEl.style.whiteSpace = 'nowrap';
+              nameEl.style.overflow = 'hidden';
+              nameEl.style.textOverflow = 'ellipsis';
+              nameEl.style.display = 'flex';
+              nameEl.style.alignItems = 'center';
+              nameEl.style.gap = '0.35rem';
+              nameEl.textContent = fullName;
+
+              if (hasUnread) {
+                const unreadDot = document.createElement('span');
+                unreadDot.style.display = 'inline-block';
+                unreadDot.style.width = '8px';
+                unreadDot.style.height = '8px';
+                unreadDot.style.borderRadius = '50%';
+                unreadDot.style.backgroundColor = '#ef4444';
+                unreadDot.style.flexShrink = '0';
+                nameEl.appendChild(unreadDot);
+              }
+
+              const textStatus = document.createElement('div');
+              textStatus.className = 'status-text';
+              textStatus.style.fontSize = '0.65rem';
+              textStatus.style.color = 'var(--text-secondary, #52525b)';
+              textStatus.style.whiteSpace = 'nowrap';
+              textStatus.style.overflow = 'hidden';
+              textStatus.style.textOverflow = 'ellipsis';
+              textStatus.textContent = emp.status_text || '';
+
+              info.appendChild(nameEl);
+              info.appendChild(textStatus);
+
+              div.appendChild(avatarWrap);
+              div.appendChild(info);
+            }
+
+            container.appendChild(div);
+          });
+
+        } catch (e) {
+          console.error('Error loading teammates:', e);
+        }
+      },
+
+      async openPrivateChat(teammate, status) {
+        this.activeReceiver = teammate;
+        this.activeReceiverStatus = status;
+
+        localStorage.setItem(`chat_read_${this.employeeId}_${teammate.id}`, new Date().toISOString());
+        this.updateUnreadIndicators();
+
+        document.getElementById('chat-list-view').style.display = 'none';
+        document.getElementById('chat-message-view').style.display = 'flex';
+
+        const nameEl = document.getElementById('chat-header-name');
+        nameEl.textContent = `${teammate.first_name} ${teammate.last_name}`;
+
+        const statusText = document.getElementById('chat-header-status-text');
+        statusText.textContent = teammate.status_text || '';
+
+        const avatarEl = document.getElementById('chat-header-avatar');
+        avatarEl.innerHTML = '';
+        if (teammate.picture_link) {
+          avatarEl.style.backgroundImage = `url('${teammate.picture_link}')`;
+          avatarEl.style.backgroundSize = 'cover';
+          avatarEl.style.backgroundPosition = 'center';
+          avatarEl.textContent = '';
+        } else {
+          avatarEl.style.backgroundImage = 'none';
+          avatarEl.style.background = 'var(--cyan-dim, #ecfeff)';
+          avatarEl.style.color = 'var(--cyan, #06b6d4)';
+          avatarEl.textContent = teammate.first_name[0] + teammate.last_name[0];
+        }
+
+        const dotEl = document.getElementById('chat-header-status-dot');
+        dotEl.style.backgroundColor = status === 'available' ? '#22c55e' : status === 'break' ? '#f97316' : '#ef4444';
+
+        document.getElementById('chat-message-input').value = '';
+        document.getElementById('chat-messages-container').innerHTML = '';
+
+        await this.fetchMessages();
+        this.startMessagePolling();
+      },
+
+      async updateUnreadIndicators() {
+        try {
+          if (!this.teammatesList || this.teammatesList.length === 0) {
+            const { data: emps } = await window.BKAuth.sb
+              .from('employees')
+              .select('id')
+              .eq('company_id', this.companyId)
+              .eq('employment_status', 'Active')
+              .neq('id', this.employeeId);
+            this.teammatesList = emps || [];
+          }
+
+          const { data: recentMsgs } = await window.BKAuth.sb
+            .from('employee_chats')
+            .select('sender_id, created_at')
+            .eq('receiver_id', this.employeeId);
+
+          const latestMsgMap = {};
+          if (recentMsgs) {
+            recentMsgs.forEach(m => {
+              const t = new Date(m.created_at).getTime();
+              if (!latestMsgMap[m.sender_id] || t > latestMsgMap[m.sender_id]) {
+                latestMsgMap[m.sender_id] = t;
+              }
+            });
+          }
+
+          let anyUnread = false;
+          if (this.teammatesList) {
+            this.teammatesList.forEach(emp => {
+              const lastReadStr = localStorage.getItem(`chat_read_${this.employeeId}_${emp.id}`);
+              const lastRead = lastReadStr ? new Date(lastReadStr).getTime() : 0;
+              if (latestMsgMap[emp.id] && latestMsgMap[emp.id] > lastRead) {
+                anyUnread = true;
+              }
+            });
+          }
+          const fabDot = document.getElementById('chat-fab-dot');
+          if (fabDot) {
+            fabDot.style.display = anyUnread ? 'inline-block' : 'none';
+          }
+          return latestMsgMap;
+        } catch (e) {
+          console.error(e);
+          return {};
+        }
+      },
+
+      async fetchMessages() {
+        if (!this.activeReceiver) return;
+
+        localStorage.setItem(`chat_read_${this.employeeId}_${this.activeReceiver.id}`, new Date().toISOString());
+        this.updateUnreadIndicators();
+
+        try {
+          const { data, error } = await window.BKAuth.sb
+            .from('employee_chats')
+            .select('*')
+            .or(`and(sender_id.eq.${this.employeeId},receiver_id.eq.${this.activeReceiver.id}),and(sender_id.eq.${this.activeReceiver.id},receiver_id.eq.${this.employeeId})`)
+            .order('created_at', { ascending: true });
+
+          if (error) throw error;
+
+          const container = document.getElementById('chat-messages-container');
+          if (!container) return;
+
+          const lastMsgCount = container.children.length;
+          container.innerHTML = '';
+
+          (data || []).forEach(msg => {
+            const isSelf = msg.sender_id === this.employeeId;
+            
+            const msgRow = document.createElement('div');
+            msgRow.style.display = 'flex';
+            msgRow.style.flexDirection = 'column';
+            msgRow.style.alignItems = isSelf ? 'flex-end' : 'flex-start';
+            msgRow.style.width = '100%';
+
+            const bubble = document.createElement('div');
+            bubble.style.padding = '0.45rem 0.75rem';
+            bubble.style.borderRadius = '16px';
+            bubble.style.fontSize = '0.76rem';
+            bubble.style.lineHeight = '1.4';
+            bubble.style.maxWidth = '75%';
+            bubble.style.wordBreak = 'break-word';
+
+            if (isSelf) {
+              bubble.style.background = 'var(--cyan, #06b6d4)';
+              bubble.style.color = '#ffffff';
+              bubble.style.borderBottomRightRadius = '4px';
+            } else {
+              bubble.style.background = 'var(--bg-elevated, #e4e4e7)';
+              bubble.style.color = 'var(--text-primary, #09090b)';
+              bubble.style.borderBottomLeftRadius = '4px';
+            }
+            bubble.textContent = msg.message;
+
+            const timeEl = document.createElement('div');
+            timeEl.style.fontSize = '0.58rem';
+            timeEl.style.color = 'var(--text-muted, #71717a)';
+            timeEl.style.marginTop = '0.2rem';
+            timeEl.style.padding = '0 0.25rem';
+            
+            const d = new Date(msg.created_at);
+            const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            const dateStr = d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+            timeEl.textContent = `${dateStr}, ${timeStr}`;
+
+            msgRow.appendChild(bubble);
+            msgRow.appendChild(timeEl);
+            container.appendChild(msgRow);
+          });
+
+          if (data && data.length !== lastMsgCount) {
+            container.scrollTop = container.scrollHeight;
+          }
+
+        } catch (e) {
+          console.error('Error fetching messages:', e);
+        }
+      },
+
+      async sendChatMessage(event, manualText) {
+        if (event) event.preventDefault();
+        const input = document.getElementById('chat-message-input');
+        if (!input) return;
+        const text = manualText !== undefined ? manualText : input.value.trim();
+        if (!text || !this.activeReceiver) return;
+
+        if (manualText === undefined) {
+          input.value = '';
+        }
+
+        // Optimistic Update: append message bubble instantly
+        const container = document.getElementById('chat-messages-container');
+        let msgRow = null;
+        if (container) {
+          msgRow = document.createElement('div');
+          msgRow.className = 'chat-pending-message';
+          msgRow.style.display = 'flex';
+          msgRow.style.flexDirection = 'column';
+          msgRow.style.alignItems = 'flex-end';
+          msgRow.style.width = '100%';
+
+          const bubble = document.createElement('div');
+          bubble.style.padding = '0.45rem 0.75rem';
+          bubble.style.borderRadius = '16px';
+          bubble.style.fontSize = '0.76rem';
+          bubble.style.lineHeight = '1.4';
+          bubble.style.maxWidth = '75%';
+          bubble.style.wordBreak = 'break-word';
+          bubble.style.background = 'var(--cyan, #06b6d4)';
+          bubble.style.color = '#ffffff';
+          bubble.style.borderBottomRightRadius = '4px';
+          bubble.textContent = text;
+
+          const timeEl = document.createElement('div');
+          timeEl.className = 'msg-time';
+          timeEl.style.fontSize = '0.58rem';
+          timeEl.style.color = 'var(--text-muted, #71717a)';
+          timeEl.style.marginTop = '0.2rem';
+          timeEl.style.padding = '0 0.25rem';
+          
+          const d = new Date();
+          const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          const dateStr = d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+          timeEl.textContent = `${dateStr}, ${timeStr}`;
+
+          msgRow.appendChild(bubble);
+          msgRow.appendChild(timeEl);
+          container.appendChild(msgRow);
+          container.scrollTop = container.scrollHeight;
+        }
+
+        try {
+          const payload = {
+            company_id: this.companyId,
+            sender_id: this.employeeId,
+            receiver_id: this.activeReceiver.id,
+            message: text
+          };
+
+          const { error } = await window.BKAuth.sb.from('employee_chats').insert([payload]);
+          if (error) throw error;
+
+          await this.fetchMessages();
+
+        } catch (e) {
+          console.error('Error sending message:', e);
+          
+          if (msgRow) {
+            const timeEl = msgRow.querySelector('.msg-time');
+            if (timeEl) timeEl.style.display = 'none';
+
+            const errorEl = document.createElement('div');
+            errorEl.style.fontSize = '0.58rem';
+            errorEl.style.color = '#ef4444';
+            errorEl.style.marginTop = '0.15rem';
+            errorEl.style.padding = '0 0.25rem';
+            errorEl.textContent = 'Failed sending. ';
+
+            const retryLink = document.createElement('span');
+            retryLink.style.textDecoration = 'underline';
+            retryLink.style.cursor = 'pointer';
+            retryLink.textContent = 'Try again.';
+            retryLink.onclick = () => {
+              msgRow.remove();
+              this.sendChatMessage(null, text);
+            };
+            errorEl.appendChild(retryLink);
+            msgRow.appendChild(errorEl);
+          }
+        }
+      },
+
+      startMessagePolling() {
+        this.stopMessagePolling();
+        this.chatInterval = setInterval(() => this.fetchMessages(), 3000);
+      },
+
+      stopMessagePolling() {
+        if (this.chatInterval) {
+          clearInterval(this.chatInterval);
+          this.chatInterval = null;
+        }
+      },
+
+      startTeammatePolling() {
+        this.stopTeammatePolling();
+        this.loadTeammates();
+        this.presenceInterval = setInterval(() => {
+          if (!this.activeReceiver) {
+            this.loadTeammates();
+          } else {
+            this.updateUnreadIndicators();
+          }
+        }, 4000);
+      },
+
+      stopTeammatePolling() {
+        if (this.presenceInterval) {
+          clearInterval(this.presenceInterval);
+          this.presenceInterval = null;
+        }
+      }
+    };
+
+    window.BKChat.init();
   }
 
   if (document.readyState === 'loading') {
