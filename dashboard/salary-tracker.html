@@ -872,8 +872,24 @@
         const tbody = document.getElementById('tracker-table-body');
         if (!header || !tbody) return;
 
-        // Sort schedules
-        this.payoutSchedules.sort((a, b) => a - b);
+        // Build sorted list of active columns chronologically by day of month
+        const columns = [];
+        this.payoutSchedules.forEach(day => {
+          columns.push({ type: 'normal', day, key: `sched_${day}` });
+        });
+        const activeSpecDays = [...new Set(this.specialSchedules.map(s => s.day))];
+        activeSpecDays.forEach(day => {
+          columns.push({ type: 'special', day, key: `spec_${day}` });
+        });
+
+        // Sort columns chronologically by day
+        columns.sort((a, b) => {
+          if (a.day !== b.day) return a.day - b.day;
+          // If days are equal, normal columns first, then special
+          if (a.type === 'normal' && b.type === 'special') return -1;
+          if (a.type === 'special' && b.type === 'normal') return 1;
+          return 0;
+        });
 
         // 1. Build Header
         let headerHtml = `
@@ -882,15 +898,12 @@
           <th>Base Monthly Salary</th>
         `;
 
-        // Normal schedules
-        this.payoutSchedules.forEach(day => {
-          headerHtml += `<th style="text-align:center;">Payout (Day ${day})</th>`;
-        });
-
-        // Special schedules (grouped by day of month)
-        const activeSpecDays = [...new Set(this.specialSchedules.map(s => s.day))].sort((a, b) => a - b);
-        activeSpecDays.forEach(day => {
-          headerHtml += `<th style="text-align:center; background: rgba(6,182,212,0.06);">Special (Day ${day})</th>`;
+        columns.forEach(col => {
+          if (col.type === 'normal') {
+            headerHtml += `<th style="text-align:center;">Payout (Day ${col.day})</th>`;
+          } else {
+            headerHtml += `<th style="text-align:center; background: rgba(6,182,212,0.06);">Special (Day ${col.day})</th>`;
+          }
         });
 
         header.innerHTML = headerHtml;
@@ -959,7 +972,7 @@
 
         // 3. Render rows
         let bodyHtml = '';
-        const colspan = 3 + this.payoutSchedules.length + activeSpecDays.length;
+        const colspan = 3 + columns.length;
 
         // Render Grouped
         Object.keys(grouped).sort().forEach(dept => {
@@ -986,7 +999,7 @@
             }
             
             grouped[dept][sub].forEach(emp => {
-              bodyHtml += this.renderEmployeeRow(emp, activeSpecDays);
+              bodyHtml += this.renderEmployeeRow(emp, columns);
             });
           });
         });
@@ -999,7 +1012,7 @@
             </tr>
           `;
           unassigned.forEach(emp => {
-            bodyHtml += this.renderEmployeeRow(emp, activeSpecDays);
+            bodyHtml += this.renderEmployeeRow(emp, columns);
           });
         }
 
@@ -1080,7 +1093,7 @@
         `;
       },
 
-      renderEmployeeRow(emp, activeSpecDays) {
+      renderEmployeeRow(emp, columns) {
         const id = emp.id;
         const baseSalary = emp.salary || 0;
         
@@ -1109,26 +1122,33 @@
         const numNormalScheds = this.payoutSchedules.length || 1;
         const rawNormalPayout = baseSalary / numNormalScheds;
 
-        // Render Normal Columns
-        this.payoutSchedules.forEach(day => {
-          const colKey = `sched_${day}`;
-          html += `
-            <td style="text-align:center;" id="cell-td-${esc(id)}-${colKey}">
-              ${this.renderPayoutCellHTML(id, colKey, rawNormalPayout, 'normal')}
-            </td>
-          `;
-        });
-
-        // Render Special Columns
-        activeSpecDays.forEach(day => {
-          const matchingSpec = this.specialSchedules.find(s => s.employeeId === id && s.day === day);
-          const specVal = matchingSpec ? matchingSpec.value : 0;
-          const colKey = `spec_${day}`;
-          html += `
-            <td style="text-align:center; background: rgba(6,182,212,0.02);" id="cell-td-${esc(id)}-${colKey}">
-              ${this.renderPayoutCellHTML(id, colKey, specVal, 'special')}
-            </td>
-          `;
+        columns.forEach(col => {
+          if (col.type === 'normal') {
+            html += `
+              <td style="text-align:center;" id="cell-td-${esc(id)}-${col.key}">
+                ${this.renderPayoutCellHTML(id, col.key, rawNormalPayout, 'normal')}
+              </td>
+            `;
+          } else {
+            // Special column: check if this employee has a special schedule on this day
+            const hasSpec = this.specialSchedules.some(s => s.employeeId === id && s.day === col.day);
+            if (hasSpec) {
+              const matchingSpec = this.specialSchedules.find(s => s.employeeId === id && s.day === col.day);
+              const specVal = matchingSpec ? matchingSpec.value : 0;
+              html += `
+                <td style="text-align:center; background: rgba(6,182,212,0.02);" id="cell-td-${esc(id)}-${col.key}">
+                  ${this.renderPayoutCellHTML(id, col.key, specVal, 'special')}
+                </td>
+              `;
+            } else {
+              // Leave blank
+              html += `
+                <td style="text-align:center; background: rgba(6,182,212,0.02);" id="cell-td-${esc(id)}-${col.key}">
+                  <span style="font-size:0.75rem; color:var(--text-muted); font-style:italic;">—</span>
+                </td>
+              `;
+            }
+          }
         });
 
         html += '</tr>';
