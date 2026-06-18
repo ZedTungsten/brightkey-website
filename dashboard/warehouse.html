@@ -1827,51 +1827,66 @@
         return;
       }
 
-      let prevRefId = null;
-      packingQueue.forEach((t, idx) => {
-        const isDuplicate = (t.reference_id && t.reference_id === prevRefId);
-        prevRefId = t.reference_id;
-        const p = allProducts.find(prod => prod.sku === t.sku) || { title: 'Unknown Product', image_main: '' };
-        const date = t.timestamp_reserved ? new Date(t.timestamp_reserved).toLocaleString() : 'N/A';
-        const isPacked = t.status === 'packed';
-        
-        const nextItem = packingQueue[idx + 1];
-        const isFollowedBySameOrder = (nextItem && t.reference_id && nextItem.reference_id === t.reference_id);
-
-        let imageSrc = p.image_main;
-        if (!imageSrc || !imageSrc.match(/^https?:\/\//)) {
-          imageSrc = '../../assets/og-image.png';
+      // Group by reference_id
+      const groups = {};
+      packingQueue.forEach(t => {
+        const refId = t.reference_id || 'N/A';
+        if (!groups[refId]) {
+          groups[refId] = {
+            reference_id: refId,
+            customer_name: t.customer_name || 'N/A',
+            customer_city: t.customer_city || 'N/A',
+            timestamp_reserved: t.timestamp_reserved,
+            items: []
+          };
         }
+        groups[refId].items.push(t);
+        if (t.timestamp_reserved && (!groups[refId].timestamp_reserved || new Date(t.timestamp_reserved) < new Date(groups[refId].timestamp_reserved))) {
+          groups[refId].timestamp_reserved = t.timestamp_reserved;
+        }
+      });
 
-        const trClasses = [];
-        if (isFollowedBySameOrder) trClasses.push('no-border-bottom');
-        const trClassAttr = trClasses.length > 0 ? `class="${trClasses.join(' ')}"` : '';
+      const orderGroups = Object.values(groups);
+
+      orderGroups.forEach(group => {
+        const allPacked = group.items.every(t => t.status === 'packed');
+        const skusHtml = group.items.map(t => `<code>${t.sku}</code>`).join('<br/>');
+        const qtysHtml = group.items.map(t => `<strong>${t.quantity}</strong>`).join('<br/>');
+        const date = group.timestamp_reserved ? new Date(group.timestamp_reserved).toLocaleString() : 'N/A';
+
+        const imagesHtml = group.items.map(t => {
+          const p = allProducts.find(prod => prod.sku === t.sku) || { image_main: '' };
+          let imageSrc = p.image_main;
+          if (!imageSrc || !imageSrc.match(/^https?:\/\//)) {
+            imageSrc = '../../assets/og-image.png';
+          }
+          return `<img src="${imageSrc}" alt="${t.sku}" style="width: 50px; height: 32px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border); background: var(--bg-elevated); margin-right: 4px; vertical-align: middle;" />`;
+        }).join('');
 
         tbody.innerHTML += `
-          <tr ${trClassAttr} ${isPacked ? 'style="opacity: 0.65; background: var(--bg-base);"' : ''}>
+          <tr ${allPacked ? 'style="opacity: 0.65; background: var(--bg-base);"' : ''}>
             <td>
-              <img src="${imageSrc}" alt="${t.sku}" style="width: 80px; height: 50px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-elevated); display: block;" />
+              <div style="display: flex; flex-wrap: wrap; gap: 4px; max-width: 160px;">${imagesHtml}</div>
             </td>
-            <td><strong>${isDuplicate ? '' : (t.reference_id || 'N/A')}</strong></td>
-            <td>${isDuplicate ? '' : (t.customer_name || 'N/A')}</td>
-            <td>${isDuplicate ? '' : (t.customer_city || 'N/A')}</td>
-            <td><code>${t.sku}</code></td>
-            <td><strong>${t.quantity}</strong></td>
+            <td><strong>${group.reference_id}</strong></td>
+            <td>${group.customer_name}</td>
+            <td>${group.customer_city}</td>
+            <td>${skusHtml}</td>
+            <td>${qtysHtml}</td>
             <td>${date}</td>
-            <td style="display:flex; gap:0.4rem; align-items:center;">
-              ${isPacked ? `
-                <button class="btn btn-cyan btn-sm" disabled style="opacity: 0.7; cursor: default; background: var(--border); color: var(--text-muted); border-color: var(--border);">
-                  <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: -2px; margin-right: 6px;"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>Packed
-                </button>
-                <button class="btn btn-outline btn-sm" onclick="unpackItem(this, '${t.id}', '${t.sku}', ${t.quantity})" title="Move back to unpacked">
-                  <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: -2px; margin-right: 4px;"><polyline points="12 19 5 12 12 5"/><line x1="19" y1="12" x2="5" y2="12"/></svg>Cancel
-                </button>
+            <td>
+              ${allPacked ? `
+                <div style="display: flex; gap: 0.4rem; align-items: center;">
+                  <button class="btn btn-cyan btn-sm" disabled style="opacity: 0.7; cursor: default; background: var(--border); color: var(--text-muted); border-color: var(--border);">
+                    <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: -2px; margin-right: 6px;"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>Packed
+                  </button>
+                  <button class="btn btn-outline btn-sm" onclick="unpackOrder(this, '${group.reference_id}')" title="Move entire order back to unpacked">
+                    <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: -2px; margin-right: 4px;"><polyline points="12 19 5 12 12 5"/><line x1="19" y1="12" x2="5" y2="12"/></svg>Unpack
+                  </button>
+                </div>
               ` : `
-                <button class="btn btn-cyan btn-sm" onclick="packItem(this, '${t.id}', '${t.sku}', ${t.quantity})">
-                  <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: -2px; margin-right: 6px;"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>Packed
-                </button>
-                <button class="btn btn-danger btn-sm" onclick="cancelPackItem(this, '${t.id}', '${t.sku}', ${t.quantity})">
-                  <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: -2px; margin-right: 4px;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>Remove
+                <button class="btn btn-cyan btn-sm" onclick="packOrder(this, '${group.reference_id}')">
+                  <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: -2px; margin-right: 6px;"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>Pack Order
                 </button>
               `}
             </td>
@@ -2069,7 +2084,7 @@
     // Badge counts updates
     function updateBadgeCounts() {
       const receiveCount = activeTransactions.filter(t => ['ordered', 'returned', 'cancelled'].includes(t.status)).length;
-      const packCount = activeTransactions.filter(t => t.status === 'reserved' && t.type === 'customer_order').length;
+      const packCount = [...new Set(activeTransactions.filter(t => t.status === 'reserved' && t.type === 'customer_order').map(t => t.reference_id))].length;
       const dispatchCount = activeTransactions.filter(t => {
         if (t.status !== 'packed') return false;
         if (t.reference_id) {
@@ -2399,6 +2414,85 @@
         const { error: updErr } = await sb.from('inventory').update(updates).eq('id', inv.id);
         if (updErr) throw updErr;
 
+        await refreshDashboard();
+      });
+    };
+
+     // ACTION: Mark entire order as Packed
+    window.packOrder = async function(btn, referenceId) {
+      await wrapActionWithLoading(btn, async () => {
+        const now = new Date().toISOString();
+        const txsToPack = activeTransactions.filter(t => 
+          t.reference_id === referenceId && 
+          t.status === 'reserved' && 
+          t.type === 'customer_order'
+        );
+
+        if (txsToPack.length === 0) return;
+
+        for (const tx of txsToPack) {
+          const { error: txErr } = await sb.from('inventory_transactions').update({
+            status: 'packed',
+            timestamp_packed: now
+          }).eq('id', tx.id);
+          if (txErr) throw txErr;
+
+          let invQPack = sb.from('inventory').select('*').eq('sku', tx.sku);
+          if (activeWarehouseId) invQPack = invQPack.eq('warehouse_id', activeWarehouseId);
+          else invQPack = invQPack.is('warehouse_id', null);
+          const { data: invRow, error: invErr } = await invQPack;
+          if (invErr) throw invErr;
+          if (invRow && invRow.length > 0) {
+            const inv = invRow[0];
+            const { error: updErr } = await sb.from('inventory').update({
+              reserved: Math.max(0, inv.reserved - tx.quantity),
+              packed: inv.packed + tx.quantity
+            }).eq('id', inv.id);
+            if (updErr) throw updErr;
+          }
+        }
+
+        lastAction = null;
+        updateUndoButtonState();
+        await refreshDashboard();
+      });
+    };
+
+    // ACTION: Unpack entire order (packed → reserved)
+    window.unpackOrder = async function(btn, referenceId) {
+      await wrapActionWithLoading(btn, async () => {
+        const txsToUnpack = activeTransactions.filter(t => 
+          t.reference_id === referenceId && 
+          t.status === 'packed' && 
+          t.type === 'customer_order'
+        );
+
+        if (txsToUnpack.length === 0) return;
+
+        for (const tx of txsToUnpack) {
+          const { error: txErr } = await sb.from('inventory_transactions').update({
+            status: 'reserved',
+            timestamp_packed: null
+          }).eq('id', tx.id);
+          if (txErr) throw txErr;
+
+          let invQUnpack = sb.from('inventory').select('*').eq('sku', tx.sku);
+          if (activeWarehouseId) invQUnpack = invQUnpack.eq('warehouse_id', activeWarehouseId);
+          else invQUnpack = invQUnpack.is('warehouse_id', null);
+          const { data: invRow, error: invErr } = await invQUnpack;
+          if (invErr) throw invErr;
+          if (invRow && invRow.length > 0) {
+            const inv = invRow[0];
+            const { error: updErr } = await sb.from('inventory').update({
+              reserved: inv.reserved + tx.quantity,
+              packed: Math.max(0, inv.packed - tx.quantity)
+            }).eq('id', inv.id);
+            if (updErr) throw updErr;
+          }
+        }
+
+        lastAction = null;
+        updateUndoButtonState();
         await refreshDashboard();
       });
     };
