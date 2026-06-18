@@ -625,15 +625,6 @@
                     </div>
                   </div>
 
-                  <div style="display: flex; align-items: center; gap: 0.5rem;">
-                    <span style="color: var(--text-muted); font-size: 0.75rem; font-weight: 600; text-transform: uppercase;">Date Range:</span>
-                    <select id="date-range-select" class="form-select" style="width: auto; padding: 0.25rem 2rem 0.25rem 0.75rem; font-size: 0.82rem; height: 30px; border-radius: 6px;" onchange="handleDateRangeChange()">
-                      <option value="7" selected>7 Days</option>
-                      <option value="14">14 Days</option>
-                      <option value="30">30 Days</option>
-                      <option value="60">60 Days</option>
-                    </select>
-                  </div>
                 </div>
               </div>
               <div class="table-responsive">
@@ -648,14 +639,13 @@
                       <th class="sortable" onclick="handleSort('available')" style="text-align: center;">Available <span id="sort-icon-available"></span></th>
                       <th class="sortable" onclick="handleSort('reserved')" style="text-align: center; color:var(--warning);">Reserved <span id="sort-icon-reserved"></span></th>
                       <th class="sortable" onclick="handleSort('packed')" style="text-align: center; color:var(--cyan-light);">Packed <span id="sort-icon-packed"></span></th>
-                      <th class="sortable" onclick="handleSort('dispatched')" style="text-align: center; color:var(--success);">Dispatched <span id="sort-icon-dispatched"></span></th>
                       <th class="sortable" onclick="handleSort('returned')" style="text-align: center; color:var(--danger);">Returned <span id="sort-icon-returned"></span></th>
                       <th class="sortable" onclick="handleSort('cancelled')" style="text-align: center; color:var(--danger);">Cancelled <span id="sort-icon-cancelled"></span></th>
                     </tr>
                   </thead>
                   <tbody id="inventory-list">
                     <tr>
-                      <td colspan="11">
+                      <td colspan="10">
                         <div class="loading-wrapper">
                           <div class="spinner-cyan"></div>
                           <span>Syncing and loading stock snapshot...</span>
@@ -1478,7 +1468,7 @@
     });
 
     function updateSortIndicators() {
-      const cols = ['sku', 'title', 'category', 'business', 'available', 'reserved', 'packed', 'dispatched', 'returned', 'cancelled'];
+      const cols = ['sku', 'title', 'category', 'business', 'available', 'reserved', 'packed', 'returned', 'cancelled'];
       cols.forEach(col => {
         const span = document.getElementById(`sort-icon-${col}`);
         if (!span) return;
@@ -1499,10 +1489,6 @@
         sortCol = col;
         sortDir = 'asc';
       }
-      renderInventorySummary();
-    };
-
-    window.handleDateRangeChange = function() {
       renderInventorySummary();
     };
 
@@ -1621,36 +1607,6 @@
         return;
       }
 
-      // Get days filter
-      const daysSelect = document.getElementById('date-range-select');
-      const days = daysSelect ? parseInt(daysSelect.value) : 7;
-      
-      // Compute counts based on date range
-      const cutoffDate = new Date();
-      cutoffDate.setDate(cutoffDate.getDate() - days);
-      
-      const filteredCounts = {};
-      activeTransactions.forEach(t => {
-        const status = t.status;
-        if (!['reserved', 'packed', 'dispatched', 'returned', 'cancelled'].includes(status)) {
-          return;
-        }
-        let ts = null;
-        if (status === 'reserved') ts = t.timestamp_reserved;
-        else if (status === 'packed') ts = t.timestamp_packed;
-        else if (status === 'dispatched') ts = t.timestamp_dispatched;
-        else if (status === 'returned') ts = t.timestamp_returned;
-        else if (status === 'cancelled') ts = t.timestamp_cancelled;
-        
-        const dateVal = new Date(ts || t.updated_at || t.created_at);
-        if (dateVal >= cutoffDate) {
-          if (!filteredCounts[t.sku]) {
-            filteredCounts[t.sku] = { reserved: 0, packed: 0, dispatched: 0, returned: 0, cancelled: 0 };
-          }
-          filteredCounts[t.sku][status] = (filteredCounts[t.sku][status] || 0) + t.quantity;
-        }
-      });
-
       // Sort
       const sortedProducts = [...filteredProducts].sort((a, b) => {
         let valA, valB;
@@ -1666,12 +1622,10 @@
         } else if (sortCol === 'business') {
           valA = a.business || '';
           valB = b.business || '';
-        } else if (sortCol === 'available') {
-          valA = (allInventory[a.sku]?.available) || 0;
-          valB = (allInventory[b.sku]?.available) || 0;
         } else {
-          valA = (filteredCounts[a.sku]?.[sortCol]) || 0;
-          valB = (filteredCounts[b.sku]?.[sortCol]) || 0;
+          // available, reserved, packed, returned, cancelled
+          valA = (allInventory[a.sku]?.[sortCol]) || 0;
+          valB = (allInventory[b.sku]?.[sortCol]) || 0;
         }
 
         if (typeof valA === 'string') {
@@ -1683,10 +1637,9 @@
 
       // Render rows
       sortedProducts.forEach(p => {
-        const baseInv = allInventory[p.sku] || { available: 0 };
-        const fInv = filteredCounts[p.sku] || { reserved: 0, packed: 0, dispatched: 0, returned: 0, cancelled: 0 };
+        const inv = allInventory[p.sku] || { available: 0, reserved: 0, packed: 0, returned: 0, cancelled: 0 };
         
-        const avail = baseInv.available || 0;
+        const avail = inv.available || 0;
         let availColor = 'var(--text-primary)'; // default black/dark
         if (avail <= 0) {
           availColor = 'var(--danger)'; // red
@@ -1696,7 +1649,6 @@
         const styleAvail = isStocked ? `color:${availColor}; font-weight:700;` : 'color:var(--text-muted) !important; opacity:0.4;';
         const styleReserved = isStocked ? 'color:var(--warning); font-weight:600;' : 'color:var(--text-muted) !important; opacity:0.4;';
         const stylePacked = isStocked ? 'color:var(--cyan-light); font-weight:600;' : 'color:var(--text-muted) !important; opacity:0.4;';
-        const styleDispatched = isStocked ? 'color:var(--success); font-weight:600;' : 'color:var(--text-muted) !important; opacity:0.4;';
         const styleReturned = isStocked ? 'color:var(--danger);' : 'color:var(--text-muted) !important; opacity:0.4;';
         const styleCancelled = isStocked ? 'color:var(--danger);' : 'color:var(--text-muted) !important; opacity:0.4;';
 
@@ -1717,16 +1669,15 @@
             <td style="text-align: center; ${styleAvail}">
               ${isEditingAvailable && isStocked ? `<input type="number" class="edit-avail-input" data-sku="${p.sku}" value="${avail}" style="width: 70px; text-align: center; padding: 2px 5px; font-size: 0.82rem; font-weight: bold; border: 1px solid var(--border); border-radius: 4px; background: var(--bg-surface); color: ${availColor};" />` : avail}
             </td>
-            <td style="text-align: center; ${styleReserved}">${fInv.reserved}</td>
-            <td style="text-align: center; ${stylePacked}">${fInv.packed}</td>
-            <td style="text-align: center; ${styleDispatched}">${fInv.dispatched}</td>
-            <td style="text-align: center; ${styleReturned}">${fInv.returned}</td>
-            <td style="text-align: center; ${styleCancelled}">${fInv.cancelled}</td>
+            <td style="text-align: center; ${styleReserved}">${inv.reserved || 0}</td>
+            <td style="text-align: center; ${stylePacked}">${inv.packed || 0}</td>
+            <td style="text-align: center; ${styleReturned}">${inv.returned || 0}</td>
+            <td style="text-align: center; ${styleCancelled}">${inv.cancelled || 0}</td>
           </tr>
         `;
       });
 
-      tbody.innerHTML += `<tr class="table-spacer-row" style="height: auto; border: none; background: transparent !important;"><td colspan="11" style="padding: 0; border: none; background: transparent !important; pointer-events: none;"></td></tr>`;
+      tbody.innerHTML += `<tr class="table-spacer-row" style="height: auto; border: none; background: transparent !important;"><td colspan="10" style="padding: 0; border: none; background: transparent !important; pointer-events: none;"></td></tr>`;
 
       updateSortIndicators();
     }
