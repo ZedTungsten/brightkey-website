@@ -1334,10 +1334,24 @@
           el.style.display = showMilestonesActions ? '' : 'none';
         });
 
-        // Top bar controls element for Edit Mode (no longer used, clear it)
+        // Top bar controls element for Edit Mode (Import/Export buttons)
         const controls = document.getElementById('edit-mode-controls');
         if (controls) {
-          controls.innerHTML = '';
+          if (this.hasEditAccess) {
+            controls.innerHTML = `
+              <button class="btn btn-outline" onclick="App.exportTasksToCSV()" style="display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.8rem; height: 32px; padding: 0 0.75rem;">
+                <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Export CSV
+              </button>
+              <button class="btn btn-outline" onclick="App.triggerImportCSV()" style="display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.8rem; height: 32px; padding: 0 0.75rem;">
+                <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                Import CSV
+              </button>
+              <input type="file" id="import-tasks-csv-file" accept=".csv" style="display: none;" onchange="App.importTasksFromCSV(event)" />
+            `;
+          } else {
+            controls.innerHTML = '';
+          }
         }
 
         if (this.hasEditAccess) {
@@ -1349,6 +1363,157 @@
           if (btnAddMilestone) btnAddMilestone.style.display = 'none';
           if (btnCreateGroup) btnCreateGroup.style.display = 'none';
         }
+      },
+
+      exportTasksToCSV() {
+        if (!this.tasks || this.tasks.length === 0) {
+          toast('No tasks to export.', 'error');
+          return;
+        }
+        
+        // Find employee name for filename
+        const select = document.getElementById('select-employee');
+        let empName = 'Employee';
+        if (select) {
+          const opt = select.options[select.selectedIndex];
+          if (opt) empName = opt.textContent.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
+        }
+
+        const headers = ['Title', 'Description', 'KPI', 'Task Type'];
+        const csvRows = [headers.join(',')];
+
+        for (const task of this.tasks) {
+          const row = [
+            `"${(task.title || '').replace(/"/g, '""')}"`,
+            `"${(task.description || '').replace(/"/g, '""')}"`,
+            `"${(task.kpi || '').replace(/"/g, '""')}"`,
+            `"${(task.task_type || '').replace(/"/g, '""')}"`
+          ];
+          csvRows.push(row.join(','));
+        }
+
+        const csvString = csvRows.join("\n");
+        const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", `${empName}_tasks.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        toast('Tasks exported successfully.', 'success');
+      },
+
+      triggerImportCSV() {
+        const fileInput = document.getElementById('import-tasks-csv-file');
+        if (fileInput) {
+          fileInput.value = '';
+          fileInput.click();
+        }
+      },
+
+      async importTasksFromCSV(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        if (!this.selectedEmployeeId) {
+          toast('No employee selected.', 'error');
+          return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+          try {
+            const text = e.target.result;
+            const rows = this.parseCSV(text);
+            if (rows.length < 2) {
+              toast('CSV is empty or invalid.', 'error');
+              return;
+            }
+
+            const headers = rows[0].map(h => h.trim().toLowerCase());
+            const titleIndex = headers.indexOf('title');
+            const descIndex = headers.indexOf('description');
+            const kpiIndex = headers.indexOf('kpi');
+            const typeIndex = headers.indexOf('task type');
+
+            if (titleIndex === -1 || typeIndex === -1) {
+              toast('CSV must contain "Title" and "Task Type" columns.', 'error');
+              return;
+            }
+
+            const payloads = [];
+            for (let i = 1; i < rows.length; i++) {
+              const row = rows[i];
+              if (row.length < 2) continue; // Skip empty rows
+
+              const title = (row[titleIndex] || '').trim();
+              const description = descIndex !== -1 ? (row[descIndex] || '').trim() : '';
+              const kpi = kpiIndex !== -1 ? (row[kpiIndex] || '').trim() : '';
+              let taskType = typeIndex !== -1 ? (row[typeIndex] || '').trim().toLowerCase() : 'daily';
+
+              if (!title) continue; // Skip rows without a title
+              if (!['daily', 'weekly', 'monthly'].includes(taskType)) {
+                taskType = 'daily';
+              }
+
+              payloads.push({
+                company_id: this.companyId,
+                assigned_to: this.selectedEmployeeId,
+                assigned_by: this.currentUser.id,
+                title: title,
+                description: description.substring(0, 500),
+                kpi: kpi,
+                task_type: taskType
+              });
+            }
+
+            if (payloads.length === 0) {
+              toast('No valid tasks found in CSV.', 'error');
+              return;
+            }
+
+            const { error } = await this.sb.from('team_tasks').insert(payloads);
+            if (error) throw error;
+
+            toast(`Successfully imported ${payloads.length} tasks.`, 'success');
+            await this.loadEmployeeData();
+          } catch (err) {
+            toast('Import failed: ' + err.message, 'error');
+          }
+        };
+        reader.readAsText(file);
+      },
+
+      parseCSV(text) {
+        const lines = [];
+        let row = [""];
+        let inQuotes = false;
+        for (let i = 0; i < text.length; i++) {
+          const c = text[i];
+          const next = text[i+1];
+          if (c === '"') {
+            if (inQuotes && next === '"') {
+              row[row.length - 1] += '"';
+              i++;
+            } else {
+              inQuotes = !inQuotes;
+            }
+          } else if (c === ',' && !inQuotes) {
+            row.push("");
+          } else if ((c === '\r' || c === '\n') && !inQuotes) {
+            if (c === '\r' && next === '\n') i++;
+            lines.push(row);
+            row = [""];
+          } else {
+            row[row.length - 1] += c;
+          }
+        }
+        if (row.length > 1 || row[0] !== "") {
+          lines.push(row);
+        }
+        return lines;
       },
 
       async loadEmployeeData() {
