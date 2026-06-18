@@ -624,12 +624,25 @@
             }
           }
 
-          for (let d = maxDay; d >= 1; d--) {
+          const weeks = [];
+          let currentWeek = [];
+          let currentWeekNum = 1;
+
+          for (let d = 1; d <= maxDay; d++) {
             const currentDateObj = new Date(this.selectedYear, this.selectedMonth, d);
+            
+            // If it's Sunday (getDay() === 0) and we already have days in currentWeek,
+            // push currentWeek as a completed week and start a new one.
+            if (currentDateObj.getDay() === 0 && currentWeek.length > 0) {
+              weeks.push({ weekNum: currentWeekNum, days: currentWeek });
+              currentWeek = [];
+              currentWeekNum++;
+            }
+
             const dateStr = currentDateObj.toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' });
             const dayLogs = dayGroups[dateStr] || [];
 
-            // Exclude weekends from default shift checks if they didn't log in
+            // Exclude weekends if they didn't log in
             const isWeekend = currentDateObj.getDay() === 0 || currentDateObj.getDay() === 6;
             if (isWeekend && dayLogs.length === 0) continue;
 
@@ -688,7 +701,7 @@
               }
             }
 
-            listRows.push({
+            currentWeek.push({
               dayNum: d,
               dateFriendly: currentDateObj.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }),
               timeIn: timeInStr,
@@ -699,29 +712,21 @@
             });
           }
 
-          if (listRows.length === 0) {
+          if (currentWeek.length > 0) {
+            weeks.push({ weekNum: currentWeekNum, days: currentWeek });
+          }
+
+          const totalDays = weeks.reduce((sum, w) => sum + w.days.length, 0);
+          if (totalDays === 0) {
             container.innerHTML = '<div style="text-align:center; padding:3rem; color:var(--text-muted);">No logs recorded for this month.</div>';
             return;
           }
 
-          // Group rows into weeks
-          // A week group will represent 7 day intervals
           container.innerHTML = '';
-          const weeks = [];
-          let currentWeek = [];
-          
-          listRows.forEach((row, index) => {
-            currentWeek.push(row);
-            if (currentWeek.length === 7 || index === listRows.length - 1) {
-              weeks.push(currentWeek);
-              currentWeek = [];
-            }
-          });
-
-          weeks.forEach((week, wIdx) => {
+          weeks.forEach(w => {
             const weekHtml = `
               <div class="week-block">
-                <div class="week-header">Week ${wIdx + 1}</div>
+                <div class="week-header">Week ${w.weekNum}</div>
                 <table class="week-table">
                   <thead>
                     <tr>
@@ -734,7 +739,7 @@
                     </tr>
                   </thead>
                   <tbody>
-                    ${week.map(r => `
+                    ${w.days.map(r => `
                       <tr>
                         <td><strong>${r.dateFriendly}</strong></td>
                         <td><span style="font-weight:600; color:var(--text-primary);">${r.timeIn}</span></td>
