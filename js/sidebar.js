@@ -153,7 +153,7 @@
           <a class="dash-nav-child" data-role="hr" style="opacity: 0.5; cursor: not-allowed;">Company Events</a>
           <a class="dash-nav-child" data-role="hr" style="opacity: 0.5; cursor: not-allowed;">Announcements</a>
           <a class="dash-nav-child" data-role="hr" style="opacity: 0.5; cursor: not-allowed;">KPI</a>
-          <a href="/dashboard/salary-tracker.html" class="dash-nav-child" data-role="hr">Salary Tracker</a>
+          <a href="/dashboard/payout-tracker.html" class="dash-nav-child" data-role="hr">Payout Tracker</a>
           <a class="dash-nav-child" data-role="hr" style="opacity: 0.5; cursor: not-allowed;">Inbox</a>
           <a class="dash-nav-child" data-role="hr" style="opacity: 0.5; cursor: not-allowed;">Resources</a>
           <a class="dash-nav-child" data-role="hr" style="opacity: 0.5; cursor: not-allowed;">Reports</a>
