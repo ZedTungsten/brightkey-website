@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Employee Attendance Logs — BrightKey ERP</title>
+  <link rel="preconnect" href="https://fonts.bunny.net" />
+  <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg?v=2" />
+
+  <style>
+    /* ── Layout ── */
+    .top-bar { flex-shrink: 0; background: var(--bg-surface); border-bottom: 1px solid var(--border); padding: 0 1.5rem; display: flex; align-items: center; gap: 1rem; height: 56px; }
+    .top-bar-title { font-size: 1rem; font-weight: 800; color: var(--text-primary); letter-spacing: -0.03em; }
+    .content-area { display: flex; flex: 1; overflow: hidden; height: calc(100vh - 56px); }
+    .main-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+    
+    .scroll-area { flex: 1; overflow: auto; padding: 2rem; display: flex; flex-direction: column; }
+    .att-container { max-width: 1200px; width: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: 2rem; }
+
+    /* ── Tab Layout ── */
+    .tabs-nav {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      background: var(--bg-surface);
+      padding: 0 1.5rem;
+    }
+    .tab-btn {
+      padding: 0.9rem 1rem;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      border: none;
+      background: none;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      white-space: nowrap;
+      transition: all 0.15s;
+    }
+    .tab-btn.active {
+      color: var(--cyan-light);
+      border-bottom-color: var(--cyan);
+    }
+    .tab-btn:hover:not(.active) {
+      color: var(--text-secondary);
+    }
+
+    .tab-content {
+      display: none;
+    }
+    .tab-content.active {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+    }
+
+    /* ── Month Selector ── */
+    .month-selector {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    .month-btn {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      cursor: pointer;
+      font-weight: 600;
+      transition: all 0.15s;
+    }
+    .month-btn:hover {
+      border-color: var(--border-hover);
+      background: var(--bg-elevated);
+    }
+    .month-title-display {
+      font-size: 1.1rem;
+      font-weight: 800;
+      color: var(--text-primary);
+      min-width: 150px;
+      text-align: center;
+    }
+
+    /* ── Week Block ── */
+    .week-block {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      margin-bottom: 1.5rem;
+      overflow: hidden;
+      box-shadow: var(--shadow-sm);
+    }
+    .week-header {
+      background: var(--bg-elevated);
+      padding: 0.75rem 1.25rem;
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: var(--text-secondary);
+      border-bottom: 1px solid var(--border);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .week-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.82rem;
+    }
+    .week-table th {
+      padding: 0.6rem 1.25rem;
+      text-align: left;
+      font-size: 0.65rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+    }
+    .week-table td {
+      padding: 0.75rem 1.25rem;
+      color: var(--text-secondary);
+      border-bottom: 1px solid var(--border);
+      vertical-align: middle;
+    }
+    .week-table tr:last-child td {
+      border-bottom: none;
+    }
+    .week-table tr:hover td {
+      background: var(--bg-elevated);
+    }
+
+    /* ── Dropdown style ── */
+    .form-select {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text-primary);
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .form-select:focus {
+      border-color: var(--cyan);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="dash-layout">
+    <!-- Sidebar -->
+    <aside class="dash-sidebar" id="dash-sidebar"></aside>
+
+    <!-- Main -->
+    <div class="dash-main">
+      <!-- Top Bar -->
+      <div class="top-bar">
+        <span class="top-bar-title">Employee Attendance Logs</span>
+        <div style="flex:1;"></div>
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+          <span style="font-size: 0.72rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); letter-spacing: 0.05em;">Employee:</span>
+          <select id="employee-select" class="form-select" style="width: 220px; height: 32px; padding: 0 0.5rem; font-size: 0.82rem; font-weight: 600;" onchange="AttendanceLogsApp.onEmployeeChange()">
+            <option value="">Select Employee...</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="content-area">
+        <main class="main-panel">
+          <!-- Tabs Navigation -->
+          <div class="tabs-nav">
+            <button class="tab-btn active" id="tab-btn-logs">Logs</button>
+          </div>
+
+          <div class="scroll-area">
+            <div class="att-container">
+
+              <!-- ── Logs Tab Content ── -->
+              <div class="tab-content active" id="tab-content-logs">
+                <!-- Month Selector -->
+                <div class="month-selector">
+                  <button class="month-btn" onclick="AttendanceLogsApp.changeMonth(-1)">&lt;</button>
+                  <span class="month-title-display" id="month-display">Loading…</span>
+                  <button class="month-btn" onclick="AttendanceLogsApp.changeMonth(1)">&gt;</button>
+                </div>
+
+                <!-- Dynamic Week Lists -->
+                <div id="logs-container">
+                  <div style="text-align:center; padding:3rem; color:var(--text-muted);">Select an employee to view shift logs.</div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/sidebar.js"></script>
+  <script src="../js/main.js"></script>
+  <script>
+    'use strict';
+
+    function esc(s) {
+      return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    const AttendanceLogsApp = {
+      currentUser: null,
+      companyId: null,
+      employees: [],
+      employee: null,
+      
+      // Date Month Selector State
+      selectedYear: new Date().getFullYear(),
+      selectedMonth: new Date().getMonth(), // 0-11
+      
+      MONTH_NAMES: [
+        'January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December'
+      ],
+
+      async init() {
+        if (!window.BKAuth) return;
+        
+        // Strictly gate to HR role
+        const authInfo = await window.BKAuth.checkRoleGate(['HR'], '../admin.html');
+        if (!authInfo) return;
+
+        this.currentUser = authInfo.user;
+        this.companyId = await this.getCompanyId(authInfo.tenantId);
+        
+        if (this.companyId) {
+          await this.loadEmployeesList();
+        }
+      },
+
+      async getCompanyId(tenantId) {
+        try {
+          const sb = window.BKAuth.sb;
+          const { data } = await sb.from('companies').select('id').eq('tenant_id', tenantId).limit(1).maybeSingle();
+          return data?.id || null;
+        } catch (err) {
+          console.error(err);
+          return null;
+        }
+      },
+
+      async loadEmployeesList() {
+        try {
+          const sb = window.BKAuth.sb;
+          const { data, error } = await sb.from('employees')
+            .select('id, first_name, last_name, shift_time_1, shift_time_2')
+            .order('first_name', { ascending: true });
+
+          if (error) throw error;
+          this.employees = data || [];
+
+          const select = document.getElementById('employee-select');
+          select.innerHTML = '<option value="">Select Employee...</option>' + 
+            this.employees.map(emp => `<option value="${emp.id}">${esc(emp.first_name)} ${esc(emp.last_name)}</option>`).join('');
+
+          // Auto-select the first employee if exists
+          if (this.employees.length > 0) {
+            select.value = this.employees[0].id;
+            this.employee = this.employees[0];
+            await this.loadLogs();
+          }
+        } catch (err) {
+          console.error(err);
+        }
+      },
+
+      async onEmployeeChange() {
+        const select = document.getElementById('employee-select');
+        const empId = select.value;
+        this.employee = this.employees.find(emp => emp.id === empId) || null;
+        await this.loadLogs();
+      },
+
+      changeMonth(dir) {
+        this.selectedMonth += dir;
+        if (this.selectedMonth < 0) {
+          this.selectedMonth = 11;
+          this.selectedYear--;
+        } else if (this.selectedMonth > 11) {
+          this.selectedMonth = 0;
+          this.selectedYear++;
+        }
+        this.loadLogs();
+      },
+
+      async loadLogs() {
+        const container = document.getElementById('logs-container');
+        document.getElementById('month-display').textContent = `${this.MONTH_NAMES[this.selectedMonth]} ${this.selectedYear}`;
+        
+        if (!this.employee) {
+          container.innerHTML = '<div style="text-align:center; padding:3rem; color:var(--text-muted);">Select an employee to view shift logs.</div>';
+          return;
+        }
+
+        container.innerHTML = '<div style="text-align:center; padding:3rem; color:var(--text-muted);"><div class="bk-spinner" style="margin: 0 auto 1rem;"></div>Loading shift logs…</div>';
+
+        let logs = [];
+        try {
+          const sb = window.BKAuth.sb;
+          const startOfMonth = new Date(this.selectedYear, this.selectedMonth, 1).toISOString();
+          const endOfMonth = new Date(this.selectedYear, this.selectedMonth + 1, 1).toISOString();
+
+          const { data, error } = await sb.from('attendance_logs')
+            .select('*')
+            .eq('employee_id', this.employee.id)
+            .gte('created_at', startOfMonth)
+            .lt('created_at', endOfMonth)
+            .order('created_at', { ascending: true });
+
+          if (error) throw error;
+          logs = data || [];
+        } catch (err) {
+          console.error(err);
+        }
+
+        try {
+          // Parse and group by Date
+          const dayGroups = {};
+          logs.forEach(log => {
+            const dateStr = new Date(log.created_at).toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' });
+            if (!dayGroups[dateStr]) {
+              dayGroups[dateStr] = [];
+            }
+            dayGroups[dateStr].push(log);
+          });
+
+          // Reconstruct Date rows
+          const listRows = [];
+          
+          // Determine the range of days to display
+          const now = new Date();
+          let maxDay = new Date(this.selectedYear, this.selectedMonth + 1, 0).getDate();
+          if (this.selectedYear === now.getFullYear() && this.selectedMonth === now.getMonth()) {
+            maxDay = now.getDate();
+          } else if (this.selectedYear > now.getFullYear() || (this.selectedYear === now.getFullYear() && this.selectedMonth > now.getMonth())) {
+            // Future months: don't show any rows
+            maxDay = 0;
+          }
+
+          // Parse shifts
+          // Default shift is 09:00 AM to 06:00 PM
+          let shiftStartHour = 9;
+          let shiftStartMin = 0;
+          let shiftEndHour = 18;
+          let shiftEndMin = 0;
+
+          if (this.employee.shift_time_1) {
+            const match = this.employee.shift_time_1.match(/(\d+):(\d+)\s*(AM|PM)/i);
+            if (match) {
+              let h = parseInt(match[1], 10);
+              const m = parseInt(match[2], 10);
+              const ampm = match[3].toUpperCase();
+              if (ampm === 'PM' && h < 12) h += 12;
+              if (ampm === 'AM' && h === 12) h = 0;
+              shiftStartHour = h;
+              shiftStartMin = m;
+            }
+          }
+          if (this.employee.shift_time_2) {
+            const match = this.employee.shift_time_2.match(/(\d+):(\d+)\s*(AM|PM)/i);
+            if (match) {
+              let h = parseInt(match[1], 10);
+              const m = parseInt(match[2], 10);
+              const ampm = match[3].toUpperCase();
+              if (ampm === 'PM' && h < 12) h += 12;
+              if (ampm === 'AM' && h === 12) h = 0;
+              shiftEndHour = h;
+              shiftEndMin = m;
+            }
+          }
+
+          for (let d = maxDay; d >= 1; d--) {
+            const currentDateObj = new Date(this.selectedYear, this.selectedMonth, d);
+            const dateStr = currentDateObj.toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' });
+            const dayLogs = dayGroups[dateStr] || [];
+
+            // Exclude weekends from default shift checks if they didn't log in
+            const isWeekend = currentDateObj.getDay() === 0 || currentDateObj.getDay() === 6;
+            if (isWeekend && dayLogs.length === 0) continue;
+
+            let timeInStr = '—';
+            let timeOutStr = '—';
+            let lateStr = '—';
+            let earlyOutStr = '—';
+
+            // Find first available log of the day
+            const availableLogs = dayLogs.filter(l => l.status === 'available');
+            if (availableLogs.length > 0) {
+              const checkInTime = new Date(availableLogs[0].created_at);
+              timeInStr = checkInTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+              
+              // Calculate Late
+              const shiftStart = new Date(checkInTime);
+              shiftStart.setHours(shiftStartHour, shiftStartMin, 0, 0);
+              if (checkInTime > shiftStart) {
+                const diffMs = checkInTime - shiftStart;
+                const diffMins = Math.floor(diffMs / 60000);
+                if (diffMins > 0) {
+                  lateStr = `${diffMins} min`;
+                }
+              }
+            }
+
+            // Find last offline log of the day
+            const offlineLogs = dayLogs.filter(l => l.status === 'offline');
+            if (offlineLogs.length > 0) {
+              const checkOutTime = new Date(offlineLogs[offlineLogs.length - 1].created_at);
+              timeOutStr = checkOutTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+
+              // Calculate Early Out
+              const shiftEnd = new Date(checkOutTime);
+              shiftEnd.setHours(shiftEndHour, shiftEndMin, 0, 0);
+              if (checkOutTime < shiftEnd) {
+                const diffMs = shiftEnd - checkOutTime;
+                const diffMins = Math.floor(diffMs / 60000);
+                if (diffMins > 0) {
+                  earlyOutStr = `${diffMins} min`;
+                }
+              }
+            }
+
+            // Calculate Total Hours
+            let totalHoursStr = '—';
+            if (availableLogs.length > 0 && offlineLogs.length > 0) {
+              const checkInTime = new Date(availableLogs[0].created_at);
+              const checkOutTime = new Date(offlineLogs[offlineLogs.length - 1].created_at);
+              if (checkOutTime >= checkInTime) {
+                const diffMs = checkOutTime - checkInTime;
+                const totalMins = Math.floor(diffMs / 60000);
+                const hrs = Math.floor(totalMins / 60);
+                const mins = totalMins % 60;
+                totalHoursStr = `${hrs}h ${mins}m`;
+              }
+            }
+
+            listRows.push({
+              dayNum: d,
+              dateFriendly: currentDateObj.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }),
+              timeIn: timeInStr,
+              timeOut: timeOutStr,
+              late: lateStr,
+              earlyOut: earlyOutStr,
+              totalHours: totalHoursStr
+            });
+          }
+
+          if (listRows.length === 0) {
+            container.innerHTML = '<div style="text-align:center; padding:3rem; color:var(--text-muted);">No logs recorded for this month.</div>';
+            return;
+          }
+
+          // Group rows into weeks
+          container.innerHTML = '';
+          const weeks = [];
+          let currentWeek = [];
+          
+          listRows.forEach((row, index) => {
+            currentWeek.push(row);
+            if (currentWeek.length === 7 || index === listRows.length - 1) {
+              weeks.push(currentWeek);
+              currentWeek = [];
+            }
+          });
+
+          weeks.forEach((week, wIdx) => {
+            const weekHtml = `
+              <div class="week-block">
+                <div class="week-header">Week ${wIdx + 1}</div>
+                <table class="week-table">
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Time In</th>
+                      <th>Time Out</th>
+                      <th>Late</th>
+                      <th>Early Out</th>
+                      <th>Total Hours</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${week.map(r => `
+                      <tr>
+                        <td><strong>${r.dateFriendly}</strong></td>
+                        <td><span style="font-weight:600; color:var(--text-primary);">${r.timeIn}</span></td>
+                        <td><span style="font-weight:600; color:var(--text-primary);">${r.timeOut}</span></td>
+                        <td><span style="color:${r.late !== '—' ? 'var(--warning)' : 'var(--text-secondary)'}; font-weight:600;">${r.late}</span></td>
+                        <td><span style="color:${r.earlyOut !== '—' ? 'var(--danger)' : 'var(--text-secondary)'}; font-weight:600;">${r.earlyOut}</span></td>
+                        <td><span style="font-weight:600; color:var(--text-primary);">${r.totalHours}</span></td>
+                      </tr>
+                    `).join('')}
+                  </tbody>
+                </table>
+              </div>
+            `;
+            container.insertAdjacentHTML('beforeend', weekHtml);
+          });
+
+        } catch (err) {
+          console.error(err);
+          container.innerHTML = `<div style="text-align:center; padding:3rem; color:var(--danger);">Failed to load logs: ${err.message}</div>`;
+        }
+      }
+    };
+
+    // Boot
+    document.addEventListener('DOMContentLoaded', () => {
+      AttendanceLogsApp.init();
+    });
+  </script>
+</body>
+</html>
