@@ -146,13 +146,23 @@
       color: var(--text-muted);
       background: var(--bg-elevated);
       border-bottom: 1px solid var(--border);
+      border-right: 1px solid rgba(228, 228, 231, 0.6);
+    }
+
+    .salary-table th:last-child {
+      border-right: none;
     }
 
     .salary-table td {
       padding: 0.75rem 1rem;
       border-bottom: 1px solid var(--border);
+      border-right: 1px solid rgba(228, 228, 231, 0.6);
       color: var(--text-secondary);
       vertical-align: middle;
+    }
+
+    .salary-table td:last-child {
+      border-right: none;
     }
 
     /* Hierarchy visual headers */
@@ -164,6 +174,7 @@
       padding-top: 0.9rem;
       padding-bottom: 0.9rem;
       border-bottom: 1.5px solid var(--border);
+      border-right: none;
     }
 
     .salary-table tr.team-header-row td {
@@ -175,11 +186,12 @@
       padding-top: 0.6rem;
       padding-bottom: 0.6rem;
       border-bottom: 1px solid var(--border);
+      border-right: none;
     }
 
     .salary-table tr.employee-row td.col-name {
       padding-left: 2.75rem;
-      font-weight: 600;
+      font-weight: 400; /* Regular weight */
       color: var(--text-primary);
     }
 
@@ -860,12 +872,14 @@
         // Build subteam mapping
         const empDeptMap = {};
         const empSubteamsMap = {};
+        const deptHeadsSet = new Set();
         const struct = this.companyStructure || { departments: [] };
         
         struct.departments.forEach(dept => {
           const deptName = dept.name;
           if (dept.managerId) {
             empDeptMap[dept.managerId] = deptName;
+            deptHeadsSet.add(dept.managerId);
           }
           if (dept.subteams) {
             dept.subteams.forEach(sub => {
@@ -900,7 +914,12 @@
           }
 
           if (!grouped[dept]) grouped[dept] = {};
-          if (subteams.length === 0) {
+          
+          if (deptHeadsSet.has(emp.id)) {
+            // Is a Department Head
+            if (!grouped[dept]['Department Head']) grouped[dept]['Department Head'] = [];
+            grouped[dept]['Department Head'].push(emp);
+          } else if (subteams.length === 0) {
             if (!grouped[dept]['_unassigned_subteam']) grouped[dept]['_unassigned_subteam'] = [];
             grouped[dept]['_unassigned_subteam'].push(emp);
           } else {
@@ -923,11 +942,18 @@
             </tr>
           `;
           
-          Object.keys(grouped[dept]).sort().forEach(sub => {
+          // Sort teams, putting 'Department Head' first if it exists
+          const teams = Object.keys(grouped[dept]).sort((a, b) => {
+            if (a === 'Department Head') return -1;
+            if (b === 'Department Head') return 1;
+            return a.localeCompare(b);
+          });
+
+          teams.forEach(sub => {
             if (sub !== '_unassigned_subteam') {
               bodyHtml += `
                 <tr class="team-header-row">
-                  <td colspan="${colspan}">${esc(sub)} Team</td>
+                  <td colspan="${colspan}">${esc(sub)}</td>
                 </tr>
               `;
             }
