@@ -595,15 +595,27 @@
         }
       },
 
-      parseShiftTime(timeStr) {
-        if (!timeStr) return null;
-        const match = timeStr.match(/(\d+):(\d+)\s*(AM|PM)/i);
+      parseShiftStartTime(rangeStr) {
+        if (!rangeStr) return null;
+        const match = rangeStr.match(/(\d+):(\d+)\s*(AM|PM)/i);
         if (!match) return null;
-        let h = parseInt(match[1], 10);
-        const m = parseInt(match[2], 10);
-        const ampm = match[3].toUpperCase();
-        if (ampm === 'PM' && h < 12) h += 12;
-        if (ampm === 'AM' && h === 12) h = 0;
+        return this.parseTimePart(match[1], match[2], match[3]);
+      },
+
+      parseShiftEndTime(rangeStr) {
+        if (!rangeStr) return null;
+        const matches = [...rangeStr.matchAll(/(\d+):(\d+)\s*(AM|PM)/gi)];
+        if (matches.length < 2) return null;
+        const match = matches[1];
+        return this.parseTimePart(match[1], match[2], match[3]);
+      },
+
+      parseTimePart(hStr, mStr, ampm) {
+        let h = parseInt(hStr, 10);
+        const m = parseInt(mStr, 10);
+        const ampmUpper = ampm.toUpperCase();
+        if (ampmUpper === 'PM' && h < 12) h += 12;
+        if (ampmUpper === 'AM' && h === 12) h = 0;
         const d = new Date();
         d.setHours(h, m, 0, 0);
         return d;
@@ -652,31 +664,97 @@
 
         if (status === this.currentStatus) return;
 
-        // Check for 30 mins early or more from starting shift when going available
         const now = new Date();
-        if (status === 'available' && this.shiftTime1) {
-          const shiftStart = this.parseShiftTime(this.shiftTime1);
-          if (shiftStart) {
-            const diffMins = Math.floor((shiftStart - now) / 60000);
-            if (diffMins >= 30) {
-              const formattedTime = this.formatTimeAway(diffMins);
-              const msg = `Do you want to time-in for today? You are ${formattedTime} away from your shift.`;
-              this.showConfirmModal(msg, () => this.executeSetStatus(status));
-              return;
+
+        if (status === 'available') {
+          const todayStart = new Date();
+          todayStart.setHours(0, 0, 0, 0);
+
+          let todayLogs = [];
+          try {
+            const { data, error } = await BKAuth.sb
+              .from('attendance_logs')
+              .select('status')
+              .eq('employee_id', this.employeeId)
+              .gte('created_at', todayStart.toISOString());
+            if (error) throw error;
+            todayLogs = data || [];
+          } catch (e) {
+            console.error('Error fetching today\'s logs:', e);
+          }
+
+          const timeIns = todayLogs.filter(l => l.status === 'available').length;
+          const timeOuts = todayLogs.filter(l => l.status === 'offline').length;
+
+          if (timeIns === 0) {
+            // First time in today (Shift 1)
+            if (this.shiftTime1) {
+              const shiftStart = this.parseShiftStartTime(this.shiftTime1);
+              if (shiftStart) {
+                const diffMins = Math.floor((shiftStart - now) / 60000);
+                if (diffMins >= 30) {
+                  const formattedTime = this.formatTimeAway(diffMins);
+                  const msg = `Do you want to time-in for today? You are ${formattedTime} away from your shift.`;
+                  this.showConfirmModal(msg, () => this.executeSetStatus(status));
+                  return;
+                }
+              }
             }
+          } else if (timeIns === 1) {
+            if (timeOuts >= 1) {
+              // Second time in today. User must have 2 shifts (shiftTime2)
+              if (!this.shiftTime2) {
+                toast('Cannot time in: You have already completed your shift for today.', 'error');
+                return;
+              }
+              const shiftStart2 = this.parseShiftStartTime(this.shiftTime2);
+              if (shiftStart2) {
+                const diffMins = Math.floor((shiftStart2 - now) / 60000);
+                if (diffMins >= 30) {
+                  const formattedTime = this.formatTimeAway(diffMins);
+                  const msg = `Do you want to time-in for today? You are ${formattedTime} away from your shift.`;
+                  this.showConfirmModal(msg, () => this.executeSetStatus(status));
+                  return;
+                }
+              }
+            }
+          } else {
+            toast('Cannot time in: You have already completed your shifts for today.', 'error');
+            return;
           }
         }
         
         // Check for 30 mins early or more from end shift when going offline
-        if (status === 'offline' && this.shiftTime2) {
-          const shiftEnd = this.parseShiftTime(this.shiftTime2);
-          if (shiftEnd) {
-            const diffMins = Math.floor((shiftEnd - now) / 60000);
-            if (diffMins >= 30) {
-              const formattedTime = this.formatTimeAway(diffMins);
-              const msg = `Do you want to time-out for today? You are ${formattedTime} away from your shift.`;
-              this.showConfirmModal(msg, () => this.executeSetStatus(status));
-              return;
+        if (status === 'offline') {
+          const todayStart = new Date();
+          todayStart.setHours(0, 0, 0, 0);
+
+          let todayLogs = [];
+          try {
+            const { data } = await BKAuth.sb
+              .from('attendance_logs')
+              .select('status')
+              .eq('employee_id', this.employeeId)
+              .gte('created_at', todayStart.toISOString());
+            todayLogs = data || [];
+          } catch (e) {}
+
+          const timeIns = todayLogs.filter(l => l.status === 'available').length;
+          let basisShift = this.shiftTime1;
+          if (timeIns >= 2 && this.shiftTime2) {
+            basisShift = this.shiftTime2;
+          }
+
+          if (basisShift) {
+            const shiftEnd = this.parseShiftEndTime(basisShift);
+            if (shiftEnd) {
+              const diffMins = Math.floor((shiftEnd - now) / 60000);
+              if (diffMins >= 30) {
+                const formattedTime = this.formatTimeAway(diffMins);
+                const msg = `Do you want to time-out for today? You are ${formattedTime} away from your shift.`;
+                this.showConfirmModal(msg, () => this.executeSetStatus(status));
+                return;
+              }
             }
           }
         }
