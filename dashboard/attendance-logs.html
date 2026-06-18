@@ -384,17 +384,18 @@
           }
 
           const weeks = [];
-          let currentWeek = [];
+          let currentWeekDays = [];
           let currentWeekNum = 1;
 
           for (let d = 1; d <= maxDay; d++) {
             const currentDateObj = new Date(this.selectedYear, this.selectedMonth, d);
             
-            // If it's Sunday (getDay() === 0) and we already have days in currentWeek,
-            // push currentWeek as a completed week and start a new one.
-            if (currentDateObj.getDay() === 0 && currentWeek.length > 0) {
-              weeks.push({ weekNum: currentWeekNum, days: currentWeek });
-              currentWeek = [];
+            // A new week starts on Sunday (getDay() === 0).
+            // If it's Sunday and we are past the first day of the month,
+            // we push the current week and start a new one.
+            if (currentDateObj.getDay() === 0 && d > 1) {
+              weeks.push({ weekNum: currentWeekNum, days: currentWeekDays });
+              currentWeekDays = [];
               currentWeekNum++;
             }
 
@@ -460,7 +461,7 @@
               }
             }
 
-            currentWeek.push({
+            currentWeekDays.push({
               dayNum: d,
               dateFriendly: currentDateObj.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }),
               timeIn: timeInStr,
@@ -471,18 +472,24 @@
             });
           }
 
-          if (currentWeek.length > 0) {
-            weeks.push({ weekNum: currentWeekNum, days: currentWeek });
+          if (currentWeekDays.length > 0) {
+            weeks.push({ weekNum: currentWeekNum, days: currentWeekDays });
           }
 
-          const totalDays = weeks.reduce((sum, w) => sum + w.days.length, 0);
+          // Filter out weeks with no logged days
+          const filteredWeeks = weeks.filter(w => w.days.length > 0);
+
+          // Reverse weeks to show the latest week first
+          filteredWeeks.reverse();
+
+          const totalDays = filteredWeeks.reduce((sum, w) => sum + w.days.length, 0);
           if (totalDays === 0) {
             container.innerHTML = '<div style="text-align:center; padding:3rem; color:var(--text-muted);">No logs recorded for this month.</div>';
             return;
           }
 
           container.innerHTML = '';
-          weeks.forEach(w => {
+          filteredWeeks.forEach(w => {
             const weekHtml = `
               <div class="week-block">
                 <div class="week-header">Week ${w.weekNum}</div>
