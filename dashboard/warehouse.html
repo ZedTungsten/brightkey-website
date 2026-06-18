@@ -639,7 +639,7 @@
                       <th class="sortable" onclick="handleSort('business')">Business <span id="sort-icon-business"></span></th>
                       <th class="sortable" onclick="handleSort('available')" style="text-align: center;">Available <span id="sort-icon-available"></span></th>
                       <th class="sortable" onclick="handleSort('reserved')" style="text-align: center; color:var(--warning);">Reserved <span id="sort-icon-reserved"></span></th>
-                      <th class="sortable" onclick="handleSort('inspect')" style="text-align: center; color:#a855f7;">Inspect <span id="sort-icon-inspect"></span></th>
+                      <th class="sortable" onclick="handleSort('inspect')" style="text-align: center; color:#a855f7;">Inspected <span id="sort-icon-inspect"></span></th>
                       <th class="sortable" onclick="handleSort('packed')" style="text-align: center; color:var(--cyan-light);">Packed <span id="sort-icon-packed"></span></th>
                       <th class="sortable" onclick="handleSort('returned')" style="text-align: center; color:var(--danger);">Returned <span id="sort-icon-returned"></span></th>
                       <th class="sortable" onclick="handleSort('cancelled')" style="text-align: center; color:var(--danger);">Cancelled <span id="sort-icon-cancelled"></span></th>
@@ -1428,18 +1428,18 @@
               console.log(`Skipping inventory update for service/non-stocked item: ${item.sku}`);
               continue;
             }
-            console.log(`Syncing inspect item: ${item.qty}x ${item.sku} for order ${orderNo}`);
+            console.log(`Syncing reserved item: ${item.qty}x ${item.sku} for order ${orderNo}`);
 
             // Create transaction record (scoped to active warehouse)
             const txPayload = {
               sku: item.sku,
               quantity: item.qty,
               type: 'customer_order',
-              status: 'inspect',
+              status: 'reserved',
               reference_id: orderNo,
               customer_name: booking.customer_name,
               customer_city: city,
-              timestamp_inspect: booking.created_at || new Date().toISOString(),
+              timestamp_reserved: booking.created_at || new Date().toISOString(),
               warehouse_id: activeWarehouseId || null
             };
             const { error: insTxErr } = await sb.from('inventory_transactions').insert([txPayload]);
@@ -1454,14 +1454,14 @@
               const current = invRow[0];
               await sb.from('inventory').update({
                 available: current.available - item.qty,
-                inspect: (current.inspect || 0) + item.qty
+                reserved: current.reserved + item.qty
               }).eq('id', current.id);
             } else {
               // Create new inventory row for this warehouse
               await sb.from('inventory').insert([{
                 sku: item.sku,
                 available: -item.qty,
-                inspect: item.qty,
+                reserved: item.qty,
                 warehouse_id: activeWarehouseId || null
               }]);
             }
@@ -1885,7 +1885,7 @@
       tbody.innerHTML = '';
 
       const packingQueue = activeTransactions.filter(t => 
-        (t.status === 'reserved' || t.status === 'packed') && 
+        (t.status === 'inspect' || t.status === 'packed') && 
         t.type === 'customer_order'
       );
 
@@ -1903,13 +1903,13 @@
             reference_id: refId,
             customer_name: t.customer_name || 'N/A',
             customer_city: t.customer_city || 'N/A',
-            timestamp_reserved: t.timestamp_reserved,
+            timestamp_inspect: t.timestamp_inspect || t.created_at,
             items: []
           };
         }
         groups[refId].items.push(t);
-        if (t.timestamp_reserved && (!groups[refId].timestamp_reserved || new Date(t.timestamp_reserved) < new Date(groups[refId].timestamp_reserved))) {
-          groups[refId].timestamp_reserved = t.timestamp_reserved;
+        if (t.timestamp_inspect && (!groups[refId].timestamp_inspect || new Date(t.timestamp_inspect) < new Date(groups[refId].timestamp_inspect))) {
+          groups[refId].timestamp_inspect = t.timestamp_inspect;
         }
       });
 
@@ -1919,7 +1919,7 @@
         const allPacked = group.items.every(t => t.status === 'packed');
         const skusHtml = group.items.map(t => `<code>${t.sku}</code>`).join('<br/>');
         const qtysHtml = group.items.map(t => `<strong>${t.quantity}</strong>`).join('<br/>');
-        const date = group.timestamp_reserved ? new Date(group.timestamp_reserved).toLocaleString() : 'N/A';
+        const date = group.timestamp_inspect ? new Date(group.timestamp_inspect).toLocaleString() : 'N/A';
 
         const imagesHtml = group.items.map(t => {
           const p = allProducts.find(prod => prod.sku === t.sku) || { image_main: '' };
@@ -1969,7 +1969,7 @@
       tbody.innerHTML = '';
 
       const inspectQueue = activeTransactions.filter(t => 
-        t.status === 'inspect' && 
+        t.status === 'reserved' && 
         t.type === 'customer_order'
       );
 
@@ -1987,13 +1987,13 @@
             reference_id: refId,
             customer_name: t.customer_name || 'N/A',
             customer_city: t.customer_city || 'N/A',
-            timestamp_inspect: t.timestamp_inspect || t.created_at,
+            timestamp_reserved: t.timestamp_reserved || t.created_at,
             items: []
           };
         }
         groups[refId].items.push(t);
-        if (t.timestamp_inspect && (!groups[refId].timestamp_inspect || new Date(t.timestamp_inspect) < new Date(groups[refId].timestamp_inspect))) {
-          groups[refId].timestamp_inspect = t.timestamp_inspect;
+        if (t.timestamp_reserved && (!groups[refId].timestamp_reserved || new Date(t.timestamp_reserved) < new Date(groups[refId].timestamp_reserved))) {
+          groups[refId].timestamp_reserved = t.timestamp_reserved;
         }
       });
 
@@ -2002,7 +2002,7 @@
       orderGroups.forEach(group => {
         const skusHtml = group.items.map(t => `<code>${t.sku}</code>`).join('<br/>');
         const qtysHtml = group.items.map(t => `<strong>${t.quantity}</strong>`).join('<br/>');
-        const date = group.timestamp_inspect ? new Date(group.timestamp_inspect).toLocaleString() : 'N/A';
+        const date = group.timestamp_reserved ? new Date(group.timestamp_reserved).toLocaleString() : 'N/A';
 
         const imagesHtml = group.items.map(t => {
           const p = allProducts.find(prod => prod.sku === t.sku) || { image_main: '' };
@@ -2044,7 +2044,7 @@
         if (t.reference_id) {
           const hasUnpacked = activeTransactions.some(other => 
             other.reference_id === t.reference_id && 
-            other.status === 'reserved'
+            ['reserved', 'inspect'].includes(other.status)
           );
           if (hasUnpacked) return false;
         }
@@ -2223,14 +2223,14 @@
     // Badge counts updates
     function updateBadgeCounts() {
       const receiveCount = activeTransactions.filter(t => ['ordered', 'returned', 'cancelled'].includes(t.status)).length;
-      const packCount = [...new Set(activeTransactions.filter(t => t.status === 'reserved' && t.type === 'customer_order').map(t => t.reference_id))].length;
-      const inspectCount = [...new Set(activeTransactions.filter(t => t.status === 'inspect' && t.type === 'customer_order').map(t => t.reference_id))].length;
+      const inspectCount = [...new Set(activeTransactions.filter(t => t.status === 'reserved' && t.type === 'customer_order').map(t => t.reference_id))].length;
+      const packCount = [...new Set(activeTransactions.filter(t => t.status === 'inspect' && t.type === 'customer_order').map(t => t.reference_id))].length;
       const dispatchCount = activeTransactions.filter(t => {
         if (t.status !== 'packed') return false;
         if (t.reference_id) {
           const hasUnpacked = activeTransactions.some(other => 
             other.reference_id === t.reference_id && 
-            other.status === 'reserved'
+            ['reserved', 'inspect'].includes(other.status)
           );
           if (hasUnpacked) return false;
         }
@@ -2751,7 +2751,7 @@
           const now = new Date().toISOString();
           const txsToPack = activeTransactions.filter(t => 
             t.reference_id === packOrderReferenceId && 
-            t.status === 'reserved' && 
+            t.status === 'inspect' && 
             t.type === 'customer_order'
           );
 
@@ -2773,8 +2773,8 @@
             if (invRow && invRow.length > 0) {
               const inv = invRow[0];
               const { error: updErr } = await sb.from('inventory').update({
-                reserved: Math.max(0, inv.reserved - tx.quantity),
-                packed: inv.packed + tx.quantity
+                inspect: Math.max(0, (inv.inspect || 0) - tx.quantity),
+                packed: (inv.packed || 0) + tx.quantity
               }).eq('id', inv.id);
               if (updErr) throw updErr;
             }
@@ -2800,7 +2800,7 @@
         const now = new Date().toISOString();
         const txsToInspect = activeTransactions.filter(t => 
           t.reference_id === referenceId && 
-          t.status === 'inspect' && 
+          t.status === 'reserved' && 
           t.type === 'customer_order'
         );
 
@@ -2808,8 +2808,8 @@
 
         for (const tx of txsToInspect) {
           const { error: txErr } = await sb.from('inventory_transactions').update({
-            status: 'reserved',
-            timestamp_reserved: now
+            status: 'inspect',
+            timestamp_inspect: now
           }).eq('id', tx.id);
           if (txErr) throw txErr;
 
@@ -2821,8 +2821,8 @@
           if (invRow && invRow.length > 0) {
             const inv = invRow[0];
             const { error: updErr } = await sb.from('inventory').update({
-              inspect: Math.max(0, (inv.inspect || 0) - tx.quantity),
-              reserved: (inv.reserved || 0) + tx.quantity
+              reserved: Math.max(0, (inv.reserved || 0) - tx.quantity),
+              inspect: (inv.inspect || 0) + tx.quantity
             }).eq('id', inv.id);
             if (updErr) throw updErr;
           }
@@ -2833,7 +2833,7 @@
       });
     };
 
-    // ACTION: Unpack entire order (packed → reserved)
+    // ACTION: Unpack entire order (packed → inspect)
     window.unpackOrder = async function(btn, referenceId) {
       await wrapActionWithLoading(btn, async () => {
         const txsToUnpack = activeTransactions.filter(t => 
@@ -2846,7 +2846,7 @@
 
         for (const tx of txsToUnpack) {
           const { error: txErr } = await sb.from('inventory_transactions').update({
-            status: 'reserved',
+            status: 'inspect',
             timestamp_packed: null
           }).eq('id', tx.id);
           if (txErr) throw txErr;
@@ -2859,7 +2859,7 @@
           if (invRow && invRow.length > 0) {
             const inv = invRow[0];
             const { error: updErr } = await sb.from('inventory').update({
-              reserved: inv.reserved + tx.quantity,
+              inspect: (inv.inspect || 0) + tx.quantity,
               packed: Math.max(0, inv.packed - tx.quantity)
             }).eq('id', inv.id);
             if (updErr) throw updErr;
@@ -3035,6 +3035,8 @@
         const updates = { cancelled: inv.cancelled + qty };
         if (prevStatus === 'reserved') {
           updates.reserved = Math.max(0, inv.reserved - qty);
+        } else if (prevStatus === 'inspect') {
+          updates.inspect = Math.max(0, (inv.inspect || 0) - qty);
         } else if (prevStatus === 'packed') {
           updates.packed = Math.max(0, inv.packed - qty);
         }
