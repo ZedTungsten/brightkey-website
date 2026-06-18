@@ -443,7 +443,8 @@
                 </table>
               </div>
             </div>
-            <div style="display:flex; justify-content:flex-end;">
+            <div style="display:flex; justify-content:flex-end; align-items:center; gap:1rem;">
+              <span id="save-status" style="font-size:0.75rem; color:var(--text-muted);"></span>
               <button class="btn btn-cyan" id="btn-save-tracker" onclick="SalaryApp.saveTrackerState()">Save Tracker State</button>
             </div>
           </div>
@@ -979,6 +980,71 @@
         tbody.innerHTML = bodyHtml;
       },
 
+      getCellState(empId, colIdx) {
+        if (!this.trackerState[empId]) this.trackerState[empId] = {};
+        let cell = this.trackerState[empId][colIdx];
+        if (!cell) {
+          cell = { adjustments: [{ adjustment: 0, label: '' }], checked: false };
+          this.trackerState[empId][colIdx] = cell;
+        } else {
+          // Backward compatibility: convert old single adjustment schema to adjustments array
+          if (!Array.isArray(cell.adjustments)) {
+            const oldAdj = parseFloat(cell.adjustment) || 0;
+            const oldLabel = cell.label || '';
+            cell.adjustments = [{ adjustment: oldAdj, label: oldLabel }];
+            delete cell.adjustment;
+            delete cell.label;
+          }
+          if (cell.adjustments.length === 0) {
+            cell.adjustments.push({ adjustment: 0, label: '' });
+          }
+        }
+        return cell;
+      },
+
+      renderPayoutCellHTML(empId, colIdx, baseVal, type = 'normal') {
+        const cell = this.getCellState(empId, colIdx);
+        const checkedAttr = cell.checked ? 'checked' : '';
+        const grayClass = cell.checked ? 'grayed-out' : '';
+
+        // Calculate total adjustment sum
+        const totalAdj = cell.adjustments.reduce((sum, item) => sum + (parseFloat(item.adjustment) || 0), 0);
+        const displayVal = baseVal + totalAdj;
+
+        const adjLinesHtml = cell.adjustments.map((adj, idx) => {
+          const showRemove = cell.adjustments.length > 1;
+          const removeBtn = showRemove ? `
+            <button class="btn-danger-link" onclick="SalaryApp.removeAdjustmentLine('${esc(empId)}', '${colIdx}', ${baseVal}, ${idx}, '${type}')" style="padding: 2px; margin-left: 2px;" title="Remove Line">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+          ` : '';
+
+          return `
+            <div class="adj-line" style="display:flex; align-items:center; gap:0.25rem;">
+              <input type="text" class="payout-adj-input" value="${adj.adjustment !== 0 ? adj.adjustment : ''}" placeholder="Adj" style="width: 55px;" oninput="SalaryApp.updateAdjustmentItem('${esc(empId)}', '${colIdx}', ${baseVal}, ${idx}, 'adjustment', this.value)">
+              <input type="text" class="payout-adj-input" value="${esc(adj.label)}" placeholder="Label" style="width: 65px; text-align:left;" oninput="SalaryApp.updateAdjustmentItem('${esc(empId)}', '${colIdx}', ${baseVal}, ${idx}, 'label', this.value)">
+              ${removeBtn}
+            </div>
+          `;
+        }).join('');
+
+        return `
+          <div class="payout-cell-container ${grayClass}" data-col-idx="${colIdx}" style="display:flex; flex-direction:column; gap:0.35rem; align-items:stretch; min-width:170px; margin: 0 auto;">
+            <div class="adj-lines-list" style="display:flex; flex-direction:column; gap:0.25rem;">
+              ${adjLinesHtml}
+            </div>
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:0.4rem; margin-top:0.2rem; border-top:1px dashed var(--border); padding-top:0.25rem;">
+              <button class="btn-outline btn-sm" style="padding: 1px 4px; font-size: 0.68rem; height: auto; font-weight: bold; border-color: rgba(6,182,212,0.3); color: var(--cyan);" onclick="SalaryApp.addAdjustmentLine('${esc(empId)}', '${colIdx}', ${baseVal}, '${type}')">+ Add</button>
+              <span class="payout-val" style="min-width: 65px; font-weight: 700; color: var(--text-primary); text-align: right; font-variant-numeric: tabular-nums;">${esc(php(displayVal))}</span>
+              <input type="checkbox" class="payout-checkbox" ${checkedAttr} onchange="SalaryApp.toggleAdjustmentCheck('${esc(empId)}', '${colIdx}', ${baseVal}, this.checked)">
+            </div>
+          </div>
+        `;
+      },
+
       renderEmployeeRow(emp, activeSpecDays) {
         const id = emp.id;
         const baseSalary = emp.salary || 0;
@@ -993,30 +1059,14 @@
         const numNormalScheds = this.payoutSchedules.length || 1;
         const rawNormalPayout = baseSalary / numNormalScheds;
 
-        // Helper to render a payout input component
-        const renderPayoutCell = (colIdx, baseVal, type = 'normal') => {
-          const cellState = (this.trackerState[id] && this.trackerState[id][colIdx]) || { adjustment: 0, label: '', checked: false };
-          const displayVal = baseVal + (cellState.adjustment || 0);
-          const checkedAttr = cellState.checked ? 'checked' : '';
-          const grayClass = cellState.checked ? 'grayed-out' : '';
-          const bgStyle = type === 'special' ? 'background: rgba(6,182,212,0.02);' : '';
-
-          return `
-            <td style="text-align:center; ${bgStyle}">
-              <div class="payout-cell-container ${grayClass}" data-col-idx="${colIdx}">
-                <input type="text" class="payout-adj-input" value="${cellState.adjustment !== 0 ? cellState.adjustment : ''}" placeholder="Adj" oninput="SalaryApp.updatePayoutCell('${esc(id)}', '${colIdx}', ${baseVal}, this.value, 'adjustment')">
-                <input type="text" class="payout-adj-input" value="${esc(cellState.label)}" placeholder="Label" style="width:70px; text-align:left;" oninput="SalaryApp.updatePayoutCell('${esc(id)}', '${colIdx}', ${baseVal}, this.value, 'label')">
-                <span class="payout-val">${esc(php(displayVal))}</span>
-                <input type="checkbox" class="payout-checkbox" ${checkedAttr} onchange="SalaryApp.updatePayoutCell('${esc(id)}', '${colIdx}', ${baseVal}, this.checked, 'checked')">
-              </div>
+        // Render Normal Columns
+        this.payoutSchedules.forEach(day => {
+          const colKey = `sched_${day}`;
+          html += `
+            <td style="text-align:center;" id="cell-td-${esc(id)}-${colKey}">
+              ${this.renderPayoutCellHTML(id, colKey, rawNormalPayout, 'normal')}
             </td>
           `;
-        };
-
-        // Render Normal Columns
-        this.payoutSchedules.forEach((day, idx) => {
-          const colKey = `sched_${day}`;
-          html += renderPayoutCell(colKey, rawNormalPayout, 'normal');
         });
 
         // Render Special Columns
@@ -1024,41 +1074,113 @@
           const matchingSpec = this.specialSchedules.find(s => s.employeeId === id && s.day === day);
           const specVal = matchingSpec ? matchingSpec.value : 0;
           const colKey = `spec_${day}`;
-          html += renderPayoutCell(colKey, specVal, 'special');
+          html += `
+            <td style="text-align:center; background: rgba(6,182,212,0.02);" id="cell-td-${esc(id)}-${colKey}">
+              ${this.renderPayoutCellHTML(id, colKey, specVal, 'special')}
+            </td>
+          `;
         });
 
         html += '</tr>';
         return html;
       },
 
-      updatePayoutCell(empId, colIdx, baseVal, value, type) {
-        if (!this.trackerState[empId]) this.trackerState[empId] = {};
-        if (!this.trackerState[empId][colIdx]) {
-          this.trackerState[empId][colIdx] = { adjustment: 0, label: '', checked: false };
-        }
-
-        const cell = this.trackerState[empId][colIdx];
-        const container = document.querySelector(`tr[data-emp-id="${empId}"] .payout-cell-container[data-col-idx="${colIdx}"]`);
-
-        if (type === 'adjustment') {
+      updateAdjustmentItem(empId, colIdx, baseVal, itemIdx, field, value) {
+        const cell = this.getCellState(empId, colIdx);
+        if (field === 'adjustment') {
           let num = parseFloat(value);
           if (isNaN(num)) num = 0;
-          cell.adjustment = num;
-        } else if (type === 'label') {
-          cell.label = value.trim();
-        } else if (type === 'checked') {
-          cell.checked = !!value;
-          if (container) {
-            container.classList.toggle('grayed-out', cell.checked);
-          }
+          cell.adjustments[itemIdx].adjustment = num;
+        } else if (field === 'label') {
+          cell.adjustments[itemIdx].label = value.trim();
         }
 
         // Live update value text
+        const totalAdj = cell.adjustments.reduce((sum, item) => sum + (parseFloat(item.adjustment) || 0), 0);
+        const displayVal = baseVal + totalAdj;
+        
+        const container = document.querySelector(`tr[data-emp-id="${empId}"] .payout-cell-container[data-col-idx="${colIdx}"]`);
         if (container) {
           const valText = container.querySelector('.payout-val');
           if (valText) {
-            const displayVal = baseVal + (cell.adjustment || 0);
             valText.textContent = php(displayVal);
+          }
+        }
+
+        this.debouncedSave();
+      },
+
+      addAdjustmentLine(empId, colIdx, baseVal, type) {
+        const cell = this.getCellState(empId, colIdx);
+        cell.adjustments.push({ adjustment: 0, label: '' });
+        
+        const td = document.getElementById(`cell-td-${empId}-${colIdx}`);
+        if (td) {
+          td.innerHTML = this.renderPayoutCellHTML(empId, colIdx, baseVal, type);
+        }
+        this.debouncedSave();
+      },
+
+      removeAdjustmentLine(empId, colIdx, baseVal, itemIdx, type) {
+        const cell = this.getCellState(empId, colIdx);
+        cell.adjustments.splice(itemIdx, 1);
+        
+        const td = document.getElementById(`cell-td-${empId}-${colIdx}`);
+        if (td) {
+          td.innerHTML = this.renderPayoutCellHTML(empId, colIdx, baseVal, type);
+        }
+        this.debouncedSave();
+      },
+
+      toggleAdjustmentCheck(empId, colIdx, baseVal, checked) {
+        const cell = this.getCellState(empId, colIdx);
+        cell.checked = checked;
+        
+        const container = document.querySelector(`tr[data-emp-id="${empId}"] .payout-cell-container[data-col-idx="${colIdx}"]`);
+        if (container) {
+          container.classList.toggle('grayed-out', checked);
+        }
+        this.debouncedSave();
+      },
+
+      saveTimeout: null,
+      debouncedSave() {
+        const statusEl = document.getElementById('save-status');
+        if (statusEl) {
+          statusEl.textContent = 'Saving changes...';
+        }
+
+        if (this.saveTimeout) clearTimeout(this.saveTimeout);
+        this.saveTimeout = setTimeout(() => {
+          this.saveTrackerStateSilent();
+        }, 1000);
+      },
+
+      async saveTrackerStateSilent() {
+        try {
+          const { error } = await getSb()
+            .from('global_settings')
+            .upsert({
+              key: 'salary_tracker_state',
+              company_id: this.companyId,
+              value: this.trackerState
+            });
+          if (error) throw error;
+          
+          const statusEl = document.getElementById('save-status');
+          if (statusEl) {
+            statusEl.textContent = 'All changes saved';
+            setTimeout(() => {
+              if (statusEl.textContent === 'All changes saved') {
+                statusEl.textContent = '';
+              }
+            }, 3000);
+          }
+        } catch (e) {
+          console.error(e);
+          const statusEl = document.getElementById('save-status');
+          if (statusEl) {
+            statusEl.textContent = 'Autosave failed: ' + e.message;
           }
         }
       },
@@ -1078,6 +1200,11 @@
             });
           if (error) throw error;
           toast('Salary tracker state saved successfully.');
+          
+          const statusEl = document.getElementById('save-status');
+          if (statusEl) {
+            statusEl.textContent = 'All changes saved';
+          }
         } catch (e) {
           toast('Save failed: ' + e.message, 'error');
         } finally {
