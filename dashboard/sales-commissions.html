@@ -226,6 +226,7 @@
     let eligibleEmployees = [];
     let commissionsConfig = { rates: [], eligibility_rules: [] };
     let currentCompanyId = null;
+    let cellAssignments = {}; // { [cellKey]: ['employeeId1', 'employeeId2'] }
 
     document.addEventListener('DOMContentLoaded', async () => {
       if (!window.BKAuth) return;
@@ -242,6 +243,45 @@
         currentCompanyId = co?.id || null;
       } catch (err) {
         console.error('Error fetching company ID:', err);
+      }
+
+      // Attach event listeners for dynamic assignment
+      const table = document.getElementById('commissions-table');
+      if (table) {
+        table.addEventListener('change', (e) => {
+          if (e.target.classList.contains('assignee-select')) {
+            const cellKey = e.target.getAttribute('data-cell-key');
+            const index = parseInt(e.target.getAttribute('data-index'), 10);
+            if (cellAssignments[cellKey]) {
+              cellAssignments[cellKey][index] = e.target.value;
+              renderCommissionsTable();
+            }
+          }
+        });
+
+        table.addEventListener('click', (e) => {
+          const addBtn = e.target.closest('.btn-add-assignee');
+          if (addBtn) {
+            const cellKey = addBtn.getAttribute('data-cell-key');
+            if (cellAssignments[cellKey]) {
+              cellAssignments[cellKey].push('');
+              renderCommissionsTable();
+            }
+          }
+
+          const removeBtn = e.target.closest('.btn-remove-assignee');
+          if (removeBtn) {
+            const cellKey = removeBtn.getAttribute('data-cell-key');
+            const index = parseInt(removeBtn.getAttribute('data-index'), 10);
+            if (cellAssignments[cellKey]) {
+              cellAssignments[cellKey].splice(index, 1);
+              if (cellAssignments[cellKey].length === 0) {
+                cellAssignments[cellKey] = [''];
+              }
+              renderCommissionsTable();
+            }
+          }
+        });
       }
 
       if (currentCompanyId) {
@@ -389,24 +429,54 @@
           let ratesCellsHtml = '';
           rates.forEach(r => {
             const percent = parseFloat(r.value) || 0;
-            const commAmountCentavos = Math.round(eligibleCentavos * (percent / 100));
+            const cellKey = `${rowKey}_${r.label}`;
+
+            if (!cellAssignments[cellKey]) {
+              cellAssignments[cellKey] = [''];
+            }
+
+            const assignedIds = cellAssignments[cellKey];
+            const activeCount = assignedIds.filter(id => id !== '').length;
+            const divisor = activeCount || 1;
+            const splitPercent = percent / divisor;
+            const splitCommAmountCentavos = Math.round(eligibleCentavos * (splitPercent / 100));
 
             // Generate employee select dropdown options
-            let employeeOptionsHtml = '<option value="">-- Assign --</option>';
-            eligibleEmployees.forEach(e => {
-              const fullName = `${e.first_name || ''} ${e.last_name || ''}`.trim();
-              employeeOptionsHtml += `<option value="${e.id}">${escapeHtml(fullName)}</option>`;
+            let selectRowsHtml = '';
+            assignedIds.forEach((currentId, idx) => {
+              let employeeOptionsHtml = '<option value="">-- Assign --</option>';
+              eligibleEmployees.forEach(e => {
+                const fullName = `${e.first_name || ''} ${e.last_name || ''}`.trim();
+                const isSelected = e.id === currentId ? ' selected' : '';
+                const isAlreadySelected = assignedIds.some((id, selectIdx) => id === e.id && selectIdx !== idx);
+                const disabledAttr = isAlreadySelected ? ' disabled' : '';
+                employeeOptionsHtml += `<option value="${e.id}"${isSelected}${disabledAttr}>${escapeHtml(fullName)}</option>`;
+              });
+
+              selectRowsHtml += `
+                <div class="assignee-row" style="display: flex; align-items: center; gap: 0.35rem; margin-bottom: 0.25rem;">
+                  <select class="form-select assignee-select" data-cell-key="${cellKey}" data-index="${idx}" style="font-size: 0.72rem; padding: 0.15rem 0.35rem; height: 26px; min-width: 110px;">
+                    ${employeeOptionsHtml}
+                  </select>
+                  <span style="font-weight: 600; color: var(--text-primary); font-size: 0.8rem; white-space: nowrap;">
+                    (${fmtPHP(splitCommAmountCentavos)})
+                  </span>
+                  ${assignedIds.length > 1 ? `
+                    <button type="button" class="btn-remove-assignee" data-cell-key="${cellKey}" data-index="${idx}" style="background: none; border: none; color: var(--danger); cursor: pointer; padding: 0.1rem 0.3rem; font-size: 0.75rem; display: flex; align-items: center; justify-content: center;" title="Remove assignee">
+                      ✕
+                    </button>
+                  ` : ''}
+                </div>
+              `;
             });
 
             ratesCellsHtml += `
               <td>
-                <div style="display: flex; flex-direction: column; gap: 0.25rem;">
-                  <select class="form-select" style="font-size: 0.72rem; padding: 0.15rem 0.35rem; height: 26px; min-width: 110px;">
-                    ${employeeOptionsHtml}
-                  </select>
-                  <span style="font-weight: 600; color: var(--text-primary); font-size: 0.8rem; margin-top: 0.15rem;">
-                    ${fmtPHP(commAmountCentavos)}
-                  </span>
+                <div style="display: flex; flex-direction: column; gap: 0.25rem; align-items: flex-start;">
+                  ${selectRowsHtml}
+                  <button type="button" class="btn-add-assignee" data-cell-key="${cellKey}" style="background: none; border: none; color: var(--cyan); cursor: pointer; font-size: 0.72rem; font-weight: 600; padding: 0.15rem 0; display: inline-flex; align-items: center; gap: 0.15rem;">
+                    + Add
+                  </button>
                 </div>
               </td>
             `;
