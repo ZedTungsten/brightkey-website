@@ -563,8 +563,6 @@
           <button class="tab-btn" onclick="switchTab('inspect')">Inspect <span id="badge-count-inspect" style="display:none; background:var(--cyan); color:white; font-size:0.75rem; padding:1px 6px; border-radius:10px; margin-left:4px;">0</span></button>
           <button class="tab-btn" onclick="switchTab('receive')">Receive <span id="badge-count-receive" style="display:none; background:var(--cyan); color:white; font-size:0.75rem; padding:1px 6px; border-radius:10px; margin-left:4px;">0</span></button>
           <button class="tab-btn" onclick="switchTab('order')">Order Supplier</button>
-          <button class="tab-btn" onclick="switchTab('cancel')">Cancel</button>
-          <button class="tab-btn" onclick="switchTab('return')">Return</button>
           <button class="tab-btn" onclick="switchTab('transfer')">Transfer</button>
         </div>
 
@@ -845,57 +843,6 @@
             </div>
           </div>
 
-          <!-- Tab Panel: Return -->
-          <div class="tab-panel" id="panel-return">
-            <div class="panel">
-              <div class="panel-header">Past Dispatched Orders</div>
-              <div class="table-responsive">
-                <table class="ledger-table">
-                  <thead>
-                    <tr>
-                      <th>Image</th>
-                      <th>Ref Order</th>
-                      <th>Customer</th>
-                      <th>City</th>
-                      <th>SKU</th>
-                      <th>Qty</th>
-                      <th>Dispatched Date</th>
-                      <th style="text-align:right;">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody id="return-list">
-                    <tr><td colspan="8" class="text-center text-muted" style="padding:2rem 0;">No past dispatched orders found.</td></tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-
-          <!-- Tab Panel: Cancel -->
-          <div class="tab-panel" id="panel-cancel">
-            <div class="panel">
-              <div class="panel-header">Cancelled Orders</div>
-              <div class="table-responsive">
-                <table class="ledger-table">
-                  <thead>
-                    <tr>
-                      <th>Image</th>
-                      <th>Ref Order</th>
-                      <th>Customer</th>
-                      <th>City</th>
-                      <th>SKU</th>
-                      <th>Qty</th>
-                      <th>Cancelled Date</th>
-                      <th style="text-align:right;">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody id="cancel-list">
-                    <tr><td colspan="8" class="text-center text-muted" style="padding:2rem 0;">No cancelled orders.</td></tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
 
           <!-- Tab Panel: Transfer -->
           <div class="tab-panel" id="panel-transfer">
@@ -1356,8 +1303,6 @@
       renderPackTab();
       renderInspectTab();
       renderDispatchTab();
-      renderReturnTab();
-      renderCancelTab();
       renderTransferTab();
       renderActivityFeed();
       updateBadgeCounts();
@@ -2087,96 +2032,6 @@
       });
     }
 
-    // Render Tab 6: Return
-    function renderReturnTab() {
-      const tbody = document.getElementById('return-list');
-      tbody.innerHTML = '';
-
-      const dispatched = activeTransactions.filter(t => t.status === 'dispatched');
-
-      if (dispatched.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted" style="padding:2rem 0;">No past dispatched orders found.</td></tr>`;
-        return;
-      }
-
-      let prevRefId = null;
-      dispatched.forEach(t => {
-        const isDuplicate = (t.reference_id && t.reference_id === prevRefId);
-        prevRefId = t.reference_id;
-        const p = allProducts.find(prod => prod.sku === t.sku) || { title: 'Unknown Product', image_main: '' };
-        const date = t.timestamp_dispatched ? new Date(t.timestamp_dispatched).toLocaleString() : 'N/A';
-        
-        let imageSrc = p.image_main;
-        if (!imageSrc || !imageSrc.match(/^https?:\/\//)) {
-          imageSrc = '../../assets/og-image.png';
-        }
-
-        tbody.innerHTML += `
-          <tr>
-            <td>
-              <img src="${imageSrc}" alt="${t.sku}" style="width: 80px; height: 50px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-elevated); display: block;" />
-            </td>
-            <td><strong>${isDuplicate ? '' : (t.reference_id || 'N/A')}</strong></td>
-            <td>${isDuplicate ? '' : (t.customer_name || 'N/A')}</td>
-            <td>${isDuplicate ? '' : (t.customer_city || 'N/A')}</td>
-            <td><code>${t.sku}</code></td>
-            <td><strong>${t.quantity}</strong></td>
-            <td>${date}</td>
-            <td style="text-align:right;">
-              <button class="btn btn-outline btn-sm" style="border-color:#ef4444; color:#ef4444;" onclick="returnItem(this, '${t.id}', '${t.sku}', ${t.quantity})">
-                <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: -2px; margin-right: 6px;"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>Return
-              </button>
-            </td>
-          </tr>
-        `;
-      });
-    }
-
-    // Render Tab 7: Cancel — shows cancelled orders with Reshelf action
-    function renderCancelTab() {
-      const tbody = document.getElementById('cancel-list');
-      tbody.innerHTML = '';
-
-      const cancelled = activeTransactions
-        .filter(t => t.status === 'cancelled' && t.type === 'customer_order')
-        .sort((a, b) => new Date(b.timestamp_cancelled || b.updated_at) - new Date(a.timestamp_cancelled || a.updated_at));
-
-      if (cancelled.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted" style="padding:2rem 0;">No cancelled orders.</td></tr>`;
-        return;
-      }
-
-      cancelled.forEach(t => {
-        const p = allProducts.find(prod => prod.sku === t.sku) || { title: 'Unknown Product', image_main: '' };
-        const cancelledDate = t.timestamp_cancelled
-          ? new Date(t.timestamp_cancelled).toLocaleString()
-          : 'N/A';
-        
-        let imageSrc = p.image_main;
-        if (!imageSrc || !imageSrc.match(/^https?:\/\//)) {
-          imageSrc = '../../assets/og-image.png';
-        }
-
-        tbody.innerHTML += `
-          <tr>
-            <td>
-              <img src="${imageSrc}" alt="${t.sku}" style="width: 80px; height: 50px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-elevated); display: block;" />
-            </td>
-            <td><strong>${t.reference_id || 'N/A'}</strong></td>
-            <td>${t.customer_name || 'N/A'}</td>
-            <td>${t.customer_city || 'N/A'}</td>
-            <td><code>${t.sku}</code></td>
-            <td><strong>${t.quantity}</strong></td>
-            <td style="color:var(--text-muted); font-size:0.82rem;">${cancelledDate}</td>
-            <td style="text-align:right;">
-              <button class="btn btn-outline btn-sm" onclick="receiveItem(this, '${t.id}', '${t.sku}', ${t.quantity}, 'cancelled')">
-                <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align:-2px; margin-right:4px;"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>Reshelf
-              </button>
-            </td>
-          </tr>
-        `;
-      });
-    }
 
     // Render Activity Feed Logs
     function renderActivityFeed() {
@@ -2989,77 +2844,7 @@
       });
     };
 
-    // ACTION: Return dispatched order (Mark "Cancelled")
-    window.returnItem = async function(btn, id, sku, qty) {
-      await wrapActionWithLoading(btn, async () => {
-        const now = new Date().toISOString();
 
-        const { error: txErr } = await sb.from('inventory_transactions').update({
-          status: 'returned',
-          timestamp_returned: now
-        }).eq('id', id);
-        if (txErr) throw txErr;
-
-        let invQRet = sb.from('inventory').select('*').eq('sku', sku);
-        if (activeWarehouseId) invQRet = invQRet.eq('warehouse_id', activeWarehouseId);
-        else invQRet = invQRet.is('warehouse_id', null);
-        const { data: invRow, error: invErr } = await invQRet;
-        if (invErr) throw invErr;
-        if (invRow && invRow.length > 0) {
-          const inv = invRow[0];
-          const { error: updErr } = await sb.from('inventory').update({
-            dispatched: Math.max(0, inv.dispatched - qty),
-            returned: inv.returned + qty
-          }).eq('id', inv.id);
-          if (updErr) throw updErr;
-        }
-
-        lastAction = { type: 'return', id, sku, qty };
-        updateUndoButtonState();
-        await refreshDashboard();
-        showToast('Order marked as Returned. Warehouse must confirm receipt under the Receive tab.');
-      });
-    };
-
-    // ACTION: Cancel reserved/packed item
-    window.cancelQueueItem = async function(btn, id, sku, qty, prevStatus) {
-      await wrapActionWithLoading(btn, async () => {
-        await handleCancellationProcess(id, sku, qty, prevStatus);
-        lastAction = { type: 'cancelPack', id, sku, qty };
-        updateUndoButtonState();
-        await refreshDashboard();
-        showToast('Order cancelled. Items sent to Receive tab to be re-shelved.');
-      });
-    };
-
-    async function handleCancellationProcess(id, sku, qty, prevStatus) {
-      const now = new Date().toISOString();
-
-      const { error: txErr } = await sb.from('inventory_transactions').update({
-        status: 'cancelled',
-        timestamp_cancelled: now
-      }).eq('id', id);
-      if (txErr) throw txErr;
-
-      let invQCancel = sb.from('inventory').select('*').eq('sku', sku);
-      if (activeWarehouseId) invQCancel = invQCancel.eq('warehouse_id', activeWarehouseId);
-      else invQCancel = invQCancel.is('warehouse_id', null);
-      const { data: invRow, error: invErr } = await invQCancel;
-      if (invErr) throw invErr;
-      if (invRow && invRow.length > 0) {
-        const inv = invRow[0];
-        const updates = { cancelled: inv.cancelled + qty };
-        if (prevStatus === 'reserved') {
-          updates.reserved = Math.max(0, inv.reserved - qty);
-        } else if (prevStatus === 'inspect') {
-          updates.inspect = Math.max(0, (inv.inspect || 0) - qty);
-        } else if (prevStatus === 'packed') {
-          updates.packed = Math.max(0, inv.packed - qty);
-        }
-        const { error: updErr } = await sb.from('inventory').update(updates).eq('id', inv.id);
-        if (updErr) throw updErr;
-      }
-    }
 
     // ACTION: Undo Last Action
     window.undoLastAction = async function(btn) {

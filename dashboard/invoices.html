@@ -1368,9 +1368,13 @@
               if (txErr) console.error('Error cancelling transaction:', txErr);
 
               // Update inventory counts
-              const { data: invRows, error: invErr } = await sb.from('inventory')
-                .select('*')
-                .eq('sku', tx.sku);
+              let invQ = sb.from('inventory').select('*').eq('sku', tx.sku);
+              if (tx.warehouse_id) {
+                invQ = invQ.eq('warehouse_id', tx.warehouse_id);
+              } else {
+                invQ = invQ.is('warehouse_id', null);
+              }
+              const { data: invRows, error: invErr } = await invQ;
               if (invErr) {
                 console.error('Error querying inventory for SKU:', tx.sku, invErr);
                 continue;
@@ -1389,7 +1393,7 @@
                 }
                 const { error: updErr } = await sb.from('inventory')
                   .update(updates)
-                  .eq('sku', tx.sku);
+                  .eq('id', inv.id);
                 if (updErr) console.error('Error updating inventory counts:', updErr);
               }
             }

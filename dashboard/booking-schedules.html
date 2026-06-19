@@ -2188,12 +2188,19 @@
         // 2. Cancel all active inventory transactions for this order
         const orderNo = selectedBooking.order_no;
         if (orderNo) {
+          // Delete delivery booking if it exists
+          const { error: delBookingErr } = await sb
+            .from('delivery_bookings')
+            .delete()
+            .eq('reference_id', orderNo);
+          if (delBookingErr) throw delBookingErr;
+
           const { data: txs, error: txFetchErr } = await sb
             .from('inventory_transactions')
-            .select('id, sku, quantity, status')
+            .select('id, sku, quantity, status, warehouse_id')
             .eq('reference_id', orderNo)
             .eq('type', 'customer_order')
-            .in('status', ['inspect', 'reserved', 'packed']);
+            .in('status', ['inspect', 'reserved', 'packed', 'dispatched']);
           if (txFetchErr) throw txFetchErr;
 
           const now = new Date().toISOString();
@@ -2206,10 +2213,13 @@
             if (txErr) throw txErr;
 
             // Adjust inventory counts
-            const { data: invRows, error: invErr } = await sb
-              .from('inventory')
-              .select('*')
-              .eq('sku', tx.sku);
+            let invQ = sb.from('inventory').select('*').eq('sku', tx.sku);
+            if (tx.warehouse_id) {
+              invQ = invQ.eq('warehouse_id', tx.warehouse_id);
+            } else {
+              invQ = invQ.is('warehouse_id', null);
+            }
+            const { data: invRows, error: invErr } = await invQ;
             if (invErr) throw invErr;
             if (invRows && invRows.length > 0) {
               const inv = invRows[0];
@@ -2220,11 +2230,13 @@
                 invUpdate.reserved = Math.max(0, (inv.reserved || 0) - tx.quantity);
               } else if (tx.status === 'packed') {
                 invUpdate.packed = Math.max(0, (inv.packed || 0) - tx.quantity);
+              } else if (tx.status === 'dispatched') {
+                invUpdate.dispatched = Math.max(0, (inv.dispatched || 0) - tx.quantity);
               }
               const { error: updErr } = await sb
                 .from('inventory')
                 .update(invUpdate)
-                .eq('sku', tx.sku);
+                .eq('id', inv.id);
               if (updErr) throw updErr;
             }
           }
