@@ -897,11 +897,8 @@
   <!-- Add Labor Modal -->
   <div class="modal-overlay" id="confirm-modal" onclick="closeConfirmModal(false)">
     <div class="modal-sheet" style="max-width: 400px; padding: 1.5rem; text-align: center;" onclick="event.stopPropagation()">
-      <h3 class="modal-title" style="margin-bottom: 0.5rem; text-align: center;">Add SKU (install price)?</h3>
-      <p style="font-size: 0.9rem; color: var(--text-secondary); line-height: 1.5; margin-bottom: 1rem;">This is for nails, material misdeclaration, and extra welding jobs. Make sure the customer is informed first before adding.</p>
-      <div style="margin-bottom: 1.25rem;">
-        <input type="number" id="addon-labor-price" class="form-input" placeholder="Price (PHP)" min="1" step="any" required style="width: 100%; text-align: center; font-size: 1.1rem; font-weight: 600;" />
-      </div>
+      <h3 class="modal-title" id="confirm-title" style="margin-bottom: 0.5rem; text-align: center;">Add Add-on Labor?</h3>
+      <p id="confirm-message" style="font-size: 0.9rem; color: var(--text-secondary); line-height: 1.5; margin-bottom: 1.5rem;">This is for nails, material misdeclaration, and extra welding jobs. Make sure the customer is informed first before adding.</p>
       <div style="display: flex; gap: 0.75rem; justify-content: center;">
         <button type="button" class="btn btn-outline" style="width: auto; padding: 0.5rem 1.5rem;" onclick="closeConfirmModal(false)">No</button>
         <button type="button" class="btn" style="width: auto; padding: 0.5rem 2rem; background: var(--cyan); color: #fff; border: none; font-weight: 600;" onclick="submitAddLabor()">Add</button>
@@ -937,12 +934,45 @@
     ];
 
     let confirmResolver = null;
-    window.promptAddLabor = function(doorIdx) {
-      document.getElementById('addon-labor-price').value = '';
-      document.getElementById('confirm-modal').style.display = 'flex';
-      return new Promise((resolve) => {
-        confirmResolver = resolve;
-      });
+    window.promptAddLabor = async function(doorIdx) {
+      const btn = document.querySelector(`button[onclick="promptAddLabor(${doorIdx})"]`);
+      const originalText = btn ? btn.innerText : '';
+      if (btn) {
+        btn.innerText = '⌛...';
+        btn.disabled = true;
+      }
+
+      try {
+        const { data: p, error } = await sb
+          .from('products')
+          .select('installation_price')
+          .eq('sku', 'ADD-ON LABOR')
+          .eq('company_id', currentInstaller.company_id)
+          .maybeSingle();
+
+        if (error) throw error;
+        if (!p) {
+          throw new Error("SKU 'ADD-ON LABOR' not found in catalog.");
+        }
+
+        const priceCents = p.installation_price || 0;
+        window.currentAddonLaborPriceCents = priceCents;
+
+        // Show confirm-modal
+        document.getElementById('confirm-modal').style.display = 'flex';
+        
+        return new Promise((resolve) => {
+          confirmResolver = resolve;
+        });
+      } catch (err) {
+        console.error(err);
+        showToast(err.message, true);
+      } finally {
+        if (btn) {
+          btn.innerText = originalText;
+          btn.disabled = false;
+        }
+      }
     };
 
     window.closeConfirmModal = function(result) {
@@ -954,14 +984,10 @@
     };
 
     window.submitAddLabor = async function() {
-      const priceInput = document.getElementById('addon-labor-price');
-      const priceVal = parseFloat(priceInput.value);
-      if (isNaN(priceVal) || priceVal <= 0) {
-        showToast('Please enter a valid price.', true);
-        return;
-      }
       closeConfirmModal(true);
-      await performAddLabor(priceVal);
+      const priceCents = window.currentAddonLaborPriceCents || 0;
+      const pricePhp = priceCents / 100;
+      await performAddLabor(pricePhp);
     };
 
     window.performAddLabor = async function(pricePhp) {
