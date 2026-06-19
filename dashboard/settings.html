@@ -379,18 +379,6 @@
                 <div class="wh-card" style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1.25rem; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 1.5rem;">
                   <h3 style="font-size: 0.95rem; font-weight: 700; color: var(--text-primary); border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; margin-bottom: 0.5rem;">Commission Eligibility</h3>
                   
-                  <div class="form-group">
-                    <label class="form-label">Scope Eligibility By</label>
-                    <div style="display: flex; gap: 1.5rem; margin-top: 0.25rem;">
-                      <label style="display: flex; align-items: center; gap: 0.4rem; cursor: pointer; font-weight: 600;">
-                        <input type="radio" name="eligibility-scope" value="businesses" checked onchange="toggleEligibilityScope()" style="accent-color: var(--cyan);" /> Businesses
-                      </label>
-                      <label style="display: flex; align-items: center; gap: 0.4rem; cursor: pointer; font-weight: 600;">
-                        <input type="radio" name="eligibility-scope" value="tags" onchange="toggleEligibilityScope()" style="accent-color: var(--cyan);" /> Tags
-                      </label>
-                    </div>
-                  </div>
-
                   <!-- Container for dynamically added eligibility rows -->
                   <div id="eligibility-rows-container" style="display: flex; flex-direction: column; gap: 0.75rem;">
                     <!-- Rows will be added here -->
@@ -418,18 +406,6 @@
                 <div class="wh-card" style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1.25rem; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px;">
                   <h3 style="font-size: 0.95rem; font-weight: 700; color: var(--text-primary); border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; margin-bottom: 0.5rem;">Commission Adjustments</h3>
                   
-                  <div class="form-group">
-                    <label class="form-label">Scope Adjustment By</label>
-                    <div style="display: flex; gap: 1.5rem; margin-top: 0.25rem;">
-                      <label style="display: flex; align-items: center; gap: 0.4rem; cursor: pointer; font-weight: 600;">
-                        <input type="radio" name="adjustment-scope" value="businesses" checked onchange="toggleAdjustmentScope()" style="accent-color: var(--cyan);" /> Businesses
-                      </label>
-                      <label style="display: flex; align-items: center; gap: 0.4rem; cursor: pointer; font-weight: 600;">
-                        <input type="radio" name="adjustment-scope" value="tags" onchange="toggleAdjustmentScope()" style="accent-color: var(--cyan);" /> Tags
-                      </label>
-                    </div>
-                  </div>
-
                   <!-- Container for dynamically added adjustment rows -->
                   <div id="adjustment-rows-container" style="display: flex; flex-direction: column; gap: 1rem;">
                     <!-- Rows will be added here -->
@@ -1549,40 +1525,22 @@
         const products = window.commissionsProductsData || [];
         const skus = products.filter(p => p.business === biz && p.category === cat).map(p => p.sku).filter(Boolean).sort();
         skuSelect.innerHTML = '<option value="all">All SKUs</option>' + skus.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
-        skuSelect.value = 'all';
-      }
-    };
-
-    window.onAdjustmentBusinessChange = function() {
-      const biz = document.getElementById('adj-business-select').value;
-      const catContainer = document.getElementById('adj-category-container');
-      const skuContainer = document.getElementById('adj-sku-container');
-      const catSelect = document.getElementById('adj-category-select');
-      const skuSelect = document.getElementById('adj-sku-select');
-
-      if (biz === 'all') {
-        catContainer.style.display = 'none';
-        skuContainer.style.display = 'none';
-      const container = document.getElementById('adjustment-rows-container');
-      if (container) container.innerHTML = '';
-      addAdjustmentRow();
-    };
-
     window.onElRowBusinessChange = function(rowId, selectedCat = 'all', selectedSku = 'all') {
       const row = document.getElementById(rowId);
       if (!row) return;
-      const biz = row.querySelector('.el-row-business').value;
+      const val = row.querySelector('.el-row-business-tag').value;
       const catContainer = row.querySelector('.el-row-category-container');
       const skuContainer = row.querySelector('.el-row-sku-container');
       const catSelect = row.querySelector('.el-row-category');
       const skuSelect = row.querySelector('.el-row-sku');
 
-      if (biz === 'all') {
+      if (!val.startsWith('biz:')) {
         catContainer.style.display = 'none';
         skuContainer.style.display = 'none';
         catSelect.value = 'all';
         skuSelect.value = 'all';
       } else {
+        const biz = val.replace('biz:', '');
         catContainer.style.display = 'block';
         skuContainer.style.display = 'none';
         skuSelect.value = 'all';
@@ -1601,7 +1559,8 @@
     window.onElRowCategoryChange = function(rowId, selectedSku = 'all') {
       const row = document.getElementById(rowId);
       if (!row) return;
-      const biz = row.querySelector('.el-row-business').value;
+      const bizVal = row.querySelector('.el-row-business-tag').value;
+      const biz = bizVal.replace('biz:', '');
       const cat = row.querySelector('.el-row-category').value;
       const skuContainer = row.querySelector('.el-row-sku-container');
       const skuSelect = row.querySelector('.el-row-sku');
@@ -1622,18 +1581,19 @@
     window.onAdjRowBusinessChange = function(rowId, selectedCat = 'all', selectedSku = 'all') {
       const row = document.getElementById(rowId);
       if (!row) return;
-      const biz = row.querySelector('.adj-row-business').value;
+      const val = row.querySelector('.adj-row-business-tag').value;
       const catContainer = row.querySelector('.adj-category-container');
       const skuContainer = row.querySelector('.adj-sku-container');
       const catSelect = row.querySelector('.adj-row-category');
       const skuSelect = row.querySelector('.adj-row-sku');
 
-      if (biz === 'all') {
+      if (!val.startsWith('biz:')) {
         catContainer.style.display = 'none';
         skuContainer.style.display = 'none';
         catSelect.value = 'all';
         skuSelect.value = 'all';
       } else {
+        const biz = val.replace('biz:', '');
         catContainer.style.display = 'block';
         skuContainer.style.display = 'none';
         skuSelect.value = 'all';
@@ -1652,7 +1612,8 @@
     window.onAdjRowCategoryChange = function(rowId, selectedSku = 'all') {
       const row = document.getElementById(rowId);
       if (!row) return;
-      const biz = row.querySelector('.adj-row-business').value;
+      const bizVal = row.querySelector('.adj-row-business-tag').value;
+      const biz = bizVal.replace('biz:', '');
       const cat = row.querySelector('.adj-row-category').value;
       const skuContainer = row.querySelector('.adj-sku-container');
       const skuSelect = row.querySelector('.adj-row-sku');
@@ -1671,72 +1632,63 @@
     };
 
     window.addEligibilityRow = function(initialData = null) {
-      const scope = document.querySelector('input[name="eligibility-scope"]:checked').value;
       const container = document.getElementById('eligibility-rows-container');
       if (!container) return;
 
       const rowId = 'el-row-' + Date.now() + Math.random().toString(36).slice(2, 6);
+      const products = window.commissionsProductsData || [];
+      const tags = [...new Set(products.flatMap(p => p.tags || []).filter(Boolean))].sort();
 
-      let html = '';
-      if (scope === 'businesses') {
-        html = `
-          <div class="eligibility-row" id="${rowId}" style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: flex-start; margin-bottom: 0.5rem; width: 100%;">
-            <div class="form-group" style="flex: 1; min-width: 150px; max-width: calc(33.333% - 0.67rem);">
-              <select class="form-select el-row-business" onchange="onElRowBusinessChange('${rowId}')">
-                <option value="all">All Businesses</option>
-                <option value="smart_lock">Smart Lock</option>
-                <option value="solar_power">Solar Power</option>
-                <option value="cctv">CCTV</option>
-                <option value="fire_extinguisher">Fire Extinguisher</option>
-              </select>
-            </div>
-            <div class="form-group el-row-category-container" style="display: none; flex: 1; min-width: 150px; max-width: calc(33.333% - 0.67rem);">
-              <select class="form-select el-row-category" onchange="onElRowCategoryChange('${rowId}')">
-                <option value="all">All Categories</option>
-              </select>
-            </div>
-            <div class="form-group el-row-sku-container" style="display: none; flex: 1; min-width: 150px; max-width: calc(33.333% - 0.67rem);">
-              <select class="form-select el-row-sku">
-                <option value="all">All SKUs</option>
-              </select>
-            </div>
-            <button class="btn btn-outline btn-sm" style="color: var(--danger); border-color: rgba(220,38,38,0.15); height: 38px; margin-top: 0px;" onclick="removeEligibilityRow('${rowId}')">
-              <svg viewBox="0 0 24 24" style="width:12px;height:12px;display:block;fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-            </button>
-          </div>
-        `;
-      } else {
-        html = `
-          <div class="eligibility-row" id="${rowId}" style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: flex-start; margin-bottom: 0.5rem; width: 100%;">
-            <div class="form-group" style="flex: 1; min-width: 200px; max-width: calc(33.333% - 0.67rem);">
-              <select class="form-select el-row-tag">
-                <option value="">-- Choose Tag --</option>
-              </select>
-            </div>
-            <button class="btn btn-outline btn-sm" style="color: var(--danger); border-color: rgba(220,38,38,0.15); height: 38px; margin-top: 0px;" onclick="removeEligibilityRow('${rowId}')">
-              <svg viewBox="0 0 24 24" style="width:12px;height:12px;display:block;fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-            </button>
-          </div>
+      let dropdownOptionsHtml = `
+        <option value="all">All Businesses & Tags</option>
+        <optgroup label="Businesses">
+          <option value="biz:smart_lock">Smart Lock</option>
+          <option value="biz:solar_power">Solar Power</option>
+          <option value="biz:cctv">CCTV</option>
+          <option value="biz:fire_extinguisher">Fire Extinguisher</option>
+        </optgroup>
+      `;
+
+      if (tags.length > 0) {
+        dropdownOptionsHtml += `
+          <optgroup label="Tags">
+            ${tags.map(t => `<option value="tag:${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('')}
+          </optgroup>
         `;
       }
+
+      const html = `
+        <div class="eligibility-row" id="${rowId}" style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: flex-start; margin-bottom: 0.5rem; width: 100%;">
+          <div class="form-group" style="flex: 1; min-width: 150px; max-width: calc(33.333% - 0.67rem);">
+            <label class="form-label" style="font-size: 0.65rem;">Business / Tag</label>
+            <select class="form-select el-row-business-tag" onchange="onElRowBusinessChange('${rowId}')">
+              ${dropdownOptionsHtml}
+            </select>
+          </div>
+          <div class="form-group el-row-category-container" style="display: none; flex: 1; min-width: 150px; max-width: calc(33.333% - 0.67rem);">
+            <label class="form-label" style="font-size: 0.65rem;">Product Category</label>
+            <select class="form-select el-row-category" onchange="onElRowCategoryChange('${rowId}')">
+              <option value="all">All Categories</option>
+            </select>
+          </div>
+          <div class="form-group el-row-sku-container" style="display: none; flex: 1; min-width: 150px; max-width: calc(33.333% - 0.67rem);">
+            <label class="form-label" style="font-size: 0.65rem;">SKU</label>
+            <select class="form-select el-row-sku">
+              <option value="all">All SKUs</option>
+            </select>
+          </div>
+          <button class="btn btn-outline btn-sm" style="color: var(--danger); border-color: rgba(220,38,38,0.15); height: 38px; margin-top: 1.25rem;" onclick="removeEligibilityRow('${rowId}')">
+            <svg viewBox="0 0 24 24" style="width:12px;height:12px;display:block;fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+      `;
 
       container.insertAdjacentHTML('beforeend', html);
 
-      const row = document.getElementById(rowId);
-      if (scope === 'tags') {
-        const tagSelect = row.querySelector('.el-row-tag');
-        const products = window.commissionsProductsData || [];
-        const tags = [...new Set(products.flatMap(p => p.tags || []).filter(Boolean))].sort();
-        tagSelect.innerHTML = '<option value="">-- Choose Tag --</option>' + tags.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
-      }
-
       if (initialData) {
-        if (scope === 'businesses') {
-          row.querySelector('.el-row-business').value = initialData.business || 'all';
-          window.onElRowBusinessChange(rowId, initialData.category || 'all', initialData.sku || 'all');
-        } else {
-          row.querySelector('.el-row-tag').value = initialData.tag || '';
-        }
+        const row = document.getElementById(rowId);
+        row.querySelector('.el-row-business-tag').value = initialData.business_tag_val || 'all';
+        window.onElRowBusinessChange(rowId, initialData.category || 'all', initialData.sku || 'all');
       }
     };
 
@@ -1746,133 +1698,92 @@
     };
 
     window.addAdjustmentRow = function(initialData = null) {
-      const scope = document.querySelector('input[name="adjustment-scope"]:checked').value;
       const container = document.getElementById('adjustment-rows-container');
       if (!container) return;
 
       const rowId = 'adj-row-' + Date.now() + Math.random().toString(36).slice(2, 6);
-      
-      let html = '';
-      if (scope === 'businesses') {
-        html = `
-          <div class="adjustment-row-card" id="${rowId}" style="border: 1px solid var(--border); border-radius: 8px; padding: 1.25rem; background: var(--bg-elevated); position: relative; margin-bottom: 0.5rem;">
-            <!-- Row 1: Filters (Business, Category, SKU) -->
-            <div class="adj-row-filters" style="display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 0.75rem;">
-              <div class="form-group" style="flex: 1; min-width: 150px; max-width: calc(33.333% - 0.67rem);">
-                <label class="form-label" style="font-size: 0.65rem;">Business</label>
-                <select class="form-select adj-row-business" onchange="onAdjRowBusinessChange('${rowId}')">
-                  <option value="all">All Businesses</option>
-                  <option value="smart_lock">Smart Lock</option>
-                  <option value="solar_power">Solar Power</option>
-                  <option value="cctv">CCTV</option>
-                  <option value="fire_extinguisher">Fire Extinguisher</option>
-                </select>
-              </div>
-              <div class="form-group adj-category-container" style="display: none; flex: 1; min-width: 150px; max-width: calc(33.333% - 0.67rem);">
-                <label class="form-label" style="font-size: 0.65rem;">Product Category</label>
-                <select class="form-select adj-row-category" onchange="onAdjRowCategoryChange('${rowId}')">
-                  <option value="all">All Categories</option>
-                </select>
-              </div>
-              <div class="form-group adj-sku-container" style="display: none; flex: 1; min-width: 150px; max-width: calc(33.333% - 0.67rem);">
-                <label class="form-label" style="font-size: 0.65rem;">SKU</label>
-                <select class="form-select adj-row-sku">
-                  <option value="all">All SKUs</option>
-                </select>
-              </div>
-            </div>
-            <!-- Row 2: Details -->
-            <div style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: flex-end;">
-              <div class="form-group" style="flex: 1.5; min-width: 180px;">
-                <label class="form-label" style="font-size: 0.65rem;">Commission Label</label>
-                <select class="form-select adj-row-label">
-                  <option value="">-- Choose Commission Rate Label --</option>
-                </select>
-              </div>
-              <div class="form-group" style="flex: 1; min-width: 100px;">
-                <label class="form-label" style="font-size: 0.65rem;">Adjustment Type</label>
-                <select class="form-select adj-row-operator">
-                  <option value="plus">Plus (+)</option>
-                  <option value="minus">Minus (-)</option>
-                </select>
-              </div>
-              <div class="form-group" style="flex: 1; min-width: 100px;">
-                <label class="form-label" style="font-size: 0.65rem;">Value (%)</label>
-                <input type="number" class="form-input adj-row-value" placeholder="0.00" min="0" step="0.01" />
-              </div>
-              <div class="form-group" style="flex: 1.5; min-width: 140px;">
-                <label class="form-label" style="font-size: 0.65rem;">Start Date</label>
-                <input type="date" class="form-input adj-row-start-date" />
-              </div>
-              <div class="form-group" style="flex: 1.5; min-width: 140px;">
-                <label class="form-label" style="font-size: 0.65rem;">End Date</label>
-                <input type="date" class="form-input adj-row-end-date" />
-              </div>
-            </div>
-            <!-- Delete button -->
-            <button class="btn btn-outline btn-sm" style="position: absolute; top: 0.5rem; right: 0.5rem; color: var(--danger); border-color: rgba(220,38,38,0.15); padding: 0.25rem;" onclick="removeAdjustmentRow('${rowId}')">
-              <svg viewBox="0 0 24 24" style="width:12px;height:12px;display:block;fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-            </button>
-          </div>
-        `;
-      } else {
-        html = `
-          <div class="adjustment-row-card" id="${rowId}" style="border: 1px solid var(--border); border-radius: 8px; padding: 1.25rem; background: var(--bg-elevated); position: relative; margin-bottom: 0.5rem;">
-            <!-- Row 1: Filters (Tag) -->
-            <div class="adj-row-filters" style="display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 0.75rem;">
-              <div class="form-group" style="flex: 1; min-width: 200px; max-width: calc(33.333% - 0.67rem);">
-                <label class="form-label" style="font-size: 0.65rem;">Tag</label>
-                <select class="form-select adj-row-tag">
-                  <option value="">-- Choose Tag --</option>
-                </select>
-              </div>
-            </div>
-            <!-- Row 2: Details -->
-            <div style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: flex-end;">
-              <div class="form-group" style="flex: 1.5; min-width: 180px;">
-                <label class="form-label" style="font-size: 0.65rem;">Commission Label</label>
-                <select class="form-select adj-row-label">
-                  <option value="">-- Choose Commission Rate Label --</option>
-                </select>
-              </div>
-              <div class="form-group" style="flex: 1; min-width: 100px;">
-                <label class="form-label" style="font-size: 0.65rem;">Adjustment Type</label>
-                <select class="form-select adj-row-operator">
-                  <option value="plus">Plus (+)</option>
-                  <option value="minus">Minus (-)</option>
-                </select>
-              </div>
-              <div class="form-group" style="flex: 1; min-width: 100px;">
-                <label class="form-label" style="font-size: 0.65rem;">Value (%)</label>
-                <input type="number" class="form-input adj-row-value" placeholder="0.00" min="0" step="0.01" />
-              </div>
-              <div class="form-group" style="flex: 1.5; min-width: 140px;">
-                <label class="form-label" style="font-size: 0.65rem;">Start Date</label>
-                <input type="date" class="form-input adj-row-start-date" />
-              </div>
-              <div class="form-group" style="flex: 1.5; min-width: 140px;">
-                <label class="form-label" style="font-size: 0.65rem;">End Date</label>
-                <input type="date" class="form-input adj-row-end-date" />
-              </div>
-            </div>
-            <!-- Delete button -->
-            <button class="btn btn-outline btn-sm" style="position: absolute; top: 0.5rem; right: 0.5rem; color: var(--danger); border-color: rgba(220,38,38,0.15); padding: 0.25rem;" onclick="removeAdjustmentRow('${rowId}')">
-              <svg viewBox="0 0 24 24" style="width:12px;height:12px;display:block;fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-            </button>
-          </div>
+      const products = window.commissionsProductsData || [];
+      const tags = [...new Set(products.flatMap(p => p.tags || []).filter(Boolean))].sort();
+
+      let dropdownOptionsHtml = `
+        <option value="all">All Businesses & Tags</option>
+        <optgroup label="Businesses">
+          <option value="biz:smart_lock">Smart Lock</option>
+          <option value="biz:solar_power">Solar Power</option>
+          <option value="biz:cctv">CCTV</option>
+          <option value="biz:fire_extinguisher">Fire Extinguisher</option>
+        </optgroup>
+      `;
+
+      if (tags.length > 0) {
+        dropdownOptionsHtml += `
+          <optgroup label="Tags">
+            ${tags.map(t => `<option value="tag:${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('')}
+          </optgroup>
         `;
       }
+      
+      const html = `
+        <div class="adjustment-row-card" id="${rowId}" style="border: 1px solid var(--border); border-radius: 8px; padding: 1.25rem; background: var(--bg-elevated); position: relative; margin-bottom: 0.5rem;">
+          <!-- Row 1: Filters (Business / Tag, Category, SKU) -->
+          <div class="adj-row-filters" style="display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 0.75rem;">
+            <div class="form-group" style="flex: 1; min-width: 150px; max-width: calc(33.333% - 0.67rem);">
+              <label class="form-label" style="font-size: 0.65rem;">Business / Tag</label>
+              <select class="form-select adj-row-business-tag" onchange="onAdjRowBusinessChange('${rowId}')">
+                ${dropdownOptionsHtml}
+              </select>
+            </div>
+            <div class="form-group adj-category-container" style="display: none; flex: 1; min-width: 150px; max-width: calc(33.333% - 0.67rem);">
+              <label class="form-label" style="font-size: 0.65rem;">Product Category</label>
+              <select class="form-select adj-row-category" onchange="onAdjRowCategoryChange('${rowId}')">
+                <option value="all">All Categories</option>
+              </select>
+            </div>
+            <div class="form-group adj-sku-container" style="display: none; flex: 1; min-width: 150px; max-width: calc(33.333% - 0.67rem);">
+              <label class="form-label" style="font-size: 0.65rem;">SKU</label>
+              <select class="form-select adj-row-sku">
+                <option value="all">All SKUs</option>
+              </select>
+            </div>
+          </div>
+          <!-- Row 2: Details -->
+          <div style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: flex-end;">
+            <div class="form-group" style="flex: 1.5; min-width: 180px;">
+              <label class="form-label" style="font-size: 0.65rem;">Commission Label</label>
+              <select class="form-select adj-row-label">
+                <option value="">-- Choose Commission Rate Label --</option>
+              </select>
+            </div>
+            <div class="form-group" style="flex: 1; min-width: 100px;">
+              <label class="form-label" style="font-size: 0.65rem;">Adjustment Type</label>
+              <select class="form-select adj-row-operator">
+                <option value="plus">Plus (+)</option>
+                <option value="minus">Minus (-)</option>
+              </select>
+            </div>
+            <div class="form-group" style="flex: 1; min-width: 100px;">
+              <label class="form-label" style="font-size: 0.65rem;">Value (%)</label>
+              <input type="number" class="form-input adj-row-value" placeholder="0.00" min="0" step="0.01" />
+            </div>
+            <div class="form-group" style="flex: 1.5; min-width: 140px;">
+              <label class="form-label" style="font-size: 0.65rem;">Start Date</label>
+              <input type="date" class="form-input adj-row-start-date" />
+            </div>
+            <div class="form-group" style="flex: 1.5; min-width: 140px;">
+              <label class="form-label" style="font-size: 0.65rem;">End Date</label>
+              <input type="date" class="form-input adj-row-end-date" />
+            </div>
+          </div>
+          <!-- Delete button -->
+          <button class="btn btn-outline btn-sm" style="position: absolute; top: 0.5rem; right: 0.5rem; color: var(--danger); border-color: rgba(220,38,38,0.15); padding: 0.25rem;" onclick="removeAdjustmentRow('${rowId}')">
+            <svg viewBox="0 0 24 24" style="width:12px;height:12px;display:block;fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+      `;
 
       container.insertAdjacentHTML('beforeend', html);
 
       const row = document.getElementById(rowId);
-      if (scope === 'tags') {
-        const tagSelect = row.querySelector('.adj-row-tag');
-        const products = window.commissionsProductsData || [];
-        const tags = [...new Set(products.flatMap(p => p.tags || []).filter(Boolean))].sort();
-        tagSelect.innerHTML = '<option value="">-- Choose Tag --</option>' + tags.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
-      }
-
       const labelSelect = row.querySelector('.adj-row-label');
       const labelInputs = document.querySelectorAll('.rate-label-input');
       let selectHtml = '<option value="">-- Choose Commission Rate Label --</option>';
@@ -1885,12 +1796,8 @@
       labelSelect.innerHTML = selectHtml;
 
       if (initialData) {
-        if (scope === 'businesses') {
-          row.querySelector('.adj-row-business').value = initialData.business || 'all';
-          window.onAdjRowBusinessChange(rowId, initialData.category || 'all', initialData.sku || 'all');
-        } else {
-          row.querySelector('.adj-row-tag').value = initialData.tag || '';
-        }
+        row.querySelector('.adj-row-business-tag').value = initialData.business_tag_val || 'all';
+        window.onAdjRowBusinessChange(rowId, initialData.category || 'all', initialData.sku || 'all');
         row.querySelector('.adj-row-label').value = initialData.label || '';
         row.querySelector('.adj-row-operator').value = initialData.operator || 'plus';
         row.querySelector('.adj-row-value').value = initialData.value || '';
@@ -1952,17 +1859,7 @@
     };
 
     function populateCommissionsDropdowns(productsData) {
-      const tags = [...new Set(productsData.flatMap(p => p.tags || []).filter(Boolean))].sort();
-
-      const elTagSelect = document.getElementById('el-tag-select');
-      const adjTagSelect = document.getElementById('adj-tag-select');
-
-      if (elTagSelect) {
-        elTagSelect.innerHTML = '<option value="">-- Choose Tag --</option>' + tags.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
-      }
-      if (adjTagSelect) {
-        adjTagSelect.innerHTML = '<option value="">-- Choose Tag --</option>' + tags.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
-      }
+      // Tags are populated dynamically per row now. Left as no-op to prevent calls throwing.
     }
 
     async function loadCommissionsSettings() {
@@ -1996,22 +1893,47 @@
             addRateRow();
           }
 
-          const elScope = v.eligibility_scope || 'businesses';
-          const elRadio = document.querySelector(`input[name="eligibility-scope"][value="${elScope}"]`);
-          if (elRadio) { elRadio.checked = true; }
-
           if (Array.isArray(v.eligibility_rules) && v.eligibility_rules.length > 0) {
-            v.eligibility_rules.forEach(r => addEligibilityRow(r));
+            v.eligibility_rules.forEach(r => {
+              let initialData;
+              if (r.scope === 'businesses') {
+                initialData = {
+                  business_tag_val: r.business === 'all' ? 'all' : `biz:${r.business}`,
+                  category: r.category,
+                  sku: r.sku
+                };
+              } else {
+                initialData = {
+                  business_tag_val: `tag:${r.tag}`
+                };
+              }
+              addEligibilityRow(initialData);
+            });
           } else {
             addEligibilityRow();
           }
 
-          const adjScope = v.adjustment_scope || 'businesses';
-          const adjRadio = document.querySelector(`input[name="adjustment-scope"][value="${adjScope}"]`);
-          if (adjRadio) { adjRadio.checked = true; }
-
           if (Array.isArray(v.adjustment_rules) && v.adjustment_rules.length > 0) {
-            v.adjustment_rules.forEach(r => addAdjustmentRow(r));
+            v.adjustment_rules.forEach(r => {
+              let initialData;
+              if (r.scope === 'businesses') {
+                initialData = {
+                  business_tag_val: r.business === 'all' ? 'all' : `biz:${r.business}`,
+                  category: r.category,
+                  sku: r.sku
+                };
+              } else {
+                initialData = {
+                  business_tag_val: `tag:${r.tag}`
+                };
+              }
+              initialData.label = r.label;
+              initialData.operator = r.operator;
+              initialData.value = r.value;
+              initialData.start_date = r.start_date;
+              initialData.end_date = r.end_date;
+              addAdjustmentRow(initialData);
+            });
           } else {
             addAdjustmentRow();
           }
@@ -2039,16 +1961,23 @@
       const eligibility_rules = [];
       const elRows = document.querySelectorAll('#eligibility-rows-container .eligibility-row');
       elRows.forEach(row => {
-        const scope = document.querySelector('input[name="eligibility-scope"]:checked').value;
-        const rule = { scope };
-        if (scope === 'businesses') {
-          rule.business = row.querySelector('.el-row-business').value;
+        const val = row.querySelector('.el-row-business-tag').value;
+        const rule = {};
+        if (val.startsWith('biz:')) {
+          rule.scope = 'businesses';
+          rule.business = val.replace('biz:', '');
           const catSelect = row.querySelector('.el-row-category');
           rule.category = (catSelect && row.querySelector('.el-row-category-container').style.display !== 'none') ? catSelect.value : 'all';
           const skuSelect = row.querySelector('.el-row-sku');
           rule.sku = (skuSelect && row.querySelector('.el-row-sku-container').style.display !== 'none') ? skuSelect.value : 'all';
+        } else if (val.startsWith('tag:')) {
+          rule.scope = 'tags';
+          rule.tag = val.replace('tag:', '');
         } else {
-          rule.tag = row.querySelector('.el-row-tag').value;
+          rule.scope = 'businesses';
+          rule.business = 'all';
+          rule.category = 'all';
+          rule.sku = 'all';
         }
         eligibility_rules.push(rule);
       });
@@ -2056,33 +1985,37 @@
       const adjustment_rules = [];
       const adjRows = document.querySelectorAll('#adjustment-rows-container .adjustment-row-card');
       adjRows.forEach(row => {
-        const scope = document.querySelector('input[name="adjustment-scope"]:checked').value;
+        const val = row.querySelector('.adj-row-business-tag').value;
         const rule = {
-          scope,
           label: row.querySelector('.adj-row-label').value,
           operator: row.querySelector('.adj-row-operator').value,
           value: parseFloat(row.querySelector('.adj-row-value').value) || 0,
           start_date: row.querySelector('.adj-row-start-date').value,
           end_date: row.querySelector('.adj-row-end-date').value
         };
-        if (scope === 'businesses') {
-          rule.business = row.querySelector('.adj-row-business').value;
+        if (val.startsWith('biz:')) {
+          rule.scope = 'businesses';
+          rule.business = val.replace('biz:', '');
           const catSelect = row.querySelector('.adj-row-category');
           rule.category = (catSelect && row.querySelector('.adj-category-container').style.display !== 'none') ? catSelect.value : 'all';
           const skuSelect = row.querySelector('.adj-row-sku');
           rule.sku = (skuSelect && row.querySelector('.adj-sku-container').style.display !== 'none') ? skuSelect.value : 'all';
+        } else if (val.startsWith('tag:')) {
+          rule.scope = 'tags';
+          rule.tag = val.replace('tag:', '');
         } else {
-          rule.tag = row.querySelector('.adj-row-tag').value;
+          rule.scope = 'businesses';
+          rule.business = 'all';
+          rule.category = 'all';
+          rule.sku = 'all';
         }
         adjustment_rules.push(rule);
       });
 
       const value = {
-        eligibility_scope: document.querySelector('input[name="eligibility-scope"]:checked').value,
         eligibility_rules,
         rates,
-        adjustment_scope: document.querySelector('input[name="adjustment-scope"]:checked').value,
-        adjustment_rules: window.adjustmentRules
+        adjustment_rules
       };
 
       try {
