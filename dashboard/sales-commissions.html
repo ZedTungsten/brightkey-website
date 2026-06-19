@@ -222,7 +222,7 @@
 
     let dbBookings = [];
     let dbProducts = [];
-    let dbEmployees = [];
+    let eligibleEmployees = [];
     let commissionsConfig = { rates: [], eligibility_rules: [] };
     let currentCompanyId = null;
 
@@ -254,22 +254,29 @@
 
       try {
         // Parallel data fetch
-        const [bookingsRes, productsRes, configRes, employeesRes] = await Promise.all([
+        const [bookingsRes, productsRes, configRes, employeesRes, assignmentsRes] = await Promise.all([
           sb.from('installation_bookings').select('*').eq('company_id', currentCompanyId).order('created_at', { ascending: false }),
           sb.from('products').select('sku, business, category, tags'),
           sb.from('global_settings').select('value').eq('key', 'commissions_config').eq('company_id', currentCompanyId).maybeSingle(),
-          sb.from('employees').select('id, first_name, last_name, employee_number').eq('company_id', currentCompanyId)
+          sb.from('employees').select('id, first_name, last_name, employee_number, assignment').eq('company_id', currentCompanyId),
+          sb.from('employee_assignments').select('id, name, visibility').eq('company_id', currentCompanyId)
         ]);
 
         if (bookingsRes.error) throw bookingsRes.error;
         if (productsRes.error) throw productsRes.error;
         if (configRes.error) throw configRes.error;
         if (employeesRes.error) throw employeesRes.error;
+        if (assignmentsRes.error) throw assignmentsRes.error;
 
         dbBookings = bookingsRes.data || [];
         dbProducts = productsRes.data || [];
-        dbEmployees = employeesRes.data || [];
         
+        const commsAssignments = (assignmentsRes.data || [])
+          .filter(a => Array.isArray(a.visibility) && a.visibility.includes('sales.commissions'))
+          .map(a => a.name);
+
+        eligibleEmployees = (employeesRes.data || []).filter(e => e.assignment && commsAssignments.includes(e.assignment));
+
         if (configRes.data && configRes.data.value) {
           commissionsConfig = configRes.data.value;
         }
@@ -385,7 +392,7 @@
 
             // Generate employee select dropdown options
             let employeeOptionsHtml = '<option value="">-- Assign --</option>';
-            dbEmployees.forEach(e => {
+            eligibleEmployees.forEach(e => {
               const fullName = `${e.first_name || ''} ${e.last_name || ''}`.trim();
               employeeOptionsHtml += `<option value="${e.id}">${escapeHtml(fullName)}</option>`;
             });
