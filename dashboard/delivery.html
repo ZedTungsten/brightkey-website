@@ -207,6 +207,7 @@
           <div class="drawer-tabs">
             <button class="tab-btn active" id="tab-btn-book" onclick="switchTab('book')">Book</button>
             <button class="tab-btn" id="tab-btn-pickup" onclick="switchTab('pickup')">Pickup</button>
+            <button class="tab-btn" id="tab-btn-done" onclick="switchTab('done')">Done</button>
           </div>
 
           <div class="scroll-area">
@@ -272,6 +273,38 @@
                             <div style="text-align:center; padding:3rem; color:var(--text-muted);">
                               <div class="bk-spinner" style="margin:0 auto 1rem;"></div>
                               Loading pickup queue…
+                            </div>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Done Tab Content -->
+              <div class="tab-content" id="tab-content-done">
+                <div class="panel">
+                  <div class="panel-header">Picked Up Deliveries (Completed / In Progress)</div>
+                  <div class="table-responsive">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Ref Order</th>
+                          <th>Full Name</th>
+                          <th>City</th>
+                          <th>SKU</th>
+                          <th>Qty</th>
+                          <th>Date Completed</th>
+                          <th>Action</th>
+                        </tr>
+                      </thead>
+                      <tbody id="done-list">
+                        <tr>
+                          <td colspan="7">
+                            <div style="text-align:center; padding:3rem; color:var(--text-muted);">
+                              <div class="bk-spinner" style="margin:0 auto 1rem;"></div>
+                              Loading done queue…
                             </div>
                           </td>
                         </tr>
@@ -435,6 +468,39 @@
     </div>
   </div>
 
+  <!-- Done Confirmation Modal -->
+  <div id="done-modal" class="modal-overlay">
+    <div class="modal-content">
+      <h3 class="modal-title">Confirm Product Delivery</h3>
+      
+      <div style="font-size: 0.82rem; color: var(--text-secondary); line-height: 1.5; background: var(--bg-elevated); padding: 0.75rem; border-radius: 6px; border: 1px solid var(--border);">
+        <div><strong>Order No:</strong> <span id="dmodal-order-no" style="color: var(--text-primary);"></span></div>
+        <div><strong>Name:</strong> <span id="dmodal-customer-name" style="color: var(--text-primary);"></span></div>
+        <div><strong>City:</strong> <span id="dmodal-customer-city" style="color: var(--text-primary);"></span></div>
+      </div>
+
+      <!-- Upload delivery confirmation screenshot -->
+      <div class="form-group">
+        <label class="form-label">Screenshot of Customer Receipt Confirmation</label>
+        <div id="done-upload-container" style="width:100%; aspect-ratio:16/10; background:var(--bg-elevated); border:2px dashed var(--border); border-radius:8px; display:flex; flex-direction:column; align-items:center; justify-content:center; overflow:hidden; position:relative; cursor:pointer;" onclick="document.getElementById('done-file-input').click()">
+          <img id="done-photo-preview" src="" style="width:100%; height:100%; object-fit:cover; display:none;" />
+          
+          <div id="done-upload-placeholder" style="display:flex; flex-direction:column; align-items:center; gap:0.5rem; color:var(--text-muted); text-align:center; padding:1rem;">
+            <svg viewBox="0 0 24 24" width="28" height="28" stroke="currentColor" stroke-width="1.5" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+            <span style="font-size:0.78rem; font-weight:600;">Drag & drop screenshot here or click to select</span>
+          </div>
+          <input type="file" id="done-file-input" accept="image/*" style="display:none;" onchange="handleDoneFileSelect(event)" />
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div style="display: flex; justify-content: flex-end; gap: 0.75rem; border-top: 1px solid var(--border); padding-top: 1rem; margin-top: 0.25rem;">
+        <button type="button" class="btn btn-outline" onclick="closeDoneModal()">Cancel</button>
+        <button type="button" id="btn-confirm-done" class="btn btn-primary" onclick="confirmDone()" disabled>Confirm Delivery</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Lightbox Modal -->
   <div id="lightbox-modal" class="modal-overlay" onclick="closeLightbox()" style="background: rgba(0,0,0,0.85); cursor: zoom-out;">
     <div style="position: relative; max-width: 90vw; max-height: 90vh;">
@@ -464,6 +530,7 @@
       selectedBooking: null,
       deliveryPhotoBlob: null,
       pickupPhotosBlobs: [], // array of { file, dataUrl }
+      donePhotoBlob: null,
 
       async init() {
         if (!window.BKAuth) return;
@@ -517,6 +584,7 @@
 
           this.renderSendOutQueue();
           this.renderPickupQueue();
+          this.renderDoneQueue();
         } catch (err) {
           console.error(err);
           Toast.error('Failed to load logistics queue: ' + err.message);
@@ -652,6 +720,54 @@
         });
       },
 
+      renderDoneQueue() {
+        const tbody = document.getElementById('done-list');
+        if (!tbody) return;
+        tbody.innerHTML = '';
+
+        // Filter bookings that are picked_up or delivered
+        const doneQueue = this.deliveryBookings.filter(db => ['picked_up', 'delivered'].includes(db.status));
+
+        if (doneQueue.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:3rem; color:var(--text-muted);">No completed or picked up orders.</td></tr>`;
+          return;
+        }
+
+        doneQueue.forEach(db => {
+          // Find the items matching reference_id
+          const items = this.activeTransactions.filter(t => t.reference_id === db.reference_id && t.status === 'dispatched');
+          const skusHtml = items.map(t => `<code>${t.sku}</code>`).join('<br/>') || '—';
+          const qtysHtml = items.map(t => `<strong>${t.quantity}</strong>`).join('<br/>') || '—';
+
+          const dateText = db.status === 'delivered' && db.delivered_at 
+            ? new Date(db.delivered_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) 
+            : '—';
+
+          let actionHtml = '';
+          if (db.status === 'delivered') {
+            actionHtml = `<span style="font-size:0.75rem; color:var(--text-muted); font-weight:600;">Completed</span>`;
+          } else {
+            actionHtml = `
+              <button class="btn btn-cyan btn-sm" onclick="DeliveryApp.openDoneModal('${db.id}')">
+                Done
+              </button>
+            `;
+          }
+
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td><strong>${esc(db.reference_id)}</strong></td>
+            <td>${esc(db.customer_name || 'N/A')}</td>
+            <td>${esc(db.customer_city || 'N/A')}</td>
+            <td>${skusHtml}</td>
+            <td>${qtysHtml}</td>
+            <td>${dateText}</td>
+            <td>${actionHtml}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+      },
+
       openBookingModal(referenceId) {
         // Find matching group details
         const matchingTx = this.activeTransactions.find(t => t.reference_id === referenceId);
@@ -715,6 +831,26 @@
         document.getElementById('pickup-modal').classList.add('open');
       },
 
+      openDoneModal(bookingId) {
+        const booking = this.deliveryBookings.find(b => b.id === bookingId);
+        if (!booking) return;
+
+        this.selectedBooking = booking;
+        this.donePhotoBlob = null;
+
+        document.getElementById('dmodal-order-no').textContent = booking.reference_id;
+        document.getElementById('dmodal-customer-name').textContent = booking.customer_name || 'N/A';
+        document.getElementById('dmodal-customer-city').textContent = booking.customer_city || 'N/A';
+
+        // Reset preview
+        document.getElementById('done-photo-preview').style.display = 'none';
+        document.getElementById('done-photo-preview').src = '';
+        document.getElementById('done-upload-placeholder').style.display = 'flex';
+        document.getElementById('btn-confirm-done').disabled = true;
+
+        document.getElementById('done-modal').classList.add('open');
+      },
+
       setupFeeFields(booking) {
         const fields = ['base', 'tip-1', 'tip-2', 'toll'];
         const dbKeyMap = {
@@ -768,9 +904,11 @@
     window.switchTab = function(tab) {
       document.getElementById('tab-btn-book').classList.toggle('active', tab === 'book');
       document.getElementById('tab-btn-pickup').classList.toggle('active', tab === 'pickup');
+      document.getElementById('tab-btn-done').classList.toggle('active', tab === 'done');
 
       document.getElementById('tab-content-book').classList.toggle('active', tab === 'book');
       document.getElementById('tab-content-pickup').classList.toggle('active', tab === 'pickup');
+      document.getElementById('tab-content-done').classList.toggle('active', tab === 'done');
     };
 
     window.closeBookingModal = function() {
@@ -779,6 +917,10 @@
 
     window.closePickupModal = function() {
       document.getElementById('pickup-modal').classList.remove('open');
+    };
+
+    window.closeDoneModal = function() {
+      document.getElementById('done-modal').classList.remove('open');
     };
 
     window.maximizePhoto = function(src) {
@@ -807,6 +949,23 @@
         img.style.display = 'block';
         document.getElementById('upload-placeholder').style.display = 'none';
         document.getElementById('btn-confirm-booking').disabled = false;
+      };
+      reader.readAsDataURL(file);
+    };
+
+    window.handleDoneFileSelect = function(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      
+      DeliveryApp.donePhotoBlob = file;
+
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        const img = document.getElementById('done-photo-preview');
+        img.src = evt.target.result;
+        img.style.display = 'block';
+        document.getElementById('done-upload-placeholder').style.display = 'none';
+        document.getElementById('btn-confirm-done').disabled = false;
       };
       reader.readAsDataURL(file);
     };
@@ -1025,6 +1184,60 @@
       } catch (err) {
         console.error(err);
         Toast.error('Failed to confirm pickup: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = originalText;
+      }
+    };
+
+    window.confirmDone = async function() {
+      const btn = document.getElementById('btn-confirm-done');
+      if (btn.disabled || !DeliveryApp.selectedBooking || !DeliveryApp.donePhotoBlob) return;
+
+      btn.disabled = true;
+      const originalText = btn.textContent;
+      btn.innerHTML = `<span class="bk-spinner" style="width:12px; height:12px; border-width:2px; display:inline-block; vertical-align:middle; margin-right:6px;"></span>Saving...`;
+
+      try {
+        // Upload screenshot
+        const base64 = await blobToBase64(DeliveryApp.donePhotoBlob);
+        const fileName = `received_${DeliveryApp.selectedBooking.reference_id}_${Date.now()}.jpg`;
+
+        const uploadRes = await fetch('/api/upload', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fileBase64: base64,
+            fileName: fileName,
+            category: 'installations',
+            refId: DeliveryApp.selectedBooking.reference_id,
+            type: 'proof',
+            companyId: DeliveryApp.companyId || 'general'
+          })
+        });
+
+        if (!uploadRes.ok) throw new Error('Delivery screenshot upload failed');
+        const uploadResult = await uploadRes.json();
+
+        const sb = window.BKAuth.sb;
+
+        // Update booking entry with delivered status and received photo
+        const { error: updErr } = await sb.from('delivery_bookings')
+          .update({
+            status: 'delivered',
+            received_photo_url: uploadResult.url,
+            delivered_at: new Date().toISOString()
+          })
+          .eq('id', DeliveryApp.selectedBooking.id);
+
+        if (updErr) throw updErr;
+
+        Toast.success('Delivery marked as completed.');
+        closeDoneModal();
+        await DeliveryApp.loadData();
+      } catch (err) {
+        console.error(err);
+        Toast.error('Failed to confirm delivery: ' + err.message);
       } finally {
         btn.disabled = false;
         btn.textContent = originalText;
