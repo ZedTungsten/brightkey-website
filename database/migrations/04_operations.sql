@@ -1,10 +1,10 @@
 -- =============================================================================
 -- BrightKey Consolidated Operations Schema (04_operations.sql)
--- Consolidates shipping, inventory ledger, installations, tickets, and support.
--- Run this in your Supabase SQL Editor.
+-- Consolidates inventory, inventory logs, inventory transactions,
+-- installations, support tickets & messages, team tasks/milestones,
+-- and per-user module RLS policies.
 -- =============================================================================
 
--- Drop tables and views in dependency order
 DROP TABLE IF EXISTS public.team_tasks CASCADE;
 DROP TABLE IF EXISTS public.team_milestones CASCADE;
 DROP TABLE IF EXISTS public.support_messages CASCADE;
@@ -24,6 +24,7 @@ CREATE TABLE public.inventory (
   incoming            INTEGER DEFAULT 0 NOT NULL,
   returned            INTEGER DEFAULT 0 NOT NULL,
   reserved            INTEGER DEFAULT 0 NOT NULL,
+  inspect             INTEGER DEFAULT 0 NOT NULL,
   packed              INTEGER DEFAULT 0 NOT NULL,
   dispatched          INTEGER DEFAULT 0 NOT NULL,
   cancelled           INTEGER DEFAULT 0 NOT NULL,
@@ -93,13 +94,15 @@ CREATE TABLE public.inventory_transactions (
   sku                   TEXT NOT NULL,
   quantity              INTEGER NOT NULL,
   type                  TEXT NOT NULL CHECK (type IN ('supplier_order', 'customer_order')),
-  status                TEXT NOT NULL CHECK (status IN ('ordered', 'received', 'reserved', 'packed', 'dispatched', 'returned', 'cancelled')),
+  status                TEXT NOT NULL CONSTRAINT inventory_transactions_status_check CHECK (status IN ('ordered', 'received', 'inspect', 'reserved', 'packed', 'dispatched', 'returned', 'cancelled')),
   reference_id          TEXT,
   customer_name         TEXT,
   customer_city         TEXT,
+  packed_photo_url      TEXT,
   
   timestamp_ordered     TIMESTAMPTZ,
   timestamp_received    TIMESTAMPTZ,
+  timestamp_inspect     TIMESTAMPTZ,
   timestamp_reserved    TIMESTAMPTZ,
   timestamp_packed      TIMESTAMPTZ,
   timestamp_dispatched  TIMESTAMPTZ,
@@ -245,99 +248,6 @@ CREATE TABLE public.support_messages (
   created_at          TIMESTAMPTZ DEFAULT NOW()
 );
 
--- ── Row Level Security Policies ──────────────────────────────────────────────
-
-ALTER TABLE public.inventory ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.inventory_logs ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.inventory_transactions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.installations ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.installation_bookings ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.support_tickets ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.support_messages ENABLE ROW LEVEL SECURITY;
-
--- Inventory Policies
-CREATE POLICY "Company staff inventory access" ON public.inventory
-  FOR ALL USING (
-    company_id IN (
-      SELECT id FROM public.companies
-      WHERE tenant_id IN (SELECT public.get_user_tenants(auth.uid()))
-    )
-  );
-
--- Inventory Logs Policies
-CREATE POLICY "Company staff inventory logs access" ON public.inventory_logs
-  FOR ALL USING (
-    company_id IN (
-      SELECT id FROM public.companies 
-      WHERE tenant_id IN (SELECT public.get_user_tenants(auth.uid()))
-    )
-  );
-
--- Inventory Transactions Policies
-CREATE POLICY "Company staff inventory transactions access" ON public.inventory_transactions
-  FOR ALL USING (
-    company_id IN (
-      SELECT id FROM public.companies 
-      WHERE tenant_id IN (SELECT public.get_user_tenants(auth.uid()))
-    )
-  );
-
--- Installations Policies
-CREATE POLICY "Company staff installations access" ON public.installations
-  FOR ALL USING (
-    company_id IN (
-      SELECT id FROM public.companies
-      WHERE tenant_id IN (SELECT public.get_user_tenants(auth.uid()))
-    )
-  );
-
--- Installation Bookings Policies
-CREATE POLICY "Company staff installation bookings access" ON public.installation_bookings
-  FOR ALL USING (
-    company_id IN (
-      SELECT id FROM public.companies 
-      WHERE tenant_id IN (SELECT public.get_user_tenants(auth.uid()))
-    )
-  );
-
--- Support Tickets Policies
-CREATE POLICY "Customers can view own tickets." ON public.support_tickets
-  FOR SELECT USING (auth.uid() = user_id);
-
-CREATE POLICY "Customers can insert own tickets." ON public.support_tickets
-  FOR INSERT WITH CHECK (auth.uid() = user_id);
-
-CREATE POLICY "Company staff tickets access" ON public.support_tickets
-  FOR ALL USING (
-    company_id IN (
-      SELECT id FROM public.companies
-      WHERE tenant_id IN (SELECT public.get_user_tenants(auth.uid()))
-    )
-  );
-
--- Support Messages Policies
-CREATE POLICY "Customers can view own messages." ON public.support_messages
-  FOR SELECT USING (
-    ticket_id IN (SELECT id FROM public.support_tickets WHERE user_id = auth.uid())
-  );
-
-CREATE POLICY "Customers can insert own messages." ON public.support_messages
-  FOR INSERT WITH CHECK (
-    ticket_id IN (SELECT id FROM public.support_tickets WHERE user_id = auth.uid())
-    AND sender_type = 'customer'
-  );
-
-CREATE POLICY "Company staff support messages access" ON public.support_messages
-  FOR ALL USING (
-    ticket_id IN (
-      SELECT id FROM public.support_tickets 
-      WHERE company_id IN (
-        SELECT id FROM public.companies 
-        WHERE tenant_id IN (SELECT public.get_user_tenants(auth.uid()))
-      )
-    )
-  );
-
 -- ── 8. Team Tasks Table ──────────────────────────────────────────────────────
 CREATE TABLE public.team_tasks (
   id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -369,28 +279,6 @@ CREATE TABLE public.team_milestones (
   updated_at   TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Enable RLS
-ALTER TABLE public.team_tasks ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.team_milestones ENABLE ROW LEVEL SECURITY;
-
--- Scoped access policies
-CREATE POLICY "Company team tasks access" ON public.team_tasks
-  FOR ALL USING (
-    company_id IN (
-      SELECT id FROM public.companies
-      WHERE tenant_id IN (SELECT public.get_user_tenants(auth.uid()))
-    )
-  );
-
-CREATE POLICY "Company team milestones access" ON public.team_milestones
-  FOR ALL USING (
-    company_id IN (
-      SELECT id FROM public.companies
-      WHERE tenant_id IN (SELECT public.get_user_tenants(auth.uid()))
-    )
-  );
-
--- Auto-update updated_at triggers
 CREATE OR REPLACE FUNCTION update_team_tasks_updated_at()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -414,3 +302,122 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE TRIGGER trg_team_milestones_updated_at
   BEFORE UPDATE ON public.team_milestones
   FOR EACH ROW EXECUTE FUNCTION update_team_milestones_updated_at();
+
+-- ── Row Level Security Policies ──────────────────────────────────────────────
+
+ALTER TABLE public.inventory ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.inventory_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.inventory_transactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.installations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.installation_bookings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.support_tickets ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.support_messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.team_tasks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.team_milestones ENABLE ROW LEVEL SECURITY;
+
+-- 1. Operations module installations policies
+CREATE POLICY "Operations module installations" ON public.installations
+  FOR ALL TO authenticated
+  USING     (public.has_module_access(auth.uid(), company_id, 'Operations'))
+  WITH CHECK (public.has_module_access(auth.uid(), company_id, 'Operations'));
+
+-- 2. Operations module installation bookings policies
+CREATE POLICY "Operations module installation_bookings" ON public.installation_bookings
+  FOR ALL TO authenticated
+  USING     (public.has_module_access(auth.uid(), company_id, 'Operations'))
+  WITH CHECK (public.has_module_access(auth.uid(), company_id, 'Operations'));
+
+-- 3. Operations OR Logistics module inventory policies
+CREATE POLICY "Operations or Logistics module inventory" ON public.inventory
+  FOR ALL TO authenticated
+  USING (
+    public.has_module_access(auth.uid(), company_id, 'Operations')
+    OR public.has_module_access(auth.uid(), company_id, 'Logistics')
+  )
+  WITH CHECK (
+    public.has_module_access(auth.uid(), company_id, 'Operations')
+    OR public.has_module_access(auth.uid(), company_id, 'Logistics')
+  );
+
+-- 4. Operations OR Logistics module inventory logs policies
+CREATE POLICY "Operations or Logistics module inventory_logs" ON public.inventory_logs
+  FOR ALL TO authenticated
+  USING (
+    public.has_module_access(auth.uid(), company_id, 'Operations')
+    OR public.has_module_access(auth.uid(), company_id, 'Logistics')
+  )
+  WITH CHECK (
+    public.has_module_access(auth.uid(), company_id, 'Operations')
+    OR public.has_module_access(auth.uid(), company_id, 'Logistics')
+  );
+
+-- 5. Operations OR Logistics module inventory transactions policies
+CREATE POLICY "Operations or Logistics module inventory_transactions" ON public.inventory_transactions
+  FOR ALL TO authenticated
+  USING (
+    public.has_module_access(auth.uid(), company_id, 'Operations')
+    OR public.has_module_access(auth.uid(), company_id, 'Logistics')
+  )
+  WITH CHECK (
+    public.has_module_access(auth.uid(), company_id, 'Operations')
+    OR public.has_module_access(auth.uid(), company_id, 'Logistics')
+  );
+
+-- 6. Operations module team tasks policies
+CREATE POLICY "Operations module team_tasks" ON public.team_tasks
+  FOR ALL TO authenticated
+  USING     (public.has_module_access(auth.uid(), company_id, 'Operations'))
+  WITH CHECK (public.has_module_access(auth.uid(), company_id, 'Operations'));
+
+-- 7. Operations module team milestones policies
+CREATE POLICY "Operations module team_milestones" ON public.team_milestones
+  FOR ALL TO authenticated
+  USING     (public.has_module_access(auth.uid(), company_id, 'Operations'))
+  WITH CHECK (public.has_module_access(auth.uid(), company_id, 'Operations'));
+
+-- 8. Support tickets policies (CS module or Operations or customer self-access)
+CREATE POLICY "Customers can view own tickets." ON public.support_tickets
+  FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Customers can insert own tickets." ON public.support_tickets
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Customer Service module support_tickets" ON public.support_tickets
+  FOR ALL TO authenticated
+  USING (
+    public.has_module_access(auth.uid(), company_id, 'Customer Service')
+    OR public.has_module_access(auth.uid(), company_id, 'Operations')
+  )
+  WITH CHECK (
+    public.has_module_access(auth.uid(), company_id, 'Customer Service')
+    OR public.has_module_access(auth.uid(), company_id, 'Operations')
+  );
+
+-- 9. Support messages policies (CS module or Operations or customer self-access)
+CREATE POLICY "Customers can view own messages." ON public.support_messages
+  FOR SELECT USING (
+    ticket_id IN (SELECT id FROM public.support_tickets WHERE user_id = auth.uid())
+  );
+
+CREATE POLICY "Customers can insert own messages." ON public.support_messages
+  FOR INSERT WITH CHECK (
+    ticket_id IN (SELECT id FROM public.support_tickets WHERE user_id = auth.uid())
+    AND sender_type = 'customer'
+  );
+
+CREATE POLICY "Customer Service module support_messages" ON public.support_messages
+  FOR ALL TO authenticated
+  USING (
+    ticket_id IN (
+      SELECT id FROM public.support_tickets st
+      WHERE public.has_module_access(auth.uid(), st.company_id, 'Customer Service')
+         OR public.has_module_access(auth.uid(), st.company_id, 'Operations')
+    )
+  )
+  WITH CHECK (
+    ticket_id IN (
+      SELECT id FROM public.support_tickets st
+      WHERE public.has_module_access(auth.uid(), st.company_id, 'Customer Service')
+         OR public.has_module_access(auth.uid(), st.company_id, 'Operations')
+    )
+  );

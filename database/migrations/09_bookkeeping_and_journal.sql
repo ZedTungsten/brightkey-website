@@ -135,112 +135,99 @@ ALTER TABLE public.bookkeeping_attachments ENABLE ROW LEVEL SECURITY;
 
 -- ── 5. Row Level Security Policies ───────────────────────────────────────────
 
--- General Journal Policies (Hardened)
-CREATE POLICY "Company staff journal access" ON public.general_journal
-  FOR ALL USING (
-    auth.uid() IS NOT NULL AND
-    company_id IN (
-      SELECT id FROM public.companies 
-      WHERE tenant_id IN (SELECT public.get_user_tenants(auth.uid()))
+DROP POLICY IF EXISTS "Company staff journal access"            ON public.general_journal;
+DROP POLICY IF EXISTS "Finance module general_journal"          ON public.general_journal;
+CREATE POLICY "Finance module general_journal" ON public.general_journal
+  FOR ALL TO authenticated
+  USING     (public.has_module_access(auth.uid(), company_id, 'Finance'))
+  WITH CHECK (public.has_module_access(auth.uid(), company_id, 'Finance'));
+
+DROP POLICY IF EXISTS "Company staff journal_accounts access"   ON public.journal_accounts;
+DROP POLICY IF EXISTS "Finance module journal_accounts"         ON public.journal_accounts;
+CREATE POLICY "Finance module journal_accounts" ON public.journal_accounts
+  FOR ALL TO authenticated
+  USING     (public.has_module_access(auth.uid(), company_id, 'Finance'))
+  WITH CHECK (public.has_module_access(auth.uid(), company_id, 'Finance'));
+
+DROP POLICY IF EXISTS "Company staff audit log access"          ON public.journal_audit_log;
+DROP POLICY IF EXISTS "Finance module journal_audit_log"        ON public.journal_audit_log;
+CREATE POLICY "Finance module journal_audit_log" ON public.journal_audit_log
+  FOR ALL TO authenticated
+  USING     (public.has_module_access(auth.uid(), company_id, 'Finance'))
+  WITH CHECK (public.has_module_access(auth.uid(), company_id, 'Finance'));
+
+-- bookkeeping_transaction_types: NULL company_id = system defaults; any Finance user can read
+DROP POLICY IF EXISTS "Bookkeeping transaction types select"    ON public.bookkeeping_transaction_types;
+DROP POLICY IF EXISTS "Bookkeeping transaction types insert"    ON public.bookkeeping_transaction_types;
+DROP POLICY IF EXISTS "Bookkeeping transaction types update"    ON public.bookkeeping_transaction_types;
+DROP POLICY IF EXISTS "Bookkeeping transaction types delete"    ON public.bookkeeping_transaction_types;
+DROP POLICY IF EXISTS "Finance module bookkeeping_transaction_types" ON public.bookkeeping_transaction_types;
+CREATE POLICY "Finance module bookkeeping_transaction_types" ON public.bookkeeping_transaction_types
+  FOR ALL TO authenticated
+  USING (
+    company_id IS NULL  -- system-wide defaults readable by any Finance user
+    OR public.has_module_access(auth.uid(), company_id, 'Finance')
+  )
+  WITH CHECK (public.has_module_access(auth.uid(), company_id, 'Finance'));
+
+-- bookkeeping_accounts: same NULL-company_id handling
+DROP POLICY IF EXISTS "Bookkeeping accounts select"             ON public.bookkeeping_accounts;
+DROP POLICY IF EXISTS "Bookkeeping accounts insert"             ON public.bookkeeping_accounts;
+DROP POLICY IF EXISTS "Bookkeeping accounts update"             ON public.bookkeeping_accounts;
+DROP POLICY IF EXISTS "Bookkeeping accounts delete"             ON public.bookkeeping_accounts;
+DROP POLICY IF EXISTS "Finance module bookkeeping_accounts"     ON public.bookkeeping_accounts;
+CREATE POLICY "Finance module bookkeeping_accounts" ON public.bookkeeping_accounts
+  FOR ALL TO authenticated
+  USING (
+    company_id IS NULL
+    OR public.has_module_access(auth.uid(), company_id, 'Finance')
+  )
+  WITH CHECK (public.has_module_access(auth.uid(), company_id, 'Finance'));
+
+DROP POLICY IF EXISTS "Bookkeeping access"                      ON public.bookkeeping;
+DROP POLICY IF EXISTS "Finance module bookkeeping"              ON public.bookkeeping;
+CREATE POLICY "Finance module bookkeeping" ON public.bookkeeping
+  FOR ALL TO authenticated
+  USING     (public.has_module_access(auth.uid(), company_id, 'Finance'))
+  WITH CHECK (public.has_module_access(auth.uid(), company_id, 'Finance'));
+
+-- bookkeeping_lines: no direct company_id — join through bookkeeping
+DROP POLICY IF EXISTS "Bookkeeping lines access"                ON public.bookkeeping_lines;
+DROP POLICY IF EXISTS "Finance module bookkeeping_lines"        ON public.bookkeeping_lines;
+CREATE POLICY "Finance module bookkeeping_lines" ON public.bookkeeping_lines
+  FOR ALL TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.bookkeeping b
+      WHERE b.id = bookkeeping_lines.bookkeeping_id
+        AND public.has_module_access(auth.uid(), b.company_id, 'Finance')
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM public.bookkeeping b
+      WHERE b.id = bookkeeping_lines.bookkeeping_id
+        AND public.has_module_access(auth.uid(), b.company_id, 'Finance')
     )
   );
 
-CREATE POLICY "Company staff journal_accounts access" ON public.journal_accounts
-  FOR ALL USING (
-    auth.uid() IS NOT NULL AND
-    company_id IN (
-      SELECT id FROM public.companies 
-      WHERE tenant_id IN (SELECT public.get_user_tenants(auth.uid()))
+-- bookkeeping_attachments: same join pattern (was previously completely open!)
+DROP POLICY IF EXISTS "Bookkeeping attachments access"          ON public.bookkeeping_attachments;
+DROP POLICY IF EXISTS "Finance module bookkeeping_attachments"  ON public.bookkeeping_attachments;
+CREATE POLICY "Finance module bookkeeping_attachments" ON public.bookkeeping_attachments
+  FOR ALL TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.bookkeeping b
+      WHERE b.id = bookkeeping_attachments.bookkeeping_id
+        AND public.has_module_access(auth.uid(), b.company_id, 'Finance')
     )
-  );
-
-CREATE POLICY "Company staff audit log access" ON public.journal_audit_log
-  FOR ALL USING (
-    auth.uid() IS NOT NULL AND
-    company_id IN (
-      SELECT id FROM public.companies 
-      WHERE tenant_id IN (SELECT public.get_user_tenants(auth.uid()))
-    )
-  );
-
--- Bookkeeping Transaction Types Policies
-CREATE POLICY "Bookkeeping transaction types select" ON public.bookkeeping_transaction_types
-  FOR SELECT USING (auth.uid() IS NOT NULL);
-
-CREATE POLICY "Bookkeeping transaction types insert" ON public.bookkeeping_transaction_types
-  FOR INSERT WITH CHECK (
-    company_id IN (
-      SELECT id FROM public.companies 
-      WHERE tenant_id IN (SELECT public.get_user_tenants(auth.uid()))
-    )
-  );
-
-CREATE POLICY "Bookkeeping transaction types update" ON public.bookkeeping_transaction_types
-  FOR UPDATE USING (
-    company_id IN (
-      SELECT id FROM public.companies 
-      WHERE tenant_id IN (SELECT public.get_user_tenants(auth.uid()))
-    )
-  );
-
-CREATE POLICY "Bookkeeping transaction types delete" ON public.bookkeeping_transaction_types
-  FOR DELETE USING (
-    company_id IN (
-      SELECT id FROM public.companies 
-      WHERE tenant_id IN (SELECT public.get_user_tenants(auth.uid()))
-    )
-  );
-
--- Bookkeeping Accounts Policies
-CREATE POLICY "Bookkeeping accounts select" ON public.bookkeeping_accounts
-  FOR SELECT USING (auth.uid() IS NOT NULL);
-
-CREATE POLICY "Bookkeeping accounts insert" ON public.bookkeeping_accounts
-  FOR INSERT WITH CHECK (
-    company_id IN (
-      SELECT id FROM public.companies 
-      WHERE tenant_id IN (SELECT public.get_user_tenants(auth.uid()))
-    )
-  );
-
-CREATE POLICY "Bookkeeping accounts update" ON public.bookkeeping_accounts
-  FOR UPDATE USING (
-    company_id IN (
-      SELECT id FROM public.companies 
-      WHERE tenant_id IN (SELECT public.get_user_tenants(auth.uid()))
-    )
-  );
-
-CREATE POLICY "Bookkeeping accounts delete" ON public.bookkeeping_accounts
-  FOR DELETE USING (
-    company_id IN (
-      SELECT id FROM public.companies 
-      WHERE tenant_id IN (SELECT public.get_user_tenants(auth.uid()))
-    )
-  );
-
--- Bookkeeping Base Table Policies
-CREATE POLICY "Bookkeeping access" ON public.bookkeeping
-  FOR ALL USING (
-    company_id IN (
-      SELECT id FROM public.companies 
-      WHERE tenant_id IN (SELECT public.get_user_tenants(auth.uid()))
-    )
-  );
-
--- Bookkeeping Lines Policies
-CREATE POLICY "Bookkeeping lines access" ON public.bookkeeping_lines
-  FOR ALL USING (
-    bookkeeping_id IN (
-      SELECT id FROM public.bookkeeping
-    )
-  );
-
--- Bookkeeping Attachments Policies
-CREATE POLICY "Bookkeeping attachments access" ON public.bookkeeping_attachments
-  FOR ALL USING (
-    bookkeeping_id IN (
-      SELECT id FROM public.bookkeeping
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM public.bookkeeping b
+      WHERE b.id = bookkeeping_attachments.bookkeeping_id
+        AND public.has_module_access(auth.uid(), b.company_id, 'Finance')
     )
   );
 

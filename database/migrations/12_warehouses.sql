@@ -1,12 +1,16 @@
 -- ============================================================
 -- Migration: 12_warehouses.sql
--- Creates the warehouses and warehouse_managers tables with
--- Row Level Security policies enforcing strict tenant isolation.
+-- Creates the warehouses, warehouse_managers, and warehouse_transfers
+-- tables, alters inventory to track per-warehouse stock levels,
+-- backfills legacy records, and establishes RLS policies.
 -- ============================================================
 
--- ── 1. warehouses ──────────────────────────────────────────
+DROP TABLE IF EXISTS public.warehouse_transfers CASCADE;
+DROP TABLE IF EXISTS public.warehouse_managers CASCADE;
+DROP TABLE IF EXISTS public.warehouses CASCADE;
 
-CREATE TABLE IF NOT EXISTS public.warehouses (
+-- ── 1. Create warehouses Table ──────────────────────────────────────────
+CREATE TABLE public.warehouses (
   id          uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id   uuid        NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
   name        text        NOT NULL,
@@ -14,43 +18,8 @@ CREATE TABLE IF NOT EXISTS public.warehouses (
   created_at  timestamptz NOT NULL DEFAULT now()
 );
 
-ALTER TABLE public.warehouses ENABLE ROW LEVEL SECURITY;
-
--- Owner / Admin members of the tenant can do full CRUD
-CREATE POLICY "Tenant members can select warehouses" ON public.warehouses
-  FOR SELECT USING (
-    tenant_id IN (
-      SELECT tenant_id FROM public.tenant_members WHERE user_id = auth.uid()
-    )
-  );
-
-CREATE POLICY "Owner/Admin can insert warehouses" ON public.warehouses
-  FOR INSERT WITH CHECK (
-    tenant_id IN (
-      SELECT tenant_id FROM public.tenant_members
-      WHERE user_id = auth.uid() AND role IN ('owner', 'admin')
-    )
-  );
-
-CREATE POLICY "Owner/Admin can update warehouses" ON public.warehouses
-  FOR UPDATE USING (
-    tenant_id IN (
-      SELECT tenant_id FROM public.tenant_members
-      WHERE user_id = auth.uid() AND role IN ('owner', 'admin')
-    )
-  );
-
-CREATE POLICY "Owner/Admin can delete warehouses" ON public.warehouses
-  FOR DELETE USING (
-    tenant_id IN (
-      SELECT tenant_id FROM public.tenant_members
-      WHERE user_id = auth.uid() AND role IN ('owner', 'admin')
-    )
-  );
-
--- ── 2. warehouse_managers ──────────────────────────────────
-
-CREATE TABLE IF NOT EXISTS public.warehouse_managers (
+-- ── 2. Create warehouse_managers Table ──────────────────────────────────
+CREATE TABLE public.warehouse_managers (
   id           uuid    PRIMARY KEY DEFAULT gen_random_uuid(),
   warehouse_id uuid    NOT NULL REFERENCES public.warehouses(id) ON DELETE CASCADE,
   user_id      uuid    NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -62,40 +31,132 @@ CREATE TABLE IF NOT EXISTS public.warehouse_managers (
   UNIQUE(warehouse_id, user_id)
 );
 
+-- ── 3. Alter inventory and inventory_transactions ───────────────────────
+
+ALTER TABLE public.inventory
+  ADD COLUMN IF NOT EXISTS warehouse_id uuid REFERENCES public.warehouses(id) ON DELETE SET NULL;
+
+CREATE INDEX IF NOT EXISTS idx_inventory_warehouse_id ON public.inventory(warehouse_id);
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'inventory_warehouse_sku_unique'
+  ) THEN
+    ALTER TABLE public.inventory
+      ADD CONSTRAINT inventory_warehouse_sku_unique UNIQUE (warehouse_id, sku);
+  END IF;
+END $$;
+
+ALTER TABLE public.inventory_transactions
+  ADD COLUMN IF NOT EXISTS warehouse_id uuid REFERENCES public.warehouses(id) ON DELETE SET NULL;
+
+CREATE INDEX IF NOT EXISTS idx_inventory_transactions_warehouse_id ON public.inventory_transactions(warehouse_id);
+
+-- ── 4. Backfill legacy records to the first warehouse of each tenant ────
+
+UPDATE public.inventory inv
+SET warehouse_id = (
+  SELECT it.warehouse_id
+  FROM public.inventory_transactions it
+  WHERE it.sku = inv.sku
+    AND it.warehouse_id IS NOT NULL
+  LIMIT 1
+)
+WHERE inv.warehouse_id IS NULL
+  AND EXISTS (
+    SELECT 1 FROM public.inventory_transactions it2
+    WHERE it2.sku = inv.sku AND it2.warehouse_id IS NOT NULL
+  );
+
+UPDATE public.inventory
+SET warehouse_id = (
+  SELECT id FROM public.warehouses ORDER BY created_at ASC LIMIT 1
+)
+WHERE warehouse_id IS NULL;
+
+UPDATE public.inventory_transactions
+SET warehouse_id = (
+  SELECT id FROM public.warehouses ORDER BY created_at ASC LIMIT 1
+)
+WHERE warehouse_id IS NULL;
+
+-- ── 5. Create warehouse_transfers Table ─────────────────────────────────
+
+CREATE TABLE public.warehouse_transfers (
+  id                    uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id            uuid        NOT NULL REFERENCES public.companies(id) ON DELETE CASCADE,
+  from_warehouse_id     uuid        NOT NULL REFERENCES public.warehouses(id) ON DELETE CASCADE,
+  to_warehouse_id       uuid        NOT NULL REFERENCES public.warehouses(id) ON DELETE CASCADE,
+  sku                   text        NOT NULL,
+  quantity              integer     NOT NULL CHECK (quantity > 0),
+  status                text        NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'declined', 'received')),
+  requested_by          uuid        REFERENCES auth.users(id) ON DELETE SET NULL,
+  approved_by           uuid        REFERENCES auth.users(id) ON DELETE SET NULL,
+  created_at            timestamptz NOT NULL DEFAULT now(),
+  updated_at            timestamptz NOT NULL DEFAULT now()
+);
+
+-- ── 6. Indexes ──────────────────────────────────────────────────────────
+
+CREATE INDEX IF NOT EXISTS idx_warehouses_tenant_id        ON public.warehouses(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_warehouse_managers_wh_id    ON public.warehouse_managers(warehouse_id);
+CREATE INDEX IF NOT EXISTS idx_warehouse_managers_user_id  ON public.warehouse_managers(user_id);
+CREATE INDEX IF NOT EXISTS idx_warehouse_transfers_company_id ON public.warehouse_transfers(company_id);
+CREATE INDEX IF NOT EXISTS idx_warehouse_transfers_from_wh ON public.warehouse_transfers(from_warehouse_id);
+CREATE INDEX IF NOT EXISTS idx_warehouse_transfers_to_wh   ON public.warehouse_transfers(to_warehouse_id);
+CREATE INDEX IF NOT EXISTS idx_warehouse_transfers_status  ON public.warehouse_transfers(status);
+
+-- ── 7. Row Level Security Policies ──────────────────────────────────────
+
+ALTER TABLE public.warehouses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.warehouse_managers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.warehouse_transfers ENABLE ROW LEVEL SECURITY;
 
--- Anyone in the same tenant can read assignments (needed to check own perms)
-CREATE POLICY "Tenant members can select warehouse_managers" ON public.warehouse_managers
-  FOR SELECT USING (
-    warehouse_id IN (
-      SELECT id FROM public.warehouses
-      WHERE tenant_id IN (
-        SELECT tenant_id FROM public.tenant_members WHERE user_id = auth.uid()
-      )
+-- Warehouses Policies (Logistics module role-gated)
+CREATE POLICY "Logistics module warehouses" ON public.warehouses
+  FOR ALL TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.companies c
+      WHERE c.tenant_id = warehouses.tenant_id
+        AND public.has_module_access(auth.uid(), c.id, 'Logistics')
+      LIMIT 1
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM public.companies c
+      WHERE c.tenant_id = warehouses.tenant_id
+        AND public.has_module_access(auth.uid(), c.id, 'Logistics')
+      LIMIT 1
     )
   );
 
--- Only Owner / Admin can assign or remove managers
-CREATE POLICY "Owner/Admin can insert warehouse_managers" ON public.warehouse_managers
-  FOR INSERT WITH CHECK (
-    warehouse_id IN (
-      SELECT w.id FROM public.warehouses w
-      JOIN public.tenant_members tm ON w.tenant_id = tm.tenant_id
-      WHERE tm.user_id = auth.uid() AND tm.role IN ('owner', 'admin')
+-- Warehouse Managers Policies
+CREATE POLICY "Logistics module warehouse_managers" ON public.warehouse_managers
+  FOR ALL TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.warehouses w
+      JOIN public.companies c ON c.tenant_id = w.tenant_id
+      WHERE w.id = warehouse_managers.warehouse_id
+        AND public.has_module_access(auth.uid(), c.id, 'Logistics')
+      LIMIT 1
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM public.warehouses w
+      JOIN public.companies c ON c.tenant_id = w.tenant_id
+      WHERE w.id = warehouse_managers.warehouse_id
+        AND public.has_module_access(auth.uid(), c.id, 'Logistics')
+      LIMIT 1
     )
   );
 
-CREATE POLICY "Owner/Admin can delete warehouse_managers" ON public.warehouse_managers
-  FOR DELETE USING (
-    warehouse_id IN (
-      SELECT w.id FROM public.warehouses w
-      JOIN public.tenant_members tm ON w.tenant_id = tm.tenant_id
-      WHERE tm.user_id = auth.uid() AND tm.role IN ('owner', 'admin')
-    )
-  );
-
--- ── 3. Indexes ─────────────────────────────────────────────
-
-CREATE INDEX IF NOT EXISTS idx_warehouses_tenant_id      ON public.warehouses(tenant_id);
-CREATE INDEX IF NOT EXISTS idx_warehouse_managers_wh_id  ON public.warehouse_managers(warehouse_id);
-CREATE INDEX IF NOT EXISTS idx_warehouse_managers_user_id ON public.warehouse_managers(user_id);
+-- Warehouse Transfers Policies
+CREATE POLICY "Logistics module warehouse_transfers" ON public.warehouse_transfers
+  FOR ALL TO authenticated
+  USING     (public.has_module_access(auth.uid(), company_id, 'Logistics'))
+  WITH CHECK (public.has_module_access(auth.uid(), company_id, 'Logistics'));
