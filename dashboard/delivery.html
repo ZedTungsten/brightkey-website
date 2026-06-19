@@ -205,14 +205,15 @@
         <main class="main-panel">
           <!-- Tabs Navigation -->
           <div class="drawer-tabs">
-            <button class="tab-btn active" id="tab-btn-sendout">Book</button>
+            <button class="tab-btn active" id="tab-btn-book" onclick="switchTab('book')">Book</button>
+            <button class="tab-btn" id="tab-btn-pickup" onclick="switchTab('pickup')">Pickup</button>
           </div>
 
           <div class="scroll-area">
             <div class="delivery-container">
 
-              <!-- Send Out Tab Content -->
-              <div class="tab-content active" id="tab-content-sendout">
+              <!-- Book Tab Content -->
+              <div class="tab-content active" id="tab-content-book">
                 <div class="panel">
                   <div class="panel-header">Packed Orders Awaiting Delivery</div>
                   <div class="table-responsive">
@@ -235,6 +236,42 @@
                             <div style="text-align:center; padding:3rem; color:var(--text-muted);">
                               <div class="bk-spinner" style="margin:0 auto 1rem;"></div>
                               Loading dispatch queue…
+                            </div>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Pickup Tab Content -->
+              <div class="tab-content" id="tab-content-pickup">
+                <div class="panel">
+                  <div class="panel-header">Booked Deliveries Awaiting Pickup</div>
+                  <div class="table-responsive">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Delivery Info</th>
+                          <th>Ref Order</th>
+                          <th>Full Name</th>
+                          <th>City</th>
+                          <th>SKU</th>
+                          <th>Qty</th>
+                          <th>Base Fee</th>
+                          <th>Tip 1</th>
+                          <th>Tip 2</th>
+                          <th>Toll</th>
+                          <th>Action</th>
+                        </tr>
+                      </thead>
+                      <tbody id="pickup-list">
+                        <tr>
+                          <td colspan="11">
+                            <div style="text-align:center; padding:3rem; color:var(--text-muted);">
+                              <div class="bk-spinner" style="margin:0 auto 1rem;"></div>
+                              Loading pickup queue…
                             </div>
                           </td>
                         </tr>
@@ -310,6 +347,94 @@
     </div>
   </div>
 
+  <!-- Picked Up Modal -->
+  <div id="pickup-modal" class="modal-overlay">
+    <div class="modal-content" style="max-width: 550px;">
+      <h3 class="modal-title">Confirm Delivery Pickup</h3>
+      
+      <!-- Order details card -->
+      <div style="font-size: 0.82rem; color: var(--text-secondary); line-height: 1.5; background: var(--bg-elevated); padding: 0.75rem; border-radius: 6px; border: 1px solid var(--border);">
+        <div><strong>Order No:</strong> <span id="pmodal-order-no" style="color: var(--text-primary);"></span></div>
+        <div><strong>Name:</strong> <span id="pmodal-customer-name" style="color: var(--text-primary);"></span></div>
+        <div><strong>City:</strong> <span id="pmodal-customer-city" style="color: var(--text-primary);"></span></div>
+      </div>
+
+      <!-- Fees editing area -->
+      <div class="form-group">
+        <label class="form-label" style="margin-bottom: 0.25rem;">Confirm / Edit Delivery Fees</label>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; background: var(--bg-elevated); padding: 1rem; border-radius: 8px; border: 1px solid var(--border);">
+          <!-- Base Fee -->
+          <div class="form-group" id="fee-group-base">
+            <label class="form-label" style="font-size: 0.7rem; color: var(--text-muted);">Base Fee (₱)</label>
+            <div class="fee-display-container" id="fee-disp-base" style="display:flex; align-items:center; gap:0.5rem;">
+              <span class="fee-val" style="font-size:0.9rem; font-weight:600; color:var(--text-primary);">₱0.00</span>
+              <button type="button" class="btn btn-outline" style="padding: 0.25rem 0.4rem; font-size:0.7rem; display:inline-flex;" onclick="editFeeField('base')">
+                <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4z"/></svg>
+              </button>
+            </div>
+            <input type="number" id="p-base-fee" class="form-input" style="display:none;" placeholder="0.00" step="0.01" min="0" />
+          </div>
+
+          <!-- Tip 1 -->
+          <div class="form-group" id="fee-group-tip-1">
+            <label class="form-label" style="font-size: 0.7rem; color: var(--text-muted);">Tip 1 (₱)</label>
+            <div class="fee-display-container" id="fee-disp-tip-1" style="display:flex; align-items:center; gap:0.5rem;">
+              <span class="fee-val" style="font-size:0.9rem; font-weight:600; color:var(--text-primary);">₱0.00</span>
+              <button type="button" class="btn btn-outline" style="padding: 0.25rem 0.4rem; font-size:0.7rem; display:inline-flex;" onclick="editFeeField('tip-1')">
+                <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4z"/></svg>
+              </button>
+            </div>
+            <input type="number" id="p-tip-1" class="form-input" style="display:none;" placeholder="0.00" step="0.01" min="0" />
+          </div>
+
+          <!-- Tip 2 -->
+          <div class="form-group" id="fee-group-tip-2">
+            <label class="form-label" style="font-size: 0.7rem; color: var(--text-muted);">Tip 2 (₱)</label>
+            <div class="fee-display-container" id="fee-disp-tip-2" style="display:flex; align-items:center; gap:0.5rem;">
+              <span class="fee-val" style="font-size:0.9rem; font-weight:600; color:var(--text-primary);">₱0.00</span>
+              <button type="button" class="btn btn-outline" style="padding: 0.25rem 0.4rem; font-size:0.7rem; display:inline-flex;" onclick="editFeeField('tip-2')">
+                <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4z"/></svg>
+              </button>
+            </div>
+            <input type="number" id="p-tip-2" class="form-input" style="display:none;" placeholder="0.00" step="0.01" min="0" />
+          </div>
+
+          <!-- Toll -->
+          <div class="form-group" id="fee-group-toll">
+            <label class="form-label" style="font-size: 0.7rem; color: var(--text-muted);">Toll (₱)</label>
+            <div class="fee-display-container" id="fee-disp-toll" style="display:flex; align-items:center; gap:0.5rem;">
+              <span class="fee-val" style="font-size:0.9rem; font-weight:600; color:var(--text-primary);">₱0.00</span>
+              <button type="button" class="btn btn-outline" style="padding: 0.25rem 0.4rem; font-size:0.7rem; display:inline-flex;" onclick="editFeeField('toll')">
+                <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4z"/></svg>
+              </button>
+            </div>
+            <input type="number" id="p-toll" class="form-input" style="display:none;" placeholder="0.00" step="0.01" min="0" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Multiple Upload Pickup Photos -->
+      <div class="form-group">
+        <label class="form-label">Upload Pictures (Rider, Handover, Plate Number)</label>
+        <div id="pickup-upload-container" style="width:100%; min-height:120px; background:var(--bg-elevated); border:2px dashed var(--border); border-radius:8px; display:flex; flex-direction:column; align-items:center; justify-content:center; overflow:hidden; position:relative; cursor:pointer; padding: 1rem;" onclick="document.getElementById('pickup-file-input').click()">
+          <div id="pickup-upload-placeholder" style="display:flex; flex-direction:column; align-items:center; gap:0.5rem; color:var(--text-muted); text-align:center;">
+            <svg viewBox="0 0 24 24" width="28" height="28" stroke="currentColor" stroke-width="1.5" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+            <span style="font-size:0.78rem; font-weight:600;">Drag & drop photos or click to select multiple</span>
+          </div>
+          <!-- Thumbnail Grid -->
+          <div id="pickup-thumbs-grid" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem; width: 100%; margin-top: 0.5rem; display: none;"></div>
+          <input type="file" id="pickup-file-input" accept="image/*" multiple style="display:none;" onchange="handlePickupFilesSelect(event)" onclick="event.stopPropagation()" />
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div style="display: flex; justify-content: flex-end; gap: 0.75rem; border-top: 1px solid var(--border); padding-top: 1rem; margin-top: 0.25rem;">
+        <button type="button" class="btn btn-outline" onclick="closePickupModal()">Cancel</button>
+        <button type="button" id="btn-confirm-pickup" class="btn btn-primary" onclick="confirmPickup()" disabled>Confirm Pickup</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Lightbox Modal -->
   <div id="lightbox-modal" class="modal-overlay" onclick="closeLightbox()" style="background: rgba(0,0,0,0.85); cursor: zoom-out;">
     <div style="position: relative; max-width: 90vw; max-height: 90vh;">
@@ -334,8 +459,11 @@
       companyId: null,
       activeTransactions: [],
       bookings: [],
+      deliveryBookings: [],
       selectedOrder: null,
+      selectedBooking: null,
       deliveryPhotoBlob: null,
+      pickupPhotosBlobs: [], // array of { file, dataUrl }
 
       async init() {
         if (!window.BKAuth) return;
@@ -380,7 +508,15 @@
           if (bErr) throw bErr;
           this.bookings = bData || [];
 
+          // 3. Fetch delivery bookings
+          const { data: dbData, error: dbErr } = await sb.from('delivery_bookings')
+            .select('*')
+            .order('created_at', { ascending: false });
+          if (dbErr) throw dbErr;
+          this.deliveryBookings = dbData || [];
+
           this.renderSendOutQueue();
+          this.renderPickupQueue();
         } catch (err) {
           console.error(err);
           Toast.error('Failed to load logistics queue: ' + err.message);
@@ -395,6 +531,10 @@
         // Filter for orders that are fully packed (Dispatch queue criteria)
         const dispatchQueue = this.activeTransactions.filter(t => {
           if (t.status !== 'packed') return false;
+          // Exclude if already has a delivery booking
+          const isBooked = this.deliveryBookings.some(db => db.reference_id === t.reference_id);
+          if (isBooked) return false;
+
           if (t.reference_id) {
             const hasUnpacked = this.activeTransactions.some(other => 
               other.reference_id === t.reference_id && 
@@ -461,6 +601,57 @@
         });
       },
 
+      renderPickupQueue() {
+        const tbody = document.getElementById('pickup-list');
+        if (!tbody) return;
+        tbody.innerHTML = '';
+
+        // Filter bookings that are booked but not yet picked up
+        const pickupQueue = this.deliveryBookings.filter(db => db.status === 'booked');
+
+        if (pickupQueue.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="11" style="text-align:center; padding:3rem; color:var(--text-muted);">No orders awaiting pickup.</td></tr>`;
+          return;
+        }
+
+        pickupQueue.forEach(db => {
+          // Find the items (transactions) matching this reference_id
+          const items = this.activeTransactions.filter(t => t.reference_id === db.reference_id);
+          const skusHtml = items.map(t => `<code>${t.sku}</code>`).join('<br/>') || '—';
+          const qtysHtml = items.map(t => `<strong>${t.quantity}</strong>`).join('<br/>') || '—';
+
+          let photoHtml = '—';
+          if (db.delivery_photo_url) {
+            photoHtml = `<img src="${db.delivery_photo_url}" alt="Delivery Proof" style="width:80px; height:50px; object-fit:cover; border-radius:6px; border:1px solid var(--border); cursor:pointer;" onclick="maximizePhoto('${esc(db.delivery_photo_url)}')" />`;
+          }
+
+          const baseFeeText = db.base_fee ? `₱${(db.base_fee / 100).toFixed(2)}` : '—';
+          const tip1Text = db.tip_1 ? `₱${(db.tip_1 / 100).toFixed(2)}` : '—';
+          const tip2Text = db.tip_2 ? `₱${(db.tip_2 / 100).toFixed(2)}` : '—';
+          const tollText = db.toll ? `₱${(db.toll / 100).toFixed(2)}` : '—';
+
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${photoHtml}</td>
+            <td><strong>${esc(db.reference_id)}</strong></td>
+            <td>${esc(db.customer_name || 'N/A')}</td>
+            <td>${esc(db.customer_city || 'N/A')}</td>
+            <td>${skusHtml}</td>
+            <td>${qtysHtml}</td>
+            <td>${baseFeeText}</td>
+            <td>${tip1Text}</td>
+            <td>${tip2Text}</td>
+            <td>${tollText}</td>
+            <td>
+              <button class="btn btn-cyan btn-sm" onclick="DeliveryApp.openPickupModal('${db.id}')">
+                Picked Up
+              </button>
+            </td>
+          `;
+          tbody.appendChild(tr);
+        });
+      },
+
       openBookingModal(referenceId) {
         // Find matching group details
         const matchingTx = this.activeTransactions.find(t => t.reference_id === referenceId);
@@ -502,11 +693,92 @@
         document.getElementById('btn-confirm-booking').disabled = true;
 
         document.getElementById('booking-modal').classList.add('open');
+      },
+
+      openPickupModal(bookingId) {
+        const booking = this.deliveryBookings.find(b => b.id === bookingId);
+        if (!booking) return;
+
+        this.selectedBooking = booking;
+        this.pickupPhotosBlobs = [];
+
+        document.getElementById('pmodal-order-no').textContent = booking.reference_id;
+        document.getElementById('pmodal-customer-name').textContent = booking.customer_name || 'N/A';
+        document.getElementById('pmodal-customer-city').textContent = booking.customer_city || 'N/A';
+
+        // Setup fee fields (display vs edit)
+        this.setupFeeFields(booking);
+
+        // Reset photo container
+        renderPickupThumbnails();
+
+        document.getElementById('pickup-modal').classList.add('open');
+      },
+
+      setupFeeFields(booking) {
+        const fields = ['base', 'tip-1', 'tip-2', 'toll'];
+        const dbKeyMap = {
+          'base': 'base_fee',
+          'tip-1': 'tip_1',
+          'tip-2': 'tip_2',
+          'toll': 'toll'
+        };
+        const inputIdMap = {
+          'base': 'p-base-fee',
+          'tip-1': 'p-tip-1',
+          'tip-2': 'p-tip-2',
+          'toll': 'p-toll'
+        };
+
+        fields.forEach(field => {
+          const dbValueCentavos = booking[dbKeyMap[field]] || 0;
+          const dispVal = document.querySelector(`#fee-disp-${field} .fee-val`);
+          const dispContainer = document.getElementById(`fee-disp-${field}`);
+          const inputEl = document.getElementById(inputIdMap[field]);
+
+          inputEl.value = dbValueCentavos > 0 ? (dbValueCentavos / 100).toFixed(2) : '';
+
+          if (dbValueCentavos > 0) {
+            // Has value: show display value + pencil button
+            dispVal.textContent = '₱' + (dbValueCentavos / 100).toFixed(2);
+            dispContainer.style.display = 'flex';
+            inputEl.style.display = 'none';
+          } else {
+            // No value/zero: directly show numeric input
+            dispContainer.style.display = 'none';
+            inputEl.style.display = 'block';
+          }
+        });
       }
+    };
+
+    window.editFeeField = function(field) {
+      const inputIdMap = {
+        'base': 'p-base-fee',
+        'tip-1': 'p-tip-1',
+        'tip-2': 'p-tip-2',
+        'toll': 'p-toll'
+      };
+      document.getElementById(`fee-disp-${field}`).style.display = 'none';
+      const inputEl = document.getElementById(inputIdMap[field]);
+      inputEl.style.display = 'block';
+      inputEl.focus();
+    };
+
+    window.switchTab = function(tab) {
+      document.getElementById('tab-btn-book').classList.toggle('active', tab === 'book');
+      document.getElementById('tab-btn-pickup').classList.toggle('active', tab === 'pickup');
+
+      document.getElementById('tab-content-book').classList.toggle('active', tab === 'book');
+      document.getElementById('tab-content-pickup').classList.toggle('active', tab === 'pickup');
     };
 
     window.closeBookingModal = function() {
       document.getElementById('booking-modal').classList.remove('open');
+    };
+
+    window.closePickupModal = function() {
+      document.getElementById('pickup-modal').classList.remove('open');
     };
 
     window.maximizePhoto = function(src) {
@@ -538,6 +810,69 @@
       };
       reader.readAsDataURL(file);
     };
+
+    window.handlePickupFilesSelect = function(e) {
+      const files = Array.from(e.target.files);
+      if (files.length === 0) return;
+      
+      let loaded = 0;
+      files.forEach(file => {
+        const reader = new FileReader();
+        reader.onload = function(evt) {
+          DeliveryApp.pickupPhotosBlobs.push({
+            file: file,
+            dataUrl: evt.target.result
+          });
+          loaded++;
+          if (loaded === files.length) {
+            renderPickupThumbnails();
+          }
+        };
+        reader.readAsDataURL(file);
+      });
+      e.target.value = '';
+    };
+
+    function renderPickupThumbnails() {
+      const grid = document.getElementById('pickup-thumbs-grid');
+      const placeholder = document.getElementById('pickup-upload-placeholder');
+      if (DeliveryApp.pickupPhotosBlobs.length === 0) {
+        grid.style.display = 'none';
+        grid.innerHTML = '';
+        placeholder.style.display = 'flex';
+        document.getElementById('btn-confirm-pickup').disabled = true;
+        return;
+      }
+
+      placeholder.style.display = 'none';
+      grid.style.display = 'grid';
+      grid.innerHTML = '';
+
+      DeliveryApp.pickupPhotosBlobs.forEach((item, index) => {
+        const thumbDiv = document.createElement('div');
+        thumbDiv.style.cssText = 'position:relative; aspect-ratio:1; border-radius:6px; overflow:hidden; border:1px solid var(--border);';
+        
+        const img = document.createElement('img');
+        img.src = item.dataUrl;
+        img.style.cssText = 'width:100%; height:100%; object-fit:cover;';
+        
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.style.cssText = 'position:absolute; top:2px; right:2px; background:rgba(0,0,0,0.6); color:#fff; border:none; border-radius:50%; width:16px; height:16px; font-size:10px; cursor:pointer; display:flex; align-items:center; justify-content:center; font-weight:bold;';
+        removeBtn.innerHTML = '×';
+        removeBtn.onclick = function(evt) {
+          evt.stopPropagation();
+          DeliveryApp.pickupPhotosBlobs.splice(index, 1);
+          renderPickupThumbnails();
+        };
+
+        thumbDiv.appendChild(img);
+        thumbDiv.appendChild(removeBtn);
+        grid.appendChild(thumbDiv);
+      });
+
+      document.getElementById('btn-confirm-pickup').disabled = false;
+    }
 
     window.confirmBooking = async function() {
       const btn = document.getElementById('btn-confirm-booking');
@@ -622,6 +957,74 @@
       } catch (err) {
         console.error(err);
         Toast.error('Failed to book delivery: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = originalText;
+      }
+    };
+
+    window.confirmPickup = async function() {
+      const btn = document.getElementById('btn-confirm-pickup');
+      if (btn.disabled || !DeliveryApp.selectedBooking || DeliveryApp.pickupPhotosBlobs.length === 0) return;
+
+      btn.disabled = true;
+      const originalText = btn.textContent;
+      btn.innerHTML = `<span class="bk-spinner" style="width:12px; height:12px; border-width:2px; display:inline-block; vertical-align:middle; margin-right:6px;"></span>Saving...`;
+
+      try {
+        const baseFeeVal = parseFloat(document.getElementById('p-base-fee').value) || 0;
+        const tip1Val = parseFloat(document.getElementById('p-tip-1').value) || 0;
+        const tip2Val = parseFloat(document.getElementById('p-tip-2').value) || 0;
+        const tollVal = parseFloat(document.getElementById('p-toll').value) || 0;
+
+        // Upload all photos in parallel
+        const uploadPromises = DeliveryApp.pickupPhotosBlobs.map(async (item, index) => {
+          const base64 = item.dataUrl.split(';base64,').pop();
+          const fileName = `pickup_${DeliveryApp.selectedBooking.reference_id}_${index}_${Date.now()}.jpg`;
+          
+          const uploadRes = await fetch('/api/upload', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              fileBase64: base64,
+              fileName: fileName,
+              category: 'installations',
+              refId: DeliveryApp.selectedBooking.reference_id,
+              type: 'proof',
+              companyId: DeliveryApp.companyId || 'general'
+            })
+          });
+
+          if (!uploadRes.ok) throw new Error(`Pickup photo ${index + 1} upload failed`);
+          const resJson = await uploadRes.json();
+          return resJson.url;
+        });
+
+        const uploadedUrls = await Promise.all(uploadPromises);
+
+        const sb = window.BKAuth.sb;
+
+        // Update booking entry
+        const { error: updErr } = await sb.from('delivery_bookings')
+          .update({
+            status: 'picked_up',
+            pickup_photos: uploadedUrls,
+            picked_up_at: new Date().toISOString(),
+            base_fee: Math.round(baseFeeVal * 100),
+            tip_1: Math.round(tip1Val * 100),
+            tip_2: Math.round(tip2Val * 100),
+            toll: Math.round(tollVal * 100)
+          })
+          .eq('id', DeliveryApp.selectedBooking.id);
+
+        if (updErr) throw updErr;
+
+        Toast.success('Delivery picked up successfully.');
+        closePickupModal();
+        await DeliveryApp.loadData();
+      } catch (err) {
+        console.error(err);
+        Toast.error('Failed to confirm pickup: ' + err.message);
       } finally {
         btn.disabled = false;
         btn.textContent = originalText;
