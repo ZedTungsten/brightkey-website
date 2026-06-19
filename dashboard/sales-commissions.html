@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sales Commissions — BrightKey ERP</title>
+  <link rel="preconnect" href="https://fonts.bunny.net" />
+  <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg?v=2" />
+
+  <style>
+    /* ── Layout ── */
+    .top-bar { flex-shrink: 0; background: var(--bg-surface); border-bottom: 1px solid var(--border); padding: 0 1.5rem; display: flex; align-items: center; gap: 1rem; height: 56px; }
+    .top-bar-title { font-size: 1rem; font-weight: 800; color: var(--text-primary); letter-spacing: -0.03em; }
+    .content-area { display: flex; flex: 1; overflow: hidden; height: calc(100vh - 56px); }
+    .main-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+    
+    .scroll-area { flex: 1; overflow: auto; padding: 2rem; display: flex; flex-direction: column; }
+    .commissions-container { max-width: 1400px; width: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: 2rem; }
+
+    /* ── Tabs Navigation ── */
+    .drawer-tabs {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      background: var(--bg-surface);
+      padding: 0 1.5rem;
+    }
+    .tab-btn {
+      padding: 0.9rem 1.25rem;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      border: none;
+      background: none;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      white-space: nowrap;
+      transition: all 0.15s;
+    }
+    .tab-btn.active {
+      color: var(--cyan-light);
+      border-bottom-color: var(--cyan);
+    }
+    .tab-btn:hover:not(.active) {
+      color: var(--text-secondary);
+    }
+
+    .tab-content {
+      display: none;
+      flex-direction: column;
+      flex: 1;
+    }
+    .tab-content.active {
+      display: flex;
+    }
+
+    /* ── Panels & Tables ── */
+    .panel {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      box-shadow: var(--shadow-sm);
+      overflow: hidden;
+    }
+    .panel-header {
+      padding: 1rem 1.25rem;
+      font-size: 0.85rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .table-responsive {
+      width: 100%;
+      overflow-x: auto;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.82rem;
+      min-width: 1200px;
+    }
+    thead th {
+      background: var(--bg-elevated);
+      color: var(--text-secondary);
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      padding: 0.75rem 1.25rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    tbody tr {
+      border-bottom: 1px solid var(--border);
+      transition: background 0.15s;
+    }
+    tbody tr:last-child {
+      border-bottom: none;
+    }
+    tbody tr:hover {
+      background: var(--bg-elevated);
+    }
+    tbody td {
+      padding: 0.85rem 1.25rem;
+      color: var(--text-secondary);
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.45rem 1rem;
+      border-radius: 6px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+    .btn-primary { background: var(--cyan); color: #fff; border-color: var(--cyan); }
+    .btn-primary:hover { background: var(--cyan-light); border-color: var(--cyan-light); }
+    .btn-outline { background: var(--bg-surface); color: var(--text-secondary); border-color: var(--border); }
+    .btn-outline:hover { border-color: var(--cyan); color: var(--cyan-light); }
+
+    .form-select {
+      padding: 0.3rem 0.5rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 0.78rem;
+      background: var(--bg-base);
+      color: var(--text-primary);
+      outline: none;
+      cursor: pointer;
+    }
+    .form-select:focus { border-color: var(--cyan); }
+  </style>
+</head>
+<body>
+
+<div class="page-wrap">
+  <!-- Top Bar -->
+  <header class="top-bar">
+    <div class="top-bar-title">Commissions</div>
+  </header>
+
+  <div class="content-area">
+    <!-- Sidebar -->
+    <aside class="dash-sidebar" id="dash-sidebar"></aside>
+
+    <!-- Main Panel -->
+    <main class="main-panel">
+      <!-- Tabs -->
+      <div class="drawer-tabs">
+        <button class="tab-btn active" id="tab-assign">Assign</button>
+      </div>
+
+      <!-- Scroll Area -->
+      <div class="scroll-area">
+        <div class="commissions-container">
+          
+          <!-- Commissions Assignment Panel -->
+          <div class="panel">
+            <div class="panel-header">
+              <span>Sales Commission Assigner</span>
+            </div>
+            
+            <div class="table-responsive">
+              <table id="commissions-table">
+                <thead>
+                  <tr id="table-headers-row">
+                    <th>Date booked</th>
+                    <th>Order No.</th>
+                    <th>Full Name</th>
+                    <th>City</th>
+                    <th>SKU</th>
+                    <th>Qty</th>
+                    <th>Total Price</th>
+                    <th>Total Eligible</th>
+                    <!-- Dynamic commission rate headers will be inserted here -->
+                  </tr>
+                </thead>
+                <tbody id="commissions-body">
+                  <tr>
+                    <td colspan="8" style="padding: 3rem; text-align: center; color: var(--text-muted);">Loading commissions assignment data...</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<!-- Supabase SDK & Auth dependencies -->
+<script>
+  if (typeof window.supabaseClient === 'undefined') {
+    window.supabaseClient = null;
+  }
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="../js/auth.js" defer></script>
+<script src="../js/sidebar.js" defer></script>
+
+<script>
+  (function() {
+    'use strict';
+
+    let dbBookings = [];
+    let dbProducts = [];
+    let dbEmployees = [];
+    let commissionsConfig = { rates: [], eligibility_rules: [] };
+    let currentCompanyId = null;
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      if (!window.BKAuth) return;
+
+      // Gate to Sales, Admin, Owner
+      const authInfo = await window.BKAuth.checkRoleGate(['owner', 'admin', 'sales'], '../admin.html');
+      if (!authInfo) return;
+
+      const sb = window.BKAuth.sb;
+
+      // Get Company ID
+      try {
+        const { data: co } = await sb.from('companies').select('id').eq('tenant_id', authInfo.tenantId).limit(1).maybeSingle();
+        currentCompanyId = co?.id || null;
+      } catch (err) {
+        console.error('Error fetching company ID:', err);
+      }
+
+      if (currentCompanyId) {
+        await loadData();
+      }
+    });
+
+    async function loadData() {
+      const sb = window.BKAuth.sb;
+      const tbody = document.getElementById('commissions-body');
+
+      try {
+        // Parallel data fetch
+        const [bookingsRes, productsRes, configRes, employeesRes] = await Promise.all([
+          sb.from('installation_bookings').select('*').eq('company_id', currentCompanyId).order('created_at', { ascending: false }),
+          sb.from('products').select('sku, business, category, tags'),
+          sb.from('global_settings').select('value').eq('key', 'commissions_config').eq('company_id', currentCompanyId).maybeSingle(),
+          sb.from('employees').select('id, first_name, last_name, employee_number').eq('company_id', currentCompanyId)
+        ]);
+
+        if (bookingsRes.error) throw bookingsRes.error;
+        if (productsRes.error) throw productsRes.error;
+        if (configRes.error) throw configRes.error;
+        if (employeesRes.error) throw employeesRes.error;
+
+        dbBookings = bookingsRes.data || [];
+        dbProducts = productsRes.data || [];
+        dbEmployees = employeesRes.data || [];
+        
+        if (configRes.data && configRes.data.value) {
+          commissionsConfig = configRes.data.value;
+        }
+
+        renderCommissionsTable();
+      } catch (err) {
+        console.error('Error loading commissions data:', err);
+        tbody.innerHTML = `<tr><td colspan="100" style="padding: 3rem; text-align: center; color: var(--danger);">Error loading data: ${escapeHtml(err.message)}</td></tr>`;
+      }
+    }
+
+    function escapeHtml(s) {
+      if (s == null) return '';
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+    }
+
+    function fmtPHP(centavos) {
+      if (!centavos) return '—';
+      return new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(centavos / 100);
+    }
+
+    function checkSkuEligibility(product, eligibilityRules) {
+      if (!eligibilityRules || eligibilityRules.length === 0) return false;
+      
+      for (const rule of eligibilityRules) {
+        if (rule.scope === 'businesses') {
+          if (rule.business === 'all') return true;
+          if (rule.business === product.business) {
+            if (rule.category === 'all') return true;
+            if (rule.category === product.category) {
+              if (rule.sku === 'all') return true;
+              if (rule.sku === product.sku) return true;
+            }
+          }
+        } else if (rule.scope === 'tags') {
+          if (product.tags && Array.isArray(product.tags) && product.tags.includes(rule.tag)) {
+            return true;
+          }
+        }
+      }
+      return false;
+    }
+
+    function renderCommissionsTable() {
+      const headerRow = document.getElementById('table-headers-row');
+      const tbody = document.getElementById('commissions-body');
+      
+      // Reset headers
+      headerRow.innerHTML = `
+        <th>Date booked</th>
+        <th>Order No.</th>
+        <th>Full Name</th>
+        <th>City</th>
+        <th>SKU</th>
+        <th>Qty</th>
+        <th>Total Price</th>
+        <th>Total Eligible</th>
+      `;
+
+      const rates = commissionsConfig.rates || [];
+
+      // Append dynamic headers
+      rates.forEach(r => {
+        const th = document.createElement('th');
+        th.textContent = `${r.label} (${r.value}%)`;
+        headerRow.appendChild(th);
+      });
+
+      if (dbBookings.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="${8 + rates.length}" style="padding: 3rem; text-align: center; color: var(--text-muted);">No bookings found.</td></tr>`;
+        return;
+      }
+
+      // Create product lookup map
+      const productMap = {};
+      dbProducts.forEach(p => {
+        if (p.sku) productMap[p.sku.toLowerCase()] = p;
+      });
+
+      // Render rows by splitting bookings with multiple products
+      const rowsHtml = [];
+
+      dbBookings.forEach(b => {
+        const dateBooked = b.created_at ? new Date(b.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
+        const city = b.customer_address ? (b.customer_address.split(',')[1]?.trim() || '') : '';
+        
+        const skus = (b.product_skus || '').split(' | ');
+        const qtys = (b.product_qtys || '').split(' | ');
+        const unitPrices = (b.product_unit_prices || '').split(' | ');
+        const totals = (b.product_totals || '').split(' | ');
+
+        const numItems = Math.max(skus.length, qtys.length);
+
+        for (let i = 0; i < numItems; i++) {
+          const sku = skus[i]?.trim() || '';
+          if (!sku) continue;
+
+          const qty = parseInt(qtys[i]?.trim()) || 1;
+          const unitPriceDec = parseFloat(unitPrices[i]?.trim()) || 0;
+          const totalCentavos = Math.round(unitPriceDec * qty * 100);
+
+          // Find product details to verify eligibility
+          const product = productMap[sku.toLowerCase()] || { sku, business: '', category: '', tags: [] };
+          const isEligible = checkSkuEligibility(product, commissionsConfig.eligibility_rules);
+
+          const eligibleCentavos = isEligible ? totalCentavos : 0;
+
+          // Build dynamic rate cells
+          let ratesCellsHtml = '';
+          rates.forEach(r => {
+            const percent = parseFloat(r.value) || 0;
+            const commAmountCentavos = Math.round(eligibleCentavos * (percent / 100));
+
+            // Generate employee select dropdown options
+            let employeeOptionsHtml = '<option value="">-- Assign --</option>';
+            dbEmployees.forEach(e => {
+              const fullName = `${e.first_name || ''} ${e.last_name || ''}`.trim();
+              employeeOptionsHtml += `<option value="${e.id}">${escapeHtml(fullName)}</option>`;
+            });
+
+            ratesCellsHtml += `
+              <td>
+                <div style="display: flex; flex-direction: column; gap: 0.25rem;">
+                  <select class="form-select" style="font-size: 0.72rem; padding: 0.15rem 0.35rem; height: 26px; min-width: 110px;">
+                    ${employeeOptionsHtml}
+                  </select>
+                  <span style="font-weight: 600; color: var(--text-primary); font-size: 0.8rem; margin-top: 0.15rem;">
+                    ${fmtPHP(commAmountCentavos)}
+                  </span>
+                </div>
+              </td>
+            `;
+          });
+
+          rowsHtml.push(`
+            <tr>
+              <td>${escapeHtml(dateBooked)}</td>
+              <td>${escapeHtml(b.order_no || '—')}</td>
+              <td>${escapeHtml(b.customer_name || '—')}</td>
+              <td>${escapeHtml(city)}</td>
+              <td><span class="sku-badge" style="font-family: var(--font-mono); font-weight: 700; font-size: 0.78rem; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 4px; padding: 0.15rem 0.4rem; color: var(--text-primary);">${escapeHtml(sku)}</span></td>
+              <td>${qty}</td>
+              <td style="font-variant-numeric: tabular-nums">${fmtPHP(totalCentavos)}</td>
+              <td style="font-variant-numeric: tabular-nums; font-weight: 600; color: ${isEligible ? 'var(--success)' : 'var(--text-muted)'};">
+                ${isEligible ? fmtPHP(eligibleCentavos) : '—'}
+              </td>
+              ${ratesCellsHtml}
+            </tr>
+          `);
+        }
+      });
+
+      if (rowsHtml.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="${8 + rates.length}" style="padding: 3rem; text-align: center; color: var(--text-muted);">No booking items found.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = rowsHtml.join('');
+    }
+
+  })();
+</script>
+</body>
+</html>
