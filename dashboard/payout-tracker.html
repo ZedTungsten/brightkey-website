@@ -584,13 +584,14 @@
                     <tr>
                       <th style="padding-left: 1.5rem;">Employee Name</th>
                       <th>Total Commissions</th>
+                      <th>Done</th>
                       <th>Payment Details</th>
                       <th style="width: 100px; text-align: center;">Paid</th>
                     </tr>
                   </thead>
                   <tbody id="commission-table-body">
                     <tr>
-                      <td colspan="4" style="text-align:center; padding:3rem; color:var(--text-muted);">Loading commission data...</td>
+                      <td colspan="5" style="text-align:center; padding:3rem; color:var(--text-muted);">Loading commission data...</td>
                     </tr>
                   </tbody>
                 </table>
@@ -787,7 +788,7 @@
         try {
           const { data: bookings, error: bookingsErr } = await getSb()
             .from('installation_bookings')
-            .select('id, created_at, status')
+            .select('id, created_at, status, updated_at')
             .eq('company_id', this.companyId);
           if (bookingsErr) throw bookingsErr;
           this.bookingsList = bookings || [];
@@ -1512,11 +1513,11 @@
 
         const monthKey = this.getCommissionMonthKey();
 
-        // 1. Map bookingId -> created_at (YYYY-MM)
+        // 1. Map bookingId -> updated_at (YYYY-MM) for completed bookings
         const bookingMonthMap = {};
         this.bookingsList.forEach(b => {
-          if (b.created_at) {
-            const date = new Date(b.created_at);
+          if (b.updated_at && b.status === 'completed') {
+            const date = new Date(b.updated_at);
             const yyyy = date.getFullYear();
             const mm = String(date.getMonth() + 1).padStart(2, '0');
             bookingMonthMap[b.id] = `${yyyy}-${mm}`;
@@ -1526,9 +1527,7 @@
         // 2. Filter assignments for selected month AND completed status
         const monthAssignments = this.commissionAssignments.filter(a => {
           const bMonth = bookingMonthMap[a.booking_id];
-          const b = this.bookingsList.find(x => x.id === a.booking_id);
-          const isDone = b && b.status === 'completed';
-          return bMonth === monthKey && isDone;
+          return bMonth === monthKey;
         });
 
         // 3. Group commission amounts by employee
@@ -1542,7 +1541,7 @@
         const activeEmpIds = Object.keys(empCommissions);
 
         if (activeEmpIds.length === 0) {
-          tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; padding:3rem; color:var(--text-muted);">No commissions assigned for this month.</td></tr>`;
+          tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:3rem; color:var(--text-muted);">No commissions assigned for this month.</td></tr>`;
           return;
         }
 
@@ -1568,6 +1567,21 @@
 
           const totalCentavos = empCommissions[empId];
 
+          // Collect unique Done dates for this employee's assignments this month
+          const doneDates = [];
+          monthAssignments.forEach(a => {
+            if (a.employee_id === empId) {
+              const b = this.bookingsList.find(x => x.id === a.booking_id);
+              if (b && b.updated_at) {
+                const d = new Date(b.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                if (!doneDates.includes(d)) {
+                  doneDates.push(d);
+                }
+              }
+            }
+          });
+          const doneDatesStr = doneDates.join(', ');
+
           if (!this.commissionPayoutState[monthKey]) {
             this.commissionPayoutState[monthKey] = {};
           }
@@ -1579,6 +1593,7 @@
             <tr class="employee-row ${grayClass}" data-emp-id="${esc(empId)}">
               <td class="col-name" style="padding-left: 1.5rem; font-weight:600; color:var(--text-primary);">${esc(fullName)}</td>
               <td style="font-weight:700; color:var(--text-primary); font-variant-numeric:tabular-nums;">${esc(php(totalCentavos / 100))}</td>
+              <td style="font-weight:600; font-size:0.78rem;">${esc(doneDatesStr)}</td>
               <td>${detailsHtml}</td>
               <td style="text-align:center;">
                 <input type="checkbox" class="payout-checkbox" ${checkedAttr} onchange="SalaryApp.toggleCommissionCheck('${esc(empId)}', this.checked)">
