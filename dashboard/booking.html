@@ -371,8 +371,9 @@
             <div class="panel-title">Products Purchased</div>
             <div id="products-header" style="display:none; gap:0.75rem; margin-bottom:0.35rem; align-items:center;">
               <span style="flex-shrink:0; width:50px;"></span>
-              <span style="flex:2; font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-muted);">Product</span>
-              <span style="flex:0.5; font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-muted);">Qty</span>
+              <span style="flex:1; font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-muted);">Warehouse</span>
+              <span style="flex:1.5; font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-muted);">Product</span>
+              <span style="flex:0.4; font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-muted);">Qty</span>
               <span style="width:32px;"></span>
             </div>
             <div id="products-container">
@@ -525,6 +526,8 @@
     let dbProducts = [];
     let currentCompanyId = null;
     let dbEmployees = [];
+    let dbWarehouses = [];
+    let dbInventory = [];
 
     const MOCK_EMPLOYEES = []; // Cleared dummy/fake installers
 
@@ -547,15 +550,22 @@
             currentCompanyId = companyData[0].id;
           }
 
-          const [productsRes, inventoryRes, employeesRes, assignmentsRes] = await Promise.all([
+          const [productsRes, inventoryRes, employeesRes, assignmentsRes, warehousesRes] = await Promise.all([
             sb.from('products').select('sku, title, image_main, installation_price, count_inventory'),
-            sb.from('inventory').select('sku, available'),
+            sb.from('inventory').select('sku, available, warehouse_id'),
             sb.from('employees').select('id, employee_number, first_name, last_name, title, department, assignment'),
-            sb.from('employee_assignments').select('id, name, visibility').eq('company_id', currentCompanyId || '')
+            sb.from('employee_assignments').select('id, name, visibility').eq('company_id', currentCompanyId || ''),
+            sb.from('warehouses').select('id, name').eq('tenant_id', tenantId).eq('is_active', true).order('created_at', { ascending: true })
           ]);
 
           if (employeesRes.data) {
             dbEmployees = employeesRes.data;
+          }
+          if (warehousesRes.data) {
+            dbWarehouses = warehousesRes.data;
+          }
+          if (inventoryRes.data) {
+            dbInventory = inventoryRes.data;
           }
 
           // Store installer-eligible assignment names (those with booking.door_specifications visibility)
@@ -567,7 +577,7 @@
             const invMap = {};
             if (inventoryRes.data) {
               inventoryRes.data.forEach(item => {
-                invMap[item.sku] = item.available;
+                invMap[item.sku] = (invMap[item.sku] || 0) + item.available;
               });
             }
 
@@ -644,37 +654,75 @@
     }
 
     // --- Dynamic Product Rows ---
+    function getProductStockInWarehouse(sku, warehouseId) {
+      if (!warehouseId) return 0;
+      const inv = dbInventory.find(item => item.sku === sku && item.warehouse_id === warehouseId);
+      return inv ? inv.available : 0;
+    }
+
+    function populateProductOptions(rowId, warehouseId) {
+      const select = document.getElementById(`${rowId}-select`);
+      if (!select) return;
+
+      const currentSelection = select.value;
+      const sortedProducts = [...dbProducts].sort((a, b) => a.sku.localeCompare(b.sku));
+      let optionsHtml = '<option value="" data-price="0">-- Choose Lock --</option>';
+
+      sortedProducts.forEach(p => {
+        const activePrice = p.salePrice || p.price;
+        const available = getProductStockInWarehouse(p.sku, warehouseId);
+        const stockStatus = available > 0 ? `${available} available` : 'BACKORDER';
+        const cleanName = p.name.includes(`(${p.sku})`) ? p.name.replace(` (${p.sku})`, '') : p.name;
+        const isSelected = p.sku === currentSelection ? 'selected' : '';
+        optionsHtml += `<option value="${p.sku}" data-price="${activePrice}" ${isSelected}>${p.sku} - ${cleanName} [${stockStatus}]</option>`;
+      });
+
+      select.innerHTML = optionsHtml;
+    }
+
+    function updateProductWarehouse(rowId) {
+      const whSelect = document.getElementById(`${rowId}-warehouse`);
+      const whId = whSelect ? whSelect.value : '';
+      populateProductOptions(rowId, whId);
+      updateProductSelect(rowId);
+    }
+
     function addProductRow() {
       const container = document.getElementById('products-container');
       document.getElementById('products-header').style.display = 'flex';
       const rowId = 'prod-row-' + Date.now();
       
-      const sortedProducts = [...dbProducts].sort((a, b) => a.sku.localeCompare(b.sku));
-      let options = sortedProducts.map(p => {
-        const activePrice = p.salePrice || p.price;
-        const stockStatus = p.available > 0 ? `${p.available} available` : 'BACKORDER';
-        const cleanName = p.name.includes(`(${p.sku})`) ? p.name.replace(` (${p.sku})`, '') : p.name;
-        return `<option value="${p.sku}" data-price="${activePrice}">${p.sku} - ${cleanName} [${stockStatus}]</option>`;
-      }).join('');
+      let whOptions = '';
+      dbWarehouses.forEach((w, idx) => {
+        const selected = idx === 0 ? 'selected' : '';
+        whOptions += `<option value="${w.id}" ${selected}>${w.name}</option>`;
+      });
 
       const html = `
         <div class="product-row" id="${rowId}">
           <div style="flex-shrink:0; width:50px; height:50px; border-radius:4px; overflow:hidden; border:1px solid var(--border);">
             <img src="../assets/og-image.png" style="width:100%; height:100%; object-fit:cover;" id="${rowId}-img" />
           </div>
-          <div style="flex: 2;">
-            <select class="form-input" style="height:auto; padding:0.5rem;" onchange="updateProductSelect('${rowId}')" id="${rowId}-select">
-              <option value="" data-price="0">-- Choose Lock --</option>
-              ${options}
+          <div style="flex: 1;">
+            <select class="form-input" style="height:auto; padding:0.5rem;" onchange="updateProductWarehouse('${rowId}')" id="${rowId}-warehouse">
+              ${whOptions}
             </select>
           </div>
-          <div style="flex: 0.5;">
+          <div style="flex: 1.5;">
+            <select class="form-input" style="height:auto; padding:0.5rem;" onchange="updateProductSelect('${rowId}')" id="${rowId}-select">
+              <!-- Dynamically populated -->
+            </select>
+          </div>
+          <div style="flex: 0.4;">
             <input type="number" class="form-input" style="padding:0.5rem;" min="1" value="1" id="${rowId}-qty" oninput="calculateTotals()" />
           </div>
           <button class="btn btn-outline btn-sm" style="color:#ef4444; border-color:#ef4444;" onclick="removeElement('${rowId}')"><svg aria-hidden="true" viewBox="0 0 24 24" style="width:1em;height:1em;display:block;fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
         </div>
       `;
       container.insertAdjacentHTML('beforeend', html);
+      
+      const defaultWhId = dbWarehouses[0]?.id || '';
+      populateProductOptions(rowId, defaultWhId);
       calculateTotals();
     }
 
@@ -912,9 +960,9 @@
       // Product subtotal
       const prodRows = document.querySelectorAll('.product-row');
       prodRows.forEach(row => {
-        const select = row.querySelector('select');
+        const select = row.querySelector('select[id$="-select"]');
         const qtyInput = row.querySelector('input[type="number"]');
-        const selectedOption = select.options[select.selectedIndex];
+        const selectedOption = select ? select.options[select.selectedIndex] : null;
         if (selectedOption && selectedOption.value) {
           const price = parseFloat(selectedOption.getAttribute('data-price')) || 0;
           const qty = parseInt(qtyInput.value) || 1;
@@ -1268,15 +1316,19 @@
       const products = [];
       const prodRows = document.querySelectorAll('.product-row');
       prodRows.forEach(row => {
-        const select = row.querySelector('select');
+        const whSelect = row.querySelector('select[id$="-warehouse"]');
+        const prodSelect = row.querySelector('select[id$="-select"]');
         const qtyInput = row.querySelector('input[type="number"]');
-        const selectedOption = select.options[select.selectedIndex];
-        if (selectedOption && selectedOption.value) {
-          products.push({
-            sku: selectedOption.value,
-            name: selectedOption.text.split(' [')[0], // "SKU - Product Name" (strips stock status)
-            qty: parseInt(qtyInput.value) || 1
-          });
+        if (prodSelect && prodSelect.options[prodSelect.selectedIndex]) {
+          const selectedOption = prodSelect.options[prodSelect.selectedIndex];
+          if (selectedOption && selectedOption.value) {
+            products.push({
+              sku: selectedOption.value,
+              name: selectedOption.text.split(' [')[0], // "SKU - Product Name" (strips stock status)
+              qty: parseInt(qtyInput.value) || 1,
+              warehouse_id: whSelect ? whSelect.value : null
+            });
+          }
         }
       });
 
@@ -1443,21 +1495,23 @@
             reference_id: receiptNo,
             customer_name: name,
             customer_city: city,
-            timestamp_reserved: reservedAt
+            timestamp_reserved: reservedAt,
+            warehouse_id: p.warehouse_id
           }]);
 
-          const { data: invRow } = await inventorySb.from('inventory').select('*').eq('sku', p.sku);
+          const { data: invRow } = await inventorySb.from('inventory').select('*').eq('sku', p.sku).eq('warehouse_id', p.warehouse_id);
           if (invRow && invRow.length > 0) {
             const inv = invRow[0];
             await inventorySb.from('inventory').update({
               available: inv.available - p.qty,
               reserved: (inv.reserved || 0) + p.qty
-            }).eq('sku', p.sku);
+            }).eq('id', inv.id);
           } else {
             await inventorySb.from('inventory').insert([{
               sku: p.sku,
               available: -p.qty,
-              reserved: p.qty
+              reserved: p.qty,
+              warehouse_id: p.warehouse_id
             }]);
           }
         }
