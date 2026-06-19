@@ -264,6 +264,14 @@
       background: var(--bg-elevated);
     }
 
+    tr.employee-row.grayed-out {
+      opacity: 0.5;
+    }
+
+    tr.employee-row.grayed-out td {
+      background: var(--bg-elevated) !important;
+    }
+
     /* ── Schedule Management List ── */
     .schedule-item-row {
       display: flex;
@@ -558,10 +566,36 @@
 
           <!-- ── COMMISSION TAB PANEL ── -->
           <div class="tab-panel" id="panel-commission">
-            <div class="j-card">
-              <div class="j-card-title">Commission</div>
-              <p style="color: var(--text-muted); font-size: 0.85rem;">Commission tracking interface is coming soon.</p>
+            
+            <!-- Month Selector -->
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 0.75rem 1.25rem; width: 100%; box-sizing: border-box;">
+              <div style="display: flex; align-items: center; gap: 1rem;">
+                <button class="btn btn-outline btn-sm" id="btn-prev-month" onclick="SalaryApp.changeCommissionMonth(-1)">&lt;</button>
+                <span id="commission-month-display" style="font-size: 0.88rem; font-weight: 700; color: var(--text-primary); min-width: 140px; text-align: center;">October 2026</span>
+                <button class="btn btn-outline btn-sm" id="btn-next-month" onclick="SalaryApp.changeCommissionMonth(1)">&gt;</button>
+              </div>
             </div>
+
+            <!-- Table -->
+            <div class="table-card">
+              <div class="table-wrap">
+                <table class="salary-table" id="commission-table-el">
+                  <thead>
+                    <tr>
+                      <th style="padding-left: 1.5rem;">Employee Name</th>
+                      <th>Payment Details</th>
+                      <th style="width: 100px; text-align: center;">Paid</th>
+                    </tr>
+                  </thead>
+                  <tbody id="commission-table-body">
+                    <tr>
+                      <td colspan="3" style="text-align:center; padding:3rem; color:var(--text-muted);">Loading commission data...</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
           </div>
 
           <!-- ── REIMBURSEMENT TAB PANEL ── -->
@@ -627,6 +661,12 @@
       payoutSchedules: [], // array of numbers representing days
       specialSchedules: [], // array of { id, employeeId, value, label, day }
       trackerState: {}, // employeeId -> payoutColumnIndex -> { adjustment: number, label: string, checked: boolean }
+      
+      commissionYear: new Date().getFullYear(),
+      commissionMonth: new Date().getMonth(),
+      commissionAssignments: [],
+      bookingsList: [],
+      commissionPayoutState: {},
 
       async init() {
         try {
@@ -645,6 +685,9 @@
 
           // Populate day selectors
           this.populateDaySelectors();
+
+          // Initialize month display
+          this.updateCommissionMonthDisplay();
 
           // Fetch structure, employees and saved settings
           await this.loadData();
@@ -726,6 +769,45 @@
           this.trackerState = {};
         }
 
+        // 5. Fetch Commission Assignments
+        try {
+          const { data: comms, error: commsErr } = await getSb()
+            .from('commission_assignments')
+            .select('*')
+            .eq('company_id', this.companyId);
+          if (commsErr) throw commsErr;
+          this.commissionAssignments = comms || [];
+        } catch (e) {
+          this.commissionAssignments = [];
+          console.error(e);
+        }
+
+        // 6. Fetch Installation Bookings
+        try {
+          const { data: bookings, error: bookingsErr } = await getSb()
+            .from('installation_bookings')
+            .select('id, created_at')
+            .eq('company_id', this.companyId);
+          if (bookingsErr) throw bookingsErr;
+          this.bookingsList = bookings || [];
+        } catch (e) {
+          this.bookingsList = [];
+          console.error(e);
+        }
+
+        // 7. Fetch Commission Payout State
+        try {
+          const { data: commPayoutData } = await getSb()
+            .from('global_settings')
+            .select('value')
+            .eq('key', 'commission_payout_state')
+            .eq('company_id', this.companyId)
+            .maybeSingle();
+          this.commissionPayoutState = commPayoutData?.value || {};
+        } catch (e) {
+          this.commissionPayoutState = {};
+        }
+
         // Populate special schedules employee dropdown
         const empSel = document.getElementById('spec-employee');
         if (empSel) {
@@ -752,6 +834,7 @@
         this.renderTracker();
         this.renderSchedules();
         this.renderSpecialSchedules();
+        this.renderCommissionTab();
       },
 
       renderSchedules() {
@@ -1317,14 +1400,18 @@
 
       async saveTrackerStateSilent() {
         try {
-          const { error } = await getSb()
-            .from('global_settings')
-            .upsert({
+          await Promise.all([
+            getSb().from('global_settings').upsert({
               key: 'salary_tracker_state',
               company_id: this.companyId,
               value: this.trackerState
-            });
-          if (error) throw error;
+            }),
+            getSb().from('global_settings').upsert({
+              key: 'commission_payout_state',
+              company_id: this.companyId,
+              value: this.commissionPayoutState
+            })
+          ]);
           
           const statusEl = document.getElementById('save-status');
           if (statusEl) {
@@ -1350,15 +1437,19 @@
         btn.textContent = 'Saving...';
 
         try {
-          const { error } = await getSb()
-            .from('global_settings')
-            .upsert({
+          await Promise.all([
+            getSb().from('global_settings').upsert({
               key: 'salary_tracker_state',
               company_id: this.companyId,
               value: this.trackerState
-            });
-          if (error) throw error;
-          toast('Salary tracker state saved successfully.');
+            }),
+            getSb().from('global_settings').upsert({
+              key: 'commission_payout_state',
+              company_id: this.companyId,
+              value: this.commissionPayoutState
+            })
+          ]);
+          toast('Payout tracker state saved successfully.');
           
           const statusEl = document.getElementById('save-status');
           if (statusEl) {
@@ -1370,6 +1461,134 @@
           btn.disabled = false;
           btn.textContent = 'Save Changes';
         }
+      },
+
+      getCommissionMonthKey() {
+        const mm = String(this.commissionMonth + 1).padStart(2, '0');
+        return `${this.commissionYear}-${mm}`;
+      },
+
+      changeCommissionMonth(diff) {
+        let m = this.commissionMonth + diff;
+        let y = this.commissionYear;
+        if (m < 0) {
+          m = 11;
+          y--;
+        } else if (m > 11) {
+          m = 0;
+          y++;
+        }
+        this.commissionMonth = m;
+        this.commissionYear = y;
+        this.updateCommissionMonthDisplay();
+        this.renderCommissionTab();
+      },
+
+      updateCommissionMonthDisplay() {
+        const monthNames = [
+          'January', 'February', 'March', 'April', 'May', 'June',
+          'July', 'August', 'September', 'October', 'November', 'December'
+        ];
+        const display = document.getElementById('commission-month-display');
+        if (display) {
+          display.textContent = `${monthNames[this.commissionMonth]} ${this.commissionYear}`;
+        }
+      },
+
+      toggleCommissionCheck(empId, checked) {
+        const monthKey = this.getCommissionMonthKey();
+        if (!this.commissionPayoutState[monthKey]) {
+          this.commissionPayoutState[monthKey] = {};
+        }
+        this.commissionPayoutState[monthKey][empId] = checked;
+        this.renderCommissionTab();
+        this.debouncedSave();
+      },
+
+      renderCommissionTab() {
+        const tbody = document.getElementById('commission-table-body');
+        if (!tbody) return;
+
+        const monthKey = this.getCommissionMonthKey();
+
+        // 1. Map bookingId -> created_at (YYYY-MM)
+        const bookingMonthMap = {};
+        this.bookingsList.forEach(b => {
+          if (b.created_at) {
+            const date = new Date(b.created_at);
+            const yyyy = date.getFullYear();
+            const mm = String(date.getMonth() + 1).padStart(2, '0');
+            bookingMonthMap[b.id] = `${yyyy}-${mm}`;
+          }
+        });
+
+        // 2. Filter assignments for selected month
+        const monthAssignments = this.commissionAssignments.filter(a => {
+          const bMonth = bookingMonthMap[a.booking_id];
+          return bMonth === monthKey;
+        });
+
+        // 3. Group commission amounts by employee
+        const empCommissions = {};
+        monthAssignments.forEach(a => {
+          if (a.employee_id && a.amount) {
+            empCommissions[a.employee_id] = (empCommissions[a.employee_id] || 0) + a.amount;
+          }
+        });
+
+        const activeEmpIds = Object.keys(empCommissions);
+
+        if (activeEmpIds.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="3" style="text-align:center; padding:3rem; color:var(--text-muted);">No commissions assigned for this month.</td></tr>`;
+          return;
+        }
+
+        // 4. Render rows
+        let html = '';
+        activeEmpIds.forEach(empId => {
+          const emp = this.employees.find(e => e.id === empId);
+          const fullName = emp ? [emp.first_name, emp.last_name].filter(Boolean).join(' ') : 'Unknown Employee';
+
+          // Payment details
+          let detailsHtml = '';
+          if (emp && (emp.payout_details || emp.payout_details_image)) {
+            detailsHtml = `<div style="font-size:0.75rem; line-height:1.25; max-width:200px; white-space:pre-wrap; font-weight:500;">${esc(emp.payout_details)}</div>`;
+            if (emp.payout_details_image) {
+              detailsHtml += `<a href="${esc(emp.payout_details_image)}" target="_blank" style="font-size:0.72rem; color:var(--cyan-light); font-weight:600; text-decoration:none; display:inline-flex; align-items:center; gap:2px; margin-top:2px;">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                QR Code
+              </a>`;
+            }
+          } else {
+            detailsHtml = `<span style="font-size:0.75rem; color:var(--text-muted); font-style:italic;">—</span>`;
+          }
+
+          const totalCentavos = empCommissions[empId];
+
+          if (!this.commissionPayoutState[monthKey]) {
+            this.commissionPayoutState[monthKey] = {};
+          }
+          const isChecked = !!this.commissionPayoutState[monthKey][empId];
+          const checkedAttr = isChecked ? 'checked' : '';
+          const grayClass = isChecked ? 'grayed-out' : '';
+
+          html += `
+            <tr class="employee-row ${grayClass}" data-emp-id="${esc(empId)}">
+              <td class="col-name" style="padding-left: 1.5rem;">
+                <div style="font-weight:600; color:var(--text-primary);">${esc(fullName)}</div>
+                <div style="font-size:0.75rem; color:var(--text-muted); margin-top:0.25rem;">
+                  Total Commissions: <span style="color: var(--cyan); font-weight:700;">${esc(php(totalCentavos / 100))}</span>
+                </div>
+              </td>
+              <td>${detailsHtml}</td>
+              <td style="text-align:center;">
+                <input type="checkbox" class="payout-checkbox" ${checkedAttr} onchange="SalaryApp.toggleCommissionCheck('${esc(empId)}', this.checked)">
+              </td>
+            </tr>
+          `;
+        });
+
+        tbody.innerHTML = html;
       }
     };
 
