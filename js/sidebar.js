@@ -76,9 +76,9 @@
           <svg class="dash-nav-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
         </button>
         <div class="dash-nav-children">
-          <a href="/dashboard/booking" class="dash-nav-child">Book</a>
-          <a href="/dashboard/invoices" class="dash-nav-child">Invoices</a>
           <a href="/dashboard/booking-schedules" class="dash-nav-child">Schedules</a>
+          <a href="/dashboard/orders-invoices" class="dash-nav-child">Orders & Invoices</a>
+          <a href="/dashboard/booking" class="dash-nav-child">Book</a>
         </div>
       </div>
 
