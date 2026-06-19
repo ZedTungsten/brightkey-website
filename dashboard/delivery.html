@@ -243,6 +243,7 @@
                       </tbody>
                     </table>
                   </div>
+                  <div id="sendout-pagination" style="display:flex; justify-content:space-between; align-items:center; padding:0.75rem 1.25rem; border-top:1px solid var(--border); background:var(--bg-surface); font-size:0.8rem; color:var(--text-muted);"></div>
                 </div>
               </div>
 
@@ -279,6 +280,7 @@
                       </tbody>
                     </table>
                   </div>
+                  <div id="pickup-pagination" style="display:flex; justify-content:space-between; align-items:center; padding:0.75rem 1.25rem; border-top:1px solid var(--border); background:var(--bg-surface); font-size:0.8rem; color:var(--text-muted);"></div>
                 </div>
               </div>
 
@@ -311,6 +313,7 @@
                       </tbody>
                     </table>
                   </div>
+                  <div id="done-pagination" style="display:flex; justify-content:space-between; align-items:center; padding:0.75rem 1.25rem; border-top:1px solid var(--border); background:var(--bg-surface); font-size:0.8rem; color:var(--text-muted);"></div>
                 </div>
               </div>
 
@@ -531,6 +534,10 @@
       deliveryPhotoBlob: null,
       pickupPhotosBlobs: [], // array of { file, dataUrl }
       donePhotoBlob: null,
+      currentPageSendOut: 1,
+      currentPagePickup: 1,
+      currentPageDone: 1,
+      itemsPerPage: 10,
 
       async init() {
         if (!window.BKAuth) return;
@@ -615,6 +622,7 @@
 
         if (dispatchQueue.length === 0) {
           tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:3rem; color:var(--text-muted);">No packed orders ready for delivery.</td></tr>`;
+          this.renderPagination(0, this.currentPageSendOut, 'sendout-pagination', 'sendout');
           return;
         }
 
@@ -637,7 +645,21 @@
           }
         });
 
-        Object.values(groups).forEach(group => {
+        const groupList = Object.values(groups);
+        const totalItems = groupList.length;
+
+        // Adjust current page if out of bounds
+        const maxPage = Math.ceil(totalItems / this.itemsPerPage) || 1;
+        if (this.currentPageSendOut > maxPage) {
+          this.currentPageSendOut = maxPage;
+        }
+
+        // Paginate
+        const startIdx = (this.currentPageSendOut - 1) * this.itemsPerPage;
+        const endIdx = startIdx + this.itemsPerPage;
+        const paginatedGroups = groupList.slice(startIdx, endIdx);
+
+        paginatedGroups.forEach(group => {
           const skusHtml = group.items.map(t => `<code>${t.sku}</code>`).join('<br/>');
           const qtysHtml = group.items.map(t => `<strong>${t.quantity}</strong>`).join('<br/>');
           
@@ -667,6 +689,8 @@
           `;
           tbody.appendChild(tr);
         });
+
+        this.renderPagination(totalItems, this.currentPageSendOut, 'sendout-pagination', 'sendout');
       },
 
       renderPickupQueue() {
@@ -679,10 +703,24 @@
 
         if (pickupQueue.length === 0) {
           tbody.innerHTML = `<tr><td colspan="11" style="text-align:center; padding:3rem; color:var(--text-muted);">No orders awaiting pickup.</td></tr>`;
+          this.renderPagination(0, this.currentPagePickup, 'pickup-pagination', 'pickup');
           return;
         }
 
-        pickupQueue.forEach(db => {
+        const totalItems = pickupQueue.length;
+
+        // Adjust current page if out of bounds
+        const maxPage = Math.ceil(totalItems / this.itemsPerPage) || 1;
+        if (this.currentPagePickup > maxPage) {
+          this.currentPagePickup = maxPage;
+        }
+
+        // Paginate
+        const startIdx = (this.currentPagePickup - 1) * this.itemsPerPage;
+        const endIdx = startIdx + this.itemsPerPage;
+        const paginatedPickup = pickupQueue.slice(startIdx, endIdx);
+
+        paginatedPickup.forEach(db => {
           // Find the items (transactions) matching this reference_id that are dispatched
           const items = this.activeTransactions.filter(t => t.reference_id === db.reference_id && t.status === 'dispatched');
           const skusHtml = items.map(t => `<code>${t.sku}</code>`).join('<br/>') || '—';
@@ -718,6 +756,8 @@
           `;
           tbody.appendChild(tr);
         });
+
+        this.renderPagination(totalItems, this.currentPagePickup, 'pickup-pagination', 'pickup');
       },
 
       renderDoneQueue() {
@@ -730,10 +770,24 @@
 
         if (doneQueue.length === 0) {
           tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:3rem; color:var(--text-muted);">No completed or picked up orders.</td></tr>`;
+          this.renderPagination(0, this.currentPageDone, 'done-pagination', 'done');
           return;
         }
 
-        doneQueue.forEach(db => {
+        const totalItems = doneQueue.length;
+
+        // Adjust current page if out of bounds
+        const maxPage = Math.ceil(totalItems / this.itemsPerPage) || 1;
+        if (this.currentPageDone > maxPage) {
+          this.currentPageDone = maxPage;
+        }
+
+        // Paginate
+        const startIdx = (this.currentPageDone - 1) * this.itemsPerPage;
+        const endIdx = startIdx + this.itemsPerPage;
+        const paginatedDone = doneQueue.slice(startIdx, endIdx);
+
+        paginatedDone.forEach(db => {
           // Find the items matching reference_id
           const items = this.activeTransactions.filter(t => t.reference_id === db.reference_id && t.status === 'dispatched');
           const skusHtml = items.map(t => `<code>${t.sku}</code>`).join('<br/>') || '—';
@@ -766,6 +820,45 @@
           `;
           tbody.appendChild(tr);
         });
+
+        this.renderPagination(totalItems, this.currentPageDone, 'done-pagination', 'done');
+      },
+
+      renderPagination(totalItems, currentPage, containerId, tabName) {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+
+        if (totalItems <= 10) {
+          container.style.display = 'none';
+          return;
+        }
+        container.style.display = 'flex';
+
+        const totalPages = Math.ceil(totalItems / this.itemsPerPage) || 1;
+        const start = (currentPage - 1) * this.itemsPerPage + 1;
+        const end = Math.min(currentPage * this.itemsPerPage, totalItems);
+
+        container.innerHTML = `
+          <span>Showing <strong>${start}</strong> to <strong>${end}</strong> of <strong>${totalItems}</strong> entries</span>
+          <div style="display:flex; gap:0.5rem; align-items:center;">
+            <button class="btn btn-outline btn-sm" style="padding:0.25rem 0.5rem; font-size:0.75rem;" ${currentPage === 1 ? 'disabled' : ''} onclick="DeliveryApp.changePage('${tabName}', ${currentPage - 1})">Previous</button>
+            <span style="font-weight:600; color:var(--text-primary); font-size:0.75rem; padding:0 0.25rem;">Page ${currentPage} of ${totalPages}</span>
+            <button class="btn btn-outline btn-sm" style="padding:0.25rem 0.5rem; font-size:0.75rem;" ${currentPage === totalPages ? 'disabled' : ''} onclick="DeliveryApp.changePage('${tabName}', ${currentPage + 1})">Next</button>
+          </div>
+        `;
+      },
+
+      changePage(tabName, newPage) {
+        if (tabName === 'sendout') {
+          this.currentPageSendOut = newPage;
+          this.renderSendOutQueue();
+        } else if (tabName === 'pickup') {
+          this.currentPagePickup = newPage;
+          this.renderPickupQueue();
+        } else if (tabName === 'done') {
+          this.currentPageDone = newPage;
+          this.renderDoneQueue();
+        }
       },
 
       openBookingModal(referenceId) {
