@@ -15,7 +15,14 @@
     .main-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
     
     .scroll-area { flex: 1; overflow: auto; padding: 2rem; display: flex; flex-direction: column; }
-    .commissions-container { max-width: 1400px; width: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: 2rem; }
+    .commissions-container { max-width: 1800px; width: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: 2rem; }
+
+    /* Toast Notification */
+    #toast-container { position: fixed; top: 1.5rem; right: 1.5rem; z-index: 99999; display: flex; flex-direction: column; gap: 0.5rem; }
+    .toast { padding: 0.75rem 1rem; border-radius: 6px; font-size: 0.82rem; font-weight: 600; color: #fff; min-width: 250px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); animation: slideIn 0.2s ease-out; }
+    .toast-success { background: var(--success, #16a34a); }
+    .toast-error { background: var(--danger, #dc2626); }
+    @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
 
     /* ── Tabs Navigation ── */
     .drawer-tabs {
@@ -147,6 +154,8 @@
 </head>
 <body>
 
+<div id="toast-container"></div>
+
 <div class="dash-layout">
   <!-- Sidebar -->
   <aside class="dash-sidebar" id="dash-sidebar"></aside>
@@ -157,6 +166,8 @@
       <!-- Top Bar -->
       <header class="top-bar">
         <div class="top-bar-title">Commissions</div>
+        <div style="flex: 1;"></div>
+        <button class="btn btn-primary" id="btn-save-assignments">Save Changes</button>
       </header>
 
       <!-- Main Panel -->
@@ -172,8 +183,9 @@
             
             <!-- Commissions Assignment Panel -->
             <div class="panel">
-              <div class="panel-header">
-                <span>Sales Commission Assigner</span>
+              <div class="panel-header" style="justify-content: flex-start; gap: 1rem; border-bottom: 1px solid var(--border); padding: 0.75rem 1.25rem;">
+                <label for="month-filter" style="font-size: 0.8rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0;">Filter Month:</label>
+                <input type="month" id="month-filter" class="form-select" style="font-size: 0.8rem; padding: 0.25rem 0.5rem; height: auto; width: 160px;" />
               </div>
               
               <div class="table-responsive">
@@ -228,8 +240,33 @@
     let currentCompanyId = null;
     let cellAssignments = {}; // { [cellKey]: ['employeeId1', 'employeeId2'] }
 
+    function showToast(msg, isError = false) {
+      const container = document.getElementById('toast-container');
+      if (!container) return;
+      const toast = document.createElement('div');
+      toast.className = `toast ${isError ? 'toast-error' : 'toast-success'}`;
+      toast.textContent = msg;
+      container.appendChild(toast);
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transition = 'opacity 0.3s ease';
+        setTimeout(() => toast.remove(), 300);
+      }, 3000);
+    }
+
     document.addEventListener('DOMContentLoaded', async () => {
       if (!window.BKAuth) return;
+
+      // Default month selector to current month (YYYY-MM)
+      const today = new Date();
+      const currentMonthStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+      const monthFilter = document.getElementById('month-filter');
+      if (monthFilter) {
+        monthFilter.value = currentMonthStr;
+        monthFilter.addEventListener('change', () => {
+          renderCommissionsTable();
+        });
+      }
 
       // Gate to Sales, Admin, Owner
       const authInfo = await window.BKAuth.checkRoleGate(['owner', 'admin', 'sales'], '../admin.html');
@@ -243,6 +280,32 @@
         currentCompanyId = co?.id || null;
       } catch (err) {
         console.error('Error fetching company ID:', err);
+      }
+
+      // Save button handler
+      const saveBtn = document.getElementById('btn-save-assignments');
+      if (saveBtn) {
+        saveBtn.addEventListener('click', async () => {
+          if (!currentCompanyId) return;
+          saveBtn.disabled = true;
+          saveBtn.textContent = 'Saving...';
+          try {
+            const { error } = await sb.from('global_settings').upsert({
+              key: 'commissions_assignments',
+              company_id: currentCompanyId,
+              value: cellAssignments,
+              updated_at: new Date().toISOString()
+            });
+            if (error) throw error;
+            showToast('Commission assignments saved successfully!');
+          } catch (err) {
+            console.error('Error saving assignments:', err);
+            showToast(`Failed to save: ${err.message}`, true);
+          } finally {
+            saveBtn.disabled = false;
+            saveBtn.textContent = 'Save Changes';
+          }
+        });
       }
 
       // Attach event listeners for dynamic assignment
@@ -295,12 +358,13 @@
 
       try {
         // Parallel data fetch
-        const [bookingsRes, productsRes, configRes, employeesRes, assignmentsRes] = await Promise.all([
+        const [bookingsRes, productsRes, configRes, employeesRes, assignmentsRes, dbAssignmentsRes] = await Promise.all([
           sb.from('installation_bookings').select('*').eq('company_id', currentCompanyId).order('created_at', { ascending: false }),
           sb.from('products').select('sku, business, category, tags'),
           sb.from('global_settings').select('value').eq('key', 'commissions_config').eq('company_id', currentCompanyId).maybeSingle(),
           sb.from('employees').select('id, first_name, last_name, employee_number, assignment').eq('company_id', currentCompanyId),
-          sb.from('employee_assignments').select('id, name, visibility').eq('company_id', currentCompanyId)
+          sb.from('employee_assignments').select('id, name, visibility').eq('company_id', currentCompanyId),
+          sb.from('global_settings').select('value').eq('key', 'commissions_assignments').eq('company_id', currentCompanyId).maybeSingle()
         ]);
 
         if (bookingsRes.error) throw bookingsRes.error;
@@ -308,10 +372,15 @@
         if (configRes.error) throw configRes.error;
         if (employeesRes.error) throw employeesRes.error;
         if (assignmentsRes.error) throw assignmentsRes.error;
+        if (dbAssignmentsRes.error) throw dbAssignmentsRes.error;
 
         dbBookings = bookingsRes.data || [];
         dbProducts = productsRes.data || [];
         
+        if (dbAssignmentsRes.data && dbAssignmentsRes.data.value) {
+          cellAssignments = dbAssignmentsRes.data.value;
+        }
+
         const commsAssignments = (assignmentsRes.data || [])
           .filter(a => Array.isArray(a.visibility) && a.visibility.includes('sales.commissions'))
           .map(a => a.name);
@@ -386,8 +455,22 @@
         headerRow.appendChild(th);
       });
 
-      if (dbBookings.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="${8 + rates.length}" style="padding: 3rem; text-align: center; color: var(--text-muted);">No bookings found.</td></tr>`;
+      const monthFilter = document.getElementById('month-filter');
+      const selectedMonth = monthFilter ? monthFilter.value : '';
+
+      let filteredBookings = dbBookings;
+      if (selectedMonth) {
+        filteredBookings = dbBookings.filter(b => {
+          if (!b.created_at) return false;
+          const date = new Date(b.created_at);
+          const yyyy = date.getFullYear();
+          const mm = String(date.getMonth() + 1).padStart(2, '0');
+          return `${yyyy}-${mm}` === selectedMonth;
+        });
+      }
+
+      if (filteredBookings.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="${8 + rates.length}" style="padding: 3rem; text-align: center; color: var(--text-muted);">No bookings found for the selected month.</td></tr>`;
         return;
       }
 
@@ -400,7 +483,7 @@
       // Render rows by splitting bookings with multiple products
       const rowsHtml = [];
 
-      dbBookings.forEach(b => {
+      filteredBookings.forEach(b => {
         const dateBooked = b.created_at ? new Date(b.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
         const city = b.customer_address ? (b.customer_address.split(',')[1]?.trim() || '') : '';
         
