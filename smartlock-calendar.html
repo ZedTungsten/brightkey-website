@@ -889,6 +889,21 @@
       </div>
     </div>
   </div>
+  <!-- Add Labor Modal -->
+  <div class="modal-overlay" id="confirm-modal" onclick="closeConfirmModal(false)">
+    <div class="modal-sheet" style="max-width: 400px; padding: 1.5rem; text-align: center;" onclick="event.stopPropagation()">
+      <h3 class="modal-title" style="margin-bottom: 0.5rem; text-align: center;">Add SKU (install price)?</h3>
+      <p style="font-size: 0.9rem; color: var(--text-secondary); line-height: 1.5; margin-bottom: 1rem;">This is for nails, material misdeclaration, and extra welding jobs. Make sure the customer is informed first before adding.</p>
+      <div style="margin-bottom: 1.25rem;">
+        <input type="number" id="addon-labor-price" class="form-input" placeholder="Price (PHP)" min="1" step="any" required style="width: 100%; text-align: center; font-size: 1.1rem; font-weight: 600;" />
+      </div>
+      <div style="display: flex; gap: 0.75rem; justify-content: center;">
+        <button type="button" class="btn btn-outline" style="width: auto; padding: 0.5rem 1.5rem;" onclick="closeConfirmModal(false)">No</button>
+        <button type="button" class="btn" style="width: auto; padding: 0.5rem 2rem; background: var(--cyan); color: #fff; border: none; font-weight: 600;" onclick="submitAddLabor()">Add</button>
+      </div>
+    </div>
+  </div>
+
   <!-- 4. LIGHTBOX MODAL -->
   <div class="modal-overlay" id="lightbox-modal" onclick="closeLightbox()">
     <img id="lightbox-img" src="" alt="Fitted Preview" style="display:none; max-width:90%; max-height:80vh; border-radius:var(--radius-sm); box-shadow: 0 10px 30px rgba(0,0,0,0.8);" onclick="event.stopPropagation()" />
@@ -915,6 +930,117 @@
       'January', 'February', 'March', 'April', 'May', 'June',
       'July', 'August', 'September', 'October', 'November', 'December'
     ];
+
+    let confirmResolver = null;
+    window.promptAddLabor = function(doorIdx) {
+      document.getElementById('addon-labor-price').value = '';
+      document.getElementById('confirm-modal').style.display = 'flex';
+      return new Promise((resolve) => {
+        confirmResolver = resolve;
+      });
+    };
+
+    window.closeConfirmModal = function(result) {
+      document.getElementById('confirm-modal').style.display = 'none';
+      if (confirmResolver) {
+        confirmResolver(result);
+        confirmResolver = null;
+      }
+    };
+
+    window.submitAddLabor = async function() {
+      const priceInput = document.getElementById('addon-labor-price');
+      const priceVal = parseFloat(priceInput.value);
+      if (isNaN(priceVal) || priceVal <= 0) {
+        showToast('Please enter a valid price.', true);
+        return;
+      }
+      closeConfirmModal(true);
+      await performAddLabor(priceVal);
+    };
+
+    window.performAddLabor = async function(pricePhp) {
+      if (!selectedBooking) return;
+      const priceCents = Math.round(pricePhp * 100);
+
+      // 1. Get existing products array
+      let productsArr = [];
+      if (typeof selectedBooking.products === 'string') {
+        try { productsArr = JSON.parse(selectedBooking.products); } catch(_) {}
+      } else if (Array.isArray(selectedBooking.products)) {
+        productsArr = [...selectedBooking.products];
+      }
+
+      // Append ADD-ON LABOR product
+      productsArr.push({
+        sku: 'ADD-ON LABOR',
+        name: 'ADD-ON LABOR',
+        title: 'ADD-ON LABOR',
+        qty: 1,
+        price: priceCents,
+        lineTotal: priceCents
+      });
+
+      // 2. Parse existing pipe-separated product fields
+      const skus = (selectedBooking.product_skus || '').split(' | ').filter(Boolean);
+      const names = (selectedBooking.product_names || '').split(' | ').filter(Boolean);
+      const qtys = (selectedBooking.product_qtys || '').split(' | ').filter(Boolean);
+      const prices = (selectedBooking.product_unit_prices || '').split(' | ').filter(Boolean);
+      const totals = (selectedBooking.product_totals || '').split(' | ').filter(Boolean);
+
+      skus.push('ADD-ON LABOR');
+      names.push('ADD-ON LABOR');
+      qtys.push('1');
+      prices.push(pricePhp.toFixed(2));
+      totals.push(pricePhp.toFixed(2));
+
+      // 3. Compute new financial totals
+      const newSubtotal = (selectedBooking.subtotal || 0) + priceCents;
+      const newGrandTotal = (selectedBooking.grand_total || 0) + priceCents;
+      const newBalance = (selectedBooking.balance_due || 0) + priceCents;
+
+      const updatePayload = {
+        products: productsArr,
+        product_skus: skus.join(' | '),
+        product_names: names.join(' | '),
+        product_qtys: qtys.join(' | '),
+        product_unit_prices: prices.join(' | '),
+        product_totals: totals.join(' | '),
+        subtotal: newSubtotal,
+        grand_total: newGrandTotal,
+        balance_due: newBalance
+      };
+
+      try {
+        const { error } = await sb
+          .from('installation_bookings')
+          .update(updatePayload)
+          .eq('id', selectedBooking.id);
+
+        if (error) throw error;
+
+        // Update local memory states
+        const idx = dbBookings.findIndex(b => b.id === selectedBooking.id);
+        if (idx !== -1) {
+          dbBookings[idx] = { ...dbBookings[idx], ...updatePayload };
+          selectedBooking = dbBookings[idx];
+        }
+
+        // Cache update
+        localStorage.setItem(`bk_cache_${currentInstaller.id}`, JSON.stringify({
+          data: dbBookings,
+          timestamp: new Date().toISOString()
+        }));
+
+        showToast('SKU: ADD-ON LABOR added successfully!');
+        
+        // Refresh details modal
+        openDetailsModal(selectedBooking.id);
+      } catch (err) {
+        console.error('Failed to add ADD-ON LABOR:', err);
+        showToast('Failed to add labor: ' + err.message, true);
+      }
+    };
 
     document.addEventListener("DOMContentLoaded", async () => {
       // 1. Initialize Supabase
@@ -1483,6 +1609,7 @@
                 <div style="position: absolute; top: 0.85rem; right: 1rem; display: flex; flex-direction: column; gap: 0.4rem; align-items: flex-end;">
                   <span style="font-size: 0.83rem; font-weight: 700; background: var(--success); color: #fff; padding: 0.3rem 0.7rem; border-radius: var(--radius-sm); text-transform: uppercase; display:inline-flex; align-items:center; gap:0.25rem;"><svg aria-hidden="true" viewBox="0 0 24 24" style="width:1em;height:1em;display:block;fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;"><polyline points="20 6 9 17 4 12"/></svg>Completed</span>
                   <button type="button" class="btn btn-sm" style="width: auto; font-size: 0.83rem; padding: 0.3rem 0.7rem; border-radius: var(--radius-sm); background: var(--cyan); color: #fff; border: none; cursor: pointer;" onclick="openUploadModal(${i})">Upload</button>
+                  <button type="button" class="btn btn-sm" style="width: auto; font-size: 0.83rem; padding: 0.3rem 0.7rem; border-radius: var(--radius-sm); background: var(--cyan-light); color: #fff; border: none; cursor: pointer;" onclick="promptAddLabor(${i})">Add Labor</button>
                 </div>
               `;
             } else {
