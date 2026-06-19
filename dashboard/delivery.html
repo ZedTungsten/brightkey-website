@@ -455,7 +455,7 @@
             <span style="font-size:0.78rem; font-weight:600;">Drag & drop photos or click to select multiple</span>
           </div>
           <!-- Thumbnail Grid -->
-          <div id="pickup-thumbs-grid" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem; width: 100%; margin-top: 0.5rem; display: none;"></div>
+          <div id="pickup-thumbs-grid" style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.5rem; width: 100%; margin-top: 0.5rem; display: none;" onclick="event.stopPropagation()"></div>
           <input type="file" id="pickup-file-input" accept="image/*" multiple style="display:none;" onchange="handlePickupFilesSelect(event)" onclick="event.stopPropagation()" />
         </div>
       </div>
@@ -974,8 +974,21 @@
       const files = Array.from(e.target.files);
       if (files.length === 0) return;
       
+      const currentCount = DeliveryApp.pickupPhotosBlobs.length;
+      if (currentCount >= 5) {
+        Toast.error('Maximum 5 images allowed.');
+        e.target.value = '';
+        return;
+      }
+      
+      const remainingCount = 5 - currentCount;
+      if (files.length > remainingCount) {
+        Toast.error(`Only up to 5 images can be uploaded. Loading the first ${remainingCount} selected image(s).`);
+      }
+      
+      const filesToLoad = files.slice(0, remainingCount);
       let loaded = 0;
-      files.forEach(file => {
+      filesToLoad.forEach(file => {
         const reader = new FileReader();
         reader.onload = function(evt) {
           DeliveryApp.pickupPhotosBlobs.push({
@@ -983,7 +996,7 @@
             dataUrl: evt.target.result
           });
           loaded++;
-          if (loaded === files.length) {
+          if (loaded === filesToLoad.length) {
             renderPickupThumbnails();
           }
         };
@@ -1029,6 +1042,27 @@
         thumbDiv.appendChild(removeBtn);
         grid.appendChild(thumbDiv);
       });
+
+      // If total photos < 5, append a "+ Add more" box inside the grid
+      if (DeliveryApp.pickupPhotosBlobs.length < 5) {
+        const addMoreDiv = document.createElement('div');
+        addMoreDiv.style.cssText = 'aspect-ratio:1; border-radius:6px; border:1px dashed var(--cyan); display:flex; flex-direction:column; align-items:center; justify-content:center; background:rgba(0,180,216,0.05); color:var(--cyan-light); cursor:pointer; transition:all 0.15s; font-size:0.7rem; font-weight:600; text-align:center; padding: 0.25rem;';
+        addMoreDiv.innerHTML = `
+          <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none" style="margin-bottom:2px;"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+          + Add more
+        `;
+        addMoreDiv.onclick = function(evt) {
+          evt.stopPropagation();
+          document.getElementById('pickup-file-input').click();
+        };
+        addMoreDiv.onmouseover = function() {
+          addMoreDiv.style.background = 'rgba(0,180,216,0.1)';
+        };
+        addMoreDiv.onmouseout = function() {
+          addMoreDiv.style.background = 'rgba(0,180,216,0.05)';
+        };
+        grid.appendChild(addMoreDiv);
+      }
 
       document.getElementById('btn-confirm-pickup').disabled = false;
     }
