@@ -14,6 +14,11 @@ CREATE TABLE IF NOT EXISTS public.delivery_bookings (
   tip_1               INTEGER DEFAULT 0, -- stored in centavos
   tip_2               INTEGER DEFAULT 0, -- stored in centavos
   toll                INTEGER DEFAULT 0, -- stored in centavos
+  status              TEXT DEFAULT 'booked' CHECK (status IN ('booked', 'picked_up', 'delivered')),
+  pickup_photos       TEXT[] DEFAULT '{}'::TEXT[],
+  picked_up_at        TIMESTAMPTZ,
+  received_photo_url  TEXT,
+  delivered_at        TIMESTAMPTZ,
   created_at          TIMESTAMPTZ DEFAULT NOW()
 );
 
