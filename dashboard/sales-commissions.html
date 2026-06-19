@@ -290,13 +290,80 @@
           saveBtn.disabled = true;
           saveBtn.textContent = 'Saving...';
           try {
-            const { error } = await sb.from('global_settings').upsert({
-              key: 'commissions_assignments',
-              company_id: currentCompanyId,
-              value: cellAssignments,
-              updated_at: new Date().toISOString()
+            // Delete existing records for currently loaded bookings to prevent orphans
+            const loadedBookingIds = dbBookings.map(b => b.id);
+            if (loadedBookingIds.length > 0) {
+              const { error: deleteError } = await sb
+                .from('commission_assignments')
+                .delete()
+                .in('booking_id', loadedBookingIds);
+              if (deleteError) throw deleteError;
+            }
+
+            // Create product lookup map
+            const productMap = {};
+            dbProducts.forEach(p => {
+              if (p.sku) productMap[p.sku.toLowerCase()] = p;
             });
-            if (error) throw error;
+
+            // Gather new assignments rows
+            const rowsToInsert = [];
+            for (const [cellKey, employeeIds] of Object.entries(cellAssignments)) {
+              if (!Array.isArray(employeeIds)) continue;
+
+              const parts = cellKey.split('_');
+              if (parts.length < 4) continue;
+
+              const bookingId = parts[0];
+              const rateLabel = parts[parts.length - 1];
+              const productIndex = parseInt(parts[parts.length - 2], 10);
+              const sku = parts.slice(1, parts.length - 2).join('_');
+
+              const b = dbBookings.find(x => x.id === bookingId);
+              if (!b) continue;
+
+              // Calculate total eligible for this SKU
+              const skus = (b.product_skus || '').split(' | ').map(s => s.trim());
+              const qtys = (b.product_qtys || '').split(' | ').map(s => s.trim());
+              const unitPrices = (b.product_unit_prices || '').split(' | ').map(s => s.trim());
+
+              const qty = parseInt(qtys[productIndex]) || 1;
+              const unitPriceDec = parseFloat(unitPrices[productIndex]) || 0;
+              const totalCentavos = Math.round(unitPriceDec * qty * 100);
+
+              const product = productMap[sku.toLowerCase()] || { sku, business: '', category: '', tags: [] };
+              const isEligible = checkSkuEligibility(product, commissionsConfig.eligibility_rules);
+              const eligibleCentavos = isEligible ? totalCentavos : 0;
+
+              const rateConfig = (commissionsConfig.rates || []).find(r => r.label === rateLabel);
+              const percent = rateConfig ? parseFloat(rateConfig.value) || 0 : 0;
+
+              const activeEmployeeIds = employeeIds.filter(id => id !== '');
+              const divisor = activeEmployeeIds.length || 1;
+              const splitPercent = percent / divisor;
+              const splitCommAmountCentavos = Math.round(eligibleCentavos * (splitPercent / 100));
+
+              activeEmployeeIds.forEach(empId => {
+                rowsToInsert.push({
+                  company_id: currentCompanyId,
+                  booking_id: bookingId,
+                  sku: sku,
+                  product_index: productIndex,
+                  employee_id: empId,
+                  rate_label: rateLabel,
+                  percent: splitPercent,
+                  amount: splitCommAmountCentavos
+                });
+              });
+            }
+
+            if (rowsToInsert.length > 0) {
+              const { error: insertError } = await sb
+                .from('commission_assignments')
+                .insert(rowsToInsert);
+              if (insertError) throw insertError;
+            }
+
             showToast('Commission assignments saved successfully!');
           } catch (err) {
             console.error('Error saving assignments:', err);
@@ -364,7 +431,7 @@
           sb.from('global_settings').select('value').eq('key', 'commissions_config').eq('company_id', currentCompanyId).maybeSingle(),
           sb.from('employees').select('id, first_name, last_name, employee_number, assignment').eq('company_id', currentCompanyId),
           sb.from('employee_assignments').select('id, name, visibility').eq('company_id', currentCompanyId),
-          sb.from('global_settings').select('value').eq('key', 'commissions_assignments').eq('company_id', currentCompanyId).maybeSingle()
+          sb.from('commission_assignments').select('*').eq('company_id', currentCompanyId)
         ]);
 
         if (bookingsRes.error) throw bookingsRes.error;
@@ -377,8 +444,17 @@
         dbBookings = bookingsRes.data || [];
         dbProducts = productsRes.data || [];
         
-        if (dbAssignmentsRes.data && dbAssignmentsRes.data.value) {
-          cellAssignments = dbAssignmentsRes.data.value;
+        cellAssignments = {};
+        if (dbAssignmentsRes.data) {
+          dbAssignmentsRes.data.forEach(row => {
+            const cellKey = `${row.booking_id}_${row.sku}_${row.product_index}_${row.rate_label}`;
+            if (!cellAssignments[cellKey]) {
+              cellAssignments[cellKey] = [];
+            }
+            if (row.employee_id && !cellAssignments[cellKey].includes(row.employee_id)) {
+              cellAssignments[cellKey].push(row.employee_id);
+            }
+          });
         }
 
         const commsAssignments = (assignmentsRes.data || [])
