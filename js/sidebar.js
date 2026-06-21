@@ -42,6 +42,8 @@
         }
         if (row.employee_id) {
           cellAssignments[cellKey].push(row.employee_id);
+        } else {
+          cellAssignments[cellKey].push('none');
         }
       });
 

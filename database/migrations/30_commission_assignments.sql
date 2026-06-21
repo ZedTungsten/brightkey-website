@@ -13,7 +13,7 @@ CREATE TABLE public.commission_assignments (
   booking_id     UUID REFERENCES public.installation_bookings(id) ON DELETE CASCADE NOT NULL,
   sku            TEXT NOT NULL,
   product_index  INTEGER DEFAULT 0 NOT NULL,
-  employee_id    UUID REFERENCES public.employees(id) ON DELETE CASCADE NOT NULL,
+  employee_id    UUID REFERENCES public.employees(id) ON DELETE CASCADE,
   rate_label     TEXT NOT NULL, -- e.g., 'Agent', 'Lead', 'Coordinator'
   percent        NUMERIC(5,2) NOT NULL, -- e.g., 2.50
   amount         INTEGER NOT NULL, -- Amount in centavos (PHP amount * 100)
