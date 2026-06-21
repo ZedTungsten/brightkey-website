@@ -191,6 +191,12 @@
               <div class="panel-header" style="justify-content: flex-start; gap: 1rem; border-bottom: 1px solid var(--border); padding: 0.75rem 1.25rem;">
                 <label for="month-filter" style="font-size: 0.8rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0;">Filter Month:</label>
                 <input type="month" id="month-filter" class="form-select" style="font-size: 0.8rem; padding: 0.25rem 0.5rem; height: auto; width: 160px;" />
+                <label for="status-filter" style="font-size: 0.8rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0; margin-left: 1rem;">Status:</label>
+                <select id="status-filter" class="form-select" style="font-size: 0.8rem; padding: 0.25rem 0.5rem; height: auto; width: 120px;">
+                  <option value="all">All</option>
+                  <option value="pending">Pending</option>
+                  <option value="eligible">Eligible</option>
+                </select>
               </div>
               
               <div class="table-responsive">
@@ -269,6 +275,13 @@
       if (monthFilter) {
         monthFilter.value = currentMonthStr;
         monthFilter.addEventListener('change', () => {
+          renderCommissionsTable();
+        });
+      }
+
+      const statusFilter = document.getElementById('status-filter');
+      if (statusFilter) {
+        statusFilter.addEventListener('change', () => {
           renderCommissionsTable();
         });
       }
@@ -539,6 +552,8 @@
 
       const monthFilter = document.getElementById('month-filter');
       const selectedMonth = monthFilter ? monthFilter.value : '';
+      const statusFilter = document.getElementById('status-filter');
+      const statusFilterVal = statusFilter ? statusFilter.value : 'all';
 
       let filteredBookings = dbBookings;
       if (selectedMonth) {
@@ -593,6 +608,13 @@
 
           // If the SKU is not eligible, don't show it in the table
           if (!isEligible) continue;
+
+          const door = doorsArr[i];
+          const isDoorDone = door?.completed || false;
+
+          // Filter by status dropdown
+          if (statusFilterVal === 'eligible' && !isDoorDone) continue;
+          if (statusFilterVal === 'pending' && isDoorDone) continue;
 
           const qty = parseInt(qtys[i]?.trim()) || 1;
           const unitPriceDec = parseFloat(unitPrices[i]?.trim()) || 0;
@@ -658,8 +680,6 @@
             `;
           });
 
-          const door = doorsArr[i];
-          const isDoorDone = door?.completed || false;
           const statusText = isDoorDone ? 'Eligible' : 'Pending';
           const badgeClass = isDoorDone ? 'status-badge status-published' : 'status-badge status-draft';
           const statusHtml = `<td><span class="${badgeClass}">${statusText}</span></td>`;
