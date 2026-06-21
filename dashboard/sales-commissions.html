@@ -576,19 +576,29 @@
 
         const numItems = Math.max(skus.length, qtys.length);
 
+        let doorsArr = [];
+        if (typeof b.doors === 'string') {
+          try { doorsArr = JSON.parse(b.doors); } catch(_) {}
+        } else if (Array.isArray(b.doors)) {
+          doorsArr = b.doors;
+        }
+
         for (let i = 0; i < numItems; i++) {
           const sku = skus[i]?.trim() || '';
           if (!sku) continue;
-
-          const qty = parseInt(qtys[i]?.trim()) || 1;
-          const unitPriceDec = parseFloat(unitPrices[i]?.trim()) || 0;
-          const totalCentavos = Math.round(unitPriceDec * qty * 100);
 
           // Find product details to verify eligibility
           const product = productMap[sku.toLowerCase()] || { sku, business: '', category: '', tags: [] };
           const isEligible = checkSkuEligibility(product, commissionsConfig.eligibility_rules);
 
-          const eligibleCentavos = isEligible ? totalCentavos : 0;
+          // If the SKU is not eligible, don't show it in the table
+          if (!isEligible) continue;
+
+          const qty = parseInt(qtys[i]?.trim()) || 1;
+          const unitPriceDec = parseFloat(unitPrices[i]?.trim()) || 0;
+          const totalCentavos = Math.round(unitPriceDec * qty * 100);
+
+          const eligibleCentavos = totalCentavos; // Since we filtered, it is always eligible here
           const rowKey = `${b.id}_${sku}_${i}`;
 
           // Build dynamic rate cells
@@ -648,9 +658,10 @@
             `;
           });
 
-          const isDone = b.status === 'completed';
-          const statusText = isDone ? 'Done' : 'Pending';
-          const badgeClass = isDone ? 'status-badge status-published' : 'status-badge status-draft';
+          const door = doorsArr[i];
+          const isDoorDone = door?.completed || false;
+          const statusText = isDoorDone ? 'Eligible' : 'Pending';
+          const badgeClass = isDoorDone ? 'status-badge status-published' : 'status-badge status-draft';
           const statusHtml = `<td><span class="${badgeClass}">${statusText}</span></td>`;
 
           rowsHtml.push(`
@@ -662,8 +673,8 @@
               <td><span class="sku-badge" style="font-family: var(--font-mono); font-weight: 700; font-size: 0.78rem; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 4px; padding: 0.15rem 0.4rem; color: var(--text-primary);">${escapeHtml(sku)}</span></td>
               <td>${qty}</td>
               <td style="font-variant-numeric: tabular-nums">${fmtPHP(totalCentavos)}</td>
-              <td style="font-variant-numeric: tabular-nums; font-weight: 600; color: ${isEligible ? 'var(--success)' : 'var(--text-muted)'};">
-                ${isEligible ? fmtPHP(eligibleCentavos) : '—'}
+              <td style="font-variant-numeric: tabular-nums; font-weight: 600; color: var(--success);">
+                ${fmtPHP(eligibleCentavos)}
               </td>
               ${statusHtml}
               ${ratesCellsHtml}
