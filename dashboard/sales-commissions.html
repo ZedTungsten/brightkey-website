@@ -356,7 +356,7 @@
               const rateConfig = (commissionsConfig.rates || []).find(r => r.label === rateLabel);
               const percent = rateConfig ? parseFloat(rateConfig.value) || 0 : 0;
 
-              const activeEmployeeIds = employeeIds.filter(id => id !== '');
+              const activeEmployeeIds = employeeIds.filter(id => id !== '' && id !== 'none');
               const divisor = activeEmployeeIds.length || 1;
               const splitPercent = percent / divisor;
               const splitCommAmountCentavos = Math.round(eligibleCentavos * (splitPercent / 100));
@@ -411,10 +411,11 @@
           const addBtn = e.target.closest('.btn-add-assignee');
           if (addBtn) {
             const cellKey = addBtn.getAttribute('data-cell-key');
-            if (cellAssignments[cellKey]) {
-              cellAssignments[cellKey].push('');
-              renderCommissionsTable();
+            if (!cellAssignments[cellKey]) {
+              cellAssignments[cellKey] = [];
             }
+            cellAssignments[cellKey].push('');
+            renderCommissionsTable();
           }
 
           const removeBtn = e.target.closest('.btn-remove-assignee');
@@ -424,7 +425,7 @@
             if (cellAssignments[cellKey]) {
               cellAssignments[cellKey].splice(index, 1);
               if (cellAssignments[cellKey].length === 0) {
-                cellAssignments[cellKey] = [''];
+                cellAssignments[cellKey] = [];
               }
               renderCommissionsTable();
             }
@@ -630,11 +631,11 @@
             const cellKey = `${rowKey}_${r.label}`;
 
             if (!cellAssignments[cellKey]) {
-              cellAssignments[cellKey] = [''];
+              cellAssignments[cellKey] = [];
             }
 
             const assignedIds = cellAssignments[cellKey];
-            const activeCount = assignedIds.filter(id => id !== '').length;
+            const activeCount = assignedIds.filter(id => id !== '' && id !== 'none').length;
             const divisor = activeCount || 1;
             const splitPercent = percent / divisor;
             const splitCommAmountCentavos = Math.round(eligibleCentavos * (splitPercent / 100));
@@ -643,6 +644,7 @@
             let selectRowsHtml = '';
             assignedIds.forEach((currentId, idx) => {
               let employeeOptionsHtml = '<option value="">-- Assign --</option>';
+              employeeOptionsHtml += `<option value="none"${currentId === 'none' ? ' selected' : ''}>None</option>`;
               eligibleEmployees.forEach(e => {
                 const fullName = `${e.first_name || ''} ${e.last_name || ''}`.trim();
                 const isSelected = e.id === currentId ? ' selected' : '';
@@ -657,9 +659,9 @@
                     ${employeeOptionsHtml}
                   </select>
                   <span style="font-weight: 600; color: var(--text-primary); font-size: 0.8rem; white-space: nowrap;">
-                    (${fmtPHP(splitCommAmountCentavos)})
+                    ${fmtPHP(splitCommAmountCentavos)}
                   </span>
-                  ${assignedIds.length > 1 ? `
+                  ${assignedIds.length > 0 ? `
                     <button type="button" class="btn-remove-assignee" data-cell-key="${cellKey}" data-index="${idx}" style="background: none; border: none; color: var(--danger); cursor: pointer; padding: 0.1rem 0.3rem; font-size: 0.75rem; display: flex; align-items: center; justify-content: center;" title="Remove assignee">
                       ✕
                     </button>
