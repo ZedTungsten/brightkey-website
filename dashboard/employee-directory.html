@@ -2632,9 +2632,17 @@
               const { id: _, isNewRow: __, ...insertBody } = merged;
               // Only null out UUID/date/numeric columns when empty — text columns stay as ''
               // to satisfy NOT NULL constraints on the table
-              const nullIfEmpty = ['reporting_to', 'date_of_birth', 'date_hired', 'salary'];
+              const nullIfEmpty = ['reporting_to', 'date_of_birth', 'date_hired', 'salary', 'level'];
               for (const key of nullIfEmpty) {
                 if (insertBody[key] === '' || insertBody[key] === undefined) insertBody[key] = null;
+              }
+              if (insertBody.level !== null && insertBody.level !== undefined) {
+                insertBody.level = parseInt(insertBody.level, 10);
+                if (isNaN(insertBody.level)) insertBody.level = null;
+              }
+              if (insertBody.salary !== null && insertBody.salary !== undefined) {
+                insertBody.salary = parseFloat(insertBody.salary);
+                if (isNaN(insertBody.salary)) insertBody.salary = null;
               }
               // Inject company_id required by RLS policy
               if (this.companyId) insertBody.company_id = this.companyId;
@@ -2662,7 +2670,19 @@
               const patchBody = {};
               for (const key in changes) {
                 if (key !== 'id' && key !== 'isNewRow') {
-                  patchBody[key] = changes[key];
+                  let val = changes[key];
+                  if (key === 'reporting_to' || key === 'date_of_birth' || key === 'date_hired' || key === 'salary' || key === 'level') {
+                    if (val === '' || val === undefined) val = null;
+                  }
+                  if (key === 'level' && val !== null) {
+                    val = parseInt(val, 10);
+                    if (isNaN(val)) val = null;
+                  }
+                  if (key === 'salary' && val !== null) {
+                    val = parseFloat(val);
+                    if (isNaN(val)) val = null;
+                  }
+                  patchBody[key] = val;
                 }
               }
               await sbPatch(id, patchBody);
@@ -3160,7 +3180,7 @@
           
           department: document.getElementById('new-emp-department').value.trim(),
           title: document.getElementById('new-emp-title').value.trim(),
-          level: document.getElementById('new-emp-level').value.trim(),
+          level: document.getElementById('new-emp-level').value.trim() ? parseInt(document.getElementById('new-emp-level').value.trim(), 10) : null,
           reporting_to: document.getElementById('new-emp-reporting').value.trim() || null,
           employment_status: document.getElementById('new-emp-status').value,
           date_hired: document.getElementById('new-emp-date-hired').value || null,
