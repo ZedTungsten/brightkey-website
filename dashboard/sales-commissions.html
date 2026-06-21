@@ -197,6 +197,12 @@
                   <option value="pending">Pending</option>
                   <option value="eligible">Eligible</option>
                 </select>
+                <label for="assign-filter" style="font-size: 0.8rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0; margin-left: 1rem;">Assign:</label>
+                <select id="assign-filter" class="form-select" style="font-size: 0.8rem; padding: 0.25rem 0.5rem; height: auto; width: 130px;">
+                  <option value="all">All</option>
+                  <option value="complete">Complete</option>
+                  <option value="incomplete">Incomplete</option>
+                </select>
               </div>
               
               <div class="table-responsive">
@@ -282,6 +288,13 @@
       const statusFilter = document.getElementById('status-filter');
       if (statusFilter) {
         statusFilter.addEventListener('change', () => {
+          renderCommissionsTable();
+        });
+      }
+
+      const assignFilter = document.getElementById('assign-filter');
+      if (assignFilter) {
+        assignFilter.addEventListener('change', () => {
           renderCommissionsTable();
         });
       }
@@ -383,6 +396,9 @@
             }
 
             showToast('Commission assignments saved successfully!');
+            if (typeof window.BKRefreshCommissionsBadge === 'function') {
+              window.BKRefreshCommissionsBadge();
+            }
           } catch (err) {
             console.error('Error saving assignments:', err);
             showToast(`Failed to save: ${err.message}`, true);
@@ -555,6 +571,8 @@
       const selectedMonth = monthFilter ? monthFilter.value : '';
       const statusFilter = document.getElementById('status-filter');
       const statusFilterVal = statusFilter ? statusFilter.value : 'all';
+      const assignFilter = document.getElementById('assign-filter');
+      const assignFilterVal = assignFilter ? assignFilter.value : 'all';
 
       let filteredBookings = dbBookings;
       if (selectedMonth) {
@@ -623,6 +641,20 @@
 
           const eligibleCentavos = totalCentavos; // Since we filtered, it is always eligible here
           const rowKey = `${b.id}_${sku}_${i}`;
+
+          // Check completeness for all rate columns on this row
+          let isRowComplete = true;
+          rates.forEach(r => {
+            const cellKey = `${rowKey}_${r.label}`;
+            const assignedIds = cellAssignments[cellKey] || [];
+            const activeAssignees = assignedIds.filter(id => id !== '' && id !== 'none');
+            if (activeAssignees.length === 0 && !assignedIds.includes('none')) {
+              isRowComplete = false;
+            }
+          });
+
+          if (assignFilterVal === 'complete' && !isRowComplete) continue;
+          if (assignFilterVal === 'incomplete' && isRowComplete) continue;
 
           // Build dynamic rate cells
           let ratesCellsHtml = '';

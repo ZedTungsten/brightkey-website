@@ -1,6 +1,126 @@
 (function() {
   'use strict';
 
+  let activeCompanyId = null;
+
+  async function checkIncompleteCommissions(companyId) {
+    if (!companyId) return;
+    const sb = window.BKAuth?.sb;
+    if (!sb) return;
+
+    try {
+      // 1. Fetch bookings, assignments, commissions config, and products
+      const [bookingsRes, configRes, productsRes, assignmentsRes] = await Promise.all([
+        sb.from('installation_bookings').select('*').eq('company_id', companyId).neq('status', 'cancelled'),
+        sb.from('global_settings').select('value').eq('key', 'commissions_config').eq('company_id', companyId).maybeSingle(),
+        sb.from('products').select('sku, business, category, tags'),
+        sb.from('commission_assignments').select('*').eq('company_id', companyId)
+      ]);
+
+      if (bookingsRes.error || configRes.error || productsRes.error || assignmentsRes.error) return;
+
+      const bookings = bookingsRes.data || [];
+      const config = configRes.data?.value || { rates: [], eligibility_rules: [] };
+      const products = productsRes.data || [];
+      const dbAssignments = assignmentsRes.data || [];
+
+      const rates = config.rates || [];
+      const eligibilityRules = config.eligibility_rules || [];
+
+      // Create product lookup map
+      const productMap = {};
+      products.forEach(p => {
+        if (p.sku) productMap[p.sku.toLowerCase()] = p;
+      });
+
+      // Create cell assignment map
+      const cellAssignments = {};
+      dbAssignments.forEach(row => {
+        const cellKey = `${row.booking_id}_${row.sku}_${row.product_index}_${row.rate_label}`;
+        if (!cellAssignments[cellKey]) {
+          cellAssignments[cellKey] = [];
+        }
+        if (row.employee_id) {
+          cellAssignments[cellKey].push(row.employee_id);
+        }
+      });
+
+      // Helper to check SKU eligibility
+      function checkSkuEligibility(product, rules) {
+        if (!rules || rules.length === 0) return false;
+        for (const rule of rules) {
+          if (rule.scope === 'businesses') {
+            if (rule.business === 'all') return true;
+            if (rule.business === product.business) {
+              if (rule.category === 'all') return true;
+              if (rule.category === product.category) {
+                if (rule.sku === 'all') return true;
+                if (rule.sku === product.sku) return true;
+              }
+            }
+          } else if (rule.scope === 'tags') {
+            if (product.tags && Array.isArray(product.tags) && product.tags.includes(rule.tag)) {
+              return true;
+            }
+          }
+        }
+        return false;
+      }
+
+      let hasIncomplete = false;
+
+      // Loop through bookings
+      for (const b of bookings) {
+        const skus = (b.product_skus || '').split(' | ');
+        const qtys = (b.product_qtys || '').split(' | ');
+        const numItems = Math.max(skus.length, qtys.length);
+
+        for (let i = 0; i < numItems; i++) {
+          const sku = skus[i]?.trim() || '';
+          if (!sku) continue;
+
+          // Find product details to verify eligibility
+          const product = productMap[sku.toLowerCase()] || { sku, business: '', category: '', tags: [] };
+          const isEligible = checkSkuEligibility(product, eligibilityRules);
+          if (!isEligible) continue;
+
+          const rowKey = `${b.id}_${sku}_${i}`;
+
+          // Check if any dynamic rate column has no assignments
+          for (const r of rates) {
+            const cellKey = `${rowKey}_${r.label}`;
+            const assignedIds = cellAssignments[cellKey] || [];
+            const activeAssignees = assignedIds.filter(id => id !== '' && id !== 'none');
+            if (activeAssignees.length === 0 && !assignedIds.includes('none')) {
+              hasIncomplete = true;
+              break;
+            }
+          }
+
+          if (hasIncomplete) break;
+        }
+        if (hasIncomplete) break;
+      }
+
+      // Toggle red marks on sidebar
+      const salesBadge = document.getElementById('sales-badge-dot');
+      const commsBadge = document.getElementById('commissions-badge-dot');
+      if (salesBadge) salesBadge.style.display = hasIncomplete ? 'inline-block' : 'none';
+      if (commsBadge) commsBadge.style.display = hasIncomplete ? 'inline-block' : 'none';
+
+      window.BKCommissionsIncomplete = hasIncomplete;
+      
+    } catch (e) {
+      console.error('Error checking incomplete commissions:', e);
+    }
+  }
+
+  window.BKRefreshCommissionsBadge = function() {
+    if (activeCompanyId) {
+      checkIncompleteCommissions(activeCompanyId);
+    }
+  };
+
   // 1. Sidebar HTML Template (absolute links starting with "/")
   const sidebarHTML = `
       <div class="dash-logo-container" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem; flex-shrink: 0; min-height: 32px;">
@@ -102,11 +222,14 @@
       <div class="dash-nav-group" id="nav-group-sales" style="display: none;">
         <button class="dash-nav-parent" onclick="toggleSubmenu(this)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
-          <span class="dash-nav-text">Sales</span>
+          <span class="dash-nav-text" style="display: inline-flex; align-items: center; gap: 0.35rem;">Sales <span id="sales-badge-dot" style="display: none; width: 6px; height: 6px; border-radius: 50%; background-color: #ef4444;"></span></span>
           <svg class="dash-nav-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
         </button>
         <div class="dash-nav-children">
-          <a href="/dashboard/sales-commissions" class="dash-nav-child" data-role="sales">Commissions</a>
+          <a href="/dashboard/sales-commissions" class="dash-nav-child" data-role="sales" style="display: flex; align-items: center; justify-content: space-between;">
+            <span>Commissions</span>
+            <span id="commissions-badge-dot" style="display: none; width: 6px; height: 6px; border-radius: 50%; background-color: #ef4444;"></span>
+          </a>
           <a class="dash-nav-child" data-role="sales" style="opacity: 0.5; cursor: not-allowed;">CRM</a>
           <a class="dash-nav-child" data-role="sales" style="opacity: 0.5; cursor: not-allowed;">Goals</a>
           <a class="dash-nav-child" data-role="sales" style="opacity: 0.5; cursor: not-allowed;">Calculators</a>
@@ -405,6 +528,18 @@
 
         const roleInfo = await window.BKAuth.getUserRole();
         const userRole = roleInfo?.role || null;
+
+        if (roleInfo?.tenantId) {
+          try {
+            const { data: co } = await window.BKAuth.sb.from('companies').select('id').eq('tenant_id', roleInfo.tenantId).limit(1).maybeSingle();
+            activeCompanyId = co?.id || null;
+            if (activeCompanyId) {
+              checkIncompleteCommissions(activeCompanyId);
+            }
+          } catch (coErr) {
+            console.error('Error fetching company inside sidebar:', coErr);
+          }
+        }
 
         let accessibleModules = roleInfo?.modules || [];
         const isOwnerOrAdmin = ['owner', 'admin'].includes(userRole);
