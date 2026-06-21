@@ -939,6 +939,7 @@
 
     let confirmResolver = null;
     window.promptAddLabor = async function(doorIdx) {
+      window.currentAddonLaborDoorIdx = doorIdx;
       const btn = document.querySelector(`button[onclick="promptAddLabor(${doorIdx})"]`);
       const originalText = btn ? btn.innerText : '';
       if (btn) {
@@ -996,10 +997,11 @@
       closeConfirmModal(true);
       const priceCents = window.currentAddonLaborPriceCents || 0;
       const pricePhp = priceCents / 100;
-      await performAddLabor(pricePhp);
+      const doorIdx = window.currentAddonLaborDoorIdx;
+      await performAddLabor(pricePhp, doorIdx);
     };
 
-    window.performAddLabor = async function(pricePhp) {
+    window.performAddLabor = async function(pricePhp, doorIdx) {
       if (!selectedBooking) return;
       const priceCents = Math.round(pricePhp * 100);
 
@@ -1018,7 +1020,8 @@
         title: 'ADD-ON LABOR',
         qty: 1,
         price: priceCents,
-        lineTotal: priceCents
+        lineTotal: priceCents,
+        doorIndex: doorIdx
       });
 
       // 2. Parse existing pipe-separated product fields
@@ -1396,14 +1399,20 @@
         }
         const skus = (b.product_skus || '').split(' | ');
         const names = (b.product_names || '').split(' | ');
-        const rowCount = Math.max(doorsArr.length, productsArr.length, skus.length);
+
+        const hardwareProducts = productsArr.filter(p => p.sku !== 'ADD-ON LABOR');
+        const hardwareSkus = skus.filter(s => s.trim() !== 'ADD-ON LABOR');
+        const hardwareNames = names.filter(n => n.trim() !== 'ADD-ON LABOR');
+        const rowCount = Math.max(doorsArr.length, hardwareProducts.length, hardwareSkus.length);
 
         const installerSkus = {};
         const unassignedSkus = [];
 
         for (let i = 0; i < rowCount; i++) {
           const door = doorsArr[i];
-          const sku = (productsArr[i]?.sku || skus[i] || 'N/A').trim();
+          const sku = (hardwareProducts[i]?.sku || hardwareSkus[i] || 'N/A').trim();
+          const isCancelled = hardwareProducts[i]?.cancelled || false;
+          if (isCancelled) continue; // Skip cancelled products from being counted as active installations
 
           let doorInstallers = door?.installers || [];
           if (doorInstallers.length === 0) {
@@ -1592,19 +1601,19 @@
         productsArr = b.products;
       }
 
-      const hasAddonLabor = productsArr.some(p => p.sku === 'ADD-ON LABOR');
+      const hardwareProducts = productsArr.filter(p => p.sku !== 'ADD-ON LABOR');
+      const hardwareSkus = skus.filter(s => s.trim() !== 'ADD-ON LABOR');
+      const hardwareNames = names.filter(n => n.trim() !== 'ADD-ON LABOR');
 
-      const skus = (b.product_skus || '').split(' | ');
-      const names = (b.product_names || '').split(' | ');
-
-      const rowCount = Math.max(doorsArr.length, productsArr.length, skus.length);
+      const rowCount = Math.max(doorsArr.length, hardwareProducts.length, hardwareSkus.length);
       if (rowCount === 0) {
         doorsContainer.innerHTML = '<span style="color:var(--text-muted); font-size:0.82rem;">No specifications found.</span>';
       } else {
         for (let i = 0; i < rowCount; i++) {
           const door = doorsArr[i];
-          const sku = productsArr[i]?.sku || skus[i] || 'N/A';
-          const title = productsArr[i]?.title || names[i] || 'N/A';
+          const sku = hardwareProducts[i]?.sku || hardwareSkus[i] || 'N/A';
+          const title = hardwareProducts[i]?.title || hardwareNames[i] || 'N/A';
+          const isCancelled = hardwareProducts[i]?.cancelled || false;
 
           const doorMaterial = door?.doorMaterial || 'N/A';
           const jambMaterial = door?.jambMaterial || 'N/A';
@@ -1645,16 +1654,30 @@
             if (cleanInstName && (cleanInstallerName.includes(cleanInstName) || cleanInstName.includes(cleanInstallerName))) return true;
             return false;
           });
-          const doorCardClass = isAssignedToThisDoor ? 'door-specs-card assigned' : 'door-specs-card unassigned';
+
+          // Check if this specific door has addon labor
+          const doorHasAddonLabor = productsArr.some(p => p.sku === 'ADD-ON LABOR' && (p.doorIndex === i || (p.doorIndex === undefined && i === 0)));
+
+          const doorCardClass = isCancelled 
+            ? 'door-specs-card unassigned' 
+            : (isAssignedToThisDoor ? 'door-specs-card assigned' : 'door-specs-card unassigned');
+          
+          const cardStyle = isCancelled ? 'opacity: 0.6;' : '';
 
           let doneButtonHtml = '';
-          if (isAssignedToThisDoor) {
+          if (isCancelled) {
+            doneButtonHtml = `
+              <div style="position: absolute; top: 0.85rem; right: 1rem; display: flex; flex-direction: column; gap: 0.4rem; align-items: flex-end;">
+                <span style="font-size: 0.83rem; font-weight: 700; background: var(--danger); color: #fff; padding: 0.3rem 0.7rem; border-radius: var(--radius-sm); text-transform: uppercase;">Cancelled</span>
+              </div>
+            `;
+          } else if (isAssignedToThisDoor) {
             if (door?.completed) {
               doneButtonHtml = `
                 <div style="position: absolute; top: 0.85rem; right: 1rem; display: flex; flex-direction: column; gap: 0.4rem; align-items: flex-end;">
                   <span style="font-size: 0.83rem; font-weight: 700; background: var(--success); color: #fff; padding: 0.3rem 0.7rem; border-radius: var(--radius-sm); text-transform: uppercase; display:inline-flex; align-items:center; gap:0.25rem;"><svg aria-hidden="true" viewBox="0 0 24 24" style="width:1em;height:1em;display:block;fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;"><polyline points="20 6 9 17 4 12"/></svg>Completed</span>
                   <button type="button" class="btn btn-sm" style="width: auto; font-size: 0.83rem; padding: 0.3rem 0.7rem; border-radius: var(--radius-sm); background: var(--cyan); color: #fff; border: none; cursor: pointer;" onclick="openUploadModal(${i})">Upload</button>
-                  ${hasAddonLabor 
+                  ${doorHasAddonLabor 
                     ? `<button type="button" class="btn btn-sm" style="width: auto; font-size: 0.83rem; padding: 0.3rem 0.7rem; border-radius: var(--radius-sm); background: #e0f2fe; color: #0284c7; border: none; cursor: not-allowed; opacity: 0.8;" disabled>Added Labor</button>` 
                     : `<button type="button" class="btn btn-sm" style="width: auto; font-size: 0.83rem; padding: 0.3rem 0.7rem; border-radius: var(--radius-sm); background: var(--cyan-light); color: #fff; border: none; cursor: pointer;" onclick="promptAddLabor(${i})">Add Labor</button>`}
                 </div>
@@ -1663,7 +1686,7 @@
               doneButtonHtml = `
                 <div style="position: absolute; top: 0.85rem; right: 1rem; display: flex; flex-direction: column; gap: 0.4rem; align-items: flex-end;">
                   <button type="button" class="btn btn-sm" style="width: auto; font-size: 0.83rem; padding: 0.3rem 0.7rem; border-radius: var(--radius-sm); background: var(--success); color: #fff; border: none; cursor: pointer;" onclick="openChecklistModal(${i})">Done</button>
-                  ${hasAddonLabor 
+                  ${doorHasAddonLabor 
                     ? `<button type="button" class="btn btn-sm" style="width: auto; font-size: 0.83rem; padding: 0.3rem 0.7rem; border-radius: var(--radius-sm); background: #e0f2fe; color: #0284c7; border: none; cursor: not-allowed; opacity: 0.8;" disabled>Added Labor</button>` 
                     : `<button type="button" class="btn btn-sm" style="width: auto; font-size: 0.83rem; padding: 0.3rem 0.7rem; border-radius: var(--radius-sm); background: var(--cyan-light); color: #fff; border: none; cursor: pointer;" onclick="promptAddLabor(${i})">Add Labor</button>`}
                 </div>
@@ -1706,7 +1729,7 @@
 
           const showTitle = title && title.trim().toLowerCase() !== sku.trim().toLowerCase();
           doorsContainer.insertAdjacentHTML('beforeend', `
-            <div class="${doorCardClass}">
+            <div class="${doorCardClass}" style="${cardStyle}">
               ${doneButtonHtml}
               <div style="font-size: 0.68rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.25rem; letter-spacing: 0.05em;">
                 ${escapeHtml(assignedText)}
