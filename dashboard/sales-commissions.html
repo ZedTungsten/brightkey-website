@@ -171,8 +171,6 @@
       <!-- Top Bar -->
       <header class="top-bar">
         <div class="top-bar-title">Commissions</div>
-        <div style="flex: 1;"></div>
-        <button class="btn btn-primary" id="btn-save-assignments">Save Changes</button>
       </header>
 
       <!-- Main Panel -->
@@ -256,6 +254,7 @@
     let commissionsConfig = { rates: [], eligibility_rules: [] };
     let currentCompanyId = null;
     let cellAssignments = {}; // { [cellKey]: ['employeeId1', 'employeeId2'] }
+    let editingCells = {}; // { [cellKey]: true }
 
     function showToast(msg, isError = false) {
       const container = document.getElementById('toast-container');
@@ -269,6 +268,108 @@
         toast.style.transition = 'opacity 0.3s ease';
         setTimeout(() => toast.remove(), 300);
       }, 3000);
+    }
+
+    async function saveCellAssignments(cellKey) {
+      if (!currentCompanyId) return;
+      
+      const parts = cellKey.split('_');
+      if (parts.length < 4) return;
+
+      const bookingId = parts[0];
+      const rateLabel = parts[parts.length - 1];
+      const productIndex = parseInt(parts[parts.length - 2], 10);
+      const sku = parts.slice(1, parts.length - 2).join('_');
+
+      try {
+        const sb = window.BKAuth.sb;
+
+        // 1. Delete existing assignments for this cell key
+        const { error: deleteError } = await sb
+          .from('commission_assignments')
+          .delete()
+          .eq('booking_id', bookingId)
+          .eq('sku', sku)
+          .eq('product_index', productIndex)
+          .eq('rate_label', rateLabel);
+        if (deleteError) throw deleteError;
+
+        // 2. Prepare new rows
+        const employeeIds = cellAssignments[cellKey] || [];
+        const hasNone = employeeIds.includes('none');
+        const activeEmployeeIds = employeeIds.filter(id => id !== '' && id !== 'none');
+
+        // Find the booking
+        const b = dbBookings.find(x => x.id === bookingId);
+        if (!b) return;
+
+        // Calculate total eligible for this SKU
+        const skus = (b.product_skus || '').split(' | ').map(s => s.trim());
+        const qtys = (b.product_qtys || '').split(' | ').map(s => s.trim());
+        const unitPrices = (b.product_unit_prices || '').split(' | ').map(s => s.trim());
+
+        const qty = parseInt(qtys[productIndex]) || 1;
+        const unitPriceDec = parseFloat(unitPrices[productIndex]) || 0;
+        const totalCentavos = Math.round(unitPriceDec * qty * 100);
+
+        // Find product details
+        const productMap = {};
+        dbProducts.forEach(p => {
+          if (p.sku) productMap[p.sku.toLowerCase()] = p;
+        });
+        const product = productMap[sku.toLowerCase()] || { sku, business: '', category: '', tags: [] };
+        const isEligible = checkSkuEligibility(product, commissionsConfig.eligibility_rules);
+        const eligibleCentavos = isEligible ? totalCentavos : 0;
+
+        const rateConfig = (commissionsConfig.rates || []).find(r => r.label === rateLabel);
+        const percent = rateConfig ? parseFloat(rateConfig.value) || 0 : 0;
+
+        const rowsToInsert = [];
+        if (hasNone) {
+          rowsToInsert.push({
+            company_id: currentCompanyId,
+            booking_id: bookingId,
+            sku: sku,
+            product_index: productIndex,
+            employee_id: null,
+            rate_label: rateLabel,
+            percent: 0,
+            amount: 0
+          });
+        } else {
+          const divisor = activeEmployeeIds.length || 1;
+          const splitPercent = percent / divisor;
+          const splitCommAmountCentavos = Math.round(eligibleCentavos * (splitPercent / 100));
+
+          activeEmployeeIds.forEach(empId => {
+            rowsToInsert.push({
+              company_id: currentCompanyId,
+              booking_id: bookingId,
+              sku: sku,
+              product_index: productIndex,
+              employee_id: empId,
+              rate_label: rateLabel,
+              percent: splitPercent,
+              amount: splitCommAmountCentavos
+            });
+          });
+        }
+
+        if (rowsToInsert.length > 0) {
+          const { error: insertError } = await sb
+            .from('commission_assignments')
+            .insert(rowsToInsert);
+          if (insertError) throw insertError;
+        }
+
+        showToast('Saved successfully!');
+        if (typeof window.BKRefreshCommissionsBadge === 'function') {
+          window.BKRefreshCommissionsBadge();
+        }
+      } catch (err) {
+        console.error('Error auto-saving cell assignment:', err);
+        showToast(`Failed to save: ${err.message}`, true);
+      }
     }
 
     document.addEventListener('DOMContentLoaded', async () => {
@@ -439,6 +540,21 @@
         });
 
         table.addEventListener('click', (e) => {
+          const editBtn = e.target.closest('.btn-edit-cell');
+          if (editBtn) {
+            const cellKey = editBtn.getAttribute('data-cell-key');
+            editingCells[cellKey] = true;
+            renderCommissionsTable();
+          }
+
+          const saveCellBtn = e.target.closest('.btn-save-cell');
+          if (saveCellBtn) {
+            const cellKey = saveCellBtn.getAttribute('data-cell-key');
+            delete editingCells[cellKey];
+            saveCellAssignments(cellKey);
+            renderCommissionsTable();
+          }
+
           const addBtn = e.target.closest('.btn-add-assignee');
           if (addBtn) {
             const cellKey = addBtn.getAttribute('data-cell-key');
@@ -726,19 +842,63 @@
             });
 
             const hasNone = assignedIds.includes('none');
+            const isEditing = editingCells[cellKey];
 
-            ratesCellsHtml += `
-              <td>
-                <div style="display: flex; flex-direction: column; gap: 0.25rem; align-items: flex-start;">
-                  ${selectRowsHtml}
-                  ${!hasNone ? `
-                    <button type="button" class="btn-add-assignee" data-cell-key="${cellKey}" style="background: none; border: none; color: var(--cyan); cursor: pointer; font-size: 0.72rem; font-weight: 600; padding: 0.15rem 0; display: inline-flex; align-items: center; gap: 0.15rem;">
-                      + Add
+            if (!isEditing) {
+              // Read-only mode
+              let readOnlyHtml = '';
+              if (assignedIds.length === 0) {
+                readOnlyHtml = '<span style="color: var(--text-muted); font-style: italic; font-size: 0.78rem;">Unassigned</span>';
+              } else if (hasNone) {
+                readOnlyHtml = '<span style="font-weight: 500; color: var(--text-secondary); font-size: 0.78rem;">None</span>';
+              } else {
+                const namesHtml = [];
+                assignedIds.forEach(empId => {
+                  const emp = eligibleEmployees.find(e => e.id === empId);
+                  const fullName = emp ? `${emp.first_name || ''} ${emp.last_name || ''}`.trim() : 'Unknown';
+                  namesHtml.push(`
+                    <div style="display: flex; align-items: center; gap: 0.35rem; margin-bottom: 0.15rem;">
+                      <span style="font-weight: 600; color: var(--text-primary); font-size: 0.78rem;">${escapeHtml(fullName)}</span>
+                      <span style="font-weight: 700; color: var(--success); font-size: 0.78rem;">
+                        ${fmtPHP(splitCommAmountCentavos)}
+                      </span>
+                    </div>
+                  `);
+                });
+                readOnlyHtml = `<div style="display: flex; flex-direction: column;">${namesHtml.join('')}</div>`;
+              }
+
+              ratesCellsHtml += `
+                <td>
+                  <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; min-width: 150px;">
+                    <div>${readOnlyHtml}</div>
+                    <button type="button" class="btn-edit-cell" data-cell-key="${cellKey}" style="background: none; border: none; padding: 0.2rem; cursor: pointer; display: flex; align-items: center; justify-content: center;" title="Edit assignments">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-muted);"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
                     </button>
-                  ` : ''}
-                </div>
-              </td>
-            `;
+                  </div>
+                </td>
+              `;
+            } else {
+              // Edit mode
+              ratesCellsHtml += `
+                <td>
+                  <div style="display: flex; flex-direction: column; gap: 0.35rem; align-items: flex-start; min-width: 180px; border: 1px solid var(--border); border-radius: 6px; padding: 0.5rem; background: var(--bg-elevated);">
+                    <div style="display: flex; align-items: center; justify-content: space-between; width: 100%; border-bottom: 1px solid var(--border); padding-bottom: 0.25rem; margin-bottom: 0.25rem;">
+                      <span style="font-size: 0.65rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.05em;">Editing</span>
+                      <button type="button" class="btn-save-cell" data-cell-key="${cellKey}" style="background: none; border: none; padding: 0.2rem; cursor: pointer; display: flex; align-items: center; justify-content: center;" title="Confirm and Save">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                      </button>
+                    </div>
+                    ${selectRowsHtml}
+                    ${!hasNone ? `
+                      <button type="button" class="btn-add-assignee" data-cell-key="${cellKey}" style="background: none; border: none; color: var(--cyan); cursor: pointer; font-size: 0.72rem; font-weight: 600; padding: 0.15rem 0; display: inline-flex; align-items: center; gap: 0.15rem;">
+                        + Add
+                      </button>
+                    ` : ''}
+                  </div>
+                </td>
+              `;
+            }
           });
 
           const statusText = isDoorDone ? 'Eligible' : 'Pending';
