@@ -442,9 +442,9 @@
       <!-- BrightKey Dashboard Tabs -->
       <div class="drawer-tabs">
         <button class="tab-btn active" id="tab-btn-tracker" onclick="SalaryApp.switchTab('tracker')">Salary</button>
-        <button class="tab-btn" id="tab-btn-schedules" onclick="SalaryApp.switchTab('schedules')">Schedules</button>
         <button class="tab-btn" id="tab-btn-commission" onclick="SalaryApp.switchTab('commission')">Commission</button>
         <button class="tab-btn" id="tab-btn-reimbursement" onclick="SalaryApp.switchTab('reimbursement')">Reimbursement</button>
+        <button class="tab-btn" id="tab-btn-schedules" onclick="SalaryApp.switchTab('schedules')">Schedules</button>
       </div>
 
       <main style="overflow-y: auto; flex: 1;">
@@ -475,7 +475,7 @@
 
           <!-- ── SCHEDULES TAB PANEL ── -->
           <div class="tab-panel" id="panel-schedules">
-            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:2rem;">
+            <div style="display:grid; grid-template-columns: 1fr 1fr 1.2fr; gap:2rem;">
               
               <!-- Left side: Payout Schedules -->
               <div>
@@ -497,6 +497,31 @@
                         <span style="font-size:0.85rem; color:var(--text-secondary);">of month</span>
                       </div>
                       <button class="btn btn-cyan btn-sm" onclick="SalaryApp.addSchedule()">+ Add Schedule</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Middle side: Commission Schedules -->
+              <div>
+                <div class="j-card">
+                  <div class="j-card-title">Commission Schedules</div>
+                  
+                  <div id="comm-schedules-list" style="margin-bottom:1.5rem;">
+                    <!-- Commission Schedule items dynamically loaded here -->
+                  </div>
+
+                  <div style="border-top: 1px solid var(--border); padding-top:1.25rem;">
+                    <h4 class="form-label" style="margin-bottom: 0.75rem;">Add Commission Schedule</h4>
+                    <div style="display:flex; gap:0.75rem; align-items:center;">
+                      <div style="display:flex; align-items:center; gap:0.4rem; flex:1;">
+                        <span style="font-size:0.85rem; color:var(--text-secondary);">Every</span>
+                        <select id="new-comm-schedule-day" class="form-select" style="max-width: 100px;">
+                          <!-- Days 1 to 31 -->
+                        </select>
+                        <span style="font-size:0.85rem; color:var(--text-secondary);">of month</span>
+                      </div>
+                      <button class="btn btn-cyan btn-sm" onclick="SalaryApp.addCommSchedule()">+ Add Schedule</button>
                     </div>
                   </div>
                 </div>
@@ -551,14 +576,7 @@
             <div class="table-card">
               <div class="table-wrap">
                 <table class="salary-table" id="commission-table-el">
-                  <thead>
-                    <tr>
-                      <th style="padding-left: 1.5rem;">Employee Name</th>
-                      <th>Total Commissions</th>
-                      <th>Done</th>
-                      <th>Payment Details</th>
-                      <th style="width: 100px; text-align: center;">Paid</th>
-                    </tr>
+                  <thead id="commission-table-header">
                   </thead>
                   <tbody id="commission-table-body">
                     <tr>
@@ -671,6 +689,7 @@
       employees: [],
       companyStructure: { departments: [] },
       payoutSchedules: [], // array of numbers representing days
+      commissionSchedules: [], // array of numbers representing days for commissions
       specialSchedules: [], // array of { id, employeeId, value, label, day }
       trackerState: {}, // employeeId -> payoutColumnIndex -> { adjustment: number, label: string, checked: boolean }
       
@@ -713,12 +732,14 @@
 
       populateDaySelectors() {
         const schedSel = document.getElementById('new-schedule-day');
+        const commSchedSel = document.getElementById('new-comm-schedule-day');
         const specDaySel = document.getElementById('spec-day');
         let html = '';
         for (let i = 1; i <= 31; i++) {
           html += `<option value="${i}">${i}</option>`;
         }
         if (schedSel) schedSel.innerHTML = html;
+        if (commSchedSel) commSchedSel.innerHTML = html;
         if (specDaySel) specDaySel.innerHTML = html;
       },
 
@@ -762,9 +783,11 @@
           
           const config = salarySettings?.value || {};
           this.payoutSchedules = config.payoutSchedules || [15, 30]; // default semi-monthly
+          this.commissionSchedules = config.commissionSchedules || [15, 30]; // default semi-monthly
           this.specialSchedules = config.specialSchedules || [];
         } catch (e) {
           this.payoutSchedules = [15, 30];
+          this.commissionSchedules = [15, 30];
           this.specialSchedules = [];
         }
 
@@ -845,6 +868,7 @@
       renderAll() {
         this.renderTracker();
         this.renderSchedules();
+        this.renderCommSchedules();
         this.renderSpecialSchedules();
         this.renderCommissionTab();
       },
@@ -896,6 +920,55 @@
         await this.saveConfig();
         this.renderAll();
         toast('Payout schedule removed.', 'info');
+      },
+
+      renderCommSchedules() {
+        const container = document.getElementById('comm-schedules-list');
+        if (!container) return;
+
+        // Sort schedules numerically
+        this.commissionSchedules.sort((a, b) => a - b);
+
+        if (this.commissionSchedules.length === 0) {
+          container.innerHTML = `<div style="text-align:center; padding:1.5rem; color:var(--text-muted); font-size:0.85rem;">No schedules configured yet.</div>`;
+          return;
+        }
+
+        container.innerHTML = this.commissionSchedules.map((day, idx) => {
+          return `
+            <div class="schedule-item-row">
+              <span class="schedule-item-row__text">Every ${day} of the month</span>
+              <button class="btn-danger-link" onclick="SalaryApp.deleteCommSchedule(${idx})" title="Remove Schedule">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="3 6 5 6 21 6"/>
+                  <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                </svg>
+              </button>
+            </div>
+          `;
+        }).join('');
+      },
+
+      async addCommSchedule() {
+        const dayVal = parseInt(document.getElementById('new-comm-schedule-day').value, 10);
+        if (isNaN(dayVal)) return;
+
+        if (this.commissionSchedules.includes(dayVal)) {
+          toast('This schedule day already exists.', 'error');
+          return;
+        }
+
+        this.commissionSchedules.push(dayVal);
+        await this.saveConfig();
+        this.renderAll();
+        toast('Commission schedule added.');
+      },
+
+      async deleteCommSchedule(idx) {
+        this.commissionSchedules.splice(idx, 1);
+        await this.saveConfig();
+        this.renderAll();
+        toast('Commission schedule removed.', 'info');
       },
 
       renderSpecialSchedules() {
@@ -974,6 +1047,7 @@
               company_id: this.companyId,
               value: {
                 payoutSchedules: this.payoutSchedules,
+                commissionSchedules: this.commissionSchedules,
                 specialSchedules: this.specialSchedules
               }
             });
@@ -1522,19 +1596,20 @@
         }
       },
 
-      toggleCommissionCheck(empId, checked) {
+      toggleCommissionCheck(empId, schedDay, checked) {
         const monthKey = this.getCommissionMonthKey();
         if (!this.commissionPayoutState[monthKey]) {
           this.commissionPayoutState[monthKey] = {};
         }
-        this.commissionPayoutState[monthKey][empId] = checked;
+        this.commissionPayoutState[monthKey][`${empId}_${schedDay}`] = checked;
         this.renderCommissionTab();
         this.debouncedSave();
       },
 
       renderCommissionTab() {
+        const header = document.getElementById('commission-table-header');
         const tbody = document.getElementById('commission-table-body');
-        if (!tbody) return;
+        if (!header || !tbody) return;
 
         const monthKey = this.getCommissionMonthKey();
 
@@ -1555,18 +1630,67 @@
           return bMonth === monthKey;
         });
 
-        // 3. Group commission amounts by employee
-        const empCommissions = {};
+        // Get sorted commission schedules
+        const scheds = [...this.commissionSchedules].sort((a, b) => a - b);
+        const schedDays = scheds.length > 0 ? scheds : [30];
+
+        const getSchedDayForDate = (dateStr) => {
+          if (!dateStr) return schedDays[schedDays.length - 1];
+          const d = new Date(dateStr);
+          const day = d.getDate();
+          for (const s of schedDays) {
+            if (day <= s) return s;
+          }
+          return schedDays[schedDays.length - 1];
+        };
+
+        // 3. Group commission amounts by employee and schedule day
+        const empCommissions = {}; // { [empId]: { [schedDay]: amount } }
+        const empDoneDates = {}; // { [empId]: { [schedDay]: [dates] } }
+
         monthAssignments.forEach(a => {
           if (a.employee_id && a.amount) {
-            empCommissions[a.employee_id] = (empCommissions[a.employee_id] || 0) + a.amount;
+            const b = this.bookingsList.find(x => x.id === a.booking_id);
+            const schedDay = getSchedDayForDate(b?.updated_at);
+            
+            if (!empCommissions[a.employee_id]) {
+              empCommissions[a.employee_id] = {};
+              empDoneDates[a.employee_id] = {};
+            }
+            empCommissions[a.employee_id][schedDay] = (empCommissions[a.employee_id][schedDay] || 0) + a.amount;
+            
+            if (b && b.updated_at) {
+              const dStr = new Date(b.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+              if (!empDoneDates[a.employee_id][schedDay]) {
+                empDoneDates[a.employee_id][schedDay] = [];
+              }
+              if (!empDoneDates[a.employee_id][schedDay].includes(dStr)) {
+                empDoneDates[a.employee_id][schedDay].push(dStr);
+              }
+            }
           }
         });
 
         const activeEmpIds = Object.keys(empCommissions);
 
+        // 1. Build Header
+        let headerHtml = `
+          <tr>
+            <th style="padding-left: 1.5rem;">Employee Name</th>
+            <th>Payment Details</th>
+            <th>Done</th>
+        `;
+        schedDays.forEach(day => {
+          headerHtml += `
+            <th style="text-align:center;">Payout (Day ${day})</th>
+            <th style="width: 100px; text-align:center;">Paid (Day ${day})</th>
+          `;
+        });
+        headerHtml += `</tr>`;
+        header.innerHTML = headerHtml;
+
         if (activeEmpIds.length === 0) {
-          tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:3rem; color:var(--text-muted);">No commissions assigned for this month.</td></tr>`;
+          tbody.innerHTML = `<tr><td colspan="${3 + schedDays.length * 2}" style="text-align:center; padding:3rem; color:var(--text-muted);">No commissions assigned for this month.</td></tr>`;
           return;
         }
 
@@ -1590,41 +1714,45 @@
             detailsHtml = `<span style="font-size:0.75rem; color:var(--text-muted); font-style:italic;">—</span>`;
           }
 
-          const totalCentavos = empCommissions[empId];
-
-          // Collect unique Done dates for this employee's assignments this month
-          const doneDates = [];
-          monthAssignments.forEach(a => {
-            if (a.employee_id === empId) {
-              const b = this.bookingsList.find(x => x.id === a.booking_id);
-              if (b && b.updated_at) {
-                const d = new Date(b.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-                if (!doneDates.includes(d)) {
-                  doneDates.push(d);
-                }
-              }
-            }
+          // Done column showing all done dates grouped
+          const allDates = [];
+          schedDays.forEach(day => {
+            const dates = empDoneDates[empId][day] || [];
+            dates.forEach(d => {
+              if (!allDates.includes(d)) allDates.push(d);
+            });
           });
-          const doneDatesStr = doneDates.join(', ');
 
-          if (!this.commissionPayoutState[monthKey]) {
-            this.commissionPayoutState[monthKey] = {};
-          }
-          const isChecked = !!this.commissionPayoutState[monthKey][empId];
-          const checkedAttr = isChecked ? 'checked' : '';
-          const grayClass = isChecked ? 'grayed-out' : '';
-
-          html += `
-            <tr class="employee-row ${grayClass}" data-emp-id="${esc(empId)}">
+          // Build row
+          let rowHtml = `
+            <tr class="employee-row" data-emp-id="${esc(empId)}">
               <td class="col-name" style="padding-left: 1.5rem; font-weight:600; color:var(--text-primary);">${esc(fullName)}</td>
-              <td style="font-weight:700; color:var(--text-primary); font-variant-numeric:tabular-nums;">${esc(php(totalCentavos / 100))}</td>
-              <td style="font-weight:600; font-size:0.78rem;">${esc(doneDatesStr)}</td>
               <td>${detailsHtml}</td>
-              <td style="text-align:center;">
-                <input type="checkbox" class="payout-checkbox" ${checkedAttr} onchange="SalaryApp.toggleCommissionCheck('${esc(empId)}', this.checked)">
-              </td>
-            </tr>
+              <td style="font-weight:600; font-size:0.78rem;">${esc(allDates.join(', '))}</td>
           `;
+
+          // Sched cells
+          schedDays.forEach(day => {
+            const amount = (empCommissions[empId] && empCommissions[empId][day]) || 0;
+            const stateKey = `${empId}_${day}`;
+            
+            if (!this.commissionPayoutState[monthKey]) {
+              this.commissionPayoutState[monthKey] = {};
+            }
+            const isChecked = !!this.commissionPayoutState[monthKey][stateKey];
+            const checkedAttr = isChecked ? 'checked' : '';
+            const grayStyle = isChecked ? 'color: var(--text-muted); opacity: 0.5; text-decoration: line-through;' : '';
+
+            rowHtml += `
+              <td style="font-weight:700; text-align:center; font-variant-numeric:tabular-nums; ${grayStyle}">${esc(php(amount / 100))}</td>
+              <td style="text-align:center;">
+                <input type="checkbox" class="payout-checkbox" ${checkedAttr} onchange="SalaryApp.toggleCommissionCheck('${esc(empId)}', ${day}, this.checked)">
+              </td>
+            `;
+          });
+
+          rowHtml += `</tr>`;
+          html += rowHtml;
         });
 
         tbody.innerHTML = html;
