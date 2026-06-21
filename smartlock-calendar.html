@@ -834,15 +834,19 @@
           <div id="checklist-install-date" style="font-size:0.88rem; color:var(--text-secondary); font-weight:500;">-</div>
         </div>
 
-        <!-- Signature Canvas -->
+        <!-- Signature Canvas & Preview -->
         <div style="display:flex; flex-direction:column; gap:0.4rem;">
           <label class="info-lbl" style="text-align:center;">Customer Signature</label>
           <div style="position:relative; border:1px dashed var(--border); border-radius:var(--radius-sm); background:#FAFAFA; overflow:hidden;">
             <canvas id="signature-canvas" style="display:block; width:100%; height:130px; cursor:crosshair;"></canvas>
+            <img id="signature-preview-img" style="display:none; width:100%; height:130px; object-fit:contain; background:#fff;" alt="Customer Signature" />
           </div>
-          <div style="display:flex; justify-content:center; gap:0.75rem; margin-top:0.75rem;">
+          <div id="checklist-actions" style="display:flex; justify-content:center; gap:0.75rem; margin-top:0.75rem;">
             <button type="button" class="btn btn-outline" onclick="clearSignature()" style="width:auto; padding:0.5rem 1.5rem; font-size:0.9rem;">Reset</button>
             <button type="button" class="btn" id="btn-submit-checklist" onclick="submitChecklist()" style="width:auto; padding:0.5rem 2rem; background:var(--success); color:#fff; border:none; font-size:0.9rem;" disabled>Submit</button>
+          </div>
+          <div id="checklist-view-actions" style="display:none; justify-content:center; gap:0.75rem; margin-top:0.75rem;">
+            <button type="button" class="btn" onclick="closeChecklistModal()" style="width:auto; padding:0.5rem 2rem; background:var(--cyan); color:#fff; border:none; font-size:0.9rem;">Close</button>
           </div>
         </div>
       </div>
@@ -1672,7 +1676,7 @@
             signatureHtml = `
               <div style="margin-top: 0.5rem; display: flex; flex-direction: column; gap: 0.2rem;">
                 <span class="info-lbl" style="font-size:0.6rem;">Customer Signature Logged</span>
-                <img src="${door.signature}" alt="Customer Signature" style="max-height: 40px; width: auto; align-self: flex-start; background: #fff; border: 1px solid var(--border); border-radius: var(--radius-sm);" />
+                <img src="${door.signature}" alt="Customer Signature" style="max-height: 40px; width: auto; align-self: flex-start; background: #fff; border: 1px solid var(--border); border-radius: var(--radius-sm); cursor: pointer;" onclick="openChecklistModal(${i}, true)" />
               </div>
             `;
           }
@@ -1931,7 +1935,7 @@
       }
     }
 
-    window.openChecklistModal = function(doorIndex) {
+    window.openChecklistModal = function(doorIndex, isReadOnly = false) {
       signatureIndex = doorIndex;
       
       // Add stacked-under visual effect to details modal
@@ -1943,20 +1947,65 @@
       // Populate customer name and installation date
       const custNameEl = document.getElementById('checklist-customer-name');
       const instDateEl = document.getElementById('checklist-install-date');
+      
+      let doorsArr = [];
+      if (selectedBooking) {
+        if (typeof selectedBooking.doors === 'string') {
+          try { doorsArr = JSON.parse(selectedBooking.doors); } catch(_) {}
+        } else if (Array.isArray(selectedBooking.doors)) {
+          doorsArr = selectedBooking.doors;
+        }
+      }
+      const door = doorsArr[doorIndex];
+
       if (custNameEl && selectedBooking) {
         custNameEl.innerText = selectedBooking.customer_name || 'N/A';
       }
-      if (instDateEl && selectedBooking) {
-        instDateEl.innerText = selectedBooking.scheduled_date ? formatDateFriendly(selectedBooking.scheduled_date) : 'N/A';
+
+      if (isReadOnly && door && door.completed_at) {
+        if (instDateEl) {
+          instDateEl.innerText = formatDateFriendly(door.completed_at);
+        }
+      } else {
+        if (instDateEl && selectedBooking) {
+          instDateEl.innerText = selectedBooking.scheduled_date ? formatDateFriendly(selectedBooking.scheduled_date) : 'N/A';
+        }
       }
 
       document.getElementById('checklist-modal').style.display = 'flex';
-      document.querySelectorAll('.checklist-item').forEach(cb => cb.checked = false);
+      
+      document.querySelectorAll('.checklist-item').forEach(cb => {
+        cb.checked = isReadOnly;
+        cb.disabled = isReadOnly;
+      });
 
-      setTimeout(() => {
-        initSignatureCanvas();
-        clearSignature();
-      }, 150);
+      const canvasEl = document.getElementById('signature-canvas');
+      const previewImgEl = document.getElementById('signature-preview-img');
+      const actionsEl = document.getElementById('checklist-actions');
+      const viewActionsEl = document.getElementById('checklist-view-actions');
+
+      if (isReadOnly && door && door.signature) {
+        if (canvasEl) canvasEl.style.display = 'none';
+        if (previewImgEl) {
+          previewImgEl.src = door.signature;
+          previewImgEl.style.display = 'block';
+        }
+        if (actionsEl) actionsEl.style.display = 'none';
+        if (viewActionsEl) viewActionsEl.style.display = 'flex';
+      } else {
+        if (canvasEl) canvasEl.style.display = 'block';
+        if (previewImgEl) {
+          previewImgEl.src = '';
+          previewImgEl.style.display = 'none';
+        }
+        if (actionsEl) actionsEl.style.display = 'flex';
+        if (viewActionsEl) viewActionsEl.style.display = 'none';
+
+        setTimeout(() => {
+          initSignatureCanvas();
+          clearSignature();
+        }, 150);
+      }
     };
 
     window.closeChecklistModal = function() {
@@ -1967,6 +2016,11 @@
       if (detModal) {
         detModal.classList.remove('stacked-under');
       }
+
+      // Re-enable checkboxes for future uses
+      document.querySelectorAll('.checklist-item').forEach(cb => {
+        cb.disabled = false;
+      });
 
       signatureIndex = null;
     };
