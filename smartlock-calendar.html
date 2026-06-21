@@ -1405,9 +1405,7 @@
         const hardwareNames = names.filter(n => n.trim() !== 'ADD-ON LABOR');
         const rowCount = Math.max(doorsArr.length, hardwareProducts.length, hardwareSkus.length);
 
-        const installerSkus = {};
-        const unassignedSkus = [];
-
+        const lines = [];
         for (let i = 0; i < rowCount; i++) {
           const door = doorsArr[i];
           const sku = (hardwareProducts[i]?.sku || hardwareSkus[i] || 'N/A').trim();
@@ -1426,32 +1424,23 @@
               doorInstallers = b.installer_name.split(' | ').map(name => ({ name }));
             }
           }
+          const installersText = doorInstallers.length > 0 
+            ? doorInstallers.map(inst => formatInstallerName(inst.name || inst)).join(', ') 
+            : 'Unassigned';
 
-          if (doorInstallers.length > 0) {
-            doorInstallers.forEach(inst => {
-              const formattedName = formatInstallerName(inst.name || inst);
-              if (!installerSkus[formattedName]) {
-                installerSkus[formattedName] = [];
-              }
-              if (!installerSkus[formattedName].includes(sku)) {
-                installerSkus[formattedName].push(sku);
-              }
-            });
-          } else {
-            if (!unassignedSkus.includes(sku)) {
-              unassignedSkus.push(sku);
-            }
-          }
-        }
+          const doorDone = door?.completed || false;
+          const statusIcon = doorDone 
+            ? `<svg viewBox="0 0 24 24" style="width: 0.85em; height: 0.85em; fill: none; stroke: var(--success); stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; display: inline-block; vertical-align: middle; margin-right: 0.25rem;"><polyline points="20 6 9 17 4 12"/></svg>`
+            : `<span style="color: var(--text-muted); margin-right: 0.35rem; font-weight: 700; display: inline-block; vertical-align: middle;">—</span>`;
 
-        const lines = [];
-        for (const [name, skusList] of Object.entries(installerSkus)) {
-          lines.push(`${escapeHtml(name)} - ${escapeHtml(skusList.join(', '))}`);
+          lines.push(`
+            <div style="display: flex; align-items: center; margin-bottom: 0.15rem; line-height: 1.25;">
+              ${statusIcon}
+              <span>${escapeHtml(installersText)} - ${escapeHtml(sku)}</span>
+            </div>
+          `);
         }
-        if (unassignedSkus.length > 0) {
-          lines.push(`Unassigned - ${escapeHtml(unassignedSkus.join(', '))}`);
-        }
-        const installerSkuListHtml = lines.length > 0 ? lines.join('<br>') : 'Smart Lock Service';
+        const installerSkuListHtml = lines.length > 0 ? lines.join('') : 'Smart Lock Service';
 
         const isDone = doorsArr.length > 0 && doorsArr.every(d => d.completed);
         const hasMedia = doorsArr.some(d => d.media_urls && d.media_urls.length > 0);
@@ -1700,7 +1689,7 @@
           let addonLaborBadgeHtml = '';
           if (doorHasAddonLabor) {
             addonLaborBadgeHtml = `
-              <div style="margin-top: 0.4rem; margin-bottom: 0.4rem; display: flex; align-items: center;">
+              <div style="margin-top: 0.1rem; margin-bottom: 0.4rem; display: flex; align-items: center;">
                 <span style="font-size: 0.68rem; font-weight: 700; background: #FEF08A; color: #854D0E; padding: 0.25rem 0.5rem; border-radius: var(--radius-sm); text-transform: uppercase; letter-spacing: 0.05em; display: inline-flex; align-items: center;">
                   Added Labor
                 </span>
