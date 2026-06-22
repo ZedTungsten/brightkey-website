@@ -516,17 +516,15 @@
                   <thead>
                     <tr>
                       <th style="padding-left: 1.5rem;">Date</th>
-                      <th>Paid</th>
                       <th>Employee Name</th>
                       <th>Label</th>
-                      <th>Client ID</th>
                       <th>Value</th>
                       <th style="width: 100px;">Action</th>
                     </tr>
                   </thead>
                   <tbody id="adjustments-table-body">
                     <tr>
-                      <td colspan="7" style="text-align:center; padding:3rem; color:var(--text-muted);">No adjustments for this month.</td>
+                      <td colspan="5" style="text-align:center; padding:3rem; color:var(--text-muted);">No adjustments for this month.</td>
                     </tr>
                   </tbody>
                 </table>
@@ -579,17 +577,15 @@
                   <thead>
                     <tr>
                       <th style="padding-left: 1.5rem;">Date</th>
-                      <th>Paid</th>
                       <th>Employee Name</th>
                       <th>Label</th>
-                      <th>Client ID</th>
                       <th>Value</th>
                       <th style="width: 100px;">Action</th>
                     </tr>
                   </thead>
                   <tbody id="reimbursements-table-body">
                     <tr>
-                      <td colspan="7" style="text-align:center; padding:3rem; color:var(--text-muted);">No reimbursements for this month.</td>
+                      <td colspan="5" style="text-align:center; padding:3rem; color:var(--text-muted);">No reimbursements for this month.</td>
                     </tr>
                   </tbody>
                 </table>
@@ -724,15 +720,9 @@
           </div>
         </div>
 
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-bottom: 1.5rem;">
-          <div class="form-group">
-            <label class="form-label" for="adj-label" style="display: block; margin-bottom: 0.4rem; font-size: 0.78rem; font-weight: 600; color: var(--text-secondary);">Adjustment Label</label>
-            <input type="text" id="adj-label" class="form-input" placeholder="e.g. Performance Bonus" style="width: 100%;" required />
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="adj-client-id" style="display: block; margin-bottom: 0.4rem; font-size: 0.78rem; font-weight: 600; color: var(--text-secondary);">Client ID (Optional)</label>
-            <input type="text" id="adj-client-id" class="form-input" placeholder="e.g. CLI-1002" style="width: 100%;" />
-          </div>
+        <div class="form-group" style="margin-bottom: 1.5rem;">
+          <label class="form-label" for="adj-label" style="display: block; margin-bottom: 0.4rem; font-size: 0.78rem; font-weight: 600; color: var(--text-secondary);">Adjustment Label</label>
+          <input type="text" id="adj-label" class="form-input" placeholder="e.g. Performance Bonus" style="width: 100%;" required />
         </div>
 
         <div style="display: flex; justify-content: flex-end; gap: 0.75rem;">
@@ -767,15 +757,9 @@
           </div>
         </div>
 
-        <div class="form-group" style="margin-bottom: 1.5rem; display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
-          <div class="form-group">
-            <label class="form-label" for="reimb-label" style="display: block; margin-bottom: 0.4rem; font-size: 0.78rem; font-weight: 600; color: var(--text-secondary);">Reimbursement Label</label>
-            <input type="text" id="reimb-label" class="form-input" placeholder="e.g. Gas Expenses, Client Dinner" style="width: 100%;" required />
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="reimb-client-id" style="display: block; margin-bottom: 0.4rem; font-size: 0.78rem; font-weight: 600; color: var(--text-secondary);">Client ID (Optional)</label>
-            <input type="text" id="reimb-client-id" class="form-input" placeholder="e.g. CLI-1002" style="width: 100%;" />
-          </div>
+        <div class="form-group" style="margin-bottom: 1.5rem;">
+          <label class="form-label" for="reimb-label" style="display: block; margin-bottom: 0.4rem; font-size: 0.78rem; font-weight: 600; color: var(--text-secondary);">Reimbursement Label</label>
+          <input type="text" id="reimb-label" class="form-input" placeholder="e.g. Gas Expenses, Client Dinner" style="width: 100%;" required />
         </div>
 
         <div style="display: flex; justify-content: flex-end; gap: 0.75rem;">
@@ -989,27 +973,41 @@
         // 4b. Fetch salary adjustments list
         try {
           const { data: adjData } = await getSb()
-            .from('global_settings')
-            .select('value')
-            .eq('key', 'salary_adjustments')
-            .eq('company_id', this.companyId)
-            .maybeSingle();
-          this.adjustmentsList = adjData?.value || [];
+            .from('employee_adjustments')
+            .select('id, employee_id, amount, date, label, client_id, paid')
+            .eq('company_id', this.companyId);
+          this.adjustmentsList = (adjData || []).map(a => ({
+            id: a.id,
+            employeeId: a.employee_id,
+            value: a.amount,
+            date: a.date,
+            label: a.label,
+            clientId: a.client_id,
+            paid: a.paid
+          }));
         } catch (e) {
           this.adjustmentsList = [];
+          console.error(e);
         }
 
         // Fetch salary reimbursements list
         try {
           const { data: reimbData } = await getSb()
-            .from('global_settings')
-            .select('value')
-            .eq('key', 'salary_reimbursements')
-            .eq('company_id', this.companyId)
-            .maybeSingle();
-          this.reimbursementsList = reimbData?.value || [];
+            .from('employee_reimbursements')
+            .select('id, employee_id, amount, date, label, client_id, paid')
+            .eq('company_id', this.companyId);
+          this.reimbursementsList = (reimbData || []).map(r => ({
+            id: r.id,
+            employeeId: r.employee_id,
+            value: r.amount,
+            date: r.date,
+            label: r.label,
+            clientId: r.client_id,
+            paid: r.paid
+          }));
         } catch (e) {
           this.reimbursementsList = [];
+          console.error(e);
         }
 
         // 4c. Fetch regular payout checkbox state
@@ -1552,30 +1550,46 @@
         const tbody = document.getElementById('special-table-body');
         if (!header || !tbody) return;
 
-        header.innerHTML = `
+        // Get sorted unique special schedule days
+        const days = [...new Set(this.specialSchedules.map(s => Number(s.day)))].sort((a, b) => a - b);
+        const displayDays = days.length > 0 ? days : [1]; // Fallback to Day 1 if empty
+
+        let headerHtml = `
           <th>Employee Name</th>
           <th>Label</th>
-          <th>Payout Day</th>
-          <th>Amount</th>
         `;
+        displayDays.forEach(day => {
+          headerHtml += `<th style="text-align:right;">Day ${day}</th>`;
+        });
+        header.innerHTML = headerHtml;
 
         const { grouped, unassigned } = this.groupEmployees();
         let bodyHtml = '';
-        const colspan = 4;
+        const colspan = 2 + displayDays.length;
 
         // Helper to render rows for an employee's special schedules
         const renderEmpSchedules = (emp) => {
           const empSpecs = this.specialSchedules.filter(s => s.employeeId === emp.id);
           if (empSpecs.length === 0) return '';
           
-          return empSpecs.map(spec => `
-            <tr class="employee-row" data-emp-id="${esc(emp.id)}">
-              <td class="col-name">${esc([emp.first_name, emp.last_name].filter(Boolean).join(' '))}</td>
-              <td>${esc(spec.label)}</td>
-              <td>Day ${esc(spec.day)}</td>
-              <td style="font-weight:700; color:var(--text-primary);">${esc(php(spec.value))}</td>
-            </tr>
-          `).join('');
+          return empSpecs.map(spec => {
+            let cellsHtml = '';
+            displayDays.forEach(day => {
+              if (Number(spec.day) === day) {
+                cellsHtml += `<td style="font-weight:700; color:var(--text-primary); text-align:right;">${esc(php(spec.value))}</td>`;
+              } else {
+                cellsHtml += `<td style="text-align:right; color:var(--text-muted);">—</td>`;
+              }
+            });
+
+            return `
+              <tr class="employee-row" data-emp-id="${esc(emp.id)}">
+                <td class="col-name">${esc([emp.first_name, emp.last_name].filter(Boolean).join(' '))}</td>
+                <td>${esc(spec.label)}</td>
+                ${cellsHtml}
+              </tr>
+            `;
+          }).join('');
         };
 
         // Render Grouped
@@ -1700,7 +1714,7 @@
         });
 
         if (filtered.length === 0) {
-          tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:3rem; color:var(--text-muted);">No adjustments for this month.</td></tr>`;
+          tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:3rem; color:var(--text-muted);">No adjustments for this month.</td></tr>`;
           return;
         }
 
@@ -1708,16 +1722,11 @@
           const emp = this.employees.find(e => e.id === adj.employeeId);
           const name = emp ? [emp.first_name, emp.last_name].filter(Boolean).join(' ') : 'Unknown Employee';
           const formattedDate = new Date(adj.date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
-          const checkedAttr = adj.paid ? 'checked' : '';
           return `
             <tr>
               <td style="padding-left: 1.5rem; font-weight:600; color:var(--text-primary);">${esc(formattedDate)}</td>
-              <td>
-                <input type="checkbox" class="payout-checkbox" ${checkedAttr} onchange="SalaryApp.toggleAdjustmentPaid('${adj.id}', this.checked)">
-              </td>
               <td>${esc(name)}</td>
               <td>${esc(adj.label)}</td>
-              <td>${esc(adj.clientId || '—')}</td>
               <td style="font-weight:700; color:var(--text-primary); font-variant-numeric:tabular-nums;">${esc(php(adj.value))}</td>
               <td style="text-align:center;">
                 <button class="btn-danger-link" onclick="SalaryApp.deleteAdjustment('${adj.id}')" title="Delete Adjustment">
@@ -1736,7 +1745,16 @@
         const adj = this.adjustmentsList.find(a => a.id === id);
         if (adj) {
           adj.paid = paid;
-          await this.saveAdjustments();
+          try {
+            const { error } = await getSb()
+              .from('employee_adjustments')
+              .update({ paid })
+              .eq('id', id);
+            if (error) throw error;
+          } catch (e) {
+            console.error(e);
+            toast('Failed to update paid status: ' + e.message, 'error');
+          }
         }
       },
 
@@ -1771,52 +1789,63 @@
         const val = parseFloat(document.getElementById('adj-value').value);
         const date = document.getElementById('adj-date').value;
         const label = document.getElementById('adj-label').value.trim();
-        const clientId = document.getElementById('adj-client-id').value.trim();
+        const clientId = document.getElementById('adj-client-id').value.trim() || null;
 
         if (!empId || isNaN(val) || !date || !label) return;
 
-        const newAdj = {
-          id: 'adj_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
-          employeeId: empId,
-          value: val,
-          date,
-          label,
-          clientId,
-          paid: false
-        };
+        try {
+          const { data, error } = await getSb()
+            .from('employee_adjustments')
+            .insert({
+              company_id: this.companyId,
+              employee_id: empId,
+              amount: val,
+              date,
+              label,
+              paid: false
+            })
+            .select()
+            .single();
 
-        this.adjustmentsList.push(newAdj);
-        await this.saveAdjustments();
-        
-        document.getElementById('adj-value').value = '';
-        document.getElementById('adj-label').value = '';
-        document.getElementById('adj-client-id').value = '';
+          if (error) throw error;
 
-        this.closeCreateAdjustmentModal();
-        this.renderAll();
-        toast('Adjustment created successfully.');
+          const newAdj = {
+            id: data.id,
+            employeeId: data.employee_id,
+            value: data.amount,
+            date: data.date,
+            label: data.label,
+            paid: data.paid
+          };
+
+          this.adjustmentsList.push(newAdj);
+          
+          document.getElementById('adj-value').value = '';
+          document.getElementById('adj-label').value = '';
+
+          this.closeCreateAdjustmentModal();
+          this.renderAll();
+          toast('Adjustment created successfully.');
+        } catch (err) {
+          console.error(err);
+          toast('Failed to create adjustment: ' + err.message, 'error');
+        }
       },
 
       async deleteAdjustment(id) {
-        this.adjustmentsList = this.adjustmentsList.filter(a => a.id !== id);
-        await this.saveAdjustments();
-        this.renderAll();
-        toast('Adjustment deleted.', 'info');
-      },
-
-      async saveAdjustments() {
         try {
           const { error } = await getSb()
-            .from('global_settings')
-            .upsert({
-              key: 'salary_adjustments',
-              company_id: this.companyId,
-              value: this.adjustmentsList
-            });
+            .from('employee_adjustments')
+            .delete()
+            .eq('id', id);
           if (error) throw error;
-        } catch (e) {
-          console.error(e);
-          toast('Failed to save adjustments: ' + e.message, 'error');
+
+          this.adjustmentsList = this.adjustmentsList.filter(a => a.id !== id);
+          this.renderAll();
+          toast('Adjustment deleted.', 'info');
+        } catch (err) {
+          console.error(err);
+          toast('Failed to delete adjustment: ' + err.message, 'error');
         }
       },
 
@@ -1834,7 +1863,7 @@
         });
 
         if (filtered.length === 0) {
-          tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:3rem; color:var(--text-muted);">No reimbursements for this month.</td></tr>`;
+          tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:3rem; color:var(--text-muted);">No reimbursements for this month.</td></tr>`;
           return;
         }
 
@@ -1842,16 +1871,11 @@
           const emp = this.employees.find(e => e.id === reimb.employeeId);
           const name = emp ? [emp.first_name, emp.last_name].filter(Boolean).join(' ') : 'Unknown Employee';
           const formattedDate = new Date(reimb.date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
-          const checkedAttr = reimb.paid ? 'checked' : '';
           return `
             <tr>
               <td style="padding-left: 1.5rem; font-weight:600; color:var(--text-primary);">${esc(formattedDate)}</td>
-              <td>
-                <input type="checkbox" class="payout-checkbox" ${checkedAttr} onchange="SalaryApp.toggleReimbursementPaid('${reimb.id}', this.checked)">
-              </td>
               <td>${esc(name)}</td>
               <td>${esc(reimb.label)}</td>
-              <td>${esc(reimb.clientId || '—')}</td>
               <td style="font-weight:700; color:var(--text-primary); font-variant-numeric:tabular-nums;">${esc(php(reimb.value))}</td>
               <td style="text-align:center;">
                 <button class="btn-danger-link" onclick="SalaryApp.deleteReimbursement('${reimb.id}')" title="Delete Reimbursement">
@@ -1870,7 +1894,16 @@
         const reimb = this.reimbursementsList.find(r => r.id === id);
         if (reimb) {
           reimb.paid = paid;
-          await this.saveReimbursements();
+          try {
+            const { error } = await getSb()
+              .from('employee_reimbursements')
+              .update({ paid })
+              .eq('id', id);
+            if (error) throw error;
+          } catch (e) {
+            console.error(e);
+            toast('Failed to update paid status: ' + e.message, 'error');
+          }
         }
       },
 
@@ -1915,52 +1948,63 @@
         const val = parseFloat(document.getElementById('reimb-value').value);
         const date = document.getElementById('reimb-date').value;
         const label = document.getElementById('reimb-label').value.trim();
-        const clientId = document.getElementById('reimb-client-id').value.trim();
+        const clientId = document.getElementById('reimb-client-id').value.trim() || null;
 
         if (!empId || isNaN(val) || !date || !label) return;
 
-        const newReimb = {
-          id: 'reimb_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
-          employeeId: empId,
-          value: val,
-          date,
-          label,
-          clientId,
-          paid: false
-        };
+        try {
+          const { data, error } = await getSb()
+            .from('employee_reimbursements')
+            .insert({
+              company_id: this.companyId,
+              employee_id: empId,
+              amount: val,
+              date,
+              label,
+              paid: false
+            })
+            .select()
+            .single();
 
-        this.reimbursementsList.push(newReimb);
-        await this.saveReimbursements();
-        
-        document.getElementById('reimb-value').value = '';
-        document.getElementById('reimb-label').value = '';
-        document.getElementById('reimb-client-id').value = '';
+          if (error) throw error;
 
-        this.closeCreateReimbursementModal();
-        this.renderAll();
-        toast('Reimbursement created successfully.');
+          const newReimb = {
+            id: data.id,
+            employeeId: data.employee_id,
+            value: data.amount,
+            date: data.date,
+            label: data.label,
+            paid: data.paid
+          };
+
+          this.reimbursementsList.push(newReimb);
+          
+          document.getElementById('reimb-value').value = '';
+          document.getElementById('reimb-label').value = '';
+
+          this.closeCreateReimbursementModal();
+          this.renderAll();
+          toast('Reimbursement created successfully.');
+        } catch (err) {
+          console.error(err);
+          toast('Failed to create reimbursement: ' + err.message, 'error');
+        }
       },
 
       async deleteReimbursement(id) {
-        this.reimbursementsList = this.reimbursementsList.filter(a => a.id !== id);
-        await this.saveReimbursements();
-        this.renderAll();
-        toast('Reimbursement deleted.', 'info');
-      },
-
-      async saveReimbursements() {
         try {
           const { error } = await getSb()
-            .from('global_settings')
-            .upsert({
-              key: 'salary_reimbursements',
-              company_id: this.companyId,
-              value: this.reimbursementsList
-            });
+            .from('employee_reimbursements')
+            .delete()
+            .eq('id', id);
           if (error) throw error;
-        } catch (e) {
-          console.error(e);
-          toast('Failed to save reimbursements: ' + e.message, 'error');
+
+          this.reimbursementsList = this.reimbursementsList.filter(a => a.id !== id);
+          this.renderAll();
+          toast('Reimbursement deleted.', 'info');
+        } catch (err) {
+          console.error(err);
+          toast('Failed to delete reimbursement: ' + err.message, 'error');
         }
       },
 
@@ -1995,8 +2039,9 @@
       async clearAllState() {
         this.closeClearModal();
         
-        // Reset all adjustments and checkboxes
+        // Reset all adjustments, reimbursements, and checkboxes
         this.adjustmentsList = [];
+        this.reimbursementsList = [];
         this.regularPayoutState = {};
         this.specialPayoutState = {};
         this.commissionPayoutState = {};
@@ -2008,11 +2053,8 @@
 
         try {
           await Promise.all([
-            getSb().from('global_settings').upsert({
-              key: 'salary_adjustments',
-              company_id: this.companyId,
-              value: this.adjustmentsList
-            }),
+            getSb().from('employee_adjustments').delete().eq('company_id', this.companyId),
+            getSb().from('employee_reimbursements').delete().eq('company_id', this.companyId),
             getSb().from('global_settings').upsert({
               key: 'regular_payout_state',
               company_id: this.companyId,
@@ -2030,7 +2072,7 @@
             })
           ]);
           
-          toast('All adjustments and checkboxes have been cleared.');
+          toast('All adjustments, reimbursements, and checkboxes have been cleared.');
           if (statusEl) {
             statusEl.textContent = 'All changes saved';
             setTimeout(() => {
@@ -2080,16 +2122,6 @@
               key: 'commission_payout_state',
               company_id: this.companyId,
               value: this.commissionPayoutState
-            }),
-            getSb().from('global_settings').upsert({
-              key: 'salary_adjustments',
-              company_id: this.companyId,
-              value: this.adjustmentsList
-            }),
-            getSb().from('global_settings').upsert({
-              key: 'salary_reimbursements',
-              company_id: this.companyId,
-              value: this.reimbursementsList
             })
           ]);
           
@@ -2132,11 +2164,6 @@
               key: 'commission_payout_state',
               company_id: this.companyId,
               value: this.commissionPayoutState
-            }),
-            getSb().from('global_settings').upsert({
-              key: 'salary_adjustments',
-              company_id: this.companyId,
-              value: this.adjustmentsList
             })
           ]);
           toast('Payout tracker state saved successfully.');
