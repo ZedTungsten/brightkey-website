@@ -2125,7 +2125,44 @@
         });
         if (error) throw error;
         employeePrefix = empPrefix;
-        showToast('HR settings saved successfully!');
+
+        // Backfill employee numbers for existing employees with new prefix
+        try {
+          const { data: emps, error: fetchErr } = await sb
+            .from('employees')
+            .select('id, employee_number')
+            .eq('company_id', currentCompanyId);
+          if (fetchErr) throw fetchErr;
+
+          const updates = [];
+          (emps || []).forEach(emp => {
+            const num = emp.employee_number || '';
+            const match = num.match(/^([A-Z]{1,3})-(\d+)$/);
+            if (match) {
+              const oldPref = match[1];
+              const suffix = match[2];
+              if (oldPref !== empPrefix) {
+                updates.push({
+                  id: emp.id,
+                  employee_number: `${empPrefix}-${suffix}`
+                });
+              }
+            }
+          });
+
+          if (updates.length > 0) {
+            for (const u of updates) {
+              await sb
+                .from('employees')
+                .update({ employee_number: u.employee_number })
+                .eq('id', u.id);
+            }
+          }
+        } catch (backfillErr) {
+          console.error('Failed to backfill employee prefixes:', backfillErr);
+        }
+
+        showToast('HR settings saved and employee numbers backfilled successfully!');
       } catch (err) {
         console.error('Error saving HR settings:', err);
         showToast('Failed to save HR settings.', true);
