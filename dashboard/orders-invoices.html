@@ -314,23 +314,23 @@
                 <div class="panel" style="padding: 1.25rem;">
                   <h3 style="margin-bottom: 1rem; border-bottom: 1px solid var(--border); padding-bottom: 0.25rem;">Template Settings</h3>
 
-                  <!-- Logo -->
+                  <!-- Brand Logo Style Selection -->
                   <div class="form-group" style="margin-bottom: 1.5rem;">
-                    <label class="form-label">Upload Brand Logo</label>
-                    <div style="display: flex; gap: 1rem; align-items: center;">
-                      <input type="file" id="logo-file-input" accept="image/*" class="form-input" style="height: auto; padding: 0.5rem;" onchange="uploadBrandLogo()" />
-                      <div id="logo-status" style="font-size: 0.8rem; color: var(--text-muted);">No file uploaded</div>
-                    </div>
-                    <input type="text" class="form-input" id="logo-cdn-url" style="margin-top: 0.5rem; font-family: monospace; font-size: 0.78rem;" placeholder="Enter logo URL or upload a file..." oninput="logoCdnUrl = this.value; compileReceipt();" />
+                    <label class="form-label">Brand Logo Style</label>
+                    <select class="form-input" id="tpl-logo-style" onchange="compileReceipt()">
+                      <option value="light">Light Logo (uses Light Logo from Settings)</option>
+                      <option value="dark">Dark Logo (uses Dark Logo from Settings)</option>
+                    </select>
                   </div>
 
-                  <!-- Company Info (upper right of header) -->
+                  <!-- Company Info (upper right of header) - Read-only reference from Settings -->
                   <div class="form-group" style="margin-bottom: 1.5rem;">
-                    <label class="form-label" style="margin-bottom:0.5rem; display:block;">Company Info <span style="font-weight:400;color:var(--text-muted);">(upper right of header)</span></label>
-                    <div style="display:flex;flex-direction:column;gap:0.5rem;">
-                      <input type="text" class="form-input" id="tpl-company-name" placeholder="Company name" oninput="compileReceipt()" />
-                      <textarea class="form-input" id="tpl-company-address" rows="2" placeholder="Address line 1&#10;Address line 2" style="resize:vertical;" oninput="compileReceipt()"></textarea>
-                      <input type="text" class="form-input" id="tpl-company-email" placeholder="Email / contact" oninput="compileReceipt()" />
+                    <label class="form-label" style="margin-bottom:0.5rem; display:block;">Company Info <span style="font-weight:400;color:var(--text-muted);">(pulled from Settings)</span></label>
+                    <div style="display:flex;flex-direction:column;gap:0.5rem; background: var(--bg-elevated); padding: 0.75rem; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 0.85rem; color: var(--text-secondary);">
+                      <div id="ref-company-name" style="font-weight: 700; color: var(--text-primary);">Loading…</div>
+                      <div id="ref-company-address" style="white-space: pre-line;">Loading…</div>
+                      <div id="ref-company-email">Loading…</div>
+                      <div id="ref-company-phone">Loading…</div>
                     </div>
                   </div>
 
@@ -462,6 +462,7 @@
 
     let configuredTerms = [];
     let logoCdnUrl = '';
+    let companyProfileConfig = {};
 
     const DEFAULT_TEMPLATE = `<!DOCTYPE html>
 <html lang="en">
@@ -635,6 +636,26 @@
         const { data: pData } = await sb.from('products').select('sku, title, image_main, installation_price');
         dbProducts = pData || [];
 
+        // Fetch company profile settings
+        const { data: profileData } = await sb.from('global_settings')
+          .select('*')
+          .eq('key', 'company_profile_config')
+          .eq('company_id', currentCompanyId)
+          .maybeSingle();
+
+        if (profileData && profileData.value) {
+          companyProfileConfig = profileData.value;
+          document.getElementById('ref-company-name').textContent = companyProfileConfig.companyName || '';
+          document.getElementById('ref-company-address').textContent = [companyProfileConfig.companyAddressLine1, companyProfileConfig.companyAddressLine2].filter(Boolean).join('\n');
+          document.getElementById('ref-company-email').textContent = companyProfileConfig.email || '';
+          document.getElementById('ref-company-phone').textContent = companyProfileConfig.phone || '';
+        } else {
+          document.getElementById('ref-company-name').textContent = 'Not configured';
+          document.getElementById('ref-company-address').textContent = 'Not configured';
+          document.getElementById('ref-company-email').textContent = 'Not configured';
+          document.getElementById('ref-company-phone').textContent = 'Not configured';
+        }
+
         // Fetch saved template config
         const { data: settingData } = await sb.from('global_settings')
           .select('*')
@@ -643,17 +664,12 @@
           .maybeSingle();
         if (settingData && settingData.value) {
           const config = settingData.value;
-          logoCdnUrl = config.logo || '';
           configuredTerms = config.terms || [];
 
           // Populate builder UI
-          document.getElementById('logo-cdn-url').value = logoCdnUrl;
-          if (logoCdnUrl) document.getElementById('logo-status').innerText = 'Ready';
-
-          // Company info
-          if (config.companyName)    document.getElementById('tpl-company-name').value    = config.companyName;
-          if (config.companyAddress) document.getElementById('tpl-company-address').value = config.companyAddress;
-          if (config.companyEmail)   document.getElementById('tpl-company-email').value   = config.companyEmail;
+          if (config.logoStyle) {
+            document.getElementById('tpl-logo-style').value = config.logoStyle;
+          }
 
           // Colors
           const setColor = (pickerId, txtId, val) => {
@@ -1162,11 +1178,16 @@
       const headerColor2  = document.getElementById('tpl-color-h2')?.value    || '#2d2d2d';
       const textColor     = document.getElementById('tpl-color-txt')?.value   || '#575757';
       const lineColor     = document.getElementById('tpl-color-line')?.value  || '#9a9a9a';
-      const companyName   = document.getElementById('tpl-company-name')?.value  || 'Company Name';
-      const companyEmail  = document.getElementById('tpl-company-email')?.value || '';
-      const companyAddressRaw = document.getElementById('tpl-company-address')?.value || '';
-      const companyAddress = companyAddressRaw.replace(/\n/g, '<br>');
       const thankYouText  = document.getElementById('tpl-thankyou')?.value    || 'THANK YOU FOR YOUR BUSINESS!';
+
+      // Pull from companyProfileConfig (loaded from Settings)
+      const companyName   = companyProfileConfig.companyName  || 'Company Name';
+      const companyAddress = [companyProfileConfig.companyAddressLine1, companyProfileConfig.companyAddressLine2].filter(Boolean).join('<br>') || 'Company Address';
+      const companyEmail  = [companyProfileConfig.email, companyProfileConfig.phone].filter(Boolean).join('<br>') || 'Email / Contact';
+
+      // Logo url resolution based on user selection
+      const logoStyle = document.getElementById('tpl-logo-style')?.value || 'light';
+      const finalLogo = (logoStyle === 'dark' ? companyProfileConfig.logoDark : companyProfileConfig.logoLight) || '../assets/og-image.png';
 
       // Compile template
       let outputHtml = DEFAULT_TEMPLATE;
@@ -1184,7 +1205,7 @@
       outputHtml = outputHtml.replace(/\{\{contact\}\}/g, contact);
       outputHtml = outputHtml.replace(/\{\{email\}\}/g, email);
       outputHtml = outputHtml.replace(/\{\{address\}\}/g, address);
-      outputHtml = outputHtml.replace(/\{\{logo\}\}/g, logoCdnUrl || '../assets/og-image.png');
+      outputHtml = outputHtml.replace(/\{\{logo\}\}/g, finalLogo);
       outputHtml = outputHtml.replace(/\{\{items\}\}/g, itemsHtml);
       outputHtml = outputHtml.replace(/\{\{itemtotal\}\}/g, `₱ ${(subtotal / 100).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`);
       outputHtml = outputHtml.replace(/\{\{addcharge\}\}/g, chargesHtml);
@@ -1586,11 +1607,8 @@
           key: 'invoice_template',
           company_id: currentCompanyId,
           value: {
-            logo:           logoCdnUrl,
+            logoStyle:      document.getElementById('tpl-logo-style')?.value || 'light',
             terms:          terms,
-            companyName:    document.getElementById('tpl-company-name')?.value    || '',
-            companyAddress: document.getElementById('tpl-company-address')?.value || '',
-            companyEmail:   document.getElementById('tpl-company-email')?.value   || '',
             headerColor1:   document.getElementById('tpl-color-h1')?.value        || '#454545',
             headerColor2:   document.getElementById('tpl-color-h2')?.value        || '#2d2d2d',
             textColor:      document.getElementById('tpl-color-txt')?.value       || '#575757',
