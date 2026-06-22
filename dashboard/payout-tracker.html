@@ -718,18 +718,21 @@
                 
                 <form id="payslip-settings-form" onsubmit="SalaryApp.savePayslipTemplate(event)">
                   <div class="form-group">
-                    <label class="form-label" for="payslip-company-name">Company Name</label>
-                    <input type="text" id="payslip-company-name" class="form-input" placeholder="BrightKey Solutions" oninput="SalaryApp.handleTemplateInput()" />
+                    <label class="form-label" for="payslip-logo-style">Brand Logo Style</label>
+                    <select id="payslip-logo-style" class="form-input" onchange="SalaryApp.handleTemplateInput()">
+                      <option value="light">Light Logo</option>
+                      <option value="dark">Dark Logo</option>
+                    </select>
                   </div>
-                  
+
                   <div class="form-group">
-                    <label class="form-label" for="payslip-company-address">Company Address / Description</label>
-                    <textarea id="payslip-company-address" class="form-input" rows="3" placeholder="123 Business Road, Suite 100&#10;Quezon City, Metro Manila" oninput="SalaryApp.handleTemplateInput()"></textarea>
-                  </div>
-                  
-                  <div class="form-group">
-                    <label class="form-label" for="payslip-logo-url">Logo URL</label>
-                    <input type="text" id="payslip-logo-url" class="form-input" placeholder="../assets/og-image.png" oninput="SalaryApp.handleTemplateInput()" />
+                    <label class="form-label">Company Info <span style="font-weight:400;color:var(--text-muted);">(upper right of header)</span></label>
+                    <div style="display:flex;flex-direction:column;gap:0.5rem; background: var(--bg-elevated); padding: 0.75rem; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 0.85rem; color: var(--text-secondary);">
+                      <div id="ref-company-name" style="font-weight: 700; color: var(--text-primary);">Loading…</div>
+                      <div id="ref-company-address" style="white-space: pre-line;">Loading…</div>
+                      <div id="ref-company-email">Loading…</div>
+                      <div id="ref-company-phone">Loading…</div>
+                    </div>
                   </div>
                   
                   <div class="form-group">
@@ -984,12 +987,11 @@
       payslipYear: new Date().getFullYear(),
       payslipMonth: new Date().getMonth(),
       payslipConfig: {
-        companyName: '',
-        companyAddress: '',
-        logoUrl: '',
+        logoStyle: 'light',
         signatoryName: '',
         signatureUrl: ''
       },
+      companyProfileConfig: {},
 
       get commissionYear() { return this.selectedYear; },
       set commissionYear(v) { this.selectedYear = v; },
@@ -1211,6 +1213,25 @@
           this.commissionPayoutState = {};
         }
 
+        // Fetch Company Profile Settings
+        try {
+          const { data: profileSettings } = await getSb()
+            .from('global_settings')
+            .select('value')
+            .eq('key', 'company_profile_config')
+            .eq('company_id', this.companyId)
+            .maybeSingle();
+          this.companyProfileConfig = profileSettings?.value || {};
+          
+          document.getElementById('ref-company-name').textContent = this.companyProfileConfig.companyName || '';
+          document.getElementById('ref-company-address').textContent = [this.companyProfileConfig.companyAddressLine1, this.companyProfileConfig.companyAddressLine2].filter(Boolean).join('\n');
+          document.getElementById('ref-company-email').textContent = this.companyProfileConfig.email || '';
+          document.getElementById('ref-company-phone').textContent = this.companyProfileConfig.phone || '';
+        } catch (e) {
+          console.error('Failed to load company profile config:', e);
+          this.companyProfileConfig = {};
+        }
+
         // Fetch Payslip Template Config
         try {
           const { data: payslipSettings } = await getSb()
@@ -1220,17 +1241,13 @@
             .eq('company_id', this.companyId)
             .maybeSingle();
           this.payslipConfig = payslipSettings?.value || {
-            companyName: '',
-            companyAddress: '',
-            logoUrl: '',
+            logoStyle: 'light',
             signatoryName: '',
             signatureUrl: ''
           };
         } catch (e) {
           this.payslipConfig = {
-            companyName: '',
-            companyAddress: '',
-            logoUrl: '',
+            logoStyle: 'light',
             signatoryName: '',
             signatureUrl: ''
           };
@@ -1238,12 +1255,8 @@
 
         // Populate template settings inputs
         const payslipCfg = this.payslipConfig;
-        const nameEl = document.getElementById('payslip-company-name');
-        if (nameEl) nameEl.value = payslipCfg.companyName || '';
-        const addrEl = document.getElementById('payslip-company-address');
-        if (addrEl) addrEl.value = payslipCfg.companyAddress || '';
-        const logoEl = document.getElementById('payslip-logo-url');
-        if (logoEl) logoEl.value = payslipCfg.logoUrl || '';
+        const logoStyleEl = document.getElementById('payslip-logo-style');
+        if (logoStyleEl) logoStyleEl.value = payslipCfg.logoStyle || 'light';
         const sigNameEl = document.getElementById('payslip-signatory-name');
         if (sigNameEl) sigNameEl.value = payslipCfg.signatoryName || '';
         
@@ -2927,9 +2940,7 @@
       },
 
       handleTemplateInput() {
-        this.payslipConfig.companyName = document.getElementById('payslip-company-name')?.value || '';
-        this.payslipConfig.companyAddress = document.getElementById('payslip-company-address')?.value || '';
-        this.payslipConfig.logoUrl = document.getElementById('payslip-logo-url')?.value || '';
+        this.payslipConfig.logoStyle = document.getElementById('payslip-logo-style')?.value || 'light';
         this.payslipConfig.signatoryName = document.getElementById('payslip-signatory-name')?.value || '';
 
         if (document.getElementById('payslip-canvas-wrapper').style.display !== 'none') {
@@ -2939,14 +2950,10 @@
 
       async savePayslipTemplate(event) {
         if (event) event.preventDefault();
-        const companyName = document.getElementById('payslip-company-name')?.value || '';
-        const companyAddress = document.getElementById('payslip-company-address')?.value || '';
-        const logoUrl = document.getElementById('payslip-logo-url')?.value || '';
+        const logoStyle = document.getElementById('payslip-logo-style')?.value || 'light';
         const signatoryName = document.getElementById('payslip-signatory-name')?.value || '';
 
-        this.payslipConfig.companyName = companyName;
-        this.payslipConfig.companyAddress = companyAddress;
-        this.payslipConfig.logoUrl = logoUrl;
+        this.payslipConfig.logoStyle = logoStyle;
         this.payslipConfig.signatoryName = signatoryName;
 
         try {
@@ -3145,12 +3152,13 @@
           `;
         });
 
-        // Company Details / Logo
-        const compLogoHtml = this.payslipConfig.logoUrl
-          ? `<img src="${esc(this.payslipConfig.logoUrl)}" alt="Logo" style="max-height: 48px; max-width: 150px; display: block; margin-bottom: 0.5rem; filter: grayscale(1);" />`
+        // Company Details / Logo resolved from Settings
+        const logoUrl = this.payslipConfig.logoStyle === 'dark' ? this.companyProfileConfig.logoDark : this.companyProfileConfig.logoLight;
+        const compLogoHtml = logoUrl
+          ? `<img src="${esc(logoUrl)}" alt="Logo" style="max-height: 48px; max-width: 150px; display: block; margin-bottom: 0.5rem; filter: grayscale(1);" />`
           : '';
-        const compName = this.payslipConfig.companyName || 'BrightKey Solutions';
-        const compAddress = (this.payslipConfig.companyAddress || '').replace(/\n/g, '<br>');
+        const compName = this.companyProfileConfig.companyName || 'BrightKey Solutions';
+        const compAddress = [this.companyProfileConfig.companyAddressLine1, this.companyProfileConfig.companyAddressLine2].filter(Boolean).join('<br>') || 'Company Address';
 
         const signatoryName = this.payslipConfig.signatoryName || 'Authorized Signatory';
         const signatureImgHtml = this.payslipConfig.signatureUrl
@@ -3243,7 +3251,7 @@
           return;
         }
 
-        const compName = this.payslipConfig.companyName || 'BrightKey Solutions';
+        const compName = this.companyProfileConfig.companyName || 'BrightKey Solutions';
         const empId = document.getElementById('payslip-employee-select').value;
         const emp = this.employees.find(e => e.id === empId);
         const empFullName = emp ? [emp.first_name, emp.last_name].filter(Boolean).join(' ') : 'Employee';
