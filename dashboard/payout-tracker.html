@@ -561,9 +561,35 @@
 
           <!-- ── REIMBURSEMENT TAB PANEL ── -->
           <div class="tab-panel" id="panel-reimbursement">
-            <div class="j-card">
-              <div class="j-card-title">Reimbursement</div>
-              <p style="color: var(--text-muted); font-size: 0.85rem;">Reimbursement tracking interface is coming soon.</p>
+            <!-- Month Selector & Create Button -->
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 0.75rem 1.25rem; width: 100%; box-sizing: border-box;">
+              <div style="display: flex; align-items: center; gap: 1rem;">
+                <button class="btn btn-outline btn-sm" onclick="SalaryApp.changeMonth(-1)">&lt;</button>
+                <span id="reimbursements-month-display" style="font-size: 0.88rem; font-weight: 700; color: var(--text-primary); min-width: 140px; text-align: center;"></span>
+                <button class="btn btn-outline btn-sm" onclick="SalaryApp.changeMonth(1)">&gt;</button>
+              </div>
+              <button class="btn btn-cyan btn-sm" onclick="SalaryApp.openCreateReimbursementModal()">+ Add Reimbursement</button>
+            </div>
+
+            <div class="table-card">
+              <div class="table-wrap">
+                <table class="salary-table" id="reimbursements-table">
+                  <thead>
+                    <tr>
+                      <th style="padding-left: 1.5rem;">Employee Name</th>
+                      <th>Reimbursement Label</th>
+                      <th>Date</th>
+                      <th>Value</th>
+                      <th style="width: 100px;">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody id="reimbursements-table-body">
+                    <tr>
+                      <td colspan="5" style="text-align:center; padding:3rem; color:var(--text-muted);">No reimbursements for this month.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
 
@@ -707,6 +733,43 @@
     </div>
   </div>
 
+  <!-- Create Reimbursement Modal -->
+  <div class="modal-overlay" id="create-reimbursement-modal">
+    <div class="modal" style="max-width: 500px; padding: 2rem;">
+      <h3 style="font-size: 1.1rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.5rem;">Create Reimbursement</h3>
+      <form id="create-reimbursement-form" onsubmit="SalaryApp.createReimbursement(event)" style="padding-top:0.75rem;">
+        
+        <div class="form-group" style="margin-bottom: 1rem;">
+          <label class="form-label" for="reimb-employee" style="display: block; margin-bottom: 0.4rem; font-size: 0.78rem; font-weight: 600; color: var(--text-secondary);">Employee</label>
+          <select id="reimb-employee" class="form-select" style="width: 100%;" required>
+            <!-- Populated dynamically -->
+          </select>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-bottom: 1rem;">
+          <div class="form-group">
+            <label class="form-label" for="reimb-value" style="display: block; margin-bottom: 0.4rem; font-size: 0.78rem; font-weight: 600; color: var(--text-secondary);">Reimbursement Value (₱)</label>
+            <input type="number" id="reimb-value" class="form-input" placeholder="0.00" step="0.01" style="width: 100%;" required />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="reimb-date" style="display: block; margin-bottom: 0.4rem; font-size: 0.78rem; font-weight: 600; color: var(--text-secondary);">Date</label>
+            <input type="date" id="reimb-date" class="form-input" style="width: 100%;" required />
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-bottom: 1.5rem;">
+          <label class="form-label" for="reimb-label" style="display: block; margin-bottom: 0.4rem; font-size: 0.78rem; font-weight: 600; color: var(--text-secondary);">Reimbursement Label</label>
+          <input type="text" id="reimb-label" class="form-input" placeholder="e.g. Gas Expenses, Client Dinner" style="width: 100%;" required />
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 0.75rem;">
+          <button type="button" class="btn btn-outline btn-sm" onclick="SalaryApp.closeCreateReimbursementModal()">Cancel</button>
+          <button type="submit" class="btn btn-cyan btn-sm">Create</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- Create Special Schedule Modal -->
   <div class="modal-overlay" id="special-schedule-modal">
     <div class="modal" style="max-width: 500px; padding: 2rem;">
@@ -783,8 +846,9 @@
       companyStructure: { departments: [] },
       payoutSchedules: [], // array of numbers representing days
       commissionSchedules: [], // array of numbers representing days for commissions
-      specialSchedules: [], // array of { id, employeeId, value, label, day }
       adjustmentsList: [], // array of { id, employeeId, value, label, date }
+      reimbursementsList: [], // array of { id, employeeId, value, label, date }
+      specialSchedules: [], // array of { id, employeeId, value, label, day }
       regularPayoutState: {}, // monthKey -> `${empId}_${schedDay}` -> boolean
       specialPayoutState: {}, // monthKey -> `${empId}_${schedDay}` -> boolean
       trackerState: {}, // backward compatibility
@@ -919,6 +983,19 @@
           this.adjustmentsList = [];
         }
 
+        // Fetch salary reimbursements list
+        try {
+          const { data: reimbData } = await getSb()
+            .from('global_settings')
+            .select('value')
+            .eq('key', 'salary_reimbursements')
+            .eq('company_id', this.companyId)
+            .maybeSingle();
+          this.reimbursementsList = reimbData?.value || [];
+        } catch (e) {
+          this.reimbursementsList = [];
+        }
+
         // 4c. Fetch regular payout checkbox state
         try {
           const { data: regularStateData } = await getSb()
@@ -1019,7 +1096,7 @@
           'July', 'August', 'September', 'October', 'November', 'December'
         ];
         const text = `${monthNames[this.selectedMonth]} ${this.selectedYear}`;
-        ['regular-month-display', 'special-month-display', 'adjustments-month-display', 'commission-month-display'].forEach(id => {
+        ['regular-month-display', 'special-month-display', 'adjustments-month-display', 'commission-month-display', 'reimbursements-month-display'].forEach(id => {
           const el = document.getElementById(id);
           if (el) el.textContent = text;
         });
@@ -1038,6 +1115,7 @@
         this.renderRegularPayout();
         this.renderSpecialPayout();
         this.renderAdjustmentsTab();
+        this.renderReimbursementsTab();
         this.renderSchedules();
         this.renderCommSchedules();
         this.renderSpecialSchedules();
@@ -1709,6 +1787,133 @@
         }
       },
 
+      // ── RENDER REIMBURSEMENTS TABLE ──
+      renderReimbursementsTab() {
+        const tbody = document.getElementById('reimbursements-table-body');
+        if (!tbody) return;
+
+        const monthKey = this.getCommissionMonthKey();
+        const filtered = this.reimbursementsList.filter(reimb => {
+          const d = new Date(reimb.date);
+          const y = d.getFullYear();
+          const m = String(d.getMonth() + 1).padStart(2, '0');
+          return `${y}-${m}` === monthKey;
+        });
+
+        if (filtered.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:3rem; color:var(--text-muted);">No reimbursements for this month.</td></tr>`;
+          return;
+        }
+
+        tbody.innerHTML = filtered.map(reimb => {
+          const emp = this.employees.find(e => e.id === reimb.employeeId);
+          const name = emp ? [emp.first_name, emp.last_name].filter(Boolean).join(' ') : 'Unknown Employee';
+          const formattedDate = new Date(reimb.date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+          return `
+            <tr>
+              <td style="padding-left: 1.5rem; font-weight:600; color:var(--text-primary);">${esc(name)}</td>
+              <td>${esc(reimb.label)}</td>
+              <td>${esc(formattedDate)}</td>
+              <td style="font-weight:700; color:var(--text-primary); font-variant-numeric:tabular-nums;">${esc(php(reimb.value))}</td>
+              <td style="text-align:center;">
+                <button class="btn-danger-link" onclick="SalaryApp.deleteReimbursement('${reimb.id}')" title="Delete Reimbursement">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="3 6 5 6 21 6"/>
+                    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                  </svg>
+                </button>
+              </td>
+            </tr>
+          `;
+        }).join('');
+      },
+
+      openCreateReimbursementModal() {
+        const modal = document.getElementById('create-reimbursement-modal');
+        if (modal) {
+          const dateInput = document.getElementById('reimb-date');
+          if (dateInput) {
+            const today = new Date();
+            const y = today.getFullYear();
+            const m = today.getMonth();
+            if (y === this.selectedYear && m === this.selectedMonth) {
+              dateInput.value = today.toISOString().split('T')[0];
+            } else {
+              dateInput.value = `${this.selectedYear}-${String(this.selectedMonth + 1).padStart(2, '0')}-01`;
+            }
+          }
+          
+          // Populate employees dropdown
+          const select = document.getElementById('reimb-employee');
+          if (select) {
+            select.innerHTML = '<option value="">-- Choose Employee --</option>' + 
+              this.employees.map(e => `<option value="${esc(e.id)}">${esc([e.first_name, e.last_name].filter(Boolean).join(' '))}</option>`).join('');
+          }
+          
+          modal.classList.add('open');
+        }
+      },
+
+      closeCreateReimbursementModal() {
+        const modal = document.getElementById('create-reimbursement-modal');
+        if (modal) {
+          modal.classList.remove('open');
+        }
+        const form = document.getElementById('create-reimbursement-form');
+        if (form) form.reset();
+      },
+
+      async createReimbursement(e) {
+        e.preventDefault();
+        const empId = document.getElementById('reimb-employee').value;
+        const val = parseFloat(document.getElementById('reimb-value').value);
+        const date = document.getElementById('reimb-date').value;
+        const label = document.getElementById('reimb-label').value.trim();
+
+        if (!empId || isNaN(val) || !date || !label) return;
+
+        const newReimb = {
+          id: 'reimb_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+          employeeId: empId,
+          value: val,
+          date,
+          label
+        };
+
+        this.reimbursementsList.push(newReimb);
+        await this.saveReimbursements();
+        
+        document.getElementById('reimb-value').value = '';
+        document.getElementById('reimb-label').value = '';
+
+        this.closeCreateReimbursementModal();
+        this.renderAll();
+        toast('Reimbursement created successfully.');
+      },
+
+      async deleteReimbursement(id) {
+        this.reimbursementsList = this.reimbursementsList.filter(a => a.id !== id);
+        await this.saveReimbursements();
+        this.renderAll();
+        toast('Reimbursement deleted.', 'info');
+      },
+
+      async saveReimbursements() {
+        try {
+          const { error } = await getSb()
+            .from('global_settings')
+            .upsert({
+              key: 'salary_reimbursements',
+              company_id: this.companyId,
+              value: this.reimbursementsList
+            });
+          if (error) throw error;
+        } catch (e) {
+          console.error(e);
+          toast('Failed to save reimbursements: ' + e.message, 'error');
+        }
+      },
+
       confirmClearAll() {
         const modal = document.getElementById('clear-all-modal');
         if (modal) {
@@ -1830,6 +2035,11 @@
               key: 'salary_adjustments',
               company_id: this.companyId,
               value: this.adjustmentsList
+            }),
+            getSb().from('global_settings').upsert({
+              key: 'salary_reimbursements',
+              company_id: this.companyId,
+              value: this.reimbursementsList
             })
           ]);
           
