@@ -1470,6 +1470,7 @@
           }
         }
         this.debouncedSave();
+        this.syncPayslipRecord(empId);
       },
 
       toggleSpecialPayoutCheck(empId, day, checked) {
@@ -1495,6 +1496,7 @@
           }
         }
         this.debouncedSave();
+        this.syncPayslipRecord(empId);
       },
 
       getScheduleDayForItemDay(itemDay, sortedScheds) {
@@ -1503,6 +1505,151 @@
           if (itemDay <= s) return s;
         }
         return sortedScheds[sortedScheds.length - 1];
+      },
+
+      async syncPayslipRecord(empId) {
+        const emp = this.employees.find(e => e.id === empId);
+        if (!emp) return;
+
+        const monthKey = this.getCommissionMonthKey();
+        const state = this.regularPayoutState[monthKey];
+        const scheds = this.payoutSchedules.length > 0 ? this.payoutSchedules : [15, 30];
+        
+        const allChecked = state && scheds.every(day => state[`${empId}_${day}`] === true);
+
+        if (allChecked) {
+          const baseSalary = emp.salary || 0;
+
+          // Commissions
+          const empComms = this.commissionAssignments.filter(a => {
+            if (a.employee_id !== emp.id) return false;
+            const b = this.bookingsList.find(x => x.id === a.booking_id);
+            if (!b) return false;
+            let doorsArr = [];
+            if (typeof b.doors === 'string') {
+              try { doorsArr = JSON.parse(b.doors); } catch(_) {}
+            } else if (Array.isArray(b.doors)) {
+              doorsArr = b.doors;
+            }
+            const door = doorsArr[a.product_index];
+            const isDone = (door && door.completed) || (b.status === 'completed');
+            if (!isDone) return false;
+            const completionDateStr = (door && door.completed_at) || b.updated_at || b.created_at;
+            if (!completionDateStr) return false;
+            const date = new Date(completionDateStr);
+            return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}` === monthKey;
+          }).reduce((sum, a) => sum + (a.amount / 100), 0);
+
+          // Reimbursements list
+          const empReimbs = this.reimbursementsList.filter(r => {
+            if (r.employeeId !== emp.id) return false;
+            const d = new Date(r.date);
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` === monthKey;
+          });
+          const totalReimbs = empReimbs.reduce((sum, r) => sum + (Number(r.value) || 0), 0);
+
+          // Adjustments list
+          const empAdjs = this.adjustmentsList.filter(a => {
+            if (a.employeeId !== emp.id) return false;
+            const d = new Date(a.date);
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` === monthKey;
+          });
+          const totalAdjs = empAdjs.reduce((sum, a) => sum + (Number(a.value) || 0), 0);
+
+          // Special Payouts
+          const empSpecs = this.specialSchedules.filter(s => s.employeeId === emp.id);
+          const totalSpecs = empSpecs.reduce((sum, s) => sum + (Number(s.value) || 0), 0);
+
+          const grandTotal = baseSalary + empComms + totalReimbs + totalAdjs + totalSpecs;
+
+          let resolvedDeptName = '—';
+          if (this.companyStructure && this.companyStructure.departments) {
+            const matchedDept = this.companyStructure.departments.find(d => {
+              if (d.managerId === emp.id) return true;
+              if (d.subteams) {
+                return d.subteams.some(s => s.managerId === emp.id || (s.colleagueIds && s.colleagueIds.includes(emp.id)));
+              }
+              return false;
+            }) || this.companyStructure.departments.find(d => d.name === emp.department);
+            resolvedDeptName = matchedDept ? matchedDept.name : (emp.department || '—');
+          } else {
+            resolvedDeptName = emp.department || '—';
+          }
+
+          const commissionDetails = this.commissionAssignments.filter(a => {
+            if (a.employee_id !== emp.id) return false;
+            const b = this.bookingsList.find(x => x.id === a.booking_id);
+            if (!b) return false;
+            let doorsArr = [];
+            if (typeof b.doors === 'string') {
+              try { doorsArr = JSON.parse(b.doors); } catch(_) {}
+            } else if (Array.isArray(b.doors)) {
+              doorsArr = b.doors;
+            }
+            const door = doorsArr[a.product_index];
+            const isDone = (door && door.completed) || (b.status === 'completed');
+            if (!isDone) return false;
+            const completionDateStr = (door && door.completed_at) || b.updated_at || b.created_at;
+            if (!completionDateStr) return false;
+            const date = new Date(completionDateStr);
+            return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}` === monthKey;
+          }).map(a => {
+            const b = this.bookingsList.find(x => x.id === a.booking_id);
+            let completionDateStr = '';
+            if (b) {
+              let doorsArr = [];
+              if (typeof b.doors === 'string') {
+                try { doorsArr = JSON.parse(b.doors); } catch(_) {}
+              } else if (Array.isArray(b.doors)) {
+                doorsArr = b.doors;
+              }
+              const door = doorsArr[a.product_index];
+              completionDateStr = (door && door.completed_at) || b.updated_at || b.created_at;
+            }
+            return {
+              bookingId: a.booking_id,
+              sku: a.sku,
+              rateLabel: a.rate_label,
+              amount: a.amount / 100,
+              customerName: b ? b.customer_name : '—',
+              completedDate: completionDateStr
+            };
+          });
+
+          const payload = {
+            company_id: this.companyId,
+            employee_id: emp.id,
+            payout_month: monthKey,
+            department: resolvedDeptName,
+            position: emp.title || '—',
+            salary: baseSalary,
+            basic_paid: baseSalary,
+            commissions: empComms,
+            adjustments: totalAdjs,
+            reimbursements: totalReimbs,
+            special_payouts: totalSpecs,
+            total_payout: grandTotal,
+            adjustments_list: empAdjs,
+            reimbursements_list: empReimbs,
+            commission_details: commissionDetails,
+            special_schedules: empSpecs
+          };
+
+          try {
+            await getSb().from('payslip_records').upsert(payload, { onConflict: 'employee_id,payout_month' });
+          } catch (e) {
+            console.error('Error snapshotting payslip:', e);
+          }
+        } else {
+          try {
+            await getSb().from('payslip_records')
+              .delete()
+              .eq('employee_id', emp.id)
+              .eq('payout_month', monthKey);
+          } catch (e) {
+            console.error('Error deleting snapshot payslip:', e);
+          }
+        }
       },
 
       renderPayoutSummary() {
@@ -1917,12 +2064,18 @@
 
         this.closeSpecialScheduleModal();
         this.renderAll();
+        this.syncPayslipRecord(empId);
       },
 
       async deleteSpecialSchedule(idOrIdx) {
+        let empId = null;
         if (typeof idOrIdx === 'number') {
+          const spec = this.specialSchedules[idOrIdx];
+          empId = spec ? spec.employeeId : null;
           this.specialSchedules.splice(idOrIdx, 1);
         } else {
+          const spec = this.specialSchedules.find(s => s.id === idOrIdx);
+          empId = spec ? spec.employeeId : null;
           const idx = this.specialSchedules.findIndex(s => s.id === idOrIdx);
           if (idx !== -1) {
             this.specialSchedules.splice(idx, 1);
@@ -1931,6 +2084,7 @@
         await this.saveConfig();
         this.renderAll();
         toast('Special schedule removed.', 'info');
+        if (empId) this.syncPayslipRecord(empId);
       },
 
       async saveConfig() {
@@ -2513,6 +2667,7 @@
 
           this.closeCreateAdjustmentModal();
           this.renderAll();
+          this.syncPayslipRecord(empId);
         } catch (err) {
           console.error(err);
           toast('Failed to save adjustment: ' + err.message, 'error');
@@ -2521,6 +2676,8 @@
 
       async deleteAdjustment(id) {
         try {
+          const adj = this.adjustmentsList.find(a => a.id === id);
+          const empId = adj ? adj.employeeId : null;
           const { error } = await getSb()
             .from('employee_adjustments')
             .delete()
@@ -2530,6 +2687,7 @@
           this.adjustmentsList = this.adjustmentsList.filter(a => a.id !== id);
           this.renderAll();
           toast('Adjustment deleted.', 'info');
+          if (empId) this.syncPayslipRecord(empId);
         } catch (err) {
           console.error(err);
           toast('Failed to delete adjustment: ' + err.message, 'error');
@@ -2733,6 +2891,7 @@
 
           this.closeCreateReimbursementModal();
           this.renderAll();
+          this.syncPayslipRecord(empId);
         } catch (err) {
           console.error(err);
           toast('Failed to save reimbursement: ' + err.message, 'error');
@@ -2741,6 +2900,8 @@
 
       async deleteReimbursement(id) {
         try {
+          const reimb = this.reimbursementsList.find(r => r.id === id);
+          const empId = reimb ? reimb.employeeId : null;
           const { error } = await getSb()
             .from('employee_reimbursements')
             .delete()
@@ -2750,6 +2911,7 @@
           this.reimbursementsList = this.reimbursementsList.filter(a => a.id !== id);
           this.renderAll();
           toast('Reimbursement deleted.', 'info');
+          if (empId) this.syncPayslipRecord(empId);
         } catch (err) {
           console.error(err);
           toast('Failed to delete reimbursement: ' + err.message, 'error');
@@ -2829,6 +2991,7 @@
           await Promise.all([
             getSb().from('employee_adjustments').delete().eq('company_id', this.companyId),
             getSb().from('employee_reimbursements').delete().eq('company_id', this.companyId),
+            getSb().from('payslip_records').delete().eq('company_id', this.companyId),
             getSb().from('global_settings').upsert({
               key: 'regular_payout_state',
               company_id: this.companyId,

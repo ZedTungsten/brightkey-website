@@ -293,7 +293,8 @@
             reimbsRes,
             adjsRes,
             payslipCfgRes,
-            profileCfgRes
+            profileCfgRes,
+            recordsRes
           ] = await Promise.all([
             sb.from('global_settings').select('value').eq('key', 'company_structure').eq('company_id', this.companyId).maybeSingle(),
             sb.from('global_settings').select('value').eq('key', 'salary_tracker_config').eq('company_id', this.companyId).maybeSingle(),
@@ -304,7 +305,8 @@
             sb.from('employee_reimbursements').select('*').eq('company_id', this.companyId),
             sb.from('employee_adjustments').select('*').eq('company_id', this.companyId),
             sb.from('global_settings').select('value').eq('key', 'payslip_template_config').eq('company_id', this.companyId).maybeSingle(),
-            sb.from('global_settings').select('value').eq('key', 'company_profile_config').eq('company_id', this.companyId).maybeSingle()
+            sb.from('global_settings').select('value').eq('key', 'company_profile_config').eq('company_id', this.companyId).maybeSingle(),
+            sb.from('payslip_records').select('*').eq('employee_id', this.employee.id)
           ]);
 
           this.companyStructure = structRes.data?.value || { departments: [] };
@@ -317,6 +319,7 @@
           this.employeesList = allEmpsRes.data || [];
           this.commissionAssignments = commsRes.data || [];
           this.bookingsList = bookingsRes.data || [];
+          this.payslipRecords = recordsRes.data || [];
           
           this.reimbursementsList = (reimbsRes.data || []).map(r => ({
             employeeId: r.employee_id,
@@ -425,54 +428,101 @@
         const emp = this.employee;
         const monthKey = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
         const monthText = `${this.MONTH_NAMES[monthIndex]} ${year}`;
-        const baseSalary = emp.salary || 0;
 
-        // Commissions
-        const empComms = this.commissionAssignments.filter(a => {
-          if (a.employee_id !== emp.id) return false;
-          const b = this.bookingsList.find(x => x.id === a.booking_id);
-          if (!b) return false;
-          let doorsArr = [];
-          if (typeof b.doors === 'string') {
-            try { doorsArr = JSON.parse(b.doors); } catch(_) {}
-          } else if (Array.isArray(b.doors)) {
-            doorsArr = b.doors;
-          }
-          const door = doorsArr[a.product_index];
-          const isDone = (door && door.completed) || (b.status === 'completed');
-          if (!isDone) return false;
-          const completionDateStr = (door && door.completed_at) || b.updated_at || b.created_at;
-          if (!completionDateStr) return false;
-          const date = new Date(completionDateStr);
-          return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}` === monthKey;
-        }).reduce((sum, a) => sum + (a.amount / 100), 0);
+        const record = this.payslipRecords ? this.payslipRecords.find(r => r.payout_month === monthKey) : null;
 
-        // Reimbursements
-        const empReimbs = this.reimbursementsList.filter(r => {
-          if (r.employeeId !== emp.id) return false;
-          const d = new Date(r.date);
-          return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` === monthKey;
-        });
-        const totalReimbs = empReimbs.reduce((sum, r) => sum + (Number(r.value) || 0), 0);
-
-        // Adjustments
-        const empAdjs = this.adjustmentsList.filter(a => {
-          if (a.employeeId !== emp.id) return false;
-          const d = new Date(a.date);
-          return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` === monthKey;
-        });
-        const totalAdjs = empAdjs.reduce((sum, a) => sum + (Number(a.value) || 0), 0);
-
-        // Special Payouts
-        const empSpecs = this.specialSchedules.filter(s => s.employeeId === emp.id);
-        const totalSpecials = empSpecs.filter(s => {
-          // Special payout for the specific month
-          return true; // matching tracker behavior
-        }).reduce((sum, s) => sum + (Number(s.value) || 0), 0);
-
-        // Resolve Department Info
-        let deptHeadId = null;
+        let baseSalary = emp.salary || 0;
+        let empComms = 0;
+        let empReimbs = [];
+        let empAdjs = [];
+        let empSpecs = [];
         let resolvedDeptName = '—';
+        let positionText = emp.title || '—';
+        let totalReimbs = 0;
+        let totalAdjs = 0;
+        let totalSpecials = 0;
+        let verifiedGrandTotal = 0;
+
+        if (record) {
+          baseSalary = record.salary || 0;
+          empComms = record.commissions || 0;
+          empReimbs = record.reimbursements_list || [];
+          empAdjs = record.adjustments_list || [];
+          empSpecs = record.special_schedules || [];
+          resolvedDeptName = record.department || '—';
+          positionText = record.position || '—';
+          totalReimbs = record.reimbursements || 0;
+          totalAdjs = record.adjustments || 0;
+          totalSpecials = record.special_payouts || 0;
+          verifiedGrandTotal = record.total_payout || 0;
+        } else {
+          // Dynamic calculation fallback
+          baseSalary = emp.salary || 0;
+
+          // Commissions
+          empComms = this.commissionAssignments.filter(a => {
+            if (a.employee_id !== emp.id) return false;
+            const b = this.bookingsList.find(x => x.id === a.booking_id);
+            if (!b) return false;
+            let doorsArr = [];
+            if (typeof b.doors === 'string') {
+              try { doorsArr = JSON.parse(b.doors); } catch(_) {}
+            } else if (Array.isArray(b.doors)) {
+              doorsArr = b.doors;
+            }
+            const door = doorsArr[a.product_index];
+            const isDone = (door && door.completed) || (b.status === 'completed');
+            if (!isDone) return false;
+            const completionDateStr = (door && door.completed_at) || b.updated_at || b.created_at;
+            if (!completionDateStr) return false;
+            const date = new Date(completionDateStr);
+            return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}` === monthKey;
+          }).reduce((sum, a) => sum + (a.amount / 100), 0);
+
+          // Reimbursements
+          empReimbs = this.reimbursementsList.filter(r => {
+            if (r.employeeId !== emp.id) return false;
+            const d = new Date(r.date);
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` === monthKey;
+          });
+          totalReimbs = empReimbs.reduce((sum, r) => sum + (Number(r.value) || 0), 0);
+
+          // Adjustments
+          empAdjs = this.adjustmentsList.filter(a => {
+            if (a.employeeId !== emp.id) return false;
+            const d = new Date(a.date);
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` === monthKey;
+          });
+          totalAdjs = empAdjs.reduce((sum, a) => sum + (Number(a.value) || 0), 0);
+
+          // Special Payouts
+          empSpecs = this.specialSchedules.filter(s => s.employeeId === emp.id);
+          totalSpecials = empSpecs.reduce((sum, s) => sum + (Number(s.value) || 0), 0);
+
+          // Resolve Department Info
+          let deptHeadId = null;
+          if (this.companyStructure && this.companyStructure.departments) {
+            const matchedDept = this.companyStructure.departments.find(d => {
+              if (d.managerId === emp.id) return true;
+              if (d.subteams) {
+                return d.subteams.some(s => s.managerId === emp.id || (s.colleagueIds && s.colleagueIds.includes(emp.id)));
+              }
+              return false;
+            }) || this.companyStructure.departments.find(d => d.name === emp.department);
+            
+            if (matchedDept) {
+              deptHeadId = matchedDept.managerId;
+              resolvedDeptName = matchedDept.name;
+            } else {
+              resolvedDeptName = emp.department || '—';
+            }
+          } else {
+            resolvedDeptName = emp.department || '—';
+          }
+        }
+
+        // Resolve reporting info for layout header (can be fetched live/fresh)
+        let deptHeadId = null;
         if (this.companyStructure && this.companyStructure.departments) {
           const matchedDept = this.companyStructure.departments.find(d => {
             if (d.managerId === emp.id) return true;
@@ -481,18 +531,10 @@
             }
             return false;
           }) || this.companyStructure.departments.find(d => d.name === emp.department);
-          
           if (matchedDept) {
             deptHeadId = matchedDept.managerId;
-            resolvedDeptName = matchedDept.name;
-          } else {
-            resolvedDeptName = emp.department || '—';
           }
-        } else {
-          resolvedDeptName = emp.department || '—';
         }
-
-        // Manager / Reporting Info
         let mgrId = emp.reporting_to;
         if (!mgrId && deptHeadId && deptHeadId !== emp.id) {
           mgrId = deptHeadId;
@@ -563,7 +605,7 @@
         // Cutoffs
         const activeScheds = this.payoutSchedules.length > 0 ? [...this.payoutSchedules].sort((a,b)=>a-b) : [15, 30];
         let cutoffHtml = '';
-        let verifiedGrandTotal = 0;
+        let loopGrandTotal = 0;
         
         activeScheds.forEach(day => {
           const salaryPortion = baseSalary / activeScheds.length;
@@ -578,7 +620,10 @@
             return this.getScheduleDayForItemDay(d.getDate(), activeScheds) === day;
           }).reduce((sum, r) => sum + (Number(r.value) || 0), 0);
 
-          const commsVal = this.commissionAssignments.filter(a => {
+          const commsVal = record ? (record.commission_details || []).filter(a => {
+            const d = new Date(a.completedDate || a.completed_at);
+            return !isNaN(d.getTime()) && this.getScheduleDayForItemDay(d.getDate(), activeScheds) === day;
+          }).reduce((sum, a) => sum + (Number(a.amount) || 0), 0) : this.commissionAssignments.filter(a => {
             if (a.employee_id !== emp.id) return false;
             const b = this.bookingsList.find(x => x.id === a.booking_id);
             if (!b) return false;
@@ -601,7 +646,7 @@
           const specsVal = empSpecs.filter(s => this.getScheduleDayForItemDay(Number(s.day), activeScheds) === day).reduce((sum, s) => sum + (Number(s.value) || 0), 0);
           
           const totalCutoff = salaryPortion + adjsVal + reimbsVal + commsVal + specsVal;
-          verifiedGrandTotal += totalCutoff;
+          loopGrandTotal += totalCutoff;
 
           cutoffHtml += `
             <div style="display: flex; justify-content: space-between; padding: 0.5rem 0; font-size: 0.85rem; border-bottom: 1px dashed #e5e7eb;">
@@ -610,6 +655,9 @@
             </div>
           `;
         });
+
+        // Use the snapshotted grand total if available, otherwise fallback to the calculated loop total
+        const finalGrandTotal = record ? verifiedGrandTotal : loopGrandTotal;
 
         // Config variables
         const logoUrl = this.payslipConfig.logoStyle === 'dark' ? this.companyProfileConfig.logoDark : this.companyProfileConfig.logoLight;
@@ -654,7 +702,7 @@
                 </div>
                 <div>
                   <div style="margin-bottom: 0.4rem;"><span style="font-size: 0.65rem; text-transform: uppercase; color: #6b7280; font-weight: 600; display: block;">Reporting To</span><strong style="font-size: 0.8rem; color: #111827;">${esc(reportingToName)}</strong></div>
-                  <div><span style="font-size: 0.65rem; text-transform: uppercase; color: #6b7280; font-weight: 600; display: block;">Position / Title</span><strong style="font-size: 0.8rem; color: #111827;">${esc(emp.title || '—')}</strong></div>
+                  <div><span style="font-size: 0.65rem; text-transform: uppercase; color: #6b7280; font-weight: 600; display: block;">Position / Title</span><strong style="font-size: 0.8rem; color: #111827;">${esc(positionText || '—')}</strong></div>
                 </div>
               </div>
 
@@ -681,7 +729,7 @@
                 ${cutoffHtml}
                 <div style="display: flex; justify-content: space-between; padding: 0.75rem 0; font-size: 1rem; font-weight: 800; border-top: 2px solid #111827;">
                   <span>TOTAL PAYOUT</span>
-                  <span style="font-variant-numeric: tabular-nums;">${this.php(verifiedGrandTotal)}</span>
+                  <span style="font-variant-numeric: tabular-nums;">${this.php(finalGrandTotal)}</span>
                 </div>
               </div>
             </div>
