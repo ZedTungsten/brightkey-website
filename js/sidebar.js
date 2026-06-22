@@ -175,6 +175,10 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
           <span class="dash-nav-text">Attendance</span>
         </a>
+        <a href="/dashboard/payouts" class="dash-nav-item" id="nav-item-payouts" style="font-weight: 600;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12" y2="18.01"></line><path d="M12 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4Z"/></svg>
+          <span class="dash-nav-text">Payouts</span>
+        </a>
         <div style="border-bottom: 1px solid var(--border); margin: 0.25rem 0.75rem 0.4rem;"></div>
 
       <!-- Products -->
@@ -503,6 +507,14 @@
         attendanceBtn.classList.add('active');
       } else {
         attendanceBtn.classList.remove('active');
+      }
+    }
+    const payoutsBtn = document.getElementById('nav-item-payouts');
+    if (payoutsBtn) {
+      if (currentPath === '/dashboard/payouts' || currentPath === '/dashboard/payouts.html') {
+        payoutsBtn.classList.add('active');
+      } else {
+        payoutsBtn.classList.remove('active');
       }
     }
 

@@ -1,0 +1,830 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>My Payouts — BrightKey ERP</title>
+  <link rel="preconnect" href="https://fonts.bunny.net" />
+  <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg?v=2" />
+
+  <style>
+    /* ── Layout & View Styles ── */
+    .top-bar { flex-shrink: 0; background: var(--bg-surface); border-bottom: 1px solid var(--border); padding: 0 1.5rem; display: flex; align-items: center; gap: 1rem; height: 56px; }
+    .top-bar-title { font-size: 1rem; font-weight: 800; color: var(--text-primary); letter-spacing: -0.03em; }
+    .content-area { display: flex; flex: 1; overflow: hidden; height: calc(100vh - 56px); }
+    .main-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+    
+    .scroll-area { flex: 1; overflow: auto; padding: 2rem; display: flex; flex-direction: column; }
+    .payouts-container { max-width: 900px; width: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: 1.5rem; }
+
+    /* ── Tab Layout ── */
+    .drawer-tabs {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      overflow-x: auto;
+      background: var(--bg-surface);
+      padding: 0 1.5rem;
+    }
+    .tab-btn {
+      padding: 0.9rem 1rem;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      border: none;
+      background: none;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      white-space: nowrap;
+      transition: all 0.15s;
+    }
+    .tab-btn.active {
+      color: var(--cyan-light);
+      border-bottom-color: var(--cyan);
+    }
+    .tab-btn:hover:not(.active) {
+      color: var(--text-secondary);
+    }
+
+    .tab-content {
+      display: none;
+    }
+    .tab-content.active {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+    }
+
+    /* ── Year Selector Row ── */
+    .year-filter-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.25rem;
+    }
+    .year-select-wrap {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    /* ── Payouts Grid / Table ── */
+    .payouts-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+    .payout-item-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 1.15rem 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: var(--shadow-sm);
+      transition: transform 0.2s, border-color 0.2s;
+    }
+    .payout-item-card:hover {
+      border-color: var(--border-hover);
+      transform: translateY(-1px);
+    }
+    .payout-meta {
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
+    }
+    .payout-month {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+    .payout-status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 0.68rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .payout-status-badge.unlocked { color: var(--success); }
+    .payout-status-badge.locked { color: var(--text-muted); }
+    
+    .payout-status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+    .payout-status-badge.unlocked .payout-status-dot { background-color: var(--success); }
+    .payout-status-badge.locked .payout-status-dot { background-color: var(--text-muted); }
+
+    .payout-actions {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    /* ── Hidden printing template container ── */
+    #payslip-hidden-wrapper {
+      position: absolute;
+      left: -9999px;
+      top: -9999px;
+      width: 210mm;
+      height: 297mm;
+      background: #fff;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="dash-layout">
+    <!-- Sidebar -->
+    <aside class="dash-sidebar" id="dash-sidebar"></aside>
+
+    <!-- Main -->
+    <div class="dash-main">
+      <!-- Top Bar -->
+      <div class="top-bar">
+        <span class="top-bar-title">My Payouts</span>
+        <div style="flex:1;"></div>
+      </div>
+
+      <div class="content-area">
+        <main class="main-panel">
+          <!-- Tabs Navigation -->
+          <div class="drawer-tabs">
+            <button class="tab-btn active" id="tab-btn-payslip" onclick="PayoutsApp.switchTab('payslip')">Payslip</button>
+            <button class="tab-btn" id="tab-btn-tax" onclick="PayoutsApp.switchTab('tax')">Tax Withheld</button>
+            <button class="tab-btn" id="tab-btn-premiums" onclick="PayoutsApp.switchTab('premiums')">Premiums</button>
+          </div>
+
+          <div class="scroll-area">
+            <div class="payouts-container">
+
+              <!-- ── Payslip Tab Content ── -->
+              <div class="tab-content active" id="tab-content-payslip">
+                <div class="year-filter-row">
+                  <div class="year-select-wrap">
+                    <span style="font-size:0.85rem; font-weight:600; color:var(--text-secondary);">Select Year:</span>
+                    <select id="payout-year-select" class="form-select" style="min-width: 120px; padding: 0.45rem 1.75rem 0.45rem 0.75rem;" onchange="PayoutsApp.renderPayslipsList()">
+                      <!-- Populated dynamically -->
+                    </select>
+                  </div>
+                </div>
+
+                <div class="payouts-list" id="payslips-list-container">
+                  <div style="text-align:center; padding:3rem; color:var(--text-muted);">Loading records…</div>
+                </div>
+              </div>
+
+              <!-- ── Tax Withheld Tab Content ── -->
+              <div class="tab-content" id="tab-content-tax">
+                <div style="text-align:center; padding:4rem 2rem; color:var(--text-muted);">
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:0.75rem; opacity:0.5;"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  <div style="font-size:0.9rem; font-weight:600; color:var(--text-secondary);">No tax withholding records available.</div>
+                  <div style="font-size:0.75rem; color:var(--text-muted); margin-top:0.25rem;">Tax withholding statements will be displayed here once generated by accounting.</div>
+                </div>
+              </div>
+
+              <!-- ── Premiums Tab Content ── -->
+              <div class="tab-content" id="tab-content-premiums">
+                <div style="text-align:center; padding:4rem 2rem; color:var(--text-muted);">
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:0.75rem; opacity:0.5;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                  <div style="font-size:0.9rem; font-weight:600; color:var(--text-secondary);">No premium contributions records found.</div>
+                  <div style="font-size:0.75rem; color:var(--text-muted); margin-top:0.25rem;">SSS, PhilHealth, and Pag-IBIG premium payments statements will appear here.</div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hidden wrapper for generating payslip PDF -->
+  <div id="payslip-hidden-wrapper">
+    <div id="payslip-a4-sheet"></div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/sidebar.js"></script>
+  <script src="../js/main.js"></script>
+
+  <script>
+    'use strict';
+
+    const PayoutsApp = {
+      currentUser: null,
+      companyId: null,
+      employee: null,
+      employeesList: [],
+      companyStructure: { departments: [] },
+      payoutSchedules: [15, 30],
+      regularPayoutState: {},
+      commissionAssignments: [],
+      bookingsList: [],
+      reimbursementsList: [],
+      adjustmentsList: [],
+      specialSchedules: [],
+      payslipConfig: {},
+      companyProfileConfig: {},
+
+      selectedTab: 'payslip',
+      selectedYear: new Date().getFullYear(),
+
+      MONTH_NAMES: [
+        'January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December'
+      ],
+
+      async init() {
+        if (!window.BKAuth) return;
+        
+        // Allowed for all authenticated users/employees
+        const user = await window.BKAuth.requireAuth('../login.html');
+        if (!user) return;
+        this.currentUser = user;
+
+        const roleInfo = await window.BKAuth.getUserRole();
+        if (roleInfo && roleInfo.tenantId) {
+          const sb = window.BKAuth.sb;
+          const { data: co } = await sb.from('companies').select('id').eq('tenant_id', roleInfo.tenantId).limit(1).maybeSingle();
+          this.companyId = co?.id || null;
+        }
+
+        if (!this.companyId) {
+          document.getElementById('payslips-list-container').innerHTML = `<div style="text-align:center; padding:3rem; color:var(--danger);">No active company found for your tenant.</div>`;
+          return;
+        }
+
+        await this.loadInitialData();
+        this.setupYearSelector();
+        this.renderPayslipsList();
+      },
+
+      async loadInitialData() {
+        const sb = window.BKAuth.sb;
+
+        try {
+          // Fetch employee record of current logged-in user
+          const { data: empRecord } = await sb.from('employees')
+            .select('*')
+            .eq('email', this.currentUser.email)
+            .limit(1)
+            .maybeSingle();
+          this.employee = empRecord || null;
+
+          if (!this.employee) return;
+
+          // Fetch other data needed for payslip compilation
+          const [
+            structRes,
+            trackerCfgRes,
+            regularStateRes,
+            allEmpsRes,
+            commsRes,
+            bookingsRes,
+            reimbsRes,
+            adjsRes,
+            payslipCfgRes,
+            profileCfgRes
+          ] = await Promise.all([
+            sb.from('global_settings').select('value').eq('key', 'company_structure').eq('company_id', this.companyId).maybeSingle(),
+            sb.from('global_settings').select('value').eq('key', 'salary_tracker_config').eq('company_id', this.companyId).maybeSingle(),
+            sb.from('global_settings').select('value').eq('key', 'regular_payout_state').eq('company_id', this.companyId).maybeSingle(),
+            sb.from('employees').select('id, first_name, middle_name, last_name, salary, employment_status, department, title').eq('company_id', this.companyId),
+            sb.from('commission_assignments').select('*').eq('company_id', this.companyId),
+            sb.from('installation_bookings').select('*').eq('company_id', this.companyId),
+            sb.from('employee_reimbursements').select('*').eq('company_id', this.companyId),
+            sb.from('employee_adjustments').select('*').eq('company_id', this.companyId),
+            sb.from('global_settings').select('value').eq('key', 'payslip_template_config').eq('company_id', this.companyId).maybeSingle(),
+            sb.from('global_settings').select('value').eq('key', 'company_profile_config').eq('company_id', this.companyId).maybeSingle()
+          ]);
+
+          this.companyStructure = structRes.data?.value || { departments: [] };
+          
+          const trackerConfig = trackerCfgRes.data?.value || {};
+          this.payoutSchedules = trackerConfig.payoutSchedules || [15, 30];
+          this.specialSchedules = trackerConfig.specialSchedules || [];
+          
+          this.regularPayoutState = regularStateRes.data?.value || {};
+          this.employeesList = allEmpsRes.data || [];
+          this.commissionAssignments = commsRes.data || [];
+          this.bookingsList = bookingsRes.data || [];
+          
+          this.reimbursementsList = (reimbsRes.data || []).map(r => ({
+            employeeId: r.employee_id,
+            value: r.amount,
+            date: r.date,
+            label: r.label
+          }));
+
+          this.adjustmentsList = (adjsRes.data || []).map(a => ({
+            employeeId: a.employee_id,
+            value: a.amount,
+            date: a.date,
+            label: a.label
+          }));
+
+          this.payslipConfig = payslipCfgRes.data?.value || {};
+          this.companyProfileConfig = profileCfgRes.data?.value || {};
+
+        } catch (e) {
+          console.error('Error loading payouts data:', e);
+        }
+      },
+
+      setupYearSelector() {
+        const select = document.getElementById('payout-year-select');
+        if (!select) return;
+
+        const currentYear = new Date().getFullYear();
+        let years = [];
+        for (let y = currentYear + 1; y >= currentYear - 3; y--) {
+          years.push(y);
+        }
+        
+        select.innerHTML = years.map(y => `<option value="${y}" ${y === this.selectedYear ? 'selected' : ''}>${y}</option>`).join('');
+      },
+
+      switchTab(tab) {
+        this.selectedTab = tab;
+        document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        
+        document.getElementById(`tab-btn-${tab}`).classList.add('active');
+        document.getElementById(`tab-content-${tab}`).classList.add('active');
+      },
+
+      isMonthUnlocked(year, monthIndex) {
+        if (!this.employee) return false;
+        const monthKey = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
+        
+        // Locked by default if no configuration or state exists
+        const state = this.regularPayoutState[monthKey];
+        if (!state) return false;
+
+        // Check if all scheduled payout days are checked (true)
+        const scheds = this.payoutSchedules.length > 0 ? this.payoutSchedules : [15, 30];
+        return scheds.every(day => {
+          return state[`${this.employee.id}_${day}`] === true;
+        });
+      },
+
+      renderPayslipsList() {
+        const container = document.getElementById('payslips-list-container');
+        if (!container) return;
+
+        const yearSelect = document.getElementById('payout-year-select');
+        this.selectedYear = parseInt(yearSelect.value, 10);
+
+        if (!this.employee) {
+          container.innerHTML = `<div style="text-align:center; padding:3rem; color:var(--text-muted);">No employee record linked to user.</div>`;
+          return;
+        }
+
+        let html = '';
+        // Loop through 12 months (latest first)
+        for (let m = 11; m >= 0; m--) {
+          const unlocked = this.isMonthUnlocked(this.selectedYear, m);
+          const monthLabel = `${this.MONTH_NAMES[m]} ${this.selectedYear}`;
+          const monthKey = `${this.selectedYear}-${String(m + 1).padStart(2, '0')}`;
+
+          html += `
+            <div class="payout-item-card">
+              <div class="payout-meta">
+                <div class="payout-month">${monthLabel}</div>
+                <div class="payout-status-badge ${unlocked ? 'unlocked' : 'locked'}">
+                  <span class="payout-status-dot"></span>
+                  <span>${unlocked ? 'Available' : 'Pending Payment'}</span>
+                </div>
+              </div>
+              <div class="payout-actions">
+                <button class="btn btn-outline btn-sm" onclick="PayoutsApp.viewPayslip('${monthKey}')" ${unlocked ? '' : 'disabled'} style="font-size:0.78rem; padding:0.4rem 0.85rem;">
+                  View
+                </button>
+                <button class="btn btn-cyan btn-sm" onclick="PayoutsApp.downloadPayslip('${monthKey}')" ${unlocked ? '' : 'disabled'} style="font-size:0.78rem; padding:0.4rem 0.85rem;">
+                  Download
+                </button>
+              </div>
+            </div>
+          `;
+        }
+
+        container.innerHTML = html;
+      },
+
+      // Construct A4 payslip template HTML matching payout-tracker.html
+      compilePayslipHtml(year, monthIndex) {
+        const emp = this.employee;
+        const monthKey = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
+        const monthText = `${this.MONTH_NAMES[monthIndex]} ${year}`;
+        const baseSalary = emp.salary || 0;
+
+        // Commissions
+        const empComms = this.commissionAssignments.filter(a => {
+          if (a.employee_id !== emp.id) return false;
+          const b = this.bookingsList.find(x => x.id === a.booking_id);
+          if (!b) return false;
+          let doorsArr = [];
+          if (typeof b.doors === 'string') {
+            try { doorsArr = JSON.parse(b.doors); } catch(_) {}
+          } else if (Array.isArray(b.doors)) {
+            doorsArr = b.doors;
+          }
+          const door = doorsArr[a.product_index];
+          const isDone = (door && door.completed) || (b.status === 'completed');
+          if (!isDone) return false;
+          const completionDateStr = (door && door.completed_at) || b.updated_at || b.created_at;
+          if (!completionDateStr) return false;
+          const date = new Date(completionDateStr);
+          return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}` === monthKey;
+        }).reduce((sum, a) => sum + (a.amount / 100), 0);
+
+        // Reimbursements
+        const empReimbs = this.reimbursementsList.filter(r => {
+          if (r.employeeId !== emp.id) return false;
+          const d = new Date(r.date);
+          return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` === monthKey;
+        });
+        const totalReimbs = empReimbs.reduce((sum, r) => sum + (Number(r.value) || 0), 0);
+
+        // Adjustments
+        const empAdjs = this.adjustmentsList.filter(a => {
+          if (a.employeeId !== emp.id) return false;
+          const d = new Date(a.date);
+          return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` === monthKey;
+        });
+        const totalAdjs = empAdjs.reduce((sum, a) => sum + (Number(a.value) || 0), 0);
+
+        // Special Payouts
+        const empSpecs = this.specialSchedules.filter(s => s.employeeId === emp.id);
+        const totalSpecials = empSpecs.filter(s => {
+          // Special payout for the specific month
+          return true; // matching tracker behavior
+        }).reduce((sum, s) => sum + (Number(s.value) || 0), 0);
+
+        // Resolve Department Info
+        let deptHeadId = null;
+        let resolvedDeptName = '—';
+        if (this.companyStructure && this.companyStructure.departments) {
+          const matchedDept = this.companyStructure.departments.find(d => {
+            if (d.managerId === emp.id) return true;
+            if (d.subteams) {
+              return d.subteams.some(s => s.managerId === emp.id || (s.colleagueIds && s.colleagueIds.includes(emp.id)));
+            }
+            return false;
+          }) || this.companyStructure.departments.find(d => d.name === emp.department);
+          
+          if (matchedDept) {
+            deptHeadId = matchedDept.managerId;
+            resolvedDeptName = matchedDept.name;
+          } else {
+            resolvedDeptName = emp.department || '—';
+          }
+        } else {
+          resolvedDeptName = emp.department || '—';
+        }
+
+        // Manager / Reporting Info
+        let mgrId = emp.reporting_to;
+        if (!mgrId && deptHeadId && deptHeadId !== emp.id) {
+          mgrId = deptHeadId;
+        }
+        const manager = this.employeesList.find(e => e.id === mgrId);
+        const reportingToName = manager ? [manager.first_name, manager.last_name].filter(Boolean).join(' ') : '—';
+
+        // Breakdown Rows HTML
+        let breakdownRowsHtml = `
+          <tr>
+            <td style="padding: 0.75rem; border-bottom: 1px solid #e5e7eb; font-weight: 600;">Basic Salary</td>
+            <td style="padding: 0.75rem; border-bottom: 1px solid #e5e7eb; color: #4b5563;">Monthly Basic Salary</td>
+            <td style="padding: 0.75rem; border-bottom: 1px solid #e5e7eb; text-align: right; font-variant-numeric: tabular-nums;">${this.php(baseSalary)}</td>
+          </tr>
+        `;
+
+        if (empComms > 0) {
+          breakdownRowsHtml += `
+            <tr>
+              <td style="padding: 0.75rem; border-bottom: 1px solid #e5e7eb; font-weight: 600;">Commissions</td>
+              <td style="padding: 0.75rem; border-bottom: 1px solid #e5e7eb; color: #4b5563;">Sales Commissions</td>
+              <td style="padding: 0.75rem; border-bottom: 1px solid #e5e7eb; text-align: right; font-variant-numeric: tabular-nums;">${this.php(empComms)}</td>
+            </tr>
+          `;
+        }
+
+        if (empAdjs.length > 0) {
+          const labels = empAdjs.map(adj => {
+            const d = new Date(adj.date);
+            const shortMonthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            const dateStr = !isNaN(d.getTime()) ? ` (${shortMonthNames[d.getMonth()]} ${d.getDate()})` : '';
+            return esc(adj.label || 'Salary Adjustment') + dateStr;
+          }).join('<br>');
+          const amounts = empAdjs.map(adj => this.php(adj.value)).join('<br>');
+          breakdownRowsHtml += `
+            <tr>
+              <td style="padding: 0.75rem; border-bottom: 1px solid #e5e7eb; font-weight: 600; vertical-align: top;">Adjustments</td>
+              <td style="padding: 0.75rem; border-bottom: 1px solid #e5e7eb; color: #4b5563; vertical-align: top; line-height: 1.5;">${labels}</td>
+              <td style="padding: 0.75rem; border-bottom: 1px solid #e5e7eb; text-align: right; font-variant-numeric: tabular-nums; vertical-align: top; line-height: 1.5;">${amounts}</td>
+            </tr>
+          `;
+        }
+
+        if (empReimbs.length > 0) {
+          const labels = empReimbs.map(r => esc(r.label || 'Expense Reimbursement')).join('<br>');
+          const amounts = empReimbs.map(r => this.php(r.value)).join('<br>');
+          breakdownRowsHtml += `
+            <tr>
+              <td style="padding: 0.75rem; border-bottom: 1px solid #e5e7eb; font-weight: 600; vertical-align: top;">Reimbursements</td>
+              <td style="padding: 0.75rem; border-bottom: 1px solid #e5e7eb; color: #4b5563; vertical-align: top; line-height: 1.5;">${labels}</td>
+              <td style="padding: 0.75rem; border-bottom: 1px solid #e5e7eb; text-align: right; font-variant-numeric: tabular-nums; vertical-align: top; line-height: 1.5;">${amounts}</td>
+            </tr>
+          `;
+        }
+
+        if (empSpecs.length > 0) {
+          const labels = empSpecs.map(s => `${esc(s.label || 'Special Payout')} (Day ${s.day})`).join('<br>');
+          const amounts = empSpecs.map(s => this.php(s.value)).join('<br>');
+          breakdownRowsHtml += `
+            <tr>
+              <td style="padding: 0.75rem; border-bottom: 1px solid #e5e7eb; font-weight: 600; vertical-align: top;">Special Payouts</td>
+              <td style="padding: 0.75rem; border-bottom: 1px solid #e5e7eb; color: #4b5563; vertical-align: top; line-height: 1.5;">${labels}</td>
+              <td style="padding: 0.75rem; border-bottom: 1px solid #e5e7eb; text-align: right; font-variant-numeric: tabular-nums; vertical-align: top; line-height: 1.5;">${amounts}</td>
+            </tr>
+          `;
+        }
+
+        // Cutoffs
+        const activeScheds = this.payoutSchedules.length > 0 ? [...this.payoutSchedules].sort((a,b)=>a-b) : [15, 30];
+        let cutoffHtml = '';
+        let verifiedGrandTotal = 0;
+        
+        activeScheds.forEach(day => {
+          const salaryPortion = baseSalary / activeScheds.length;
+          
+          const adjsVal = empAdjs.filter(a => {
+            const d = new Date(a.date);
+            return this.getScheduleDayForItemDay(d.getDate(), activeScheds) === day;
+          }).reduce((sum, a) => sum + (Number(a.value) || 0), 0);
+
+          const reimbsVal = empReimbs.filter(r => {
+            const d = new Date(r.date);
+            return this.getScheduleDayForItemDay(d.getDate(), activeScheds) === day;
+          }).reduce((sum, r) => sum + (Number(r.value) || 0), 0);
+
+          const commsVal = this.commissionAssignments.filter(a => {
+            if (a.employee_id !== emp.id) return false;
+            const b = this.bookingsList.find(x => x.id === a.booking_id);
+            if (!b) return false;
+            let doorsArr = [];
+            if (typeof b.doors === 'string') {
+              try { doorsArr = JSON.parse(b.doors); } catch(_) {}
+            } else if (Array.isArray(b.doors)) {
+              doorsArr = b.doors;
+            }
+            const door = doorsArr[a.product_index];
+            const isDone = (door && door.completed) || (b.status === 'completed');
+            if (!isDone) return false;
+            const completionDateStr = (door && door.completed_at) || b.updated_at || b.created_at;
+            if (!completionDateStr) return false;
+            const date = new Date(completionDateStr);
+            if (`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}` !== monthKey) return false;
+            return this.getScheduleDayForItemDay(date.getDate(), activeScheds) === day;
+          }).reduce((sum, a) => sum + (a.amount / 100), 0);
+
+          const specsVal = empSpecs.filter(s => this.getScheduleDayForItemDay(Number(s.day), activeScheds) === day).reduce((sum, s) => sum + (Number(s.value) || 0), 0);
+          
+          const totalCutoff = salaryPortion + adjsVal + reimbsVal + commsVal + specsVal;
+          verifiedGrandTotal += totalCutoff;
+
+          cutoffHtml += `
+            <div style="display: flex; justify-content: space-between; padding: 0.5rem 0; font-size: 0.85rem; border-bottom: 1px dashed #e5e7eb;">
+              <span style="font-weight: 500; color: #4b5563;">Cutoff Payout (Day ${day})</span>
+              <span style="font-weight: 700; color: #111827; font-variant-numeric: tabular-nums;">${this.php(totalCutoff)}</span>
+            </div>
+          `;
+        });
+
+        // Config variables
+        const logoUrl = this.payslipConfig.logoStyle === 'dark' ? this.companyProfileConfig.logoDark : this.companyProfileConfig.logoLight;
+        const compLogoHtml = logoUrl ? `<img src="${esc(logoUrl)}" alt="Logo" style="max-height: 48px; max-width: 150px; display: block; margin-bottom: 0.5rem; filter: grayscale(1);" />` : '';
+        const compName = this.companyProfileConfig.companyName || 'BrightKey Solutions';
+        const compAddress = [this.companyProfileConfig.companyAddressLine1, this.companyProfileConfig.companyAddressLine2].filter(Boolean).join('<br>') || 'Company Address';
+        const compEmailPhone = [this.companyProfileConfig.email, this.companyProfileConfig.phone].filter(Boolean).join('<br>');
+        
+        const signatoryName = this.payslipConfig.signatoryName || 'Authorized Signatory';
+        const signatureImgHtml = this.payslipConfig.signatureUrl
+          ? `<img src="${this.payslipConfig.signatureUrl}" alt="Signature" style="max-height: 100px; max-width: 170px; object-fit: contain; display: block;" />`
+          : `<div style="height: 100px; width: 150px;"></div>`;
+        
+        const empFullName = [emp.first_name, emp.last_name].filter(Boolean).join(' ');
+
+        return `
+          <div style="display: flex; flex-direction: column; justify-content: space-between; min-height: 250mm; padding: 1.5rem; box-sizing: border-box; background: #fff; color: #111827;">
+            <div>
+              <!-- Header -->
+              <div style="display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 1rem; margin-bottom: 1.5rem;">
+                <div>
+                  ${compLogoHtml}
+                </div>
+                <div style="text-align: right; font-size: 0.7rem; line-height: 1.25; color: #4b5563;">
+                  <strong style="display: block; margin-bottom: 3px; color: #111827; font-size: 0.7rem; font-weight: 800; line-height: 1.25; letter-spacing: normal;">${esc(compName)}</strong>
+                  ${compAddress}<br>
+                  ${compEmailPhone}
+                </div>
+              </div>
+
+              <!-- Payslip Center Header -->
+              <div style="text-align: center; margin-bottom: 1.5rem;">
+                <div style="font-size: 1.6rem; font-weight: 900; letter-spacing: 1px; color: #111827; text-transform: uppercase; line-height: 1.15;">Payslip</div>
+                <div style="font-size: 0.95rem; color: #4b5563; margin-top: 0.1rem;"><strong>${esc(monthText)}</strong></div>
+              </div>
+
+              <!-- Metadata Section -->
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; background: #f9fafb; padding: 0.85rem; border-radius: 6px; margin-bottom: 1.5rem; border: 1px solid #e5e7eb;">
+                <div>
+                  <div style="margin-bottom: 0.4rem;"><span style="font-size: 0.65rem; text-transform: uppercase; color: #6b7280; font-weight: 600; display: block;">Employee Name</span><strong style="font-size: 0.8rem; color: #111827;">${esc(empFullName)}</strong></div>
+                  <div><span style="font-size: 0.65rem; text-transform: uppercase; color: #6b7280; font-weight: 600; display: block;">Department</span><strong style="font-size: 0.8rem; color: #111827;">${esc(resolvedDeptName)}</strong></div>
+                </div>
+                <div>
+                  <div style="margin-bottom: 0.4rem;"><span style="font-size: 0.65rem; text-transform: uppercase; color: #6b7280; font-weight: 600; display: block;">Reporting To</span><strong style="font-size: 0.8rem; color: #111827;">${esc(reportingToName)}</strong></div>
+                  <div><span style="font-size: 0.65rem; text-transform: uppercase; color: #6b7280; font-weight: 600; display: block;">Position / Title</span><strong style="font-size: 0.8rem; color: #111827;">${esc(emp.title || '—')}</strong></div>
+                </div>
+              </div>
+
+              <!-- Breakdown Table -->
+              <div style="margin-bottom: 2rem;">
+                <div style="font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem;">Earnings & Adjustments Breakdown</div>
+                <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
+                  <thead>
+                    <tr style="background: #f3f4f6; text-align: left;">
+                      <th style="padding: 0.5rem 0.75rem; border-bottom: 1px solid #d1d5db; font-weight: 700;">Type</th>
+                      <th style="padding: 0.5rem 0.75rem; border-bottom: 1px solid #d1d5db; font-weight: 700;">Description</th>
+                      <th style="padding: 0.5rem 0.75rem; border-bottom: 1px solid #d1d5db; text-align: right; font-weight: 700;">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${breakdownRowsHtml}
+                  </tbody>
+                </table>
+              </div>
+
+              <!-- Cutoff Payouts -->
+              <div style="margin-bottom: 2rem; max-width: 400px; margin-left: auto;">
+                <div style="font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; border-bottom: 1px solid #111827; padding-bottom: 0.25rem;">Payout Schedule Allocation</div>
+                ${cutoffHtml}
+                <div style="display: flex; justify-content: space-between; padding: 0.75rem 0; font-size: 1rem; font-weight: 800; border-top: 2px solid #111827;">
+                  <span>TOTAL PAYOUT</span>
+                  <span style="font-variant-numeric: tabular-nums;">${this.php(verifiedGrandTotal)}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Footer Signature Sign-off -->
+            <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-top: auto; padding-top: 2rem;">
+              <div style="font-size: 0.72rem; color: #6b7280; max-width: 320px; line-height: 1.2;">
+                This payslip is generated through Brightkey ERP and serves as an official payroll record. Any concerns regarding computation should be reported within seven (7) days of issuance.
+              </div>
+              <div style="display: flex; flex-direction: column; align-items: center; width: 180px;">
+                <div style="height: 105px; display: flex; align-items: center; justify-content: center; width: 100%;">
+                  ${signatureImgHtml}
+                </div>
+                <div style="font-size: 0.85rem; font-weight: 700; border-top: 1px solid #111827; width: 100%; text-align: center; padding-top: 0.25rem; margin-top: 0.25rem;">${esc(signatoryName)}</div>
+                <div style="font-size: 0.72rem; color: #6b7280; width: 100%; text-align: center;">Authorized Signatory</div>
+              </div>
+            </div>
+          </div>
+        `;
+      },
+
+      viewPayslip(monthKey) {
+        const parts = monthKey.split('-');
+        const year = parseInt(parts[0], 10);
+        const monthIndex = parseInt(parts[1], 10) - 1;
+
+        const sheetHtml = this.compilePayslipHtml(year, monthIndex);
+        const empFullName = [this.employee.first_name, this.employee.last_name].filter(Boolean).join(' ');
+        const monthText = `${this.MONTH_NAMES[monthIndex]} ${year}`;
+
+        const win = window.open('', '_blank');
+        if (!win) {
+          if (window.BKDialog) {
+            window.BKDialog.notice('Popup blocked! Please allow popups to view the payslip.');
+          } else {
+            console.error('Popup blocked! Please allow popups to view the payslip.');
+          }
+          return;
+        }
+
+        win.document.write(`
+          <!DOCTYPE html>
+          <html>
+            <head>
+              <title>Payslip - ${esc(empFullName)} - ${esc(monthText)}</title>
+              <link rel="preconnect" href="https://fonts.bunny.net" />
+              <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
+              <style>
+                body {
+                  font-family: 'Commissioner', sans-serif;
+                  margin: 0;
+                  background: #f4f4f5;
+                  padding: 2rem 1rem;
+                  display: flex;
+                  justify-content: center;
+                }
+                .payslip-wrap {
+                  background: #fff;
+                  border: 1px solid #e4e4e7;
+                  border-radius: 8px;
+                  box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
+                  width: 100%;
+                  max-width: 680px;
+                }
+                @media print {
+                  body { background: #fff; padding: 0; }
+                  .payslip-wrap { border: none; box-shadow: none; max-width: 100%; }
+                }
+              </style>
+            </head>
+            <body>
+              <div class="payslip-wrap">
+                ${sheetHtml}
+              </div>
+            </body>
+          </html>
+        `);
+        win.document.close();
+      },
+
+      async downloadPayslip(monthKey) {
+        const parts = monthKey.split('-');
+        const year = parseInt(parts[0], 10);
+        const monthIndex = parseInt(parts[1], 10) - 1;
+
+        const sheetHtml = this.compilePayslipHtml(year, monthIndex);
+        
+        const container = document.getElementById('payslip-a4-sheet');
+        container.innerHTML = sheetHtml;
+
+        const empFullName = [this.employee.first_name, this.employee.last_name].filter(Boolean).join(' ');
+        const monthText = `${this.MONTH_NAMES[monthIndex]} ${year}`;
+        const pdfFileName = `Payslip_${empFullName.replace(/\s+/g, '_')}_${monthText.replace(/\s+/g, '_')}.pdf`;
+
+        const opt = {
+          margin:       [10, 10, 10, 10],
+          filename:     pdfFileName,
+          image:        { type: 'jpeg', quality: 0.98 },
+          html2canvas:  { scale: 2, useCORS: true, letterRendering: true },
+          jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+        };
+
+        const originalBorder = container.style.border;
+        const originalShadow = container.style.boxShadow;
+        
+        container.style.border = 'none';
+        container.style.boxShadow = 'none';
+
+        try {
+          await html2pdf().set(opt).from(container).save();
+        } catch (err) {
+          console.error(err);
+        } finally {
+          container.style.border = originalBorder;
+          container.style.boxShadow = originalShadow;
+          container.innerHTML = ''; // Clear container
+        }
+      },
+
+      // Helper to match pay schedule cutoff day
+      getScheduleDayForItemDay(dayVal, sortedScheds) {
+        for (let i = 0; i < sortedScheds.length; i++) {
+          if (dayVal <= sortedScheds[i]) {
+            return sortedScheds[i];
+          }
+        }
+        return sortedScheds[sortedScheds.length - 1];
+      },
+
+      php(v) {
+        if (v === null || v === undefined || v === '') return '₱0.00';
+        return '₱' + Number(v).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      }
+    };
+
+    function esc(s) {
+      return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      PayoutsApp.init();
+      if (typeof initNav === 'function') initNav();
+    });
+  </script>
+</body>
+</html>
