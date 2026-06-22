@@ -294,7 +294,14 @@
               </div>
 
               <div class="tab-content" id="tab-content-settings">
-                <form id="leaves-settings-form" onsubmit="AttendanceLogsApp.saveSettings(event)" style="display:flex; flex-direction:column; gap:1.5rem;">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">
+                  <div style="font-size: 0.8rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em;">Leaves Rules & Configuration</div>
+                  <div style="font-size: 0.75rem; color: var(--text-muted); display: flex; align-items: center; gap: 0.4rem;" id="autosave-status">
+                    <span style="width: 6px; height: 6px; background-color: var(--success); border-radius: 50%;"></span>
+                    <span>All changes autosaved</span>
+                  </div>
+                </div>
+                <form id="leaves-settings-form" onsubmit="event.preventDefault();" style="display:flex; flex-direction:column; gap:1.5rem;">
                   <div class="settings-grid">
                     
                     <!-- Leaves Loading Section -->
@@ -568,10 +575,6 @@
                     </div>
 
                   </div>
-
-                  <div style="display: flex; justify-content: flex-end; margin-top: 1rem; border-top: 1px solid var(--border); padding-top: 1.5rem;">
-                    <button type="submit" class="btn btn-cyan" style="min-width: 150px; font-weight: 700; height: 40px;">Save Settings</button>
-                  </div>
                 </form>
               </div>
 
@@ -756,6 +759,36 @@
         document.getElementById('bday-leave-amt').value = s.bday_leave_amt ?? '';
         document.getElementById('bday-leave-days-before').value = s.bday_leave_days_before ?? '';
         this.toggleCardSection('bday-leave');
+        this.bindAutosave();
+      },
+
+      bindAutosave() {
+        const form = document.getElementById('leaves-settings-form');
+        if (form && !form.dataset.autosaveBound) {
+          form.dataset.autosaveBound = 'true';
+          
+          let debounceTimeout;
+          const triggerSave = () => {
+            clearTimeout(debounceTimeout);
+            debounceTimeout = setTimeout(() => this.saveSettings(), 500);
+          };
+
+          form.addEventListener('input', (e) => {
+            const tag = e.target.tagName.toLowerCase();
+            const type = e.target.type;
+            if (tag === 'input' && (type === 'number' || type === 'text' || type === 'date')) {
+              triggerSave();
+            }
+          });
+
+          form.addEventListener('change', (e) => {
+            const tag = e.target.tagName.toLowerCase();
+            const type = e.target.type;
+            if (tag === 'select' || type === 'checkbox' || type === 'radio') {
+              this.saveSettings();
+            }
+          });
+        }
       },
 
       toggleCardSection(sectionId) {
@@ -788,9 +821,14 @@
         if (targetContent) targetContent.classList.add('active');
       },
 
-      async saveSettings(e) {
-        if (e) e.preventDefault();
+      async saveSettings() {
         if (!this.companyId) return;
+
+        const statusEl = document.getElementById('autosave-status');
+        if (statusEl) {
+          statusEl.innerHTML = '<div class="bk-spinner" style="width: 10px; height: 10px; border-width: 1.5px; margin: 0;"></div><span>Saving changes…</span>';
+          statusEl.style.color = 'var(--cyan)';
+        }
 
         const sb = window.BKAuth.sb;
         
@@ -850,9 +888,17 @@
 
           if (error) throw error;
           this.leavesSettings = updatedSettings;
-          Toast.success('Leaves settings saved successfully.');
+
+          if (statusEl) {
+            statusEl.innerHTML = '<span style="width: 6px; height: 6px; background-color: var(--success); border-radius: 50%;"></span><span>All changes autosaved</span>';
+            statusEl.style.color = 'var(--text-muted)';
+          }
         } catch (err) {
           console.error('Failed to save leaves settings:', err);
+          if (statusEl) {
+            statusEl.innerHTML = '<span style="width: 6px; height: 6px; background-color: var(--danger); border-radius: 50%;"></span><span>Failed to autosave</span>';
+            statusEl.style.color = 'var(--danger)';
+          }
           Toast.error('Failed to save leaves settings: ' + err.message);
         }
       },
