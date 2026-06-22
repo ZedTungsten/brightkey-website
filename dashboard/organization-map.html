@@ -1437,6 +1437,45 @@
             value: companyStructure
           });
         if (error) throw error;
+
+        // Build mapping of employee ID to department name from companyStructure
+        const empDeptMap = {};
+        companyStructure.departments.forEach(dept => {
+          const deptName = dept.name || '';
+          if (dept.managerId) {
+            empDeptMap[dept.managerId] = deptName;
+          }
+          if (dept.subteams) {
+            dept.subteams.forEach(sub => {
+              if (sub.managerId) {
+                empDeptMap[sub.managerId] = deptName;
+              }
+              if (sub.colleagueIds) {
+                sub.colleagueIds.forEach(id => {
+                  empDeptMap[id] = deptName;
+                });
+              }
+            });
+          }
+        });
+
+        // Batch update employees whose department has changed
+        const updates = employeesList.map(emp => {
+          const newDept = empDeptMap[emp.id] || null;
+          if (emp.department !== newDept) {
+            emp.department = newDept; // Update local cache
+            return getSb()
+              .from('employees')
+              .update({ department: newDept })
+              .eq('id', emp.id);
+          }
+          return null;
+        }).filter(Boolean);
+
+        if (updates.length > 0) {
+          await Promise.all(updates);
+        }
+
         showSaveToast();
       } catch (err) {
         console.error('Failed to save structure:', err);
