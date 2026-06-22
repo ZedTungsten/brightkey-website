@@ -277,6 +277,7 @@
             <button class="tab-btn" id="tab-assignments" onclick="switchTab('assignments')">Assignments</button>
             <button class="tab-btn" id="tab-warehouse" onclick="switchTab('warehouse')">Warehouse</button>
             <button class="tab-btn" id="tab-commissions" onclick="switchTab('commissions')">Commissions</button>
+            <button class="tab-btn" id="tab-hr" onclick="switchTab('hr')">HR</button>
           </div>
 
           <div class="scroll-area">
@@ -426,6 +427,37 @@
 
               </div>
             </div><!-- /panel-commissions -->
+
+            <!-- ── HR Tab ── -->
+            <div class="tab-panel" id="panel-hr">
+              <div class="panel-header">
+                <div class="panel-title">HR Configuration</div>
+                <button class="btn btn-primary" onclick="saveHRSettings()">Save HR Settings</button>
+              </div>
+              <div class="table-scroll">
+                
+                <!-- Section: Employee Prefix -->
+                <div class="wh-card" style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1.25rem; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 1.5rem;">
+                  <h3 style="font-size: 0.95rem; font-weight: 700; color: var(--text-primary); border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; margin-bottom: 0.5rem;">Employee Prefix</h3>
+                  <div class="form-group">
+                    <label class="form-label" for="hr-employee-prefix">Prefix (1-3 letters)</label>
+                    <input type="text" id="hr-employee-prefix" class="form-input" placeholder="e.g. BK" maxlength="3" oninput="this.value = this.value.toUpperCase().replace(/[^A-Z]/g, '')" style="max-width: 200px;" />
+                    <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">Used for new employee generation and employee number prefixing.</div>
+                  </div>
+                </div>
+
+                <!-- Section: Contractor Prefix -->
+                <div class="wh-card" style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1.25rem; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px;">
+                  <h3 style="font-size: 0.95rem; font-weight: 700; color: var(--text-primary); border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; margin-bottom: 0.5rem;">Contractor Prefix</h3>
+                  <div class="form-group">
+                    <label class="form-label" for="hr-contractor-prefix">Prefix (1-3 letters)</label>
+                    <input type="text" id="hr-contractor-prefix" class="form-input" placeholder="e.g. CON" maxlength="3" oninput="this.value = this.value.toUpperCase().replace(/[^A-Z]/g, '')" style="max-width: 200px;" />
+                    <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">Prefix for contractor-specific records and future reference.</div>
+                  </div>
+                </div>
+
+              </div>
+            </div><!-- /panel-hr -->
 
           </div><!-- /scroll-area -->
         </main>
@@ -596,6 +628,7 @@
     let currentTenantId;
     let currentUser;
     let currentCompanyId = '';
+    let employeePrefix = 'BK';
 
     let confirmCallback = null;
     let allTeamMembers = [];
@@ -642,6 +675,7 @@
       }
 
       await loadCommissionsSettings();
+      await loadHRSettings();
 
       const confirmYes = document.getElementById('btn-confirm-yes');
       if (confirmYes) {
@@ -959,7 +993,7 @@
         if (!empNum) {
           const { count, error: countErr } = await sb.from('employees').select('*', { count: 'exact', head: true });
           if (countErr) throw countErr;
-          empNum = 'BK-' + String((count || 0) + 1).padStart(4, '0');
+          empNum = employeePrefix + '-' + String((count || 0) + 1).padStart(4, '0');
         }
         const insertPayload = {
           email: email.toLowerCase().trim(),
@@ -1060,7 +1094,7 @@
       document.getElementById('tab-' + tab).classList.add('active');
       const panel = document.getElementById('panel-' + tab);
       panel.classList.add('active');
-      panel.style.display = (tab === 'access' || tab === 'warehouse' || tab === 'commissions') ? 'flex' : 'block';
+      panel.style.display = (tab === 'access' || tab === 'warehouse' || tab === 'commissions' || tab === 'hr') ? 'flex' : 'block';
     };
 
     // ── Assignments ──
@@ -2039,6 +2073,62 @@
       } catch (err) {
         console.error('Error saving commissions settings:', err);
         showToast('Failed to save commissions settings.', true);
+      }
+    };
+
+    // ── HR Settings ──
+    async function loadHRSettings() {
+      try {
+        const { data, error } = await sb
+          .from('global_settings')
+          .select('value')
+          .eq('key', 'hr_config')
+          .eq('company_id', currentCompanyId)
+          .maybeSingle();
+
+        if (error) throw error;
+        if (data && data.value) {
+          employeePrefix = data.value.employee_prefix || 'BK';
+          document.getElementById('hr-employee-prefix').value = employeePrefix;
+          document.getElementById('hr-contractor-prefix').value = data.value.contractor_prefix || '';
+        } else {
+          employeePrefix = 'BK';
+          document.getElementById('hr-employee-prefix').value = 'BK';
+          document.getElementById('hr-contractor-prefix').value = '';
+        }
+      } catch (err) {
+        console.error('Error loading HR settings:', err);
+      }
+    }
+
+    window.saveHRSettings = async function() {
+      const empPrefix = document.getElementById('hr-employee-prefix').value.trim().toUpperCase();
+      const conPrefix = document.getElementById('hr-contractor-prefix').value.trim().toUpperCase();
+
+      if (empPrefix.length < 1 || empPrefix.length > 3) {
+        showToast('Employee prefix must be 1 to 3 letters.', true);
+        return;
+      }
+      if (conPrefix.length < 1 || conPrefix.length > 3) {
+        showToast('Contractor prefix must be 1 to 3 letters.', true);
+        return;
+      }
+
+      try {
+        const { error } = await sb.from('global_settings').upsert({
+          key: 'hr_config',
+          company_id: currentCompanyId,
+          value: {
+            employee_prefix: empPrefix,
+            contractor_prefix: conPrefix
+          }
+        });
+        if (error) throw error;
+        employeePrefix = empPrefix;
+        showToast('HR settings saved successfully!');
+      } catch (err) {
+        console.error('Error saving HR settings:', err);
+        showToast('Failed to save HR settings.', true);
       }
     };
   </script>

@@ -1753,6 +1753,7 @@
       pageSize: 20,
       editMode: false,
       dirty: {},
+      employeePrefix: 'BK',
       assignments: [],  // [{ id, name, visibility[] }] loaded from employee_assignments
       pendingDeletes: new Set(),
       sortCol: 'employee_number',
@@ -1952,6 +1953,19 @@
             .order('created_at', { ascending: true });
           this.assignments = aData || [];
         } catch(e) { this.assignments = []; }
+
+        // Load HR configuration for prefix
+        this.employeePrefix = 'BK';
+        try {
+          const { data: hrConf } = await getSb().from('global_settings')
+            .select('value')
+            .eq('key', 'hr_config')
+            .eq('company_id', this.companyId || '')
+            .maybeSingle();
+          if (hrConf && hrConf.value && hrConf.value.employee_prefix) {
+            this.employeePrefix = hrConf.value.employee_prefix.toUpperCase();
+          }
+        } catch(e) { console.error('Failed to load HR prefix settings:', e); }
 
         this.bindToolbar();
         this.bindEditMode();
@@ -3214,16 +3228,17 @@
       openAddEmployeeModal() {
         // 1. Calculate next employee number
         let maxNum = 0;
+        const regex = new RegExp(`^${this.employeePrefix}-(\\d+)`);
         this.allEmployees.forEach(emp => {
           const numStr = emp.employee_number || '';
-          const match = numStr.match(/BK-(\d+)/);
+          const match = numStr.match(regex) || numStr.match(/^[A-Z]{1,3}-(\d+)/);
           if (match) {
             const val = parseInt(match[1], 10);
             if (val > maxNum) maxNum = val;
           }
         });
         const nextNum = maxNum + 1;
-        const formattedNum = 'BK-' + String(nextNum).padStart(4, '0');
+        const formattedNum = `${this.employeePrefix}-${String(nextNum).padStart(4, '0')}`;
 
         // 2. Reset form
         const form = document.getElementById('add-employee-form');
