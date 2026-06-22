@@ -754,7 +754,7 @@
               </div>
 
               <!-- Right side: Payslip Generator & Preview -->
-              <div style="display:flex; flex-direction:column; gap:1.5rem;">
+              <div style="display:flex; flex-direction:column; gap:1.5rem; max-width:640px; width:100%;">
                 
                 <div class="j-card" style="margin-bottom:0;">
                   
@@ -781,18 +781,16 @@
                   
                   <!-- Dynamic A4 Canvas (initially hidden) -->
                   <div id="payslip-canvas-wrapper" style="display:none; width:100%;">
-                    <div style="display:flex; justify-content:flex-end; margin-bottom:1rem; gap:0.75rem; width:100%; max-width:650px; margin:0 auto 1rem auto;">
+                    <div style="display:flex; justify-content:flex-end; margin-bottom:1rem; gap:0.75rem; width:100%; max-width:600px; margin:0 auto 1rem auto;">
+                      <button class="btn btn-outline btn-sm" onclick="SalaryApp.exportPayslipPDF()">
+                        <svg aria-hidden="true" viewBox="0 0 24 24" style="width:1em;height:1em;display:inline-block;vertical-align:-0.15em;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;margin-right:0.35rem;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"></polyline></svg>Save to PDF
+                      </button>
                       <button class="btn btn-cyan btn-sm" onclick="SalaryApp.printPayslip()">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                          <polyline points="6 9 6 2 18 2 18 9"/>
-                          <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
-                          <rect x="6" y="14" width="12" height="8"/>
-                        </svg>
-                        Print / Export PDF
+                        <svg aria-hidden="true" viewBox="0 0 24 24" style="width:1em;height:1em;display:inline-block;vertical-align:-0.15em;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;margin-right:0.35rem;"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>Print Invoice
                       </button>
                     </div>
                     
-                    <div id="payslip-a4-sheet" style="background:#fff; color:#111827; border:1px solid #e5e7eb; border-radius:8px; box-shadow:var(--shadow-lg); width:100%; max-width:650px; padding:2rem; box-sizing:border-box; margin:0 auto; font-family:'Inter', sans-serif;">
+                    <div id="payslip-a4-sheet" style="background:#fff; color:#111827; border:1px solid #e5e7eb; border-radius:8px; box-shadow:var(--shadow-lg); width:100%; max-width:600px; padding:2rem; box-sizing:border-box; margin:0 auto; font-family:'Inter', sans-serif;">
                       <!-- Generated Dynamically -->
                     </div>
                   </div>
@@ -936,6 +934,7 @@
   <div id="toast-container" aria-live="polite"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <script src="../js/auth.js"></script>
   <script src="../js/sidebar.js"></script>
   <script src="../js/main.js"></script>
@@ -3175,7 +3174,7 @@
                   ${compLogoHtml}
                 </div>
                 <div style="text-align: right; font-size: 0.7rem; line-height: 1.25; color: #4b5563;">
-                  <strong style="display: block; margin-bottom: 3px; color: #111827; font-size: 0.82rem; font-weight: 800; letter-spacing: 0.5px;">${esc(compName)}</strong>
+                  <strong style="display: block; margin-bottom: 3px; color: #111827; font-size: 0.7rem; font-weight: 800; line-height: 1.25; letter-spacing: normal;">${esc(compName)}</strong>
                   ${compAddress}<br>
                   ${compEmailPhone}
                 </div>
@@ -3246,6 +3245,40 @@
         document.getElementById('payslip-a4-sheet').innerHTML = sheetHtml;
         document.getElementById('payslip-placeholder').style.display = 'none';
         document.getElementById('payslip-canvas-wrapper').style.display = 'block';
+      },
+
+      async exportPayslipPDF() {
+        const element = document.getElementById('payslip-a4-sheet');
+        if (!element) {
+          toast('No payslip content to export.', 'error');
+          return;
+        }
+
+        const empId = document.getElementById('payslip-employee-select').value;
+        const emp = this.employees.find(e => e.id === empId);
+        const empFullName = emp ? [emp.first_name, emp.last_name].filter(Boolean).join(' ') : 'Employee';
+        const monthNames = [
+          'January', 'February', 'March', 'April', 'May', 'June',
+          'July', 'August', 'September', 'October', 'November', 'December'
+        ];
+        const monthText = `${monthNames[this.payslipMonth]} ${this.payslipYear}`;
+        const pdfFileName = `Payslip_${empFullName.replace(/\s+/g, '_')}_${monthText.replace(/\s+/g, '_')}.pdf`;
+
+        const opt = {
+          margin:       [10, 10, 10, 10],
+          filename:     pdfFileName,
+          image:        { type: 'jpeg', quality: 0.98 },
+          html2canvas:  { scale: 2, useCORS: true, letterRendering: true },
+          jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+        };
+
+        try {
+          await html2pdf().set(opt).from(element).save();
+          toast('Payslip PDF downloaded successfully!', 'success');
+        } catch (err) {
+          console.error('PDF Compile error:', err);
+          toast('Error compiling PDF: ' + err.message, 'error');
+        }
       },
 
       printPayslip() {
