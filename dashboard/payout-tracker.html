@@ -486,27 +486,20 @@
 
           <!-- ── SPECIAL PAYOUT TAB PANEL ── -->
           <div class="tab-panel" id="panel-special">
-            <!-- Month Selector -->
-            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 0.75rem 1.25rem; width: 100%; box-sizing: border-box;">
-              <div style="display: flex; align-items: center; gap: 1rem;">
-                <button class="btn btn-outline btn-sm" onclick="SalaryApp.changeMonth(-1)">&lt;</button>
-                <span id="special-month-display" style="font-size: 0.88rem; font-weight: 700; color: var(--text-primary); min-width: 140px; text-align: center;"></span>
-                <button class="btn btn-outline btn-sm" onclick="SalaryApp.changeMonth(1)">&gt;</button>
-              </div>
-            </div>
-
             <div class="table-card">
               <div class="table-wrap">
                 <table class="salary-table" id="special-table">
                   <thead>
                     <tr id="special-table-header">
                       <th>Employee Name</th>
-                      <!-- Flexible payout columns injected here -->
+                      <th>Label</th>
+                      <th>Payout Day</th>
+                      <th style="text-align:right;">Amount</th>
                     </tr>
                   </thead>
                   <tbody id="special-table-body">
                     <tr>
-                      <td colspan="10" style="text-align:center; padding:3rem; color:var(--text-muted);">Loading special payout data...</td>
+                      <td colspan="4" style="text-align:center; padding:3rem; color:var(--text-muted);">Loading special payout data...</td>
                     </tr>
                   </tbody>
                 </table>
@@ -1512,19 +1505,31 @@
         const tbody = document.getElementById('special-table-body');
         if (!header || !tbody) return;
 
-        const columns = [...new Set(this.specialSchedules.map(s => Number(s.day)))].sort((a, b) => a - b);
-
-        let headerHtml = `
+        header.innerHTML = `
           <th>Employee Name</th>
+          <th>Label</th>
+          <th>Payout Day</th>
+          <th style="text-align:right;">Amount</th>
         `;
-        columns.forEach(day => {
-          headerHtml += `<th style="text-align:center;">Special Payout (Day ${day})</th>`;
-        });
-        header.innerHTML = headerHtml;
 
         const { grouped, unassigned } = this.groupEmployees();
         let bodyHtml = '';
-        const colspan = 1 + columns.length;
+        const colspan = 4;
+
+        // Helper to render rows for an employee's special schedules
+        const renderEmpSchedules = (emp) => {
+          const empSpecs = this.specialSchedules.filter(s => s.employeeId === emp.id);
+          if (empSpecs.length === 0) return '';
+          
+          return empSpecs.map(spec => `
+            <tr class="employee-row" data-emp-id="${esc(emp.id)}">
+              <td class="col-name">${esc([emp.first_name, emp.last_name].filter(Boolean).join(' '))}</td>
+              <td>${esc(spec.label)}</td>
+              <td>Day ${esc(spec.day)}</td>
+              <td style="text-align:right; font-weight:700; color:var(--text-primary);">${esc(php(spec.value))}</td>
+            </tr>
+          `).join('');
+        };
 
         // Render Grouped
         Object.keys(grouped).sort().forEach(dept => {
@@ -1537,10 +1542,7 @@
 
           teams.forEach(sub => {
             grouped[dept][sub].forEach(emp => {
-              const hasAnySpec = this.specialSchedules.some(s => s.employeeId === emp.id);
-              if (hasAnySpec) {
-                deptRows += this.renderSpecialEmployeeRow(emp, columns);
-              }
+              deptRows += renderEmpSchedules(emp);
             });
           });
 
@@ -1556,10 +1558,7 @@
         // Render Unassigned
         let unassignedRows = '';
         unassigned.forEach(emp => {
-          const hasAnySpec = this.specialSchedules.some(s => s.employeeId === emp.id);
-          if (hasAnySpec) {
-            unassignedRows += this.renderSpecialEmployeeRow(emp, columns);
-          }
+          unassignedRows += renderEmpSchedules(emp);
         });
         if (unassignedRows) {
           bodyHtml += `
