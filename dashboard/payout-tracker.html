@@ -3619,7 +3619,12 @@
         const departments = [...departmentsSet].sort();
 
         // Populate Department dropdown
-        deptSelect.innerHTML = departments.map(d => `<option value="${esc(d)}">${esc(d)}</option>`).join('');
+        let deptHtml = `<option value="ALL">All Departments</option>`;
+        if (departments.length > 0) {
+          deptHtml += `<option disabled>──────────</option>`;
+          deptHtml += departments.map(d => `<option value="${esc(d)}">${esc(d)}</option>`).join('');
+        }
+        deptSelect.innerHTML = deptHtml;
 
         // Trigger change to populate teams and employees
         this.handlePayslipDeptChange();
@@ -3634,24 +3639,28 @@
         
         // Find all employees belonging to this department
         const deptEmps = this.employees.filter(emp => {
+          if (selectedDept === 'ALL') return true;
           const d = (this.payslipEmpDeptMap && this.payslipEmpDeptMap[emp.id]) || emp.department || 'Unassigned';
           return d === selectedDept;
         });
 
-        // Get unique teams for this department
+        // Get unique teams for this department (excluding 'No Team' for the main list)
         const teamsSet = new Set();
         deptEmps.forEach(emp => {
           const t = (this.payslipEmpTeamMap && this.payslipEmpTeamMap[emp.id]) || 'No Team';
-          teamsSet.add(t);
+          if (t !== 'No Team') {
+            teamsSet.add(t);
+          }
         });
         const teams = [...teamsSet].sort();
 
-        // Populate Teams dropdown
-        let teamsHtml = '';
-        if (teams.length > 1 || (teams.length === 1 && teams[0] !== 'No Team')) {
-          teamsHtml += `<option value="ALL">All Teams</option>`;
+        // Populate Teams dropdown with top options
+        let teamsHtml = `<option value="ALL">All Teams</option>`;
+        teamsHtml += `<option value="No Team">No Team</option>`;
+        if (teams.length > 0) {
+          teamsHtml += `<option disabled>──────────</option>`;
+          teamsHtml += teams.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('');
         }
-        teamsHtml += teams.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('');
         teamSelect.innerHTML = teamsHtml;
 
         this.handlePayslipTeamChange();
@@ -3666,12 +3675,14 @@
         const selectedDept = deptSelect.value;
         const selectedTeam = teamSelect.value;
 
-        // Filter employees by department and team
+        // Filter employees by department
         let filteredEmps = this.employees.filter(emp => {
+          if (selectedDept === 'ALL') return true;
           const d = (this.payslipEmpDeptMap && this.payslipEmpDeptMap[emp.id]) || emp.department || 'Unassigned';
           return d === selectedDept;
         });
 
+        // Filter by team
         if (selectedTeam !== 'ALL') {
           filteredEmps = filteredEmps.filter(emp => {
             const t = (this.payslipEmpTeamMap && this.payslipEmpTeamMap[emp.id]) || 'No Team';
