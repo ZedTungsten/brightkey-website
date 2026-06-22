@@ -1203,6 +1203,31 @@
         this.debouncedSave();
       },
 
+      toggleSpecialPayoutCheck(empId, day, checked) {
+        const monthKey = this.getCommissionMonthKey();
+        if (!this.specialPayoutState[monthKey]) {
+          this.specialPayoutState[monthKey] = {};
+        }
+        this.specialPayoutState[monthKey][`${empId}_${day}`] = checked;
+        
+        const valEl = document.getElementById(`val-spec-${empId}-${day}`);
+        if (valEl) {
+          const isPast = this.isPastDay(day);
+          if (checked) {
+            valEl.classList.remove('overdue');
+            valEl.style.textDecoration = 'line-through';
+            valEl.style.opacity = '0.5';
+          } else {
+            valEl.style.textDecoration = 'none';
+            valEl.style.opacity = '1';
+            if (isPast) {
+              valEl.classList.add('overdue');
+            }
+          }
+        }
+        this.debouncedSave();
+      },
+
       getScheduleDayForItemDay(itemDay, sortedScheds) {
         if (sortedScheds.length === 0) return 30;
         for (const s of sortedScheds) {
@@ -1304,7 +1329,16 @@
               .reduce((sum, s) => sum + (Number(s.value) || 0), 0);
             totalSpecials += specVal;
             if (specVal > 0) {
-              specialCellsHtml += `<td>${esc(php(specVal))}</td>`;
+              const isPaid = this.specialPayoutState[monthKey]?.[`${emp.id}_${day}`] || false;
+              const isPast = this.isPastDay(day);
+              specialCellsHtml += `
+                <td>
+                  <div class="payout-cell-container" style="display:inline-flex; align-items:center; gap:0.4rem;">
+                    <input type="checkbox" class="payout-checkbox" ${isPaid ? 'checked' : ''} onchange="SalaryApp.toggleSpecialPayoutCheck('${emp.id}', ${day}, this.checked)">
+                    <span class="payout-val ${isPast && !isPaid ? 'overdue' : ''}" id="val-spec-${emp.id}-${day}" style="${isPaid ? 'text-decoration: line-through; opacity: 0.5;' : ''}">${esc(php(specVal))}</span>
+                  </div>
+                </td>
+              `;
             } else {
               specialCellsHtml += `<td style="color:var(--text-muted);">—</td>`;
             }
