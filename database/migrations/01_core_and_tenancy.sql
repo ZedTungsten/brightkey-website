@@ -162,7 +162,9 @@ BEGIN
 END;
 $$;
 
-CREATE OR REPLACE VIEW public.view_public_integrations AS
+CREATE OR REPLACE VIEW public.view_public_integrations 
+WITH (security_invoker = true) 
+AS
 SELECT 
   company_id, 
   (paymongo_public_key IS NOT NULL AND paymongo_secret_key IS NOT NULL) AS paymongo_configured, 
