@@ -3121,8 +3121,27 @@
         // Special Payouts
         const empSpecs = this.specialSchedules.filter(s => s.employeeId === emp.id);
 
+        // Find employee's department manager (Dept. Head) from company structure
+        let deptHeadId = null;
+        if (this.companyStructure && this.companyStructure.departments) {
+          const matchedDept = this.companyStructure.departments.find(d => {
+            if (d.managerId === emp.id) return true;
+            if (d.subteams) {
+              return d.subteams.some(s => s.managerId === emp.id || (s.colleagueIds && s.colleagueIds.includes(emp.id)));
+            }
+            return false;
+          }) || this.companyStructure.departments.find(d => d.name === emp.department);
+          
+          if (matchedDept) {
+            deptHeadId = matchedDept.managerId;
+          }
+        }
+
         // Resolve reporting to (team leader, if none, department head, fallback to database reporting_to)
-        const mgrId = (this.reportingToMap && this.reportingToMap[emp.id]) || emp.reporting_to;
+        let mgrId = (this.reportingToMap && this.reportingToMap[emp.id]) || emp.reporting_to;
+        if (!mgrId && deptHeadId && deptHeadId !== emp.id) {
+          mgrId = deptHeadId;
+        }
         const manager = this.employees.find(e => e.id === mgrId);
         const reportingToName = manager ? [manager.first_name, manager.last_name].filter(Boolean).join(' ') : (emp.reporting_to || '—');
 
