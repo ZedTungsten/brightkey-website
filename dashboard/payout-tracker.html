@@ -968,6 +968,7 @@
       companyId: null,
       employees: [],
       companyStructure: { departments: [] },
+      reportingToMap: {},
       payoutSchedules: [], // array of numbers representing days
       commissionSchedules: [], // array of numbers representing days for commissions
       adjustmentsList: [], // array of { id, employeeId, value, label, date }
@@ -1053,6 +1054,7 @@
             .eq('company_id', this.companyId)
             .maybeSingle();
           this.companyStructure = settings?.value || { departments: [] };
+          this.buildReportingToMap();
         } catch (e) {
           this.companyStructure = { departments: [] };
         }
@@ -2849,6 +2851,36 @@
         tbody.innerHTML = html;
       },
 
+      buildReportingToMap() {
+        this.reportingToMap = {};
+        const struct = this.companyStructure || { departments: [] };
+        if (!struct.departments) return;
+        struct.departments.forEach(dept => {
+          const deptHeadId = dept.managerId;
+          if (dept.subteams) {
+            dept.subteams.forEach(sub => {
+              const subteamManagerId = sub.managerId;
+              if (subteamManagerId) {
+                if (deptHeadId) {
+                  this.reportingToMap[subteamManagerId] = deptHeadId;
+                }
+                if (sub.colleagueIds) {
+                  sub.colleagueIds.forEach(colId => {
+                    this.reportingToMap[colId] = subteamManagerId;
+                  });
+                }
+              } else {
+                if (deptHeadId && sub.colleagueIds) {
+                  sub.colleagueIds.forEach(colId => {
+                    this.reportingToMap[colId] = deptHeadId;
+                  });
+                }
+              }
+            });
+          }
+        });
+      },
+
       changePayslipMonth(diff) {
         let m = this.payslipMonth + diff;
         let y = this.payslipYear;
@@ -3002,8 +3034,9 @@
         // Special Payouts
         const empSpecs = this.specialSchedules.filter(s => s.employeeId === emp.id);
 
-        // Resolve reporting to
-        const manager = this.employees.find(e => e.id === emp.reporting_to);
+        // Resolve reporting to (team leader, if none, department head, fallback to database reporting_to)
+        const mgrId = (this.reportingToMap && this.reportingToMap[emp.id]) || emp.reporting_to;
+        const manager = this.employees.find(e => e.id === mgrId);
         const reportingToName = manager ? [manager.first_name, manager.middle_name, manager.last_name].filter(Boolean).join(' ') : (emp.reporting_to || '—');
 
         // Build Breakdown Rows
@@ -3026,39 +3059,39 @@
         }
 
         if (empAdjs.length > 0) {
-          empAdjs.forEach(adj => {
-            breakdownRowsHtml += `
-              <tr>
-                <td style="padding: 0.75rem; border-bottom: 1px solid #e5e7eb; font-weight: 600;">Adjustment</td>
-                <td style="padding: 0.75rem; border-bottom: 1px solid #e5e7eb; color: #4b5563;">${esc(adj.label || 'Salary Adjustment')}</td>
-                <td style="padding: 0.75rem; border-bottom: 1px solid #e5e7eb; text-align: right; font-variant-numeric: tabular-nums;">${php(adj.value)}</td>
-              </tr>
-            `;
-          });
+          const labels = empAdjs.map(adj => esc(adj.label || 'Salary Adjustment')).join('<br>');
+          const amounts = empAdjs.map(adj => php(adj.value)).join('<br>');
+          breakdownRowsHtml += `
+            <tr>
+              <td style="padding: 0.75rem; border-bottom: 1px solid #e5e7eb; font-weight: 600; vertical-align: top;">Adjustments</td>
+              <td style="padding: 0.75rem; border-bottom: 1px solid #e5e7eb; color: #4b5563; vertical-align: top; line-height: 1.5;">${labels}</td>
+              <td style="padding: 0.75rem; border-bottom: 1px solid #e5e7eb; text-align: right; font-variant-numeric: tabular-nums; vertical-align: top; line-height: 1.5;">${amounts}</td>
+            </tr>
+          `;
         }
 
         if (empReimbs.length > 0) {
-          empReimbs.forEach(r => {
-            breakdownRowsHtml += `
-              <tr>
-                <td style="padding: 0.75rem; border-bottom: 1px solid #e5e7eb; font-weight: 600;">Reimbursement</td>
-                <td style="padding: 0.75rem; border-bottom: 1px solid #e5e7eb; color: #4b5563;">${esc(r.label || 'Expense Reimbursement')}</td>
-                <td style="padding: 0.75rem; border-bottom: 1px solid #e5e7eb; text-align: right; font-variant-numeric: tabular-nums;">${php(r.value)}</td>
-              </tr>
-            `;
-          });
+          const labels = empReimbs.map(r => esc(r.label || 'Expense Reimbursement')).join('<br>');
+          const amounts = empReimbs.map(r => php(r.value)).join('<br>');
+          breakdownRowsHtml += `
+            <tr>
+              <td style="padding: 0.75rem; border-bottom: 1px solid #e5e7eb; font-weight: 600; vertical-align: top;">Reimbursements</td>
+              <td style="padding: 0.75rem; border-bottom: 1px solid #e5e7eb; color: #4b5563; vertical-align: top; line-height: 1.5;">${labels}</td>
+              <td style="padding: 0.75rem; border-bottom: 1px solid #e5e7eb; text-align: right; font-variant-numeric: tabular-nums; vertical-align: top; line-height: 1.5;">${amounts}</td>
+            </tr>
+          `;
         }
 
         if (empSpecs.length > 0) {
-          empSpecs.forEach(s => {
-            breakdownRowsHtml += `
-              <tr>
-                <td style="padding: 0.75rem; border-bottom: 1px solid #e5e7eb; font-weight: 600;">Special Payout</td>
-                <td style="padding: 0.75rem; border-bottom: 1px solid #e5e7eb; color: #4b5563;">${esc(s.label || 'Special Payout')} (Day ${s.day})</td>
-                <td style="padding: 0.75rem; border-bottom: 1px solid #e5e7eb; text-align: right; font-variant-numeric: tabular-nums;">${php(s.value)}</td>
-              </tr>
-            `;
-          });
+          const labels = empSpecs.map(s => `${esc(s.label || 'Special Payout')} (Day ${s.day})`).join('<br>');
+          const amounts = empSpecs.map(s => php(s.value)).join('<br>');
+          breakdownRowsHtml += `
+            <tr>
+              <td style="padding: 0.75rem; border-bottom: 1px solid #e5e7eb; font-weight: 600; vertical-align: top;">Special Payouts</td>
+              <td style="padding: 0.75rem; border-bottom: 1px solid #e5e7eb; color: #4b5563; vertical-align: top; line-height: 1.5;">${labels}</td>
+              <td style="padding: 0.75rem; border-bottom: 1px solid #e5e7eb; text-align: right; font-variant-numeric: tabular-nums; vertical-align: top; line-height: 1.5;">${amounts}</td>
+            </tr>
+          `;
         }
 
         // Build Cutoffs Portion
