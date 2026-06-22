@@ -270,6 +270,48 @@
         padding: 0;
       }
     }
+
+    /* ── Tab Container Bar ── */
+    .drawer-tabs {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      overflow-x: auto;
+      background: var(--bg-surface);
+      margin-bottom: 1.5rem;
+    }
+
+    /* ── Tab Buttons ── */
+    .tab-btn {
+      padding: 0.9rem 1.25rem;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      border: none;
+      background: none;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      white-space: nowrap;
+      transition: all 0.15s;
+    }
+
+    /* ── Active Tab Styling ── */
+    .tab-btn.active {
+      color: var(--cyan-light);
+      border-bottom-color: var(--cyan);
+    }
+
+    /* ── Hover State ── */
+    .tab-btn:hover:not(.active) {
+      color: var(--text-secondary);
+    }
+
+    .booking-tab-panel {
+      display: none;
+    }
+    .booking-tab-panel.active {
+      display: block;
+    }
   </style>
 </head>
 <body>
@@ -295,7 +337,13 @@
         <p style="color:var(--text-secondary);">Direct intake form for manually booked locksmith services & custom orders.</p>
       </div>
 
-      <div class="booking-grid">
+      <!-- Tab Navigation -->
+      <div class="drawer-tabs" id="booking-business-tabs" style="margin-top: 1rem;"></div>
+
+      <div id="booking-panels-container">
+        <!-- Panel: Smart Lock -->
+        <div class="booking-tab-panel active" id="panel-smart-lock">
+          <div class="booking-grid">
         
         <!-- Left: Form Input Panels -->
         <div>
@@ -510,7 +558,17 @@
           </div>
         </div>
 
+      </div> <!-- /booking-grid -->
+      </div> <!-- /panel-smart-lock -->
+
+      <!-- Panel: Placeholder -->
+      <div class="booking-tab-panel" id="panel-booking-placeholder">
+        <div class="panel" style="text-align: center; padding: 5rem 2rem;">
+          <p style="color: var(--text-muted); font-size: 0.95rem; font-weight: 500;">This business does not have manual booking configuration enabled.</p>
+        </div>
       </div>
+
+      </div> <!-- /booking-panels-container -->
 
     </div>
   </main>
@@ -548,6 +606,15 @@
           const { data: companyData } = await sb.from('companies').select('id').eq('tenant_id', tenantId).limit(1);
           if (companyData && companyData.length > 0) {
             currentCompanyId = companyData[0].id;
+          }
+
+          // Fetch businesses list dynamically and render tabs
+          try {
+            const { data: businesses } = await sb.from('tenant_businesses').select('name').eq('company_id', currentCompanyId).order('name', { ascending: true });
+            renderBusinessTabs(businesses || []);
+          } catch (bizErr) {
+            console.error("Error fetching businesses:", bizErr);
+            renderBusinessTabs([]);
           }
 
           const [productsRes, inventoryRes, employeesRes, assignmentsRes, warehousesRes] = await Promise.all([
@@ -1941,6 +2008,45 @@
       calculateTotals();
       showNotification('Form and uploaded images cleared!', 'success');
     };
+
+    // ── Business Tabs Rendering & Interaction ──
+    window.renderBusinessTabs = function(businesses) {
+      const container = document.getElementById('booking-business-tabs');
+      if (!container) return;
+      
+      const bizList = businesses.length > 0 ? businesses.map(b => b.name) : ['Smart Lock'];
+      if (!bizList.includes('Smart Lock')) {
+        bizList.unshift('Smart Lock');
+      }
+
+      let tabsHtml = '';
+      bizList.forEach(biz => {
+        const activeClass = biz === 'Smart Lock' ? 'active' : '';
+        tabsHtml += `<button class="tab-btn ${activeClass}" id="tab-btn-${sanitizeId(biz)}" onclick="switchBookingTab('${escapeHtml(biz)}')">${escapeHtml(biz)}</button>`;
+      });
+      container.innerHTML = tabsHtml;
+    };
+
+    window.switchBookingTab = function(bizName) {
+      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+      const activeBtn = document.getElementById(`tab-btn-${sanitizeId(bizName)}`);
+      if (activeBtn) activeBtn.classList.add('active');
+
+      document.querySelectorAll('.booking-tab-panel').forEach(p => p.classList.remove('active'));
+      if (bizName === 'Smart Lock') {
+        document.getElementById('panel-smart-lock').classList.add('active');
+      } else {
+        document.getElementById('panel-booking-placeholder').classList.add('active');
+      }
+    };
+
+    function sanitizeId(str) {
+      return str.toLowerCase().replace(/[^a-z0-9]/g, '-');
+    }
+    
+    function escapeHtml(str) {
+      return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
   </script>
 
   <!-- Booking Calendar Modal -->
