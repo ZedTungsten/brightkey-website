@@ -214,6 +214,32 @@
     .form-select:focus {
       border-color: var(--cyan);
     }
+
+    /* Switch styling */
+    .switch input:checked + .slider {
+      background-color: var(--cyan);
+    }
+    .switch .slider:before {
+      position: absolute;
+      content: "";
+      height: 16px;
+      width: 16px;
+      left: 3px;
+      bottom: 3px;
+      background-color: var(--text-primary);
+      transition: .3s;
+      border-radius: 50%;
+    }
+    .switch input:checked + .slider:before {
+      transform: translateX(22px);
+      background-color: var(--bg-surface);
+    }
+    .disabled-container {
+      opacity: 0.45;
+      pointer-events: none;
+      filter: grayscale(80%);
+      transition: all 0.25s ease;
+    }
   </style>
 </head>
 <body>
@@ -266,7 +292,22 @@
               <!-- ── Settings Tab Content ── -->
               <div class="tab-content" id="tab-content-settings">
                 <form id="leaves-settings-form" onsubmit="AttendanceLogsApp.saveSettings(event)" style="display:flex; flex-direction:column; gap:1.5rem;">
-                  <div class="settings-grid">
+                  <!-- Master Toggle Switch -->
+                  <div style="display: flex; align-items: center; justify-content: space-between; background: var(--bg-surface); border: 1px solid var(--border); padding: 1rem 1.25rem; border-radius: var(--radius-md); box-shadow: var(--shadow-sm);">
+                    <div>
+                      <div style="font-size: 0.9rem; font-weight: 700; color: var(--text-primary);">Leaves Settings Automation</div>
+                      <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.15rem;">Enable or disable all automatic leave loading, limit enforcement, rollover, and payout conversions.</div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 0.75rem;">
+                      <span id="leaves-master-status" style="font-size: 0.82rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;">Disabled</span>
+                      <label class="switch" style="position: relative; display: inline-block; width: 44px; height: 22px;">
+                        <input type="checkbox" id="leaves-master-toggle" onchange="AttendanceLogsApp.toggleMasterSwitch()" style="opacity: 0; width: 0; height: 0;" />
+                        <span class="slider" style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: var(--border); transition: .3s; border-radius: 22px;"></span>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div class="settings-grid" id="settings-grid-container">
                     
                     <!-- Leaves Loading Section -->
                     <div class="settings-card">
@@ -593,6 +634,7 @@
 
       getDefaultSettings() {
         return {
+          leaves_settings_active: true,
           vl_load_amt: 0,
           vl_load_days: 365,
           vl_trickle_enabled: false,
@@ -630,6 +672,12 @@
       populateSettingsForm() {
         const s = this.leavesSettings || this.getDefaultSettings();
         
+        const masterToggle = document.getElementById('leaves-master-toggle');
+        if (masterToggle) {
+          masterToggle.checked = s.leaves_settings_active !== false; // default to true
+        }
+        this.toggleMasterSwitch();
+
         document.getElementById('vl-load-amt').value = s.vl_load_amt ?? '';
         document.getElementById('vl-load-days').value = s.vl_load_days ?? '';
         document.getElementById('vl-trickle-enabled').checked = !!s.vl_trickle_enabled;
@@ -689,6 +737,25 @@
         }
       },
 
+      toggleMasterSwitch() {
+        const masterToggle = document.getElementById('leaves-master-toggle');
+        if (!masterToggle) return;
+        const checked = masterToggle.checked;
+        const statusSpan = document.getElementById('leaves-master-status');
+        const gridContainer = document.getElementById('settings-grid-container');
+        if (statusSpan) {
+          statusSpan.textContent = checked ? 'Enabled' : 'Disabled';
+          statusSpan.style.color = checked ? 'var(--cyan-light)' : 'var(--text-muted)';
+        }
+        if (gridContainer) {
+          if (checked) {
+            gridContainer.classList.remove('disabled-container');
+          } else {
+            gridContainer.classList.add('disabled-container');
+          }
+        }
+      },
+
       switchTab(tab) {
         document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
         document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
@@ -709,6 +776,7 @@
         const slAutoloadTrigger = document.querySelector('input[name="sl-autoload-trigger"]:checked')?.value || 'date';
 
         const updatedSettings = {
+          leaves_settings_active: document.getElementById('leaves-master-toggle').checked,
           vl_load_amt: parseFloat(document.getElementById('vl-load-amt').value) || 0,
           vl_load_days: parseInt(document.getElementById('vl-load-days').value, 10) || 0,
           vl_trickle_enabled: document.getElementById('vl-trickle-enabled').checked,
