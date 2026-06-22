@@ -431,7 +431,8 @@
 
       <!-- BrightKey Dashboard Tabs -->
       <div class="drawer-tabs">
-        <button class="tab-btn active" id="tab-btn-regular" onclick="SalaryApp.switchTab('regular')">Salary</button>
+        <button class="tab-btn active" id="tab-btn-summary" onclick="SalaryApp.switchTab('summary')">Payout</button>
+        <button class="tab-btn" id="tab-btn-regular" onclick="SalaryApp.switchTab('regular')">Salary</button>
         <button class="tab-btn" id="tab-btn-special" onclick="SalaryApp.switchTab('special')">Special Payout</button>
         <button class="tab-btn" id="tab-btn-adjustments" onclick="SalaryApp.switchTab('adjustments')">Adjustments</button>
         <button class="tab-btn" id="tab-btn-commission" onclick="SalaryApp.switchTab('commission')">Commission</button>
@@ -442,8 +443,45 @@
       <main style="overflow-y: auto; flex: 1;">
         <div class="int-wrap">
 
+          <!-- ── PAYOUT SUMMARY TAB PANEL ── -->
+          <div class="tab-panel active" id="panel-summary">
+            <!-- Month Selector -->
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 0.75rem 1.25rem; width: 100%; box-sizing: border-box;">
+              <div style="display: flex; align-items: center; gap: 1rem;">
+                <button class="btn btn-outline btn-sm" onclick="SalaryApp.changeMonth(-1)">&lt;</button>
+                <span id="summary-month-display" style="font-size: 0.88rem; font-weight: 700; color: var(--text-primary); min-width: 140px; text-align: center;"></span>
+                <button class="btn btn-outline btn-sm" onclick="SalaryApp.changeMonth(1)">&gt;</button>
+              </div>
+            </div>
+
+            <div class="table-card">
+              <div class="table-wrap">
+                <table class="salary-table" id="summary-table">
+                  <thead>
+                    <tr id="summary-table-header">
+                      <th>Employee Name</th>
+                      <th>Title/Position</th>
+                      <th>Payment Information</th>
+                      <th>Salary</th>
+                      <th>Commission</th>
+                      <th>Reimbursements</th>
+                      <th>Adjustments</th>
+                      <th style="border-right: 2px solid var(--border); width: 1px; padding: 0;"></th>
+                      <!-- Dynamic columns injected here -->
+                    </tr>
+                  </thead>
+                  <tbody id="summary-table-body">
+                    <tr>
+                      <td colspan="9" style="text-align:center; padding:3rem; color:var(--text-muted);">Loading payout summary...</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
           <!-- ── REGULAR PAYOUT TAB PANEL ── -->
-          <div class="tab-panel active" id="panel-regular">
+          <div class="tab-panel" id="panel-regular">
             <div class="table-card">
               <div class="table-wrap">
                 <table class="salary-table" id="regular-table">
@@ -1100,14 +1138,14 @@
           'July', 'August', 'September', 'October', 'November', 'December'
         ];
         const text = `${monthNames[this.selectedMonth]} ${this.selectedYear}`;
-        ['regular-month-display', 'special-month-display', 'adjustments-month-display', 'commission-month-display', 'reimbursements-month-display'].forEach(id => {
+        ['summary-month-display', 'regular-month-display', 'special-month-display', 'adjustments-month-display', 'commission-month-display', 'reimbursements-month-display'].forEach(id => {
           const el = document.getElementById(id);
           if (el) el.textContent = text;
         });
       },
 
       switchTab(tab) {
-        ['regular', 'special', 'adjustments', 'commission', 'reimbursement', 'schedules'].forEach(t => {
+        ['summary', 'regular', 'special', 'adjustments', 'commission', 'reimbursement', 'schedules'].forEach(t => {
           const btn = document.getElementById(`tab-btn-${t}`);
           if (btn) btn.classList.toggle('active', t === tab);
           const panel = document.getElementById(`panel-${t}`);
@@ -1116,6 +1154,7 @@
       },
 
       renderAll() {
+        this.renderPayoutSummary();
         this.renderRegularPayout();
         this.renderSpecialPayout();
         this.renderAdjustmentsTab();
@@ -1124,6 +1163,276 @@
         this.renderCommSchedules();
         this.renderSpecialSchedules();
         this.renderCommissionTab();
+      },
+
+      isPastDay(day) {
+        const today = new Date();
+        const curYear = today.getFullYear();
+        const curMonth = today.getMonth();
+        const curDay = today.getDate();
+
+        if (this.selectedYear < curYear) return true;
+        if (this.selectedYear > curYear) return false;
+        if (this.selectedMonth < curMonth) return true;
+        if (this.selectedMonth > curMonth) return false;
+        return day < curDay;
+      },
+
+      togglePayoutCheck(empId, schedDay, checked) {
+        const monthKey = this.getCommissionMonthKey();
+        if (!this.regularPayoutState[monthKey]) {
+          this.regularPayoutState[monthKey] = {};
+        }
+        this.regularPayoutState[monthKey][`${empId}_${schedDay}`] = checked;
+        
+        const valEl = document.getElementById(`val-${empId}-${schedDay}`);
+        if (valEl) {
+          const isPast = this.isPastDay(schedDay);
+          if (checked) {
+            valEl.classList.remove('overdue');
+            valEl.style.textDecoration = 'line-through';
+            valEl.style.opacity = '0.5';
+          } else {
+            valEl.style.textDecoration = 'none';
+            valEl.style.opacity = '1';
+            if (isPast) {
+              valEl.classList.add('overdue');
+            }
+          }
+        }
+        this.debouncedSave();
+      },
+
+      getScheduleDayForItemDay(itemDay, sortedScheds) {
+        if (sortedScheds.length === 0) return 30;
+        for (const s of sortedScheds) {
+          if (itemDay <= s) return s;
+        }
+        return sortedScheds[sortedScheds.length - 1];
+      },
+
+      renderPayoutSummary() {
+        const header = document.getElementById('summary-table-header');
+        const tbody = document.getElementById('summary-table-body');
+        if (!header || !tbody) return;
+
+        const monthKey = this.getCommissionMonthKey();
+
+        // 1. Determine columns
+        const specialDays = [...new Set(this.specialSchedules.map(s => Number(s.day)))].sort((a, b) => a - b);
+        const sortedScheds = [...this.payoutSchedules].sort((a, b) => a - b);
+
+        let headerHtml = `
+          <th>Employee Name</th>
+          <th>Title/Position</th>
+          <th>Payment Details</th>
+          <th>Salary</th>
+          <th>Commission</th>
+          <th>Reimbursements</th>
+          <th>Adjustments</th>
+          <th style="border-right: 2px solid var(--border); width: 1px; padding: 0;"></th>
+        `;
+
+        specialDays.forEach(day => {
+          headerHtml += `<th>Special (Day ${day})</th>`;
+        });
+
+        sortedScheds.forEach(day => {
+          headerHtml += `<th>Payout (Day ${day})</th>`;
+        });
+
+        headerHtml += `<th>Grand Total</th>`;
+        header.innerHTML = headerHtml;
+
+        const colspan = 8 + specialDays.length + sortedScheds.length + 1;
+
+        const { grouped, unassigned } = this.groupEmployees();
+        let bodyHtml = '';
+
+        const renderEmpRow = (emp) => {
+          const baseSalary = emp.salary || 0;
+          const positionText = emp.title || emp.position || '';
+          const detailsText = emp.payout_details || '';
+
+          // Calculate summary totals
+          // Commission
+          const empComms = this.commissionAssignments.filter(a => {
+            if (a.employee_id !== emp.id) return false;
+            const b = this.bookingsList.find(x => x.id === a.booking_id);
+            if (!b) return false;
+            let doorsArr = [];
+            if (typeof b.doors === 'string') {
+              try { doorsArr = JSON.parse(b.doors); } catch(_) {}
+            } else if (Array.isArray(b.doors)) {
+              doorsArr = b.doors;
+            }
+            const door = doorsArr[a.product_index];
+            const isDone = (door && door.completed) || (b.status === 'completed');
+            if (!isDone) return false;
+            const completionDateStr = (door && door.completed_at) || b.updated_at || b.created_at;
+            if (!completionDateStr) return false;
+            const date = new Date(completionDateStr);
+            const yyyy = date.getFullYear();
+            const mm = String(date.getMonth() + 1).padStart(2, '0');
+            return `${yyyy}-${mm}` === monthKey;
+          }).reduce((sum, a) => sum + (a.amount / 100), 0);
+
+          // Reimbursements
+          const empReimbs = this.reimbursementsList.filter(r => {
+            if (r.employeeId !== emp.id) return false;
+            const d = new Date(r.date);
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            return `${y}-${m}` === monthKey;
+          }).reduce((sum, r) => sum + (Number(r.value) || 0), 0);
+
+          // Adjustments
+          const empAdjs = this.adjustmentsList.filter(a => {
+            if (a.employeeId !== emp.id) return false;
+            const d = new Date(a.date);
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            return `${y}-${m}` === monthKey;
+          }).reduce((sum, a) => sum + (Number(a.value) || 0), 0);
+
+          // Build Special columns cells HTML
+          let specialCellsHtml = '';
+          let totalSpecials = 0;
+          specialDays.forEach(day => {
+            const specVal = this.specialSchedules
+              .filter(s => s.employeeId === emp.id && Number(s.day) === day)
+              .reduce((sum, s) => sum + (Number(s.value) || 0), 0);
+            totalSpecials += specVal;
+            if (specVal > 0) {
+              specialCellsHtml += `<td>${esc(php(specVal))}</td>`;
+            } else {
+              specialCellsHtml += `<td style="color:var(--text-muted);">—</td>`;
+            }
+          });
+
+          // Build Payout columns cells HTML
+          let payoutCellsHtml = '';
+          const numSchedules = sortedScheds.length || 1;
+          const salaryPortion = baseSalary / numSchedules;
+
+          sortedScheds.forEach(day => {
+            // Partition components
+            const adjsVal = this.adjustmentsList.filter(a => {
+              if (a.employeeId !== emp.id) return false;
+              const d = new Date(a.date);
+              const y = d.getFullYear();
+              const m = String(d.getMonth() + 1).padStart(2, '0');
+              if (`${y}-${m}` !== monthKey) return false;
+              return this.getScheduleDayForItemDay(d.getDate(), sortedScheds) === day;
+            }).reduce((sum, a) => sum + (Number(a.value) || 0), 0);
+
+            const reimbsVal = this.reimbursementsList.filter(r => {
+              if (r.employeeId !== emp.id) return false;
+              const d = new Date(r.date);
+              const y = d.getFullYear();
+              const m = String(d.getMonth() + 1).padStart(2, '0');
+              if (`${y}-${m}` !== monthKey) return false;
+              return this.getScheduleDayForItemDay(d.getDate(), sortedScheds) === day;
+            }).reduce((sum, r) => sum + (Number(r.value) || 0), 0);
+
+            const commsVal = this.commissionAssignments.filter(a => {
+              if (a.employee_id !== emp.id) return false;
+              const b = this.bookingsList.find(x => x.id === a.booking_id);
+              if (!b) return false;
+              let doorsArr = [];
+              if (typeof b.doors === 'string') {
+                try { doorsArr = JSON.parse(b.doors); } catch(_) {}
+              } else if (Array.isArray(b.doors)) {
+                doorsArr = b.doors;
+              }
+              const door = doorsArr[a.product_index];
+              const isDone = (door && door.completed) || (b.status === 'completed');
+              if (!isDone) return false;
+              const completionDateStr = (door && door.completed_at) || b.updated_at || b.created_at;
+              if (!completionDateStr) return false;
+              const date = new Date(completionDateStr);
+              const yyyy = date.getFullYear();
+              const mm = String(date.getMonth() + 1).padStart(2, '0');
+              if (`${yyyy}-${mm}` !== monthKey) return false;
+              return this.getScheduleDayForItemDay(date.getDate(), sortedScheds) === day;
+            }).reduce((sum, a) => sum + (a.amount / 100), 0);
+
+            const totalSchedVal = salaryPortion + adjsVal + reimbsVal + commsVal;
+
+            const isPaid = this.regularPayoutState[monthKey]?.[`${emp.id}_${day}`] || false;
+            const isPast = this.isPastDay(day);
+
+            payoutCellsHtml += `
+              <td>
+                <div class="payout-cell-container" style="display:inline-flex; align-items:center; gap:0.4rem;">
+                  <input type="checkbox" class="payout-checkbox" ${isPaid ? 'checked' : ''} onchange="SalaryApp.togglePayoutCheck('${emp.id}', ${day}, this.checked)">
+                  <span class="payout-val ${isPast && !isPaid ? 'overdue' : ''}" id="val-${emp.id}-${day}" style="${isPaid ? 'text-decoration: line-through; opacity: 0.5;' : ''}">${esc(php(totalSchedVal))}</span>
+                </div>
+              </td>
+            `;
+          });
+
+          // Grand Total Payout
+          const grandTotal = baseSalary + empComms + empReimbs + empAdjs + totalSpecials;
+
+          return `
+            <tr class="employee-row" data-emp-id="${esc(emp.id)}">
+              <td class="col-name">${esc([emp.first_name, emp.last_name].filter(Boolean).join(' '))}</td>
+              <td><div style="font-size:0.75rem; color:var(--text-secondary);">${esc(positionText || '—')}</div></td>
+              <td><div style="font-size:0.75rem; color:var(--text-secondary); white-space:pre-wrap; max-width:180px;">${esc(detailsText || '—')}</div></td>
+              <td>${esc(php(baseSalary))}</td>
+              <td>${esc(php(empComms))}</td>
+              <td>${esc(php(empReimbs))}</td>
+              <td style="color:${empAdjs < 0 ? 'var(--danger)' : 'var(--text-primary)'};">${esc(php(empAdjs))}</td>
+              <td style="border-right: 2px solid var(--border); padding: 0;"></td>
+              ${specialCellsHtml}
+              ${payoutCellsHtml}
+              <td style="font-weight:800; color:var(--text-primary);">${esc(php(grandTotal))}</td>
+            </tr>
+          `;
+        };
+
+        // Render Grouped
+        Object.keys(grouped).sort().forEach(dept => {
+          bodyHtml += `
+            <tr class="dept-header-row">
+              <td colspan="${colspan}">${esc(dept)} Department</td>
+            </tr>
+          `;
+          
+          const teams = Object.keys(grouped[dept]).sort((a, b) => {
+            if (a === 'Department Head') return -1;
+            if (b === 'Department Head') return 1;
+            return a.localeCompare(b);
+          });
+
+          teams.forEach(sub => {
+            if (sub !== '_unassigned_subteam') {
+              bodyHtml += `
+                <tr class="team-header-row">
+                  <td colspan="${colspan}">${esc(sub)}</td>
+                </tr>
+              `;
+            }
+            grouped[dept][sub].forEach(emp => {
+              bodyHtml += renderEmpRow(emp);
+            });
+          });
+        });
+
+        // Render Unassigned
+        if (unassigned.length > 0) {
+          bodyHtml += `
+            <tr class="dept-header-row">
+              <td colspan="${colspan}">Unassigned Department / Pool</td>
+            </tr>
+          `;
+          unassigned.forEach(emp => {
+            bodyHtml += renderEmpRow(emp);
+          });
+        }
+
+        tbody.innerHTML = bodyHtml || `<tr><td colspan="${colspan}" style="text-align:center; padding:3rem; color:var(--text-muted);">No employees found.</td></tr>`;
       },
 
       renderSchedules() {
