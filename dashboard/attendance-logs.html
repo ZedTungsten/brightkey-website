@@ -20,10 +20,11 @@
     .att-container { max-width: 1200px; width: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: 2rem; }
 
     /* ── Tab Layout ── */
-    .tabs-nav {
+    .drawer-tabs {
       display: flex;
       border-bottom: 1px solid var(--border);
       flex-shrink: 0;
+      overflow-x: auto;
       background: var(--bg-surface);
       padding: 0 1.5rem;
     }
@@ -45,6 +46,72 @@
     }
     .tab-btn:hover:not(.active) {
       color: var(--text-secondary);
+    }
+
+    /* ── Settings Styling ── */
+    .settings-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+      gap: 1.5rem;
+    }
+    .settings-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 1.5rem;
+      box-sizing: border-box;
+      box-shadow: var(--shadow-sm);
+    }
+    .settings-card-title {
+      font-size: 0.88rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 1.25rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 0.5rem;
+    }
+    .settings-card-title::before {
+      content: '';
+      width: 3px;
+      height: 14px;
+      background: var(--cyan);
+      border-radius: 2px;
+      flex-shrink: 0;
+    }
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+      margin-bottom: 1rem;
+    }
+    .form-group-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+    .form-label {
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+      letter-spacing: 0.05em;
+    }
+    .form-input {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 0.5rem 0.75rem;
+      font-size: 0.88rem;
+      color: var(--text-primary);
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .form-input:focus {
+      border-color: var(--cyan);
     }
 
     .tab-content {
@@ -173,8 +240,9 @@
       <div class="content-area">
         <main class="main-panel">
           <!-- Tabs Navigation -->
-          <div class="tabs-nav">
-            <button class="tab-btn active" id="tab-btn-logs">Logs</button>
+          <div class="drawer-tabs">
+            <button class="tab-btn active" id="tab-btn-logs" onclick="AttendanceLogsApp.switchTab('logs')">Logs</button>
+            <button class="tab-btn" id="tab-btn-settings" onclick="AttendanceLogsApp.switchTab('settings')">Leaves Settings</button>
           </div>
 
           <div class="scroll-area">
@@ -193,6 +261,252 @@
                 <div id="logs-container">
                   <div style="text-align:center; padding:3rem; color:var(--text-muted);">Select an employee to view shift logs.</div>
                 </div>
+              </div>
+
+              <!-- ── Settings Tab Content ── -->
+              <div class="tab-content" id="tab-content-settings">
+                <form id="leaves-settings-form" onsubmit="AttendanceLogsApp.saveSettings(event)" style="display:flex; flex-direction:column; gap:1.5rem;">
+                  <div class="settings-grid">
+                    
+                    <!-- Leaves Loading Section -->
+                    <div class="settings-card">
+                      <div class="settings-card-title">Leaves Loading</div>
+                      
+                      <div style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 1rem;">
+                        Automatically load employee leaves after a certain stay duration.
+                      </div>
+
+                      <!-- VL Loading -->
+                      <div class="form-group">
+                        <label class="form-label">Vacation Leave (VL)</label>
+                        <div style="display: flex; align-items: center; gap: 0.5rem;">
+                          <span>Load</span>
+                          <input type="number" step="0.5" id="vl-load-amt" class="form-input" style="width: 70px;" placeholder="0" />
+                          <span>credits after</span>
+                          <input type="number" id="vl-load-days" class="form-input" style="width: 80px;" placeholder="365" />
+                          <span>days of stay.</span>
+                        </div>
+                      </div>
+
+                      <div class="form-group-row" style="margin-bottom: 0.5rem;">
+                        <input type="checkbox" id="vl-trickle-enabled" onchange="AttendanceLogsApp.toggleTrickle('vl')" />
+                        <label for="vl-trickle-enabled" style="font-size: 0.8rem; font-weight: 500; cursor: pointer;">Enable Trickle Loading</label>
+                      </div>
+
+                      <div id="vl-trickle-wrap" class="form-group" style="display: none; padding-left: 1.25rem;">
+                        <div style="display: flex; align-items: center; gap: 0.5rem;">
+                          <span>Gain only</span>
+                          <input type="number" step="0.5" id="vl-trickle-gain" class="form-input" style="width: 70px;" placeholder="1" />
+                          <span>credits every month until reached limit.</span>
+                        </div>
+                      </div>
+
+                      <div style="border-bottom: 1px dashed var(--border); margin: 1.5rem 0;"></div>
+
+                      <!-- SL Loading -->
+                      <div class="form-group">
+                        <label class="form-label">Sick Leave (SL)</label>
+                        <div style="display: flex; align-items: center; gap: 0.5rem;">
+                          <span>Load</span>
+                          <input type="number" step="0.5" id="sl-load-amt" class="form-input" style="width: 70px;" placeholder="0" />
+                          <span>credits after</span>
+                          <input type="number" id="sl-load-days" class="form-input" style="width: 80px;" placeholder="365" />
+                          <span>days of stay.</span>
+                        </div>
+                      </div>
+
+                      <div class="form-group-row" style="margin-bottom: 0.5rem;">
+                        <input type="checkbox" id="sl-trickle-enabled" onchange="AttendanceLogsApp.toggleTrickle('sl')" />
+                        <label for="sl-trickle-enabled" style="font-size: 0.8rem; font-weight: 500; cursor: pointer;">Enable Trickle Loading</label>
+                      </div>
+
+                      <div id="sl-trickle-wrap" class="form-group" style="display: none; padding-left: 1.25rem;">
+                        <div style="display: flex; align-items: center; gap: 0.5rem;">
+                          <span>Gain only</span>
+                          <input type="number" step="0.5" id="sl-trickle-gain" class="form-input" style="width: 70px;" placeholder="1" />
+                          <span>credits every month until reached limit.</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Automatic Loading Section -->
+                    <div class="settings-card">
+                      <div class="settings-card-title">Automatic Loading</div>
+
+                      <!-- VL Auto Load -->
+                      <div class="form-group">
+                        <label class="form-label">VL Automatic Loading</label>
+                        <div class="form-group-row" style="margin-bottom: 0.5rem;">
+                          <input type="checkbox" id="vl-autoload-active" />
+                          <label for="vl-autoload-active" style="font-size: 0.82rem; font-weight: 600; cursor: pointer;">On / Active</label>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+                          <span>Load</span>
+                          <input type="number" step="0.5" id="vl-autoload-amt" class="form-input" style="width: 70px;" placeholder="0" />
+                          <span>credits.</span>
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 0.35rem; padding-left: 0.25rem;">
+                          <div class="form-group-row" style="margin: 0; gap: 0.35rem;">
+                            <input type="radio" name="vl-autoload-trigger" id="vl-trigger-date" value="date" checked />
+                            <label for="vl-trigger-date" style="font-size: 0.78rem; cursor: pointer;">After specific date:</label>
+                            <input type="date" id="vl-autoload-date" class="form-input" style="padding: 0.25rem 0.5rem; font-size: 0.78rem; width: 130px;" />
+                          </div>
+                          <div class="form-group-row" style="margin: 0; gap: 0.35rem;">
+                            <input type="radio" name="vl-autoload-trigger" id="vl-trigger-hired" value="hired" />
+                            <label for="vl-trigger-hired" style="font-size: 0.78rem; cursor: pointer;">Next anniversary of Date Hired</label>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style="border-bottom: 1px dashed var(--border); margin: 1.5rem 0;"></div>
+
+                      <!-- SL Auto Load -->
+                      <div class="form-group">
+                        <label class="form-label">SL Automatic Loading</label>
+                        <div class="form-group-row" style="margin-bottom: 0.5rem;">
+                          <input type="checkbox" id="sl-autoload-active" />
+                          <label for="sl-autoload-active" style="font-size: 0.82rem; font-weight: 600; cursor: pointer;">On / Active</label>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+                          <span>Load</span>
+                          <input type="number" step="0.5" id="sl-autoload-amt" class="form-input" style="width: 70px;" placeholder="0" />
+                          <span>credits.</span>
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 0.35rem; padding-left: 0.25rem;">
+                          <div class="form-group-row" style="margin: 0; gap: 0.35rem;">
+                            <input type="radio" name="sl-autoload-trigger" id="sl-trigger-date" value="date" checked />
+                            <label for="sl-trigger-date" style="font-size: 0.78rem; cursor: pointer;">After specific date:</label>
+                            <input type="date" id="sl-autoload-date" class="form-input" style="padding: 0.25rem 0.5rem; font-size: 0.78rem; width: 130px;" />
+                          </div>
+                          <div class="form-group-row" style="margin: 0; gap: 0.35rem;">
+                            <input type="radio" name="sl-autoload-trigger" id="sl-trigger-hired" value="hired" />
+                            <label for="sl-trigger-hired" style="font-size: 0.78rem; cursor: pointer;">Next anniversary of Date Hired</label>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Leave Credits to Payout Section -->
+                    <div class="settings-card">
+                      <div class="settings-card-title">Leave Credits to Payout</div>
+                      
+                      <div style="font-size: 0.75rem; color: var(--warning); margin-bottom: 1rem; font-weight: 500; line-height: 1.4;">
+                        Note: Conversion reduces active VL/SL loads to 0 and adds them as payout adjustments. Ensure autoloading doesn't precede this date.
+                      </div>
+
+                      <!-- VL Payout -->
+                      <div class="form-group">
+                        <label class="form-label">VL Payout Conversion</label>
+                        <div class="form-group-row" style="margin-bottom: 0.5rem;">
+                          <input type="checkbox" id="vl-payout-active" />
+                          <label for="vl-payout-active" style="font-size: 0.82rem; font-weight: 600; cursor: pointer;">On / Active</label>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+                          <span>Convert each VL to</span>
+                          <input type="number" step="0.01" id="vl-payout-value" class="form-input" style="width: 100px;" placeholder="0.00" />
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 0.5rem;">
+                          <span>Payout Date:</span>
+                          <input type="date" id="vl-payout-date" class="form-input" style="width: 150px;" />
+                        </div>
+                      </div>
+
+                      <div style="border-bottom: 1px dashed var(--border); margin: 1.5rem 0;"></div>
+
+                      <!-- SL Payout -->
+                      <div class="form-group">
+                        <label class="form-label">SL Payout Conversion</label>
+                        <div class="form-group-row" style="margin-bottom: 0.5rem;">
+                          <input type="checkbox" id="sl-payout-active" />
+                          <label for="sl-payout-active" style="font-size: 0.82rem; font-weight: 600; cursor: pointer;">On / Active</label>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+                          <span>Convert each SL to</span>
+                          <input type="number" step="0.01" id="sl-payout-value" class="form-input" style="width: 100px;" placeholder="0.00" />
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 0.5rem;">
+                          <span>Payout Date:</span>
+                          <input type="date" id="sl-payout-date" class="form-input" style="width: 150px;" />
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Rollover Section -->
+                    <div class="settings-card">
+                      <div class="settings-card-title">Rollover</div>
+
+                      <div style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 1rem; line-height: 1.4;">
+                        Roll remaining leave credits over to the following year as Extra Leaves (best used when payout conversion is disabled).
+                      </div>
+
+                      <div class="form-group-row">
+                        <input type="checkbox" id="vl-rollover-enabled" />
+                        <label for="vl-rollover-enabled" style="font-size: 0.82rem; font-weight: 600; cursor: pointer;">Allow VL Rollover as Extra Leaves</label>
+                      </div>
+
+                      <div class="form-group-row">
+                        <input type="checkbox" id="sl-rollover-enabled" />
+                        <label for="sl-rollover-enabled" style="font-size: 0.82rem; font-weight: 600; cursor: pointer;">Allow SL Rollover as Extra Leaves</label>
+                      </div>
+                    </div>
+
+                    <!-- Leaves Limit Section -->
+                    <div class="settings-card">
+                      <div class="settings-card-title">Leaves Limit</div>
+                      
+                      <div style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 1rem; line-height: 1.4;">
+                        Maximum leaves limit by employee level (autoloading stops once reached, excluding Extra Leaves).
+                      </div>
+
+                      <div class="form-group">
+                        <label for="limit-level-1" class="form-label">Level 1 (Staff)</label>
+                        <input type="number" id="limit-level-1" class="form-input" style="width: 100px;" placeholder="15" />
+                      </div>
+
+                      <div class="form-group">
+                        <label for="limit-level-2" class="form-label">Level 2 (Supervisor)</label>
+                        <input type="number" id="limit-level-2" class="form-input" style="width: 100px;" placeholder="20" />
+                      </div>
+
+                      <div class="form-group">
+                        <label for="limit-level-3" class="form-label">Level 3 (Manager)</label>
+                        <input type="number" id="limit-level-3" class="form-input" style="width: 100px;" placeholder="25" />
+                      </div>
+
+                      <div class="form-group">
+                        <label for="limit-level-4" class="form-label">Level 4 (Director/Executive)</label>
+                        <input type="number" id="limit-level-4" class="form-input" style="width: 100px;" placeholder="30" />
+                      </div>
+                    </div>
+
+                    <!-- Birthday Leave Section -->
+                    <div class="settings-card">
+                      <div class="settings-card-title">Birthday Leave</div>
+
+                      <div class="form-group-row" style="margin-bottom: 0.5rem;">
+                        <input type="checkbox" id="bday-leave-active" />
+                        <label for="bday-leave-active" style="font-size: 0.82rem; font-weight: 600; cursor: pointer;">On / Active</label>
+                      </div>
+
+                      <div class="form-group">
+                        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+                          <span>Load</span>
+                          <input type="number" step="1" id="bday-leave-amt" class="form-input" style="width: 70px;" placeholder="1" />
+                          <span>Extra Leave day(s)</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 0.5rem;">
+                          <input type="number" step="1" id="bday-leave-days-before" class="form-input" style="width: 70px;" placeholder="0" />
+                          <span>day(s) before employee's birthday (0 = on birthday).</span>
+                        </div>
+                      </div>
+                    </div>
+
+                  </div>
+
+                  <div style="display: flex; justify-content: flex-end; margin-top: 1rem; border-top: 1px solid var(--border); padding-top: 1.5rem;">
+                    <button type="submit" class="btn btn-cyan" style="min-width: 150px; font-weight: 700; height: 40px;">Save Settings</button>
+                  </div>
+                </form>
               </div>
 
             </div>
@@ -228,6 +542,8 @@
         'July', 'August', 'September', 'October', 'November', 'December'
       ],
 
+      leavesSettings: null,
+
       async init() {
         if (!window.BKAuth) return;
         
@@ -240,6 +556,7 @@
         
         if (this.companyId) {
           await this.loadEmployeesList();
+          await this.loadSettings();
         }
       },
 
@@ -251,6 +568,201 @@
         } catch (err) {
           console.error(err);
           return null;
+        }
+      },
+
+      async loadSettings() {
+        if (!this.companyId) return;
+        try {
+          const sb = window.BKAuth.sb;
+          const { data, error } = await sb.from('global_settings')
+            .select('value')
+            .eq('key', 'leaves_settings')
+            .eq('company_id', this.companyId)
+            .maybeSingle();
+
+          if (error) throw error;
+          
+          this.leavesSettings = data?.value || this.getDefaultSettings();
+          this.populateSettingsForm();
+        } catch (err) {
+          console.error('Failed to load leaves settings:', err);
+          Toast.error('Failed to load leaves settings: ' + err.message);
+        }
+      },
+
+      getDefaultSettings() {
+        return {
+          vl_load_amt: 0,
+          vl_load_days: 365,
+          vl_trickle_enabled: false,
+          vl_trickle_gain: 1,
+          sl_load_amt: 0,
+          sl_load_days: 365,
+          sl_trickle_enabled: false,
+          sl_trickle_gain: 1,
+          vl_autoload_active: false,
+          vl_autoload_amt: 0,
+          vl_autoload_trigger: 'date',
+          vl_autoload_date: '',
+          sl_autoload_active: false,
+          sl_autoload_amt: 0,
+          sl_autoload_trigger: 'date',
+          sl_autoload_date: '',
+          vl_payout_active: false,
+          vl_payout_value: 0,
+          vl_payout_date: '',
+          sl_payout_active: false,
+          sl_payout_value: 0,
+          sl_payout_date: '',
+          vl_rollover_enabled: false,
+          sl_rollover_enabled: false,
+          limit_level_1: 15,
+          limit_level_2: 20,
+          limit_level_3: 25,
+          limit_level_4: 30,
+          bday_leave_active: false,
+          bday_leave_amt: 1,
+          bday_leave_days_before: 0
+        };
+      },
+
+      populateSettingsForm() {
+        const s = this.leavesSettings || this.getDefaultSettings();
+        
+        document.getElementById('vl-load-amt').value = s.vl_load_amt ?? '';
+        document.getElementById('vl-load-days').value = s.vl_load_days ?? '';
+        document.getElementById('vl-trickle-enabled').checked = !!s.vl_trickle_enabled;
+        document.getElementById('vl-trickle-gain').value = s.vl_trickle_gain ?? '';
+        this.toggleTrickle('vl');
+
+        document.getElementById('sl-load-amt').value = s.sl_load_amt ?? '';
+        document.getElementById('sl-load-days').value = s.sl_load_days ?? '';
+        document.getElementById('sl-trickle-enabled').checked = !!s.sl_trickle_enabled;
+        document.getElementById('sl-trickle-gain').value = s.sl_trickle_gain ?? '';
+        this.toggleTrickle('sl');
+
+        document.getElementById('vl-autoload-active').checked = !!s.vl_autoload_active;
+        document.getElementById('vl-autoload-amt').value = s.vl_autoload_amt ?? '';
+        const vlTrigger = s.vl_autoload_trigger || 'date';
+        const vlTriggerDateRadio = document.getElementById('vl-trigger-date');
+        const vlTriggerHiredRadio = document.getElementById('vl-trigger-hired');
+        if (vlTrigger === 'date' && vlTriggerDateRadio) vlTriggerDateRadio.checked = true;
+        if (vlTrigger === 'hired' && vlTriggerHiredRadio) vlTriggerHiredRadio.checked = true;
+        document.getElementById('vl-autoload-date').value = s.vl_autoload_date || '';
+
+        document.getElementById('sl-autoload-active').checked = !!s.sl_autoload_active;
+        document.getElementById('sl-autoload-amt').value = s.sl_autoload_amt ?? '';
+        const slTrigger = s.sl_autoload_trigger || 'date';
+        const slTriggerDateRadio = document.getElementById('sl-trigger-date');
+        const slTriggerHiredRadio = document.getElementById('sl-trigger-hired');
+        if (slTrigger === 'date' && slTriggerDateRadio) slTriggerDateRadio.checked = true;
+        if (slTrigger === 'hired' && slTriggerHiredRadio) slTriggerHiredRadio.checked = true;
+        document.getElementById('sl-autoload-date').value = s.sl_autoload_date || '';
+
+        document.getElementById('vl-payout-active').checked = !!s.vl_payout_active;
+        document.getElementById('vl-payout-value').value = s.vl_payout_value ?? '';
+        document.getElementById('vl-payout-date').value = s.vl_payout_date || '';
+
+        document.getElementById('sl-payout-active').checked = !!s.sl_payout_active;
+        document.getElementById('sl-payout-value').value = s.sl_payout_value ?? '';
+        document.getElementById('sl-payout-date').value = s.sl_payout_date || '';
+
+        document.getElementById('vl-rollover-enabled').checked = !!s.vl_rollover_enabled;
+        document.getElementById('sl-rollover-enabled').checked = !!s.sl_rollover_enabled;
+
+        document.getElementById('limit-level-1').value = s.limit_level_1 ?? '';
+        document.getElementById('limit-level-2').value = s.limit_level_2 ?? '';
+        document.getElementById('limit-level-3').value = s.limit_level_3 ?? '';
+        document.getElementById('limit-level-4').value = s.limit_level_4 ?? '';
+
+        document.getElementById('bday-leave-active').checked = !!s.bday_leave_active;
+        document.getElementById('bday-leave-amt').value = s.bday_leave_amt ?? '';
+        document.getElementById('bday-leave-days-before').value = s.bday_leave_days_before ?? '';
+      },
+
+      toggleTrickle(type) {
+        const checked = document.getElementById(`${type}-trickle-enabled`).checked;
+        const wrap = document.getElementById(`${type}-trickle-wrap`);
+        if (wrap) {
+          wrap.style.display = checked ? 'block' : 'none';
+        }
+      },
+
+      switchTab(tab) {
+        document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+        
+        const targetBtn = document.getElementById(`tab-btn-${tab}`);
+        const targetContent = document.getElementById(`tab-content-${tab}`);
+        if (targetBtn) targetBtn.classList.add('active');
+        if (targetContent) targetContent.classList.add('active');
+      },
+
+      async saveSettings(e) {
+        if (e) e.preventDefault();
+        if (!this.companyId) return;
+
+        const sb = window.BKAuth.sb;
+        
+        const vlAutoloadTrigger = document.querySelector('input[name="vl-autoload-trigger"]:checked')?.value || 'date';
+        const slAutoloadTrigger = document.querySelector('input[name="sl-autoload-trigger"]:checked')?.value || 'date';
+
+        const updatedSettings = {
+          vl_load_amt: parseFloat(document.getElementById('vl-load-amt').value) || 0,
+          vl_load_days: parseInt(document.getElementById('vl-load-days').value, 10) || 0,
+          vl_trickle_enabled: document.getElementById('vl-trickle-enabled').checked,
+          vl_trickle_gain: parseFloat(document.getElementById('vl-trickle-gain').value) || 0,
+
+          sl_load_amt: parseFloat(document.getElementById('sl-load-amt').value) || 0,
+          sl_load_days: parseInt(document.getElementById('sl-load-days').value, 10) || 0,
+          sl_trickle_enabled: document.getElementById('sl-trickle-enabled').checked,
+          sl_trickle_gain: parseFloat(document.getElementById('sl-trickle-gain').value) || 0,
+
+          vl_autoload_active: document.getElementById('vl-autoload-active').checked,
+          vl_autoload_amt: parseFloat(document.getElementById('vl-autoload-amt').value) || 0,
+          vl_autoload_trigger: vlAutoloadTrigger,
+          vl_autoload_date: document.getElementById('vl-autoload-date').value,
+
+          sl_autoload_active: document.getElementById('sl-autoload-active').checked,
+          sl_autoload_amt: parseFloat(document.getElementById('sl-autoload-amt').value) || 0,
+          sl_autoload_trigger: slAutoloadTrigger,
+          sl_autoload_date: document.getElementById('sl-autoload-date').value,
+
+          vl_payout_active: document.getElementById('vl-payout-active').checked,
+          vl_payout_value: parseFloat(document.getElementById('vl-payout-value').value) || 0,
+          vl_payout_date: document.getElementById('vl-payout-date').value,
+
+          sl_payout_active: document.getElementById('sl-payout-active').checked,
+          sl_payout_value: parseFloat(document.getElementById('sl-payout-value').value) || 0,
+          sl_payout_date: document.getElementById('sl-payout-date').value,
+
+          vl_rollover_enabled: document.getElementById('vl-rollover-enabled').checked,
+          sl_rollover_enabled: document.getElementById('sl-rollover-enabled').checked,
+
+          limit_level_1: parseInt(document.getElementById('limit-level-1').value, 10) || 0,
+          limit_level_2: parseInt(document.getElementById('limit-level-2').value, 10) || 0,
+          limit_level_3: parseInt(document.getElementById('limit-level-3').value, 10) || 0,
+          limit_level_4: parseInt(document.getElementById('limit-level-4').value, 10) || 0,
+
+          bday_leave_active: document.getElementById('bday-leave-active').checked,
+          bday_leave_amt: parseInt(document.getElementById('bday-leave-amt').value, 10) || 0,
+          bday_leave_days_before: parseInt(document.getElementById('bday-leave-days-before').value, 10) || 0
+        };
+
+        try {
+          const { error } = await sb.from('global_settings').upsert({
+            key: 'leaves_settings',
+            company_id: this.companyId,
+            value: updatedSettings
+          });
+
+          if (error) throw error;
+          this.leavesSettings = updatedSettings;
+          Toast.success('Leaves settings saved successfully.');
+        } catch (err) {
+          console.error('Failed to save leaves settings:', err);
+          Toast.error('Failed to save leaves settings: ' + err.message);
         }
       },
 
