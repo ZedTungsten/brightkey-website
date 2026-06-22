@@ -814,21 +814,39 @@
               <!-- Right side: Payslip Generator & Preview -->
               <div style="display:flex; flex-direction:column; gap:1.5rem; width: 720px; flex-shrink: 0;">
                 
-                <div class="j-card" style="margin-bottom:0;">
-                  
-                  <div style="display:flex; gap:1rem; align-items:flex-end;">
-                    <div class="form-group" style="flex:1; margin-bottom:0;">
-                      <label class="form-label" for="payslip-employee-select">Employee</label>
-                      <select id="payslip-employee-select" class="form-select" onchange="SalaryApp.generatePayslipPreview()">
-                        <!-- Populated dynamically -->
-                      </select>
-                    </div>
-                    
+                <div class="j-card" style="margin-bottom:0; display:flex; flex-direction:column; gap:1.25rem;">
+                  <!-- Month display row -->
+                  <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span style="font-size: 0.95rem; font-weight: 700; color: var(--text-primary);">Generate Payslip</span>
                     <div style="display:flex; gap:0.5rem; align-items:center;">
                       <button class="btn btn-outline btn-sm" onclick="SalaryApp.changePayslipMonth(-1)" style="height: 38px;">&lt;</button>
                       <span id="payslip-month-display" style="font-size:0.88rem; font-weight:700; color:var(--text-primary); min-width:140px; text-align:center; display:inline-block; line-height:38px;"></span>
                       <button class="btn btn-outline btn-sm" onclick="SalaryApp.changePayslipMonth(1)" style="height: 38px;">&gt;</button>
                     </div>
+                  </div>
+
+                  <!-- Department Dropdown -->
+                  <div class="form-group">
+                    <label class="form-label" for="payslip-department-select">Department</label>
+                    <select id="payslip-department-select" class="form-select" onchange="SalaryApp.handlePayslipDeptChange()">
+                      <!-- Populated dynamically -->
+                    </select>
+                  </div>
+
+                  <!-- Team Dropdown -->
+                  <div class="form-group">
+                    <label class="form-label" for="payslip-team-select">Team</label>
+                    <select id="payslip-team-select" class="form-select" onchange="SalaryApp.handlePayslipTeamChange()">
+                      <!-- Populated dynamically -->
+                    </select>
+                  </div>
+
+                  <!-- Employee Dropdown -->
+                  <div class="form-group">
+                    <label class="form-label" for="payslip-employee-select">Employee</label>
+                    <select id="payslip-employee-select" class="form-select" onchange="SalaryApp.generatePayslipPreview()">
+                      <!-- Populated dynamically -->
+                    </select>
                   </div>
                 </div>
 
@@ -1345,7 +1363,9 @@
         if (adjEmpSel) adjEmpSel.innerHTML = empOptionsHtml;
 
         const payslipEmpSel = document.getElementById('payslip-employee-select');
-        if (payslipEmpSel) payslipEmpSel.innerHTML = empOptionsHtml;
+        if (payslipEmpSel) {
+          this.populatePayslipDrilldown();
+        }
 
         // Initialize Payslip month display
         this.updateMonthDisplays();
@@ -3551,9 +3571,151 @@
         }
       },
 
+      populatePayslipDrilldown() {
+        const deptSelect = document.getElementById('payslip-department-select');
+        if (!deptSelect) return;
+
+        // 1. Build the mappings
+        const empDeptMap = {};
+        const empTeamMap = {};
+        const struct = this.companyStructure || { departments: [] };
+        if (struct.departments) {
+          struct.departments.forEach(dept => {
+            const deptName = dept.name || '';
+            if (dept.managerId) {
+              empDeptMap[dept.managerId] = deptName;
+            }
+            if (dept.subteams) {
+              dept.subteams.forEach(sub => {
+                const subteamName = sub.name || '';
+                if (sub.managerId) {
+                  empDeptMap[sub.managerId] = deptName;
+                  empTeamMap[sub.managerId] = subteamName;
+                }
+                if (sub.colleagueIds) {
+                  sub.colleagueIds.forEach(id => {
+                    empDeptMap[id] = deptName;
+                    empTeamMap[id] = subteamName;
+                  });
+                }
+              });
+            }
+          });
+        }
+
+        // Cache these maps on SalaryApp
+        this.payslipEmpDeptMap = empDeptMap;
+        this.payslipEmpTeamMap = empTeamMap;
+
+        // 2. Get unique departments list
+        const departmentsSet = new Set();
+        this.employees.forEach(emp => {
+          const d = empDeptMap[emp.id] || emp.department || 'Unassigned';
+          departmentsSet.add(d);
+        });
+        const departments = [...departmentsSet].sort();
+
+        // Populate Department dropdown
+        deptSelect.innerHTML = departments.map(d => `<option value="${esc(d)}">${esc(d)}</option>`).join('');
+
+        // Trigger change to populate teams and employees
+        this.handlePayslipDeptChange();
+      },
+
+      handlePayslipDeptChange() {
+        const deptSelect = document.getElementById('payslip-department-select');
+        const teamSelect = document.getElementById('payslip-team-select');
+        if (!deptSelect || !teamSelect) return;
+
+        const selectedDept = deptSelect.value;
+        
+        // Find all employees belonging to this department
+        const deptEmps = this.employees.filter(emp => {
+          const d = (this.payslipEmpDeptMap && this.payslipEmpDeptMap[emp.id]) || emp.department || 'Unassigned';
+          return d === selectedDept;
+        });
+
+        // Get unique teams for this department
+        const teamsSet = new Set();
+        deptEmps.forEach(emp => {
+          const t = (this.payslipEmpTeamMap && this.payslipEmpTeamMap[emp.id]) || 'No Team';
+          teamsSet.add(t);
+        });
+        const teams = [...teamsSet].sort();
+
+        // Populate Teams dropdown
+        let teamsHtml = '';
+        if (teams.length > 1 || (teams.length === 1 && teams[0] !== 'No Team')) {
+          teamsHtml += `<option value="ALL">All Teams</option>`;
+        }
+        teamsHtml += teams.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('');
+        teamSelect.innerHTML = teamsHtml;
+
+        this.handlePayslipTeamChange();
+      },
+
+      handlePayslipTeamChange() {
+        const deptSelect = document.getElementById('payslip-department-select');
+        const teamSelect = document.getElementById('payslip-team-select');
+        const empSelect = document.getElementById('payslip-employee-select');
+        if (!deptSelect || !teamSelect || !empSelect) return;
+
+        const selectedDept = deptSelect.value;
+        const selectedTeam = teamSelect.value;
+
+        // Filter employees by department and team
+        let filteredEmps = this.employees.filter(emp => {
+          const d = (this.payslipEmpDeptMap && this.payslipEmpDeptMap[emp.id]) || emp.department || 'Unassigned';
+          return d === selectedDept;
+        });
+
+        if (selectedTeam !== 'ALL') {
+          filteredEmps = filteredEmps.filter(emp => {
+            const t = (this.payslipEmpTeamMap && this.payslipEmpTeamMap[emp.id]) || 'No Team';
+            return t === selectedTeam;
+          });
+        }
+
+        // Sort employees by name
+        filteredEmps.sort((a, b) => {
+          const nameA = [a.first_name, a.middle_name, a.last_name].filter(Boolean).join(' ').toLowerCase();
+          const nameB = [b.first_name, b.middle_name, b.last_name].filter(Boolean).join(' ').toLowerCase();
+          return nameA.localeCompare(nameB);
+        });
+
+        // Populate Employee dropdown
+        empSelect.innerHTML = filteredEmps.map(emp => {
+          const fullName = [emp.first_name, emp.middle_name, emp.last_name].filter(Boolean).join(' ');
+          return `<option value="${emp.id}">${esc(fullName)}</option>`;
+        }).join('');
+
+        // Trigger change/preview for the newly selected employee
+        this.generatePayslipPreview();
+      },
+
       async shortcutSavePayslip(empId) {
+        const deptSelect = document.getElementById('payslip-department-select');
+        const teamSelect = document.getElementById('payslip-team-select');
         const empSelect = document.getElementById('payslip-employee-select');
         if (!empSelect) return;
+
+        const emp = this.employees.find(e => e.id === empId);
+        if (emp) {
+          const d = (this.payslipEmpDeptMap && this.payslipEmpDeptMap[empId]) || emp.department || 'Unassigned';
+          const t = (this.payslipEmpTeamMap && this.payslipEmpTeamMap[empId]) || 'No Team';
+
+          if (deptSelect) {
+            deptSelect.value = d;
+            this.handlePayslipDeptChange();
+          }
+          if (teamSelect) {
+            teamSelect.value = t;
+            if (!teamSelect.value) {
+              teamSelect.value = 'ALL';
+            }
+            this.handlePayslipTeamChange();
+          }
+        }
 
         // Remember the current active tab
         const activeTabBtn = document.querySelector('.drawer-tabs .tab-btn.active');
