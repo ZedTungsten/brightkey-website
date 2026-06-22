@@ -759,7 +759,7 @@
                   <div style="display:flex; gap:1rem; align-items:flex-end;">
                     <div class="form-group" style="flex:1; margin-bottom:0;">
                       <label class="form-label" for="payslip-employee-select">Employee</label>
-                      <select id="payslip-employee-select" class="form-select">
+                      <select id="payslip-employee-select" class="form-select" onchange="SalaryApp.generatePayslipPreview()">
                         <!-- Populated dynamically -->
                       </select>
                     </div>
@@ -1314,6 +1314,9 @@
           const panel = document.getElementById(`panel-${t}`);
           if (panel) panel.classList.toggle('active', t === tab);
         });
+        if (tab === 'payslip') {
+          this.generatePayslipPreview();
+        }
       },
 
       renderAll() {
@@ -2919,11 +2922,9 @@
       },
 
       generatePayslipPreview() {
-        const empId = document.getElementById('payslip-employee-select').value;
-        if (!empId) {
-          toast('Please select an employee.', 'error');
-          return;
-        }
+        const empSelect = document.getElementById('payslip-employee-select');
+        const empId = empSelect ? empSelect.value : null;
+        if (!empId) return;
 
         const emp = this.employees.find(e => e.id === empId);
         if (!emp) {
@@ -2995,12 +2996,12 @@
           <tr>
             <td style="padding: 0.75rem; border-bottom: 1px solid #e5e7eb; font-weight: 600;">Basic Salary</td>
             <td style="padding: 0.75rem; border-bottom: 1px solid #e5e7eb; color: #4b5563;">Monthly Basic Salary</td>
-            <td style="padding: 0.75rem; border-bottom: 1px solid #e5e7eb; text-align: right; font-variant-numeric: tabular-nums;">\${php(baseSalary)}</td>
+            <td style="padding: 0.75rem; border-bottom: 1px solid #e5e7eb; text-align: right; font-variant-numeric: tabular-nums;">${php(baseSalary)}</td>
           </tr>
           <tr>
             <td style="padding: 0.75rem; border-bottom: 1px solid #e5e7eb; font-weight: 600;">Commissions</td>
             <td style="padding: 0.75rem; border-bottom: 1px solid #e5e7eb; color: #4b5563;">Sales Commissions</td>
-            <td style="padding: 0.75rem; border-bottom: 1px solid #e5e7eb; text-align: right; font-variant-numeric: tabular-nums;">\${php(empComms)}</td>
+            <td style="padding: 0.75rem; border-bottom: 1px solid #e5e7eb; text-align: right; font-variant-numeric: tabular-nums;">${php(empComms)}</td>
           </tr>
         `;
 
@@ -3009,9 +3010,9 @@
             const isNeg = Number(adj.value) < 0;
             breakdownRowsHtml += `
               <tr>
-                <td style="padding: 0.75rem; border-bottom: 1px solid #e5e7eb; font-weight: 600; color: \${isNeg ? '#dc2626' : '#111827'};">Adjustment</td>
-                <td style="padding: 0.75rem; border-bottom: 1px solid #e5e7eb; color: #4b5563;">\${esc(adj.label || 'Salary Adjustment')}</td>
-                <td style="padding: 0.75rem; border-bottom: 1px solid #e5e7eb; text-align: right; font-variant-numeric: tabular-nums; color: \${isNeg ? '#dc2626' : '#111827'}; font-weight: 600;">\${php(adj.value)}</td>
+                <td style="padding: 0.75rem; border-bottom: 1px solid #e5e7eb; font-weight: 600; color: ${isNeg ? '#dc2626' : '#111827'};">Adjustment</td>
+                <td style="padding: 0.75rem; border-bottom: 1px solid #e5e7eb; color: #4b5563;">${esc(adj.label || 'Salary Adjustment')}</td>
+                <td style="padding: 0.75rem; border-bottom: 1px solid #e5e7eb; text-align: right; font-variant-numeric: tabular-nums; color: ${isNeg ? '#dc2626' : '#111827'}; font-weight: 600;">${php(adj.value)}</td>
               </tr>
             `;
           });
@@ -3030,8 +3031,8 @@
             breakdownRowsHtml += `
               <tr>
                 <td style="padding: 0.75rem; border-bottom: 1px solid #e5e7eb; font-weight: 600;">Reimbursement</td>
-                <td style="padding: 0.75rem; border-bottom: 1px solid #e5e7eb; color: #4b5563;">\${esc(r.label || 'Expense Reimbursement')}</td>
-                <td style="padding: 0.75rem; border-bottom: 1px solid #e5e7eb; text-align: right; font-variant-numeric: tabular-nums;">\${php(r.value)}</td>
+                <td style="padding: 0.75rem; border-bottom: 1px solid #e5e7eb; color: #4b5563;">${esc(r.label || 'Expense Reimbursement')}</td>
+                <td style="padding: 0.75rem; border-bottom: 1px solid #e5e7eb; text-align: right; font-variant-numeric: tabular-nums;">${php(r.value)}</td>
               </tr>
             `;
           });
@@ -3050,8 +3051,8 @@
             breakdownRowsHtml += `
               <tr>
                 <td style="padding: 0.75rem; border-bottom: 1px solid #e5e7eb; font-weight: 600;">Special Payout</td>
-                <td style="padding: 0.75rem; border-bottom: 1px solid #e5e7eb; color: #4b5563;">\${esc(s.label || 'Special Payout')} (Day \${s.day})</td>
-                <td style="padding: 0.75rem; border-bottom: 1px solid #e5e7eb; text-align: right; font-variant-numeric: tabular-nums;">\${php(s.value)}</td>
+                <td style="padding: 0.75rem; border-bottom: 1px solid #e5e7eb; color: #4b5563;">${esc(s.label || 'Special Payout')} (Day ${s.day})</td>
+                <td style="padding: 0.75rem; border-bottom: 1px solid #e5e7eb; text-align: right; font-variant-numeric: tabular-nums;">${php(s.value)}</td>
               </tr>
             `;
           });
@@ -3100,7 +3101,7 @@
             const date = new Date(completionDateStr);
             const yyyy = date.getFullYear();
             const mm = String(date.getMonth() + 1).padStart(2, '0');
-            if (`\${yyyy}-\\${mm}` !== monthKey) return false;
+            if (`${yyyy}-${mm}` !== monthKey) return false;
             return this.getScheduleDayForItemDay(date.getDate(), activeScheds) === day;
           }).reduce((sum, a) => sum + (a.amount / 100), 0);
 
@@ -3110,22 +3111,22 @@
 
           cutoffHtml += `
             <div style="display: flex; justify-content: space-between; padding: 0.5rem 0; font-size: 0.85rem; border-bottom: 1px dashed #e5e7eb;">
-              <span style="font-weight: 500; color: #4b5563;">Cutoff Payout (Day \${day})</span>
-              <span style="font-weight: 700; color: #111827; font-variant-numeric: tabular-nums;">\${php(totalCutoff)}</span>
+              <span style="font-weight: 500; color: #4b5563;">Cutoff Payout (Day ${day})</span>
+              <span style="font-weight: 700; color: #111827; font-variant-numeric: tabular-nums;">${php(totalCutoff)}</span>
             </div>
           `;
         });
 
         // Company Details / Logo
         const compLogoHtml = this.payslipConfig.logoUrl
-          ? `<img src="\${esc(this.payslipConfig.logoUrl)}" alt="Logo" style="max-height: 48px; max-width: 150px; display: block; margin-bottom: 0.5rem; filter: grayscale(1);" />`
+          ? `<img src="${esc(this.payslipConfig.logoUrl)}" alt="Logo" style="max-height: 48px; max-width: 150px; display: block; margin-bottom: 0.5rem; filter: grayscale(1);" />`
           : '';
         const compName = this.payslipConfig.companyName || 'BrightKey Solutions';
-        const compAddress = (this.payslipConfig.companyAddress || '').replace(/\\n/g, '<br>');
+        const compAddress = (this.payslipConfig.companyAddress || '').replace(/\n/g, '<br>');
 
         const signatoryName = this.payslipConfig.signatoryName || 'Authorized Signatory';
         const signatureImgHtml = this.payslipConfig.signatureUrl
-          ? `<img src="\${this.payslipConfig.signatureUrl}" alt="Signature" style="max-height: 40px; display: block; margin-bottom: 0.25rem;" />`
+          ? `<img src="${this.payslipConfig.signatureUrl}" alt="Signature" style="max-height: 40px; display: block; margin-bottom: 0.25rem;" />`
           : `<div style="height: 40px; border-bottom: 1px solid #9ca3af; margin-bottom: 0.25rem; width: 150px;"></div>`;
 
         const empFullName = [emp.first_name, emp.middle_name, emp.last_name].filter(Boolean).join(' ');
@@ -3137,25 +3138,25 @@
               <!-- Header -->
               <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #111827; padding-bottom: 1rem; margin-bottom: 1.5rem;">
                 <div>
-                  \${compLogoHtml}
-                  <div style="font-size: 1.15rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">\${esc(compName)}</div>
-                  <div style="font-size: 0.75rem; color: #4b5563; line-height: 1.4; margin-top: 0.25rem;">\${compAddress}</div>
+                  ${compLogoHtml}
+                  <div style="font-size: 1.15rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">${esc(compName)}</div>
+                  <div style="font-size: 0.75rem; color: #4b5563; line-height: 1.4; margin-top: 0.25rem;">${compAddress}</div>
                 </div>
                 <div style="text-align: right;">
                   <div style="font-size: 1.5rem; font-weight: 900; letter-spacing: 1px; color: #111827; text-transform: uppercase;">Payslip</div>
-                  <div style="font-size: 0.8rem; color: #4b5563; margin-top: 0.25rem;">Month of <strong>\${esc(monthText)}</strong></div>
+                  <div style="font-size: 0.8rem; color: #4b5563; margin-top: 0.25rem;">Month of <strong>${esc(monthText)}</strong></div>
                 </div>
               </div>
 
               <!-- Metadata Section -->
               <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; background: #f9fafb; padding: 1rem; border-radius: 6px; margin-bottom: 1.5rem; border: 1px solid #e5e7eb;">
                 <div>
-                  <div style="margin-bottom: 0.5rem;"><span style="font-size: 0.72rem; text-transform: uppercase; color: #6b7280; font-weight: 600; display: block;">Employee Name</span><strong style="font-size: 0.9rem; color: #111827;">\${esc(empFullName)}</strong></div>
-                  <div><span style="font-size: 0.72rem; text-transform: uppercase; color: #6b7280; font-weight: 600; display: block;">Position / Title</span><strong style="font-size: 0.9rem; color: #111827;">\${esc(emp.title || '—')}</strong></div>
+                  <div style="margin-bottom: 0.5rem;"><span style="font-size: 0.72rem; text-transform: uppercase; color: #6b7280; font-weight: 600; display: block;">Employee Name</span><strong style="font-size: 0.9rem; color: #111827;">${esc(empFullName)}</strong></div>
+                  <div><span style="font-size: 0.72rem; text-transform: uppercase; color: #6b7280; font-weight: 600; display: block;">Position / Title</span><strong style="font-size: 0.9rem; color: #111827;">${esc(emp.title || '—')}</strong></div>
                 </div>
                 <div>
-                  <div style="margin-bottom: 0.5rem;"><span style="font-size: 0.72rem; text-transform: uppercase; color: #6b7280; font-weight: 600; display: block;">Reporting To</span><strong style="font-size: 0.9rem; color: #111827;">\${esc(reportingToName)}</strong></div>
-                  <div><span style="font-size: 0.72rem; text-transform: uppercase; color: #6b7280; font-weight: 600; display: block;">Pay Period</span><strong style="font-size: 0.9rem; color: #111827;">\${esc(monthText)}</strong></div>
+                  <div style="margin-bottom: 0.5rem;"><span style="font-size: 0.72rem; text-transform: uppercase; color: #6b7280; font-weight: 600; display: block;">Reporting To</span><strong style="font-size: 0.9rem; color: #111827;">${esc(reportingToName)}</strong></div>
+                  <div><span style="font-size: 0.72rem; text-transform: uppercase; color: #6b7280; font-weight: 600; display: block;">Pay Period</span><strong style="font-size: 0.9rem; color: #111827;">${esc(monthText)}</strong></div>
                 </div>
               </div>
 
@@ -3171,7 +3172,7 @@
                     </tr>
                   </thead>
                   <tbody>
-                    \${breakdownRowsHtml}
+                    ${breakdownRowsHtml}
                   </tbody>
                 </table>
               </div>
@@ -3179,10 +3180,10 @@
               <!-- Cutoff Payouts -->
               <div style="margin-bottom: 2rem; max-width: 400px; margin-left: auto;">
                 <div style="font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; border-bottom: 1px solid #111827; padding-bottom: 0.25rem;">Payout Schedule Allocation</div>
-                \${cutoffHtml}
+                ${cutoffHtml}
                 <div style="display: flex; justify-content: space-between; padding: 0.75rem 0; font-size: 1rem; font-weight: 800; border-top: 2px solid #111827;">
                   <span>TOTAL PAYOUT</span>
-                  <span style="font-variant-numeric: tabular-nums;">\${php(verifiedGrandTotal)}</span>
+                  <span style="font-variant-numeric: tabular-nums;">${php(verifiedGrandTotal)}</span>
                 </div>
               </div>
             </div>
@@ -3193,8 +3194,8 @@
                 This payslip is a confidential document generated by BrightKey ERP. Any unauthorized copying or distribution is strictly prohibited.
               </div>
               <div style="text-align: right; display: flex; flex-direction: column; align-items: flex-end;">
-                \${signatureImgHtml}
-                <div style="font-size: 0.85rem; font-weight: 700; border-top: 1px solid #111827; width: 180px; text-align: center; padding-top: 0.25rem; margin-top: 0.25rem;">\${esc(signatoryName)}</div>
+                ${signatureImgHtml}
+                <div style="font-size: 0.85rem; font-weight: 700; border-top: 1px solid #111827; width: 180px; text-align: center; padding-top: 0.25rem; margin-top: 0.25rem;">${esc(signatoryName)}</div>
                 <div style="font-size: 0.72rem; color: #6b7280; width: 180px; text-align: center;">Authorized Signatory</div>
               </div>
             </div>
