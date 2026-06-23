@@ -2742,6 +2742,27 @@
         }
       },
 
+      getEmployeeDepartmentName(employeeId) {
+        if (!this.companyStructure || !this.companyStructure.departments) {
+          return 'No Dept';
+        }
+        for (const dept of this.companyStructure.departments) {
+          // Check if department manager
+          if (dept.managerId === employeeId) {
+            return dept.name || 'No Dept';
+          }
+          // Check inside subteams
+          if (dept.subteams) {
+            for (const sub of dept.subteams) {
+              if (sub.managerId === employeeId || (sub.colleagueIds && sub.colleagueIds.includes(employeeId))) {
+                return dept.name || 'No Dept';
+              }
+            }
+          }
+        }
+        return 'No Dept';
+      },
+
       openMembersModal(projectId) {
         document.getElementById('project-members-modal-id').value = projectId;
         
@@ -2754,7 +2775,8 @@
         let selectHtml = '';
         nonMembers.forEach(emp => {
           const name = `${emp.first_name} ${emp.last_name || ''}`.trim();
-          selectHtml += `<option value="${esc(emp.id)}">${esc(name)} (${esc(emp.department || 'No Dept')})</option>`;
+          const deptName = this.getEmployeeDepartmentName(emp.id);
+          selectHtml += `<option value="${esc(emp.id)}">${esc(name)} (${esc(deptName)})</option>`;
         });
         select.innerHTML = selectHtml || '<option value="">All employees assigned</option>';
 
