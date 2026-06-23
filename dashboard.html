@@ -258,6 +258,7 @@
       min-width: 0;
       outline: none;
       transition: background 0.15s, border-color 0.15s, color 0.15s;
+      position: relative;
     }
     .home-calendar-day:hover {
       background: var(--cyan-dim);
@@ -611,6 +612,17 @@
               </div>
               <div class="home-calendar-grid" id="home-calendar-grid"></div>
             </div>
+
+            <!-- Upcoming Events Card -->
+            <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.5rem; box-shadow: var(--shadow-sm); display: flex; flex-direction: column; gap: 1rem;">
+              <h3 style="font-size: 0.95rem; font-weight: 700; color: var(--text-primary); letter-spacing: -0.01em; margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--cyan);"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                Upcoming Events
+              </h3>
+              <div id="home-events-list" style="display: flex; flex-direction: column; gap: 0.75rem; font-size: 0.82rem; color: var(--text-secondary);">
+                <div style="color: var(--text-muted); font-style: italic; padding: 0.25rem 0;">Loading events...</div>
+              </div>
+            </div>
             
             <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.5rem; box-shadow: var(--shadow-sm); display: flex; flex-direction: column; gap: 1rem;">
               <h3 style="font-size: 0.95rem; font-weight: 700; color: var(--text-primary); letter-spacing: -0.01em; margin: 0; display: flex; align-items: center; gap: 0.5rem;">
@@ -766,6 +778,7 @@
       activeModalMilestoneId: null,
       calendarDate: new Date(),
       calendarEvents: {},
+      birthdays: [],
 
       async init() {
         updateDateTime();
@@ -849,6 +862,7 @@
           // Load tasks and milestones assigned to the current employee
           await this.loadMyTasks();
           await this.loadMyMilestones();
+          await this.loadBirthdays();
 
         } catch (err) {
           console.error('Initialization error:', err);
@@ -873,6 +887,7 @@
 
       changeCalendarMonth(direction) {
         this.calendarDate = new Date(this.calendarDate.getFullYear(), this.calendarDate.getMonth() + direction, 1);
+        this.generateBirthdayEvents();
         this.renderCalendar();
       },
 
@@ -897,14 +912,145 @@
           const mutedClass = date.getMonth() === month ? '' : ' is-muted';
           const todayClass = key === todayKey ? ' is-today' : '';
           const label = this.formatCalendarDate(date);
+          
+          const event = this.calendarEvents[key];
+          const hasBirthday = event && event.isBirthday;
+          const birthdayDot = hasBirthday ? `<div style="position: absolute; bottom: 3px; left: 50%; transform: translateX(-50%); width: 4px; height: 4px; border-radius: 50%; background: var(--cyan);"></div>` : '';
+
           days.push(`
             <button type="button" class="home-calendar-day${mutedClass}${todayClass}" onclick="App.showCalendarDayModal('${key}')" aria-label="${esc(label)}">
               ${date.getDate()}
+              ${birthdayDot}
             </button>
           `);
         }
 
         gridEl.innerHTML = days.join('');
+      },
+
+      async loadBirthdays() {
+        try {
+          const { data, error } = await BKAuth.sb
+            .from('employees')
+            .select('first_name, last_name, date_of_birth')
+            .eq('employment_status', 'Active');
+          
+          if (error) throw error;
+          this.birthdays = data || [];
+          
+          this.generateBirthdayEvents();
+          this.renderCalendar();
+          this.renderUpcomingEvents();
+        } catch (err) {
+          console.error('Error loading birthdays:', err);
+          this.birthdays = [];
+        }
+      },
+
+      generateBirthdayEvents() {
+        this.calendarEvents = {};
+        if (!this.birthdays) return;
+
+        const currentYear = this.calendarDate.getFullYear();
+        // Generate for prev, current and next year to handle transitions smoothly
+        [-1, 0, 1].forEach(offset => {
+          const year = currentYear + offset;
+          this.birthdays.forEach(emp => {
+            if (!emp.date_of_birth) return;
+            const parts = emp.date_of_birth.split('-');
+            if (parts.length < 3) return;
+            
+            const monthStr = parts[1];
+            const dayStr = parts[2];
+            const key = `${year}-${monthStr}-${dayStr}`;
+            
+            const name = `${emp.first_name} ${emp.last_name ? emp.last_name.charAt(0) + '.' : ''}`.trim();
+            if (!this.calendarEvents[key]) {
+              this.calendarEvents[key] = {
+                name: "Birthday: " + name,
+                description: `${name}'s Birthday!`,
+                isBirthday: true
+              };
+            } else {
+              this.calendarEvents[key].name += ", " + name;
+              this.calendarEvents[key].description += ` and ${name}'s Birthday!`;
+            }
+          });
+        });
+      },
+
+      renderUpcomingEvents() {
+        const listEl = document.getElementById('home-events-list');
+        if (!listEl) return;
+
+        if (!this.birthdays || this.birthdays.length === 0) {
+          listEl.innerHTML = '<div style="color: var(--text-muted); font-style: italic; padding: 0.25rem 0;">No upcoming events.</div>';
+          return;
+        }
+
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const currentYear = today.getFullYear();
+        const upcoming = [];
+
+        this.birthdays.forEach(emp => {
+          if (!emp.date_of_birth) return;
+          const parts = emp.date_of_birth.split('-');
+          if (parts.length < 3) return;
+
+          const month = parseInt(parts[1], 10);
+          const day = parseInt(parts[2], 10);
+
+          let bdayDate = new Date(currentYear, month - 1, day);
+          if (bdayDate < today) {
+            bdayDate = new Date(currentYear + 1, month - 1, day);
+          }
+          upcoming.push({
+            employee: emp,
+            date: bdayDate
+          });
+        });
+
+        upcoming.sort((a, b) => a.date - b.date);
+
+        const nextThree = upcoming.slice(0, 3);
+        if (nextThree.length === 0) {
+          listEl.innerHTML = '<div style="color: var(--text-muted); font-style: italic; padding: 0.25rem 0;">No upcoming events.</div>';
+          return;
+        }
+
+        const formatDate = (d) => {
+          const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+          return `${months[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+        };
+
+        let html = '';
+        nextThree.forEach(item => {
+          const emp = item.employee;
+          const name = `${emp.first_name} ${emp.last_name ? emp.last_name.charAt(0) + '.' : ''}`.trim();
+          
+          const cakeSvg = `
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--cyan)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;">
+              <path d="M20 21v-8a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8"></path>
+              <path d="M4 16h16"></path>
+              <path d="M12 11V3"></path>
+              <path d="M12 3c-.5 0-1 .5-1 1s.5 1 1 1 1-.5 1-1-.5-1-1-1z"></path>
+            </svg>
+          `;
+
+          html += `
+            <div style="display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem; background: var(--bg-elevated); border-radius: 6px; border: 1px solid var(--border);">
+              ${cakeSvg}
+              <div style="display: flex; flex-direction: column; gap: 0.15rem; flex: 1;">
+                <span style="font-weight: 700; color: var(--text-primary);">${esc(name)}'s Birthday</span>
+                <span style="font-size: 0.72rem; color: var(--text-muted);">${formatDate(item.date)}</span>
+              </div>
+            </div>
+          `;
+        });
+
+        listEl.innerHTML = html;
       },
 
       showCalendarDayModal(dateKey) {
