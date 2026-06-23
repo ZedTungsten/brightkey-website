@@ -281,6 +281,7 @@
           <div class="drawer-tabs">
             <button class="tab-btn active" id="tab-btn-logs" onclick="AttendanceLogsApp.switchTab('logs')">Logs</button>
             <button class="tab-btn" id="tab-btn-settings" onclick="AttendanceLogsApp.switchTab('settings')">Leaves Settings</button>
+            <button class="tab-btn" id="tab-btn-att-settings" onclick="AttendanceLogsApp.switchTab('att-settings')">Attendance Settings</button>
           </div>
 
           <div class="scroll-area">
@@ -599,6 +600,88 @@
                 </form>
               </div>
 
+              <!-- ── Attendance Settings Tab Content ── -->
+              <div class="tab-content" id="tab-content-att-settings">
+                <div style="margin-bottom: 0.5rem;">
+                  <div style="font-size: 0.8rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em;">Attendance & Overtime Configuration</div>
+                </div>
+                <form id="attendance-settings-form" onsubmit="event.preventDefault();" style="display:flex; flex-direction:column; gap:1.5rem;">
+                  <div class="settings-grid">
+                    
+                    <!-- Late Settings Card -->
+                    <div class="settings-card">
+                      <div class="settings-card-title">Late Settings</div>
+                      <div style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 1rem; line-height: 1.4;">
+                        Flag an employee as late if they clock in past this threshold before the scheduled start of their shift.
+                      </div>
+                      <div style="display: flex; align-items: center; gap: 0.5rem;">
+                        <input type="number" id="att-late-value" class="form-input" style="width: 100px;" placeholder="0" min="0" />
+                        <select id="att-late-unit" class="form-select" style="width: 100px;">
+                          <option value="mins">mins</option>
+                          <option value="hrs">hrs</option>
+                        </select>
+                        <span>before shift start</span>
+                      </div>
+                    </div>
+
+                    <!-- Early Out Card -->
+                    <div class="settings-card">
+                      <div class="settings-card-title">Early Out Settings</div>
+                      <div style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 1rem; line-height: 1.4;">
+                        Flag an employee as early out if they clock out past this threshold before the scheduled end of their shift.
+                      </div>
+                      <div style="display: flex; align-items: center; gap: 0.5rem;">
+                        <input type="number" id="att-early-value" class="form-input" style="width: 100px;" placeholder="0" min="0" />
+                        <select id="att-early-unit" class="form-select" style="width: 100px;">
+                          <option value="mins">mins</option>
+                          <option value="hrs">hrs</option>
+                        </select>
+                        <span>before shift end</span>
+                      </div>
+                    </div>
+
+                    <!-- Over Time Settings Card -->
+                    <div class="settings-card" style="grid-column: span 2;">
+                      <div class="settings-card-title">Overtime (OT) Configuration</div>
+                      
+                      <div class="form-group-row" style="justify-content: space-between; gap: 1rem; margin-bottom: 1.25rem;">
+                        <div style="display: flex; flex-direction: column; gap: 0.15rem;">
+                          <span style="font-size: 0.82rem; font-weight: 600; color: var(--text-secondary);">Allow Over Time</span>
+                          <span style="font-size: 0.72rem; color: var(--text-muted);">Enable overtime hours calculation for white-listed employees.</span>
+                        </div>
+                        <label class="switch">
+                          <input type="checkbox" id="att-allow-ot" onchange="AttendanceLogsApp.saveAttendanceSettings()" />
+                          <span class="slider"></span>
+                        </label>
+                      </div>
+
+                      <div id="ot-whitelist-section" style="border-top: 1px solid var(--border); padding-top: 1.25rem;">
+                        <div style="font-size: 0.78rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.75rem; letter-spacing: 0.05em;">Allowed Overtime Whitelist</div>
+                        
+                        <!-- Add Form -->
+                        <div style="display: flex; gap: 0.75rem; margin-bottom: 1.25rem; flex-wrap: wrap; align-items: center;">
+                          <select id="ot-add-type" class="form-select" style="width: 150px; height: 36px;" onchange="AttendanceLogsApp.onOtTypeChange()">
+                            <option value="department">Department</option>
+                            <option value="team">Team (Role)</option>
+                            <option value="employee">Employee</option>
+                          </select>
+                          <select id="ot-add-target" class="form-select" style="width: 250px; height: 36px;">
+                            <!-- Populated dynamically -->
+                          </select>
+                          <button type="button" class="btn btn-primary" onclick="AttendanceLogsApp.addOtWhitelistItem()" style="height: 36px;">Add to Whitelist</button>
+                        </div>
+
+                        <!-- Current Whitelist -->
+                        <div id="ot-whitelist-list" style="display: flex; flex-direction: column; gap: 0.5rem; max-height: 200px; overflow-y: auto; padding: 0.5rem; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-elevated);">
+                          <!-- Whitelist items with remove button -->
+                        </div>
+                      </div>
+                    </div>
+
+                  </div>
+                </form>
+              </div>
+
             </div>
           </div>
         </main>
@@ -665,19 +748,29 @@
         if (!this.companyId) return;
         try {
           const sb = window.BKAuth.sb;
-          const { data, error } = await sb.from('global_settings')
-            .select('value')
-            .eq('key', 'leaves_settings')
-            .eq('company_id', this.companyId)
-            .maybeSingle();
+          const [leavesRes, attRes] = await Promise.all([
+            sb.from('global_settings')
+              .select('value')
+              .eq('key', 'leaves_settings')
+              .eq('company_id', this.companyId)
+              .maybeSingle(),
+            sb.from('global_settings')
+              .select('value')
+              .eq('key', 'attendance_settings')
+              .eq('company_id', this.companyId)
+              .maybeSingle()
+          ]);
 
-          if (error) throw error;
-          
-          this.leavesSettings = data?.value || this.getDefaultSettings();
+          if (leavesRes.error) throw leavesRes.error;
+          this.leavesSettings = leavesRes.data?.value || this.getDefaultSettings();
           this.populateSettingsForm();
+
+          if (attRes.error) throw attRes.error;
+          this.attendanceSettings = attRes.data?.value || this.getDefaultAttendanceSettings();
+          this.populateAttendanceSettingsForm();
         } catch (err) {
-          console.error('Failed to load leaves settings:', err);
-          Toast.error('Failed to load leaves settings: ' + err.message);
+          console.error('Failed to load settings:', err);
+          Toast.error('Failed to load settings: ' + err.message);
         }
       },
 
@@ -840,6 +933,10 @@
         const targetContent = document.getElementById(`tab-content-${tab}`);
         if (targetBtn) targetBtn.classList.add('active');
         if (targetContent) targetContent.classList.add('active');
+
+        if (tab === 'logs') {
+          this.loadLogs();
+        }
       },
 
       async saveSettings() {
@@ -924,13 +1021,228 @@
         }
       },
 
+      attendanceSettings: null,
+
+      getDefaultAttendanceSettings() {
+        return {
+          late_value: '',
+          late_unit: 'mins',
+          early_value: '',
+          early_unit: 'mins',
+          allow_ot: false,
+          ot_whitelist: []
+        };
+      },
+
+      populateAttendanceSettingsForm() {
+        const s = this.attendanceSettings || this.getDefaultAttendanceSettings();
+        document.getElementById('att-late-value').value = s.late_value ?? '';
+        document.getElementById('att-late-unit').value = s.late_unit || 'mins';
+        document.getElementById('att-early-value').value = s.early_value ?? '';
+        document.getElementById('att-early-unit').value = s.early_unit || 'mins';
+        document.getElementById('att-allow-ot').checked = !!s.allow_ot;
+
+        this.renderOtWhitelist();
+        this.onOtTypeChange();
+        this.bindAttendanceAutosave();
+      },
+
+      bindAttendanceAutosave() {
+        const form = document.getElementById('attendance-settings-form');
+        if (form && !form.dataset.autosaveBound) {
+          form.dataset.autosaveBound = 'true';
+          
+          let debounceTimeout;
+          const triggerSave = () => {
+            clearTimeout(debounceTimeout);
+            debounceTimeout = setTimeout(() => this.saveAttendanceSettings(), 500);
+          };
+
+          form.addEventListener('input', (e) => {
+            const tag = e.target.tagName.toLowerCase();
+            const type = e.target.type;
+            if (tag === 'input' && (type === 'number' || type === 'text')) {
+              triggerSave();
+            }
+          });
+
+          form.addEventListener('change', (e) => {
+            const tag = e.target.tagName.toLowerCase();
+            const type = e.target.type;
+            if (tag === 'select' || type === 'checkbox') {
+              this.saveAttendanceSettings();
+            }
+          });
+        }
+      },
+
+      async saveAttendanceSettings() {
+        if (!this.companyId) return;
+
+        const sb = window.BKAuth.sb;
+        const currentWhitelist = (this.attendanceSettings && this.attendanceSettings.ot_whitelist) || [];
+
+        const updatedSettings = {
+          late_value: document.getElementById('att-late-value').value,
+          late_unit: document.getElementById('att-late-unit').value,
+          early_value: document.getElementById('att-early-value').value,
+          early_unit: document.getElementById('att-early-unit').value,
+          allow_ot: document.getElementById('att-allow-ot').checked,
+          ot_whitelist: currentWhitelist
+        };
+
+        this.attendanceSettings = updatedSettings;
+
+        try {
+          const { error } = await sb.from('global_settings').upsert({
+            key: 'attendance_settings',
+            company_id: this.companyId,
+            value: updatedSettings
+          }, { onConflict: 'key, company_id' });
+
+          if (error) throw error;
+        } catch (err) {
+          console.error('Failed to save attendance settings:', err);
+          Toast.error('Failed to save settings: ' + err.message);
+        }
+      },
+
+      onOtTypeChange() {
+        const typeSelect = document.getElementById('ot-add-type');
+        const targetSelect = document.getElementById('ot-add-target');
+        if (!typeSelect || !targetSelect) return;
+
+        const type = typeSelect.value;
+        targetSelect.innerHTML = '';
+
+        if (type === 'department') {
+          const depts = [...new Set(this.employees.map(emp => emp.department).filter(Boolean))].sort();
+          if (depts.length === 0) {
+            targetSelect.innerHTML = '<option value="" disabled>No departments found</option>';
+          } else {
+            targetSelect.innerHTML = depts.map(d => `<option value="${esc(d)}">${esc(d)}</option>`).join('');
+          }
+        } else if (type === 'team') {
+          const teams = [...new Set(this.employees.map(emp => emp.title || emp.assignment).filter(Boolean))].sort();
+          if (teams.length === 0) {
+            targetSelect.innerHTML = '<option value="" disabled>No teams found</option>';
+          } else {
+            targetSelect.innerHTML = teams.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('');
+          }
+        } else if (type === 'employee') {
+          if (this.employees.length === 0) {
+            targetSelect.innerHTML = '<option value="" disabled>No employees found</option>';
+          } else {
+            targetSelect.innerHTML = this.employees.map(emp => `<option value="${emp.id}">${esc(emp.first_name)} ${esc(emp.last_name)}</option>`).join('');
+          }
+        }
+      },
+
+      addOtWhitelistItem() {
+        const typeSelect = document.getElementById('ot-add-type');
+        const targetSelect = document.getElementById('ot-add-target');
+        if (!typeSelect || !targetSelect || !targetSelect.value) return;
+
+        const type = typeSelect.value;
+        const idOrName = targetSelect.value;
+        const displayName = targetSelect.options[targetSelect.selectedIndex].text;
+
+        if (!this.attendanceSettings) {
+          this.attendanceSettings = this.getDefaultAttendanceSettings();
+        }
+        if (!this.attendanceSettings.ot_whitelist) {
+          this.attendanceSettings.ot_whitelist = [];
+        }
+
+        const exists = this.attendanceSettings.ot_whitelist.some(item => item.type === type && item.id === idOrName);
+        if (exists) {
+          Toast.error('Item is already in the whitelist.');
+          return;
+        }
+
+        this.attendanceSettings.ot_whitelist.push({
+          type: type,
+          id: idOrName,
+          name: displayName
+        });
+
+        this.renderOtWhitelist();
+        this.saveAttendanceSettings();
+      },
+
+      removeOtWhitelistItem(index) {
+        if (!this.attendanceSettings || !this.attendanceSettings.ot_whitelist) return;
+        this.attendanceSettings.ot_whitelist.splice(index, 1);
+        this.renderOtWhitelist();
+        this.saveAttendanceSettings();
+      },
+
+      renderOtWhitelist() {
+        const container = document.getElementById('ot-whitelist-list');
+        if (!container) return;
+
+        const list = (this.attendanceSettings && this.attendanceSettings.ot_whitelist) || [];
+        if (list.length === 0) {
+          container.innerHTML = '<div style="color:var(--text-muted); font-size:0.8rem; text-align:center; padding:0.5rem 0;">Whitelist is empty.</div>';
+          return;
+        }
+
+        container.innerHTML = '';
+        list.forEach((item, index) => {
+          const div = document.createElement('div');
+          div.style.display = 'flex';
+          div.style.justifyContent = 'space-between';
+          div.style.alignItems = 'center';
+          div.style.padding = '0.4rem 0.6rem';
+          div.style.borderBottom = '1px solid var(--border)';
+          div.style.fontSize = '0.82rem';
+          if (index === list.length - 1) div.style.borderBottom = 'none';
+
+          const label = item.type === 'employee' ? 'Employee' : (item.type === 'department' ? 'Dept' : 'Team');
+
+          div.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+              <span style="font-weight: 700; text-transform: uppercase; font-size: 0.68rem; color: var(--cyan);">[${label}]</span>
+              <span style="color: var(--text-primary); font-weight: 600;">${esc(item.name)}</span>
+            </div>
+            <button type="button" class="btn btn-outline btn-sm" onclick="AttendanceLogsApp.removeOtWhitelistItem(${index})" style="padding: 0.2rem 0.5rem; font-size: 0.72rem; color: var(--danger); border-color: var(--border);">Remove</button>
+          `;
+          container.appendChild(div);
+        });
+      },
+
+      isOvertimeAllowed(emp) {
+        if (!emp) return false;
+        const attSettings = this.attendanceSettings || {};
+        if (!attSettings.allow_ot) return false;
+
+        const list = attSettings.ot_whitelist || [];
+        if (list.length === 0) return false;
+
+        return list.some(item => {
+          if (item.type === 'employee' && item.id === emp.id) {
+            return true;
+          }
+          if (item.type === 'department' && emp.department && item.name.toLowerCase() === emp.department.toLowerCase()) {
+            return true;
+          }
+          if (item.type === 'team') {
+            const teamName = (emp.title || emp.assignment || '').toLowerCase();
+            if (teamName && item.name.toLowerCase() === teamName) {
+              return true;
+            }
+          }
+          return false;
+        });
+      },
+
       editMode: false,
 
       async loadEmployeesList() {
         try {
           const sb = window.BKAuth.sb;
           const { data, error } = await sb.from('employees')
-            .select('id, first_name, last_name, shift_time_1, shift_time_2')
+            .select('id, first_name, last_name, shift_time_1, shift_time_2, department, title, assignment')
             .order('first_name', { ascending: true });
 
           if (error) throw error;
@@ -1140,8 +1452,18 @@
               // Calculate Late
               const shiftStart = new Date(checkInTime);
               shiftStart.setHours(shiftStartHour, shiftStartMin, 0, 0);
-              if (checkInTime > shiftStart) {
-                const diffMs = checkInTime - shiftStart;
+              
+              const attSettings = this.attendanceSettings || {};
+              const lateVal = parseFloat(attSettings.late_value);
+              let lateThresholdMs = 0;
+              if (!isNaN(lateVal)) {
+                const unitFactor = attSettings.late_unit === 'hrs' ? 3600000 : 60000;
+                lateThresholdMs = lateVal * unitFactor;
+              }
+              const lateDeadline = new Date(shiftStart.getTime() - lateThresholdMs);
+
+              if (checkInTime > lateDeadline) {
+                const diffMs = checkInTime - lateDeadline;
                 const diffMins = Math.floor(diffMs / 60000);
                 if (diffMins > 0) {
                   lateStr = `${diffMins} min`;
@@ -1163,7 +1485,17 @@
               // Calculate Early Out
               const shiftEnd = new Date(checkOutTime);
               shiftEnd.setHours(shiftEndHour, shiftEndMin, 0, 0);
-              if (checkOutTime < shiftEnd) {
+
+              const attSettings = this.attendanceSettings || {};
+              const earlyVal = parseFloat(attSettings.early_value);
+              let earlyOutThresholdMs = 0;
+              if (!isNaN(earlyVal)) {
+                const unitFactor = attSettings.early_unit === 'hrs' ? 3600000 : 60000;
+                earlyOutThresholdMs = earlyVal * unitFactor;
+              }
+              const earlyOutDeadline = new Date(shiftEnd.getTime() - earlyOutThresholdMs);
+
+              if (checkOutTime < earlyOutDeadline) {
                 const diffMs = shiftEnd - checkOutTime;
                 const diffMins = Math.floor(diffMs / 60000);
                 if (diffMins > 0) {
@@ -1178,7 +1510,22 @@
               const checkInTime = new Date(availableLogs[0].created_at);
               const checkOutTime = new Date(offlineLogs[offlineLogs.length - 1].created_at);
               if (checkOutTime >= checkInTime) {
-                const diffMs = checkOutTime - checkInTime;
+                let diffMs = checkOutTime - checkInTime;
+
+                // Overtime check
+                const isOtAllowed = this.isOvertimeAllowed(this.employee);
+                if (!isOtAllowed) {
+                  // Capped to regular shift duration
+                  let regularShiftMins = (shiftEndHour * 60 + shiftEndMin) - (shiftStartHour * 60 + shiftStartMin);
+                  if (regularShiftMins < 0) {
+                    regularShiftMins += 24 * 60;
+                  }
+                  const regularShiftMs = regularShiftMins * 60000;
+                  if (diffMs > regularShiftMs) {
+                    diffMs = regularShiftMs;
+                  }
+                }
+
                 const totalMins = Math.floor(diffMs / 60000);
                 const hrs = Math.floor(totalMins / 60);
                 const mins = totalMins % 60;
