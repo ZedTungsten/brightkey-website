@@ -137,8 +137,10 @@
       return null;
     }
 
-    // Check if the user has at least one of the required modules
-    const hasAccess = requiredModules.some(mod => modules.includes(mod));
+    // Check if the user has at least one of the required modules (case-insensitive check)
+    const hasAccess = requiredModules.some(mod => 
+      modules.some(m => m.trim().toLowerCase() === mod.trim().toLowerCase())
+    );
     if (!hasAccess) {
       window.location.href = redirectTo;
       return null;
