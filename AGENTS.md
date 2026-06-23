@@ -55,9 +55,10 @@ We enforce rigorous practices to prevent SQL injections (SQLi) and Cross-Site Sc
 - **Obfuscated Key Storage**: Keys are hidden from public pages and are only pulled from Supabase inside auth-checked admin routes. No credentials are leaked to the public client storefront pages.
 - **Role Gating**: All dashboard route handlers run an auth-check gate matching the user's role:
   ```javascript
-  const authInfo = await window.BKAuth.checkRoleGate(['owner', 'admin'], '../admin.html');
+  const authInfo = await window.BKAuth.checkRoleGate(['Sales', 'Operations'], '../admin.html');
   ```
   This guarantees that non-admin and non-tenant accounts are booted before the browser can fetch or draw sensitive forms.
+  - **Module Casing & Robustness**: Standard database modules are capitalized (e.g. `['Sales', 'Operations', 'Logistics', 'Finance', 'HR', 'Products', 'Marketing', 'Customer Service']`). However, the `checkRoleGate()` function is designed to match names **case-insensitively** to prevent access/redirect failures from minor casing mismatches. Always declare route gates using the standard capitalized naming conventions for consistency.
 
 ---
 
