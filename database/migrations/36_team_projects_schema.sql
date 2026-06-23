@@ -2,6 +2,71 @@
 -- Migration 36: Team Projects and Project Members Tables & RLS Policies
 -- =============================================================================
 
+-- ── 0. Create Helper Function to Check Team Leader Status from Org Map ───────
+CREATE OR REPLACE FUNCTION public.is_team_leader(
+  p_user_id    UUID,
+  p_company_id UUID
+)
+RETURNS BOOLEAN
+SECURITY DEFINER
+LANGUAGE plpgsql
+STABLE
+AS $$
+DECLARE
+  v_tenant_id UUID;
+  v_role      TEXT;
+  v_structure JSONB;
+  v_is_leader BOOLEAN := FALSE;
+BEGIN
+  -- Resolve tenant from company
+  SELECT tenant_id INTO v_tenant_id
+  FROM public.companies WHERE id = p_company_id LIMIT 1;
+  IF v_tenant_id IS NULL THEN RETURN FALSE; END IF;
+
+  -- Load user's membership role
+  SELECT role INTO v_role
+  FROM public.tenant_members
+  WHERE user_id = p_user_id AND tenant_id = v_tenant_id
+  LIMIT 1;
+
+  -- Owners and admins are always team leaders/supervisors
+  IF v_role IS NOT NULL AND lower(v_role) IN ('owner', 'admin') THEN
+    RETURN TRUE;
+  END IF;
+
+  -- Load company structure
+  SELECT value INTO v_structure
+  FROM public.global_settings
+  WHERE key = 'company_structure' AND company_id = p_company_id
+  LIMIT 1;
+
+  IF v_structure IS NULL THEN
+    RETURN FALSE;
+  END IF;
+
+  -- Check if user is a department manager in the JSON
+  SELECT EXISTS (
+    SELECT 1
+    FROM jsonb_to_recordset(v_structure->'departments') AS dept(managerId TEXT)
+    WHERE dept.managerId = p_user_id::TEXT
+  ) INTO v_is_leader;
+
+  IF v_is_leader THEN
+    RETURN TRUE;
+  END IF;
+
+  -- Check if user is a subteam manager in the JSON
+  SELECT EXISTS (
+    SELECT 1
+    FROM jsonb_to_recordset(v_structure->'departments') AS dept(subteams JSONB),
+         jsonb_to_recordset(dept.subteams) AS sub(managerId TEXT)
+    WHERE sub.managerId = p_user_id::TEXT
+  ) INTO v_is_leader;
+
+  RETURN v_is_leader;
+END;
+$$;
+
 -- ── 1. Create Team Projects Table ────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.team_projects (
   id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
