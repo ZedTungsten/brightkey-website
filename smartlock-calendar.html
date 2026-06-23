@@ -1598,15 +1598,50 @@
       const hardwareSkus = skus.filter(s => s.trim() !== 'ADD-ON LABOR');
       const hardwareNames = names.filter(n => n.trim() !== 'ADD-ON LABOR');
 
-      const rowCount = Math.max(doorsArr.length, hardwareProducts.length, hardwareSkus.length);
+      // Check if any door has attached products (new style)
+      const anyDoorHasAttachedProducts = doorsArr.some(d => Array.isArray(d.products) && d.products.length > 0);
+
+      const rowCount = anyDoorHasAttachedProducts 
+        ? doorsArr.length 
+        : Math.max(doorsArr.length, hardwareProducts.length, hardwareSkus.length);
+
       if (rowCount === 0) {
         doorsContainer.innerHTML = '<span style="color:var(--text-muted); font-size:0.82rem;">No specifications found.</span>';
       } else {
         for (let i = 0; i < rowCount; i++) {
           const door = doorsArr[i];
-          const sku = hardwareProducts[i]?.sku || hardwareSkus[i] || 'N/A';
-          const title = hardwareProducts[i]?.title || hardwareNames[i] || 'N/A';
-          const isCancelled = hardwareProducts[i]?.cancelled || false;
+          
+          let sku = '';
+          let titleHtml = '';
+          let isCancelled = false;
+
+          if (anyDoorHasAttachedProducts) {
+            const attachedSkusList = door?.products || [];
+            sku = attachedSkusList.join(', ') || 'N/A';
+            const doorTitles = attachedSkusList.map(itemSku => {
+              const pMatch = productsArr.find(p => p.sku === itemSku);
+              if (pMatch) {
+                return pMatch.name || pMatch.title || itemSku;
+              }
+              const idx = skus.indexOf(itemSku);
+              if (idx !== -1) {
+                return names[idx] || itemSku;
+              }
+              return itemSku;
+            });
+            titleHtml = doorTitles.map(t => `<div style="font-size:0.8rem; color:var(--text-secondary); margin-bottom:0.4rem;">${escapeHtml(t)}</div>`).join('');
+            isCancelled = attachedSkusList.length > 0 && attachedSkusList.every(itemSku => {
+              const pMatch = productsArr.find(p => p.sku === itemSku);
+              return pMatch?.cancelled || false;
+            });
+          } else {
+            const currentSku = hardwareProducts[i]?.sku || hardwareSkus[i] || 'N/A';
+            sku = currentSku;
+            const currentTitle = hardwareProducts[i]?.title || hardwareNames[i] || 'N/A';
+            const showTitle = currentTitle && currentTitle.trim().toLowerCase() !== currentSku.trim().toLowerCase();
+            titleHtml = showTitle ? `<div style="font-size:0.8rem; color:var(--text-secondary); margin-bottom:0.4rem;">${escapeHtml(currentTitle)}</div>` : '';
+            isCancelled = hardwareProducts[i]?.cancelled || false;
+          }
 
           const doorMaterial = door?.doorMaterial || 'N/A';
           const jambMaterial = door?.jambMaterial || 'N/A';
@@ -1731,7 +1766,6 @@
             `;
           }
 
-          const showTitle = title && title.trim().toLowerCase() !== sku.trim().toLowerCase();
           doorsContainer.insertAdjacentHTML('beforeend', `
             <div class="${doorCardClass}" style="${cardStyle}">
               ${doneButtonHtml}
@@ -1739,7 +1773,7 @@
                 ${escapeHtml(assignedText)}
               </div>
               <h5>Door ${i + 1}: ${escapeHtml(sku)}</h5>
-              ${showTitle ? `<div style="font-size:0.8rem; color:var(--text-secondary); margin-bottom:0.4rem;">${escapeHtml(title)}</div>` : ''}
+              ${titleHtml}
               ${addonLaborBadgeHtml}
               <div class="door-details-grid">
                 <div>
