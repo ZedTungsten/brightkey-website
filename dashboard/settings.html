@@ -250,6 +250,90 @@
     #eligibility-rows-container .eligibility-row:not(:first-child) button {
       margin-top: 0 !important;
     }
+    /* ── Checklist Builder ── */
+    .checklist-builder-row {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.5rem 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .checklist-builder-row.indented {
+      margin-left: 2rem;
+      border-left: 3px solid var(--cyan);
+      background: var(--bg-surface);
+    }
+    .checklist-builder-row:not(.indented) {
+      margin-left: 0;
+      border-left: 1px solid var(--border);
+      background: var(--bg-elevated);
+    }
+    .btn-indent-toggle {
+      background: var(--bg-surface);
+      color: var(--text-secondary);
+      border: 1px solid var(--border);
+      font-size: 0.75rem;
+      font-weight: 600;
+      border-radius: 6px;
+      padding: 0.35rem 0.65rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      cursor: pointer;
+      height: 32px;
+      transition: all 0.15s;
+      user-select: none;
+    }
+    .btn-indent-toggle.active {
+      background: var(--cyan-dim);
+      color: var(--cyan-light);
+      border-color: var(--cyan-border);
+    }
+    .btn-indent-toggle:hover {
+      border-color: var(--cyan);
+    }
+    .btn-action-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      height: 32px;
+      width: 32px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--bg-surface);
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .btn-action-icon:hover:not(:disabled) {
+      border-color: var(--cyan);
+      color: var(--cyan-light);
+      background: var(--cyan-dim);
+    }
+    .btn-action-icon:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+    }
+    .btn-action-danger {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      height: 32px;
+      width: 32px;
+      border-radius: 6px;
+      border: 1px solid rgba(220, 38, 38, 0.15);
+      background: rgba(220, 38, 38, 0.05);
+      color: var(--danger);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .btn-action-danger:hover {
+      background: var(--danger);
+      color: #fff;
+      border-color: var(--danger);
+    }
   </style>
 </head>
 <body>
@@ -582,14 +666,16 @@
             <div class="tab-panel" id="panel-booking">
               <div class="panel-header">
                 <div class="panel-title">Booking Configuration</div>
-                <button class="btn btn-primary" onclick="saveBookingSettings()">Save Booking Settings</button>
               </div>
               <div class="table-scroll">
                 
                 <!-- Section: Checklist -->
                 <div class="wh-card" style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1.25rem; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 1.5rem;">
                   <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; margin-bottom: 0.5rem;">
-                    <h3 style="font-size: 0.95rem; font-weight: 700; color: var(--text-primary); margin: 0;">Checklist</h3>
+                    <div style="display: flex; align-items: center; gap: 0.75rem;">
+                      <h3 style="font-size: 0.95rem; font-weight: 700; color: var(--text-primary); margin: 0;">Checklist</h3>
+                      <span id="autosave-status" style="font-size: 0.72rem; color: var(--text-muted); font-weight: 500; transition: color 0.15s;">Saved</span>
+                    </div>
                     <button class="btn btn-cyan btn-xs" onclick="addChecklistItem()">+ Add Item</button>
                   </div>
                   
@@ -2460,43 +2546,86 @@
       }
     }
 
-    window.saveBookingSettings = async function() {
-      const validItems = bookingChecklist.map(item => ({
-        text: (item.text || '').trim(),
-        indent: !!item.indent
-      })).filter(item => item.text !== '');
+    let autosaveTimeout = null;
+    function triggerAutosave(immediate = false) {
+      updateAutosaveStatus('Saving...');
+      if (autosaveTimeout) clearTimeout(autosaveTimeout);
+      
+      const saveFn = async () => {
+        const validItems = bookingChecklist.map(item => ({
+          text: (item.text || '').trim(),
+          indent: !!item.indent
+        })).filter(item => item.text !== '');
 
-      try {
-        const { error } = await sb.from('global_settings').upsert({
-          key: 'booking_checklist',
-          company_id: currentCompanyId,
-          value: validItems
-        }, { onConflict: 'key, company_id' });
+        try {
+          const { error } = await sb.from('global_settings').upsert({
+            key: 'booking_checklist',
+            company_id: currentCompanyId,
+            value: validItems
+          }, { onConflict: 'key, company_id' });
 
-        if (error) throw error;
-        bookingChecklist = validItems;
-        renderBookingChecklist();
-        showToast('Booking settings saved successfully!');
-      } catch (err) {
-        console.error('Error saving Booking settings:', err);
-        showToast('Failed to save Booking settings.', true);
+          if (error) throw error;
+          updateAutosaveStatus('Saved');
+        } catch (err) {
+          console.error('Autosave failed:', err);
+          updateAutosaveStatus('Failed to save changes', true);
+        }
+      };
+
+      if (immediate) {
+        saveFn();
+      } else {
+        autosaveTimeout = setTimeout(saveFn, 1000);
       }
-    };
+    }
+
+    function updateAutosaveStatus(text, isError = false) {
+      const statusEl = document.getElementById('autosave-status');
+      if (!statusEl) return;
+      statusEl.textContent = text;
+      if (isError) {
+        statusEl.style.color = 'var(--danger)';
+      } else if (text === 'Saving...') {
+        statusEl.style.color = 'var(--cyan-light)';
+      } else {
+        statusEl.style.color = 'var(--text-muted)';
+      }
+    }
 
     window.addChecklistItem = function() {
       bookingChecklist.push({ text: '', indent: false });
       renderBookingChecklist();
+      triggerAutosave(true);
     };
 
     window.updateChecklistItem = function(index, field, value) {
       if (bookingChecklist[index]) {
         bookingChecklist[index][field] = value;
+        triggerAutosave(false);
+      }
+    };
+
+    window.toggleIndent = function(index) {
+      if (bookingChecklist[index]) {
+        bookingChecklist[index].indent = !bookingChecklist[index].indent;
+        renderBookingChecklist();
+        triggerAutosave(true);
+        
+        // Retain focus on the input if possible
+        const input = document.getElementById(`checklist-text-input-${index}`);
+        if (input) {
+          input.focus();
+          const val = input.value;
+          input.value = '';
+          input.value = val;
+        }
       }
     };
 
     window.removeChecklistItem = function(index) {
       bookingChecklist.splice(index, 1);
       renderBookingChecklist();
+      triggerAutosave(true);
     };
 
     window.moveChecklistItem = function(index, direction) {
@@ -2506,6 +2635,7 @@
       bookingChecklist[index] = bookingChecklist[targetIndex];
       bookingChecklist[targetIndex] = temp;
       renderBookingChecklist();
+      triggerAutosave(true);
     };
 
     function renderBookingChecklist() {
@@ -2520,25 +2650,24 @@
       container.innerHTML = '';
       bookingChecklist.forEach((item, index) => {
         const itemRow = document.createElement('div');
-        itemRow.className = 'checklist-builder-row';
-        itemRow.style.display = 'flex';
-        itemRow.style.alignItems = 'center';
-        itemRow.style.gap = '0.75rem';
-        itemRow.style.padding = '0.5rem';
-        itemRow.style.background = 'var(--bg-elevated)';
-        itemRow.style.border = '1px solid var(--border)';
-        itemRow.style.borderRadius = '6px';
+        itemRow.className = `checklist-builder-row ${item.indent ? 'indented' : ''}`;
 
         itemRow.innerHTML = `
-          <label style="display: flex; align-items: center; gap: 0.25rem; font-size: 0.75rem; color: var(--text-secondary); user-select: none; cursor: pointer; flex-shrink: 0;">
-            <input type="checkbox" class="checklist-indent-checkbox" ${item.indent ? 'checked' : ''} onchange="updateChecklistItem(${index}, 'indent', this.checked)" />
-            Indent
-          </label>
-          <input type="text" class="form-input" style="flex: 1; padding: 0.35rem 0.6rem; font-size: 0.82rem; height: 32px;" value="${escapeHtml(item.text)}" oninput="updateChecklistItem(${index}, 'text', this.value)" placeholder="Enter checklist item text..." />
+          <button type="button" class="btn-indent-toggle ${item.indent ? 'active' : ''}" onclick="toggleIndent(${index})" title="Toggle Sub-item/Indentation">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="transform: ${item.indent ? 'rotate(180deg)' : 'none'}; transition: transform 0.2s;"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            Sub-item
+          </button>
+          <input type="text" id="checklist-text-input-${index}" class="form-input" style="flex: 1; padding: 0.35rem 0.6rem; font-size: 0.82rem; height: 32px; background: var(--bg-surface);" value="${escapeHtml(item.text)}" oninput="updateChecklistItem(${index}, 'text', this.value)" placeholder="Enter checklist item text..." />
           <div style="display: flex; align-items: center; gap: 0.35rem; flex-shrink: 0;">
-            <button type="button" class="btn btn-outline btn-xs" style="height: 32px; width: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center;" onclick="moveChecklistItem(${index}, -1)" ${index === 0 ? 'disabled' : ''} title="Move Up">↑</button>
-            <button type="button" class="btn btn-outline btn-xs" style="height: 32px; width: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center;" onclick="moveChecklistItem(${index}, 1)" ${index === bookingChecklist.length - 1 ? 'disabled' : ''} title="Move Down">↓</button>
-            <button type="button" class="btn btn-outline btn-xs" style="height: 32px; color: var(--danger); border-color: rgba(220,38,38,0.15); padding: 0 0.5rem; font-size: 0.78rem;" onclick="removeChecklistItem(${index})">Remove</button>
+            <button type="button" class="btn-action-icon" onclick="moveChecklistItem(${index}, -1)" ${index === 0 ? 'disabled' : ''} title="Move Up">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>
+            </button>
+            <button type="button" class="btn-action-icon" onclick="moveChecklistItem(${index}, 1)" ${index === bookingChecklist.length - 1 ? 'disabled' : ''} title="Move Down">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline></svg>
+            </button>
+            <button type="button" class="btn-action-danger" onclick="removeChecklistItem(${index})" title="Remove Item">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+            </button>
           </div>
         `;
         container.appendChild(itemRow);
