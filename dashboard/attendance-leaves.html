@@ -1679,28 +1679,50 @@
           let shiftEndHour = 18;
           let shiftEndMin = 0;
 
-          if (this.employee.shift_time_1) {
-            const match = this.employee.shift_time_1.match(/(\d+):(\d+)\s*(AM|PM)/i);
-            if (match) {
-              let h = parseInt(match[1], 10);
-              const m = parseInt(match[2], 10);
-              const ampm = match[3].toUpperCase();
-              if (ampm === 'PM' && h < 12) h += 12;
-              if (ampm === 'AM' && h === 12) h = 0;
-              shiftStartHour = h;
-              shiftStartMin = m;
+          if (this.employee) {
+            const parseTimeStr = (str) => {
+              if (!str) return null;
+              const match = str.match(/(\d+):(\d+)\s*(AM|PM)/i);
+              if (match) {
+                let h = parseInt(match[1], 10);
+                const m = parseInt(match[2], 10);
+                const ampm = match[3].toUpperCase();
+                if (ampm === 'PM' && h < 12) h += 12;
+                if (ampm === 'AM' && h === 12) h = 0;
+                return { hour: h, minute: m };
+              }
+              return null;
+            };
+
+            if (this.employee.shift_time_1) {
+              const parts = this.employee.shift_time_1.split('-');
+              if (parts.length === 2) {
+                const start = parseTimeStr(parts[0]);
+                const end = parseTimeStr(parts[1]);
+                if (start) {
+                  shiftStartHour = start.hour;
+                  shiftStartMin = start.minute;
+                }
+                if (end) {
+                  shiftEndHour = end.hour;
+                  shiftEndMin = end.minute;
+                }
+              } else {
+                const start = parseTimeStr(this.employee.shift_time_1);
+                if (start) {
+                  shiftStartHour = start.hour;
+                  shiftStartMin = start.minute;
+                }
+              }
             }
-          }
-          if (this.employee.shift_time_2) {
-            const match = this.employee.shift_time_2.match(/(\d+):(\d+)\s*(AM|PM)/i);
-            if (match) {
-              let h = parseInt(match[1], 10);
-              const m = parseInt(match[2], 10);
-              const ampm = match[3].toUpperCase();
-              if (ampm === 'PM' && h < 12) h += 12;
-              if (ampm === 'AM' && h === 12) h = 0;
-              shiftEndHour = h;
-              shiftEndMin = m;
+            if (this.employee.shift_time_2) {
+              const parts = this.employee.shift_time_2.split('-');
+              const target = parts.length === 2 ? parts[1] : this.employee.shift_time_2;
+              const end = parseTimeStr(target);
+              if (end) {
+                shiftEndHour = end.hour;
+                shiftEndMin = end.minute;
+              }
             }
           }
 
