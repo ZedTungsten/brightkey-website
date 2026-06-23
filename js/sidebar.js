@@ -236,6 +236,7 @@
             <span>Commissions</span>
             <span id="commissions-badge-dot" style="display: none; width: 6px; height: 6px; border-radius: 50%; background-color: #ef4444;"></span>
           </a>
+          <a href="/dashboard/sales-inventory" class="dash-nav-child" data-role="sales">Inventory</a>
           <a class="dash-nav-child" data-role="sales" style="opacity: 0.5; cursor: not-allowed;">CRM</a>
           <a class="dash-nav-child" data-role="sales" style="opacity: 0.5; cursor: not-allowed;">Goals</a>
           <a class="dash-nav-child" data-role="sales" style="opacity: 0.5; cursor: not-allowed;">Calculators</a>
