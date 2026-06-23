@@ -141,6 +141,10 @@
       flex-direction: column;
       border: 1px solid transparent;
       transition: background 0.15s;
+      cursor: pointer;
+    }
+    .calendar-cell:hover {
+      background: var(--bg-elevated);
     }
     .calendar-cell-header {
       display: flex;
@@ -944,6 +948,60 @@
     </div>
   </div>
 
+  <!-- Day Events Modal -->
+  <div class="modal-overlay" id="day-events-modal" onclick="closeDayEventsModal(event)">
+    <div class="modal-card" style="width: 480px;" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <div class="modal-title">Schedules for <span id="day-events-title-date">Date</span></div>
+        <button class="modal-close" onclick="toggleDayEventsModal(false)">
+          <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body" id="day-events-body">
+        
+        <!-- Day Events List View -->
+        <div id="day-events-list-container">
+          <div id="day-events-list" style="display: flex; flex-direction: column; gap: 0.75rem;">
+            <!-- Bookings listed here, or No bookings message -->
+          </div>
+          <button type="button" class="btn btn-primary" id="btn-create-event-init" onclick="showCreateEventForm()" style="width: 100%; margin-top: 1.25rem;">+ Create Event</button>
+        </div>
+
+        <!-- Create Event Form View -->
+        <form id="day-events-create-form" style="display: none; flex-direction: column; gap: 1rem;" onsubmit="event.preventDefault();">
+          <div class="form-group">
+            <label class="form-label" for="event-type">Event Type</label>
+            <select id="event-type" class="form-input">
+              <option value="backjob">Backjob</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="event-cust-name">Customer Name</label>
+            <input type="text" id="event-cust-name" class="form-input" placeholder="e.g. Juan dela Cruz" required />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="event-time-slot">Preferred Time</label>
+            <select id="event-time-slot" class="form-input">
+              <option value="Morning">Morning (AM)</option>
+              <option value="Afternoon">Afternoon (PM)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Assign Installers</label>
+            <div id="event-installers-list" style="display: flex; flex-direction: column; gap: 0.5rem; max-height: 150px; overflow-y: auto; padding: 0.6rem 0.8rem; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-base);">
+              <!-- Populated by JS -->
+            </div>
+          </div>
+          <div class="modal-footer" style="padding: 1rem 0 0 0; background: transparent; border-top: none; display: flex; justify-content: flex-end; gap: 0.75rem; width: 100%;">
+            <button type="button" class="btn btn-outline" onclick="hideCreateEventForm()">Cancel</button>
+            <button type="button" class="btn btn-primary" onclick="createDayEvent()">Create</button>
+          </div>
+        </form>
+
+      </div>
+    </div>
+  </div>
+
   <!-- Lightbox Modal -->
   <div class="modal-overlay" id="lightbox-modal" onclick="closeLightbox()">
     <img id="lightbox-img" src="" alt="Preview Large" onclick="event.stopPropagation()" />
@@ -963,6 +1021,7 @@
     let dbEmployees = [];
     let filteredBookings = [];
     let selectedBooking = null;
+    let selectedDayDate = '';
     let searchQuery = '';
 
     // Date state
@@ -1140,7 +1199,7 @@
             : (b.installer_name ? `<span class="calendar-inst-badge">${escapeHtml(formatInstallerName(b.installer_name))}</span>` : '');
 
           const slotHtml = `
-            <div class="calendar-slot ${isAfternoon(b.scheduled_time) ? 'pm' : 'am'}${isAborted ? ' aborted' : ''}" title="${displayText}" onclick="showBookingDetails('${b.id}')">
+            <div class="calendar-slot ${isAfternoon(b.scheduled_time) ? 'pm' : 'am'}${isAborted ? ' aborted' : ''}" title="${displayText}" onclick="event.stopPropagation(); showBookingDetails('${b.id}')">
               <div style="font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; width:100%;">${displayText}</div>
               ${badgeHtml}
             </div>
@@ -1157,7 +1216,7 @@
         const cellClass = isToday ? 'calendar-cell today' : 'calendar-cell';
 
         const cellHtml = `
-          <div class="${cellClass}">
+          <div class="${cellClass}" onclick="handleDayClick('${dateStr}', event)">
             <div class="calendar-cell-header">
               <span class="calendar-cell-num">${day}</span>
             </div>
@@ -2259,6 +2318,195 @@
       } finally {
         btn.disabled = false;
         btn.textContent = 'Abort';
+      }
+    }
+
+    // Day events modal actions
+    function toggleDayEventsModal(show) {
+      document.getElementById('day-events-modal').classList.toggle('open', show);
+      if (!show) {
+        hideCreateEventForm();
+      }
+    }
+
+    function closeDayEventsModal(e) {
+      if (e.target.id === 'day-events-modal') {
+        toggleDayEventsModal(false);
+      }
+    }
+
+    function handleDayClick(dateStr, event) {
+      selectedDayDate = dateStr;
+      
+      // Update modal title with date
+      document.getElementById('day-events-title-date').textContent = formatDateFriendly(dateStr);
+      
+      // Filter bookings for this day
+      const dayBookings = dbBookings.filter(b => b.scheduled_date === dateStr);
+      const listContainer = document.getElementById('day-events-list');
+      
+      if (dayBookings.length === 0) {
+        listContainer.innerHTML = '<div style="color:var(--text-muted); text-align:center; padding: 1.5rem 0;">No bookings</div>';
+      } else {
+        listContainer.innerHTML = '';
+        dayBookings.forEach(b => {
+          const isAborted = b.status === 'cancelled';
+          const timeLabel = isAfternoon(b.scheduled_time) ? 'Afternoon (PM)' : 'Morning (AM)';
+          const item = document.createElement('div');
+          item.style.padding = '0.75rem';
+          item.style.border = '1px solid var(--border)';
+          item.style.borderRadius = '6px';
+          item.style.background = 'var(--bg-surface)';
+          item.style.cursor = 'pointer';
+          item.style.display = 'flex';
+          item.style.justifyContent = 'space-between';
+          item.style.alignItems = 'center';
+          item.onclick = () => {
+            toggleDayEventsModal(false);
+            showBookingDetails(b.id);
+          };
+
+          item.innerHTML = `
+            <div>
+              <div style="font-weight: 600; color: var(--text-primary);">${escapeHtml(b.customer_name)}</div>
+              <div style="font-size: 0.75rem; color: var(--text-muted);">${timeLabel}</div>
+            </div>
+            <div>
+              ${isAborted ? '<span style="font-size:0.7rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;">Aborted</span>' : ''}
+            </div>
+          `;
+          listContainer.appendChild(item);
+        });
+      }
+      
+      // Populate installers list checkboxes
+      populateInstallersChecklist();
+      
+      toggleDayEventsModal(true);
+    }
+
+    function populateInstallersChecklist() {
+      const container = document.getElementById('event-installers-list');
+      if (!container) return;
+      container.innerHTML = '';
+
+      const installerNames = window._installerAssignmentNames || [];
+      const installers = dbEmployees.filter(emp => {
+        if (installerNames.length > 0) {
+          return emp.assignment && installerNames.includes(emp.assignment);
+        }
+        const title = (emp.title || emp.position || '').toLowerCase();
+        const assignment = (emp.assignment || '').toLowerCase();
+        return title.includes('installer') || title.includes('operations') || title.includes('field') || assignment.includes('installer');
+      });
+
+      if (installers.length === 0) {
+        container.innerHTML = '<div style="color:var(--text-muted); font-size:0.8rem;">No installers found.</div>';
+        return;
+      }
+
+      installers.forEach(inst => {
+        const lastName = inst.last_name ? ` ${inst.last_name.trim()}` : '';
+        const displayName = `${inst.first_name}${lastName}`;
+        const checkboxId = `inst-check-${inst.id}`;
+
+        const wrapper = document.createElement('label');
+        wrapper.style.display = 'flex';
+        wrapper.style.alignItems = 'center';
+        wrapper.style.gap = '0.5rem';
+        wrapper.style.cursor = 'pointer';
+        wrapper.style.fontSize = '0.85rem';
+        wrapper.style.color = 'var(--text-primary)';
+
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.value = inst.id;
+        checkbox.id = checkboxId;
+        checkbox.name = 'event-installers';
+        checkbox.dataset.name = displayName;
+        checkbox.style.cursor = 'pointer';
+
+        wrapper.appendChild(checkbox);
+        wrapper.appendChild(document.createTextNode(displayName));
+        container.appendChild(wrapper);
+      });
+    }
+
+    function showCreateEventForm() {
+      document.getElementById('day-events-list-container').style.display = 'none';
+      document.getElementById('day-events-create-form').style.display = 'flex';
+      
+      // Clear inputs
+      document.getElementById('event-cust-name').value = '';
+      document.getElementById('event-time-slot').value = 'Morning';
+      
+      // Uncheck all checkboxes
+      const checkboxes = document.querySelectorAll('input[name="event-installers"]');
+      checkboxes.forEach(cb => cb.checked = false);
+    }
+
+    function hideCreateEventForm() {
+      document.getElementById('day-events-create-form').style.display = 'none';
+      document.getElementById('day-events-list-container').style.display = 'block';
+    }
+
+    async function createDayEvent() {
+      const nameInput = document.getElementById('event-cust-name');
+      const customerName = nameInput.value.trim();
+      if (!customerName) {
+        showToast('Please enter a Customer Name.', true);
+        nameInput.focus();
+        return;
+      }
+
+      const timeSlot = document.getElementById('event-time-slot').value;
+      
+      // Collect selected installers
+      const selectedCheckboxes = document.querySelectorAll('input[name="event-installers"]:checked');
+      const installersList = [];
+      selectedCheckboxes.forEach(cb => {
+        installersList.push({
+          id: cb.value,
+          name: cb.dataset.name
+        });
+      });
+
+      const installerIdStr = installersList.length > 0 ? installersList.map(i => i.id).join(' | ') : null;
+      const installerNameStr = installersList.length > 0 ? installersList.map(i => i.name).join(' | ') : null;
+
+      const randomSuffix = Date.now();
+      const folderRefId = `BJ-${randomSuffix}`;
+      const orderNo = `BJ-${randomSuffix}`;
+
+      const payload = {
+        company_id: currentCompanyId,
+        folder_ref_id: folderRefId,
+        order_no: orderNo,
+        customer_name: customerName,
+        customer_address: 'Backjob',
+        scheduled_date: selectedDayDate,
+        scheduled_time: timeSlot,
+        installer_id: installerIdStr,
+        installer_name: installerNameStr,
+        installers: installersList,
+        status: 'scheduled',
+        grand_total: 0,
+        subtotal: 0
+      };
+
+      try {
+        const { error } = await sb
+          .from('installation_bookings')
+          .insert([payload]);
+
+        if (error) throw error;
+
+        showToast('Backjob created successfully.');
+        toggleDayEventsModal(false);
+        await loadData();
+      } catch (err) {
+        console.error('Failed to create event:', err);
+        showToast('Failed to create event: ' + err.message, true);
       }
     }
 
