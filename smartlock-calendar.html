@@ -1601,9 +1601,11 @@
       // Check if any door has attached products (new style)
       const anyDoorHasAttachedProducts = doorsArr.some(d => Array.isArray(d.products) && d.products.length > 0);
 
-      const rowCount = anyDoorHasAttachedProducts 
-        ? doorsArr.length 
-        : Math.max(doorsArr.length, hardwareProducts.length, hardwareSkus.length);
+      const rowCount = (doorsArr.length === 1)
+        ? 1
+        : (anyDoorHasAttachedProducts 
+            ? doorsArr.length 
+            : Math.max(doorsArr.length, hardwareProducts.length, hardwareSkus.length));
 
       if (rowCount === 0) {
         doorsContainer.innerHTML = '<span style="color:var(--text-muted); font-size:0.82rem;">No specifications found.</span>';
@@ -1634,6 +1636,17 @@
               const pMatch = productsArr.find(p => p.sku === itemSku);
               return pMatch?.cancelled || false;
             });
+          } else if (doorsArr.length === 1) {
+            // Combine all products to Door 1
+            const allSkusList = hardwareProducts.length > 0 ? hardwareProducts.map(p => p.sku) : hardwareSkus;
+            sku = allSkusList.join(', ') || 'N/A';
+            
+            const doorTitles = hardwareProducts.length > 0 
+              ? hardwareProducts.map(p => p.title || p.name || p.sku) 
+              : hardwareNames;
+            
+            titleHtml = doorTitles.map(t => `<div style="font-size:0.8rem; color:var(--text-secondary); margin-bottom:0.4rem;">${escapeHtml(t)}</div>`).join('');
+            isCancelled = hardwareProducts.length > 0 && hardwareProducts.every(p => p.cancelled || false);
           } else {
             const currentSku = hardwareProducts[i]?.sku || hardwareSkus[i] || 'N/A';
             sku = currentSku;
