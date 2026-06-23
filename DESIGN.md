@@ -338,3 +338,56 @@ This means the typical approach of adding `border-right` and `box-shadow` to a s
   box-shadow: 4px 0 8px rgba(0,0,0,0.1);  /* clipped by table stacking context */
 }
 ```
+
+---
+
+## 15. Toggle Switch (On/Off Pill)
+
+* **Rule**: When implementing on/off settings or state controls, use a rounded pill toggle switch instead of standard checkboxes to ensure a premium, unified dashboard design.
+* **HTML Structure**:
+  ```html
+  <label class="toggle-switch">
+    <input type="checkbox" onchange="..." />
+    <span class="toggle-slider"></span>
+  </label>
+  ```
+* **CSS Styling**:
+  ```css
+  .toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 44px;
+    height: 24px;
+  }
+  .toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+  .toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    inset: 0;
+    background-color: var(--border);
+    transition: .3s;
+    border-radius: 24px;
+  }
+  .toggle-slider:before {
+    position: absolute;
+    content: "";
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 3px;
+    background-color: #fff;
+    transition: .3s;
+    border-radius: 50%;
+  }
+  input:checked + .toggle-slider {
+    background-color: var(--cyan);
+  }
+  input:checked + .toggle-slider:before {
+    transform: translateX(20px);
+  }
+  ```
+```
