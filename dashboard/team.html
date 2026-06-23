@@ -600,6 +600,159 @@
       cursor: not-allowed;
       text-decoration: none;
     }
+
+    /* ── Projects CSS ── */
+    .projects-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 1.25rem;
+      padding: 1.25rem;
+    }
+    
+    .project-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+      display: flex;
+      flex-direction: column;
+      padding: 1.25rem;
+      position: relative;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+
+    .project-card:hover {
+      border-color: var(--border-hover);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    }
+
+    .project-card.completed {
+      opacity: 0.7;
+    }
+
+    .project-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 0.75rem;
+    }
+
+    .project-title {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin: 0;
+      line-height: 1.3;
+    }
+
+    .project-card.completed .project-title {
+      text-decoration: line-through;
+      color: var(--text-muted);
+    }
+
+    .project-actions {
+      display: flex;
+      gap: 0.35rem;
+      align-items: center;
+    }
+
+    .project-description {
+      font-size: 0.82rem;
+      color: var(--text-secondary);
+      line-height: 1.4;
+      margin: 0 0 1rem 0;
+      white-space: pre-wrap;
+      flex: 1;
+    }
+
+    .project-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      border-top: 1px solid var(--border);
+      padding-top: 0.75rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .project-deadline.overdue {
+      color: var(--danger);
+      font-weight: 600;
+    }
+
+    .project-members-section {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      border-top: 1px dashed var(--border);
+      padding-top: 0.75rem;
+    }
+
+    .project-members-title {
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 0.35rem;
+    }
+
+    .project-members-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      align-items: center;
+    }
+
+    .project-member-avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 1.5px solid var(--border);
+      background: var(--bg-elevated);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.65rem;
+      font-weight: 700;
+      color: var(--cyan-light);
+      position: relative;
+    }
+
+    .project-member-avatar img {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      object-fit: cover;
+    }
+
+    .project-member-avatar:hover .project-member-tooltip {
+      opacity: 1;
+      visibility: visible;
+    }
+
+    .project-member-tooltip {
+      position: absolute;
+      bottom: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--text-primary);
+      color: var(--bg-surface);
+      font-size: 0.7rem;
+      font-weight: 500;
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      white-space: nowrap;
+      pointer-events: none;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.15s, visibility 0.15s;
+      z-index: 10;
+      margin-bottom: 4px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
   </style>
 </head>
 <body>
@@ -637,6 +790,7 @@
       <div class="tabs-nav">
         <button class="tab-btn active" id="btn-tab-tasks" onclick="App.switchMainTab('tasks')">Regular Tasks</button>
         <button class="tab-btn" id="btn-tab-milestones" onclick="App.switchMainTab('milestones')">Milestones</button>
+        <button class="tab-btn" id="btn-tab-projects" onclick="App.switchMainTab('projects')">Projects</button>
       </div>
 
       <div class="content-area">
@@ -750,6 +904,21 @@
               </div>
             </div>
           </div>
+
+          <!-- Tab Panel 3: Projects -->
+          <div class="tab-panel" id="panel-projects">
+            <div class="section-card">
+              <div class="section-header">
+                <div class="section-title">Projects</div>
+                <div style="display: flex; gap: 0.5rem;">
+                  <button class="btn btn-primary btn-sm" id="btn-add-project" style="display: none;" onclick="App.openProjectModal(null)">+ Add Project</button>
+                </div>
+              </div>
+              <div class="projects-grid" id="projects-grid">
+                <div class="empty-row" style="padding: 2rem; text-align: center; color: var(--text-muted); width: 100%; grid-column: 1 / -1;">No projects registered.</div>
+              </div>
+            </div>
+          </div>
         </main>
       </div>
     </div>
@@ -853,7 +1022,75 @@
         </div>
       </form>
     </div>
+  <!-- Project Dialog Modal -->
+  <div class="modal-overlay" id="project-modal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title" id="project-modal-title">Add New Project</div>
+        <button class="modal-close" onclick="App.closeProjectModal()">
+          <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <form onsubmit="App.saveProject(event)">
+        <input type="hidden" id="project-modal-id" />
+        <div class="modal-body" style="display: flex; flex-direction: column; gap: 1.25rem;">
+          <div class="form-group">
+            <label class="form-label" for="project-modal-title-input">Project Title</label>
+            <input type="text" id="project-modal-title-input" class="form-input" placeholder="e.g. Website Redesign" required />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="project-modal-desc-input">Description (max 500 characters)</label>
+            <textarea id="project-modal-desc-input" class="form-textarea" maxlength="500" placeholder="Project details and links..."></textarea>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="project-modal-deadline-input">Deadline</label>
+            <input type="date" id="project-modal-deadline-input" class="form-input" />
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" onclick="App.closeProjectModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-submit-project">Save Project</button>
+        </div>
+      </form>
+    </div>
   </div>
+
+  <!-- Project Members Dialog Modal -->
+  <div class="modal-overlay" id="project-members-modal">
+    <div class="modal-card" style="width: 480px; max-width: 90%;">
+      <div class="modal-header">
+        <div class="modal-title" id="project-members-modal-title">Manage Members</div>
+        <button class="modal-close" onclick="App.closeMembersModal()">
+          <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body" style="display: flex; flex-direction: column; gap: 1.25rem;">
+        <input type="hidden" id="project-members-modal-id" />
+        
+        <!-- Add new member form -->
+        <div id="add-member-control-group" style="display: flex; gap: 0.5rem; align-items: flex-end;">
+          <div style="flex: 1;">
+            <label class="form-label" for="project-member-select">Add Employee to Project</label>
+            <select id="project-member-select" class="form-select"></select>
+          </div>
+          <button type="button" class="btn btn-primary" onclick="App.addSelectedProjectMember()" style="height: 38px; display: flex; align-items: center; justify-content: center; padding: 0 1rem;">
+            Add
+          </button>
+        </div>
+
+        <div style="margin-top: 0.5rem;">
+          <label class="form-label">Current Members</label>
+          <div id="project-members-current-list" style="display: flex; flex-direction: column; gap: 0.5rem; max-height: 250px; overflow-y: auto; padding: 0.25rem;">
+            <!-- list of members dynamically populated -->
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" onclick="App.closeMembersModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
 
 
 
@@ -906,9 +1143,13 @@
       memberRoles: {}, // user_id -> role
 
       // Current view states
-      activeMainTab: 'tasks', // 'tasks', 'milestones'
+      activeMainTab: 'tasks', // 'tasks', 'milestones', 'projects'
       tasks: [],
       milestones: [],
+      projects: [],
+      allProjects: [],
+      allProjectMembers: [],
+      allActiveEmployees: [],
 
       async init() {
         const user = await window.BKAuth.requireAuth('../login.html');
@@ -996,8 +1237,10 @@
         try {
           const { data } = await this.sb.from('employees').select('id, first_name, last_name, employee_number, picture_link, cv_link, title, job_description').eq('employment_status', 'Active');
           allEmployees = data || [];
+          this.allActiveEmployees = allEmployees;
         } catch (e) {
           console.error(e);
+          this.allActiveEmployees = [];
         }
 
         // Check if the current user has subordinates in the company structure
@@ -1306,6 +1549,7 @@
         const btnAddTasks = document.querySelectorAll('.btn-add-task-cls');
         const btnAddMilestone = document.getElementById('btn-add-milestone');
         const btnCreateGroup = document.getElementById('btn-create-group');
+        const btnAddProject = document.getElementById('btn-add-project');
         
         // Show/hide actions column header based on edit access state
         const thActions = document.querySelectorAll('.th-actions');
@@ -1344,10 +1588,12 @@
           btnAddTasks.forEach(btn => btn.style.display = 'inline-flex');
           if (btnAddMilestone) btnAddMilestone.style.display = 'inline-flex';
           if (btnCreateGroup) btnCreateGroup.style.display = 'inline-flex';
+          if (btnAddProject) btnAddProject.style.display = 'inline-flex';
         } else {
           btnAddTasks.forEach(btn => btn.style.display = 'none');
           if (btnAddMilestone) btnAddMilestone.style.display = 'none';
           if (btnCreateGroup) btnCreateGroup.style.display = 'none';
+          if (btnAddProject) btnAddProject.style.display = 'none';
         }
       },
 
@@ -1535,23 +1781,47 @@
           this.milestones = [];
         }
 
-        // Render both
+        // Fetch projects & memberships
+        const grid = document.getElementById('projects-grid');
+        if (grid) grid.innerHTML = '<div class="empty-row" style="padding: 2rem; text-align: center; color: var(--text-muted); width: 100%; grid-column: 1 / -1;">Loading projects...</div>';
+        try {
+          const { data: projData } = await this.sb
+            .from('team_projects')
+            .select('*')
+            .eq('company_id', this.companyId)
+            .order('created_at', { ascending: true });
+          this.allProjects = projData || [];
+
+          const { data: memData } = await this.sb
+            .from('project_members')
+            .select('*');
+          this.allProjectMembers = memData || [];
+
+          const myProjectIds = this.allProjectMembers.filter(m => m.employee_id === this.selectedEmployeeId).map(m => m.project_id);
+          this.projects = this.allProjects.filter(p => myProjectIds.includes(p.id));
+        } catch(e) {
+          this.allProjects = [];
+          this.allProjectMembers = [];
+          this.projects = [];
+        }
+
+        // Render all
         this.renderTasks();
         this.renderMilestones();
+        this.renderProjects();
       },
 
       switchMainTab(tab) {
         this.activeMainTab = tab;
-        document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+        const nav = document.getElementById('btn-tab-tasks').parentElement;
+        nav.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
         document.getElementById(`btn-tab-${tab}`).classList.add('active');
         
-        if (tab === 'tasks') {
-          document.getElementById('panel-tasks').classList.add('active');
-          document.getElementById('panel-milestones').classList.remove('active');
-        } else {
-          document.getElementById('panel-tasks').classList.remove('active');
-          document.getElementById('panel-milestones').classList.add('active');
-        }
+        document.getElementById('panel-tasks').classList.remove('active');
+        document.getElementById('panel-milestones').classList.remove('active');
+        document.getElementById('panel-projects').classList.remove('active');
+
+        document.getElementById(`panel-${tab}`).classList.add('active');
       },
 
       openTaskModal(id = null, type = 'daily') {
@@ -1942,10 +2212,26 @@
             .order('created_at', { ascending: true });
           this.milestones = msData || [];
 
+          const { data: projData } = await this.sb
+            .from('team_projects')
+            .select('*')
+            .eq('company_id', this.companyId)
+            .order('created_at', { ascending: true });
+          this.allProjects = projData || [];
+
+          const { data: memData } = await this.sb
+            .from('project_members')
+            .select('*');
+          this.allProjectMembers = memData || [];
+
+          const myProjectIds = this.allProjectMembers.filter(m => m.employee_id === this.selectedEmployeeId).map(m => m.project_id);
+          this.projects = this.allProjects.filter(p => myProjectIds.includes(p.id));
+
           this.renderTasks();
           this.renderMilestones();
+          this.renderProjects();
         } catch (e) {
-          console.error('Error refreshing tasks and milestones:', e);
+          console.error('Error refreshing tasks, milestones and projects:', e);
         }
       },
 
@@ -2226,6 +2512,337 @@
 
         tbody.innerHTML = rowsHtml;
         this.updateUIIndicators();
+      },
+
+      renderProjects() {
+        const grid = document.getElementById('projects-grid');
+        if (!grid) return;
+
+        if (this.projects.length === 0) {
+          grid.innerHTML = `<div class="empty-row" style="padding: 2rem; text-align: center; color: var(--text-muted); width: 100%; grid-column: 1 / -1;">No projects registered.</div>`;
+          return;
+        }
+
+        const formatDate = (dateStr) => {
+          if (!dateStr) return '';
+          if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+            const parts = dateStr.split('-');
+            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            return `${months[parseInt(parts[1], 10) - 1]} ${parts[2]}, ${parts[0]}`;
+          }
+          const d = new Date(dateStr);
+          if (isNaN(d.getTime())) return '';
+          const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+          return `${months[d.getMonth()]} ${String(d.getDate()).padStart(2, '0')}, ${d.getFullYear()}`;
+        };
+
+        const todayString = new Date().toISOString().slice(0, 10);
+        let html = '';
+
+        this.projects.forEach(p => {
+          const isCompleted = !!p.completed_at;
+          const isOverdue = p.deadline && !isCompleted && p.deadline < todayString;
+          const deadlineText = p.deadline ? formatDate(p.deadline) : 'None';
+          const deadlineClass = isOverdue ? 'project-deadline overdue' : 'project-deadline';
+
+          // Get members for this project
+          const projectMems = this.allProjectMembers.filter(m => m.project_id === p.id);
+          let membersHtml = '';
+
+          projectMems.forEach(pm => {
+            const emp = this.allActiveEmployees.find(e => e.id === pm.employee_id);
+            if (emp) {
+              const first = emp.first_name || '';
+              const lastInitial = emp.last_name ? emp.last_name.trim().charAt(0) + '.' : '';
+              const displayName = `${first} ${lastInitial}`.trim();
+              const avatar = emp.picture_link
+                ? `<img src="${esc(emp.picture_link)}" alt="${esc(displayName)}" loading="lazy" />`
+                : displayName.split(' ').map(n => n[0]).join('').toUpperCase();
+
+              membersHtml += `
+                <div class="project-member-avatar">
+                  ${avatar}
+                  <div class="project-member-tooltip">${esc(displayName)}</div>
+                </div>
+              `;
+            }
+          });
+
+          if (projectMems.length === 0) {
+            membersHtml = '<span style="font-size: 0.75rem; color: var(--text-muted); font-style: italic;">No members</span>';
+          }
+
+          // Show action buttons
+          let actionButtons = '';
+          const showActions = this.hasEditAccess || (this.currentUser && this.selectedEmployeeId === this.currentUser.id);
+          
+          if (showActions) {
+            actionButtons = `
+              <button class="btn-check-link ${isCompleted ? 'active' : ''}" onclick="App.toggleProjectCompletion('${esc(p.id)}', ${!isCompleted})" title="${isCompleted ? 'Mark Active' : 'Mark Done'}">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              </button>
+            `;
+            if (this.hasEditAccess) {
+              actionButtons += `
+                <button class="btn-edit-link" onclick="App.openProjectModal('${esc(p.id)}')" title="Edit Project">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                </button>
+                <button class="btn-danger-link" onclick="App.deleteProject('${esc(p.id)}')" title="Delete Project">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                </button>
+              `;
+            }
+          }
+
+          let addMemberBtnHtml = '';
+          if (this.hasEditAccess) {
+            addMemberBtnHtml = `
+              <button class="btn btn-outline btn-sm" style="padding: 0.2rem 0.4rem; border-radius: 4px; display: inline-flex; align-items: center; justify-content: center;" onclick="App.openMembersModal('${esc(p.id)}')" title="Manage Members">
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                  <circle cx="8.5" cy="7" r="4"></circle>
+                  <line x1="20" y1="8" x2="20" y2="14"></line>
+                  <line x1="17" y1="11" x2="23" y2="11"></line>
+                </svg>
+              </button>
+            `;
+          }
+
+          html += `
+            <div class="project-card ${isCompleted ? 'completed' : ''}">
+              <div class="project-card-header">
+                <h4 class="project-title">${esc(p.title)}</h4>
+                <div class="project-actions">${actionButtons}</div>
+              </div>
+              <p class="project-description">${formatTextWithLinks(p.description)}</p>
+              <div class="project-meta">
+                <div class="${deadlineClass}">Deadline: ${deadlineText}</div>
+                <div style="font-size: 0.72rem;">Created: ${formatDate(p.created_at)}</div>
+              </div>
+              <div class="project-members-section">
+                <div style="display: flex; flex-direction: column;">
+                  <span class="project-members-title">Members</span>
+                  <div class="project-members-list">${membersHtml}</div>
+                </div>
+                ${addMemberBtnHtml}
+              </div>
+            </div>
+          `;
+        });
+
+        grid.innerHTML = html;
+      },
+
+      openProjectModal(id = null) {
+        document.getElementById('project-modal-id').value = id || '';
+        const titleInput = document.getElementById('project-modal-title-input');
+        const descInput = document.getElementById('project-modal-desc-input');
+        const deadlineInput = document.getElementById('project-modal-deadline-input');
+        const modalTitle = document.getElementById('project-modal-title');
+
+        if (id) {
+          modalTitle.textContent = 'Edit Project';
+          const p = this.allProjects.find(x => x.id === id);
+          titleInput.value = p?.title || '';
+          descInput.value = p?.description || '';
+          deadlineInput.value = p?.deadline || '';
+        } else {
+          modalTitle.textContent = 'Add New Project';
+          titleInput.value = '';
+          descInput.value = '';
+          deadlineInput.value = '';
+        }
+
+        document.getElementById('project-modal').classList.add('open');
+      },
+
+      closeProjectModal() {
+        document.getElementById('project-modal').classList.remove('open');
+      },
+
+      async saveProject(e) {
+        e.preventDefault();
+        const id = document.getElementById('project-modal-id').value;
+        const title = document.getElementById('project-modal-title-input').value.trim();
+        const description = document.getElementById('project-modal-desc-input').value.trim();
+        const deadline = document.getElementById('project-modal-deadline-input').value || null;
+
+        if (!title) return;
+
+        const btn = document.getElementById('btn-submit-project');
+        btn.disabled = true;
+        const origText = btn.innerText;
+        btn.innerText = 'Saving...';
+
+        const payload = {
+          company_id: this.companyId,
+          assigned_by: this.currentUser.id,
+          title: title,
+          description: description,
+          deadline: deadline
+        };
+
+        try {
+          if (id) {
+            const { error } = await this.sb.from('team_projects').update(payload).eq('id', id);
+            if (error) throw error;
+            toast('Project updated successfully.', 'success');
+          } else {
+            const { data, error } = await this.sb.from('team_projects').insert([payload]).select();
+            if (error) throw error;
+            
+            // Auto add the current selected employee as a member when project is created
+            if (data && data.length > 0) {
+              await this.sb.from('project_members').insert([{
+                project_id: data[0].id,
+                employee_id: this.selectedEmployeeId
+              }]);
+            }
+            toast('Project created successfully.', 'success');
+          }
+          this.closeProjectModal();
+          await this.refreshTasksAndMilestones();
+        } catch (err) {
+          toast('Error saving project: ' + err.message, 'error');
+        } finally {
+          btn.disabled = false;
+          btn.innerText = origText;
+        }
+      },
+
+      async deleteProject(id) {
+        const ok = await BKDialog.ask({
+          title: 'Delete Project',
+          message: 'This project and all its memberships will be permanently deleted.',
+          okText: 'Delete',
+          danger: true
+        });
+        if (!ok) return;
+
+        try {
+          const { error } = await this.sb.from('team_projects').delete().eq('id', id);
+          if (error) throw error;
+          toast('Project deleted successfully.', 'success');
+          await this.refreshTasksAndMilestones();
+        } catch (err) {
+          toast('Error deleting project: ' + err.message, 'error');
+        }
+      },
+
+      async toggleProjectCompletion(id, isCompleted) {
+        const completed_at = isCompleted ? new Date().toISOString() : null;
+        try {
+          const { error } = await this.sb.from('team_projects').update({ completed_at }).eq('id', id);
+          if (error) throw error;
+          toast(isCompleted ? 'Project marked as completed.' : 'Project marked as active.', 'success');
+          await this.refreshTasksAndMilestones();
+        } catch (err) {
+          toast('Error toggling project: ' + err.message, 'error');
+        }
+      },
+
+      openMembersModal(projectId) {
+        document.getElementById('project-members-modal-id').value = projectId;
+        
+        // Populate employee dropdown with active employees who are NOT yet members
+        const select = document.getElementById('project-member-select');
+        const currentMems = this.allProjectMembers.filter(m => m.project_id === projectId);
+        const currentMemIds = currentMems.map(m => m.employee_id);
+
+        const nonMembers = this.allActiveEmployees.filter(e => !currentMemIds.includes(e.id));
+        let selectHtml = '';
+        nonMembers.forEach(emp => {
+          const name = `${emp.first_name} ${emp.last_name || ''}`.trim();
+          selectHtml += `<option value="${esc(emp.id)}">${esc(name)} (${esc(emp.department || 'No Dept')})</option>`;
+        });
+        select.innerHTML = selectHtml || '<option value="">All employees assigned</option>';
+
+        // Render current list of members
+        const listDiv = document.getElementById('project-members-current-list');
+        let listHtml = '';
+        currentMems.forEach(pm => {
+          const emp = this.allActiveEmployees.find(e => e.id === pm.employee_id);
+          if (emp) {
+            const first = emp.first_name || '';
+            const lastInitial = emp.last_name ? emp.last_name.trim().charAt(0) + '.' : '';
+            const displayName = `${first} ${lastInitial}`.trim();
+            const avatar = emp.picture_link
+              ? `<img src="${esc(emp.picture_link)}" alt="" style="width:24px; height:24px; border-radius:50%; object-fit:cover;" />`
+              : `<div style="width:24px; height:24px; border-radius:50%; background:var(--cyan-dim); color:var(--cyan-light); display:flex; align-items:center; justify-content:center; font-size:0.6rem; font-weight:700;">${displayName.split(' ').map(n => n[0]).join('').toUpperCase()}</div>`;
+
+            listHtml += `
+              <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.5rem; background: var(--bg-elevated); border-radius: 4px;">
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                  ${avatar}
+                  <span style="font-size: 0.82rem; font-weight: 600; color: var(--text-primary);">${esc(displayName)}</span>
+                </div>
+                <button class="btn-danger-link" onclick="App.removeProjectMember('${esc(projectId)}', '${esc(pm.employee_id)}')" title="Remove member" style="padding: 0.2rem; background: none; border: none; cursor: pointer; color: var(--danger);">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+              </div>
+            `;
+          }
+        });
+
+        if (currentMems.length === 0) {
+          listHtml = '<div style="font-size:0.8rem; color:var(--text-muted); font-style:italic; padding:0.5rem; text-align:center;">No members assigned to this project yet.</div>';
+        }
+        listDiv.innerHTML = listHtml;
+
+        document.getElementById('project-members-modal').classList.add('open');
+      },
+
+      closeMembersModal() {
+        document.getElementById('project-members-modal').classList.remove('open');
+      },
+
+      async addSelectedProjectMember() {
+        const projectId = document.getElementById('project-members-modal-id').value;
+        const employeeId = document.getElementById('project-member-select').value;
+        if (!employeeId) return;
+
+        try {
+          const { error } = await this.sb.from('project_members').insert([{
+            project_id: projectId,
+            employee_id: employeeId
+          }]);
+          if (error) throw error;
+
+          toast('Member added to project.', 'success');
+          // Refresh list inside modal
+          this.openMembersModal(projectId);
+          // Refresh dashboard
+          await this.refreshTasksAndMilestones();
+        } catch (err) {
+          toast('Error adding member: ' + err.message, 'error');
+        }
+      },
+
+      async removeProjectMember(projectId, employeeId) {
+        const ok = await BKDialog.ask({
+          title: 'Remove Member',
+          message: 'Are you sure you want to remove this member from the project?',
+          okText: 'Remove',
+          danger: true
+        });
+        if (!ok) return;
+
+        try {
+          const { error } = await this.sb
+            .from('project_members')
+            .delete()
+            .eq('project_id', projectId)
+            .eq('employee_id', employeeId);
+          if (error) throw error;
+
+          toast('Member removed from project.', 'success');
+          // Refresh list inside modal
+          this.openMembersModal(projectId);
+          // Refresh dashboard
+          await this.refreshTasksAndMilestones();
+        } catch (err) {
+          toast('Error removing member: ' + err.message, 'error');
+        }
       }
     };
 
