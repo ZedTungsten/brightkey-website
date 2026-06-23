@@ -312,6 +312,41 @@
     .booking-tab-panel.active {
       display: block;
     }
+
+    /* ── Attached Product Badges ── */
+    .door-attached-products {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-bottom: 0.5rem;
+    }
+    .attached-product-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      padding: 0.25rem 0.6rem;
+      border-radius: var(--radius-xs);
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .attached-product-badge .remove-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--text-muted);
+      padding: 0;
+      display: inline-flex;
+      align-items: center;
+      transition: color 0.15s;
+      font-size: 0.9rem;
+      line-height: 1;
+    }
+    .attached-product-badge .remove-btn:hover {
+      color: var(--danger);
+    }
   </style>
 </head>
 <body>
@@ -801,6 +836,118 @@
       calculateTotals();
     }
 
+    // --- Product Attachment Logic ---
+    window.doorAttachedProducts = {};
+
+    function updateAllDoorProductDropdowns() {
+      // 1. Gather all products currently purchased in the Products Purchased section
+      const purchased = {}; // SKU -> { qty: number, name: string }
+      const prodRows = document.querySelectorAll('.product-row');
+      prodRows.forEach(row => {
+        const select = row.querySelector('select[id$="-select"]');
+        const qtyInput = row.querySelector('input[type="number"]');
+        if (select && select.value) {
+          const sku = select.value;
+          const qty = parseInt(qtyInput.value) || 1;
+          const nameOption = select.options[select.selectedIndex];
+          // Strip stock status like " [22 available]" from option text
+          const fullName = nameOption ? nameOption.text.split(' [')[0] : sku;
+          if (purchased[sku]) {
+            purchased[sku].qty += qty;
+          } else {
+            purchased[sku] = { qty: qty, name: fullName };
+          }
+        }
+      });
+
+      // 2. Count how many of each SKU are attached across all doors in DOM
+      const attached = {}; // SKU -> number
+      const doorCards = document.querySelectorAll('.door-card');
+      const activeDoorIds = new Set();
+      
+      doorCards.forEach(card => {
+        const doorId = card.id;
+        activeDoorIds.add(doorId);
+        const list = window.doorAttachedProducts[doorId] || [];
+        list.forEach(sku => {
+          attached[sku] = (attached[sku] || 0) + 1;
+        });
+      });
+
+      // Clean up window.doorAttachedProducts for any door cards that were deleted
+      for (const dId in window.doorAttachedProducts) {
+        if (!activeDoorIds.has(dId)) {
+          delete window.doorAttachedProducts[dId];
+        }
+      }
+
+      // 3. For each active door card, update its badges and its dropdown options
+      doorCards.forEach(card => {
+        const doorId = card.id;
+        const attachedList = window.doorAttachedProducts[doorId] || [];
+        
+        // Update badges container
+        const badgesContainer = document.getElementById(`${doorId}-attached-products`);
+        if (badgesContainer) {
+          if (attachedList.length === 0) {
+            badgesContainer.innerHTML = '<span style="font-size:0.75rem; color:var(--text-muted); font-style:italic;">No products attached</span>';
+          } else {
+            badgesContainer.innerHTML = attachedList.map(sku => {
+              const name = purchased[sku] ? purchased[sku].name : sku;
+              return `
+                <div class="attached-product-badge">
+                  <span>${name}</span>
+                  <button type="button" class="remove-btn" onclick="detachProductFromDoor('${doorId}', '${sku}')" title="Remove attachment">&times;</button>
+                </div>
+              `;
+            }).join('');
+          }
+        }
+
+        // Update dropdown
+        const select = document.getElementById(`${doorId}-attach-select`);
+        if (select) {
+          const currentVal = select.value;
+          let optionsHtml = '<option value="">-- Attach a Product --</option>';
+          
+          for (const sku in purchased) {
+            const totalPurchased = purchased[sku].qty;
+            const totalAttached = attached[sku] || 0;
+            const remaining = totalPurchased - totalAttached;
+
+            if (remaining > 0) {
+              optionsHtml += `<option value="${sku}">${purchased[sku].name} (${remaining} left)</option>`;
+            }
+          }
+          select.innerHTML = optionsHtml;
+          select.value = ''; // Reset select to placeholder after draw
+        }
+      });
+    }
+
+    function attachProductToDoor(doorId, selectEl) {
+      const sku = selectEl.value;
+      if (!sku) return;
+      
+      if (!window.doorAttachedProducts[doorId]) {
+        window.doorAttachedProducts[doorId] = [];
+      }
+      
+      window.doorAttachedProducts[doorId].push(sku);
+      updateAllDoorProductDropdowns();
+    }
+
+    function detachProductFromDoor(doorId, sku) {
+      if (!window.doorAttachedProducts[doorId]) return;
+      
+      const idx = window.doorAttachedProducts[doorId].indexOf(sku);
+      if (idx !== -1) {
+        window.doorAttachedProducts[doorId].splice(idx, 1);
+      }
+      
+      updateAllDoorProductDropdowns();
+    }
+
     // --- Dynamic Doors Card ---
     function adjustDoors(change) {
       const container = document.getElementById('doors-container');
@@ -865,6 +1012,16 @@
             </div>
 
             <div style="margin-top:0.75rem; border-top:1px dashed var(--border); padding-top:0.75rem;">
+              <label class="form-label">Attach Product</label>
+              <div id="${doorId}-attached-products" class="door-attached-products" style="margin-bottom: 0.5rem;">
+                <!-- Badges will render here -->
+              </div>
+              <select class="form-input door-product-attach-select" id="${doorId}-attach-select" style="height:auto; padding:0.4rem; margin-bottom:0.75rem;" onchange="attachProductToDoor('${doorId}', this)">
+                <option value="">-- Attach a Product --</option>
+              </select>
+            </div>
+
+            <div style="margin-top:0.75rem; border-top:1px dashed var(--border); padding-top:0.75rem;">
               <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.35rem;">
                 <label class="form-label">Installers (Optional)</label>
                 <button type="button" class="btn btn-outline btn-sm" id="${doorId}-add-inst"
@@ -881,6 +1038,7 @@
         `;
         container.insertAdjacentHTML('beforeend', html);
         reindexDoors();
+        updateAllDoorProductDropdowns();
       }
     }
 
@@ -889,6 +1047,7 @@
       if (el) {
         el.remove();
         reindexDoors();
+        updateAllDoorProductDropdowns();
       }
     }
 
@@ -1058,6 +1217,9 @@
 
       currentGrandTotalCents = grandTotal;
       updateVatBreakdown();
+      if (typeof updateAllDoorProductDropdowns === 'function') {
+        updateAllDoorProductDropdowns();
+      }
     }
 
     let currentGrandTotalCents = 0;
@@ -1370,7 +1532,8 @@
           jambMaterial,
           swing,
           photos,
-          installers: doorInstallers
+          installers: doorInstallers,
+          products: window.doorAttachedProducts[card.id] || []
         });
       }
 
@@ -1517,7 +1680,7 @@
         deduction_labels:   dLabels.join(' | ') || null,
         deduction_values:   dValues.join(' | ') || null,
         // Full door specs JSONB
-        doors:              doors.map(d => ({ index: d.index, doorMaterial: d.doorMaterial, jambMaterial: d.jambMaterial, swing: d.swing, photos: d.photos, installers: d.installers || [] })),
+        doors:              doors.map(d => ({ index: d.index, doorMaterial: d.doorMaterial, jambMaterial: d.jambMaterial, swing: d.swing, photos: d.photos, installers: d.installers || [], products: d.products || [] })),
         // All CDN image URLs
         map_image_url:      mapUrl || null,
         frontage_image_url: frontageUrl || null,
@@ -1938,6 +2101,9 @@
     }
 
     window.clearForm = function() {
+      // Reset attached products mapping
+      window.doorAttachedProducts = {};
+      
       // Clear Customer details
       document.getElementById('cust-name').value = '';
       document.getElementById('cust-social').value = '';
