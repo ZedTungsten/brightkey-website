@@ -271,11 +271,11 @@
                     <thead>
                       <tr>
                         <th style="width: 80px;">Image</th>
-                        <th style="width: 150px;">SKU</th>
-                        <th style="width: 150px;">Category</th>
-                        <th>Product Title</th>
+                        <th style="width: 150px; cursor: pointer; user-select: none;" id="header-sku" onclick="setSort('sku')">SKU</th>
+                        <th style="width: 150px; cursor: pointer; user-select: none;" id="header-category" onclick="setSort('category')">Category</th>
+                        <th style="cursor: pointer; user-select: none;" id="header-title" onclick="setSort('title')">Product Title</th>
                         <th>Product Description</th>
-                        <th style="width: 120px; text-align: center;">Available</th>
+                        <th style="width: 120px; text-align: center; cursor: pointer; user-select: none;" id="header-available" onclick="setSort('available')">Available</th>
                       </tr>
                     </thead>
                     <tbody id="inventory-tbody">
@@ -318,6 +318,8 @@
     let activeBusiness = 'smart_lock';
     let searchQuery = '';
     let stockFilterMode = 'all'; // 'all' or 'with_stocks'
+    let sortColumn = ''; // 'sku', 'category', 'title', 'available'
+    let sortDirection = 'asc'; // 'asc' or 'desc'
 
     document.addEventListener("DOMContentLoaded", async () => {
       if (window.BKAuth) {
@@ -370,18 +372,24 @@
 
         const warehouseIds = (warehouses || []).map(w => w.id);
 
-        // Fetch products and inventory in parallel
-        const [prodRes, invRes] = await Promise.all([
-          sb.from('products').select('sku, title, category, business, image_main, description').eq('company_id', currentCompanyId).order('sku'),
+        // Fetch products, inventory and commissions config in parallel
+        const [prodRes, invRes, commsRes] = await Promise.all([
+          sb.from('products').select('sku, title, category, business, image_main, description, tags').eq('company_id', currentCompanyId).order('sku'),
           warehouseIds.length > 0
             ? sb.from('inventory').select('sku, available').in('warehouse_id', warehouseIds)
-            : Promise.resolve({ data: [] })
+            : Promise.resolve({ data: [] }),
+          sb.from('global_settings').select('value').eq('key', 'commissions_config').eq('company_id', currentCompanyId).maybeSingle()
         ]);
 
         if (prodRes.error) throw prodRes.error;
         if (invRes.error) throw invRes.error;
+        if (commsRes.error) throw commsRes.error;
 
-        dbProducts = prodRes.data || [];
+        const commissionsConfig = commsRes.data?.value || { rates: [], eligibility_rules: [] };
+        const eligibilityRules = commissionsConfig.eligibility_rules || [];
+
+        const rawProducts = prodRes.data || [];
+        dbProducts = rawProducts.filter(p => checkSkuEligibility(p, eligibilityRules));
 
         // Sum up available inventory across all warehouses per SKU
         dbInventory = {};
@@ -432,6 +440,33 @@
 
         return true;
       });
+
+      // Sort
+      if (sortColumn) {
+        filtered.sort((a, b) => {
+          let valA = '';
+          let valB = '';
+          if (sortColumn === 'available') {
+            valA = dbInventory[a.sku] || 0;
+            valB = dbInventory[b.sku] || 0;
+          } else if (sortColumn === 'sku') {
+            valA = (a.sku || '').toLowerCase();
+            valB = (b.sku || '').toLowerCase();
+          } else if (sortColumn === 'category') {
+            valA = (a.category || '').toLowerCase();
+            valB = (b.category || '').toLowerCase();
+          } else if (sortColumn === 'title') {
+            valA = (a.title || '').toLowerCase();
+            valB = (b.title || '').toLowerCase();
+          }
+
+          if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
+          if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
+          return 0;
+        });
+      }
+
+      renderHeaders();
 
       if (filtered.length === 0) {
         tbody.innerHTML = `
@@ -502,6 +537,55 @@
     function handleStockFilter() {
       stockFilterMode = document.getElementById('stock-filter').value;
       renderInventoryTable();
+    }
+
+    function checkSkuEligibility(product, eligibilityRules) {
+      if (!eligibilityRules || eligibilityRules.length === 0) return false;
+      
+      for (const rule of eligibilityRules) {
+        if (rule.scope === 'businesses') {
+          if (rule.business === 'all') return true;
+          if (rule.business === product.business) {
+            if (rule.category === 'all') return true;
+            if (rule.category === product.category) {
+              if (rule.sku === 'all') return true;
+              if (rule.sku === product.sku) return true;
+            }
+          }
+        } else if (rule.scope === 'tags') {
+          if (product.tags && Array.isArray(product.tags) && product.tags.includes(rule.tag)) {
+            return true;
+          }
+        }
+      }
+      return false;
+    }
+
+    function setSort(col) {
+      if (sortColumn === col) {
+        sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+      } else {
+        sortColumn = col;
+        sortDirection = 'asc';
+      }
+      renderInventoryTable();
+    }
+
+    function renderHeaders() {
+      const getIndicator = (col) => {
+        if (sortColumn !== col) return '';
+        return sortDirection === 'asc' ? ' ▲' : ' ▼';
+      };
+
+      const skuEl = document.getElementById('header-sku');
+      const catEl = document.getElementById('header-category');
+      const titleEl = document.getElementById('header-title');
+      const availEl = document.getElementById('header-available');
+
+      if (skuEl) skuEl.innerHTML = `SKU${getIndicator('sku')}`;
+      if (catEl) catEl.innerHTML = `Category${getIndicator('category')}`;
+      if (titleEl) titleEl.innerHTML = `Product Title${getIndicator('title')}`;
+      if (availEl) availEl.innerHTML = `Available${getIndicator('available')}`;
     }
 
     function esc(s) {
