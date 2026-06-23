@@ -848,9 +848,149 @@
           if (attRes.error) throw attRes.error;
           this.attendanceSettings = attRes.data?.value || this.getDefaultAttendanceSettings();
           this.populateAttendanceSettingsForm();
+
+          await this.checkAndRunPayoutConversions();
         } catch (err) {
           console.error('Failed to load settings:', err);
           Toast.error('Failed to load settings: ' + err.message);
+        }
+      },
+
+      async checkAndRunPayoutConversions() {
+        if (!this.companyId || !this.leavesSettings) return;
+
+        const settings = this.leavesSettings;
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const currentMonth = now.getMonth() + 1; // 1-12
+        const currentDay = now.getDate(); // 1-31
+
+        const nowCompare = currentYear * 10000 + currentMonth * 100 + currentDay;
+        const dateStr = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(currentDay).padStart(2, '0')}`;
+
+        let settingsChanged = false;
+        const sb = window.BKAuth.sb;
+
+        // 1. Check VL Payout
+        if (settings.vl_payout_active) {
+          const vlDay = parseInt(settings.vl_payout_day, 10) || 1;
+          const vlMonth = parseInt(settings.vl_payout_month, 10) || 1;
+          const vlTargetCompare = currentYear * 10000 + vlMonth * 100 + vlDay;
+          const lastVlYear = parseInt(settings.vl_last_conversion_year, 10) || 0;
+
+          if (nowCompare >= vlTargetCompare && lastVlYear < currentYear) {
+            // Fetch employees to get active VL loads
+            const { data: emps, error } = await sb.from('employees')
+              .select('id, first_name, last_name, vl_load')
+              .eq('company_id', this.companyId);
+
+            if (error) {
+              console.error('Error fetching employees for VL conversion:', error);
+            } else {
+              const activeEmps = (emps || []).filter(e => parseFloat(e.vl_load || 0) > 0);
+              const vlPayoutValue = parseFloat(settings.vl_payout_value || 0);
+
+              if (activeEmps.length > 0) {
+                const adjustmentsToInsert = activeEmps.map(e => ({
+                  company_id: this.companyId,
+                  employee_id: e.id,
+                  amount: parseFloat((parseFloat(e.vl_load) * vlPayoutValue).toFixed(2)),
+                  date: dateStr,
+                  label: 'VL Payout Conversion',
+                  paid: false
+                }));
+
+                const { error: adjErr } = await sb.from('employee_adjustments').insert(adjustmentsToInsert);
+                if (adjErr) {
+                  console.error('Error inserting VL conversion adjustments:', adjErr);
+                } else {
+                  const ids = activeEmps.map(e => e.id);
+                  const { error: empErr } = await sb.from('employees')
+                    .update({ vl_load: 0 })
+                    .in('id', ids);
+
+                  if (empErr) {
+                    console.error('Error resetting employee VL loads:', empErr);
+                  } else {
+                    settings.vl_last_conversion_year = currentYear;
+                    settingsChanged = true;
+                    if (window.Toast) {
+                      window.Toast.success(`VL payout conversion completed for ${activeEmps.length} employees.`);
+                    }
+                  }
+                }
+              } else {
+                settings.vl_last_conversion_year = currentYear;
+                settingsChanged = true;
+              }
+            }
+          }
+        }
+
+        // 2. Check SL Payout
+        if (settings.sl_payout_active) {
+          const slDay = parseInt(settings.sl_payout_day, 10) || 1;
+          const slMonth = parseInt(settings.sl_payout_month, 10) || 1;
+          const slTargetCompare = currentYear * 10000 + slMonth * 100 + slDay;
+          const lastSlYear = parseInt(settings.sl_last_conversion_year, 10) || 0;
+
+          if (nowCompare >= slTargetCompare && lastSlYear < currentYear) {
+            // Fetch employees to get active SL loads
+            const { data: emps, error } = await sb.from('employees')
+              .select('id, first_name, last_name, sl_load')
+              .eq('company_id', this.companyId);
+
+            if (error) {
+              console.error('Error fetching employees for SL conversion:', error);
+            } else {
+              const activeEmps = (emps || []).filter(e => parseFloat(e.sl_load || 0) > 0);
+              const slPayoutValue = parseFloat(settings.sl_payout_value || 0);
+
+              if (activeEmps.length > 0) {
+                const adjustmentsToInsert = activeEmps.map(e => ({
+                  company_id: this.companyId,
+                  employee_id: e.id,
+                  amount: parseFloat((parseFloat(e.sl_load) * slPayoutValue).toFixed(2)),
+                  date: dateStr,
+                  label: 'SL Payout Conversion',
+                  paid: false
+                }));
+
+                const { error: adjErr } = await sb.from('employee_adjustments').insert(adjustmentsToInsert);
+                if (adjErr) {
+                  console.error('Error inserting SL conversion adjustments:', adjErr);
+                } else {
+                  const ids = activeEmps.map(e => e.id);
+                  const { error: empErr } = await sb.from('employees')
+                    .update({ sl_load: 0 })
+                    .in('id', ids);
+
+                  if (empErr) {
+                    console.error('Error resetting employee SL loads:', empErr);
+                  } else {
+                    settings.sl_last_conversion_year = currentYear;
+                    settingsChanged = true;
+                    if (window.Toast) {
+                      window.Toast.success(`SL payout conversion completed for ${activeEmps.length} employees.`);
+                    }
+                  }
+                }
+              } else {
+                settings.sl_last_conversion_year = currentYear;
+                settingsChanged = true;
+              }
+            }
+          }
+        }
+
+        if (settingsChanged) {
+          await sb.from('global_settings').upsert({
+            key: 'leaves_settings',
+            company_id: this.companyId,
+            value: settings
+          });
+          this.leavesSettings = settings;
+          await this.loadEmployeesList();
         }
       },
 
@@ -1122,12 +1262,14 @@
           vl_payout_day: parseInt(document.getElementById('vl-payout-day').value, 10) || 1,
           vl_payout_month: parseInt(document.getElementById('vl-payout-month').value, 10) || 1,
           vl_payout_date: `2020-${String(document.getElementById('vl-payout-month').value).padStart(2, '0')}-${String(document.getElementById('vl-payout-day').value).padStart(2, '0')}`,
+          vl_last_conversion_year: this.leavesSettings?.vl_last_conversion_year || 0,
 
           sl_payout_active: document.getElementById('sl-payout-active').checked,
           sl_payout_value: parseFloat(document.getElementById('sl-payout-value').value) || 0,
           sl_payout_day: parseInt(document.getElementById('sl-payout-day').value, 10) || 1,
           sl_payout_month: parseInt(document.getElementById('sl-payout-month').value, 10) || 1,
           sl_payout_date: `2020-${String(document.getElementById('sl-payout-month').value).padStart(2, '0')}-${String(document.getElementById('sl-payout-day').value).padStart(2, '0')}`,
+          sl_last_conversion_year: this.leavesSettings?.sl_last_conversion_year || 0,
 
           vl_rollover_enabled: document.getElementById('vl-rollover-enabled').checked,
           sl_rollover_enabled: document.getElementById('sl-rollover-enabled').checked,
@@ -1397,7 +1539,7 @@
         try {
           const sb = window.BKAuth.sb;
           const { data, error } = await sb.from('employees')
-            .select('id, first_name, last_name, shift_time_1, shift_time_2, department, title, assignment')
+            .select('id, first_name, last_name, shift_time_1, shift_time_2, department, title, assignment, vl_load, sl_load')
             .order('first_name', { ascending: true });
 
           if (error) throw error;
@@ -1621,7 +1763,9 @@
                 const diffMs = checkInTime - shiftStart;
                 const diffMins = Math.floor(diffMs / 60000);
                 if (diffMins > 0) {
-                  lateStr = `${diffMins} min`;
+                  const hrs = Math.floor(diffMins / 60);
+                  const mins = diffMins % 60;
+                  lateStr = hrs > 0 ? (mins > 0 ? `${hrs} hr ${mins} min` : `${hrs} hr`) : `${mins} min`;
                 }
               }
             }
@@ -1654,7 +1798,9 @@
                 const diffMs = shiftEnd - checkOutTime;
                 const diffMins = Math.floor(diffMs / 60000);
                 if (diffMins > 0) {
-                  earlyOutStr = `${diffMins} min`;
+                  const hrs = Math.floor(diffMins / 60);
+                  const mins = diffMins % 60;
+                  earlyOutStr = hrs > 0 ? (mins > 0 ? `${hrs} hr ${mins} min` : `${hrs} hr`) : `${mins} min`;
                 }
               }
             }
