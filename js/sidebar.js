@@ -282,7 +282,7 @@
           <a href="/dashboard/employee-directory" class="dash-nav-child" data-role="hr">Directory</a>
           <a href="/dashboard/organization-map.html" class="dash-nav-child" data-role="hr">Org Map</a>
           <a href="/dashboard/onboarding" class="dash-nav-child" data-role="hr">Onboarding</a>
-          <a href="/dashboard/attendance-logs" class="dash-nav-child" data-role="hr">Attendance Logs</a>
+          <a href="/dashboard/attendance-leaves" class="dash-nav-child" data-role="hr">Attendance & Leaves</a>
           <a class="dash-nav-child" data-role="hr" style="opacity: 0.5; cursor: not-allowed;">Company Events</a>
           <a class="dash-nav-child" data-role="hr" style="opacity: 0.5; cursor: not-allowed;">Announcements</a>
           <a class="dash-nav-child" data-role="hr" style="opacity: 0.5; cursor: not-allowed;">KPI</a>
