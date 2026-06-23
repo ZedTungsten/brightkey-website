@@ -786,43 +786,8 @@
       <div class="modal-body" style="display:flex; flex-direction:column; gap:1.2rem; padding-bottom:1.5rem;">
         
         <!-- Checklist -->
-        <div style="display:flex; flex-direction:column; gap:0.65rem; font-size:calc(0.86rem + 1.5px); color:var(--text-secondary);">
-          <label style="display:flex; align-items:flex-start; gap:0.55rem; cursor:pointer;">
-            <input type="checkbox" class="checklist-item" style="margin-top:0.15rem;" onchange="validateChecklist()" />
-            <span>Door opens and closes smoothly without obstruction</span>
-          </label>
-          <label style="display:flex; align-items:flex-start; gap:0.55rem; cursor:pointer;">
-            <input type="checkbox" class="checklist-item" style="margin-top:0.15rem;" onchange="validateChecklist()" />
-            <span>Smart lock operates properly (locking and unlocking)</span>
-          </label>
-          <label style="display:flex; align-items:flex-start; gap:0.55rem; cursor:pointer;">
-            <input type="checkbox" class="checklist-item" style="margin-top:0.15rem;" onchange="validateChecklist()" />
-            <span>Smart lock is successfully connected to the mobile app</span>
-          </label>
-          <label style="display:flex; align-items:flex-start; gap:0.55rem; cursor:pointer; margin-left:1.2rem;">
-            <input type="checkbox" class="checklist-item" style="margin-top:0.15rem;" onchange="validateChecklist()" />
-            <span>I know how to create an account on the app</span>
-          </label>
-          <label style="display:flex; align-items:flex-start; gap:0.55rem; cursor:pointer; margin-left:1.2rem;">
-            <input type="checkbox" class="checklist-item" style="margin-top:0.15rem;" onchange="validateChecklist()" />
-            <span>I have registered RFID card on the device</span>
-          </label>
-          <label style="display:flex; align-items:flex-start; gap:0.55rem; cursor:pointer;">
-            <input type="checkbox" class="checklist-item" style="margin-top:0.15rem;" onchange="validateChecklist()" />
-            <span>All components, including the camera, screen, handle, keypad, mechanical unlock, and deadbolt, are free of defects</span>
-          </label>
-          <label style="display:flex; align-items:flex-start; gap:0.55rem; cursor:pointer;">
-            <input type="checkbox" class="checklist-item" style="margin-top:0.15rem;" onchange="validateChecklist()" />
-            <span>Screws and fasteners are securely installed</span>
-          </label>
-          <label style="display:flex; align-items:flex-start; gap:0.55rem; cursor:pointer;">
-            <input type="checkbox" class="checklist-item" style="margin-top:0.15rem;" onchange="validateChecklist()" />
-            <span>I have been invited to leave a review for LOOCK Cavite and has consented to taking a photo with the device for documentation</span>
-          </label>
-          <label style="display:flex; align-items:flex-start; gap:0.55rem; cursor:pointer;">
-            <input type="checkbox" class="checklist-item" style="margin-top:0.15rem;" onchange="validateChecklist()" />
-            <span>Warranty coverage: 1 year on factory defects, 7 days on installation warranty (excludes user-caused damage, service may apply)</span>
-          </label>
+        <div id="checklist-items-container" style="display:flex; flex-direction:column; gap:0.65rem; font-size:calc(0.86rem + 1.5px); color:var(--text-secondary);">
+          <!-- Checklist items loaded dynamically -->
         </div>
 
         <div style="font-size:calc(0.8rem + 2px); font-weight:700; color:var(--text-primary); text-transform:uppercase; letter-spacing:0.04em; margin-top:0.3rem; text-align:center;">
@@ -927,6 +892,20 @@
     // State variables
     let currentInstaller = null; // { id, first_name, last_name, company_id, password }
     let dbBookings = [];
+
+    const defaultChecklist = [
+      { text: "Door opens and closes smoothly without obstruction", indent: false },
+      { text: "Smart lock operates properly (locking and unlocking)", indent: false },
+      { text: "Smart lock is successfully connected to the mobile app", indent: false },
+      { text: "I know how to create an account on the app", indent: true },
+      { text: "I have registered RFID card on the device", indent: true },
+      { text: "All components, including the camera, screen, handle, keypad, mechanical unlock, and deadbolt, are free of defects", indent: false },
+      { text: "Screws and fasteners are securely installed", indent: false },
+      { text: "I have been invited to leave a review for LOOCK Cavite and has consented to taking a photo with the device for documentation", indent: false },
+      { text: "Warranty coverage: 1 year on factory defects, 7 days on installation warranty (excludes user-caused damage, service may apply)", indent: false }
+    ];
+    let bookingChecklist = [...defaultChecklist];
+
     let selectedBooking = null;
     let activeDate = new Date(); // selected day
     let currentYear = activeDate.getFullYear();
@@ -1195,6 +1174,13 @@
           drawAgenda();
         } catch (_) {}
       }
+
+      const cachedChecklist = localStorage.getItem('bk_booking_checklist');
+      if (cachedChecklist) {
+        try {
+          bookingChecklist = JSON.parse(cachedChecklist);
+        } catch (_) {}
+      }
     }
 
     async function syncData() {
@@ -1206,6 +1192,21 @@
       banner.classList.remove('offline');
 
       try {
+        // Fetch booking checklist
+        const { data: checklistRes } = await sb
+          .from('global_settings')
+          .select('value')
+          .eq('key', 'booking_checklist')
+          .eq('company_id', currentInstaller.company_id)
+          .maybeSingle();
+
+        if (checklistRes && checklistRes.value && Array.isArray(checklistRes.value)) {
+          bookingChecklist = checklistRes.value;
+        } else {
+          bookingChecklist = defaultChecklist;
+        }
+        localStorage.setItem('bk_booking_checklist', JSON.stringify(bookingChecklist));
+
         // Fetch bookings for this company
         const { data, error } = await sb
           .from('installation_bookings')
@@ -1999,12 +2000,30 @@
         }
       }
 
+      const checklistContainer = document.getElementById('checklist-items-container');
+      if (checklistContainer) {
+        if (isReadOnly && door && Array.isArray(door.checklist)) {
+          checklistContainer.innerHTML = door.checklist.map(ch => {
+            return `
+              <label style="display:flex; align-items:flex-start; gap:0.55rem; cursor:pointer;${ch.indent || ch.item === 'I know how to create an account on the app' || ch.item === 'I have registered RFID card on the device' ? ' margin-left:1.2rem;' : ''}">
+                <input type="checkbox" class="checklist-item" style="margin-top:0.15rem;" ${ch.checked ? 'checked' : ''} disabled />
+                <span>${escapeHtml(ch.item || '')}</span>
+              </label>
+            `;
+          }).join('');
+        } else {
+          checklistContainer.innerHTML = bookingChecklist.map((ch, idx) => {
+            return `
+              <label style="display:flex; align-items:flex-start; gap:0.55rem; cursor:pointer;${ch.indent ? ' margin-left:1.2rem;' : ''}">
+                <input type="checkbox" class="checklist-item" style="margin-top:0.15rem;" onchange="validateChecklist()" />
+                <span>${escapeHtml(ch.text || '')}</span>
+              </label>
+            `;
+          }).join('');
+        }
+      }
+
       document.getElementById('checklist-modal').style.display = 'flex';
-      
-      document.querySelectorAll('.checklist-item').forEach(cb => {
-        cb.checked = isReadOnly;
-        cb.disabled = isReadOnly;
-      });
 
       const canvasEl = document.getElementById('signature-canvas');
       const previewImgEl = document.getElementById('signature-preview-img');

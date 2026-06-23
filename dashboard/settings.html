@@ -279,6 +279,7 @@
             <button class="tab-btn" id="tab-warehouse" onclick="switchTab('warehouse')">Warehouse</button>
             <button class="tab-btn" id="tab-commissions" onclick="switchTab('commissions')">Commissions</button>
             <button class="tab-btn" id="tab-hr" onclick="switchTab('hr')">HR</button>
+            <button class="tab-btn" id="tab-booking" onclick="switchTab('booking')">Booking</button>
           </div>
 
           <div class="scroll-area">
@@ -569,14 +570,40 @@
                 <div class="wh-card" style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1.25rem; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px;">
                   <h3 style="font-size: 0.95rem; font-weight: 700; color: var(--text-primary); border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; margin-bottom: 0.5rem;">Contractor Prefix</h3>
                   <div class="form-group">
-                    <label class="form-label" for="hr-contractor-prefix">Prefix (1-3 letters)</label>
+                        <label class="form-label" for="hr-contractor-prefix">Prefix (1-3 letters)</label>
                     <input type="text" id="hr-contractor-prefix" class="form-input" placeholder="e.g. CON" maxlength="3" oninput="this.value = this.value.toUpperCase().replace(/[^A-Z]/g, '')" style="max-width: 200px;" />
                     <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">Prefix for contractor-specific records and future reference.</div>
                   </div>
                 </div>
-
               </div>
             </div><!-- /panel-hr -->
+
+            <!-- ── Booking Tab ── -->
+            <div class="tab-panel" id="panel-booking">
+              <div class="panel-header">
+                <div class="panel-title">Booking Configuration</div>
+                <button class="btn btn-primary" onclick="saveBookingSettings()">Save Booking Settings</button>
+              </div>
+              <div class="table-scroll">
+                
+                <!-- Section: Checklist -->
+                <div class="wh-card" style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1.25rem; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 1.5rem;">
+                  <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; margin-bottom: 0.5rem;">
+                    <h3 style="font-size: 0.95rem; font-weight: 700; color: var(--text-primary); margin: 0;">Checklist</h3>
+                    <button class="btn btn-cyan btn-xs" onclick="addChecklistItem()">+ Add Item</button>
+                  </div>
+                  
+                  <div style="font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 0.5rem; line-height: 1.4;">
+                    Configure the verification checklist items used during installation inside the smartlock calendar.
+                  </div>
+
+                  <div id="booking-checklist-container" style="display: flex; flex-direction: column; gap: 0.75rem;">
+                    <!-- Checklist items rendered dynamically -->
+                  </div>
+                </div>
+
+              </div>
+            </div><!-- /panel-booking -->
 
           </div><!-- /scroll-area -->
         </main>
@@ -796,6 +823,7 @@
       await loadCommissionsSettings();
       await loadHRSettings();
       await loadCompanySettings();
+      await loadBookingSettings();
 
       const confirmYes = document.getElementById('btn-confirm-yes');
       if (confirmYes) {
@@ -1214,7 +1242,7 @@
       document.getElementById('tab-' + tab).classList.add('active');
       const panel = document.getElementById('panel-' + tab);
       panel.classList.add('active');
-      panel.style.display = (tab === 'access' || tab === 'warehouse' || tab === 'commissions' || tab === 'hr' || tab === 'company') ? 'flex' : 'block';
+      panel.style.display = (tab === 'access' || tab === 'warehouse' || tab === 'commissions' || tab === 'hr' || tab === 'company' || tab === 'booking') ? 'flex' : 'block';
     };
 
     // ── Assignments ──
@@ -2392,6 +2420,129 @@
         if (skeleton) skeleton.style.display = 'none';
         if (content) content.style.display = 'flex';
       }
+    }
+
+    // ── Booking Settings ──
+    let bookingChecklist = [];
+
+    const defaultChecklist = [
+      { text: "Door opens and closes smoothly without obstruction", indent: false },
+      { text: "Smart lock operates properly (locking and unlocking)", indent: false },
+      { text: "Smart lock is successfully connected to the mobile app", indent: false },
+      { text: "I know how to create an account on the app", indent: true },
+      { text: "I have registered RFID card on the device", indent: true },
+      { text: "All components, including the camera, screen, handle, keypad, mechanical unlock, and deadbolt, are free of defects", indent: false },
+      { text: "Screws and fasteners are securely installed", indent: false },
+      { text: "I have been invited to leave a review for LOOCK Cavite and has consented to taking a photo with the device for documentation", indent: false },
+      { text: "Warranty coverage: 1 year on factory defects, 7 days on installation warranty (excludes user-caused damage, service may apply)", indent: false }
+    ];
+
+    async function loadBookingSettings() {
+      try {
+        const { data, error } = await sb
+          .from('global_settings')
+          .select('value')
+          .eq('key', 'booking_checklist')
+          .eq('company_id', currentCompanyId)
+          .maybeSingle();
+
+        if (error) throw error;
+        if (data && data.value && Array.isArray(data.value)) {
+          bookingChecklist = data.value;
+        } else {
+          bookingChecklist = [...defaultChecklist];
+        }
+        renderBookingChecklist();
+      } catch (err) {
+        console.error('Error loading Booking settings:', err);
+        bookingChecklist = [...defaultChecklist];
+        renderBookingChecklist();
+      }
+    }
+
+    window.saveBookingSettings = async function() {
+      const validItems = bookingChecklist.map(item => ({
+        text: (item.text || '').trim(),
+        indent: !!item.indent
+      })).filter(item => item.text !== '');
+
+      try {
+        const { error } = await sb.from('global_settings').upsert({
+          key: 'booking_checklist',
+          company_id: currentCompanyId,
+          value: validItems
+        }, { onConflict: 'key, company_id' });
+
+        if (error) throw error;
+        bookingChecklist = validItems;
+        renderBookingChecklist();
+        showToast('Booking settings saved successfully!');
+      } catch (err) {
+        console.error('Error saving Booking settings:', err);
+        showToast('Failed to save Booking settings.', true);
+      }
+    };
+
+    window.addChecklistItem = function() {
+      bookingChecklist.push({ text: '', indent: false });
+      renderBookingChecklist();
+    };
+
+    window.updateChecklistItem = function(index, field, value) {
+      if (bookingChecklist[index]) {
+        bookingChecklist[index][field] = value;
+      }
+    };
+
+    window.removeChecklistItem = function(index) {
+      bookingChecklist.splice(index, 1);
+      renderBookingChecklist();
+    };
+
+    window.moveChecklistItem = function(index, direction) {
+      const targetIndex = index + direction;
+      if (targetIndex < 0 || targetIndex >= bookingChecklist.length) return;
+      const temp = bookingChecklist[index];
+      bookingChecklist[index] = bookingChecklist[targetIndex];
+      bookingChecklist[targetIndex] = temp;
+      renderBookingChecklist();
+    };
+
+    function renderBookingChecklist() {
+      const container = document.getElementById('booking-checklist-container');
+      if (!container) return;
+
+      if (bookingChecklist.length === 0) {
+        container.innerHTML = `<div style="text-align: center; font-size: 0.82rem; color: var(--text-muted); padding: 1rem 0;">No checklist items configured. Click "+ Add Item" to create one.</div>`;
+        return;
+      }
+
+      container.innerHTML = '';
+      bookingChecklist.forEach((item, index) => {
+        const itemRow = document.createElement('div');
+        itemRow.className = 'checklist-builder-row';
+        itemRow.style.display = 'flex';
+        itemRow.style.alignItems = 'center';
+        itemRow.style.gap = '0.75rem';
+        itemRow.style.padding = '0.5rem';
+        itemRow.style.background = 'var(--bg-elevated)';
+        itemRow.style.border = '1px solid var(--border)';
+        itemRow.style.borderRadius = '6px';
+
+        itemRow.innerHTML = `
+          <label style="display: flex; align-items: center; gap: 0.25rem; font-size: 0.75rem; color: var(--text-secondary); user-select: none; cursor: pointer; flex-shrink: 0;">
+            <input type="checkbox" class="checklist-indent-checkbox" ${item.indent ? 'checked' : ''} onchange="updateChecklistItem(${index}, 'indent', this.checked)" />
+            Indent
+          </label>
+          <input type="text" class="form-input" style="flex: 1; padding: 0.35rem 0.6rem; font-size: 0.82rem; height: 32px;" value="${esc(item.text)}" oninput="updateChecklistItem(${index}, 'text', this.value)" placeholder="Enter checklist item text..." />
+          <div style="display: flex; align-items: center; gap: 0.35rem; flex-shrink: 0;">
+            <button type="button" class="btn btn-outline btn-xs" style="height: 32px; width: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center;" onclick="moveChecklistItem(${index}, -1)" ${index === 0 ? 'disabled' : ''} title="Move Up">↑</button>
+            <button type="button" class="btn btn-outline btn-xs" style="height: 32px; width: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center;" onclick="moveChecklistItem(${index}, 1)" ${index === bookingChecklist.length - 1 ? 'disabled' : ''} title="Move Down">↓</button>
+            <button type="button" class="btn btn-outline btn-xs" style="height: 32px; color: var(--danger); border-color: rgba(220,38,38,0.15); padding: 0 0.5rem; font-size: 0.78rem;" onclick="removeChecklistItem(${index})">Remove</button>
+          </div>
+        `;
+        container.appendChild(itemRow);
+      });
     }
   </script>
 </body>
