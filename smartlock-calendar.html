@@ -1404,13 +1404,39 @@
         const hardwareProducts = productsArr.filter(p => p.sku !== 'ADD-ON LABOR');
         const hardwareSkus = skus.filter(s => s.trim() !== 'ADD-ON LABOR');
         const hardwareNames = names.filter(n => n.trim() !== 'ADD-ON LABOR');
-        const rowCount = Math.max(doorsArr.length, hardwareProducts.length, hardwareSkus.length);
+        
+        const anyDoorHasAttachedProducts = doorsArr.some(d => Array.isArray(d.products) && d.products.length > 0);
+
+        const agendaRowCount = (doorsArr.length === 1)
+          ? 1
+          : (anyDoorHasAttachedProducts 
+              ? doorsArr.length 
+              : Math.max(doorsArr.length, hardwareProducts.length, hardwareSkus.length));
 
         const lines = [];
-        for (let i = 0; i < rowCount; i++) {
+        for (let i = 0; i < agendaRowCount; i++) {
           const door = doorsArr[i];
-          const sku = (hardwareProducts[i]?.sku || hardwareSkus[i] || 'N/A').trim();
-          const isCancelled = hardwareProducts[i]?.cancelled || false;
+          
+          let sku = '';
+          let isCancelled = false;
+
+          if (anyDoorHasAttachedProducts) {
+            const attachedSkusList = door?.products || [];
+            sku = attachedSkusList.join(', ') || 'N/A';
+            isCancelled = attachedSkusList.length > 0 && attachedSkusList.every(itemSku => {
+              const pMatch = productsArr.find(p => p.sku === itemSku);
+              return pMatch?.cancelled || false;
+            });
+          } else if (doorsArr.length === 1) {
+            const allSkusList = hardwareProducts.length > 0 ? hardwareProducts.map(p => p.sku) : hardwareSkus;
+            sku = allSkusList.join(', ') || 'N/A';
+            isCancelled = hardwareProducts.length > 0 && hardwareProducts.every(p => p.cancelled || false);
+          } else {
+            const currentSku = hardwareProducts[i]?.sku || hardwareSkus[i] || 'N/A';
+            sku = currentSku;
+            isCancelled = hardwareProducts[i]?.cancelled || false;
+          }
+
           if (isCancelled) continue; // Skip cancelled products from being counted as active installations
 
           let doorInstallers = door?.installers || [];
