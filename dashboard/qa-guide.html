@@ -79,6 +79,8 @@
       display: grid;
       grid-template-columns: repeat(3, 1fr);
       gap: 1rem;
+      min-height: 100px;
+      padding: 0.25rem;
     }
     @media (max-width: 1024px) {
       .group-parts-container {
@@ -100,6 +102,7 @@
       border-radius: 8px;
       padding: 1rem;
       position: relative;
+      will-change: transform;
     }
 
     .image-upload-box {
@@ -146,6 +149,16 @@
     .btn-danger:hover { background: var(--danger); color: #fff; }
     .btn-sm { padding: 0.3rem 0.55rem; font-size: 0.75rem; }
 
+    /* SortableJS drag placeholders style */
+    .sortable-ghost {
+      opacity: 0.4 !important;
+      background: var(--cyan-dim) !important;
+      border: 2px dashed var(--cyan) !important;
+    }
+    .sortable-chosen {
+      background: var(--bg-elevated);
+    }
+
     /* Toast */
     #toast-container { position: fixed; top: 1.5rem; right: 1.5rem; z-index: 99999; display: flex; flex-direction: column; gap: 0.5rem; }
     .toast { padding: 0.75rem 1rem; border-radius: 6px; font-size: 0.82rem; font-weight: 600; color: #fff; min-width: 250px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); animation: slideIn 0.2s ease-out; }
@@ -154,6 +167,7 @@
     @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 </head>
 <body>
 
@@ -357,7 +371,7 @@
           </button>
         </div>
 
-        <div class="group-parts-container" ondragover="handleDragOver(event)" ondragenter="handleDragEnter(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event)" style="min-height: 80px; transition: outline 0.15s;">
+        <div class="group-parts-container">
           <!-- Parts checklist will go here -->
         </div>
 
@@ -369,6 +383,20 @@
         </div>
       `;
       container.appendChild(div);
+      
+      // Initialize SortableJS on parts list container
+      const partsContainer = div.querySelector('.group-parts-container');
+      new Sortable(partsContainer, {
+        group: 'shared-parts',
+        handle: '.drag-handle',
+        animation: 180,
+        ghostClass: 'sortable-ghost',
+        chosenClass: 'sortable-chosen',
+        swapThreshold: 0.65,
+        invertSwap: true,
+        fallbackOnBody: true
+      });
+
       return groupId;
     }
 
@@ -381,14 +409,11 @@
       const div = document.createElement('div');
       div.className = 'part-row';
       div.id = rowId;
-      div.setAttribute('draggable', 'false');
-      div.setAttribute('ondragstart', `handleDragStart(event, '${rowId}')`);
-      div.setAttribute('ondragend', `handleDragEnd(event, '${rowId}')`);
       
       div.style.cssText = 'flex-direction: row; align-items: stretch; gap: 0.5rem; padding-left: 0.5rem;';
       div.innerHTML = `
         <!-- 6-Dot Drag Handle -->
-        <div class="drag-handle" style="cursor: grab; display: flex; align-items: center; justify-content: center; width: 20px; color: var(--text-muted); user-select: none;" onmousedown="enableDrag('${rowId}')" onmouseup="disableDrag('${rowId}')" ondragend="disableDrag('${rowId}')">
+        <div class="drag-handle" style="cursor: grab; display: flex; align-items: center; justify-content: center; width: 20px; color: var(--text-muted); user-select: none;">
           <svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor" style="opacity: 0.65;">
             <circle cx="2" cy="2" r="1.5"/>
             <circle cx="8" cy="2" r="1.5"/>
@@ -427,136 +452,6 @@
         </div>
       `;
       container.appendChild(div);
-    }
-
-    // Drag and Drop Handlers
-    function enableDrag(rowId) {
-      const el = document.getElementById(rowId);
-      if (el) el.setAttribute('draggable', 'true');
-    }
-
-    function disableDrag(rowId) {
-      const el = document.getElementById(rowId);
-      if (el) el.setAttribute('draggable', 'false');
-    }
-
-    function handleDragStart(event, rowId) {
-      event.dataTransfer.setData('text/plain', rowId);
-      const el = document.getElementById(rowId);
-      if (el) {
-        el.style.opacity = '0.4';
-        el.classList.add('is-dragging');
-      }
-    }
-
-    function handleDragEnd(event, rowId) {
-      const el = document.getElementById(rowId);
-      if (el) {
-        el.style.opacity = '1';
-        el.classList.remove('is-dragging');
-        el.setAttribute('draggable', 'false');
-      }
-    }
-
-    function handleDragOver(event) {
-      event.preventDefault();
-      const container = event.currentTarget;
-      const draggingCard = document.querySelector('.is-dragging');
-      if (!draggingCard) return;
-
-      const afterElement = getDragAfterElement(container, event.clientX, event.clientY);
-      
-      // Only perform insertion and animate if the position actually changes
-      if (afterElement !== draggingCard.nextElementSibling && afterElement !== draggingCard) {
-        animateReorder(container, () => {
-          if (afterElement) {
-            container.insertBefore(draggingCard, afterElement);
-          } else {
-            container.appendChild(draggingCard);
-          }
-        });
-      }
-    }
-
-    function handleDragEnter(event) {
-      event.preventDefault();
-      const container = event.currentTarget;
-      container.style.outline = '2px dashed var(--cyan)';
-      container.style.outlineOffset = '4px';
-      container.style.borderRadius = '6px';
-    }
-
-    function handleDragLeave(event) {
-      const container = event.currentTarget;
-      container.style.outline = 'none';
-    }
-
-    function handleDrop(event) {
-      event.preventDefault();
-      const container = event.currentTarget;
-      container.style.outline = 'none';
-    }
-
-    function animateReorder(container, domModifierFn) {
-      // First: get rects of all sibling cards before modification
-      const cards = [...container.querySelectorAll('.part-row')];
-      const firstPositions = cards.map(card => {
-        const rect = card.getBoundingClientRect();
-        return {
-          element: card,
-          left: rect.left,
-          top: rect.top
-        };
-      });
-
-      // Modify DOM
-      domModifierFn();
-
-      // Last: get new rects, Invert position changes, and Play animations
-      requestAnimationFrame(() => {
-        firstPositions.forEach(pos => {
-          const card = pos.element;
-          const rect = card.getBoundingClientRect();
-          const dx = pos.left - rect.left;
-          const dy = pos.top - rect.top;
-
-          if (dx !== 0 || dy !== 0) {
-            // Invert: shift back immediately with transition none
-            card.style.transition = 'none';
-            card.style.transform = `translate(${dx}px, ${dy}px)`;
-            
-            // Force browser layout reflow
-            card.offsetHeight;
-
-            // Play: transition back to zero translate origin
-            card.style.transition = 'transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)';
-            card.style.transform = '';
-            
-            // Cleanup transitions on completion
-            setTimeout(() => {
-              card.style.transition = '';
-            }, 250);
-          }
-        });
-      });
-    }
-
-    function getDragAfterElement(container, x, y) {
-      const draggableElements = [...container.querySelectorAll('.part-row:not(.is-dragging)')];
-
-      return draggableElements.reduce((closest, child) => {
-        const box = child.getBoundingClientRect();
-        const centerX = box.left + box.width / 2;
-        const centerY = box.top + box.height / 2;
-        const distance = Math.pow(x - centerX, 2) + Math.pow(y - centerY, 2);
-
-        // Limit search distance to look for local reordering elements
-        if (distance < closest.distance) {
-          return { distance: distance, element: child };
-        } else {
-          return closest;
-        }
-      }, { distance: Number.POSITIVE_INFINITY }).element;
     }
 
     async function handleImageUpload(event, rowId) {
