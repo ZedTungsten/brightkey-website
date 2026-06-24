@@ -478,6 +478,33 @@
       border-color: var(--cyan);
     }
 
+    .wh-select-dropdown {
+      height: 36px;
+      padding: 0 2.25rem 0 0.75rem;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      cursor: pointer;
+      outline: none;
+      transition: all 0.15s;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23a1a1aa' stroke-width='2.5'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19.5 8.25l-7.5 7.5-7.5-7.5' /%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 0.75rem center;
+      background-size: 1rem;
+      min-width: 180px;
+    }
+    .wh-select-dropdown:hover {
+      border-color: var(--cyan);
+    }
+    .wh-select-dropdown:focus {
+      border-color: var(--cyan);
+      box-shadow: 0 0 0 2px var(--cyan-dim);
+    }
+
     tr.table-spacer-row,
     tr.table-spacer-row:hover {
       background: transparent !important;
@@ -535,6 +562,7 @@
             <button id="btn-undo" class="btn btn-outline" style="display: none; border-color: var(--warning); color: var(--warning);" onclick="undoLastAction(this)">
               <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: -2px; margin-right: 6px;"><path d="M3 7v6h6M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg>Undo
             </button>
+            <select id="wh-select-dropdown" class="wh-select-dropdown" style="display:none;" onchange="switchWarehouse(this.value)"></select>
             <button id="btn-logs" class="btn btn-outline" onclick="toggleLogs()">
               <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none" style="vertical-align: -2px; margin-right: 6px;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>Logs
             </button>
@@ -549,11 +577,6 @@
       
       <!-- Left Workspace (Tables & Stats) -->
       <div class="main-workspace">
-
-        <!-- Warehouse Level-1 Tab Bar (hidden when only 1 warehouse) -->
-        <div class="wh-tabs" id="wh-tab-bar" style="display:none;">
-          <!-- Populated dynamically by loadWarehouseTabs() -->
-        </div>
 
         <!-- Level-2 Operation Tab Bar -->
         <div class="drawer-tabs">
@@ -1188,31 +1211,25 @@
         if (error) throw error;
         fulfillmentWarehouses = (data || []).filter(w => w.is_active);
 
-        const bar = document.getElementById('wh-tab-bar');
-        if (!bar) return;
+        const dropdown = document.getElementById('wh-select-dropdown');
+        if (!dropdown) return;
 
         if (fulfillmentWarehouses.length === 0) {
-          bar.style.display = 'none';
+          dropdown.style.display = 'none';
           activeWarehouseId = null;
           return;
         }
 
-        // Always show warehouse tab bar (even for 1 warehouse)
-        bar.style.display = 'flex';
-        bar.innerHTML = fulfillmentWarehouses.map((wh, idx) => `
-          <button
-            class="wh-tab-btn${idx === 0 ? ' active' : ''}"
-            id="wh-tab-${wh.id}"
-            onclick="switchWarehouse('${wh.id}')"
-          >
-            <span class="wh-inactive-dot"></span>
-            ${escFulfillment(wh.name)}
-          </button>
+        // Show select dropdown
+        dropdown.style.display = 'inline-block';
+        dropdown.innerHTML = fulfillmentWarehouses.map(wh => `
+          <option value="${wh.id}">${escFulfillment(wh.name)}</option>
         `).join('');
 
         activeWarehouseId = fulfillmentWarehouses[0]?.id || null;
+        dropdown.value = activeWarehouseId;
       } catch (err) {
-        console.warn('Could not load warehouse tabs:', err.message);
+        console.warn('Could not load warehouse dropdown:', err.message);
       }
     }
 
@@ -1223,10 +1240,10 @@
 
     window.switchWarehouse = function(whId) {
       activeWarehouseId = whId;
-      document.querySelectorAll('.wh-tab-btn').forEach(btn => btn.classList.remove('active'));
-      const btn = document.getElementById(`wh-tab-${whId}`);
-      if (btn) btn.classList.add('active');
-      // Refresh data for the selected warehouse context (future: filter by warehouse)
+      const dropdown = document.getElementById('wh-select-dropdown');
+      if (dropdown && dropdown.value !== whId) {
+        dropdown.value = whId;
+      }
       refreshDashboard();
     };
 
