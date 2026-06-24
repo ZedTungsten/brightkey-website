@@ -357,7 +357,7 @@
           </button>
         </div>
 
-        <div class="group-parts-container">
+        <div class="group-parts-container" ondragover="handleDragOver(event)" ondragenter="handleDragEnter(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event)" style="min-height: 80px; transition: outline 0.15s;">
           <!-- Parts checklist will go here -->
         </div>
 
@@ -381,33 +381,107 @@
       const div = document.createElement('div');
       div.className = 'part-row';
       div.id = rowId;
+      div.setAttribute('draggable', 'false');
+      div.setAttribute('ondragstart', `handleDragStart(event, '${rowId}')`);
+      div.setAttribute('ondragend', `handleDragEnd(event, '${rowId}')`);
+      
+      div.style.cssText = 'flex-direction: row; align-items: stretch; gap: 0.5rem; padding-left: 0.5rem;';
       div.innerHTML = `
-        <div style="display: flex; gap: 0.75rem; align-items: center; width: 100%;">
-          <div class="image-upload-box" onclick="document.getElementById('${rowId}_file').click()" style="width: 80px; height: 80px; flex-shrink: 0;">
-            <input type="file" id="${rowId}_file" style="display:none;" accept="image/*" onchange="handleImageUpload(event, '${rowId}')" />
-            <img id="${rowId}_img" src="${imageUrl}" style="display: ${imageUrl ? 'block' : 'none'};" />
-            <div class="image-upload-placeholder" id="${rowId}_placeholder" style="display: ${imageUrl ? 'none' : 'flex'}; justify-content: center; align-items: center; flex-direction: column; gap: 4px; padding: 4px;">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-              <span style="font-size: 0.6rem;">Upload</span>
-            </div>
-          </div>
-          
-          <div class="form-group" style="flex: 1;">
-            <label class="form-label">Quantity</label>
-            <input type="number" min="1" class="form-input part-qty" value="${quantity}" required />
-          </div>
-
-          <button class="btn btn-danger btn-sm" onclick="this.closest('.part-row').remove()" style="height: 36px; padding: 0 0.75rem; align-self: flex-end;">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          </button>
+        <!-- 6-Dot Drag Handle -->
+        <div class="drag-handle" style="cursor: grab; display: flex; align-items: center; justify-content: center; width: 20px; color: var(--text-muted); user-select: none;" onmousedown="enableDrag('${rowId}')" onmouseup="disableDrag('${rowId}')" ondragend="disableDrag('${rowId}')">
+          <svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor" style="opacity: 0.65;">
+            <circle cx="2" cy="2" r="1.5"/>
+            <circle cx="8" cy="2" r="1.5"/>
+            <circle cx="2" cy="8" r="1.5"/>
+            <circle cx="8" cy="8" r="1.5"/>
+            <circle cx="2" cy="14" r="1.5"/>
+            <circle cx="8" cy="14" r="1.5"/>
+          </svg>
         </div>
 
-        <div class="form-group" style="width: 100%;">
-          <label class="form-label">Instructions / Warning Notes</label>
-          <input type="text" class="form-input part-notes" placeholder="e.g. check for scratches, specific screws" value="${escapeHtml(notes)}" />
+        <div style="display: flex; flex-direction: column; gap: 0.75rem; flex: 1;">
+          <div style="display: flex; gap: 0.75rem; align-items: center; width: 100%;">
+            <div class="image-upload-box" onclick="document.getElementById('${rowId}_file').click()" style="width: 80px; height: 80px; flex-shrink: 0;">
+              <input type="file" id="${rowId}_file" style="display:none;" accept="image/*" onchange="handleImageUpload(event, '${rowId}')" />
+              <img id="${rowId}_img" src="${imageUrl}" style="display: ${imageUrl ? 'block' : 'none'};" />
+              <div class="image-upload-placeholder" id="${rowId}_placeholder" style="display: ${imageUrl ? 'none' : 'flex'}; justify-content: center; align-items: center; flex-direction: column; gap: 4px; padding: 4px;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                <span style="font-size: 0.6rem;">Upload</span>
+              </div>
+            </div>
+            
+            <div class="form-group" style="flex: 1;">
+              <label class="form-label">Quantity</label>
+              <input type="number" min="1" class="form-input part-qty" value="${quantity}" required />
+            </div>
+
+            <button class="btn btn-danger btn-sm" onclick="this.closest('.part-row').remove()" style="height: 36px; padding: 0 0.75rem; align-self: flex-end;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+
+          <div class="form-group" style="width: 100%;">
+            <label class="form-label">Instructions / Warning Notes</label>
+            <input type="text" class="form-input part-notes" placeholder="e.g. check for scratches, specific screws" value="${escapeHtml(notes)}" />
+          </div>
         </div>
       `;
       container.appendChild(div);
+    }
+
+    // Drag and Drop Handlers
+    function enableDrag(rowId) {
+      const el = document.getElementById(rowId);
+      if (el) el.setAttribute('draggable', 'true');
+    }
+
+    function disableDrag(rowId) {
+      const el = document.getElementById(rowId);
+      if (el) el.setAttribute('draggable', 'false');
+    }
+
+    function handleDragStart(event, rowId) {
+      event.dataTransfer.setData('text/plain', rowId);
+      const el = document.getElementById(rowId);
+      if (el) {
+        el.style.opacity = '0.4';
+      }
+    }
+
+    function handleDragEnd(event, rowId) {
+      const el = document.getElementById(rowId);
+      if (el) {
+        el.style.opacity = '1';
+        el.setAttribute('draggable', 'false');
+      }
+    }
+
+    function handleDragOver(event) {
+      event.preventDefault();
+    }
+
+    function handleDragEnter(event) {
+      event.preventDefault();
+      const container = event.currentTarget;
+      container.style.outline = '2px dashed var(--cyan)';
+      container.style.outlineOffset = '4px';
+      container.style.borderRadius = '6px';
+    }
+
+    function handleDragLeave(event) {
+      const container = event.currentTarget;
+      container.style.outline = 'none';
+    }
+
+    function handleDrop(event) {
+      event.preventDefault();
+      const container = event.currentTarget;
+      container.style.outline = 'none';
+      const rowId = event.dataTransfer.getData('text/plain');
+      const card = document.getElementById(rowId);
+      if (card && container) {
+        container.appendChild(card);
+      }
     }
 
     async function handleImageUpload(event, rowId) {
