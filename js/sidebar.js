@@ -1414,7 +1414,13 @@
                 this.updateUnreadIndicators();
               }
             })
-            .subscribe();
+            .subscribe(status => {
+              if (status === 'SUBSCRIBED') {
+                console.info('Chat realtime subscribed');
+              } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+                console.warn('Chat realtime subscription status:', status);
+              }
+            });
         } catch (err) {
           console.warn('Realtime subscription failed:', err);
         }
