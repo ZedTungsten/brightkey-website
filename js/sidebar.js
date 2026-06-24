@@ -721,6 +721,13 @@
     fab.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"></path><circle cx="8" cy="10" r="1.5" fill="currentColor" stroke="none"></circle><circle cx="12" cy="10" r="1.5" fill="currentColor" stroke="none"></circle><circle cx="16" cy="10" r="1.5" fill="currentColor" stroke="none"></circle></svg><span>Chat</span><span id="chat-fab-dot" style="display: none; width: 8px; height: 8px; border-radius: 50%; background-color: #ef4444;"></span>`;
     document.body.appendChild(fab);
 
+    if (!document.getElementById('bk-chat-spinner-style')) {
+      const spinnerStyle = document.createElement('style');
+      spinnerStyle.id = 'bk-chat-spinner-style';
+      spinnerStyle.textContent = '@keyframes bkChatSpin { to { transform: rotate(360deg); } }';
+      document.head.appendChild(spinnerStyle);
+    }
+
     // 2. Create and inject chat Window
     const win = document.createElement('div');
     win.id = 'chat-window';
@@ -888,10 +895,23 @@
         container.appendChild(separator);
       },
 
+      showChatLoading() {
+        const container = document.getElementById('chat-members-container');
+        if (!container) return;
+
+        container.innerHTML = `
+          <div style="height: 100%; min-height: 180px; display: flex; align-items: center; justify-content: center; gap: 0.6rem; color: var(--text-muted, #71717a); font-size: 0.78rem; font-weight: 600;">
+            <span aria-hidden="true" style="width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--border, #e4e4e7); border-top-color: var(--cyan, #06b6d4); animation: bkChatSpin 0.75s linear infinite;"></span>
+            <span>Loading messages...</span>
+          </div>
+        `;
+      },
+
       showChatList() {
         this.activeReceiver = null;
         document.getElementById('chat-message-view').style.display = 'none';
         document.getElementById('chat-list-view').style.display = 'flex';
+        this.showChatLoading();
         this.loadTeammates();
       },
 
