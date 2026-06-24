@@ -1047,7 +1047,7 @@
               div.setAttribute('data-id', emp.id);
               div.onclick = () => this.openPrivateChat(emp, status);
               
-              div.style.cssText = 'display: flex; align-items: center; gap: 0.65rem; padding: 0.5rem 0.85rem; cursor: pointer; transition: background 0.15s; border-radius: 8px; margin: 0 0.5rem 0.25rem;';
+              div.style.cssText = 'display: flex; align-items: center; gap: 0.65rem; padding: 0.25rem 0.85rem; cursor: pointer; transition: background 0.15s; border-radius: 8px; margin: 0 0.5rem;';
               div.addEventListener('mouseenter', () => div.style.background = 'var(--bg-elevated, #f4f4f5)');
               div.addEventListener('mouseleave', () => div.style.background = 'none');
 
