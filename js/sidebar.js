@@ -1349,9 +1349,48 @@
         }
       },
 
+      setupRealtimeSubscriptions() {
+        if (this.presenceChannel) return;
+
+        try {
+          this.presenceChannel = window.BKAuth.sb
+            .channel('public:employee_presence_and_chats')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'employee_presence' }, () => {
+              if (!this.activeReceiver) {
+                this.loadTeammates();
+              }
+            })
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'employee_chats' }, payload => {
+              const newMsg = payload.new;
+              if (this.activeReceiver && (
+                (newMsg.sender_id === this.employeeId && newMsg.receiver_id === this.activeReceiver.id) ||
+                (newMsg.sender_id === this.activeReceiver.id && newMsg.receiver_id === this.employeeId)
+              )) {
+                this.fetchMessages();
+              }
+              if (newMsg.receiver_id === this.employeeId) {
+                this.updateUnreadIndicators();
+              }
+            })
+            .subscribe();
+        } catch (err) {
+          console.warn('Realtime subscription failed:', err);
+        }
+      },
+
+      removeRealtimeSubscriptions() {
+        if (this.presenceChannel) {
+          try {
+            window.BKAuth.sb.removeChannel(this.presenceChannel);
+          } catch (_) {}
+          this.presenceChannel = null;
+        }
+      },
+
       startTeammatePolling() {
         this.stopTeammatePolling();
         this.loadTeammates();
+        this.setupRealtimeSubscriptions();
         this.presenceInterval = setInterval(() => {
           if (!this.activeReceiver) {
             this.loadTeammates();
@@ -1366,6 +1405,7 @@
           clearInterval(this.presenceInterval);
           this.presenceInterval = null;
         }
+        this.removeRealtimeSubscriptions();
       }
     };
 
