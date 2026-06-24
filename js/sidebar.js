@@ -857,6 +857,37 @@
         this.chatTone.play().catch(() => {});
       },
 
+      shouldShowMessageTime(currentTime, previousTime) {
+        if (!previousTime) return true;
+        return currentTime - previousTime >= 10 * 60 * 1000;
+      },
+
+      formatMessageTime(value) {
+        const date = new Date(value);
+        const now = new Date();
+        const sameYear = date.getFullYear() === now.getFullYear();
+        const dateOptions = sameYear
+          ? { month: 'short', day: 'numeric' }
+          : { month: 'short', day: 'numeric', year: 'numeric' };
+        const dateStr = date.toLocaleDateString([], dateOptions);
+        const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        return `${dateStr}, ${timeStr}`;
+      },
+
+      appendMessageTimeSeparator(container, messageId, timestamp) {
+        const separator = document.createElement('div');
+        separator.className = 'chat-time-separator';
+        separator.setAttribute('data-time-for', messageId);
+        separator.style.alignSelf = 'center';
+        separator.style.fontSize = '0.62rem';
+        separator.style.fontWeight = '600';
+        separator.style.color = 'var(--text-muted, #71717a)';
+        separator.style.margin = '0.35rem 0 0.1rem';
+        separator.style.padding = '0 0.35rem';
+        separator.textContent = this.formatMessageTime(timestamp);
+        container.appendChild(separator);
+      },
+
       showChatList() {
         this.activeReceiver = null;
         document.getElementById('chat-message-view').style.display = 'none';
@@ -1215,55 +1246,48 @@
           const pendingRows = container.querySelectorAll('.chat-pending-message');
           pendingRows.forEach(row => row.remove());
 
+          container.innerHTML = '';
           let addedNew = false;
+          let previousMessageTime = null;
 
           (data || []).forEach(msg => {
-            let msgRow = container.querySelector(`[data-msg-id="${msg.id}"]`);
-            if (!msgRow) {
-              const isSelf = msg.sender_id === this.employeeId;
-              
-              msgRow = document.createElement('div');
-              msgRow.setAttribute('data-msg-id', msg.id);
-              msgRow.style.display = 'flex';
-              msgRow.style.flexDirection = 'column';
-              msgRow.style.alignItems = isSelf ? 'flex-end' : 'flex-start';
-              msgRow.style.width = '100%';
-
-              const bubble = document.createElement('div');
-              bubble.style.padding = '0.45rem 0.75rem';
-              bubble.style.borderRadius = '16px';
-              bubble.style.fontSize = '0.76rem';
-              bubble.style.lineHeight = '1.4';
-              bubble.style.maxWidth = '75%';
-              bubble.style.wordBreak = 'break-word';
-
-              if (isSelf) {
-                bubble.style.background = 'var(--cyan, #06b6d4)';
-                bubble.style.color = '#ffffff';
-                bubble.style.borderBottomRightRadius = '4px';
-              } else {
-                bubble.style.background = 'var(--bg-elevated, #e4e4e7)';
-                bubble.style.color = 'var(--text-primary, #09090b)';
-                bubble.style.borderBottomLeftRadius = '4px';
-              }
-              bubble.textContent = msg.message;
-
-              const timeEl = document.createElement('div');
-              timeEl.style.fontSize = '0.58rem';
-              timeEl.style.color = 'var(--text-muted, #71717a)';
-              timeEl.style.marginTop = '0.2rem';
-              timeEl.style.padding = '0 0.25rem';
-              
-              const d = new Date(msg.created_at);
-              const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-              const dateStr = d.toLocaleDateString([], { month: 'short', day: 'numeric' });
-              timeEl.textContent = `${dateStr}, ${timeStr}`;
-
-              msgRow.appendChild(bubble);
-              msgRow.appendChild(timeEl);
-              container.appendChild(msgRow);
-              addedNew = true;
+            const messageTime = new Date(msg.created_at).getTime();
+            if (this.shouldShowMessageTime(messageTime, previousMessageTime)) {
+              this.appendMessageTimeSeparator(container, msg.id, msg.created_at);
             }
+
+            const isSelf = msg.sender_id === this.employeeId;
+            const msgRow = document.createElement('div');
+            msgRow.setAttribute('data-msg-id', msg.id);
+            msgRow.setAttribute('data-msg-time', String(messageTime));
+            msgRow.style.display = 'flex';
+            msgRow.style.flexDirection = 'column';
+            msgRow.style.alignItems = isSelf ? 'flex-end' : 'flex-start';
+            msgRow.style.width = '100%';
+
+            const bubble = document.createElement('div');
+            bubble.style.padding = '0.45rem 0.75rem';
+            bubble.style.borderRadius = '16px';
+            bubble.style.fontSize = '0.76rem';
+            bubble.style.lineHeight = '1.4';
+            bubble.style.maxWidth = '75%';
+            bubble.style.wordBreak = 'break-word';
+
+            if (isSelf) {
+              bubble.style.background = 'var(--cyan, #06b6d4)';
+              bubble.style.color = '#ffffff';
+              bubble.style.borderBottomRightRadius = '4px';
+            } else {
+              bubble.style.background = 'var(--bg-elevated, #e4e4e7)';
+              bubble.style.color = 'var(--text-primary, #09090b)';
+              bubble.style.borderBottomLeftRadius = '4px';
+            }
+            bubble.textContent = msg.message;
+
+            msgRow.appendChild(bubble);
+            container.appendChild(msgRow);
+            previousMessageTime = messageTime;
+            addedNew = true;
           });
 
           if (addedNew) {
@@ -1290,8 +1314,20 @@
         const container = document.getElementById('chat-messages-container');
         let msgRow = null;
         if (container) {
+          const renderedMessages = container.querySelectorAll('[data-msg-time]');
+          const lastMessage = renderedMessages[renderedMessages.length - 1];
+          const now = new Date();
+          const nowTime = now.getTime();
+          const lastMessageTime = lastMessage ? Number(lastMessage.getAttribute('data-msg-time')) : null;
+          const pendingTimeId = `pending-${nowTime}`;
+
+          if (this.shouldShowMessageTime(nowTime, lastMessageTime)) {
+            this.appendMessageTimeSeparator(container, pendingTimeId, now);
+          }
+
           msgRow = document.createElement('div');
           msgRow.className = 'chat-pending-message';
+          msgRow.setAttribute('data-msg-time', String(nowTime));
           msgRow.style.display = 'flex';
           msgRow.style.flexDirection = 'column';
           msgRow.style.alignItems = 'flex-end';
@@ -1309,20 +1345,7 @@
           bubble.style.borderBottomRightRadius = '4px';
           bubble.textContent = text;
 
-          const timeEl = document.createElement('div');
-          timeEl.className = 'msg-time';
-          timeEl.style.fontSize = '0.58rem';
-          timeEl.style.color = 'var(--text-muted, #71717a)';
-          timeEl.style.marginTop = '0.2rem';
-          timeEl.style.padding = '0 0.25rem';
-          
-          const d = new Date();
-          const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-          const dateStr = d.toLocaleDateString([], { month: 'short', day: 'numeric' });
-          timeEl.textContent = `${dateStr}, ${timeStr}`;
-
           msgRow.appendChild(bubble);
-          msgRow.appendChild(timeEl);
           container.appendChild(msgRow);
           container.scrollTop = container.scrollHeight;
         }
@@ -1344,9 +1367,6 @@
           console.error('Error sending message:', e);
           
           if (msgRow) {
-            const timeEl = msgRow.querySelector('.msg-time');
-            if (timeEl) timeEl.style.display = 'none';
-
             const errorEl = document.createElement('div');
             errorEl.style.fontSize = '0.58rem';
             errorEl.style.color = '#ef4444';
