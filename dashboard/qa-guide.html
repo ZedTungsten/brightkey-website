@@ -465,10 +465,16 @@
       if (!draggingCard) return;
 
       const afterElement = getDragAfterElement(container, event.clientX, event.clientY);
-      if (afterElement) {
-        container.insertBefore(draggingCard, afterElement);
-      } else {
-        container.appendChild(draggingCard);
+      
+      // Only perform insertion and animate if the position actually changes
+      if (afterElement !== draggingCard.nextElementSibling && afterElement !== draggingCard) {
+        animateReorder(container, () => {
+          if (afterElement) {
+            container.insertBefore(draggingCard, afterElement);
+          } else {
+            container.appendChild(draggingCard);
+          }
+        });
       }
     }
 
@@ -489,15 +495,50 @@
       event.preventDefault();
       const container = event.currentTarget;
       container.style.outline = 'none';
-      const draggingCard = document.querySelector('.is-dragging');
-      if (draggingCard && container) {
-        const afterElement = getDragAfterElement(container, event.clientX, event.clientY);
-        if (afterElement) {
-          container.insertBefore(draggingCard, afterElement);
-        } else {
-          container.appendChild(draggingCard);
-        }
-      }
+    }
+
+    function animateReorder(container, domModifierFn) {
+      // First: get rects of all sibling cards before modification
+      const cards = [...container.querySelectorAll('.part-row')];
+      const firstPositions = cards.map(card => {
+        const rect = card.getBoundingClientRect();
+        return {
+          element: card,
+          left: rect.left,
+          top: rect.top
+        };
+      });
+
+      // Modify DOM
+      domModifierFn();
+
+      // Last: get new rects, Invert position changes, and Play animations
+      requestAnimationFrame(() => {
+        firstPositions.forEach(pos => {
+          const card = pos.element;
+          const rect = card.getBoundingClientRect();
+          const dx = pos.left - rect.left;
+          const dy = pos.top - rect.top;
+
+          if (dx !== 0 || dy !== 0) {
+            // Invert: shift back immediately with transition none
+            card.style.transition = 'none';
+            card.style.transform = `translate(${dx}px, ${dy}px)`;
+            
+            // Force browser layout reflow
+            card.offsetHeight;
+
+            // Play: transition back to zero translate origin
+            card.style.transition = 'transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)';
+            card.style.transform = '';
+            
+            // Cleanup transitions on completion
+            setTimeout(() => {
+              card.style.transition = '';
+            }, 250);
+          }
+        });
+      });
     }
 
     function getDragAfterElement(container, x, y) {
