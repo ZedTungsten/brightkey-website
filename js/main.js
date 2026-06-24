@@ -379,7 +379,9 @@ if (yearEl) yearEl.textContent = new Date().getFullYear();
   if (document.querySelector('script[src*="cart.js"]')) return;
   const pathname = window.location.pathname;
   let pathPrefix = '';
-  if (pathname.includes('/products/') || pathname.includes('/dashboard/')) {
+  if (pathname.includes('/dashboard/warehouse/')) {
+    pathPrefix = '../../';
+  } else if (pathname.includes('/products/') || pathname.includes('/dashboard/')) {
     pathPrefix = '../';
   } else if (pathname.includes('/internal/ecommerce/') || pathname.includes('/internal/web-css/')) {
     pathPrefix = '../../';
