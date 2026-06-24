@@ -202,6 +202,13 @@
             </div>
 
             <div id="guide-editor-card" class="guide-card" style="display: none;">
+              <div style="display: flex; justify-content: flex-start; margin-bottom: 0.25rem;">
+                <button class="btn btn-outline" onclick="openLoadGuideModal()">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  Load Saved QA Guide
+                </button>
+              </div>
+
               <div class="form-group">
                 <label class="form-label">General Notes / Instructions</label>
                 <textarea id="general-notes" class="form-input" rows="4" placeholder="Describe the overall QA check, handling guidelines, or packaging instructions for this product..." style="resize: vertical; font-family: inherit;"></textarea>
@@ -605,7 +612,124 @@
                 .replace(/'/g, "&#039;");
     }
 
+    async function openLoadGuideModal() {
+      const modal = document.getElementById('load-guide-modal');
+      const select = document.getElementById('modal-guide-select');
+      const currentProductId = document.getElementById('product-select').value;
+      
+      select.innerHTML = '<option value="" disabled selected>Loading saved guides...</option>';
+      modal.style.display = 'flex';
+      
+      try {
+        const { data, error } = await sb
+          .from('qa_guides')
+          .select('id, product_id, general_notes, parts, products (sku, title)')
+          .eq('company_id', currentCompanyId);
+          
+        if (error) throw error;
+        
+        // Filter out current product's guide
+        const otherGuides = (data || [])
+          .filter(g => g.product_id !== currentProductId && g.products)
+          .map(g => ({
+            id: g.id,
+            product_id: g.product_id,
+            general_notes: g.general_notes,
+            parts: g.parts,
+            displayName: `[${g.products.sku}] ${g.products.title}`
+          }));
+          
+        otherGuides.sort((a, b) => a.displayName.localeCompare(b.displayName));
+        
+        if (otherGuides.length === 0) {
+          select.innerHTML = '<option value="" disabled selected>No other saved guides found</option>';
+          return;
+        }
+        
+        window.loadedGuidesCache = otherGuides;
+        
+        select.innerHTML = '<option value="" disabled selected>Select guide to load...</option>' + 
+          otherGuides.map(g => `<option value="${g.product_id}">${escapeHtml(g.displayName)}</option>`).join('');
+          
+      } catch (err) {
+        console.error(err);
+        showToast('Error loading guides: ' + err.message, true);
+        closeLoadGuideModal();
+      }
+    }
+
+    function closeLoadGuideModal() {
+      document.getElementById('load-guide-modal').style.display = 'none';
+    }
+
+    function confirmLoadGuide() {
+      const select = document.getElementById('modal-guide-select');
+      const selectedProductId = select.value;
+      if (!selectedProductId) {
+        showToast('Please select a guide to load.', true);
+        return;
+      }
+      
+      const guide = (window.loadedGuidesCache || []).find(g => g.product_id === selectedProductId);
+      if (!guide) {
+        showToast('Selected guide not found.', true);
+        return;
+      }
+      
+      // Load into UI
+      document.getElementById('general-notes').value = guide.general_notes || '';
+      const container = document.getElementById('groups-list-container');
+      container.innerHTML = '';
+      
+      const partsData = guide.parts || [];
+      if (partsData.length > 0) {
+        if (partsData[0] && typeof partsData[0] === 'object' && 'group_name' in partsData[0]) {
+          partsData.forEach(group => {
+            const groupId = addGroupCard(group.group_name);
+            const gparts = group.parts || [];
+            gparts.forEach(part => addPartRow(groupId, part.image_url, part.quantity, part.notes));
+          });
+        } else {
+          const groupId = addGroupCard('General Components');
+          partsData.forEach(part => addPartRow(groupId, part.image_url, part.quantity, part.notes));
+        }
+      } else {
+        const groupId = addGroupCard();
+        addPartRow(groupId);
+      }
+      
+      closeLoadGuideModal();
+      showToast('Guide loaded successfully! Review and click Save to apply.');
+    }
+
     document.addEventListener('DOMContentLoaded', initPage);
   </script>
+
+  <!-- Modal: Load Saved QA Guide -->
+  <div id="load-guide-modal" class="modal-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); backdrop-filter:blur(4px); z-index:9999; align-items:center; justify-content:center;">
+    <div class="modal-content" style="width:100%; max-width:500px; background:var(--bg-surface); border:1px solid var(--border); border-radius:12px; padding:1.75rem; box-shadow:0 12px 48px rgba(0,0,0,0.25); display:flex; flex-direction:column; gap:1.25rem; position:relative;">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <span style="font-size:1.1rem; font-weight:700; color:var(--text-primary);">Load Saved QA Guide</span>
+        <button type="button" onclick="closeLoadGuideModal()" style="background:none; border:none; cursor:pointer; color:var(--text-muted); display:flex; align-items:center; justify-content:center;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <p style="margin:0; font-size:0.82rem; color:var(--text-muted); line-height:1.4;">
+        Select an existing QA Guide from another product to copy its notes and components list into the current editor.
+      </p>
+      
+      <div class="form-group">
+        <label class="form-label">Source Product Guide</label>
+        <select id="modal-guide-select" class="form-input" style="cursor: pointer; background: var(--bg-surface);">
+          <option value="" disabled selected>Select guide to load...</option>
+        </select>
+      </div>
+
+      <div style="display:flex; justify-content:flex-end; gap:0.75rem; border-top: 1px solid var(--border); padding-top:1.25rem; margin-top:0.5rem;">
+        <button type="button" class="btn btn-outline" onclick="closeLoadGuideModal()" style="height:36px; font-size:0.82rem; padding:0 1.25rem;">Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="confirmLoadGuide()" style="height:36px; font-size:0.82rem; padding:0 1.25rem;">Load Guide</button>
+      </div>
+    </div>
+  </div>
 </body>
 </html>
