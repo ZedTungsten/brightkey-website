@@ -943,6 +943,7 @@
 
           this.teammatesList = emps || [];
           const latestMsgMap = await this.updateUnreadIndicators();
+          const latestActivityMap = await this.getLatestChatActivityMap();
 
           // Clean up any old elements that are no longer in the active list
           const activeIds = new Set(this.teammatesList.map(e => e.id));
@@ -984,6 +985,7 @@
           const hasUnreadMessage = (id) => {
             return !!(latestMsgMap[id] && latestMsgMap[id] > getLastReadTime(id));
           };
+          const getLatestActivityTime = (id) => latestActivityMap[id] || 0;
 
           const sortedEmps = (emps || []).sort((a, b) => {
             const unreadA = hasUnreadMessage(a.id);
@@ -991,8 +993,11 @@
             if (unreadA !== unreadB) {
               return unreadA ? -1 : 1;
             }
-            if (unreadA && latestMsgMap[a.id] !== latestMsgMap[b.id]) {
-              return latestMsgMap[b.id] - latestMsgMap[a.id];
+
+            const latestA = getLatestActivityTime(a.id);
+            const latestB = getLatestActivityTime(b.id);
+            if (latestA !== latestB) {
+              return latestB - latestA;
             }
 
             const relA = getRelevance(a);
@@ -1174,6 +1179,31 @@
         document.getElementById('chat-messages-container').innerHTML = '';
 
         await this.fetchMessages();
+      },
+
+      async getLatestChatActivityMap() {
+        try {
+          const { data, error } = await window.BKAuth.sb
+            .from('employee_chats')
+            .select('sender_id, receiver_id, created_at')
+            .or(`sender_id.eq.${this.employeeId},receiver_id.eq.${this.employeeId}`);
+
+          if (error) throw error;
+
+          const latestActivityMap = {};
+          (data || []).forEach(msg => {
+            const partnerId = msg.sender_id === this.employeeId ? msg.receiver_id : msg.sender_id;
+            const timestamp = new Date(msg.created_at).getTime();
+            if (!latestActivityMap[partnerId] || timestamp > latestActivityMap[partnerId]) {
+              latestActivityMap[partnerId] = timestamp;
+            }
+          });
+
+          return latestActivityMap;
+        } catch (e) {
+          console.error('Error loading chat activity:', e);
+          return {};
+        }
       },
 
       async updateUnreadIndicators() {
