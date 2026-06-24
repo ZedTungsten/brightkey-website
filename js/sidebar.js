@@ -946,8 +946,24 @@
 
           const statusOrder = { 'available': 0, 'break': 1, 'offline': 2 };
           const getStatusValue = (id) => statusOrder[presenceMap[id] || 'offline'];
+          const getLastReadTime = (id) => {
+            const lastReadStr = localStorage.getItem(`chat_read_${this.employeeId}_${id}`);
+            return lastReadStr ? new Date(lastReadStr).getTime() : 0;
+          };
+          const hasUnreadMessage = (id) => {
+            return !!(latestMsgMap[id] && latestMsgMap[id] > getLastReadTime(id));
+          };
 
           const sortedEmps = (emps || []).sort((a, b) => {
+            const unreadA = hasUnreadMessage(a.id);
+            const unreadB = hasUnreadMessage(b.id);
+            if (unreadA !== unreadB) {
+              return unreadA ? -1 : 1;
+            }
+            if (unreadA && latestMsgMap[a.id] !== latestMsgMap[b.id]) {
+              return latestMsgMap[b.id] - latestMsgMap[a.id];
+            }
+
             const relA = getRelevance(a);
             const relB = getRelevance(b);
             if (relA !== relB) {
@@ -960,10 +976,7 @@
             const status = presenceMap[emp.id] || 'offline';
             const statusColor = status === 'available' ? '#22c55e' : status === 'break' ? '#f97316' : '#ef4444';
             const fullName = `${emp.first_name} ${emp.last_name}`;
-            
-            const lastReadStr = localStorage.getItem(`chat_read_${this.employeeId}_${emp.id}`);
-            const lastRead = lastReadStr ? new Date(lastReadStr).getTime() : 0;
-            const hasUnread = latestMsgMap[emp.id] && latestMsgMap[emp.id] > lastRead;
+            const hasUnread = hasUnreadMessage(emp.id);
 
             let div = container.querySelector(`[data-id="${emp.id}"]`);
             if (div) {
@@ -1412,6 +1425,13 @@
               if (newMsg.receiver_id === this.employeeId) {
                 this.playChatTone();
                 this.updateUnreadIndicators();
+
+                const chatWin = document.getElementById('chat-window');
+                const listView = document.getElementById('chat-list-view');
+                const isListOpen = chatWin && chatWin.classList.contains('open') && listView && listView.style.display !== 'none';
+                if (isListOpen) {
+                  this.loadTeammates();
+                }
               }
             })
             .subscribe(status => {
