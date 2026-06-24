@@ -445,6 +445,7 @@
       const el = document.getElementById(rowId);
       if (el) {
         el.style.opacity = '0.4';
+        el.classList.add('is-dragging');
       }
     }
 
@@ -452,12 +453,23 @@
       const el = document.getElementById(rowId);
       if (el) {
         el.style.opacity = '1';
+        el.classList.remove('is-dragging');
         el.setAttribute('draggable', 'false');
       }
     }
 
     function handleDragOver(event) {
       event.preventDefault();
+      const container = event.currentTarget;
+      const draggingCard = document.querySelector('.is-dragging');
+      if (!draggingCard) return;
+
+      const afterElement = getDragAfterElement(container, event.clientX, event.clientY);
+      if (afterElement) {
+        container.insertBefore(draggingCard, afterElement);
+      } else {
+        container.appendChild(draggingCard);
+      }
     }
 
     function handleDragEnter(event) {
@@ -477,11 +489,33 @@
       event.preventDefault();
       const container = event.currentTarget;
       container.style.outline = 'none';
-      const rowId = event.dataTransfer.getData('text/plain');
-      const card = document.getElementById(rowId);
-      if (card && container) {
-        container.appendChild(card);
+      const draggingCard = document.querySelector('.is-dragging');
+      if (draggingCard && container) {
+        const afterElement = getDragAfterElement(container, event.clientX, event.clientY);
+        if (afterElement) {
+          container.insertBefore(draggingCard, afterElement);
+        } else {
+          container.appendChild(draggingCard);
+        }
       }
+    }
+
+    function getDragAfterElement(container, x, y) {
+      const draggableElements = [...container.querySelectorAll('.part-row:not(.is-dragging)')];
+
+      return draggableElements.reduce((closest, child) => {
+        const box = child.getBoundingClientRect();
+        const centerX = box.left + box.width / 2;
+        const centerY = box.top + box.height / 2;
+        const distance = Math.pow(x - centerX, 2) + Math.pow(y - centerY, 2);
+
+        // Limit search distance to look for local reordering elements
+        if (distance < closest.distance) {
+          return { distance: distance, element: child };
+        } else {
+          return closest;
+        }
+      }, { distance: Number.POSITIVE_INFINITY }).element;
     }
 
     async function handleImageUpload(event, rowId) {
