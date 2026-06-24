@@ -726,13 +726,6 @@
               }
             }
 
-            // Offline guard: if checked in but no offline log, and 12h elapsed since check in
-            if (availableLogs.length > 0 && offlineLogs.length === 0) {
-              const checkInTime = new Date(availableLogs[0].created_at);
-              if (Date.now() - checkInTime.getTime() > 12 * 60 * 60 * 1000) {
-                timeOutStr = 'No Time Out';
-              }
-            }
 
             // Calculate Total Hours
             let totalHoursStr = '—';
@@ -978,7 +971,7 @@
           const sb = window.BKAuth.sb;
           const { data } = await sb.from('employees')
             .select('id')
-            .eq('reporting_to', `${this.employee.first_name} ${this.employee.last_name}`)
+            .eq('reporting_to', this.employee.id)
             .limit(1);
           if (data && data.length > 0) {
             hasReports = true;
@@ -1006,10 +999,10 @@
             `)
             .eq('status', 'pending');
 
-          // If not HR/Admin/Owner, filter strictly by reporting manager matching this employee's name
+          // If not HR/Admin/Owner, filter strictly by reporting manager matching this employee's ID
           if (!isManagerOrHR) {
             // Note: PostgREST relational filter
-            query = query.eq('employees.reporting_to', `${this.employee.first_name} ${this.employee.last_name}`);
+            query = query.eq('employees.reporting_to', this.employee.id);
           }
 
           const { data, error } = await query;
