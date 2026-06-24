@@ -2740,21 +2740,47 @@
             const parts = guide.parts || [];
             let partsHtml = '';
             if (parts.length > 0) {
-              partsHtml = `
-                <div style="display:flex; flex-direction:column; gap:0.5rem; margin-top:0.5rem;">
-                  <span style="font-size:0.72rem; font-weight:700; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.05em;">Verify Component Checklist:</span>
-                  ${parts.map((part, idx) => `
-                    <label style="display:flex; align-items:center; gap:0.75rem; background:var(--bg-surface); padding:0.6rem 0.85rem; border:1px solid var(--border); border-radius:6px; cursor:pointer; user-select:none;">
-                      <input type="checkbox" style="width:16px; height:16px; cursor:pointer;" />
-                      <img src="${part.image_url}" style="width:48px; height:48px; object-fit:cover; border-radius:4px; border:1px solid var(--border); background:var(--bg-elevated);" />
-                      <div style="flex:1;">
-                        <div style="font-size:0.82rem; font-weight:700; color:var(--text-primary);">Required Quantity: ${part.quantity}</div>
-                        ${part.notes ? `<div style="font-size:0.75rem; color:var(--danger); font-weight:600; margin-top:2px;">Check: ${escapeHtml(part.notes)}</div>` : ''}
+              // Check if parts uses the new grouped format
+              if (parts[0] && typeof parts[0] === 'object' && 'group_name' in parts[0]) {
+                partsHtml = parts.map(group => {
+                  const gparts = group.parts || [];
+                  if (gparts.length === 0) return '';
+                  return `
+                    <div style="margin-top:0.75rem;">
+                      <div style="font-size:0.75rem; font-weight:800; color:var(--text-primary); margin-bottom:0.4rem; text-transform:uppercase; letter-spacing:0.02em;">${escapeHtml(group.group_name)}</div>
+                      <div style="display:flex; flex-direction:column; gap:0.5rem;">
+                        ${gparts.map(part => `
+                          <label style="display:flex; align-items:center; gap:0.75rem; background:var(--bg-surface); padding:0.6rem 0.85rem; border:1px solid var(--border); border-radius:6px; cursor:pointer; user-select:none;">
+                            <input type="checkbox" style="width:16px; height:16px; cursor:pointer;" />
+                            <img src="${part.image_url}" style="width:48px; height:48px; object-fit:cover; border-radius:4px; border:1px solid var(--border); background:var(--bg-elevated);" />
+                            <div style="flex:1;">
+                              <div style="font-size:0.82rem; font-weight:700; color:var(--text-primary);">Required Quantity: ${part.quantity}</div>
+                              ${part.notes ? `<div style="font-size:0.75rem; color:var(--danger); font-weight:600; margin-top:2px;">Check: ${escapeHtml(part.notes)}</div>` : ''}
+                            </div>
+                          </label>
+                        `).join('')}
                       </div>
-                    </label>
-                  `).join('')}
-                </div>
-              `;
+                    </div>
+                  `;
+                }).join('');
+              } else {
+                // Flat format backward compatibility
+                partsHtml = `
+                  <div style="display:flex; flex-direction:column; gap:0.5rem; margin-top:0.5rem;">
+                    <span style="font-size:0.72rem; font-weight:700; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.05em;">Verify Component Checklist:</span>
+                    ${parts.map((part, idx) => `
+                      <label style="display:flex; align-items:center; gap:0.75rem; background:var(--bg-surface); padding:0.6rem 0.85rem; border:1px solid var(--border); border-radius:6px; cursor:pointer; user-select:none;">
+                        <input type="checkbox" style="width:16px; height:16px; cursor:pointer;" />
+                        <img src="${part.image_url}" style="width:48px; height:48px; object-fit:cover; border-radius:4px; border:1px solid var(--border); background:var(--bg-elevated);" />
+                        <div style="flex:1;">
+                          <div style="font-size:0.82rem; font-weight:700; color:var(--text-primary);">Required Quantity: ${part.quantity}</div>
+                          ${part.notes ? `<div style="font-size:0.75rem; color:var(--danger); font-weight:600; margin-top:2px;">Check: ${escapeHtml(part.notes)}</div>` : ''}
+                        </div>
+                      </label>
+                    `).join('')}
+                  </div>
+                `;
+              }
             }
 
             guideHtml = `
