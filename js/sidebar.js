@@ -801,6 +801,8 @@
       chatInterval: null,
       presenceInterval: null,
       teammatesList: [],
+      chatTone: null,
+      chatToneUnlocked: false,
 
       async init() {
         try {
@@ -823,6 +825,7 @@
           this.lastName = emp?.last_name || '';
           this.department = emp?.department || '';
           this.reportingTo = emp?.reporting_to || '';
+          this.initChatTone();
 
           // Fetch initial unread indicators and subscribe to realtime updates
           this.updateUnreadIndicators();
@@ -831,6 +834,27 @@
         } catch (err) {
           console.error('Chat init error:', err);
         }
+      },
+
+      initChatTone() {
+        this.chatTone = new Audio('/assets/audio/chat-message.mp3');
+        this.chatTone.preload = 'auto';
+
+        const unlockTone = () => {
+          this.chatToneUnlocked = true;
+          document.removeEventListener('pointerdown', unlockTone);
+          document.removeEventListener('keydown', unlockTone);
+        };
+
+        document.addEventListener('pointerdown', unlockTone, { once: true });
+        document.addEventListener('keydown', unlockTone, { once: true });
+      },
+
+      playChatTone() {
+        if (!this.chatTone || !this.chatToneUnlocked) return;
+
+        this.chatTone.currentTime = 0;
+        this.chatTone.play().catch(() => {});
       },
 
       showChatList() {
@@ -1386,6 +1410,7 @@
                 this.fetchMessages();
               }
               if (newMsg.receiver_id === this.employeeId) {
+                this.playChatTone();
                 this.updateUnreadIndicators();
               }
             })
