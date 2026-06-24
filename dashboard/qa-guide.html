@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>QA Guides — BrightKey Admin</title>
+  <link rel="preconnect" href="https://fonts.bunny.net" />
+  <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg?v=2" />
+
+  <style>
+    :root {
+      --bg-base: #FAFAFA;
+      --bg-surface: #FFFFFF;
+      --bg-elevated: #F4F4F5;
+      --bg-card: #FFFFFF;
+      --border: #E4E4E7;
+      --border-hover: #D4D4D8;
+      --text-primary: #09090B;
+      --text-secondary: #52525B;
+      --text-muted: #A1A1AA;
+      --cyan: #06B6D4;
+      --cyan-light: #0891B2;
+      --cyan-dim: rgba(6,182,212,0.12);
+      --cyan-border: rgba(6,182,212,0.25);
+      --success: #16A34A;
+      --danger: #DC2626;
+      --warning: #D97706;
+      --font-mono: 'Courier New', monospace;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg-base); color: var(--text-secondary); font-family: 'Commissioner', sans-serif; font-size: 0.9rem; }
+
+    .content-area { display: flex; flex: 1; overflow: hidden; }
+    .main-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+    .panel-header { padding: 1.5rem; border-bottom: 1px solid var(--border); background: var(--bg-surface); display: flex; justify-content: space-between; align-items: center; }
+    .panel-title { font-size: 1.1rem; font-weight: 700; color: var(--text-primary); }
+
+    .scroll-container { flex: 1; overflow: auto; padding: 1.5rem; display: flex; flex-direction: column; gap: 1.5rem; }
+    
+    .guide-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.5rem;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+      margin: 0 auto;
+      max-width: 900px;
+      width: 100%;
+    }
+
+    .form-group { display: flex; flex-direction: column; gap: 0.4rem; }
+    .form-label { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); }
+    .form-input { width: 100%; padding: 0.55rem 0.75rem; border: 1px solid var(--border); border-radius: 6px; font-size: 0.85rem; background: var(--bg-base); color: var(--text-primary); outline: none; transition: border-color 0.2s; }
+    .form-input:focus { border-color: var(--cyan); }
+    .form-input:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    .parts-section {
+      border-top: 1px solid var(--border);
+      padding-top: 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .section-title-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.5rem;
+    }
+
+    .part-row {
+      display: grid;
+      grid-template-columns: 140px 100px 1fr auto;
+      gap: 1rem;
+      align-items: start;
+      background: var(--bg-base);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem;
+      position: relative;
+    }
+
+    .image-upload-box {
+      border: 2px dashed var(--border);
+      border-radius: 6px;
+      height: 100px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+      background: var(--bg-surface);
+      transition: border-color 0.2s;
+    }
+    .image-upload-box:hover {
+      border-color: var(--cyan);
+    }
+    .image-upload-box img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      position: absolute;
+      top: 0; left: 0;
+    }
+    .image-upload-placeholder {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      font-size: 0.68rem;
+      color: var(--text-muted);
+      gap: 4px;
+      text-align: center;
+      padding: 4px;
+    }
+
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.35rem; padding: 0.55rem 1rem; border-radius: 6px; font-size: 0.8rem; font-weight: 600; cursor: pointer; border: 1px solid transparent; transition: all 0.15s; text-decoration: none; }
+    .btn-primary { background: var(--cyan); color: #fff; border-color: var(--cyan); }
+    .btn-primary:hover { background: var(--cyan-light); border-color: var(--cyan-light); }
+    .btn-outline { background: var(--bg-surface); color: var(--text-secondary); border-color: var(--border); }
+    .btn-outline:hover { border-color: var(--cyan); color: var(--cyan); }
+    .btn-danger { background: rgba(220, 38, 38, 0.08); color: var(--danger); border: none; }
+    .btn-danger:hover { background: var(--danger); color: #fff; }
+    .btn-sm { padding: 0.3rem 0.55rem; font-size: 0.75rem; }
+
+    /* Toast */
+    #toast-container { position: fixed; top: 1.5rem; right: 1.5rem; z-index: 99999; display: flex; flex-direction: column; gap: 0.5rem; }
+    .toast { padding: 0.75rem 1rem; border-radius: 6px; font-size: 0.82rem; font-weight: 600; color: #fff; min-width: 250px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); animation: slideIn 0.2s ease-out; }
+    .toast-success { background: var(--success); }
+    .toast-error { background: var(--danger); }
+    @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+</head>
+<body>
+
+  <div class="toast-container" id="toast-container"></div>
+
+  <div class="dash-layout">
+    <!-- Sidebar -->
+    <aside class="dash-sidebar" id="dash-sidebar"></aside>
+
+    <!-- Main Content -->
+    <div class="dash-main">
+      <!-- Top Bar -->
+      <div class="top-bar">
+        <span class="top-bar-title">Product QA Guides</span>
+        <div style="flex:1"></div>
+        <div style="display: flex; align-items: center; gap: 0.75rem; margin-right: 0.75rem; min-width: 280px;">
+          <span style="font-size: 0.72rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap;">Product:</span>
+          <select id="product-select" class="form-input" style="cursor: pointer; background: var(--bg-surface);" onchange="handleProductChange()">
+            <option value="" disabled selected>Select a Product...</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="content-area">
+        <main class="main-panel">
+          <div class="scroll-container" id="qa-container">
+            <div id="select-notice" style="color: var(--text-muted); text-align: center; padding: 5rem 2rem; border: 1px dashed var(--border); border-radius: 8px; background: var(--bg-surface); max-width: 900px; width: 100%; margin: 0 auto;">
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 0.75rem; color: var(--text-muted);"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+              <h3 style="color: var(--text-primary); font-weight: 700; margin-bottom: 0.25rem;">No Product Selected</h3>
+              <p style="font-size: 0.82rem;">Choose a product from the dropdown above to view or construct its QA Guide.</p>
+            </div>
+
+            <div id="guide-editor-card" class="guide-card" style="display: none;">
+              <div class="form-group">
+                <label class="form-label">General Notes / Instructions</label>
+                <textarea id="general-notes" class="form-input" rows="4" placeholder="Describe the overall QA check, handling guidelines, or packaging instructions for this product..." style="resize: vertical; font-family: inherit;"></textarea>
+              </div>
+
+              <div class="parts-section">
+                <div class="section-title-bar">
+                  <span class="form-label" style="font-size: 0.75rem;">Component Parts Checklist</span>
+                  <button class="btn btn-outline btn-sm" onclick="addPartRow()">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                    Add Component Part
+                  </button>
+                </div>
+
+                <div id="parts-list-container" style="display: flex; flex-direction: column; gap: 0.75rem;">
+                  <!-- Dynamic rows go here -->
+                </div>
+              </div>
+
+              <div style="display: flex; justify-content: flex-end; margin-top: 1rem; border-top: 1px solid var(--border); padding-top: 1.25rem;">
+                <button class="btn btn-primary" id="btn-save-guide" onclick="saveQaGuide(this)">Save QA Guide</button>
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+  </div>
+
+  <script src="../js/auth.js"></script>
+  <script src="../js/sidebar.js"></script>
+  <script src="../js/main.js"></script>
+  <script>
+    let sb;
+    let currentTenantId;
+    let currentCompanyId;
+    let products = [];
+    let currentGuide = null;
+
+    async function initPage() {
+      if (window.BKAuth) {
+        const authInfo = await window.BKAuth.checkRoleGate(['Logistics'], '../admin.html');
+        if (!authInfo) return;
+        currentTenantId = authInfo.tenantId;
+        sb = window.BKAuth.sb;
+        
+        // Fetch company ID
+        const { data: companyData, error: companyErr } = await sb
+          .from('companies')
+          .select('id')
+          .eq('tenant_id', currentTenantId)
+          .limit(1);
+          
+        if (companyErr) {
+          showToast('Error loading company: ' + companyErr.message, true);
+          return;
+        }
+        if (!companyData || companyData.length === 0) {
+          showToast('No company config found.', true);
+          return;
+        }
+        currentCompanyId = companyData[0].id;
+      } else {
+        showToast('Authentication module missing.', true);
+        return;
+      }
+
+      await loadProducts();
+    }
+
+    async function loadProducts() {
+      try {
+        const { data, error } = await sb
+          .from('products')
+          .select('id, sku, title')
+          .eq('company_id', currentCompanyId)
+          .eq('status', 'published')
+          .order('title', { ascending: true });
+
+        if (error) throw error;
+        products = data || [];
+        
+        const select = document.getElementById('product-select');
+        select.innerHTML = '<option value="" disabled selected>Select a Product...</option>' + 
+          products.map(p => `<option value="${p.id}">${escapeHtml(p.title)} (${escapeHtml(p.sku)})</option>`).join('');
+
+      } catch (err) {
+        console.error(err);
+        showToast('Error loading products: ' + err.message, true);
+      }
+    }
+
+    async function handleProductChange() {
+      const productId = document.getElementById('product-select').value;
+      if (!productId) return;
+
+      document.getElementById('select-notice').style.display = 'none';
+      document.getElementById('guide-editor-card').style.display = 'flex';
+      document.getElementById('parts-list-container').innerHTML = '';
+      document.getElementById('general-notes').value = '';
+      currentGuide = null;
+
+      try {
+        const { data, error } = await sb
+          .from('qa_guides')
+          .select('*')
+          .eq('product_id', productId)
+          .maybeSingle();
+
+        if (error) throw error;
+
+        if (data) {
+          currentGuide = data;
+          document.getElementById('general-notes').value = data.general_notes || '';
+          const parts = data.parts || [];
+          if (parts.length > 0) {
+            parts.forEach(part => addPartRow(part.image_url, part.quantity, part.notes));
+          } else {
+            addPartRow();
+          }
+        } else {
+          addPartRow();
+        }
+      } catch (err) {
+        console.error(err);
+        showToast('Error fetching QA guide: ' + err.message, true);
+      }
+    }
+
+    function addPartRow(imageUrl = '', quantity = 1, notes = '') {
+      const container = document.getElementById('parts-list-container');
+      const rowId = 'row_' + Math.random().toString(36).substr(2, 9);
+      
+      const div = document.createElement('div');
+      div.className = 'part-row';
+      div.id = rowId;
+      div.innerHTML = `
+        <div class="image-upload-box" onclick="document.getElementById('${rowId}_file').click()">
+          <input type="file" id="${rowId}_file" style="display:none;" accept="image/*" onchange="handleImageUpload(event, '${rowId}')" />
+          <img id="${rowId}_img" src="${imageUrl}" style="display: ${imageUrl ? 'block' : 'none'};" />
+          <div class="image-upload-placeholder" id="${rowId}_placeholder" style="display: ${imageUrl ? 'none' : 'flex'};">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+            <span>Upload Part Image</span>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Quantity</label>
+          <input type="number" min="1" class="form-input part-qty" value="${quantity}" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Instructions / Warning Notes</label>
+          <input type="text" class="form-input part-notes" placeholder="e.g. check for scratches, inclusion of specific screws" value="${escapeHtml(notes)}" />
+        </div>
+        <button class="btn btn-danger btn-sm" onclick="this.closest('.part-row').remove()" style="align-self: center; height: 36px; padding: 0 0.75rem;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      `;
+      container.appendChild(div);
+    }
+
+    async function handleImageUpload(event, rowId) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const placeholder = document.getElementById(`${rowId}_placeholder`);
+      placeholder.innerHTML = `<span>Processing...</span>`;
+
+      try {
+        const base64 = await blobToBase64(file);
+        const fileName = `qa_part_${rowId}_${Date.now()}.jpg`;
+
+        const response = await fetch('/api/upload', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fileBase64: base64,
+            fileName: fileName,
+            category: 'products',
+            refId: 'qa_guides',
+            type: 'image',
+            companyId: currentCompanyId
+          })
+        });
+
+        if (!response.ok) throw new Error('Upload failed');
+        const result = await response.json();
+
+        const img = document.getElementById(`${rowId}_img`);
+        img.src = result.url;
+        img.style.display = 'block';
+        placeholder.style.display = 'none';
+
+      } catch (err) {
+        console.error(err);
+        showToast('Image upload failed: ' + err.message, true);
+        placeholder.innerHTML = `
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+          <span>Upload Part Image</span>
+        `;
+      }
+    }
+
+    function blobToBase64(blob) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    }
+
+    async function saveQaGuide(btn) {
+      const productId = document.getElementById('product-select').value;
+      if (!productId) return;
+
+      const generalNotes = document.getElementById('general-notes').value.trim();
+      const partsRows = document.querySelectorAll('#parts-list-container .part-row');
+      const parts = [];
+
+      for (const row of partsRows) {
+        const img = row.querySelector('img');
+        const qtyInput = row.querySelector('.part-qty');
+        const notesInput = row.querySelector('.part-notes');
+
+        if (!img.src || img.style.display === 'none') {
+          showToast('Please upload an image for all component parts.', true);
+          return;
+        }
+
+        parts.push({
+          image_url: img.src,
+          quantity: parseInt(qtyInput.value) || 1,
+          notes: notesInput.value.trim()
+        });
+      }
+
+      btn.disabled = true;
+      btn.innerText = 'Saving Guide...';
+
+      try {
+        const payload = {
+          company_id: currentCompanyId,
+          product_id: productId,
+          general_notes: generalNotes,
+          parts: parts
+        };
+
+        let resultErr;
+        if (currentGuide) {
+          const { error } = await sb
+            .from('qa_guides')
+            .update(payload)
+            .eq('id', currentGuide.id);
+          resultErr = error;
+        } else {
+          const { error } = await sb
+            .from('qa_guides')
+            .insert([payload]);
+          resultErr = error;
+        }
+
+        if (resultErr) throw resultErr;
+
+        showToast('QA Guide successfully saved!');
+        await handleProductChange(); // reload
+
+      } catch (err) {
+        console.error(err);
+        showToast('Failed to save QA guide: ' + err.message, true);
+      } finally {
+        btn.disabled = false;
+        btn.innerText = 'Save QA Guide';
+      }
+    }
+
+    function showToast(msg, isError = false) {
+      const container = document.getElementById('toast-container');
+      if (!container) return;
+      const el = document.createElement('div');
+      el.className = `toast toast-${isError ? 'error' : 'success'}`;
+      el.innerText = msg;
+      container.appendChild(el);
+      setTimeout(() => el.remove(), 3500);
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return str.replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+    }
+
+    document.addEventListener('DOMContentLoaded', initPage);
+  </script>
+</body>
+</html>

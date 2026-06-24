@@ -1013,6 +1013,29 @@
     </div>
   </div>
 
+  <!-- Modal: QA Inspection Guide Checklist -->
+  <div id="qa-inspect-modal" class="modal-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); backdrop-filter:blur(4px); z-index:9999; align-items:center; justify-content:center;">
+    <div class="modal-content" style="width:100%; max-width:650px; max-height:85vh; background:var(--bg-surface); border:1px solid var(--border); border-radius:12px; padding:1.75rem; box-shadow:0 12px 48px rgba(0,0,0,0.25); display:flex; flex-direction:column; position:relative; overflow:hidden;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-shrink:0;">
+        <h3 style="margin:0; font-size:1.15rem; font-weight:600; color:var(--text-primary);">QA Inspection Checklist</h3>
+        <button type="button" onclick="closeQaInspectModal()" style="background:none; border:none; cursor:pointer; color:var(--text-muted); display:flex; align-items:center; justify-content:center;">
+          <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2.5" fill="none"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <p style="margin:0 0 1.25rem; font-size:0.82rem; color:var(--text-muted); line-height:1.4; flex-shrink:0;">Verify the contents of order <strong id="qa-modal-ref-id" style="color:var(--text-primary);"></strong> against the QA guide before completing inspection.</p>
+      
+      <div id="qa-guides-container" style="flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:1.25rem; margin-bottom:1.25rem; padding-right:4px;">
+        <!-- Dynamic Guides rendered here -->
+      </div>
+
+      <!-- Footer Buttons -->
+      <div style="display:flex; justify-content:flex-end; gap:0.75rem; border-top:1px solid var(--border); padding-top:1rem; margin-top:0.25rem; flex-shrink:0;">
+        <button type="button" class="btn btn-outline" onclick="closeQaInspectModal()" style="height:36px; font-size:0.82rem; padding:0 1.25rem;">Cancel</button>
+        <button type="button" id="btn-confirm-qa-inspect" class="btn btn-cyan" onclick="executeQaInspect()" style="height:36px; font-size:0.82rem; padding:0 1.25rem;">Confirm QA Inspected</button>
+      </div>
+    </div>
+  </div>
+
   <script src="../js/auth.js"></script>
   <script src="../js/sidebar.js"></script>
   <script src="../js/main.js"></script>
@@ -2660,47 +2683,166 @@
       } catch (err) {
         console.error(err);
         showToast('Fulfillment failed: ' + err.message, true);
-        confirmBtn.disabled = false;
-        confirmBtn.innerHTML = 'Confirm';
-      }
-    };
+           let qaInspectRefId = null;
+    let qaInspectBtn = null;
 
     window.qaInspectOrder = async function(btn, referenceId) {
-      await wrapActionWithLoading(btn, async () => {
-        const now = new Date().toISOString();
-        const txsToInspect = activeTransactions.filter(t => 
+      qaInspectRefId = referenceId;
+      qaInspectBtn = btn;
+
+      const modal = document.getElementById('qa-inspect-modal');
+      document.getElementById('qa-modal-ref-id').textContent = referenceId;
+      document.getElementById('qa-guides-container').innerHTML = '<div style="color:var(--text-muted); text-align:center; padding:2rem 0;">Loading QA Guides...</div>';
+      
+      modal.style.display = 'flex';
+      modal.offsetHeight;
+      modal.classList.add('open');
+
+      try {
+        const txs = activeTransactions.filter(t => 
           t.reference_id === referenceId && 
           t.status === 'reserved' && 
           t.type === 'customer_order'
         );
 
-        if (txsToInspect.length === 0) return;
+        if (txs.length === 0) {
+          closeQaInspectModal();
+          return;
+        }
 
-        for (const tx of txsToInspect) {
-          const { error: txErr } = await sb.from('inventory_transactions').update({
-            status: 'inspect',
-            timestamp_inspect: now
-          }).eq('id', tx.id);
-          if (txErr) throw txErr;
+        const skus = txs.map(t => t.sku);
+        const matchedProducts = allProducts.filter(p => skus.includes(p.sku));
+        const matchedProductIds = matchedProducts.map(p => p.id);
 
-          let invQPack = sb.from('inventory').select('*').eq('sku', tx.sku);
-          if (activeWarehouseId) invQPack = invQPack.eq('warehouse_id', activeWarehouseId);
-          else invQPack = invQPack.is('warehouse_id', null);
-          const { data: invRow, error: invErr } = await invQPack;
-          if (invErr) throw invErr;
-          if (invRow && invRow.length > 0) {
-            const inv = invRow[0];
-            const { error: updErr } = await sb.from('inventory').update({
-              reserved: Math.max(0, (inv.reserved || 0) - tx.quantity),
-              inspect: (inv.inspect || 0) + tx.quantity
-            }).eq('id', inv.id);
-            if (updErr) throw updErr;
+        let guides = [];
+        if (matchedProductIds.length > 0) {
+          const { data, error } = await sb
+            .from('qa_guides')
+            .select('*')
+            .in('product_id', matchedProductIds);
+          if (!error && data) {
+            guides = data;
           }
         }
 
-        await refreshDashboard();
-        showToast('Order QA inspected. Moved to Pack.');
-      });
+        const container = document.getElementById('qa-guides-container');
+        container.innerHTML = '';
+
+        txs.forEach(tx => {
+          const prod = allProducts.find(p => p.sku === tx.sku) || { title: 'Unknown Product', id: null };
+          const guide = guides.find(g => g.product_id === prod.id);
+
+          const productCard = document.createElement('div');
+          productCard.style.cssText = 'border:1px solid var(--border); border-radius:8px; padding:1.25rem; background:var(--bg-base); display:flex; flex-direction:column; gap:0.75rem;';
+          
+          let guideHtml = '';
+          if (guide) {
+            const parts = guide.parts || [];
+            let partsHtml = '';
+            if (parts.length > 0) {
+              partsHtml = `
+                <div style="display:flex; flex-direction:column; gap:0.5rem; margin-top:0.5rem;">
+                  <span style="font-size:0.72rem; font-weight:700; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.05em;">Verify Component Checklist:</span>
+                  ${parts.map((part, idx) => `
+                    <label style="display:flex; align-items:center; gap:0.75rem; background:var(--bg-surface); padding:0.6rem 0.85rem; border:1px solid var(--border); border-radius:6px; cursor:pointer; user-select:none;">
+                      <input type="checkbox" style="width:16px; height:16px; cursor:pointer;" />
+                      <img src="${part.image_url}" style="width:48px; height:48px; object-fit:cover; border-radius:4px; border:1px solid var(--border); background:var(--bg-elevated);" />
+                      <div style="flex:1;">
+                        <div style="font-size:0.82rem; font-weight:700; color:var(--text-primary);">Required Quantity: ${part.quantity}</div>
+                        ${part.notes ? `<div style="font-size:0.75rem; color:var(--danger); font-weight:600; margin-top:2px;">Check: ${escapeHtml(part.notes)}</div>` : ''}
+                      </div>
+                    </label>
+                  `).join('')}
+                </div>
+              `;
+            }
+
+            guideHtml = `
+              ${guide.general_notes ? `<div style="font-size:0.82rem; color:var(--text-secondary); border-left:3px solid var(--cyan); padding-left:0.5rem; margin-bottom:0.5rem; line-height:1.4;"><strong>General Notes:</strong> ${escapeHtml(guide.general_notes)}</div>` : ''}
+              ${partsHtml}
+            `;
+          } else {
+            guideHtml = `<div style="font-size:0.82rem; color:var(--text-muted); font-style:italic;">No QA Guide defined for this product.</div>`;
+          }
+
+          productCard.innerHTML = `
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border); padding-bottom:0.5rem; margin-bottom:0.25rem;">
+              <span style="font-size:0.85rem; font-weight:700; color:var(--text-primary);">${escapeHtml(prod.title)} (Qty: ${tx.quantity})</span>
+              <code style="font-size:0.75rem; color:var(--text-muted);">${tx.sku}</code>
+            </div>
+            <div>${guideHtml}</div>
+          `;
+          container.appendChild(productCard);
+        });
+
+      } catch (err) {
+        console.error(err);
+        document.getElementById('qa-guides-container').innerHTML = '<div style="color:var(--danger); text-align:center; padding:2rem 0;">Error loading QA Guides.</div>';
+      }
+    };
+
+    window.closeQaInspectModal = function() {
+      const modal = document.getElementById('qa-inspect-modal');
+      modal.classList.remove('open');
+      setTimeout(() => {
+        modal.style.display = 'none';
+      }, 150);
+      qaInspectRefId = null;
+      qaInspectBtn = null;
+    };
+
+    window.executeQaInspect = async function() {
+      if (!qaInspectRefId || !qaInspectBtn) return;
+      
+      const confirmBtn = document.getElementById('btn-confirm-qa-inspect');
+      const originalHtml = confirmBtn.innerHTML;
+      confirmBtn.disabled = true;
+      confirmBtn.innerHTML = `Confirming...`;
+
+      try {
+        await wrapActionWithLoading(qaInspectBtn, async () => {
+          const now = new Date().toISOString();
+          const txsToInspect = activeTransactions.filter(t => 
+            t.reference_id === qaInspectRefId && 
+            t.status === 'reserved' && 
+            t.type === 'customer_order'
+          );
+
+          if (txsToInspect.length === 0) return;
+
+          for (const tx of txsToInspect) {
+            const { error: txErr } = await sb.from('inventory_transactions').update({
+              status: 'inspect',
+              timestamp_inspect: now
+            }).eq('id', tx.id);
+            if (txErr) throw txErr;
+
+            let invQPack = sb.from('inventory').select('*').eq('sku', tx.sku);
+            if (activeWarehouseId) invQPack = invQPack.eq('warehouse_id', activeWarehouseId);
+            else invQPack = invQPack.is('warehouse_id', null);
+            const { data: invRow, error: invErr } = await invQPack;
+            if (invErr) throw invErr;
+            if (invRow && invRow.length > 0) {
+              const inv = invRow[0];
+              const { error: updErr } = await sb.from('inventory').update({
+                reserved: Math.max(0, (inv.reserved || 0) - tx.quantity),
+                inspect: (inv.inspect || 0) + tx.quantity
+              }).eq('id', inv.id);
+              if (updErr) throw updErr;
+            }
+          }
+
+          closeQaInspectModal();
+          await refreshDashboard();
+          showToast('Order QA inspected. Moved to Pack.');
+        });
+      } catch (err) {
+        console.error(err);
+        showToast('Inspection failed: ' + err.message, true);
+      } finally {
+        confirmBtn.disabled = false;
+        confirmBtn.innerHTML = originalHtml;
+      }
     };
 
     // ACTION: Unpack entire order (packed → inspect)

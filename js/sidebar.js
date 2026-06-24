@@ -268,6 +268,7 @@
           <a href="/dashboard/warehouse" class="dash-nav-child" data-role="logistics">Warehouse</a>
           <a href="/dashboard/delivery" class="dash-nav-child" data-role="logistics">Delivery</a>
           <a href="/dashboard/shipping-rates" class="dash-nav-child" data-role="logistics">Shipping Rates</a>
+          <a href="/dashboard/qa-guide" class="dash-nav-child" data-role="logistics">QA Guide</a>
         </div>
       </div>
 
@@ -1336,11 +1337,44 @@
         try {
           this.presenceChannel = window.BKAuth.sb
             .channel('public:employee_presence_and_chats')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'employee_presence' }, () => {
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'attendance_logs' }, payload => {
               const chatWin = document.getElementById('chat-window');
               const isOpen = chatWin && chatWin.classList.contains('open');
-              if (isOpen && !this.activeReceiver) {
-                this.loadTeammates();
+              const newLog = payload.new;
+              if (!newLog) return;
+
+              // Update current user's status dot in the sidebar if status changed from another tab/dashboard
+              if (newLog.employee_id === this.employeeId) {
+                const statusDot = document.getElementById('user-status-dot');
+                const statusText = document.getElementById('user-status-text');
+                if (statusDot && statusText) {
+                  const status = newLog.status;
+                  if (status === 'available') {
+                    statusDot.style.backgroundColor = '#22c55e';
+                    statusText.textContent = 'Online';
+                    statusText.style.color = '#22c55e';
+                  } else if (status === 'break') {
+                    statusDot.style.backgroundColor = '#f97316';
+                    statusText.textContent = 'Away';
+                    statusText.style.color = '#f97316';
+                  } else {
+                    statusDot.style.backgroundColor = '#ef4444';
+                    statusText.textContent = 'Offline';
+                    statusText.style.color = '#ef4444';
+                  }
+                }
+              }
+
+              // Update teammate list status and active chat window status header if open
+              if (isOpen) {
+                this.loadTeammates().then(() => {
+                  if (this.activeReceiver && newLog.employee_id === this.activeReceiver.id) {
+                    const dotEl = document.getElementById('chat-header-status-dot');
+                    if (dotEl) {
+                      dotEl.style.backgroundColor = newLog.status === 'available' ? '#22c55e' : newLog.status === 'break' ? '#f97316' : '#ef4444';
+                    }
+                  }
+                });
               }
             })
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'employee_chats' }, payload => {
