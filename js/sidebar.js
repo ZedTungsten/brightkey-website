@@ -823,11 +823,9 @@
           this.department = emp?.department || '';
           this.reportingTo = emp?.reporting_to || '';
 
-          // Start background unread indicators check
+          // Fetch initial unread indicators and subscribe to realtime updates
           this.updateUnreadIndicators();
-          this.unreadPollingInterval = setInterval(() => {
-            this.updateUnreadIndicators();
-          }, 5000);
+          this.setupRealtimeSubscriptions();
 
         } catch (err) {
           console.error('Chat init error:', err);
@@ -835,7 +833,6 @@
       },
 
       showChatList() {
-        this.stopMessagePolling();
         this.activeReceiver = null;
         document.getElementById('chat-message-view').style.display = 'none';
         document.getElementById('chat-list-view').style.display = 'flex';
@@ -853,8 +850,6 @@
           chatWin.style.visibility = 'hidden';
           chatWin.style.transform = 'translateY(20px) scale(0.95)';
           chatWin.style.pointerEvents = 'none';
-          this.stopMessagePolling();
-          this.stopTeammatePolling();
         } else {
           chatWin.classList.add('open');
           chatWin.style.opacity = '1';
@@ -862,7 +857,6 @@
           chatWin.style.transform = 'translateY(0) scale(1)';
           chatWin.style.pointerEvents = 'auto';
           this.showChatList();
-          this.startTeammatePolling();
         }
       },
 
@@ -1111,7 +1105,6 @@
         document.getElementById('chat-messages-container').innerHTML = '';
 
         await this.fetchMessages();
-        this.startMessagePolling();
       },
 
       async updateUnreadIndicators() {
@@ -1337,18 +1330,6 @@
         }
       },
 
-      startMessagePolling() {
-        this.stopMessagePolling();
-        this.chatInterval = setInterval(() => this.fetchMessages(), 3000);
-      },
-
-      stopMessagePolling() {
-        if (this.chatInterval) {
-          clearInterval(this.chatInterval);
-          this.chatInterval = null;
-        }
-      },
-
       setupRealtimeSubscriptions() {
         if (this.presenceChannel) return;
 
@@ -1356,7 +1337,9 @@
           this.presenceChannel = window.BKAuth.sb
             .channel('public:employee_presence_and_chats')
             .on('postgres_changes', { event: '*', schema: 'public', table: 'employee_presence' }, () => {
-              if (!this.activeReceiver) {
+              const chatWin = document.getElementById('chat-window');
+              const isOpen = chatWin && chatWin.classList.contains('open');
+              if (isOpen && !this.activeReceiver) {
                 this.loadTeammates();
               }
             })
@@ -1376,36 +1359,6 @@
         } catch (err) {
           console.warn('Realtime subscription failed:', err);
         }
-      },
-
-      removeRealtimeSubscriptions() {
-        if (this.presenceChannel) {
-          try {
-            window.BKAuth.sb.removeChannel(this.presenceChannel);
-          } catch (_) {}
-          this.presenceChannel = null;
-        }
-      },
-
-      startTeammatePolling() {
-        this.stopTeammatePolling();
-        this.loadTeammates();
-        this.setupRealtimeSubscriptions();
-        this.presenceInterval = setInterval(() => {
-          if (!this.activeReceiver) {
-            this.loadTeammates();
-          } else {
-            this.updateUnreadIndicators();
-          }
-        }, 4000);
-      },
-
-      stopTeammatePolling() {
-        if (this.presenceInterval) {
-          clearInterval(this.presenceInterval);
-          this.presenceInterval = null;
-        }
-        this.removeRealtimeSubscriptions();
       }
     };
 
