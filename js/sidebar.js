@@ -769,7 +769,7 @@
           </button>
         </div>
         <!-- Messages List -->
-        <div id="chat-messages-container" style="flex: 1; overflow-y: auto; padding: 1rem; display: flex; flex-direction: column; gap: 0.75rem; background: var(--bg-base, #fafafa);">
+        <div id="chat-messages-container" style="flex: 1; overflow-y: auto; padding: 1rem; display: flex; flex-direction: column; gap: 2px; background: var(--bg-base, #fafafa);">
         </div>
         <!-- Footer Input Area -->
         <form id="chat-input-form" style="padding: 0.5rem 0.75rem; border-top: 1px solid var(--border, #e4e4e7); display: flex; gap: 0.4rem; background: var(--bg-surface, #ffffff); align-items: center;">
