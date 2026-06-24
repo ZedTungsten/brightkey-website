@@ -393,3 +393,34 @@ if (yearEl) yearEl.textContent = new Date().getFullYear();
   script.src = pathPrefix + 'js/cart.js';
   document.head.appendChild(script);
 })();
+
+// ── Theater Mode Image Viewer ──────────────────────────────────
+window.showTheaterImage = function(url) {
+  let overlay = document.getElementById('bk-theater-overlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'bk-theater-overlay';
+    overlay.style.cssText = 'position:fixed; inset:0; background:rgba(9,9,11,0.9); z-index:100000; display:flex; align-items:center; justify-content:center; cursor:zoom-out; opacity:0; transition:opacity 0.2s ease;';
+    overlay.innerHTML = `
+      <img id="bk-theater-img" src="" style="max-width:90%; max-height:90%; object-fit:contain; border-radius:8px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.5); transform:scale(0.95); transition:transform 0.2s ease;" />
+      <button style="position:absolute; top:1.5rem; right:1.5rem; background:none; border:none; color:white; font-size:2rem; cursor:pointer; font-weight:300; line-height:1;">&times;</button>
+    `;
+    overlay.onclick = function() {
+      overlay.style.opacity = '0';
+      overlay.querySelector('#bk-theater-img').style.transform = 'scale(0.95)';
+      setTimeout(() => {
+        overlay.style.display = 'none';
+      }, 200);
+    };
+    document.body.appendChild(overlay);
+  }
+
+  const img = overlay.querySelector('#bk-theater-img');
+  img.src = url;
+  overlay.style.display = 'flex';
+  
+  setTimeout(() => {
+    overlay.style.opacity = '1';
+    img.style.transform = 'scale(1)';
+  }, 10);
+};
