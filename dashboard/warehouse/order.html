@@ -1,0 +1,3612 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Warehouse — BrightKey Admin</title>
+  
+  <link rel="preconnect" href="https://fonts.bunny.net" />
+  <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../../css/style.css" />
+  <link rel="icon" type="image/svg+xml" href="../../assets/favicon.svg?v=2" />
+  
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+
+  <style>
+    :root {
+      --bg-base: #FAFAFA;
+      --bg-surface: #FFFFFF;
+      --bg-elevated: #F4F4F5;
+      --bg-card: #FFFFFF;
+      --border: #E4E4E7;
+      --border-hover: #D4D4D8;
+      --text-primary: #09090B;
+      --text-secondary: #52525B;
+      --text-muted: #A1A1AA;
+      --cyan: #06B6D4;
+      --cyan-light: #0891B2;
+      --cyan-dim: rgba(6,182,212,0.12);
+      --cyan-border: rgba(6,182,212,0.25);
+      --success: #16A34A;
+      --danger: #DC2626;
+      --warning: #D97706;
+      --font-mono: 'Courier New', monospace;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    
+    body {
+      background: var(--bg-base);
+      color: var(--text-secondary);
+      font-family: 'Commissioner', sans-serif;
+      font-size: 0.9rem;
+      min-height: 100vh;
+    }
+
+    /* ── Page Layout ── */
+    .page-wrap {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    .top-bar {
+      flex-shrink: 0;
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      height: 56px;
+    }
+
+    .top-bar-title {
+      font-size: 1rem;
+      font-weight: 800;
+      color: var(--text-primary);
+      letter-spacing: -0.03em;
+    }
+
+    .top-bar-back {
+      font-size: 0.82rem;
+      color: var(--cyan-light);
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-weight: 600;
+    }
+
+    .top-bar-back:hover {
+      text-decoration: underline;
+    }
+
+    .top-bar-sep {
+      color: var(--border);
+    }
+
+    .content-area {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* ── Main Workspace ── */
+    .main-workspace {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Stats Strip ── */
+    .stats-strip {
+      display: flex;
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      overflow-x: auto;
+    }
+
+    .stat-cell {
+      padding: 0.85rem 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      border-right: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .stat-cell:last-child {
+      border-right: none;
+    }
+
+    .stat-num {
+      font-size: 1.4rem;
+      font-weight: 800;
+      color: var(--text-primary);
+      letter-spacing: -0.04em;
+    }
+
+    .stat-label {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    /* ── Tab Bar ── */
+    .drawer-tabs {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      overflow-x: auto;
+      background: var(--bg-surface);
+    }
+
+    .tab-btn {
+      padding: 0.9rem 1.25rem;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      border: none;
+      background: none;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      white-space: nowrap;
+      transition: all 0.15s;
+    
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+    }
+
+    .tab-btn.active {
+      color: var(--cyan-light);
+      border-bottom-color: var(--cyan);
+    }
+
+    .tab-btn:hover:not(.active) {
+      color: var(--text-secondary);
+    }
+
+    /* ── Warehouse Level-1 Tabs ── */
+    .wh-tabs {
+      display: flex;
+      border-bottom: 2px solid var(--border);
+      flex-shrink: 0;
+      overflow-x: auto;
+      background: var(--bg-elevated);
+      padding: 0 0.5rem;
+    }
+    .wh-tab-btn {
+      padding: 0.7rem 1.1rem;
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      border: none;
+      background: none;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -2px;
+      white-space: nowrap;
+      transition: all 0.15s;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .wh-tab-btn.active {
+      color: var(--cyan-light);
+      border-bottom-color: var(--cyan);
+      background: var(--bg-surface);
+    }
+    .wh-tab-btn:hover:not(.active) {
+      color: var(--text-secondary);
+    }
+    .wh-tab-btn .wh-inactive-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--text-muted);
+      display: inline-block;
+      flex-shrink: 0;
+    }
+    .wh-tab-btn.active .wh-inactive-dot {
+      background: var(--cyan);
+    }
+
+
+    /* ── Table & Panels ── */
+    .table-scroll {
+      flex: 1;
+      overflow: auto;
+    }
+
+    .tab-panel {
+      display: none;
+      height: 100%;
+      padding: 1.5rem;
+    }
+
+    .tab-panel.active {
+      display: block;
+    }
+
+    /* Transfer tab has stacked sections, let it size to content */
+    #panel-transfer {
+      height: auto;
+      overflow-y: auto;
+    }
+
+    .panel {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      box-shadow: var(--shadow-sm);
+      position: relative;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .panel-header {
+      padding: 1rem 1.25rem;
+      font-size: 0.85rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border);
+      border-top-left-radius: 7px;
+      border-top-right-radius: 7px;
+      position: relative;
+      z-index: 10;
+      flex-shrink: 0;
+    }
+
+    .table-responsive {
+      flex: 1;
+      overflow: auto;
+      overscroll-behavior: contain;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.82rem;
+    }
+
+    thead th {
+      position: sticky;
+      top: 0;
+      background: var(--bg-elevated);
+      color: var(--text-secondary);
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      padding: 0.65rem 1rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+      z-index: 1;
+    }
+
+    tbody tr {
+      border-bottom: 1px solid var(--border);
+      transition: background 0.1s;
+      height: 1px;
+    }
+
+    tbody tr:hover {
+      background: var(--bg-elevated);
+    }
+
+    tbody tr.no-border-bottom {
+      border-bottom: none !important;
+    }
+
+    tbody td {
+      padding: 0.4rem 1.0rem;
+      color: var(--text-secondary);
+      vertical-align: middle;
+    }
+
+    tbody td img {
+      width: 64px !important;
+      height: 40px !important;
+    }
+
+    /* ── Badges ── */
+    .badge-status {
+      display: inline-block;
+      padding: 0.2rem 0.55rem;
+      border-radius: 20px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      text-transform: capitalize;
+    }
+
+    .badge-ordered     { background: rgba(37,99,235,0.1); color: #2563eb; }
+    .badge-received    { background: rgba(22,163,74,0.1); color: var(--success); }
+    .badge-reserved    { background: rgba(217,119,6,0.1); color: var(--warning); }
+    .badge-packed      { background: rgba(6,182,212,0.1); color: var(--cyan-light); }
+    .badge-dispatched  { background: var(--bg-elevated); color: var(--text-secondary); border: 1px solid var(--border); }
+    .badge-returned    { background: rgba(220,38,38,0.1); color: var(--danger); }
+    .badge-cancelled   { background: rgba(75,85,99,0.1); color: #4b5563; }
+
+    /* ── Side Workspace (Logs) ── */
+    .side-workspace {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 185px;
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      background: var(--bg-surface);
+      border-top: 1px solid var(--border);
+      box-shadow: 0 -4px 16px rgba(0,0,0,0.08);
+      transform: translateY(100%);
+      transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .side-workspace.open {
+      transform: translateY(0);
+    }
+
+    #btn-logs.active {
+      background: var(--bg-elevated) !important;
+      border-color: var(--cyan) !important;
+      color: var(--cyan-light) !important;
+      box-shadow: inset 0 2px 4px rgba(6, 182, 212, 0.12) !important;
+    }
+
+    .side-header {
+      padding: 0.6rem 1rem;
+      border-bottom: 1px solid var(--border);
+      font-weight: 700;
+      color: var(--text-primary);
+      font-size: 0.85rem;
+      flex-shrink: 0;
+    }
+
+    .log-container {
+      flex: 1;
+      overflow-y: auto;
+      padding: 0.75rem 1rem;
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      line-height: 1.5;
+      background: #FAFAFA;
+    }
+
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
+    .spinner-cyan {
+      width: 24px;
+      height: 24px;
+      border: 3px solid rgba(6, 182, 212, 0.15);
+      border-top-color: var(--cyan);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      display: inline-block;
+    }
+
+    .loading-wrapper {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.75rem;
+      padding: 2.5rem 0;
+      color: var(--text-muted);
+      font-size: 0.82rem;
+      font-weight: 600;
+    }
+
+    .btn-loading {
+      filter: brightness(0.7) !important;
+      cursor: not-allowed !important;
+      pointer-events: none !important;
+    }
+
+    .log-entry {
+      border-bottom: 1px solid var(--border);
+      padding: 0.5rem 0;
+      color: var(--text-secondary);
+    }
+
+    .log-entry:last-child {
+      border-bottom: none;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.45rem 1rem;
+      border-radius: 6px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+
+    .btn-primary { background: var(--cyan); color: #fff; border-color: var(--cyan); }
+    .btn-primary:hover { background: var(--cyan-light); border-color: var(--cyan-light); }
+    .btn-outline { background: var(--bg-surface); color: var(--text-secondary); border-color: var(--border); }
+    .btn-outline:hover { border-color: var(--cyan); color: var(--cyan-light); }
+    .btn-danger { background: var(--danger); color: #fff; border-color: var(--danger); }
+    .btn-danger:hover { opacity: 0.9; }
+    .btn-cyan { background: var(--cyan-dim); color: var(--cyan-light); border-color: var(--cyan-border); }
+    .btn-cyan:hover { background: var(--cyan-light); color: white; }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+
+    .form-label {
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .form-input, .form-select {
+      padding: 0.55rem 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 0.85rem;
+      background: var(--bg-base);
+      color: var(--text-primary);
+      outline: none;
+      transition: border 0.15s;
+      width: 100%;
+    }
+
+    .form-input:focus, .form-select:focus {
+      border-color: var(--cyan);
+    }
+
+    .wh-select-dropdown {
+      height: 36px;
+      padding: 0 2.25rem 0 0.75rem;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      cursor: pointer;
+      outline: none;
+      transition: all 0.15s;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23a1a1aa' stroke-width='2.5'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19.5 8.25l-7.5 7.5-7.5-7.5' /%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 0.75rem center;
+      background-size: 1rem;
+      min-width: 180px;
+    }
+    .wh-select-dropdown:hover {
+      border-color: var(--cyan);
+    }
+    .wh-select-dropdown:focus {
+      border-color: var(--cyan);
+      box-shadow: 0 0 0 2px var(--cyan-dim);
+    }
+
+    tr.table-spacer-row,
+    tr.table-spacer-row:hover {
+      background: transparent !important;
+      border: none !important;
+      pointer-events: none !important;
+    }
+    tr.table-spacer-row td {
+      border: none !important;
+      pointer-events: none !important;
+      padding: 0 !important;
+    }
+
+    thead th.sortable {
+      cursor: pointer;
+      user-select: none;
+      transition: background-color 0.15s, color 0.15s;
+    }
+    thead th.sortable:hover {
+      background: var(--border-hover) !important;
+      color: var(--text-primary);
+    }
+
+    /* Separator line between Available and other counts */
+    .tally-table th:nth-child(6),
+    .tally-table td:nth-child(6) {
+      border-left: 1.5px solid var(--border);
+      padding-left: 1.5rem;
+    }
+
+    /* Toast styling */
+    #toast-container { position: fixed; top: 1.5rem; right: 1.5rem; z-index: 99999; display: flex; flex-direction: column; gap: 0.5rem; }
+    .toast { padding: 0.75rem 1rem; border-radius: 6px; font-size: 0.82rem; font-weight: 600; color: #fff; min-width: 250px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); animation: slideIn 0.2s ease-out; }
+    .toast-success { background: var(--success); }
+    .toast-error { background: var(--danger); }
+    @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+  </style>
+</head>
+<body>
+  <div class="toast-container" id="toast-container"></div>
+
+  <div class="dash-layout">
+    <!-- Sidebar -->
+    <aside class="dash-sidebar" id="dash-sidebar"></aside>
+
+    <!-- Main Content -->
+    <div class="dash-main">
+
+      <div class="page-wrap">
+        
+        <!-- Top Bar -->
+        <div class="top-bar">
+          <span class="top-bar-title">Warehouse & Inventory Ledger</span>
+          <div style="flex:1;"></div>
+          <div style="display:flex; gap:0.5rem; align-items:center;">
+            <button id="btn-undo" class="btn btn-outline" style="display: none; border-color: var(--warning); color: var(--warning);" onclick="undoLastAction(this)">
+              <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: -2px; margin-right: 6px;"><path d="M3 7v6h6M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg>Undo
+            </button>
+            <select id="wh-select-dropdown" class="wh-select-dropdown" style="display:none;" onchange="switchWarehouse(this.value)"></select>
+            <button id="btn-logs" class="btn btn-outline" onclick="toggleLogs()">
+              <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none" style="vertical-align: -2px; margin-right: 6px;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>Logs
+            </button>
+            <button id="btn-sync" class="btn btn-primary">
+              <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: -2px; margin-right: 6px;"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Refresh
+            </button>
+          </div>
+        </div>
+
+    <!-- Content Area -->
+    <div class="content-area">
+      
+      <!-- Left Workspace (Tables & Stats) -->
+      <div class="main-workspace">
+
+        <!-- Level-2 Operation Tab Bar -->
+        <div class="drawer-tabs">
+          <a class="tab-btn" href="/dashboard/warehouse/summary">Inventory Summary</a>
+          <a class="tab-btn" href="/dashboard/warehouse/dispatch">Dispatch <span id="badge-count-dispatch" style="display:none; background:var(--cyan); color:white; font-size:0.75rem; padding:1px 6px; border-radius:10px; margin-left:4px;">0</span></a>
+          <a class="tab-btn" href="/dashboard/warehouse/pack">Pack <span id="badge-count-pack" style="display:none; background:var(--cyan); color:white; font-size:0.75rem; padding:1px 6px; border-radius:10px; margin-left:4px;">0</span></a>
+          <a class="tab-btn" href="/dashboard/warehouse/inspect">Inspect <span id="badge-count-inspect" style="display:none; background:var(--cyan); color:white; font-size:0.75rem; padding:1px 6px; border-radius:10px; margin-left:4px;">0</span></a>
+          <a class="tab-btn" href="/dashboard/warehouse/receive">Receive <span id="badge-count-receive" style="display:none; background:var(--cyan); color:white; font-size:0.75rem; padding:1px 6px; border-radius:10px; margin-left:4px;">0</span></a>
+          <a class="tab-btn active" href="/dashboard/warehouse/order">Order Supplier</a>
+          <a class="tab-btn" href="/dashboard/warehouse/transfer">Transfer</a>
+        </div>
+
+        <!-- Table Scroll workspace -->
+        <div class="table-scroll">
+          
+          <!-- Tab Panel: Inventory -->
+          <div class="tab-panel active" id="panel-inventory">
+            <div class="panel">
+              <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center;">
+                <span>Warehouse Tally <span id="panel-wh-name" style="font-weight:400; color:var(--text-muted); font-size:0.85em; margin-left:0.4rem;"></span></span>
+                <div style="display: flex; align-items: center; gap: 1rem; text-transform: none; font-weight: normal; font-size: 0.82rem;">
+
+                  <!-- Stock Filter Dropdown -->
+                  <div class="dropdown" id="stock-filter-container" style="position: relative;">
+                    <button type="button" id="stock-filter-btn" class="btn btn-outline" style="height: 30px; padding: 0.25rem 0.75rem; font-size: 0.82rem; display: inline-flex; align-items: center; gap: 0.35rem;" onclick="toggleStockFilterDropdown(event)">
+                      Stock Filter
+                      <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: middle;"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    </button>
+                    <div id="stock-filter-menu" style="display: none; position: absolute; top: 34px; left: 0; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); padding: 0.5rem; min-width: 200px; z-index: 1000;">
+                      <label style="display: flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0.5rem; font-size: 0.82rem; cursor: pointer; color: var(--text-secondary); user-select: none;">
+                        <input type="checkbox" value="with_stocks" checked onchange="handleStockFilterChange(this)" style="cursor: pointer;" />
+                        <span>With Stocks</span>
+                      </label>
+                      <label style="display: flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0.5rem; font-size: 0.82rem; cursor: pointer; color: var(--text-secondary); user-select: none;">
+                        <input type="checkbox" value="no_stocks" checked onchange="handleStockFilterChange(this)" style="cursor: pointer;" />
+                        <span>No Stocks</span>
+                      </label>
+                      <label style="display: flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0.5rem; font-size: 0.82rem; cursor: pointer; color: var(--text-secondary); user-select: none;">
+                        <input type="checkbox" value="with_dispatched" checked onchange="handleStockFilterChange(this)" style="cursor: pointer;" />
+                        <span>With Dispatched</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  <!-- Edit Stocks Controls -->
+                  <div id="edit-avail-actions" style="display: flex; align-items: center; gap: 0.5rem;">
+                    <button type="button" id="btn-edit-avail" class="btn btn-outline" style="height: 30px; padding: 0.25rem 0.75rem; font-size: 0.82rem; display: inline-flex; align-items: center; gap: 0.35rem;" onclick="startEditingAvailable()">
+                      <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="2" fill="none" style="vertical-align: middle;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                      Edit Stocks
+                    </button>
+                    <button type="button" id="btn-save-avail" class="btn btn-success" style="height: 30px; padding: 0.25rem 0.75rem; font-size: 0.82rem; display: none; align-items: center; gap: 0.35rem; background-color: var(--success); border-color: var(--success); color: white;" onclick="saveEditingAvailable()">
+                      <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: middle;"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                      Save Changes
+                    </button>
+                    <button type="button" id="btn-cancel-avail" class="btn btn-outline" style="height: 30px; padding: 0.25rem 0.75rem; font-size: 0.82rem; display: none; align-items: center; gap: 0.35rem;" onclick="cancelEditingAvailable()">
+                      Cancel
+                    </button>
+                  </div>
+
+                  <!-- Category Dropdown Container -->
+                  <div class="dropdown" id="category-dropdown-container" style="position: relative;">
+                    <button type="button" class="btn btn-outline" style="height: 30px; padding: 0.25rem 0.75rem; font-size: 0.82rem; display: inline-flex; align-items: center; gap: 0.35rem;" onclick="toggleCategoryDropdown(event)">
+                      Categories
+                      <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: middle;"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    </button>
+                    <div id="category-dropdown-menu" style="display: none; position: absolute; top: 34px; right: 0; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); padding: 0.5rem; min-width: 180px; z-index: 1000; max-height: 250px; overflow-y: auto;">
+                      <!-- Checkboxes dynamically generated here -->
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+              <div class="table-responsive">
+                <table class="ledger-table tally-table">
+                  <thead>
+                    <tr>
+                      <th>Image</th>
+                      <th class="sortable" onclick="handleSort('sku')">SKU <span id="sort-icon-sku"></span></th>
+                      <th class="sortable" onclick="handleSort('title')">Product Title <span id="sort-icon-title"></span></th>
+                      <th class="sortable" onclick="handleSort('category')">Category <span id="sort-icon-category"></span></th>
+                      <th class="sortable" onclick="handleSort('business')">Business <span id="sort-icon-business"></span></th>
+                      <th class="sortable" onclick="handleSort('available')" style="text-align: center;">Available <span id="sort-icon-available"></span></th>
+                      <th class="sortable" onclick="handleSort('reserved')" style="text-align: center; color:var(--warning);">Reserved <span id="sort-icon-reserved"></span></th>
+                      <th class="sortable" onclick="handleSort('inspect')" style="text-align: center; color:#a855f7;">Inspected <span id="sort-icon-inspect"></span></th>
+                      <th class="sortable" onclick="handleSort('packed')" style="text-align: center; color:var(--cyan-light);">Packed <span id="sort-icon-packed"></span></th>
+                      <th class="sortable" onclick="handleSort('returned')" style="text-align: center; color:var(--danger);">Returned <span id="sort-icon-returned"></span></th>
+                      <th class="sortable" onclick="handleSort('cancelled')" style="text-align: center; color:var(--danger);">Cancelled <span id="sort-icon-cancelled"></span></th>
+                    </tr>
+                  </thead>
+                  <tbody id="inventory-list">
+                    <tr>
+                      <td colspan="11">
+                        <div class="loading-wrapper">
+                          <div class="spinner-cyan"></div>
+                          <span>Syncing and loading stock snapshot...</span>
+                        </div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab Panel: Order -->
+          <div class="tab-panel" id="panel-order">
+            <div class="panel" style="margin-bottom: 2rem;">
+              <div class="panel-header">Supplier Order Catalog</div>
+              
+              <!-- Search & Page Stats -->
+              <div style="display: flex; gap: 1rem; align-items: center; justify-content: space-between; padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); flex-wrap: wrap; background: var(--bg-surface);">
+                <div style="display: flex; gap: 0.75rem; align-items: center; flex: 1; min-width: 280px;">
+                  <input type="search" id="supplier-search" placeholder="Search by SKU or title..." oninput="handleSupplierSearch(event)" class="form-input" style="max-width: 380px;" />
+                  <span id="supplier-count-badge" class="badge-status badge-packed" style="background: var(--bg-elevated); color: var(--text-secondary); border: 1px solid var(--border);">0 products</span>
+                </div>
+                <div id="supplier-page-info" style="font-size: 0.8rem; color: var(--text-muted); font-weight: 600;">Page 1 of 1</div>
+              </div>
+              
+              <!-- Pager Row -->
+              <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1.25rem; border-bottom: 1px solid var(--border); background: var(--bg-surface); flex-wrap: wrap; gap: 0.75rem;">
+                <div id="supplier-pager" style="display: flex; gap: 0.35rem; align-items: center;">
+                  <!-- Pagination buttons injected here -->
+                </div>
+                <div id="supplier-selected-info" style="font-size: 0.8rem; color: var(--text-secondary); font-weight: 600;">No items selected</div>
+              </div>
+
+              <!-- Product Grid Table -->
+              <div class="table-responsive">
+                <table>
+                  <thead>
+                    <tr>
+                      <th style="width: 100px;">Image</th>
+                      <th style="width: 160px;">Product Code</th>
+                      <th>Product Title</th>
+                      <th style="width: 140px;">Quantity</th>
+                      <th style="width: 160px; text-align: right;">Dealer Price</th>
+                      <th style="width: 160px; text-align: right;">Line Total</th>
+                    </tr>
+                  </thead>
+                  <tbody id="supplier-product-list">
+                    <tr>
+                      <td colspan="6">
+                        <div class="loading-wrapper">
+                          <div class="spinner-cyan"></div>
+                          <span>Loading product catalog...</span>
+                        </div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <!-- Tally Summary Section -->
+              <div style="padding: 1.5rem; border-top: 1px solid var(--border); background: var(--bg-elevated);">
+                <div style="font-size: 0.85rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); letter-spacing: 0.05em; margin-bottom: 1rem;">
+                  Tally of Selected Products
+                </div>
+                
+                <!-- Table headers for tally -->
+                <div style="display: flex; align-items: center; gap: 1rem; font-size: 0.75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border);">
+                  <div style="width: 180px;">Unit Code</div>
+                  <div style="width: 90px; text-align: right;">Quantity</div>
+                  <div style="width: 140px; text-align: right;">Price</div>
+                  <div style="margin-left: auto; width: 160px; text-align: right;">Amount</div>
+                </div>
+
+                <div id="supplier-tally-list" style="padding-top: 0.5rem;">
+                  <div style="font-size: 0.82rem; color: var(--text-muted); padding: 0.5rem 0;">No products selected.</div>
+                </div>
+
+                <!-- Tally Total -->
+                <div id="supplier-tally-total" style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border); text-align: right; font-size: 1.05rem; font-weight: 800; color: var(--text-primary); font-family: var(--font-mono);">
+                  Total: ₱0.00
+                </div>
+
+                <!-- Submit Button -->
+                <div style="margin-top: 1.5rem; text-align: right;">
+                  <span style="font-size: 0.75rem; color: var(--text-muted); margin-right: 1.25rem;">Only items with a quantity greater than 0 will be submitted.</span>
+                  <button id="btn-supplier-order-submit" class="btn btn-primary" style="padding: 0.75rem 2rem; font-size: 0.9rem;" onclick="submitSupplierOrder(this)" disabled>
+                    Request Order
+                  </button>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- Tab Panel: Receive -->
+          <div class="tab-panel" id="panel-receive">
+            <div class="panel">
+              <div class="panel-header">Incoming queue</div>
+              <div class="table-responsive">
+                <table class="ledger-table">
+                  <thead>
+                    <tr>
+                      <th>Image</th>
+                      <th>Source / Type</th>
+                      <th>SKU</th>
+                      <th>Product</th>
+                      <th>Quantity</th>
+                      <th>State / Origin</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody id="receive-list">
+                    <tr><td colspan="7" class="text-center text-muted" style="padding:2rem 0;">No incoming items to receive.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab Panel: Pack -->
+          <div class="tab-panel" id="panel-pack">
+            <div class="panel">
+              <div class="panel-header">Orders to Pack</div>
+              <div class="table-responsive">
+                <table class="ledger-table">
+                  <thead>
+                    <tr>
+                      <th>Image</th>
+                      <th>Ref Order</th>
+                      <th>Customer</th>
+                      <th>City</th>
+                      <th>SKU</th>
+                      <th>Qty</th>
+                      <th>Reserved Date</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody id="pack-list">
+                    <tr><td colspan="8" class="text-center text-muted" style="padding:2rem 0;">No items waiting to be packed.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab Panel: Inspect -->
+          <div class="tab-panel" id="panel-inspect">
+            <div class="panel">
+              <div class="panel-header">Orders to Inspect</div>
+              <div class="table-responsive">
+                <table class="ledger-table">
+                  <thead>
+                    <tr>
+                      <th>Image</th>
+                      <th>Ref Order</th>
+                      <th>Customer</th>
+                      <th>City</th>
+                      <th>SKU</th>
+                      <th>Qty</th>
+                      <th>Request Date</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody id="inspect-list">
+                    <tr><td colspan="8" class="text-center text-muted" style="padding:2rem 0;">No items waiting to be inspected.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab Panel: Dispatch -->
+          <div class="tab-panel" id="panel-dispatch">
+            <div class="panel">
+              <div class="panel-header">Packed & Ready to Dispatch</div>
+              <div class="table-responsive">
+                <table class="ledger-table">
+                  <thead>
+                    <tr>
+                      <th>Image</th>
+                      <th>Ref Order</th>
+                      <th>Customer</th>
+                      <th>City</th>
+                      <th>SKU</th>
+                      <th>Qty</th>
+                      <th>Packed Date</th>
+                    </tr>
+                  </thead>
+                  <tbody id="dispatch-list">
+                    <tr><td colspan="8" class="text-center text-muted" style="padding:2rem 0;">No items waiting to be dispatched.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+
+          <!-- Tab Panel: Transfer -->
+          <div class="tab-panel" id="panel-transfer">
+            
+            <!-- Section 1: Requests by other warehouse managers -->
+            <div class="panel" style="margin-bottom: 1.5rem; height: auto;">
+              <div class="panel-header">Requests (by other warehouse managers)</div>
+              <div class="table-responsive" style="flex: none; overflow: visible;">
+                <table class="ledger-table">
+                  <thead>
+                    <tr>
+                      <th>SKU</th>
+                      <th>Product</th>
+                      <th>Quantity</th>
+                      <th>Requester Warehouse</th>
+                      <th>Requested By</th>
+                      <th>Date</th>
+                      <th style="text-align:right;">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="transfer-requests-list">
+                    <tr><td colspan="7" class="text-center text-muted" style="padding:2rem 0;">No pending transfer requests.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Side by side: Direct Transfer and Request Transfer -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; align-items: start;">
+              
+              <!-- Section 2: Direct Transfer -->
+              <div class="panel" style="display: flex; flex-direction: column;">
+                <div class="panel-header">Transfer Stock (Direct)</div>
+                <div style="padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem;">
+                  <div class="form-group">
+                    <label class="form-label">Select Item</label>
+                    <select class="form-input" id="direct-transfer-sku" style="height: auto; padding: 0.5rem;"></select>
+                  </div>
+                  <div style="display: flex; gap: 1rem;">
+                    <div class="form-group" style="flex: 1;">
+                      <label class="form-label">Quantity</label>
+                      <input type="number" class="form-input" id="direct-transfer-qty" min="1" value="1" />
+                    </div>
+                    <div class="form-group" style="flex: 2;">
+                      <label class="form-label">Target Warehouse</label>
+                      <select class="form-input" id="direct-transfer-target-wh" style="height: auto; padding: 0.5rem;"></select>
+                    </div>
+                  </div>
+                  <div style="text-align: right;">
+                    <button class="btn btn-outline btn-sm" onclick="addDirectTransferItem()">+ Add Product</button>
+                  </div>
+
+                  <!-- Added products list table -->
+                  <div style="border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; margin-top: 0.5rem;">
+                    <table class="ledger-table" style="font-size: 0.82rem; margin: 0; width: 100%;">
+                      <thead>
+                        <tr>
+                          <th>SKU</th>
+                          <th>Qty</th>
+                          <th>Target</th>
+                          <th style="text-align:right;">Remove</th>
+                        </tr>
+                      </thead>
+                      <tbody id="direct-transfer-items-list">
+                        <tr><td colspan="4" class="text-center text-muted" style="padding: 1rem 0;">No products added yet.</td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div style="margin-top: 1rem; text-align: right;">
+                    <button id="btn-submit-direct-transfer" class="btn btn-cyan" onclick="submitDirectTransfer()" disabled>Transfer</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Section 3: Request Transfer -->
+              <div class="panel" style="display: flex; flex-direction: column;">
+                <div class="panel-header">Request Transfer (From another warehouse)</div>
+                <div style="padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem;">
+                  <div class="form-group">
+                    <label class="form-label">Select Item</label>
+                    <select class="form-input" id="request-transfer-sku" style="height: auto; padding: 0.5rem;"></select>
+                  </div>
+                  <div style="display: flex; gap: 1rem;">
+                    <div class="form-group" style="flex: 1;">
+                      <label class="form-label">Quantity</label>
+                      <input type="number" class="form-input" id="request-transfer-qty" min="1" value="1" />
+                    </div>
+                    <div class="form-group" style="flex: 2;">
+                      <label class="form-label">Source Warehouse</label>
+                      <select class="form-input" id="request-transfer-source-wh" style="height: auto; padding: 0.5rem;"></select>
+                    </div>
+                  </div>
+
+                  <div style="margin-top: 1rem; text-align: right;">
+                    <button id="btn-submit-transfer-request" class="btn btn-cyan" onclick="submitTransferRequest()">Request Transfer</button>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+
+      <!-- Right Workspace (Logs Feed) -->
+      <div class="side-workspace">
+        <div class="side-header">Ledger Activity Feed</div>
+        <div class="log-container" id="activity-feed">
+          <div class="log-entry" style="color:var(--text-muted); text-align:center; padding: 2rem 0;">Loading activity logs...</div>
+        </div>
+      </div>
+
+      </div>
+
+    </div>
+  <!-- Modal: Upload / Capture Packed Photo -->
+  <div id="pack-photo-modal" class="modal-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); backdrop-filter:blur(4px); z-index:9999; align-items:center; justify-content:center;">
+    <div class="modal-content" style="width:100%; max-width:480px; background:var(--bg-surface); border:1px solid var(--border); border-radius:12px; padding:1.75rem; box-shadow:0 12px 48px rgba(0,0,0,0.25); display:flex; flex-direction:column; gap:1.25rem; position:relative;">
+      <h3 style="margin:0; font-size:1.15rem; font-weight:600; color:var(--text-primary);">Upload Packed Photo Proof</h3>
+      <p style="margin:0; font-size:0.82rem; color:var(--text-muted); line-height:1.4;">A photo proof of the packed items is required to complete fulfillment of order <strong id="modal-ref-id" style="color:var(--text-primary);"></strong>.</p>
+      <div id="modal-customer-info" style="font-size:0.82rem; color:var(--text-secondary); line-height:1.5; margin-top:-0.5rem;">
+        <div><strong>Name:</strong> <span id="modal-customer-name" style="color:var(--text-primary);"></span></div>
+        <div><strong>City:</strong> <span id="modal-customer-city" style="color:var(--text-primary);"></span></div>
+      </div>
+      
+      <!-- Video Element for Camera Stream -->
+      <div id="camera-container" style="display:none; position:relative; width:100%; aspect-ratio:4/3; background:#000; border-radius:8px; overflow:hidden; border:1px solid var(--border);">
+        <video id="camera-stream" autoplay playsinline style="width:100%; height:100%; object-fit:cover;"></video>
+        <button type="button" class="btn btn-cyan" onclick="captureCameraPhoto()" style="position:absolute; bottom:12px; left:50%; transform:translateX(-50%); border-radius:20px; padding:6px 16px; font-size:0.8rem; box-shadow:0 4px 12px rgba(0,0,0,0.3);">
+          Capture Photo
+        </button>
+      </div>
+
+      <!-- Preview Image / Upload Container -->
+      <div id="photo-preview-container" style="width:100%; aspect-ratio:4/3; background:var(--bg-elevated); border:2px dashed var(--border); border-radius:8px; display:flex; flex-direction:column; align-items:center; justify-content:center; overflow:hidden; position:relative; transition: border-color 0.15s; cursor:pointer;" onclick="document.getElementById('pack-file-input').click()">
+        <img id="packed-photo-preview" src="" style="width:100%; height:100%; object-fit:cover; display:none;" />
+        
+        <div id="upload-placeholder" style="display:flex; flex-direction:column; align-items:center; gap:0.5rem; color:var(--text-muted); text-align:center; padding:1.5rem;">
+          <svg viewBox="0 0 24 24" width="32" height="32" stroke="currentColor" stroke-width="1.5" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+          <span style="font-size:0.8rem; font-weight:600;">Drag & drop photo here or click to select</span>
+        </div>
+      </div>
+
+      <!-- Action Buttons for Uploading/Camera -->
+      <div style="display:flex; gap:0.75rem;">
+        <!-- Camera Button -->
+        <button type="button" id="btn-open-camera" class="btn btn-outline" style="flex:1; font-size:0.82rem; height:36px; display:inline-flex; align-items:center; justify-content:center; gap:0.4rem;" onclick="startCamera()">
+          <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+          Use Camera
+        </button>
+        <!-- File input wrapper -->
+        <label class="btn btn-outline" style="flex:1; font-size:0.82rem; height:36px; display:inline-flex; align-items:center; justify-content:center; gap:0.4rem; cursor:pointer; margin:0;">
+          <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          Upload Photo
+          <input type="file" id="pack-file-input" accept="image/*" style="display:none;" onchange="handlePackFileSelect(event)" />
+        </label>
+      </div>
+
+      <!-- Footer Buttons -->
+      <div style="display:flex; justify-content:flex-end; gap:0.75rem; border-top:1px solid var(--border); padding-top:1rem; margin-top:0.25rem;">
+        <button type="button" class="btn btn-outline" onclick="closePackPhotoModal()" style="height:36px; font-size:0.82rem; padding:0 1.25rem;">Cancel</button>
+        <button type="button" id="btn-confirm-pack" class="btn btn-cyan" onclick="confirmPackWithPhoto()" disabled style="height:36px; font-size:0.82rem; padding:0 1.25rem;">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="qa-inspect-modal" class="modal-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); backdrop-filter:blur(4px); z-index:9999; align-items:center; justify-content:center;">
+    <div class="modal-content" style="width:95%; max-width:1200px; max-height:90vh; background:var(--bg-surface); border:1px solid var(--border); border-radius:12px; padding:1.75rem; box-shadow:0 12px 48px rgba(0,0,0,0.25); display:flex; flex-direction:column; position:relative; overflow:hidden;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.25rem; flex-shrink:0;">
+        <h3 style="margin:0; font-size:1.15rem; font-weight:600; color:var(--text-primary);">QA Inspection Checklist &mdash; <span id="qa-modal-ref-id" style="font-weight:700; color:var(--cyan);"></span></h3>
+        <button type="button" onclick="closeQaInspectModal()" style="background:none; border:none; cursor:pointer; color:var(--text-muted); display:flex; align-items:center; justify-content:center;">
+          <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2.5" fill="none"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      
+      <div id="qa-guides-container" style="flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:1.25rem; margin-bottom:1.25rem; padding-right:4px;">
+        <!-- Dynamic Guides rendered here -->
+      </div>
+
+      <!-- Footer Buttons -->
+      <div style="display:flex; justify-content:flex-end; gap:0.75rem; border-top:1px solid var(--border); padding-top:1rem; margin-top:0.25rem; flex-shrink:0;">
+        <button type="button" class="btn btn-outline" onclick="closeQaInspectModal()" style="height:36px; font-size:0.82rem; padding:0 1.25rem;">Cancel</button>
+        <button type="button" id="btn-confirm-qa-inspect" class="btn btn-cyan" onclick="executeQaInspect()" style="height:36px; font-size:0.82rem; padding:0 1.25rem;">Confirm QA Inspected</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="../../js/auth.js"></script>
+  <script src="../../js/sidebar.js"></script>
+  <script src="../../js/main.js"></script>
+  <script>
+    'use strict';
+
+    async function wrapActionWithLoading(btn, asyncFn) {
+      if (!btn || btn.disabled) return;
+      const originalHtml = btn.innerHTML;
+      btn.disabled = true;
+      btn.classList.add('btn-loading');
+      btn.innerHTML = `<svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: -2px; margin-right: 6px; animation: spin 1s linear infinite;"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Processing...`;
+      try {
+        await asyncFn();
+      } catch (err) {
+        btn.disabled = false;
+        btn.classList.remove('btn-loading');
+        btn.innerHTML = originalHtml;
+        showToast('Operation failed: ' + err.message, true);
+      }
+    }
+
+    let sb;
+
+    let allProducts = [];
+    let allInventory = {};
+    let isEditingAvailable = false;
+    let activeTransactions = [];
+    let bookings = [];
+    let warehouseTransfers = [];
+    let allEmployees = [];
+    let companyId = null;
+
+    // Last action for Undo
+    let lastAction = null;
+
+    function updateUndoButtonState() {
+      const undoBtn = document.getElementById('btn-undo');
+      if (undoBtn) {
+        undoBtn.style.display = lastAction ? 'inline-flex' : 'none';
+      }
+    }
+
+    // Supplier Order State
+    let supplierOrderSearch = "";
+    let supplierOrderPage = 1;
+    const supplierOrderPageSize = 10;
+    let supplierOrderQuantities = {};
+    let supplierOrderPosting = false;
+
+    // Premium Currency Formatter
+    function formatMoney(cents) {
+      const php = (cents || 0) / 100;
+      return "₱" + php.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    // Switch between tabs
+    window.switchTab = function(tabId) {
+      const tabMap = {
+        'inventory': 'summary',
+        'dispatch': 'dispatch',
+        'pack': 'pack',
+        'inspect': 'inspect',
+        'receive': 'receive',
+        'order': 'order',
+        'transfer': 'transfer'
+      };
+      const target = tabMap[tabId] || 'summary';
+      window.location.href = `/dashboard/warehouse/${target}`;
+    };
+
+    // Initialize Page
+    async function init() {
+      try {
+        const authInfo = await BKAuth.checkRoleGate(['Logistics'], '../../admin.html');
+        if (!authInfo) return;
+        sb = BKAuth.sb;
+
+        // Resolve company_id using tenant_id
+        const { data: co } = await sb.from('companies').select('id').eq('tenant_id', authInfo.tenantId).limit(1).maybeSingle();
+        companyId = co?.id || null;
+
+        await loadWarehouseTabs(authInfo.tenantId);
+        showLoadingState();
+        await loadCoreData();
+        await runAutoSync();
+        await refreshDashboard();
+
+        // Restore logs drawer state
+        const logsOpen = localStorage.getItem('logs_drawer_open') === 'true';
+        if (logsOpen) {
+          const sideWorkspace = document.querySelector('.side-workspace');
+          const btnLogs = document.getElementById('btn-logs');
+          if (sideWorkspace) sideWorkspace.classList.add('open');
+          if (btnLogs) btnLogs.classList.add('active');
+        }
+
+        // Setup Drag & Drop for Pack Photo Modal
+        const zone = document.getElementById('photo-preview-container');
+        if (zone) {
+          zone.addEventListener('dragover', e => {
+            e.preventDefault();
+            e.stopPropagation();
+            zone.style.borderColor = 'var(--cyan)';
+          });
+          zone.addEventListener('dragleave', () => {
+            zone.style.borderColor = 'var(--border)';
+          });
+          zone.addEventListener('drop', async e => {
+            e.preventDefault();
+            e.stopPropagation();
+            zone.style.borderColor = 'var(--border)';
+            if (e.dataTransfer.files.length) {
+              const file = e.dataTransfer.files[0];
+              if (file.type.startsWith('image/')) {
+                try {
+                  const compressed = await compressPackedImage(file);
+                  packPhotoBlob = compressed;
+                  const url = URL.createObjectURL(compressed);
+                  document.getElementById('packed-photo-preview').src = url;
+                  document.getElementById('packed-photo-preview').style.display = 'block';
+                  document.getElementById('upload-placeholder').style.display = 'none';
+                  document.getElementById('camera-container').style.display = 'none';
+                  document.getElementById('photo-preview-container').style.display = 'flex';
+                  document.getElementById('btn-open-camera').style.display = 'inline-flex';
+                  document.getElementById('btn-confirm-pack').disabled = false;
+                } catch (err) {
+                  console.error(err);
+                  showToast('File compression failed: ' + err.message, true);
+                }
+              } else {
+                showToast('Please drop a valid image file.', true);
+              }
+            }
+          });
+        }
+      } catch (err) {
+        console.error(err);
+        showToast('Error loading fulfillment data: ' + err.message, true);
+      }
+    }
+
+    // ── Warehouse Level-1 Tabs ──
+    let fulfillmentWarehouses = [];
+    let activeWarehouseId = null;
+
+    async function loadWarehouseTabs(tenantId) {
+      try {
+        const { data, error } = await sb
+          .from('warehouses')
+          .select('id, name, is_active')
+          .eq('tenant_id', tenantId)
+          .order('created_at', { ascending: true });
+
+        if (error) throw error;
+        fulfillmentWarehouses = (data || []).filter(w => w.is_active);
+
+        const dropdown = document.getElementById('wh-select-dropdown');
+        if (!dropdown) return;
+
+        if (fulfillmentWarehouses.length === 0) {
+          dropdown.style.display = 'none';
+          activeWarehouseId = null;
+          return;
+        }
+
+        // Show select dropdown
+        dropdown.style.display = 'inline-block';
+        dropdown.innerHTML = fulfillmentWarehouses.map(wh => `
+          <option value="${wh.id}">${escFulfillment(wh.name)}</option>
+        `).join('');
+
+        const storedWhId = localStorage.getItem('active_warehouse_id');
+        if (storedWhId && fulfillmentWarehouses.some(w => w.id === storedWhId)) {
+          activeWarehouseId = storedWhId;
+        } else {
+          activeWarehouseId = fulfillmentWarehouses[0]?.id || null;
+        }
+        dropdown.value = activeWarehouseId;
+        dropdown.value = activeWarehouseId;
+      } catch (err) {
+        console.warn('Could not load warehouse dropdown:', err.message);
+      }
+    }
+
+    function escFulfillment(str) {
+      if (!str) return '';
+      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    window.switchWarehouse = function(whId) {
+      activeWarehouseId = whId;
+      localStorage.setItem('active_warehouse_id', whId);
+      const dropdown = document.getElementById('wh-select-dropdown');
+      if (dropdown && dropdown.value !== whId) {
+        dropdown.value = whId;
+      }
+      refreshDashboard();
+    };
+
+
+    function showToast(msg, isError = false) {
+      const container = document.getElementById('toast-container');
+      if (!container) return;
+      const el = document.createElement('div');
+      el.className = `toast toast-${isError ? 'error' : 'success'}`;
+      el.innerText = msg;
+      container.appendChild(el);
+      setTimeout(() => el.remove(), 3500);
+    }
+
+    function showLoadingState() {
+      const loading = `
+        <tr>
+          <td colspan="10">
+            <div class="loading-wrapper">
+              <div class="spinner-cyan"></div>
+              <span>Syncing and loading ledger data...</span>
+            </div>
+          </td>
+        </tr>
+      `;
+      document.getElementById('inventory-list').innerHTML = loading;
+    }
+
+    async function loadCoreData() {
+      // 1. Fetch products (with image_main, category, business, dealer_price, and count_inventory columns)
+      const { data: pData, error: pErr } = await sb.from('products').select('id, sku, title, category, business, image_main, dealer_price, count_inventory').order('sku');
+      if (pErr) throw pErr;
+      allProducts = pData || [];
+      populateCategoryFilter();
+
+      // Fetch employees
+      try {
+        const { data: empData } = await sb.from('employees').select('id, first_name, last_name');
+        allEmployees = empData || [];
+      } catch (e) {
+        console.warn('Could not load employees:', e);
+      }
+    }
+
+    async function refreshDashboard() {
+      // 2. Fetch inventory snapshot — scoped to active warehouse
+      let invQuery = sb.from('inventory').select('*');
+      if (activeWarehouseId) {
+        invQuery = invQuery.eq('warehouse_id', activeWarehouseId);
+      } else {
+        invQuery = invQuery.is('warehouse_id', null);
+      }
+      const { data: invData, error: invErr } = await invQuery;
+      if (invErr) throw invErr;
+
+      allInventory = {};
+      (invData || []).forEach(row => {
+        allInventory[row.sku] = row;
+      });
+
+      // 3. Fetch transactions — scoped to active warehouse
+      let txQuery = sb.from('inventory_transactions').select('*').order('created_at', { ascending: false });
+      if (activeWarehouseId) {
+        txQuery = txQuery.eq('warehouse_id', activeWarehouseId);
+      } else {
+        txQuery = txQuery.is('warehouse_id', null);
+      }
+      const { data: txData, error: txErr } = await txQuery;
+      if (txErr) throw txErr;
+      activeTransactions = txData || [];
+
+      // Update warehouse name label in the inventory panel header
+      const whNameEl = document.getElementById('panel-wh-name');
+      if (whNameEl) {
+        const wh = fulfillmentWarehouses.find(w => w.id === activeWarehouseId);
+        whNameEl.textContent = wh ? wh.name : 'All Inventory';
+      }
+
+      // Fetch warehouse transfers
+      if (companyId) {
+        try {
+          const { data: transData, error: transErr } = await sb.from('warehouse_transfers').select('*');
+          if (!transErr) {
+            warehouseTransfers = transData || [];
+          }
+        } catch (e) {
+          console.error('Failed to fetch warehouse transfers:', e);
+        }
+      }
+
+      // Render all tabs
+      renderInventorySummary();
+      renderSupplierOrderTab();
+      renderReceiveTab();
+      renderPackTab();
+      renderInspectTab();
+      renderDispatchTab();
+      renderTransferTab();
+      renderActivityFeed();
+      updateBadgeCounts();
+    }
+
+    function renderStatsStrip() {
+      // Disabled - stats strip removed
+    }
+
+    // Auto-Sync Bookings logic
+    async function runAutoSync() {
+      // 1. Fetch bookings
+      const { data: bData, error: bErr } = await sb.from('installation_bookings').select('*').neq('status', 'completed');
+      if (bErr) throw bErr;
+      bookings = bData || [];
+
+      // Get existing transaction reference IDs
+      const { data: txRefs, error: refErr } = await sb.from('inventory_transactions').select('reference_id, status').eq('type', 'customer_order');
+      if (refErr) throw refErr;
+
+      const existingRefs = {};
+      (txRefs || []).forEach(tx => {
+        if (!existingRefs[tx.reference_id]) existingRefs[tx.reference_id] = [];
+        existingRefs[tx.reference_id].push(tx.status);
+      });
+
+      for (const booking of bookings) {
+        const orderNo = booking.order_no;
+        const address = booking.customer_address || '';
+        const addrParts = address.split(',');
+        const city = booking.customer_city ||
+          (addrParts.length >= 2 ? addrParts[addrParts.length - 2].trim() : (addrParts[0]?.trim() || 'N/A'));
+
+        // Check if booking is cancelled
+        if (booking.status === 'cancelled') {
+          // If we have active reserved/packed transactions for this booking, cancel them
+          const txsToCancel = activeTransactions.filter(t => t.reference_id === orderNo && ['reserved', 'packed'].includes(t.status));
+          for (const tx of txsToCancel) {
+            await handleCancellationProcess(tx.id, tx.sku, tx.quantity, tx.status);
+          }
+          continue;
+        }
+
+        // Patch customer_city on existing transactions that have a wrong value
+        const wrongCityTxs = activeTransactions.filter(t =>
+          t.reference_id === orderNo && t.customer_city !== city
+        );
+        for (const tx of wrongCityTxs) {
+          await sb.from('inventory_transactions').update({ customer_city: city }).eq('id', tx.id);
+          tx.customer_city = city; // update in-memory too
+        }
+
+        // If booking is active but has no transactions logged yet, reserve it
+        if (!existingRefs[orderNo]) {
+          // Parse products from pipe-separated strings or products JSONB
+          let items = [];
+          if (booking.product_skus && booking.product_qtys) {
+            const skus = booking.product_skus.split('|').map(s => s.trim().toUpperCase());
+            const qtys = booking.product_qtys.split('|').map(q => parseInt(q.trim()) || 0);
+            skus.forEach((sku, idx) => {
+              if (sku && qtys[idx] > 0) {
+                items.push({ sku, qty: qtys[idx] });
+              }
+            });
+          }
+
+          for (const item of items) {
+            const prod = allProducts.find(x => x.sku === item.sku);
+            if (prod && prod.count_inventory === false) {
+              console.log(`Skipping inventory update for service/non-stocked item: ${item.sku}`);
+              continue;
+            }
+            console.log(`Syncing reserved item: ${item.qty}x ${item.sku} for order ${orderNo}`);
+
+            // Create transaction record (scoped to active warehouse)
+            const txPayload = {
+              sku: item.sku,
+              quantity: item.qty,
+              type: 'customer_order',
+              status: 'reserved',
+              reference_id: orderNo,
+              customer_name: booking.customer_name,
+              customer_city: city,
+              timestamp_reserved: booking.created_at || new Date().toISOString(),
+              warehouse_id: activeWarehouseId || null
+            };
+            const { error: insTxErr } = await sb.from('inventory_transactions').insert([txPayload]);
+            if (insTxErr) console.error('Error inserting transaction during sync:', insTxErr);
+
+            // Update inventory totals for this warehouse
+            let invQ = sb.from('inventory').select('*').eq('sku', item.sku);
+            if (activeWarehouseId) invQ = invQ.eq('warehouse_id', activeWarehouseId);
+            else invQ = invQ.is('warehouse_id', null);
+            const { data: invRow } = await invQ;
+            if (invRow && invRow.length > 0) {
+              const current = invRow[0];
+              await sb.from('inventory').update({
+                available: current.available - item.qty,
+                reserved: current.reserved + item.qty
+              }).eq('id', current.id);
+            } else {
+              // Create new inventory row for this warehouse
+              await sb.from('inventory').insert([{
+                sku: item.sku,
+                available: -item.qty,
+                reserved: item.qty,
+                warehouse_id: activeWarehouseId || null
+              }]);
+            }
+          }
+        }
+      }
+      console.log('Auto-sync complete.');
+    }
+
+    let sortCol = 'sku';
+    let sortDir = 'asc';
+    let selectedCategories = new Set();
+    let uniqueCategories = [];
+    let isCategoryInitialized = false;
+
+    // Stock filter state — all active by default (shows everything)
+    const activeStockFilters = new Set(['with_stocks', 'no_stocks', 'with_dispatched']);
+
+    window.toggleStockFilterDropdown = function(event) {
+      event.stopPropagation();
+      const menu = document.getElementById('stock-filter-menu');
+      if (!menu) return;
+      menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
+    };
+
+    window.handleStockFilterChange = function(cb) {
+      if (cb.checked) {
+        activeStockFilters.add(cb.value);
+      } else {
+        activeStockFilters.delete(cb.value);
+      }
+      // Update button label to show active count when not all selected
+      const btn = document.getElementById('stock-filter-btn');
+      if (btn) {
+        const allThree = activeStockFilters.size === 3;
+        btn.childNodes[0].textContent = allThree ? 'Stock Filter' : `Stock Filter (${activeStockFilters.size})`;
+      }
+      renderInventorySummary();
+    };
+
+    window.selectAllCategories = function(selectActive, event) {
+      if (event) event.stopPropagation();
+      selectedCategories.clear();
+      if (selectActive) {
+        uniqueCategories.forEach(cat => selectedCategories.add(cat));
+      }
+      populateCategoryFilter();
+      renderInventorySummary();
+    };
+
+    function populateCategoryFilter() {
+      const cats = new Set();
+      allProducts.forEach(p => {
+        cats.add(p.category || '');
+      });
+      uniqueCategories = Array.from(cats).sort();
+
+      const menu = document.getElementById('category-dropdown-menu');
+      if (!menu) return;
+
+      // Initialize all categories as selected on first load
+      if (!isCategoryInitialized) {
+        uniqueCategories.forEach(cat => selectedCategories.add(cat));
+        isCategoryInitialized = true;
+      }
+
+      const headerHtml = `
+        <div style="display: flex; gap: 0.5rem; border-bottom: 1px solid var(--border); padding: 0.25rem 0.5rem 0.5rem; margin-bottom: 0.25rem; justify-content: space-between; align-items: center;">
+          <span style="color: var(--cyan-light); cursor: pointer; font-weight: 700; font-size: 0.72rem; text-transform: uppercase;" onclick="selectAllCategories(true, event)">All</span>
+          <span style="color: var(--text-muted); cursor: pointer; font-weight: 700; font-size: 0.72rem; text-transform: uppercase;" onclick="selectAllCategories(false, event)">None</span>
+        </div>
+      `;
+
+      const listHtml = uniqueCategories.map(cat => {
+        const displayLabel = cat ? cat.replace(/_/g, ' ') : '(No Category)';
+        const checked = selectedCategories.has(cat) ? 'checked' : '';
+        return `
+          <label style="display: flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0.5rem; font-size: 0.82rem; cursor: pointer; color: var(--text-secondary); user-select: none;">
+            <input type="checkbox" value="${cat}" ${checked} onchange="handleCategoryCheckboxChange(this)" style="cursor: pointer;" />
+            <span style="text-transform: capitalize;">${displayLabel}</span>
+          </label>
+        `;
+      }).join('');
+
+      menu.innerHTML = headerHtml + listHtml;
+    }
+
+    window.toggleCategoryDropdown = function(event) {
+      event.stopPropagation();
+      const menu = document.getElementById('category-dropdown-menu');
+      if (!menu) return;
+      const isOpen = menu.style.display === 'block';
+      menu.style.display = isOpen ? 'none' : 'block';
+    };
+
+    window.handleCategoryCheckboxChange = function(cb) {
+      const cat = cb.value;
+      if (cb.checked) {
+        selectedCategories.add(cat);
+      } else {
+        selectedCategories.delete(cat);
+      }
+      renderInventorySummary();
+    };
+
+    // Close dropdowns when clicking outside
+    document.addEventListener('click', (e) => {
+      const catContainer = document.getElementById('category-dropdown-container');
+      const catMenu = document.getElementById('category-dropdown-menu');
+      if (catMenu && catContainer && !catContainer.contains(e.target)) {
+        catMenu.style.display = 'none';
+      }
+      const stockContainer = document.getElementById('stock-filter-container');
+      const stockMenu = document.getElementById('stock-filter-menu');
+      if (stockMenu && stockContainer && !stockContainer.contains(e.target)) {
+        stockMenu.style.display = 'none';
+      }
+    });
+
+    function updateSortIndicators() {
+      const cols = ['sku', 'title', 'category', 'business', 'available', 'reserved', 'inspect', 'packed', 'returned', 'cancelled'];
+      cols.forEach(col => {
+        const span = document.getElementById(`sort-icon-${col}`);
+        if (!span) return;
+        if (sortCol === col) {
+          span.innerHTML = sortDir === 'asc' 
+            ? `<svg viewBox="0 0 24 24" width="10" height="10" stroke="currentColor" stroke-width="3" fill="none" style="vertical-align: middle; margin-left: 4px; color: var(--cyan);"><polyline points="18 15 12 9 6 15"></polyline></svg>` 
+            : `<svg viewBox="0 0 24 24" width="10" height="10" stroke="currentColor" stroke-width="3" fill="none" style="vertical-align: middle; margin-left: 4px; color: var(--cyan);"><polyline points="6 9 12 15 18 9"></polyline></svg>`;
+        } else {
+          span.innerHTML = `<svg viewBox="0 0 24 24" width="10" height="10" stroke="currentColor" stroke-width="2" fill="none" style="vertical-align: middle; margin-left: 4px; opacity: 0.3;"><polyline points="6 9 12 15 18 9"></polyline><polyline points="18 15 12 9 6 15"></polyline></svg>`;
+        }
+      });
+    }
+
+    window.handleSort = function(col) {
+      if (sortCol === col) {
+        sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+      } else {
+        sortCol = col;
+        sortDir = 'asc';
+      }
+      renderInventorySummary();
+    };
+
+    window.startEditingAvailable = function() {
+      isEditingAvailable = true;
+      document.getElementById('btn-edit-avail').style.display = 'none';
+      document.getElementById('btn-save-avail').style.display = 'inline-flex';
+      document.getElementById('btn-cancel-avail').style.display = 'inline-flex';
+      renderInventorySummary();
+    };
+
+    window.cancelEditingAvailable = function() {
+      isEditingAvailable = false;
+      document.getElementById('btn-edit-avail').style.display = 'inline-flex';
+      document.getElementById('btn-save-avail').style.display = 'none';
+      document.getElementById('btn-cancel-avail').style.display = 'none';
+      renderInventorySummary();
+    };
+
+    window.saveEditingAvailable = async function() {
+      const inputs = document.querySelectorAll('.edit-avail-input');
+      const updates = [];
+      const changedSkus = [];
+
+      inputs.forEach(input => {
+        const sku = input.getAttribute('data-sku');
+        const newVal = parseInt(input.value);
+        if (isNaN(newVal)) return;
+
+        const baseInv = allInventory[sku] || { available: 0 };
+        const oldVal = baseInv.available || 0;
+
+        if (newVal !== oldVal) {
+          changedSkus.push(sku);
+          updates.push({
+            sku: sku,
+            available: newVal
+          });
+        }
+      });
+
+      if (updates.length === 0) {
+        showToast('No changes to save.');
+        cancelEditingAvailable();
+        return;
+      }
+
+      try {
+        const btnSave = document.getElementById('btn-save-avail');
+        btnSave.disabled = true;
+        btnSave.innerText = 'Saving...';
+
+        const promises = updates.map(async (upd) => {
+          if (allInventory[upd.sku]) {
+            // Update existing row by id (warehouse-scoped)
+            const { error } = await sb.from('inventory')
+              .update({ available: upd.available })
+              .eq('id', allInventory[upd.sku].id);
+            if (error) throw error;
+          } else {
+            // Insert new row for this warehouse
+            const { error } = await sb.from('inventory')
+              .insert([{ sku: upd.sku, available: upd.available, warehouse_id: activeWarehouseId || null }]);
+            if (error) throw error;
+          }
+        });
+
+        await Promise.all(promises);
+        showToast(`Successfully updated ${updates.length} item(s).`);
+        
+        isEditingAvailable = false;
+        document.getElementById('btn-edit-avail').style.display = 'inline-flex';
+        document.getElementById('btn-save-avail').style.display = 'none';
+        document.getElementById('btn-cancel-avail').style.display = 'none';
+        document.getElementById('btn-save-avail').disabled = false;
+        document.getElementById('btn-save-avail').innerHTML = `<svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: middle;"><polyline points="20 6 9 17 4 12"></polyline></svg> Save Changes`;
+
+        await refreshDashboard();
+      } catch (err) {
+        console.error(err);
+        showToast('Error saving changes: ' + err.message, true);
+        document.getElementById('btn-save-avail').disabled = false;
+        document.getElementById('btn-save-avail').innerHTML = `<svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: middle;"><polyline points="20 6 9 17 4 12"></polyline></svg> Save Changes`;
+      }
+    };
+
+    // Render Tab 1: Inventory Summary
+    function renderInventorySummary() {
+      const tbody = document.getElementById('inventory-list');
+      tbody.innerHTML = '';
+
+      if (allProducts.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="10" class="text-center">No products found in database.</td></tr>`;
+        return;
+      }
+
+      // Filter products by selected categories and count_inventory !== false
+      const catFiltered = allProducts.filter(p => selectedCategories.has(p.category || '') && p.count_inventory !== false);
+
+      // Apply stock filter (OR logic: show row if any checked condition matches)
+      const filteredProducts = catFiltered.filter(p => {
+        if (activeStockFilters.size === 3) return true; // all checked = show all
+        if (activeStockFilters.size === 0) return false;
+        const inv = allInventory[p.sku] || {};
+        const avail = inv.available || 0;
+        const dispatched = inv.dispatched || 0;
+        if (activeStockFilters.has('with_stocks') && avail > 0) return true;
+        if (activeStockFilters.has('no_stocks') && avail < 1) return true;
+        if (activeStockFilters.has('with_dispatched') && dispatched > 0) return true;
+        return false;
+      });
+
+      if (filteredProducts.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="10" class="text-center">No products match the selected filters.</td></tr>`;
+        updateSortIndicators();
+        return;
+      }
+
+      // Sort
+      const sortedProducts = [...filteredProducts].sort((a, b) => {
+        let valA, valB;
+        if (sortCol === 'sku') {
+          valA = a.sku || '';
+          valB = b.sku || '';
+        } else if (sortCol === 'title') {
+          valA = a.title || '';
+          valB = b.title || '';
+        } else if (sortCol === 'category') {
+          valA = a.category || '';
+          valB = b.category || '';
+        } else if (sortCol === 'business') {
+          valA = a.business || '';
+          valB = b.business || '';
+        } else {
+          // available, reserved, packed, returned, cancelled
+          valA = (allInventory[a.sku]?.[sortCol]) || 0;
+          valB = (allInventory[b.sku]?.[sortCol]) || 0;
+        }
+
+        if (typeof valA === 'string') {
+          return sortDir === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+        } else {
+          return sortDir === 'asc' ? valA - valB : valB - valA;
+        }
+      });
+
+      // Render rows
+      sortedProducts.forEach(p => {
+        const inv = allInventory[p.sku] || { available: 0, reserved: 0, inspect: 0, packed: 0, returned: 0, cancelled: 0 };
+        
+        const avail = inv.available || 0;
+        let availColor = 'var(--text-primary)'; // default black/dark
+        if (avail <= 0) {
+          availColor = 'var(--danger)'; // red
+        }
+
+        const isStocked = p.count_inventory !== false;
+        const styleAvail = isStocked ? `color:${availColor}; font-weight:700;` : 'color:var(--text-muted) !important; opacity:0.4;';
+        const styleReserved = isStocked ? 'color:var(--warning); font-weight:600;' : 'color:var(--text-muted) !important; opacity:0.4;';
+        const styleInspect = isStocked ? 'color:#a855f7; font-weight:600;' : 'color:var(--text-muted) !important; opacity:0.4;';
+        const stylePacked = isStocked ? 'color:var(--cyan-light); font-weight:600;' : 'color:var(--text-muted) !important; opacity:0.4;';
+        const styleReturned = isStocked ? 'color:var(--danger);' : 'color:var(--text-muted) !important; opacity:0.4;';
+        const styleCancelled = isStocked ? 'color:var(--danger);' : 'color:var(--text-muted) !important; opacity:0.4;';
+
+        let imageSrc = p.image_main;
+        if (!imageSrc || !imageSrc.match(/^https?:\/\//)) {
+          imageSrc = '../../assets/og-image.png';
+        }
+
+        tbody.innerHTML += `
+          <tr>
+            <td>
+              <img src="${imageSrc}" alt="${p.sku}" style="width: 80px; height: 50px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-elevated); display: block;" />
+            </td>
+            <td><strong>${p.sku}</strong></td>
+            <td>${p.title}</td>
+            <td><span class="badge-status dispatched" style="font-size: 0.72rem; padding: 0.15rem 0.4rem; background: var(--bg-elevated); border: 1px solid var(--border); text-transform: capitalize;">${(p.category || '—').replace(/_/g, ' ')}</span></td>
+            <td><span class="badge-status dispatched" style="font-size: 0.72rem; padding: 0.15rem 0.4rem; background: var(--bg-elevated); border: 1px solid var(--border);">${p.business.replace(/_/g, ' ')}</span></td>
+            <td style="text-align: center; ${styleAvail}">
+              ${isEditingAvailable && isStocked ? `<input type="number" class="edit-avail-input" data-sku="${p.sku}" value="${avail}" style="width: 70px; text-align: center; padding: 2px 5px; font-size: 0.82rem; font-weight: bold; border: 1px solid var(--border); border-radius: 4px; background: var(--bg-surface); color: ${availColor};" />` : avail}
+            </td>
+            <td style="text-align: center; ${styleReserved}">${inv.reserved || 0}</td>
+            <td style="text-align: center; ${styleInspect}">${inv.inspect || 0}</td>
+            <td style="text-align: center; ${stylePacked}">${inv.packed || 0}</td>
+            <td style="text-align: center; ${styleReturned}">${inv.returned || 0}</td>
+            <td style="text-align: center; ${styleCancelled}">${inv.cancelled || 0}</td>
+          </tr>
+        `;
+      });
+
+      tbody.innerHTML += `<tr class="table-spacer-row" style="height: auto; border: none; background: transparent !important;"><td colspan="11" style="padding: 0; border: none; background: transparent !important; pointer-events: none;"></td></tr>`;
+
+      updateSortIndicators();
+    }
+
+    // Render Tab 3: Receive
+    function renderReceiveTab() {
+      const tbody = document.getElementById('receive-list');
+      tbody.innerHTML = '';
+
+      const pending = activeTransactions.filter(t => ['ordered', 'returned', 'cancelled'].includes(t.status));
+      const incomingTransfers = warehouseTransfers.filter(t => t.status === 'approved' && t.to_warehouse_id === activeWarehouseId);
+      
+      if (pending.length === 0 && incomingTransfers.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted" style="padding:2rem 0;">No incoming shipments, returns, or transfers to receive.</td></tr>`;
+        return;
+      }
+
+      pending.forEach(t => {
+        const p = allProducts.find(prod => prod.sku === t.sku) || { title: 'Unknown Product', image_main: '' };
+        let sourceLabel = '';
+        let badgeClass = '';
+        if (t.status === 'ordered') {
+          sourceLabel = 'Supplier PO';
+          badgeClass = 'badge-ordered';
+        } else if (t.status === 'returned') {
+          sourceLabel = `Return (${t.customer_name || 'Customer'})`;
+          badgeClass = 'badge-returned';
+        } else if (t.status === 'cancelled') {
+          sourceLabel = `Cancellation (${t.customer_name || 'Customer'})`;
+          badgeClass = 'badge-cancelled';
+        }
+
+        let imageSrc = p.image_main;
+        if (!imageSrc || !imageSrc.match(/^https?:\/\//)) {
+          imageSrc = '../../assets/og-image.png';
+        }
+
+        tbody.innerHTML += `
+          <tr>
+            <td>
+              <img src="${imageSrc}" alt="${t.sku}" style="width: 80px; height: 50px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-elevated); display: block;" />
+            </td>
+            <td><strong>${sourceLabel}</strong></td>
+            <td><code>${t.sku}</code></td>
+            <td>${p.title}</td>
+            <td><strong>${t.quantity}</strong></td>
+            <td><span class="badge-status ${badgeClass}">${t.status}</span></td>
+            <td>
+              <button class="btn btn-cyan btn-sm" onclick="receiveItem(this, '${t.id}', '${t.sku}', ${t.quantity}, '${t.status}')">
+                <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: -2px; margin-right: 6px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Received
+              </button>
+            </td>
+          </tr>
+        `;
+      });
+
+      incomingTransfers.forEach(tr => {
+        const p = allProducts.find(prod => prod.sku === tr.sku) || { title: 'Unknown Product', image_main: '' };
+        const sourceWh = fulfillmentWarehouses.find(w => w.id === tr.from_warehouse_id) || { name: 'Unknown Warehouse' };
+
+        let imageSrc = p.image_main;
+        if (!imageSrc || !imageSrc.match(/^https?:\/\//)) {
+          imageSrc = '../../assets/og-image.png';
+        }
+
+        tbody.innerHTML += `
+          <tr>
+            <td>
+              <img src="${imageSrc}" alt="${tr.sku}" style="width: 80px; height: 50px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-elevated); display: block;" />
+            </td>
+            <td><strong>Warehouse Transfer</strong></td>
+            <td><code>${tr.sku}</code></td>
+            <td>${p.title}</td>
+            <td><strong>${tr.quantity}</strong></td>
+            <td><span class="badge-status badge-ordered" style="background-color: var(--cyan); color: white;">from ${sourceWh.name}</span></td>
+            <td>
+              <button class="btn btn-cyan btn-sm" onclick="receiveTransfer(this, '${tr.id}', '${tr.sku}', ${tr.quantity})">
+                <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: -2px; margin-right: 6px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Receive Transfer
+              </button>
+            </td>
+          </tr>
+        `;
+      });
+    }
+
+    // Render Tab 4: Pack
+    function renderPackTab() {
+      const tbody = document.getElementById('pack-list');
+      tbody.innerHTML = '';
+
+      const packingQueue = activeTransactions.filter(t => 
+        (t.status === 'inspect' || t.status === 'packed') && 
+        t.type === 'customer_order'
+      );
+
+      if (packingQueue.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted" style="padding:2rem 0;">No orders currently in packing queue.</td></tr>`;
+        return;
+      }
+
+      // Group by reference_id
+      const groups = {};
+      packingQueue.forEach(t => {
+        const refId = t.reference_id || 'N/A';
+        if (!groups[refId]) {
+          groups[refId] = {
+            reference_id: refId,
+            customer_name: t.customer_name || 'N/A',
+            customer_city: t.customer_city || 'N/A',
+            timestamp_inspect: t.timestamp_inspect || t.created_at,
+            items: []
+          };
+        }
+        groups[refId].items.push(t);
+        if (t.timestamp_inspect && (!groups[refId].timestamp_inspect || new Date(t.timestamp_inspect) < new Date(groups[refId].timestamp_inspect))) {
+          groups[refId].timestamp_inspect = t.timestamp_inspect;
+        }
+      });
+
+      const orderGroups = Object.values(groups);
+
+      orderGroups.forEach(group => {
+        const allPacked = group.items.every(t => t.status === 'packed');
+        const skusHtml = group.items.map(t => `<code>${t.sku}</code>`).join('<br/>');
+        const qtysHtml = group.items.map(t => `<strong>${t.quantity}</strong>`).join('<br/>');
+        const date = group.timestamp_inspect ? new Date(group.timestamp_inspect).toLocaleString() : 'N/A';
+
+        const imagesHtml = group.items.map(t => {
+          const p = allProducts.find(prod => prod.sku === t.sku) || { image_main: '' };
+          let imageSrc = p.image_main;
+          if (!imageSrc || !imageSrc.match(/^https?:\/\//)) {
+            imageSrc = '../../assets/og-image.png';
+          }
+          return `<img src="${imageSrc}" alt="${t.sku}" style="width: 50px; height: 32px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border); background: var(--bg-elevated); margin-right: 4px; vertical-align: middle;" />`;
+        }).join('');
+
+        tbody.innerHTML += `
+          <tr ${allPacked ? 'style="opacity: 0.65; background: var(--bg-base);"' : ''}>
+            <td>
+              <div style="display: flex; flex-wrap: wrap; gap: 4px; max-width: 160px;">${imagesHtml}</div>
+            </td>
+            <td><strong>${group.reference_id}</strong></td>
+            <td>${group.customer_name}</td>
+            <td>${group.customer_city}</td>
+            <td>${skusHtml}</td>
+            <td>${qtysHtml}</td>
+            <td>${date}</td>
+            <td>
+              ${allPacked ? `
+                <div style="display: flex; gap: 0.4rem; align-items: center;">
+                  <button class="btn btn-cyan btn-sm" disabled style="opacity: 0.7; cursor: default; background: var(--border); color: var(--text-muted); border-color: var(--border);">
+                    <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: -2px; margin-right: 6px;"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>Packed
+                  </button>
+                  <button class="btn btn-outline btn-sm" onclick="unpackOrder(this, '${group.reference_id}')" title="Move entire order back to unpacked">
+                    <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: -2px; margin-right: 4px;"><polyline points="12 19 5 12 12 5"/><line x1="19" y1="12" x2="5" y2="12"/></svg>Unpack
+                  </button>
+                </div>
+              ` : `
+                <button class="btn btn-cyan btn-sm" onclick="window.packOrder(this, '${group.reference_id}', '${group.customer_name.replace(/'/g, "\\'")}', '${group.customer_city.replace(/'/g, "\\'")}')">
+                  <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: -2px; margin-right: 6px;"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>Pack Order
+                </button>
+              `}
+            </td>
+          </tr>
+        `;
+      });
+    }
+
+    // Render Tab: Inspect
+    function renderInspectTab() {
+      const tbody = document.getElementById('inspect-list');
+      if (!tbody) return;
+      tbody.innerHTML = '';
+
+      const inspectQueue = activeTransactions.filter(t => 
+        t.status === 'reserved' && 
+        t.type === 'customer_order'
+      );
+
+      if (inspectQueue.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted" style="padding:2rem 0;">No orders currently in inspection queue.</td></tr>`;
+        return;
+      }
+
+      // Group by reference_id
+      const groups = {};
+      inspectQueue.forEach(t => {
+        const refId = t.reference_id || 'N/A';
+        if (!groups[refId]) {
+          groups[refId] = {
+            reference_id: refId,
+            customer_name: t.customer_name || 'N/A',
+            customer_city: t.customer_city || 'N/A',
+            timestamp_reserved: t.timestamp_reserved || t.created_at,
+            items: []
+          };
+        }
+        groups[refId].items.push(t);
+        if (t.timestamp_reserved && (!groups[refId].timestamp_reserved || new Date(t.timestamp_reserved) < new Date(groups[refId].timestamp_reserved))) {
+          groups[refId].timestamp_reserved = t.timestamp_reserved;
+        }
+      });
+
+      const orderGroups = Object.values(groups);
+
+      orderGroups.forEach(group => {
+        const rowSpan = group.items.length;
+        const dateOnly = group.timestamp_reserved ? new Date(group.timestamp_reserved).toLocaleDateString() : 'N/A';
+
+        group.items.forEach((item, idx) => {
+          const p = allProducts.find(prod => prod.sku === item.sku) || { title: 'Unknown Product', image_main: '' };
+          let imageSrc = p.image_main;
+          if (!imageSrc || !imageSrc.match(/^https?:\/\//)) {
+            imageSrc = '../../assets/og-image.png';
+          }
+          const imageHtml = `<img src="${imageSrc}" alt="${item.sku}" style="width: 50px; height: 32px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border); background: var(--bg-elevated);" />`;
+
+          const actionButtonHtml = `
+            <button class="btn btn-cyan btn-sm" onclick="qaInspectOrder(this, '${group.reference_id}', '${item.id}', '${item.sku}')">
+              QA Inspect
+            </button>
+          `;
+
+          if (idx === 0) {
+            tbody.innerHTML += `
+              <tr>
+                <td>${imageHtml}</td>
+                <td rowspan="${rowSpan}"><strong>${group.reference_id}</strong></td>
+                <td rowspan="${rowSpan}">${group.customer_name}</td>
+                <td rowspan="${rowSpan}">${group.customer_city}</td>
+                <td><code>${item.sku}</code></td>
+                <td><strong>${item.quantity}</strong></td>
+                <td rowspan="${rowSpan}">${dateOnly}</td>
+                <td>${actionButtonHtml}</td>
+              </tr>
+            `;
+          } else {
+            tbody.innerHTML += `
+              <tr>
+                <td>${imageHtml}</td>
+                <td><code>${item.sku}</code></td>
+                <td><strong>${item.quantity}</strong></td>
+                <td>${actionButtonHtml}</td>
+              </tr>
+            `;
+          }
+        });
+      });
+    }
+
+    // Render Tab 5: Dispatch
+    function renderDispatchTab() {
+      const tbody = document.getElementById('dispatch-list');
+      tbody.innerHTML = '';
+
+      const dispatchQueue = activeTransactions.filter(t => {
+        if (t.status !== 'packed') return false;
+        if (t.reference_id) {
+          const hasUnpacked = activeTransactions.some(other => 
+            other.reference_id === t.reference_id && 
+            ['reserved', 'inspect'].includes(other.status)
+          );
+          if (hasUnpacked) return false;
+        }
+        return true;
+      });
+
+      if (dispatchQueue.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted" style="padding:2rem 0;">No packed items ready to dispatch.</td></tr>`;
+        return;
+      }
+
+      let prevRefId = null;
+      dispatchQueue.forEach(t => {
+        const isDuplicate = (t.reference_id && t.reference_id === prevRefId);
+        prevRefId = t.reference_id;
+        const p = allProducts.find(prod => prod.sku === t.sku) || { title: 'Unknown Product', image_main: '' };
+        const date = t.timestamp_packed ? new Date(t.timestamp_packed).toLocaleString() : 'N/A';
+        
+        let imageSrc = p.image_main;
+        if (!imageSrc || !imageSrc.match(/^https?:\/\//)) {
+          imageSrc = '../../assets/og-image.png';
+        }
+
+        tbody.innerHTML += `
+          <tr>
+            <td>
+              <img src="${imageSrc}" alt="${t.sku}" style="width: 80px; height: 50px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-elevated); display: block;" />
+            </td>
+            <td><strong>${isDuplicate ? '' : (t.reference_id || 'N/A')}</strong></td>
+            <td>${isDuplicate ? '' : (t.customer_name || 'N/A')}</td>
+            <td>${isDuplicate ? '' : (t.customer_city || 'N/A')}</td>
+            <td><code>${t.sku}</code></td>
+            <td><strong>${t.quantity}</strong></td>
+            <td>${date}</td>
+          </tr>
+        `;
+      });
+    }
+
+
+    // Render Activity Feed Logs
+    function renderActivityFeed() {
+      const feed = document.getElementById('activity-feed');
+      feed.innerHTML = '';
+
+      const logs = activeTransactions.slice(0, 3); // limit to 3 latest logs
+      
+      if (logs.length === 0) {
+        feed.innerHTML = `<div class="log-entry" style="color:var(--text-muted); text-align:center; padding: 2rem 0;">No ledger activity logged.</div>`;
+        return;
+      }
+
+      logs.forEach(t => {
+        const time = new Date(t.updated_at).toLocaleTimeString();
+        let message = '';
+
+        if (t.status === 'ordered') {
+          message = `ordered supplier replenishment: ${t.quantity}x ${t.sku}`;
+        } else if (t.status === 'received') {
+          message = `received/re-shelved: ${t.quantity}x ${t.sku} to Available`;
+        } else if (t.status === 'reserved') {
+          message = `order reserved: ${t.quantity}x ${t.sku} for order no. ${t.reference_id || 'N/A'} (${t.customer_name || 'N/A'})`;
+        } else if (t.status === 'packed') {
+          message = `order packed: ${t.quantity}x ${t.sku} for order no. ${t.reference_id || 'N/A'} (${t.customer_name || 'N/A'})`;
+        } else if (t.status === 'dispatched') {
+          message = `order dispatched: ${t.quantity}x ${t.sku} sent to ${t.customer_city || 'N/A'} for order no. ${t.reference_id || 'N/A'}`;
+        } else if (t.status === 'returned') {
+          message = `returned dispatch order: ${t.quantity}x ${t.sku} for order no. ${t.reference_id || 'N/A'} (pending warehouse receive)`;
+        } else if (t.status === 'cancelled') {
+          message = `cancelled queue reservation: ${t.quantity}x ${t.sku} for order no. ${t.reference_id || 'N/A'} (pending warehouse receive)`;
+        }
+
+        feed.innerHTML += `
+          <div class="log-entry">
+            <span style="color:var(--cyan); font-weight:600;">[${time}]</span> ${message}
+          </div>
+        `;
+      });
+    }
+
+    // Badge counts updates
+    function updateBadgeCounts() {
+      const receiveCount = activeTransactions.filter(t => ['ordered', 'returned', 'cancelled'].includes(t.status)).length;
+      const inspectCount = [...new Set(activeTransactions.filter(t => t.status === 'reserved' && t.type === 'customer_order').map(t => t.reference_id))].length;
+      const packCount = [...new Set(activeTransactions.filter(t => t.status === 'inspect' && t.type === 'customer_order').map(t => t.reference_id))].length;
+      const dispatchCount = activeTransactions.filter(t => {
+        if (t.status !== 'packed') return false;
+        if (t.reference_id) {
+          const hasUnpacked = activeTransactions.some(other => 
+            other.reference_id === t.reference_id && 
+            ['reserved', 'inspect'].includes(other.status)
+          );
+          if (hasUnpacked) return false;
+        }
+        return true;
+      }).length;
+
+      const badgeRec = document.getElementById('badge-count-receive');
+      const badgePck = document.getElementById('badge-count-pack');
+      const badgeDsp = document.getElementById('badge-count-dispatch');
+      const badgeInsp = document.getElementById('badge-count-inspect');
+
+      if (receiveCount > 0) { badgeRec.innerText = receiveCount; badgeRec.style.display = 'inline-block'; }
+      else badgeRec.style.display = 'none';
+
+      if (packCount > 0) { badgePck.innerText = packCount; badgePck.style.display = 'inline-block'; }
+      else badgePck.style.display = 'none';
+
+      if (dispatchCount > 0) { badgeDsp.innerText = dispatchCount; badgeDsp.style.display = 'inline-block'; }
+      else badgeDsp.style.display = 'none';
+
+      if (badgeInsp) {
+        if (inspectCount > 0) { badgeInsp.innerText = inspectCount; badgeInsp.style.display = 'inline-block'; }
+        else badgeInsp.style.display = 'none';
+      }
+    }
+
+    // Render Tab 2: Supplier Order Catalog
+    window.renderSupplierOrderTab = function() {
+      const tbody = document.getElementById('supplier-product-list');
+      if (!tbody) return;
+
+      // Filter products
+      const query = supplierOrderSearch.toLowerCase().trim();
+      const filtered = allProducts.filter(p => {
+        const sku = (p.sku || '').toLowerCase();
+        const title = (p.title || '').toLowerCase();
+        return !query || sku.includes(query) || title.includes(query);
+      });
+
+      // Paginate
+      const total = filtered.length;
+      const pages = Math.max(1, Math.ceil(total / supplierOrderPageSize));
+      if (supplierOrderPage > pages) supplierOrderPage = pages;
+      if (supplierOrderPage < 1) supplierOrderPage = 1;
+
+      const start = (supplierOrderPage - 1) * supplierOrderPageSize;
+      const paginated = filtered.slice(start, start + supplierOrderPageSize);
+
+      // Update counters
+      document.getElementById('supplier-count-badge').innerText = `${total} product${total !== 1 ? 's' : ''}`;
+      document.getElementById('supplier-page-info').innerText = `Page ${supplierOrderPage} of ${pages}`;
+
+      // Render Pager Buttons
+      renderSupplierPager(pages, supplierOrderPage);
+
+      // Render Table Rows
+      tbody.innerHTML = '';
+      if (paginated.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted" style="padding: 2rem 0;">No matching products found.</td></tr>`;
+        renderSupplierTally();
+        return;
+      }
+
+      paginated.forEach(p => {
+        const qty = supplierOrderQuantities[p.sku] !== undefined ? supplierOrderQuantities[p.sku] : "";
+        
+        // Image absolute path resolution
+        let imageSrc = p.image_main;
+        if (!imageSrc || !imageSrc.match(/^https?:\/\//)) {
+          imageSrc = '../../assets/og-image.png'; // local default
+        }
+
+        const lineTotalText = qty && qty > 0 
+          ? formatMoney(p.dealer_price * qty) 
+          : "";
+
+        tbody.innerHTML += `
+          <tr data-sku="${p.sku}">
+            <td>
+              <img src="${imageSrc}" alt="${p.sku}" style="width: 80px; height: 50px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-elevated); display: block;" />
+            </td>
+            <td><strong style="font-family: var(--font-mono);">${p.sku}</strong></td>
+            <td>${p.title}</td>
+            <td>
+              <input type="number" class="form-input" min="0" step="1" placeholder="0" value="${qty}" style="width: 90px;" oninput="updateSupplierQty('${p.sku}', this.value)" />
+            </td>
+            <td style="text-align: right; font-family: var(--font-mono);">${formatMoney(p.dealer_price)}</td>
+            <td data-role="line-total" style="text-align: right; font-family: var(--font-mono); font-weight: 700; color: var(--text-primary);">${lineTotalText}</td>
+          </tr>
+        `;
+      });
+
+      renderSupplierTally();
+    };
+
+    function renderSupplierPager(pages, current) {
+      const pagerWrap = document.getElementById('supplier-pager');
+      if (!pagerWrap) return;
+      pagerWrap.innerHTML = '';
+
+      function createButton(label, pageNum, disabled, active) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = active ? 'btn btn-primary btn-sm' : 'btn btn-outline btn-sm';
+        btn.innerText = label;
+        btn.disabled = disabled;
+        btn.style.padding = '0.35rem 0.65rem';
+        btn.style.fontSize = '0.75rem';
+        if (!disabled) {
+          btn.onclick = () => {
+            supplierOrderPage = pageNum;
+            renderSupplierOrderTab();
+          };
+        }
+        return btn;
+      }
+
+      // Prev Button
+      pagerWrap.appendChild(createButton('Prev', current - 1, current <= 1, false));
+
+      // Page numbers (up to 7 buttons, or ellipses)
+      const buildPageButtons = (totPages, curr) => {
+        const btns = [];
+        if (totPages <= 7) {
+          for (let i = 1; i <= totPages; i++) btns.push(i);
+          return btns;
+        }
+        btns.push(1);
+        const left = Math.max(2, curr - 2);
+        const right = Math.min(totPages - 1, curr + 2);
+        if (left > 2) btns.push('...');
+        for (let j = left; j <= right; j++) btns.push(j);
+        if (right < totPages - 1) btns.push('...');
+        btns.push(totPages);
+        return btns;
+      };
+
+      const pagesList = buildPageButtons(pages, current);
+      pagesList.forEach(item => {
+        if (item === '...') {
+          const dots = document.createElement('span');
+          dots.innerText = '...';
+          dots.style.padding = '0 0.25rem';
+          dots.style.fontSize = '0.8rem';
+          dots.style.color = 'var(--text-muted)';
+          pagerWrap.appendChild(dots);
+        } else {
+          pagerWrap.appendChild(createButton(String(item), item, false, item === current));
+        }
+      });
+
+      // Next Button
+      pagerWrap.appendChild(createButton('Next', current + 1, current >= pages, false));
+    }
+
+    window.handleSupplierSearch = function(e) {
+      supplierOrderSearch = e.target.value;
+      supplierOrderPage = 1;
+      renderSupplierOrderTab();
+    };
+
+    window.updateSupplierQty = function(sku, value) {
+      const parsed = parseInt(value);
+      if (isNaN(parsed) || parsed <= 0) {
+        delete supplierOrderQuantities[sku];
+      } else {
+        supplierOrderQuantities[sku] = parsed;
+      }
+
+      // In-place update of the line total column for the changed SKU to preserve cursor focus
+      const row = Array.from(document.querySelectorAll('#supplier-product-list tr')).find(tr => tr.getAttribute('data-sku') === sku);
+      if (row) {
+        const lineTotalCell = row.querySelector('td[data-role="line-total"]');
+        const prod = allProducts.find(p => p.sku === sku);
+        if (lineTotalCell && prod) {
+          const qty = supplierOrderQuantities[sku] || 0;
+          lineTotalCell.innerText = qty > 0 ? formatMoney(prod.dealer_price * qty) : "";
+        }
+      }
+
+      // Update selection info and tally
+      renderSupplierTally();
+    };
+
+    function renderSupplierTally() {
+      const tallyList = document.getElementById('supplier-tally-list');
+      const tallyTotal = document.getElementById('supplier-tally-total');
+      const submitBtn = document.getElementById('btn-supplier-order-submit');
+      const selectedInfo = document.getElementById('supplier-selected-info');
+      if (!tallyList) return;
+
+      tallyList.innerHTML = '';
+      let totalCents = 0;
+      let selectedCount = 0;
+
+      allProducts.forEach(p => {
+        const qty = supplierOrderQuantities[p.sku];
+        if (qty && qty > 0) {
+          selectedCount++;
+          const price = p.dealer_price || 0;
+          const amt = price * qty;
+          totalCents += amt;
+
+          tallyList.innerHTML += `
+            <div style="display: flex; align-items: baseline; gap: 1rem; font-size: 0.82rem; padding: 0.5rem 0; color: var(--text-secondary); border-bottom: 1px solid var(--border);">
+              <div style="width: 180px; font-family: var(--font-mono); font-weight: 700; color: var(--text-primary);">${p.sku}</div>
+              <div style="width: 90px; text-align: right; font-weight: 700; color: var(--text-primary); font-family: var(--font-mono);">${qty}</div>
+              <div style="width: 140px; text-align: right; font-family: var(--font-mono);">${formatMoney(price)}</div>
+              <div style="margin-left: auto; width: 160px; text-align: right; font-weight: 800; color: var(--text-primary); font-family: var(--font-mono);">${formatMoney(amt)}</div>
+            </div>
+          `;
+        }
+      });
+
+      if (selectedCount === 0) {
+        tallyList.innerHTML = `<div style="font-size: 0.82rem; color: var(--text-muted); padding: 0.5rem 0;">No products selected.</div>`;
+        tallyTotal.innerText = 'Total: ₱0.00';
+        selectedInfo.innerText = 'No items selected';
+        submitBtn.disabled = true;
+        submitBtn.innerText = 'Request Order';
+        return;
+      }
+
+      tallyTotal.innerText = `Total: ${formatMoney(totalCents)}`;
+      selectedInfo.innerText = `${selectedCount} item${selectedCount !== 1 ? 's' : ''} selected`;
+      
+      if (!supplierOrderPosting) {
+        submitBtn.disabled = false;
+        submitBtn.innerText = 'Request Order';
+      } else {
+        submitBtn.disabled = true;
+        submitBtn.innerText = 'Requesting...';
+      }
+    }
+
+    window.submitSupplierOrder = async function(btn) {
+      const items = [];
+      allProducts.forEach(p => {
+        const qty = supplierOrderQuantities[p.sku];
+        if (qty && qty > 0) {
+          items.push({ sku: p.sku, qty: qty });
+        }
+      });
+
+      if (items.length === 0) return;
+
+      try {
+        await wrapActionWithLoading(btn, async () => {
+          supplierOrderPosting = true;
+          const payloads = items.map(item => ({
+            sku: item.sku,
+            quantity: item.qty,
+            type: 'supplier_order',
+            status: 'ordered',
+            timestamp_ordered: new Date().toISOString(),
+            warehouse_id: activeWarehouseId || null
+          }));
+
+          // Bulk insert into Supabase
+          const { error: txErr } = await sb.from('inventory_transactions').insert(payloads);
+          if (txErr) throw txErr;
+
+          // Ensure inventory rows exist for these SKUs in this warehouse
+          const uniqueSkus = [...new Set(items.map(i => i.sku))];
+          let existQ = sb.from('inventory').select('sku').in('sku', uniqueSkus);
+          if (activeWarehouseId) existQ = existQ.eq('warehouse_id', activeWarehouseId);
+          else existQ = existQ.is('warehouse_id', null);
+          const { data: existingRows, error: checkErr } = await existQ;
+          if (checkErr) throw checkErr;
+
+          const existingSkus = new Set((existingRows || []).map(r => r.sku));
+          const newInventoryRows = uniqueSkus
+            .filter(sku => !existingSkus.has(sku))
+            .map(sku => ({ sku, available: 0, warehouse_id: activeWarehouseId || null }));
+
+          if (newInventoryRows.length > 0) {
+            const { error: insErr } = await sb.from('inventory').insert(newInventoryRows);
+            if (insErr) throw insErr;
+          }
+
+          // Reset state
+          supplierOrderQuantities = {};
+          supplierOrderSearch = "";
+          const searchInput = document.getElementById('supplier-search');
+          if (searchInput) searchInput.value = "";
+
+          await refreshDashboard();
+          showToast('Supplier order successfully requested!');
+        });
+      } finally {
+        supplierOrderPosting = false;
+        renderSupplierOrderTab();
+      }
+    };
+
+    // ACTION: Warehouse Confirms Receipt
+    window.receiveItem = async function(btn, id, sku, qty, prevStatus) {
+      await wrapActionWithLoading(btn, async () => {
+        const now = new Date().toISOString();
+        
+        // Update transaction status
+        const { error: txErr } = await sb.from('inventory_transactions').update({
+          status: 'received',
+          timestamp_received: now
+        }).eq('id', id);
+        if (txErr) throw txErr;
+
+        // Get current inventory row for this warehouse
+        let invQ = sb.from('inventory').select('*').eq('sku', sku);
+        if (activeWarehouseId) invQ = invQ.eq('warehouse_id', activeWarehouseId);
+        else invQ = invQ.is('warehouse_id', null);
+        const { data: invRow, error: invErr } = await invQ;
+        if (invErr || !invRow || invRow.length === 0) {
+          throw new Error('Error fetching inventory item for this warehouse');
+        }
+
+        const inv = invRow[0];
+        const updates = { available: inv.available + qty };
+
+        // Deduct from previous state counter in inventory
+        if (prevStatus === 'returned') {
+          updates.returned = Math.max(0, inv.returned - qty);
+        } else if (prevStatus === 'cancelled') {
+          updates.cancelled = Math.max(0, inv.cancelled - qty);
+        }
+
+        const { error: updErr } = await sb.from('inventory').update(updates).eq('id', inv.id);
+        if (updErr) throw updErr;
+
+        await refreshDashboard();
+      });
+    };
+
+    let packOrderReferenceId = null;
+    let packPhotoBlob = null;
+    let cameraStream = null;
+    let packOrderBtn = null;
+
+    // Helper to detect if device is a mobile phone
+    function isMobilePhone() {
+      return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 
+             (navigator.maxTouchPoints > 0 && window.innerWidth <= 768);
+    }
+
+    // ACTION: Mark entire order as Packed (triggers Modal)
+    window.packOrder = function(btn, referenceId, customerName = 'N/A', customerCity = 'N/A') {
+      packOrderReferenceId = referenceId;
+      packOrderBtn = btn;
+      packPhotoBlob = null;
+      
+      // Stop any existing stream
+      if (cameraStream) {
+        cameraStream.getTracks().forEach(t => t.stop());
+        cameraStream = null;
+      }
+      
+      // Reset Modal UI
+      document.getElementById('modal-ref-id').textContent = referenceId;
+      document.getElementById('modal-customer-name').textContent = customerName;
+      document.getElementById('modal-customer-city').textContent = customerCity;
+      document.getElementById('packed-photo-preview').style.display = 'none';
+      document.getElementById('packed-photo-preview').src = '';
+      document.getElementById('upload-placeholder').style.display = 'flex';
+      document.getElementById('camera-container').style.display = 'none';
+      document.getElementById('photo-preview-container').style.display = 'flex';
+      document.getElementById('btn-confirm-pack').disabled = true;
+      document.getElementById('btn-confirm-pack').innerHTML = 'Confirm';
+      
+      // Only show camera option if on mobile/phone
+      const showCamera = isMobilePhone() && !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+      document.getElementById('btn-open-camera').style.display = showCamera ? 'inline-flex' : 'none';
+      
+      // Show Modal
+      const modal = document.getElementById('pack-photo-modal');
+      modal.style.display = 'flex';
+      modal.offsetHeight; // force reflow
+      modal.classList.add('open');
+    };
+
+    window.closePackPhotoModal = function() {
+      const modal = document.getElementById('pack-photo-modal');
+      modal.classList.remove('open');
+      setTimeout(() => {
+        modal.style.display = 'none';
+      }, 150);
+      if (cameraStream) {
+        cameraStream.getTracks().forEach(t => t.stop());
+        cameraStream = null;
+      }
+    };
+
+    window.startCamera = async function() {
+      try {
+        cameraStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment' },
+          audio: false
+        });
+        const video = document.getElementById('camera-stream');
+        video.srcObject = cameraStream;
+        
+        document.getElementById('photo-preview-container').style.display = 'none';
+        document.getElementById('camera-container').style.display = 'block';
+        document.getElementById('btn-open-camera').style.display = 'none';
+      } catch (err) {
+        console.error('Camera access failed:', err);
+        showToast('Camera access failed: ' + err.message, true);
+      }
+    };
+
+    window.captureCameraPhoto = function() {
+      const video = document.getElementById('camera-stream');
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth || 640;
+      canvas.height = video.videoHeight || 480;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      
+      // Stop tracks
+      if (cameraStream) {
+        cameraStream.getTracks().forEach(t => t.stop());
+        cameraStream = null;
+      }
+      
+      canvas.toBlob(async (blob) => {
+        try {
+          const compressed = await compressPackedImage(blob);
+          packPhotoBlob = compressed;
+          const url = URL.createObjectURL(compressed);
+          
+          document.getElementById('packed-photo-preview').src = url;
+          document.getElementById('packed-photo-preview').style.display = 'block';
+          document.getElementById('upload-placeholder').style.display = 'none';
+          document.getElementById('camera-container').style.display = 'none';
+          document.getElementById('photo-preview-container').style.display = 'flex';
+          document.getElementById('btn-open-camera').style.display = 'inline-flex';
+          document.getElementById('btn-confirm-pack').disabled = false;
+        } catch (err) {
+          console.error(err);
+          showToast('Image processing failed: ' + err.message, true);
+        }
+      }, 'image/jpeg', 0.8);
+    };
+
+    window.handlePackFileSelect = async function(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      
+      try {
+        const compressed = await compressPackedImage(file);
+        packPhotoBlob = compressed;
+        const url = URL.createObjectURL(compressed);
+        
+        document.getElementById('packed-photo-preview').src = url;
+        document.getElementById('packed-photo-preview').style.display = 'block';
+        document.getElementById('upload-placeholder').style.display = 'none';
+        document.getElementById('camera-container').style.display = 'none';
+        document.getElementById('photo-preview-container').style.display = 'flex';
+        document.getElementById('btn-confirm-pack').disabled = false;
+      } catch (err) {
+        console.error(err);
+        showToast('File compression failed: ' + err.message, true);
+      } finally {
+        event.target.value = '';
+      }
+    };
+
+    function compressPackedImage(fileOrBlob) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const maxDim = 1024;
+          let w = img.width;
+          let h = img.height;
+          if (w > maxDim || h > maxDim) {
+            if (w > h) {
+              h = Math.round((h * maxDim) / w);
+              w = maxDim;
+            } else {
+              w = Math.round((w * maxDim) / h);
+              h = maxDim;
+            }
+          }
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, w, h);
+          canvas.toBlob((blob) => {
+            if (!blob) return reject(new Error('Canvas compression failed'));
+            resolve(blob);
+          }, 'image/jpeg', 0.8);
+        };
+        img.onerror = reject;
+        img.src = URL.createObjectURL(fileOrBlob);
+      });
+    }
+
+    async function blobToBase64(blob) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    }
+
+    window.confirmPackWithPhoto = async function() {
+      if (!packPhotoBlob || !packOrderReferenceId) return;
+      
+      const confirmBtn = document.getElementById('btn-confirm-pack');
+      confirmBtn.disabled = true;
+      confirmBtn.innerHTML = `<svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: -2px; margin-right: 6px; animation: spin 1s linear infinite;"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Uploading...`;
+
+      try {
+        const base64 = await blobToBase64(packPhotoBlob);
+        const fileName = `packed_${packOrderReferenceId}_${Date.now()}.jpg`;
+        
+        const r = await fetch('/api/upload', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fileBase64: base64,
+            fileName: fileName,
+            category: 'installations',
+            refId: packOrderReferenceId,
+            type: 'proof',
+            companyId: companyId || 'general'
+          })
+        });
+        
+        if (!r.ok) throw new Error('Photo upload failed');
+        const uploadResult = await r.json();
+        
+        // Execute database update
+        await wrapActionWithLoading(packOrderBtn, async () => {
+          const now = new Date().toISOString();
+          const txsToPack = activeTransactions.filter(t => 
+            t.reference_id === packOrderReferenceId && 
+            t.status === 'inspect' && 
+            t.type === 'customer_order'
+          );
+
+          if (txsToPack.length === 0) return;
+
+          for (const tx of txsToPack) {
+            const { error: txErr } = await sb.from('inventory_transactions').update({
+              status: 'packed',
+              timestamp_packed: now,
+              packed_photo_url: uploadResult.url
+            }).eq('id', tx.id);
+            if (txErr) throw txErr;
+
+            let invQPack = sb.from('inventory').select('*').eq('sku', tx.sku);
+            if (activeWarehouseId) invQPack = invQPack.eq('warehouse_id', activeWarehouseId);
+            else invQPack = invQPack.is('warehouse_id', null);
+            const { data: invRow, error: invErr } = await invQPack;
+            if (invErr) throw invErr;
+            if (invRow && invRow.length > 0) {
+              const inv = invRow[0];
+              const { error: updErr } = await sb.from('inventory').update({
+                inspect: Math.max(0, (inv.inspect || 0) - tx.quantity),
+                packed: (inv.packed || 0) + tx.quantity
+              }).eq('id', inv.id);
+              if (updErr) throw updErr;
+            }
+          }
+
+          lastAction = null;
+          updateUndoButtonState();
+          closePackPhotoModal();
+          await refreshDashboard();
+          showToast('Order successfully packed with photo proof!');
+        });
+        
+      } catch (err) {
+        console.error(err);
+        showToast('Fulfillment failed: ' + err.message, true);
+        confirmBtn.disabled = false;
+        confirmBtn.innerHTML = 'Confirm';
+      }
+    };
+
+    let qaInspectRefId = null;
+    let qaInspectBtn = null;
+    let qaInspectTxId = null;
+    let qaInspectSku = null;
+
+    window.qaInspectOrder = async function(btn, referenceId, transactionId = null, sku = null) {
+      qaInspectRefId = referenceId;
+      qaInspectBtn = btn;
+      qaInspectTxId = transactionId;
+      qaInspectSku = sku;
+
+      const modal = document.getElementById('qa-inspect-modal');
+      document.getElementById('qa-modal-ref-id').textContent = referenceId;
+      document.getElementById('qa-guides-container').innerHTML = '<div style="color:var(--text-muted); text-align:center; padding:2rem 0;">Loading QA Guides...</div>';
+      
+      modal.style.display = 'flex';
+      modal.offsetHeight;
+      modal.classList.add('open');
+
+      try {
+        const txs = activeTransactions.filter(t => 
+          t.reference_id === referenceId && 
+          t.status === 'reserved' && 
+          t.type === 'customer_order' &&
+          (!transactionId || t.id === transactionId)
+        );
+
+        if (txs.length === 0) {
+          closeQaInspectModal();
+          return;
+        }
+
+        const skus = txs.map(t => t.sku);
+        const matchedProducts = allProducts.filter(p => skus.includes(p.sku));
+        const matchedProductIds = matchedProducts.map(p => p.id);
+        console.log('[QA Inspect] txs:', txs);
+        console.log('[QA Inspect] skus:', skus);
+        console.log('[QA Inspect] matchedProducts:', matchedProducts);
+        console.log('[QA Inspect] matchedProductIds:', matchedProductIds);
+
+        let guides = [];
+        if (matchedProductIds.length > 0) {
+          const { data, error } = await sb
+            .from('qa_guides')
+            .select('*')
+            .in('product_id', matchedProductIds);
+          console.log('[QA Inspect] guides fetch result:', { data, error });
+          if (error) {
+            console.error('[QA Inspect] fetch error:', error);
+          }
+          if (!error && data) {
+            guides = data;
+          }
+        }
+
+        const container = document.getElementById('qa-guides-container');
+        container.innerHTML = '';
+
+        txs.forEach(tx => {
+          const prod = allProducts.find(p => p.sku === tx.sku) || { title: 'Unknown Product', id: null };
+          const guide = guides.find(g => g.product_id === prod.id);
+
+          const productCard = document.createElement('div');
+          productCard.style.cssText = 'border:1px solid var(--border); border-radius:8px; padding:1.25rem; background:var(--bg-base); display:flex; flex-direction:column; gap:0.75rem;';
+          
+          let guideHtml = '';
+          if (guide) {
+            const parts = guide.parts || [];
+            let partsHtml = '';
+            if (parts.length > 0) {
+              let groupedParts = [];
+              if (parts[0] && typeof parts[0] === 'object' && 'group_name' in parts[0]) {
+                groupedParts = parts;
+              } else {
+                groupedParts = [{
+                  group_name: 'General Components',
+                  parts: parts
+                }];
+              }
+
+              partsHtml = `
+                <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:0.75rem; margin-top:0.5rem;">
+                  ${groupedParts.map(group => {
+                    const gparts = group.parts || [];
+                    if (gparts.length === 0) return '';
+                    return `
+                      <div style="border:1px solid var(--border); border-radius:8px; padding:0.6rem 0.75rem; background:var(--bg-surface); display:flex; flex-direction:column; gap:0.4rem;">
+                        <div style="font-size:0.72rem; font-weight:800; color:var(--text-primary); text-transform:uppercase; letter-spacing:0.02em; border-bottom:1px solid var(--border); padding-bottom:0.35rem; margin-bottom:0.1rem;">${escFulfillment(group.group_name)}</div>
+                        <div style="display:flex; flex-direction:column; gap:0.35rem;">
+                          ${gparts.map(part => `
+                            <label style="display:flex; align-items:center; gap:0.5rem; background:var(--bg-base); padding:0.35rem 0.5rem; border:1px solid var(--border); border-radius:6px; cursor:pointer; user-select:none; justify-content:space-between;">
+                              <div style="display:flex; align-items:center; gap:0.5rem; flex:1; min-width:0;">
+                                <img src="${part.image_url}" style="width:36px; height:36px; object-fit:cover; border-radius:4px; border:1px solid var(--border); background:var(--bg-elevated); flex-shrink:0;" />
+                                <div style="flex:1; min-width:0; line-height:1.2;">
+                                  <div style="font-size:0.75rem; font-weight:700; color:var(--text-primary);">Qty: ${part.quantity}</div>
+                                  ${part.notes ? `<div style="font-size:0.7rem; color:var(--text-secondary); word-break:break-word; margin-top:2px;">${escFulfillment(part.notes)}</div>` : ''}
+                                </div>
+                              </div>
+                              <input type="checkbox" style="width:18px; height:18px; cursor:pointer; flex-shrink:0; margin-left:0.5rem;" />
+                            </label>
+                          `).join('')}
+                        </div>
+                      </div>
+                    `;
+                  }).join('')}
+                </div>
+              `;
+            }
+ 
+            guideHtml = `
+              ${guide.general_notes ? `<div style="font-size:0.82rem; color:var(--text-secondary); border-left:3px solid var(--cyan); padding-left:0.5rem; margin-bottom:0.5rem; line-height:1.4;"><strong>General Notes:</strong> ${escFulfillment(guide.general_notes)}</div>` : ''}
+              ${partsHtml}
+            `;
+          } else {
+            guideHtml = `<div style="font-size:0.82rem; color:var(--text-muted); font-style:italic;">No QA Guide defined for this product.</div>`;
+          }
+ 
+          productCard.innerHTML = `
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border); padding-bottom:0.4rem; margin-bottom:0.4rem;">
+              <span style="font-size:0.9rem; font-weight:700; color:var(--text-primary);">[${tx.sku}] ${escFulfillment(prod.title)}</span>
+            </div>
+            <div>${guideHtml}</div>
+          `;
+          container.appendChild(productCard);
+        });
+
+      } catch (err) {
+        console.error(err);
+        document.getElementById('qa-guides-container').innerHTML = '<div style="color:var(--danger); text-align:center; padding:2rem 0;">Error loading QA Guides.</div>';
+      }
+    };
+
+    window.closeQaInspectModal = function() {
+      const modal = document.getElementById('qa-inspect-modal');
+      modal.classList.remove('open');
+      setTimeout(() => {
+        modal.style.display = 'none';
+      }, 150);
+      qaInspectRefId = null;
+      qaInspectBtn = null;
+      qaInspectTxId = null;
+      qaInspectSku = null;
+    };
+
+    window.executeQaInspect = async function() {
+      if (!qaInspectRefId || !qaInspectBtn) return;
+      
+      const confirmBtn = document.getElementById('btn-confirm-qa-inspect');
+      const originalHtml = confirmBtn.innerHTML;
+      confirmBtn.disabled = true;
+      confirmBtn.innerHTML = `Confirming...`;
+
+      try {
+        await wrapActionWithLoading(qaInspectBtn, async () => {
+          const now = new Date().toISOString();
+          const txsToInspect = activeTransactions.filter(t => 
+            t.reference_id === qaInspectRefId && 
+            t.status === 'reserved' && 
+            t.type === 'customer_order' &&
+            (!qaInspectTxId || t.id === qaInspectTxId)
+          );
+
+          if (txsToInspect.length === 0) return;
+
+          for (const tx of txsToInspect) {
+            const { error: txErr } = await sb.from('inventory_transactions').update({
+              status: 'inspect',
+              timestamp_inspect: now
+            }).eq('id', tx.id);
+            if (txErr) throw txErr;
+
+            let invQPack = sb.from('inventory').select('*').eq('sku', tx.sku);
+            if (activeWarehouseId) invQPack = invQPack.eq('warehouse_id', activeWarehouseId);
+            else invQPack = invQPack.is('warehouse_id', null);
+            const { data: invRow, error: invErr } = await invQPack;
+            if (invErr) throw invErr;
+            if (invRow && invRow.length > 0) {
+              const inv = invRow[0];
+              const { error: updErr } = await sb.from('inventory').update({
+                reserved: Math.max(0, (inv.reserved || 0) - tx.quantity),
+                inspect: (inv.inspect || 0) + tx.quantity
+              }).eq('id', inv.id);
+              if (updErr) throw updErr;
+            }
+          }
+
+          closeQaInspectModal();
+          await refreshDashboard();
+          showToast('Item QA inspected. Moved to Pack.');
+        });
+      } catch (err) {
+        console.error(err);
+        showToast('Inspection failed: ' + err.message, true);
+      } finally {
+        confirmBtn.disabled = false;
+        confirmBtn.innerHTML = originalHtml;
+      }
+    };
+
+    // ACTION: Unpack entire order (packed → inspect)
+    window.unpackOrder = async function(btn, referenceId) {
+      await wrapActionWithLoading(btn, async () => {
+        const txsToUnpack = activeTransactions.filter(t => 
+          t.reference_id === referenceId && 
+          t.status === 'packed' && 
+          t.type === 'customer_order'
+        );
+
+        if (txsToUnpack.length === 0) return;
+
+        for (const tx of txsToUnpack) {
+          const { error: txErr } = await sb.from('inventory_transactions').update({
+            status: 'inspect',
+            timestamp_packed: null
+          }).eq('id', tx.id);
+          if (txErr) throw txErr;
+
+          let invQUnpack = sb.from('inventory').select('*').eq('sku', tx.sku);
+          if (activeWarehouseId) invQUnpack = invQUnpack.eq('warehouse_id', activeWarehouseId);
+          else invQUnpack = invQUnpack.is('warehouse_id', null);
+          const { data: invRow, error: invErr } = await invQUnpack;
+          if (invErr) throw invErr;
+          if (invRow && invRow.length > 0) {
+            const inv = invRow[0];
+            const { error: updErr } = await sb.from('inventory').update({
+              inspect: (inv.inspect || 0) + tx.quantity,
+              packed: Math.max(0, inv.packed - tx.quantity)
+            }).eq('id', inv.id);
+            if (updErr) throw updErr;
+          }
+        }
+
+        lastAction = null;
+        updateUndoButtonState();
+        await refreshDashboard();
+      });
+    };
+
+    // ACTION: Mark Packed
+    window.packItem = async function(btn, id, sku, qty) {
+      await wrapActionWithLoading(btn, async () => {
+        const now = new Date().toISOString();
+
+        const { error: txErr } = await sb.from('inventory_transactions').update({
+          status: 'packed',
+          timestamp_packed: now
+        }).eq('id', id);
+        if (txErr) throw txErr;
+
+        let invQPack = sb.from('inventory').select('*').eq('sku', sku);
+        if (activeWarehouseId) invQPack = invQPack.eq('warehouse_id', activeWarehouseId);
+        else invQPack = invQPack.is('warehouse_id', null);
+        const { data: invRow, error: invErr } = await invQPack;
+        if (invErr) throw invErr;
+        if (invRow && invRow.length > 0) {
+          const inv = invRow[0];
+          const { error: updErr } = await sb.from('inventory').update({
+            reserved: Math.max(0, inv.reserved - qty),
+            packed: inv.packed + qty
+          }).eq('id', inv.id);
+          if (updErr) throw updErr;
+        }
+
+        lastAction = { type: 'pack', id, sku, qty };
+        updateUndoButtonState();
+        await refreshDashboard();
+      });
+    };
+
+    // ACTION: Cancel from Pack queue (reserved → cancelled inventory)
+    window.cancelPackItem = async function(btn, id, sku, qty) {
+      await wrapActionWithLoading(btn, async () => {
+        await handleCancellationProcess(id, sku, qty, 'reserved');
+        lastAction = { type: 'cancelPack', id, sku, qty };
+        updateUndoButtonState();
+        await refreshDashboard();
+      });
+    };
+
+    // ACTION: Unpack item (packed → reserved)
+    window.unpackItem = async function(btn, id, sku, qty) {
+      await wrapActionWithLoading(btn, async () => {
+        const { error: txErr } = await sb.from('inventory_transactions').update({
+          status: 'reserved',
+          timestamp_packed: null
+        }).eq('id', id);
+        if (txErr) throw txErr;
+
+        let invQUnpack = sb.from('inventory').select('*').eq('sku', sku);
+        if (activeWarehouseId) invQUnpack = invQUnpack.eq('warehouse_id', activeWarehouseId);
+        else invQUnpack = invQUnpack.is('warehouse_id', null);
+        const { data: invRow, error: invErr } = await invQUnpack;
+        if (invErr) throw invErr;
+        if (invRow && invRow.length > 0) {
+          const inv = invRow[0];
+          const { error: updErr } = await sb.from('inventory').update({
+            reserved: inv.reserved + qty,
+            packed: Math.max(0, inv.packed - qty)
+          }).eq('id', inv.id);
+          if (updErr) throw updErr;
+        }
+
+        lastAction = null;
+        updateUndoButtonState();
+        await refreshDashboard();
+      });
+    };
+
+    // ACTION: Mark Dispatched
+    window.dispatchItem = async function(btn, id, sku, qty) {
+      await wrapActionWithLoading(btn, async () => {
+        const now = new Date().toISOString();
+
+        const { error: txErr } = await sb.from('inventory_transactions').update({
+          status: 'dispatched',
+          timestamp_dispatched: now
+        }).eq('id', id);
+        if (txErr) throw txErr;
+
+        let invQDisp = sb.from('inventory').select('*').eq('sku', sku);
+        if (activeWarehouseId) invQDisp = invQDisp.eq('warehouse_id', activeWarehouseId);
+        else invQDisp = invQDisp.is('warehouse_id', null);
+        const { data: invRow, error: invErr } = await invQDisp;
+        if (invErr) throw invErr;
+        if (invRow && invRow.length > 0) {
+          const inv = invRow[0];
+          const { error: updErr } = await sb.from('inventory').update({
+            packed: Math.max(0, inv.packed - qty),
+            dispatched: inv.dispatched + qty
+          }).eq('id', inv.id);
+          if (updErr) throw updErr;
+        }
+
+        lastAction = { type: 'dispatch', id, sku, qty };
+        updateUndoButtonState();
+        await refreshDashboard();
+      });
+    };
+
+
+
+    // ACTION: Undo Last Action
+    window.undoLastAction = async function(btn) {
+      if (!lastAction) {
+        showToast('No action to undo.', true);
+        return;
+      }
+
+      await wrapActionWithLoading(btn, async () => {
+        const { type, id, sku, qty } = lastAction;
+
+        if (type === 'pack') {
+          // undo pack (change packed back to reserved)
+          const { error: txErr } = await sb.from('inventory_transactions').update({
+            status: 'reserved',
+            timestamp_packed: null
+          }).eq('id', id);
+          if (txErr) throw txErr;
+
+          let invQU1 = sb.from('inventory').select('*').eq('sku', sku);
+          if (activeWarehouseId) invQU1 = invQU1.eq('warehouse_id', activeWarehouseId);
+          else invQU1 = invQU1.is('warehouse_id', null);
+          const { data: invRow, error: invErr } = await invQU1;
+          if (invErr) throw invErr;
+          if (invRow && invRow.length > 0) {
+            const inv = invRow[0];
+            const { error: updErr } = await sb.from('inventory').update({
+              reserved: inv.reserved + qty,
+              packed: Math.max(0, inv.packed - qty)
+            }).eq('id', inv.id);
+            if (updErr) throw updErr;
+          }
+          showToast('Undone: Item marked back as reserved.');
+        } 
+        else if (type === 'cancelPack') {
+          // undo cancelPack (change cancelled back to reserved)
+          const { error: txErr } = await sb.from('inventory_transactions').update({
+            status: 'reserved',
+            timestamp_cancelled: null
+          }).eq('id', id);
+          if (txErr) throw txErr;
+
+          let invQU2 = sb.from('inventory').select('*').eq('sku', sku);
+          if (activeWarehouseId) invQU2 = invQU2.eq('warehouse_id', activeWarehouseId);
+          else invQU2 = invQU2.is('warehouse_id', null);
+          const { data: invRow, error: invErr } = await invQU2;
+          if (invErr) throw invErr;
+          if (invRow && invRow.length > 0) {
+            const inv = invRow[0];
+            const { error: updErr } = await sb.from('inventory').update({
+              reserved: inv.reserved + qty,
+              cancelled: Math.max(0, inv.cancelled - qty)
+            }).eq('id', inv.id);
+            if (updErr) throw updErr;
+          }
+          showToast('Undone: Cancelled item restored back to Pack queue.');
+        }
+        else if (type === 'dispatch') {
+          // undo dispatch (change dispatched back to packed)
+          const { error: txErr } = await sb.from('inventory_transactions').update({
+            status: 'packed',
+            timestamp_dispatched: null
+          }).eq('id', id);
+          if (txErr) throw txErr;
+
+          let invQU3 = sb.from('inventory').select('*').eq('sku', sku);
+          if (activeWarehouseId) invQU3 = invQU3.eq('warehouse_id', activeWarehouseId);
+          else invQU3 = invQU3.is('warehouse_id', null);
+          const { data: invRow, error: invErr } = await invQU3;
+          if (invErr) throw invErr;
+          if (invRow && invRow.length > 0) {
+            const inv = invRow[0];
+            const { error: updErr } = await sb.from('inventory').update({
+              packed: inv.packed + qty,
+              dispatched: Math.max(0, inv.dispatched - qty)
+            }).eq('id', inv.id);
+            if (updErr) throw updErr;
+          }
+          showToast('Undone: Dispatched item moved back to Dispatch queue.');
+        }
+        else if (type === 'return') {
+          // undo return (change returned back to dispatched)
+          const { error: txErr } = await sb.from('inventory_transactions').update({
+            status: 'dispatched',
+            timestamp_returned: null
+          }).eq('id', id);
+          if (txErr) throw txErr;
+
+          let invQU4 = sb.from('inventory').select('*').eq('sku', sku);
+          if (activeWarehouseId) invQU4 = invQU4.eq('warehouse_id', activeWarehouseId);
+          else invQU4 = invQU4.is('warehouse_id', null);
+          const { data: invRow, error: invErr } = await invQU4;
+          if (invErr) throw invErr;
+          if (invRow && invRow.length > 0) {
+            const inv = invRow[0];
+            const { error: updErr } = await sb.from('inventory').update({
+              dispatched: inv.dispatched + qty,
+              returned: Math.max(0, inv.returned - qty)
+            }).eq('id', inv.id);
+            if (updErr) throw updErr;
+          }
+          showToast('Undone: Returned item marked back as dispatched.');
+        }
+
+        lastAction = null;
+        updateUndoButtonState();
+        await refreshDashboard();
+      });
+    };
+
+    // Trigger explicit booking sync on demand
+    document.getElementById('btn-sync').addEventListener('click', async () => {
+      document.getElementById('btn-sync').disabled = true;
+      document.getElementById('btn-sync').innerHTML = `<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: -2px; margin-right: 6px; animation: spin 1s linear infinite;"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Refreshing...`;
+      try {
+        await runAutoSync();
+        await refreshDashboard();
+        showToast('Refresh complete!');
+      } catch (err) {
+        console.error(err);
+        showToast('Refresh error: ' + err.message, true);
+      } finally {
+        document.getElementById('btn-sync').disabled = false;
+        document.getElementById('btn-sync').innerHTML = `<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: -2px; margin-right: 6px;"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Refresh`;
+      }
+    });
+
+    // Toggle logs drawer overlay
+    window.toggleLogs = function() {
+      const sidebar = document.querySelector('.side-workspace');
+      const btn = document.getElementById('btn-logs');
+      if (sidebar.classList.contains('open')) {
+        sidebar.classList.remove('open');
+        btn.classList.remove('active');
+        localStorage.setItem('logs_drawer_open', 'false');
+      } else {
+        sidebar.classList.add('open');
+        btn.classList.add('active');
+        localStorage.setItem('logs_drawer_open', 'true');
+      }
+    };
+
+    // ── WAREHOUSE TRANSFER TAB FUNCTIONALITY ──
+    let directTransferDraft = [];
+
+    window.populateTransferDropdowns = function() {
+      const activeWh = fulfillmentWarehouses.find(w => w.id === activeWarehouseId);
+      const skuDirectSelect = document.getElementById('direct-transfer-sku');
+      const skuRequestSelect = document.getElementById('request-transfer-sku');
+      const targetWhSelect = document.getElementById('direct-transfer-target-wh');
+      const sourceWhSelect = document.getElementById('request-transfer-source-wh');
+
+      if (!skuDirectSelect || !skuRequestSelect || !targetWhSelect || !sourceWhSelect) return;
+
+      // Populate SKUs
+      // 1. Direct Transfer SKU needs available stock in activeWarehouseId
+      let directSkuOptions = '';
+      let requestSkuOptions = '';
+
+      allProducts.forEach(p => {
+        if (p.count_inventory === false) return; // Skip service/non-stocked items
+        const inv = allInventory[p.sku];
+        const avail = inv ? inv.available : 0;
+        
+        // Show SKU, title and available quantity
+        const optText = `[${p.sku}] ${p.title} (Avail: ${avail})`;
+        
+        requestSkuOptions += `<option value="${escFulfillment(p.sku)}">${escFulfillment(optText)}</option>`;
+        if (avail > 0) {
+          directSkuOptions += `<option value="${escFulfillment(p.sku)}">${escFulfillment(optText)}</option>`;
+        }
+      });
+
+      skuDirectSelect.innerHTML = directSkuOptions || '<option value="" disabled>No stocked items available</option>';
+      skuRequestSelect.innerHTML = requestSkuOptions || '<option value="" disabled>No products available</option>';
+
+      // Populate Warehouses
+      let targetWhOptions = '<option value="" disabled selected>Select Target Warehouse</option>';
+      let sourceWhOptions = '<option value="" disabled selected>Select Source Warehouse</option>';
+
+      fulfillmentWarehouses.forEach(w => {
+        if (w.id === activeWarehouseId) return; // Exclude active warehouse
+        const optHtml = `<option value="${escFulfillment(w.id)}">${escFulfillment(w.name)}</option>`;
+        targetWhOptions += optHtml;
+        sourceWhOptions += optHtml;
+      });
+
+      targetWhSelect.innerHTML = targetWhOptions;
+      sourceWhSelect.innerHTML = sourceWhOptions;
+
+      // If activeWarehouseId is null (All Inventory), disable controls
+      const inputs = [
+        skuDirectSelect, skuRequestSelect, targetWhSelect, sourceWhSelect,
+        document.getElementById('direct-transfer-qty'),
+        document.getElementById('request-transfer-qty'),
+        document.getElementById('btn-submit-transfer-request')
+      ];
+      const addProdBtn = document.querySelector('button[onclick="addDirectTransferItem()"]');
+      if (addProdBtn) inputs.push(addProdBtn);
+
+      if (!activeWarehouseId) {
+        inputs.forEach(el => { if (el) el.disabled = true; });
+        showToast('Please select a specific warehouse to transfer or request stock.', true);
+      } else {
+        inputs.forEach(el => { if (el && el !== document.getElementById('btn-submit-transfer-request')) el.disabled = false; });
+        // Enable request button as well
+        const reqBtn = document.getElementById('btn-submit-transfer-request');
+        if (reqBtn) reqBtn.disabled = false;
+      }
+    };
+
+    window.addDirectTransferItem = function() {
+      if (!activeWarehouseId) return;
+      const skuSelect = document.getElementById('direct-transfer-sku');
+      const qtyInput = document.getElementById('direct-transfer-qty');
+      const targetWhSelect = document.getElementById('direct-transfer-target-wh');
+
+      if (!skuSelect || !qtyInput || !targetWhSelect) return;
+
+      const sku = skuSelect.value;
+      const qty = parseInt(qtyInput.value) || 0;
+      const targetWhId = targetWhSelect.value;
+
+      if (!sku) {
+        showToast('Please select an item.', true);
+        return;
+      }
+      if (qty <= 0) {
+        showToast('Quantity must be greater than 0.', true);
+        return;
+      }
+      if (!targetWhId) {
+        showToast('Please select a target warehouse.', true);
+        return;
+      }
+
+      // Check available stock in activeWarehouseId
+      const inv = allInventory[sku];
+      const avail = inv ? inv.available : 0;
+      
+      // Calculate current total quantity of this SKU in draft
+      const draftTotal = directTransferDraft
+        .filter(item => item.sku === sku)
+        .reduce((sum, item) => sum + item.quantity, 0);
+
+      if (avail < draftTotal + qty) {
+        showToast(`Insufficient stock of ${sku}. Available: ${avail}, currently in draft: ${draftTotal}`, true);
+        return;
+      }
+
+      const targetWh = fulfillmentWarehouses.find(w => w.id === targetWhId);
+
+      // Add or merge into draft
+      const existing = directTransferDraft.find(item => item.sku === sku && item.targetWarehouseId === targetWhId);
+      if (existing) {
+        existing.quantity += qty;
+      } else {
+        directTransferDraft.push({
+          sku,
+          quantity: qty,
+          targetWarehouseId: targetWhId,
+          targetWarehouseName: targetWh ? targetWh.name : 'Unknown'
+        });
+      }
+
+      qtyInput.value = 1;
+      renderDirectTransferItemsList();
+    };
+
+    window.removeDirectTransferItem = function(idx) {
+      directTransferDraft.splice(idx, 1);
+      renderDirectTransferItemsList();
+    };
+
+    window.renderDirectTransferItemsList = function() {
+      const tbody = document.getElementById('direct-transfer-items-list');
+      const submitBtn = document.getElementById('btn-submit-direct-transfer');
+      if (!tbody) return;
+
+      if (directTransferDraft.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="4" class="text-center text-muted" style="padding: 1rem 0;">No products added yet.</td></tr>`;
+        if (submitBtn) submitBtn.disabled = true;
+        return;
+      }
+
+      tbody.innerHTML = directTransferDraft.map((item, idx) => `
+        <tr>
+          <td><code>${escFulfillment(item.sku)}</code></td>
+          <td><strong>${item.quantity}</strong></td>
+          <td>${escFulfillment(item.targetWarehouseName)}</td>
+          <td style="text-align:right;">
+            <button class="btn btn-danger btn-sm" style="padding: 0.15rem 0.4rem; font-size: 0.75rem;" onclick="removeDirectTransferItem(${idx})">Remove</button>
+          </td>
+        </tr>
+      `).join('');
+
+      if (submitBtn) submitBtn.disabled = false;
+    };
+
+    window.submitDirectTransfer = async function() {
+      const btn = document.getElementById('btn-submit-direct-transfer');
+      if (!btn || btn.disabled || directTransferDraft.length === 0) return;
+
+      await wrapActionWithLoading(btn, async () => {
+        if (!companyId) throw new Error('Company context is not initialized.');
+
+        const { data: { user } } = await sb.auth.getSession();
+
+        // 1. Process each item in draft
+        for (const item of directTransferDraft) {
+          // Double-check stock in active warehouse
+          let invQ = sb.from('inventory').select('*').eq('sku', item.sku).eq('warehouse_id', activeWarehouseId);
+          const { data: invRow, error: invErr } = await invQ;
+          if (invErr || !invRow || invRow.length === 0) {
+            throw new Error(`Inventory record not found for SKU ${item.sku} in current warehouse.`);
+          }
+
+          const currentInv = invRow[0];
+          if (currentInv.available < item.quantity) {
+            throw new Error(`Insufficient stock for SKU ${item.sku}. Available: ${currentInv.available}, requested: ${item.quantity}`);
+          }
+
+          // Deduct from source warehouse
+          const { error: updErr } = await sb.from('inventory').update({
+            available: currentInv.available - item.quantity
+          }).eq('id', currentInv.id);
+          if (updErr) throw updErr;
+
+          // Insert approved warehouse_transfer row
+          const { error: insErr } = await sb.from('warehouse_transfers').insert([{
+            company_id: companyId,
+            from_warehouse_id: activeWarehouseId,
+            to_warehouse_id: item.targetWarehouseId,
+            sku: item.sku,
+            quantity: item.quantity,
+            status: 'approved',
+            requested_by: user?.id || null,
+            approved_by: user?.id || null,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          }]);
+          if (insErr) throw insErr;
+        }
+
+        showToast('Stocks transferred and shipped successfully!');
+        directTransferDraft = [];
+        renderDirectTransferItemsList();
+        await refreshDashboard();
+      });
+    };
+
+    window.submitTransferRequest = async function() {
+      const btn = document.getElementById('btn-submit-transfer-request');
+      if (!btn || btn.disabled || !activeWarehouseId) return;
+
+      const skuSelect = document.getElementById('request-transfer-sku');
+      const qtyInput = document.getElementById('request-transfer-qty');
+      const sourceWhSelect = document.getElementById('request-transfer-source-wh');
+
+      if (!skuSelect || !qtyInput || !sourceWhSelect) return;
+
+      const sku = skuSelect.value;
+      const qty = parseInt(qtyInput.value) || 0;
+      const sourceWhId = sourceWhSelect.value;
+
+      if (!sku) {
+        showToast('Please select an item.', true);
+        return;
+      }
+      if (qty <= 0) {
+        showToast('Quantity must be greater than 0.', true);
+        return;
+      }
+      if (!sourceWhId) {
+        showToast('Please select a source warehouse.', true);
+        return;
+      }
+
+      await wrapActionWithLoading(btn, async () => {
+        if (!companyId) throw new Error('Company context is not initialized.');
+
+        const { data: { user } } = await sb.auth.getSession();
+
+        // Insert pending warehouse_transfer row (requested_by is current user, target is activeWarehouseId, source is sourceWhId)
+        const { error: insErr } = await sb.from('warehouse_transfers').insert([{
+          company_id: companyId,
+          from_warehouse_id: sourceWhId,
+          to_warehouse_id: activeWarehouseId,
+          sku: sku,
+          quantity: qty,
+          status: 'pending',
+          requested_by: user?.id || null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }]);
+        if (insErr) throw insErr;
+
+        showToast('Transfer request submitted successfully!');
+        qtyInput.value = 1;
+        await refreshDashboard();
+      });
+    };
+
+    window.approveTransfer = async function(reqId, btn) {
+      await wrapActionWithLoading(btn, async () => {
+        const transfer = warehouseTransfers.find(t => t.id === reqId);
+        if (!transfer) throw new Error('Transfer request not found');
+
+        // Check stock in the source warehouse
+        let invQ = sb.from('inventory').select('*').eq('sku', transfer.sku).eq('warehouse_id', transfer.from_warehouse_id);
+        const { data: invRow, error: invErr } = await invQ;
+        if (invErr || !invRow || invRow.length === 0) {
+          throw new Error('Stock record not found in source warehouse');
+        }
+
+        const currentAvail = invRow[0].available;
+        if (currentAvail < transfer.quantity) {
+          throw new Error(`Insufficient stock in source warehouse. Available: ${currentAvail}`);
+        }
+
+        // Deduct from source warehouse
+        const { error: updErr } = await sb.from('inventory').update({
+          available: currentAvail - transfer.quantity
+        }).eq('id', invRow[0].id);
+        if (updErr) throw updErr;
+
+        // Mark as approved and approved_by
+        const { data: { user } } = await sb.auth.getSession();
+        const { error: trErr } = await sb.from('warehouse_transfers').update({
+          status: 'approved',
+          approved_by: user?.id || null,
+          updated_at: new Date().toISOString()
+        }).eq('id', reqId);
+        if (trErr) throw trErr;
+
+        showToast('Transfer request approved and shipped!');
+        await refreshDashboard();
+      });
+    };
+
+    window.declineTransfer = async function(reqId, btn) {
+      await wrapActionWithLoading(btn, async () => {
+        const { error: trErr } = await sb.from('warehouse_transfers').update({
+          status: 'declined',
+          updated_at: new Date().toISOString()
+        }).eq('id', reqId);
+        if (trErr) throw trErr;
+
+        showToast('Transfer request declined.');
+        await refreshDashboard();
+      });
+    };
+
+    window.receiveTransfer = async function(btn, transferId, sku, qty) {
+      await wrapActionWithLoading(btn, async () => {
+        const transfer = warehouseTransfers.find(t => t.id === transferId);
+        if (!transfer) throw new Error('Transfer record not found');
+
+        const now = new Date().toISOString();
+
+        // Mark as received
+        const { error: trErr } = await sb.from('warehouse_transfers').update({
+          status: 'received',
+          updated_at: now
+        }).eq('id', transferId);
+        if (trErr) throw trErr;
+
+        // Increment inventory in target warehouse
+        let invQ = sb.from('inventory').select('*').eq('sku', sku).eq('warehouse_id', transfer.to_warehouse_id);
+        const { data: invRow, error: invErr } = await invQ;
+        if (invErr) throw invErr;
+
+        if (invRow && invRow.length > 0) {
+          const current = invRow[0];
+          const { error: updErr } = await sb.from('inventory').update({
+            available: current.available + qty
+          }).eq('id', current.id);
+          if (updErr) throw updErr;
+        } else {
+          // Insert new row if it doesn't exist
+          const { error: insErr } = await sb.from('inventory').insert([{
+            sku: sku,
+            available: qty,
+            reserved: 0,
+            packed: 0,
+            dispatched: 0,
+            returned: 0,
+            cancelled: 0,
+            warehouse_id: transfer.to_warehouse_id
+          }]);
+          if (insErr) throw insErr;
+        }
+
+        showToast('Transfer received successfully!');
+        await refreshDashboard();
+      });
+    };
+
+    window.renderTransferTab = function() {
+      const tbody = document.getElementById('transfer-requests-list');
+      if (!tbody) return;
+
+      // Filter transfers where from_warehouse_id matches activeWarehouseId and status is pending
+      const pendingTransfers = warehouseTransfers.filter(tr =>
+        tr.from_warehouse_id === activeWarehouseId && tr.status === 'pending'
+      );
+
+      if (pendingTransfers.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted" style="padding:2rem 0;">No pending transfer requests.</td></tr>`;
+      } else {
+        tbody.innerHTML = pendingTransfers.map(tr => {
+          const p = allProducts.find(prod => prod.sku === tr.sku) || { title: 'Unknown Product' };
+          const targetWh = fulfillmentWarehouses.find(w => w.id === tr.to_warehouse_id) || { name: 'Unknown Warehouse' };
+          const requesterEmp = allEmployees.find(e => e.id === tr.requested_by);
+          const requesterName = requesterEmp ? `${requesterEmp.first_name} ${requesterEmp.last_name}` : 'Warehouse Manager';
+          const dateStr = tr.created_at ? new Date(tr.created_at).toLocaleString() : 'N/A';
+
+          return `
+            <tr>
+              <td><code>${escFulfillment(tr.sku)}</code></td>
+              <td>${escFulfillment(p.title)}</td>
+              <td><strong>${tr.quantity}</strong></td>
+              <td>${escFulfillment(targetWh.name)}</td>
+              <td>${escFulfillment(requesterName)}</td>
+              <td>${escFulfillment(dateStr)}</td>
+              <td style="text-align:right;">
+                <button class="btn btn-cyan btn-sm" onclick="approveTransfer('${tr.id}', this)">Approve</button>
+                <button class="btn btn-danger btn-sm" style="margin-left:0.5rem;" onclick="declineTransfer('${tr.id}', this)">Decline</button>
+              </td>
+            </tr>
+          `;
+        }).join('');
+      }
+
+      // Re-populate dropdown lists
+      populateTransferDropdowns();
+    };
+
+    // Run Initial Load
+    init();
+  </script>
+</body>
+</html>

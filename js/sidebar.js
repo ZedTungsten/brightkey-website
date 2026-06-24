@@ -523,7 +523,7 @@
     // Check sub-links and auto-expand active group
     document.querySelectorAll('.dash-nav-child').forEach(link => {
       const href = link.getAttribute('href');
-      if (href && (currentPath === href || currentPath === href + '.html')) {
+      if (href && (currentPath === href || currentPath === href + '.html' || (href === '/dashboard/warehouse' && currentPath.startsWith('/dashboard/warehouse')))) {
         link.classList.add('active');
         const group = link.closest('.dash-nav-group');
         if (group) {
