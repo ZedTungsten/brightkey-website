@@ -161,3 +161,11 @@ Ensure the tabs container and buttons use the following premium styling tokens:
 >      modal.style.display = 'none';
 >    }, 150);
 >    ```
+
+---
+
+## 10. Fetching Products (MANDATORY `id` Selection)
+> [!IMPORTANT]
+> When querying the `products` table from Supabase client (e.g. `sb.from('products').select(...)`), ALWAYS explicitly include the `id` column in the select fields list.
+> 
+> Failing to include `id` will result in `undefined` product IDs at runtime when performing product matching or querying dependent tables (like `qa_guides` or `inventory_transactions`), which triggers database UUID syntax errors: `invalid input syntax for type uuid: "undefined"`.
