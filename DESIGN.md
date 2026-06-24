@@ -390,4 +390,25 @@ This means the typical approach of adding `border-right` and `box-shadow` to a s
     transform: translateX(20px);
   }
   ```
-```
+
+---
+
+## 16. Modal Overlay Activation (Opacity & Transitions)
+
+> [!IMPORTANT]
+> When opening or closing modal overlays (such as `.modal-overlay` styled elements), updating `.style.display = 'flex'/'none'` alone is NOT sufficient. The CSS rules hide the overlay by default using `opacity: 0` and `pointer-events: none` to support fade transitions.
+>
+> To correctly trigger modals:
+> 1. **Open**: Show the display block/flex, trigger a browser reflow (e.g., read `offsetHeight`), and add the `.open` class.
+>    ```javascript
+>    modal.style.display = 'flex';
+>    modal.offsetHeight; // force reflow
+>    modal.classList.add('open');
+>    ```
+> 2. **Close**: Remove the `.open` class first to trigger the fadeout, then hide the display after the transition completes.
+>    ```javascript
+>    modal.classList.remove('open');
+>    setTimeout(() => {
+>      modal.style.display = 'none';
+>    }, 150);
+>    ```
