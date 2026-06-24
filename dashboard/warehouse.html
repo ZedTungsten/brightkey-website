@@ -806,7 +806,7 @@
                       <th>City</th>
                       <th>SKU</th>
                       <th>Qty</th>
-                      <th>Inspect Date</th>
+                      <th>Request Date</th>
                       <th>Action</th>
                     </tr>
                   </thead>
@@ -1970,37 +1970,47 @@
       const orderGroups = Object.values(groups);
 
       orderGroups.forEach(group => {
-        const skusHtml = group.items.map(t => `<code>${t.sku}</code>`).join('<br/>');
-        const qtysHtml = group.items.map(t => `<strong>${t.quantity}</strong>`).join('<br/>');
-        const date = group.timestamp_reserved ? new Date(group.timestamp_reserved).toLocaleString() : 'N/A';
+        const rowSpan = group.items.length;
+        const dateOnly = group.timestamp_reserved ? new Date(group.timestamp_reserved).toLocaleDateString() : 'N/A';
 
-        const imagesHtml = group.items.map(t => {
-          const p = allProducts.find(prod => prod.sku === t.sku) || { image_main: '' };
+        group.items.forEach((item, idx) => {
+          const p = allProducts.find(prod => prod.sku === item.sku) || { title: 'Unknown Product', image_main: '' };
           let imageSrc = p.image_main;
           if (!imageSrc || !imageSrc.match(/^https?:\/\//)) {
             imageSrc = '../../assets/og-image.png';
           }
-          return `<img src="${imageSrc}" alt="${t.sku}" style="width: 50px; height: 32px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border); background: var(--bg-elevated); margin-right: 4px; vertical-align: middle;" />`;
-        }).join('');
+          const imageHtml = `<img src="${imageSrc}" alt="${item.sku}" style="width: 50px; height: 32px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border); background: var(--bg-elevated);" />`;
 
-        tbody.innerHTML += `
-          <tr>
-            <td>
-              <div style="display: flex; flex-wrap: wrap; gap: 4px; max-width: 160px;">${imagesHtml}</div>
-            </td>
-            <td><strong>${group.reference_id}</strong></td>
-            <td>${group.customer_name}</td>
-            <td>${group.customer_city}</td>
-            <td>${skusHtml}</td>
-            <td>${qtysHtml}</td>
-            <td>${date}</td>
-            <td>
-              <button class="btn btn-cyan btn-sm" onclick="qaInspectOrder(this, '${group.reference_id}')">
-                <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: -2px; margin-right: 6px;"><polyline points="20 6 9 17 4 12"/></svg>QA Inspected
-              </button>
-            </td>
-          </tr>
-        `;
+          const actionButtonHtml = `
+            <button class="btn btn-cyan btn-sm" onclick="qaInspectOrder(this, '${group.reference_id}', '${item.id}', '${item.sku}')">
+              <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: -2px; margin-right: 6px;"><polyline points="20 6 9 17 4 12"/></svg>QA Inspected
+            </button>
+          `;
+
+          if (idx === 0) {
+            tbody.innerHTML += `
+              <tr>
+                <td>${imageHtml}</td>
+                <td rowspan="${rowSpan}"><strong>${group.reference_id}</strong></td>
+                <td rowspan="${rowSpan}">${group.customer_name}</td>
+                <td rowspan="${rowSpan}">${group.customer_city}</td>
+                <td><code>${item.sku}</code></td>
+                <td><strong>${item.quantity}</strong></td>
+                <td rowspan="${rowSpan}">${dateOnly}</td>
+                <td>${actionButtonHtml}</td>
+              </tr>
+            `;
+          } else {
+            tbody.innerHTML += `
+              <tr>
+                <td>${imageHtml}</td>
+                <td><code>${item.sku}</code></td>
+                <td><strong>${item.quantity}</strong></td>
+                <td>${actionButtonHtml}</td>
+              </tr>
+            `;
+          }
+        });
       });
     }
 
@@ -2690,10 +2700,14 @@
 
     let qaInspectRefId = null;
     let qaInspectBtn = null;
+    let qaInspectTxId = null;
+    let qaInspectSku = null;
 
-    window.qaInspectOrder = async function(btn, referenceId) {
+    window.qaInspectOrder = async function(btn, referenceId, transactionId = null, sku = null) {
       qaInspectRefId = referenceId;
       qaInspectBtn = btn;
+      qaInspectTxId = transactionId;
+      qaInspectSku = sku;
 
       const modal = document.getElementById('qa-inspect-modal');
       document.getElementById('qa-modal-ref-id').textContent = referenceId;
@@ -2707,7 +2721,8 @@
         const txs = activeTransactions.filter(t => 
           t.reference_id === referenceId && 
           t.status === 'reserved' && 
-          t.type === 'customer_order'
+          t.type === 'customer_order' &&
+          (!transactionId || t.id === transactionId)
         );
 
         if (txs.length === 0) {
@@ -2820,6 +2835,8 @@
       }, 150);
       qaInspectRefId = null;
       qaInspectBtn = null;
+      qaInspectTxId = null;
+      qaInspectSku = null;
     };
 
     window.executeQaInspect = async function() {
@@ -2836,7 +2853,8 @@
           const txsToInspect = activeTransactions.filter(t => 
             t.reference_id === qaInspectRefId && 
             t.status === 'reserved' && 
-            t.type === 'customer_order'
+            t.type === 'customer_order' &&
+            (!qaInspectTxId || t.id === qaInspectTxId)
           );
 
           if (txsToInspect.length === 0) return;
@@ -2865,7 +2883,7 @@
 
           closeQaInspectModal();
           await refreshDashboard();
-          showToast('Order QA inspected. Moved to Pack.');
+          showToast('Item QA inspected. Moved to Pack.');
         });
       } catch (err) {
         console.error(err);
