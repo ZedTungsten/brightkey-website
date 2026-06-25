@@ -2468,12 +2468,6 @@
             throw new Error(`Insufficient stock for SKU ${item.sku}. Available: ${currentInv.available}, requested: ${item.quantity}`);
           }
 
-          // Deduct from source warehouse
-          const { error: updErr } = await sb.from('inventory').update({
-            available: currentInv.available - item.quantity
-          }).eq('id', currentInv.id);
-          if (updErr) throw updErr;
-
           // Add stock to target warehouse immediately for direct transfers.
           let targetInvQ = sb.from('inventory').select('*').eq('sku', item.sku).eq('warehouse_id', item.targetWarehouseId);
           const { data: targetRows, error: targetErr } = await targetInvQ;
@@ -2499,6 +2493,12 @@
             }]);
             if (targetInsErr) throw targetInsErr;
           }
+
+          // Deduct from source warehouse only after the target write succeeds.
+          const { error: updErr } = await sb.from('inventory').update({
+            available: currentInv.available - item.quantity
+          }).eq('id', currentInv.id);
+          if (updErr) throw updErr;
 
           // Keep an audit trail, but mark direct transfers as already received.
           const { error: insErr } = await sb.from('warehouse_transfers').insert([{
