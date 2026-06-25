@@ -1,0 +1,985 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sales Schedule — BrightKey ERP</title>
+  <meta name="description" content="Manage weekly sales staff schedules with color-coded time blocks across a visual calendar grid." />
+  <link rel="preconnect" href="https://fonts.bunny.net" />
+  <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg?v=2" />
+
+  <style>
+    /* ── Layout ── */
+    .page-wrap { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+    .main-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+    .scroll-area { flex: 1; overflow-y: auto; padding: 1.5rem 2rem 2rem; display: flex; flex-direction: column; gap: 1.5rem; }
+
+    /* Toast */
+    #toast-container { position: fixed; top: 1.5rem; right: 1.5rem; z-index: 99999; display: flex; flex-direction: column; gap: 0.5rem; pointer-events: none; }
+    .toast { padding: 0.75rem 1rem; border-radius: 6px; font-size: 0.82rem; font-weight: 600; color: #fff; min-width: 240px; box-shadow: 0 4px 12px rgba(0,0,0,0.12); animation: slideIn 0.2s ease-out; pointer-events: auto; }
+    .toast-success { background: var(--success, #16a34a); }
+    .toast-error { background: var(--danger, #dc2626); }
+    @keyframes slideIn { from { transform: translateX(120%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+    /* ── Tabs ── */
+    .drawer-tabs { display: flex; border-bottom: 1px solid var(--border); flex-shrink: 0; background: var(--bg-surface); padding: 0 1.5rem; overflow-x: auto; }
+    .tab-btn { padding: 0.9rem 1.25rem; font-size: 0.82rem; font-weight: 600; color: var(--text-muted); border: none; background: none; cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap; transition: all 0.15s; }
+    .tab-btn.active { color: var(--cyan-light); border-bottom-color: var(--cyan); }
+    .tab-btn:hover:not(.active) { color: var(--text-secondary); }
+
+    /* ── Panel ── */
+    .panel { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: var(--shadow-sm, 0 1px 3px rgba(0,0,0,0.06)); overflow: hidden; }
+    .panel-header { padding: 0.85rem 1.25rem; font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-shrink: 0; }
+
+    /* ── Calendar Grid ── */
+    .cal-outer { overflow: auto; position: relative; }
+    .cal-grid {
+      display: grid;
+      /* col 0 = time label, cols 1-7 = Mon–Sun */
+      grid-template-columns: 56px repeat(7, minmax(96px, 1fr));
+      min-width: 740px;
+      font-size: 0.72rem;
+    }
+
+    /* Header row (day names) */
+    .cal-day-header {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      background: var(--bg-elevated);
+      border-bottom: 1px solid var(--border);
+      border-right: 1px solid var(--border);
+      padding: 0.5rem 0.35rem;
+      text-align: center;
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      white-space: nowrap;
+    }
+    .cal-day-header.today { color: var(--cyan-light); background: var(--cyan-dim, #ecfeff); }
+
+    /* Time label cells */
+    .cal-time-label {
+      position: sticky;
+      left: 0;
+      z-index: 5;
+      background: var(--bg-elevated);
+      border-right: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      padding: 0 6px;
+      display: flex;
+      align-items: flex-start;
+      justify-content: flex-end;
+      padding-top: 4px;
+      font-size: 0.65rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      user-select: none;
+    }
+
+    /* Top-left corner cell */
+    .cal-corner {
+      position: sticky;
+      top: 0;
+      left: 0;
+      z-index: 15;
+      background: var(--bg-elevated);
+      border-right: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+
+    /* Regular cells */
+    .cal-cell {
+      border-right: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      min-height: 36px;
+      position: relative;
+      overflow: hidden;
+      background: var(--bg-base);
+      transition: background 0.1s;
+    }
+    .cal-cell:last-child { border-right: none; }
+
+    /* Block chip inside a cell */
+    .cal-block {
+      position: absolute;
+      inset: 2px;
+      border-radius: 4px;
+      opacity: 0.88;
+      pointer-events: none;
+    }
+
+    /* Employee label inside block */
+    .cal-block-label {
+      position: absolute;
+      inset: 2px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      padding: 0 5px;
+      font-size: 0.62rem;
+      font-weight: 700;
+      color: #fff;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      pointer-events: none;
+      mix-blend-mode: normal;
+    }
+
+    /* ── Employee List ── */
+    .emp-list { display: flex; flex-direction: column; gap: 0; }
+    .emp-row {
+      display: grid;
+      grid-template-columns: 32px 1fr auto;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.75rem 1.25rem;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      transition: background 0.12s;
+    }
+    .emp-row:last-child { border-bottom: none; }
+    .emp-row:hover { background: var(--bg-elevated); }
+    .emp-row.selected { background: var(--cyan-dim, #ecfeff); }
+
+    .emp-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      font-size: 0.72rem;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      flex-shrink: 0;
+    }
+    .emp-name { font-size: 0.82rem; font-weight: 600; color: var(--text-primary); }
+    .emp-sub { font-size: 0.72rem; color: var(--text-muted); margin-top: 1px; }
+    .emp-color-swatch { width: 16px; height: 16px; border-radius: 3px; border: 1px solid rgba(0,0,0,0.12); flex-shrink: 0; }
+
+    /* ── Assignment Panel ── */
+    #assign-panel { display: none; }
+    #assign-panel.open { display: flex; flex-direction: column; gap: 1rem; }
+
+    .ap-section { display: flex; flex-direction: column; gap: 0.5rem; }
+    .ap-label { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); }
+
+    .day-toggle-row { display: flex; gap: 0.35rem; flex-wrap: wrap; }
+    .day-btn {
+      padding: 0.35rem 0.6rem;
+      border-radius: 5px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      border: 1px solid var(--border);
+      background: var(--bg-base);
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.12s;
+      user-select: none;
+    }
+    .day-btn.on { color: #fff; border-color: transparent; }
+
+    /* Range rows */
+    .range-list { display: flex; flex-direction: column; gap: 0.5rem; }
+    .range-row { display: flex; align-items: center; gap: 0.5rem; }
+    .range-sep { font-size: 0.75rem; color: var(--text-muted); flex-shrink: 0; }
+    .time-select {
+      flex: 1;
+      padding: 0.35rem 0.5rem;
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      font-size: 0.78rem;
+      background: var(--bg-base);
+      color: var(--text-primary);
+      outline: none;
+      cursor: pointer;
+      transition: border 0.12s;
+    }
+    .time-select:focus { border-color: var(--cyan); }
+
+    .btn-remove-range {
+      width: 26px;
+      height: 26px;
+      border-radius: 5px;
+      border: 1px solid var(--border);
+      background: var(--bg-elevated);
+      color: var(--danger, #dc2626);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: background 0.12s;
+    }
+    .btn-remove-range:hover { background: rgba(220,38,38,0.08); }
+
+    .btn-add-range {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.35rem 0.75rem;
+      border-radius: 5px;
+      border: 1px dashed var(--cyan, #06b6d4);
+      background: transparent;
+      color: var(--cyan-light, #22d3ee);
+      font-size: 0.72rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.12s;
+    }
+    .btn-add-range:hover { background: var(--cyan-dim, #ecfeff); }
+
+    /* Color picker */
+    .color-row { display: flex; align-items: center; gap: 0.75rem; }
+    .hex-preview { width: 28px; height: 28px; border-radius: 5px; border: 1px solid rgba(0,0,0,0.12); flex-shrink: 0; cursor: pointer; transition: transform 0.12s; }
+    .hex-preview:hover { transform: scale(1.1); }
+    .hex-input {
+      flex: 1;
+      padding: 0.35rem 0.6rem;
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      font-size: 0.78rem;
+      font-family: var(--font-mono, monospace);
+      background: var(--bg-base);
+      color: var(--text-primary);
+      outline: none;
+      transition: border 0.12s;
+      text-transform: uppercase;
+    }
+    .hex-input:focus { border-color: var(--cyan); }
+    /* hidden native color input */
+    #native-color-picker { width: 0; height: 0; opacity: 0; position: absolute; }
+
+    /* Preset palette chips */
+    .palette-row { display: flex; gap: 0.35rem; flex-wrap: wrap; }
+    .palette-chip { width: 20px; height: 20px; border-radius: 4px; cursor: pointer; border: 2px solid transparent; transition: transform 0.1s, border-color 0.1s; }
+    .palette-chip:hover { transform: scale(1.15); }
+    .palette-chip.selected { border-color: var(--text-primary); }
+
+    /* Buttons */
+    .btn { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.45rem 1rem; border-radius: 6px; font-size: 0.82rem; font-weight: 600; cursor: pointer; border: 1px solid transparent; transition: all 0.15s; white-space: nowrap; }
+    .btn-primary { background: var(--cyan); color: #fff; border-color: var(--cyan); }
+    .btn-primary:hover { opacity: 0.88; }
+    .btn-outline { background: var(--bg-surface); color: var(--text-secondary); border-color: var(--border); }
+    .btn-outline:hover { border-color: var(--cyan); color: var(--cyan-light); }
+    .btn-danger-outline { background: var(--bg-surface); color: var(--danger, #dc2626); border-color: var(--border); }
+    .btn-danger-outline:hover { border-color: var(--danger, #dc2626); background: rgba(220,38,38,0.05); }
+
+    /* Week nav */
+    .week-nav { display: flex; align-items: center; gap: 0.75rem; }
+    .week-nav-btn { width: 28px; height: 28px; border-radius: 5px; border: 1px solid var(--border); background: var(--bg-elevated); cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--text-secondary); transition: all 0.12s; }
+    .week-nav-btn:hover { border-color: var(--cyan); color: var(--cyan-light); }
+    .week-label { font-size: 0.8rem; font-weight: 700; color: var(--text-primary); white-space: nowrap; }
+
+    /* Loading / empty state */
+    .empty-state { padding: 3rem 1rem; text-align: center; color: var(--text-muted); font-size: 0.82rem; }
+
+    /* Spinner */
+    .spinner { width: 20px; height: 20px; border: 2.5px solid rgba(6,182,212,0.15); border-top-color: var(--cyan); border-radius: 50%; animation: spin 0.7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Scrollbar thin */
+    .cal-outer::-webkit-scrollbar { width: 5px; height: 5px; }
+    .cal-outer::-webkit-scrollbar-track { background: transparent; }
+    .cal-outer::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  </style>
+</head>
+<body>
+
+<div id="toast-container"></div>
+
+<div class="dash-layout">
+  <aside class="dash-sidebar" id="dash-sidebar"></aside>
+
+  <div class="dash-main">
+    <div class="page-wrap">
+      <!-- Top Bar -->
+      <header class="top-bar">
+        <div class="top-bar-title">Sales Schedule</div>
+        <div style="flex:1;"></div>
+        <button class="btn btn-outline" id="btn-refresh" style="height:34px; font-size:0.78rem;">
+          <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+          Refresh
+        </button>
+      </header>
+
+      <main class="main-panel">
+        <!-- Tabs -->
+        <div class="drawer-tabs">
+          <button class="tab-btn active" id="tab-schedule">Week View</button>
+        </div>
+
+        <!-- Scroll Area -->
+        <div class="scroll-area" id="scroll-area">
+
+          <!-- ── Calendar Panel ── -->
+          <div class="panel">
+            <div class="panel-header">
+              <span>Weekly Schedule</span>
+              <div class="week-nav">
+                <button class="week-nav-btn" id="btn-prev-week" title="Previous week">
+                  <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none"><polyline points="15 18 9 12 15 6"/></svg>
+                </button>
+                <span class="week-label" id="week-label">—</span>
+                <button class="week-nav-btn" id="btn-next-week" title="Next week">
+                  <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none"><polyline points="9 18 15 12 9 6"/></svg>
+                </button>
+                <button class="btn btn-outline" id="btn-today" style="height:28px; font-size:0.72rem; padding:0 0.6rem;">Today</button>
+              </div>
+            </div>
+            <!-- Calendar grid injected by JS -->
+            <div class="cal-outer" id="cal-outer">
+              <div class="empty-state" id="cal-loading">
+                <div style="display:flex;align-items:center;justify-content:center;gap:0.5rem;">
+                  <div class="spinner"></div>
+                  <span>Loading schedule...</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ── Employees Panel ── -->
+          <div class="panel">
+            <div class="panel-header">
+              <span>Sales Employees</span>
+              <span id="emp-count" style="font-size:0.72rem; font-weight:600; color:var(--text-muted);">—</span>
+            </div>
+
+            <!-- Employee list -->
+            <div class="emp-list" id="emp-list">
+              <div class="empty-state" id="emp-loading">
+                <div style="display:flex;align-items:center;justify-content:center;gap:0.5rem;">
+                  <div class="spinner"></div>
+                  <span>Loading employees...</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- ── Assignment Panel ── -->
+            <div id="assign-panel" style="padding:1.25rem; border-top:1px solid var(--border); background:var(--bg-elevated);">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+                <div style="font-size:0.88rem; font-weight:700; color:var(--text-primary);" id="ap-title">Schedule Assignment</div>
+                <button class="btn btn-outline" id="btn-close-panel" style="height:28px; font-size:0.72rem; padding:0 0.6rem;">Close</button>
+              </div>
+
+              <!-- Days -->
+              <div class="ap-section">
+                <div class="ap-label">Days (select up to 7)</div>
+                <div class="day-toggle-row" id="day-toggle-row">
+                  <button class="day-btn" data-day="1">Mon</button>
+                  <button class="day-btn" data-day="2">Tue</button>
+                  <button class="day-btn" data-day="3">Wed</button>
+                  <button class="day-btn" data-day="4">Thu</button>
+                  <button class="day-btn" data-day="5">Fri</button>
+                  <button class="day-btn" data-day="6">Sat</button>
+                  <button class="day-btn" data-day="0">Sun</button>
+                </div>
+              </div>
+
+              <!-- Time ranges -->
+              <div class="ap-section">
+                <div class="ap-label">Time Ranges</div>
+                <div class="range-list" id="range-list"></div>
+                <button class="btn-add-range" id="btn-add-range">
+                  <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="2.5" fill="none"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  Add Range
+                </button>
+              </div>
+
+              <!-- Color -->
+              <div class="ap-section">
+                <div class="ap-label">Block Color</div>
+                <div class="color-row">
+                  <div class="hex-preview" id="hex-preview" title="Click to open color picker"></div>
+                  <input type="text" class="hex-input" id="hex-input" maxlength="7" placeholder="#06B6D4" />
+                  <input type="color" id="native-color-picker" tabindex="-1" />
+                </div>
+                <div class="palette-row" id="palette-row"></div>
+              </div>
+
+              <!-- Actions -->
+              <div style="display:flex; gap:0.75rem; margin-top:0.5rem; flex-wrap:wrap;">
+                <button class="btn btn-primary" id="btn-save-schedule" style="flex:1;">
+                  <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                  Save Schedule
+                </button>
+                <button class="btn btn-danger-outline" id="btn-clear-schedule" style="flex:0 0 auto;">
+                  <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                  Clear
+                </button>
+              </div>
+            </div>
+
+          </div><!-- /panel employees -->
+
+        </div><!-- /scroll-area -->
+      </main>
+    </div>
+  </div>
+</div>
+
+<script src="../js/auth.js" defer></script>
+<script src="../js/sidebar.js" defer></script>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ── Constants ── */
+  const DAYS_SHORT  = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const DAYS_FULL   = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  // Calendar: 12AM (0) through 11PM (23) → 24 hours
+  const HOUR_START  = 0;
+  const HOUR_END    = 23;
+  const TOTAL_HOURS = HOUR_END - HOUR_START + 1;
+
+  const PRESET_COLORS = [
+    '#06b6d4','#8b5cf6','#ec4899','#f97316',
+    '#16a34a','#2563eb','#dc2626','#ca8a04',
+    '#0891b2','#7c3aed','#db2777','#ea580c',
+  ];
+
+  /* ── State ── */
+  let sb = null;
+  let companyId = null;
+  let allEmployees   = [];   // [{id, first_name, last_name, assignment, color, schedules:[]}]
+  let schedules      = [];   // DB rows from sales_schedules table
+  let selectedEmpId  = null;
+  let selectedDays   = new Set(); // 0=Sun..6=Sat
+  let ranges         = [];   // [{from:8, to:17}] hour values
+  let pickedColor    = '#06b6d4';
+  // Current week offset (0 = current week)
+  let weekOffset     = 0;
+
+  /* ── Helpers ── */
+  function esc(s) {
+    if (s == null) return '';
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function showToast(msg, isError = false) {
+    const c = document.getElementById('toast-container');
+    if (!c) return;
+    const el = document.createElement('div');
+    el.className = 'toast ' + (isError ? 'toast-error' : 'toast-success');
+    el.textContent = msg;
+    c.appendChild(el);
+    setTimeout(() => { el.style.opacity='0'; el.style.transition='opacity 0.3s'; setTimeout(()=>el.remove(),320); }, 3200);
+  }
+
+  function hhmm(h) {
+    if (h === 0)  return '12 AM';
+    if (h === 12) return '12 PM';
+    if (h < 12)   return h + ' AM';
+    return (h - 12) + ' PM';
+  }
+
+  function getWeekStart(offset = 0) {
+    const today = new Date();
+    const day   = today.getDay(); // 0=Sun
+    // Week starts on Monday
+    const diff  = day === 0 ? -6 : 1 - day;
+    const mon   = new Date(today);
+    mon.setHours(0,0,0,0);
+    mon.setDate(today.getDate() + diff + offset * 7);
+    return mon;
+  }
+
+  function formatDate(d) {
+    return d.toLocaleDateString('en-US', { month:'short', day:'numeric' });
+  }
+
+  function stringToColor(str) {
+    // Deterministic pastel from string
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) hash = str.charCodeAt(i) + ((hash << 5) - hash);
+    const h = Math.abs(hash) % 360;
+    return `hsl(${h},60%,48%)`;
+  }
+
+  function initials(e) {
+    return ((e.first_name?.[0] || '') + (e.last_name?.[0] || '')).toUpperCase() || '?';
+  }
+
+  function isValidHex(v) { return /^#[0-9A-Fa-f]{6}$/.test(v); }
+
+  /* ── Week label ── */
+  function updateWeekLabel() {
+    const mon = getWeekStart(weekOffset);
+    const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+    document.getElementById('week-label').textContent =
+      formatDate(mon) + ' – ' + formatDate(sun) + ', ' + sun.getFullYear();
+  }
+
+  /* ── Build Hour options ── */
+  function buildHourOptions(selected) {
+    let html = '';
+    for (let h = HOUR_START; h <= HOUR_END + 1; h++) {
+      const label = h > HOUR_END ? '12 AM (next day)' : hhmm(h);
+      html += `<option value="${h}" ${h === selected ? 'selected' : ''}>${label}</option>`;
+    }
+    return html;
+  }
+
+  /* ── Render Range List ── */
+  function renderRangeList() {
+    const list = document.getElementById('range-list');
+    if (!list) return;
+    if (ranges.length === 0) {
+      list.innerHTML = '';
+      return;
+    }
+    list.innerHTML = ranges.map((r, i) => `
+      <div class="range-row" data-idx="${i}">
+        <select class="time-select range-from" data-idx="${i}">${buildHourOptions(r.from)}</select>
+        <span class="range-sep">to</span>
+        <select class="time-select range-to" data-idx="${i}">${buildHourOptions(r.to)}</select>
+        <button class="btn-remove-range" data-idx="${i}" title="Remove range">
+          <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="2.5" fill="none">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+    `).join('');
+
+    list.querySelectorAll('.range-from').forEach(sel => {
+      sel.addEventListener('change', e => {
+        ranges[+e.target.dataset.idx].from = +e.target.value;
+      });
+    });
+    list.querySelectorAll('.range-to').forEach(sel => {
+      sel.addEventListener('change', e => {
+        ranges[+e.target.dataset.idx].to = +e.target.value;
+      });
+    });
+    list.querySelectorAll('.btn-remove-range').forEach(btn => {
+      btn.addEventListener('click', e => {
+        ranges.splice(+e.currentTarget.dataset.idx, 1);
+        renderRangeList();
+      });
+    });
+  }
+
+  /* ── Color picker sync ── */
+  function syncColor(hex) {
+    if (!isValidHex(hex)) return;
+    pickedColor = hex.toUpperCase();
+    const preview = document.getElementById('hex-preview');
+    const hexInput = document.getElementById('hex-input');
+    const native   = document.getElementById('native-color-picker');
+    if (preview)  preview.style.background = pickedColor;
+    if (hexInput) hexInput.value = pickedColor;
+    if (native)   native.value  = pickedColor;
+    // Update palette selection
+    document.querySelectorAll('.palette-chip').forEach(c => {
+      c.classList.toggle('selected', c.dataset.color.toUpperCase() === pickedColor);
+    });
+  }
+
+  function renderPalette() {
+    const row = document.getElementById('palette-row');
+    if (!row) return;
+    row.innerHTML = PRESET_COLORS.map(c => `
+      <div class="palette-chip ${c.toUpperCase() === pickedColor ? 'selected' : ''}"
+           data-color="${c}" style="background:${c};" title="${c}"></div>
+    `).join('');
+    row.querySelectorAll('.palette-chip').forEach(chip => {
+      chip.addEventListener('click', () => syncColor(chip.dataset.color));
+    });
+  }
+
+  /* ── Open / close assignment panel ── */
+  function openAssignPanel(emp) {
+    selectedEmpId = emp.id;
+    const panel = document.getElementById('assign-panel');
+    const title = document.getElementById('ap-title');
+    if (panel) panel.classList.add('open');
+    if (title) title.textContent = `Schedule: ${emp.first_name} ${emp.last_name}`;
+
+    // Pre-fill existing schedule for this employee (current week)
+    selectedDays.clear();
+    ranges = [];
+
+    const empSchedules = schedules.filter(s => s.employee_id === emp.id);
+    if (empSchedules.length > 0) {
+      empSchedules.forEach(s => {
+        if (s.day_of_week !== undefined && s.day_of_week !== null) {
+          selectedDays.add(s.day_of_week);
+        }
+        // Collect unique ranges
+        const exists = ranges.find(r => r.from === s.hour_start && r.to === s.hour_end);
+        if (!exists) ranges.push({ from: s.hour_start, to: s.hour_end });
+      });
+    } else {
+      // Default: Mon–Fri, 8 AM to 5 PM
+      [1,2,3,4,5].forEach(d => selectedDays.add(d));
+      ranges = [{ from: 8, to: 17 }];
+    }
+
+    // Color from employee record or fallback
+    syncColor(emp.color || stringToColor(emp.id));
+    renderPalette();
+    updateDayButtons();
+    renderRangeList();
+
+    // Update selected row
+    document.querySelectorAll('.emp-row').forEach(r => {
+      r.classList.toggle('selected', r.dataset.empId === emp.id);
+    });
+    // Scroll panel into view
+    panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function closeAssignPanel() {
+    selectedEmpId = null;
+    const panel = document.getElementById('assign-panel');
+    if (panel) panel.classList.remove('open');
+    document.querySelectorAll('.emp-row').forEach(r => r.classList.remove('selected'));
+  }
+
+  function updateDayButtons() {
+    document.querySelectorAll('.day-btn').forEach(btn => {
+      const d = +btn.dataset.day;
+      const isOn = selectedDays.has(d);
+      btn.classList.toggle('on', isOn);
+      if (isOn) {
+        const emp = allEmployees.find(e => e.id === selectedEmpId);
+        btn.style.background = emp?.color || pickedColor;
+      } else {
+        btn.style.background = '';
+      }
+    });
+  }
+
+  /* ── Render employee list ── */
+  function renderEmpList() {
+    const list = document.getElementById('emp-list');
+    const countEl = document.getElementById('emp-count');
+    if (!list) return;
+
+    if (allEmployees.length === 0) {
+      list.innerHTML = '<div class="empty-state">No Sales employees found.</div>';
+      if (countEl) countEl.textContent = '0 employees';
+      return;
+    }
+
+    if (countEl) countEl.textContent = allEmployees.length + ' employee' + (allEmployees.length !== 1 ? 's' : '');
+
+    list.innerHTML = allEmployees.map(emp => {
+      const color = emp.color || stringToColor(emp.id);
+      const empScheduleCount = schedules.filter(s => s.employee_id === emp.id).length;
+      return `
+        <div class="emp-row" data-emp-id="${emp.id}">
+          <div class="emp-avatar" style="background:${esc(color)}">${esc(initials(emp))}</div>
+          <div>
+            <div class="emp-name">${esc(emp.first_name)} ${esc(emp.last_name)}</div>
+            <div class="emp-sub">${esc(emp.assignment || '—')} · ${empScheduleCount > 0 ? empScheduleCount + ' blocks' : 'No schedule'}</div>
+          </div>
+          <div class="emp-color-swatch" style="background:${esc(color)};"></div>
+        </div>
+      `;
+    }).join('');
+
+    list.querySelectorAll('.emp-row').forEach(row => {
+      row.addEventListener('click', () => {
+        const emp = allEmployees.find(e => e.id === row.dataset.empId);
+        if (emp) openAssignPanel(emp);
+      });
+    });
+  }
+
+  /* ── Build Calendar Grid ── */
+  function buildCalGrid() {
+    const mon = getWeekStart(weekOffset);
+    const outer = document.getElementById('cal-outer');
+    if (!outer) return;
+
+    // Check today
+    const today = new Date();
+    today.setHours(0,0,0,0);
+
+    // Build 7 day dates (Mon=0 … Sun=6 in grid, but actual wday Mon=1..Sun=0)
+    const weekDates = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(mon);
+      d.setDate(mon.getDate() + i);
+      weekDates.push(d);
+    }
+
+    let html = '<div class="cal-grid">';
+
+    /* ─ Header row ─ */
+    html += '<div class="cal-corner"></div>';
+    weekDates.forEach(d => {
+      const isToday = d.getTime() === today.getTime();
+      const wday    = d.getDay(); // 0=Sun..6=Sat
+      html += `<div class="cal-day-header${isToday ? ' today' : ''}">
+        ${DAYS_SHORT[wday]}<br/>
+        <span style="font-size:0.68rem;font-weight:500;opacity:0.7;">${formatDate(d)}</span>
+      </div>`;
+    });
+
+    /* ─ Hour rows ─ */
+    for (let h = HOUR_START; h <= HOUR_END; h++) {
+      html += `<div class="cal-time-label">${hhmm(h)}</div>`;
+
+      weekDates.forEach(d => {
+        const wday = d.getDay(); // 0=Sun..6=Sat
+        // Find all employee blocks that cover this hour on this weekday
+        const covering = schedules.filter(s => {
+          return s.day_of_week === wday && h >= s.hour_start && h < s.hour_end;
+        });
+
+        // Multiple employees can overlap — stack them
+        const blockHtml = covering.map(s => {
+          const emp   = allEmployees.find(e => e.id === s.employee_id);
+          const color = s.color || emp?.color || '#06b6d4';
+          const lbl   = emp ? initials(emp) : '?';
+          const w     = Math.min(100 / covering.length, 100);
+          const idx   = covering.indexOf(s);
+          return `
+            <div class="cal-block-label" style="background:${esc(color)};
+              left:${idx * w}%; width:${w}%;">${esc(lbl)}</div>
+          `;
+        }).join('');
+
+        html += `<div class="cal-cell">${blockHtml}</div>`;
+      });
+    }
+
+    html += '</div>';
+    outer.innerHTML = html;
+
+    // Scroll to 7 AM on init
+    const cellHeight = 36;
+    outer.scrollTop = 7 * cellHeight;
+  }
+
+  /* ── Save Schedule ── */
+  async function saveSchedule() {
+    if (!selectedEmpId) return;
+    if (!sb || !companyId) { showToast('Not authenticated', true); return; }
+    if (selectedDays.size === 0) { showToast('Select at least one day.', true); return; }
+    if (ranges.length === 0)     { showToast('Add at least one time range.', true); return; }
+
+    // Validate ranges
+    for (const r of ranges) {
+      if (r.from >= r.to) { showToast('Each range must have start before end.', true); return; }
+    }
+
+    const btn = document.getElementById('btn-save-schedule');
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+
+    try {
+      // Delete existing schedules for this employee + company
+      const { error: delErr } = await sb
+        .from('sales_schedules')
+        .delete()
+        .eq('company_id', companyId)
+        .eq('employee_id', selectedEmpId);
+      if (delErr) throw delErr;
+
+      // Build rows to insert
+      const rows = [];
+      selectedDays.forEach(day => {
+        ranges.forEach(r => {
+          rows.push({
+            company_id:  companyId,
+            employee_id: selectedEmpId,
+            day_of_week: day,
+            hour_start:  r.from,
+            hour_end:    r.to,
+            color:       pickedColor,
+          });
+        });
+      });
+
+      if (rows.length > 0) {
+        const { error: insErr } = await sb.from('sales_schedules').insert(rows);
+        if (insErr) throw insErr;
+      }
+
+      // Update employee color locally
+      const emp = allEmployees.find(e => e.id === selectedEmpId);
+      if (emp) emp.color = pickedColor;
+
+      showToast('Schedule saved!');
+      await loadSchedules();
+      buildCalGrid();
+      renderEmpList();
+      // Keep panel open, re-select
+      if (emp) openAssignPanel(emp);
+    } catch (err) {
+      console.error(err);
+      showToast('Error saving: ' + err.message, true);
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'Save Schedule'; }
+    }
+  }
+
+  /* ── Clear Schedule ── */
+  async function clearSchedule() {
+    if (!selectedEmpId || !sb || !companyId) return;
+    const btn = document.getElementById('btn-clear-schedule');
+    if (btn) { btn.disabled = true; }
+    try {
+      const { error } = await sb.from('sales_schedules').delete()
+        .eq('company_id', companyId).eq('employee_id', selectedEmpId);
+      if (error) throw error;
+      showToast('Schedule cleared.');
+      selectedDays.clear();
+      ranges = [];
+      await loadSchedules();
+      buildCalGrid();
+      renderEmpList();
+      updateDayButtons();
+      renderRangeList();
+    } catch (err) {
+      showToast('Error: ' + err.message, true);
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  /* ── Load Data ── */
+  async function loadSchedules() {
+    if (!sb || !companyId) return;
+    const { data, error } = await sb.from('sales_schedules').select('*').eq('company_id', companyId);
+    if (error) throw error;
+    schedules = data || [];
+  }
+
+  async function loadEmployees() {
+    if (!sb || !companyId) return;
+
+    // Get sales assignment names
+    const { data: assignData } = await sb
+      .from('employee_assignments')
+      .select('id, name, visibility')
+      .eq('company_id', companyId);
+    const salesAssignments = (assignData || [])
+      .filter(a => Array.isArray(a.visibility) && a.visibility.some(v => v.toLowerCase().includes('sales')))
+      .map(a => a.name);
+
+    const { data: empData, error: empErr } = await sb
+      .from('employees')
+      .select('id, first_name, last_name, assignment, picture_link')
+      .eq('company_id', companyId);
+    if (empErr) throw empErr;
+
+    // Filter to Sales employees (or show all if no sales assignments defined)
+    allEmployees = (empData || []).filter(e =>
+      salesAssignments.length === 0 || salesAssignments.includes(e.assignment)
+    );
+
+    // Merge color from schedules
+    allEmployees.forEach(emp => {
+      const s = schedules.find(sc => sc.employee_id === emp.id);
+      if (s?.color) emp.color = s.color;
+    });
+  }
+
+  /* ── Init ── */
+  document.addEventListener('DOMContentLoaded', async () => {
+    updateWeekLabel();
+
+    // Wire nav buttons
+    document.getElementById('btn-prev-week')?.addEventListener('click', () => {
+      weekOffset--; updateWeekLabel(); buildCalGrid();
+    });
+    document.getElementById('btn-next-week')?.addEventListener('click', () => {
+      weekOffset++; updateWeekLabel(); buildCalGrid();
+    });
+    document.getElementById('btn-today')?.addEventListener('click', () => {
+      weekOffset = 0; updateWeekLabel(); buildCalGrid();
+    });
+    document.getElementById('btn-refresh')?.addEventListener('click', async () => {
+      await refresh();
+    });
+    document.getElementById('btn-close-panel')?.addEventListener('click', closeAssignPanel);
+
+    // Day toggle buttons
+    document.getElementById('day-toggle-row')?.addEventListener('click', e => {
+      const btn = e.target.closest('.day-btn');
+      if (!btn) return;
+      const d = +btn.dataset.day;
+      if (selectedDays.has(d)) selectedDays.delete(d);
+      else selectedDays.add(d);
+      updateDayButtons();
+    });
+
+    // Add range
+    document.getElementById('btn-add-range')?.addEventListener('click', () => {
+      const last = ranges[ranges.length - 1];
+      const from = last ? Math.min(last.to, HOUR_END) : 8;
+      const to   = Math.min(from + 4, HOUR_END + 1);
+      ranges.push({ from, to });
+      renderRangeList();
+    });
+
+    // Save / Clear
+    document.getElementById('btn-save-schedule')?.addEventListener('click', saveSchedule);
+    document.getElementById('btn-clear-schedule')?.addEventListener('click', clearSchedule);
+
+    // Color hex input
+    document.getElementById('hex-input')?.addEventListener('input', e => {
+      let v = e.target.value.trim();
+      if (!v.startsWith('#')) v = '#' + v;
+      if (isValidHex(v)) syncColor(v);
+    });
+
+    // Hex preview click → open native picker
+    document.getElementById('hex-preview')?.addEventListener('click', () => {
+      document.getElementById('native-color-picker')?.click();
+    });
+    document.getElementById('native-color-picker')?.addEventListener('input', e => {
+      syncColor(e.target.value);
+    });
+
+    // Auth
+    if (!window.BKAuth) return;
+    try {
+      const authInfo = await window.BKAuth.checkRoleGate(['Sales', 'Operations'], '../admin.html');
+      if (!authInfo) return;
+      sb = window.BKAuth.sb;
+
+      const { data: co } = await sb.from('companies').select('id').eq('tenant_id', authInfo.tenantId).limit(1).maybeSingle();
+      companyId = co?.id || null;
+
+      await refresh();
+    } catch (err) {
+      console.error(err);
+      showToast('Error loading page: ' + err.message, true);
+    }
+  });
+
+  async function refresh() {
+    const calOuter = document.getElementById('cal-outer');
+    if (calOuter) calOuter.innerHTML = '<div class="empty-state"><div style="display:flex;align-items:center;justify-content:center;gap:0.5rem;"><div class="spinner"></div><span>Loading...</span></div></div>';
+
+    const empList = document.getElementById('emp-list');
+    if (empList) empList.innerHTML = '<div class="empty-state"><div style="display:flex;align-items:center;justify-content:center;gap:0.5rem;"><div class="spinner"></div><span>Loading employees...</span></div></div>';
+
+    try {
+      await loadSchedules();
+      await loadEmployees();
+      buildCalGrid();
+      renderEmpList();
+    } catch (err) {
+      console.error(err);
+      showToast('Error: ' + err.message, true);
+      if (calOuter) calOuter.innerHTML = `<div class="empty-state" style="color:var(--danger);">${esc(err.message)}</div>`;
+    }
+  }
+
+})();
+</script>
+</body>
+</html>
