@@ -964,15 +964,7 @@
           this.teammatesList = emps || [];
           const latestMsgMap = await this.updateUnreadIndicators();
           const latestActivityMap = await this.getLatestChatActivityMap();
-
-          // Clean up any old elements that are no longer in the active list
-          const activeIds = new Set(this.teammatesList.map(e => e.id));
-          Array.from(container.children).forEach(child => {
-            const childId = child.getAttribute('data-id');
-            if (childId && !activeIds.has(childId)) {
-              child.remove();
-            }
-          });
+          container.innerHTML = '';
 
           const myFullName = `${this.firstName || ''} ${this.lastName || ''}`.trim().toLowerCase();
           const myManagerName = (this.reportingTo || '').trim().toLowerCase();
