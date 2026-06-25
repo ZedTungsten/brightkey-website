@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Schedules — BrightKey Portal</title>
+  <link rel="preconnect" href="https://fonts.bunny.net" />
+  <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../../../css/style.css" />
+  <link rel="stylesheet" href="../shared.css" />
+  <link rel="icon" type="image/svg+xml" href="../../../assets/favicon.svg?v=2" />
+</head>
+<body>
+  <div class="dash-layout">
+    <aside class="dash-sidebar" id="dash-sidebar"></aside>
+    <div class="dash-main">
+      <div class="top-bar">
+        <span class="top-bar-title">Payout Tracker</span>
+        <div style="flex:1"></div>
+      </div>
+
+      <nav class="drawer-tabs" id="payout-nav">
+        <a href="../payout/"         class="tab-btn" data-page="payout">Payout</a>
+        <a href="../salary/"         class="tab-btn" data-page="salary">Salary</a>
+        <a href="../special-payout/" class="tab-btn" data-page="special-payout">Special Payout</a>
+        <a href="../adjustments/"    class="tab-btn" data-page="adjustments">Adjustments</a>
+        <a href="../commissions/"    class="tab-btn" data-page="commissions">Commission</a>
+        <a href="../reimbursements/" class="tab-btn" data-page="reimbursements">Reimbursement</a>
+        <a href="../schedules/"      class="tab-btn" data-page="schedules">Schedules</a>
+        <a href="../payslip/"        class="tab-btn" data-page="payslip">Payslip</a>
+      </nav>
+
+      <main style="overflow-y: auto; flex: 1;">
+        <div class="int-wrap">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;">
+
+            <!-- Payout Schedules -->
+            <div class="j-card">
+              <div class="j-card-title">Salary Payout Schedules</div>
+              <p style="font-size:0.82rem;color:var(--text-secondary);margin-bottom:1.25rem;line-height:1.5;">Configure which days of the month salary is released. Days after the last schedule day of a month are included in that period.</p>
+              <div id="payout-schedule-list"></div>
+              <form id="add-payout-schedule-form" style="display:flex;align-items:flex-end;gap:0.75rem;margin-top:0.75rem;">
+                <div class="form-group" style="flex:1;margin-bottom:0;">
+                  <label class="form-label" for="payout-day-input">Add Schedule Day</label>
+                  <input type="number" id="payout-day-input" class="form-input" placeholder="e.g. 15" min="1" max="31" required style="width:100%;box-sizing:border-box;" />
+                </div>
+                <button type="submit" class="btn btn-cyan btn-sm">Add</button>
+              </form>
+            </div>
+
+            <!-- Commission Schedules -->
+            <div class="j-card">
+              <div class="j-card-title">Commission Payout Schedules</div>
+              <p style="font-size:0.82rem;color:var(--text-secondary);margin-bottom:1.25rem;line-height:1.5;">Configure which days of the month commissions from completed jobs are released.</p>
+              <div id="commission-schedule-list"></div>
+              <form id="add-commission-schedule-form" style="display:flex;align-items:flex-end;gap:0.75rem;margin-top:0.75rem;">
+                <div class="form-group" style="flex:1;margin-bottom:0;">
+                  <label class="form-label" for="commission-day-input">Add Schedule Day</label>
+                  <input type="number" id="commission-day-input" class="form-input" placeholder="e.g. 30" min="1" max="31" required style="width:100%;box-sizing:border-box;" />
+                </div>
+                <button type="submit" class="btn btn-cyan btn-sm">Add</button>
+              </form>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <div id="toast-container" aria-live="polite"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="../../../js/auth.js"></script>
+  <script src="../../../js/sidebar.js"></script>
+  <script src="../../../js/main.js"></script>
+  <script>
+    'use strict';
+
+    (function () {
+      const parts = window.location.pathname.split('/').filter(Boolean);
+      let page = parts[parts.length - 1];
+      if (page === 'index.html') page = parts[parts.length - 2];
+      document.querySelectorAll('#payout-nav .tab-btn[data-page]').forEach(a => {
+        if (a.dataset.page === page) a.classList.add('active');
+      });
+    })();
+
+    const getSb = () => window.BKAuth.sb;
+    const toast = (msg, type = 'success') => {
+      const c = document.getElementById('toast-container');
+      if (!c) return;
+      const el = document.createElement('div');
+      el.className = `toast toast-${type}`;
+      el.textContent = msg;
+      c.appendChild(el);
+      setTimeout(() => el.remove(), 3500);
+    };
+    const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+    const App = {
+      tenantId: null,
+      companyId: null,
+      payoutSchedules: [],
+      commissionSchedules: [],
+      specialSchedules: [],
+
+      async init() {
+        try {
+          const authInfo = await window.BKAuth.checkRoleGate(['HR', 'Finance'], '../../../admin.html');
+          if (!authInfo) return;
+          this.tenantId = authInfo.tenantId;
+          const { data: co } = await getSb().from('companies').select('id').eq('tenant_id', this.tenantId).limit(1).maybeSingle();
+          this.companyId = co?.id || null;
+          if (!this.companyId) { toast('Failed to resolve company.', 'error'); return; }
+          await this.loadConfig();
+          this.renderAll();
+          this.bindEvents();
+        } catch (e) {
+          console.error(e);
+          toast('Initialization failed: ' + e.message, 'error');
+        }
+      },
+
+      async loadConfig() {
+        try {
+          const { data } = await getSb().from('global_settings').select('value').eq('key', 'salary_tracker_config').eq('company_id', this.companyId).maybeSingle();
+          const cfg = data?.value || {};
+          this.payoutSchedules      = cfg.payoutSchedules      || [15, 30];
+          this.commissionSchedules  = cfg.commissionSchedules  || [15, 30];
+          this.specialSchedules     = cfg.specialSchedules     || [];
+        } catch (_) {
+          this.payoutSchedules = [15, 30];
+          this.commissionSchedules = [15, 30];
+          this.specialSchedules = [];
+        }
+      },
+
+      async saveConfig() {
+        try {
+          const { error } = await getSb().from('global_settings').upsert({
+            key: 'salary_tracker_config', company_id: this.companyId,
+            value: {
+              payoutSchedules: this.payoutSchedules,
+              commissionSchedules: this.commissionSchedules,
+              specialSchedules: this.specialSchedules,
+            }
+          });
+          if (error) throw error;
+          toast('Schedule saved successfully.');
+        } catch (e) {
+          console.error(e);
+          toast('Failed to save schedule: ' + e.message, 'error');
+        }
+      },
+
+      renderAll() {
+        this.renderScheduleList('payout-schedule-list', this.payoutSchedules, 'payout');
+        this.renderScheduleList('commission-schedule-list', this.commissionSchedules, 'commission');
+      },
+
+      renderScheduleList(containerId, schedules, type) {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+        const sorted = [...schedules].sort((a, b) => a - b);
+        if (sorted.length === 0) {
+          container.innerHTML = `<p style="font-size:0.82rem;color:var(--text-muted);font-style:italic;margin-bottom:0.75rem;">No schedules configured.</p>`;
+          return;
+        }
+        container.innerHTML = sorted.map(day => `
+          <div class="schedule-item-row">
+            <span class="schedule-item-row__text">Day ${day} of every month</span>
+            <button class="btn-danger-link" onclick="App.removeSchedule('${type}', ${day})" title="Remove">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+            </button>
+          </div>
+        `).join('');
+      },
+
+      bindEvents() {
+        document.getElementById('add-payout-schedule-form').addEventListener('submit', e => {
+          e.preventDefault();
+          const day = parseInt(document.getElementById('payout-day-input').value, 10);
+          if (isNaN(day) || day < 1 || day > 31) { toast('Enter a valid day between 1 and 31.', 'error'); return; }
+          if (this.payoutSchedules.includes(day)) { toast('Day already in schedule.', 'info'); return; }
+          this.payoutSchedules.push(day);
+          document.getElementById('payout-day-input').value = '';
+          this.renderScheduleList('payout-schedule-list', this.payoutSchedules, 'payout');
+          this.saveConfig();
+        });
+
+        document.getElementById('add-commission-schedule-form').addEventListener('submit', e => {
+          e.preventDefault();
+          const day = parseInt(document.getElementById('commission-day-input').value, 10);
+          if (isNaN(day) || day < 1 || day > 31) { toast('Enter a valid day between 1 and 31.', 'error'); return; }
+          if (this.commissionSchedules.includes(day)) { toast('Day already in schedule.', 'info'); return; }
+          this.commissionSchedules.push(day);
+          document.getElementById('commission-day-input').value = '';
+          this.renderScheduleList('commission-schedule-list', this.commissionSchedules, 'commission');
+          this.saveConfig();
+        });
+      },
+
+      removeSchedule(type, day) {
+        if (type === 'payout') {
+          this.payoutSchedules = this.payoutSchedules.filter(d => d !== day);
+          this.renderScheduleList('payout-schedule-list', this.payoutSchedules, 'payout');
+        } else {
+          this.commissionSchedules = this.commissionSchedules.filter(d => d !== day);
+          this.renderScheduleList('commission-schedule-list', this.commissionSchedules, 'commission');
+        }
+        this.saveConfig();
+      },
+    };
+
+    document.addEventListener('DOMContentLoaded', () => {
+      App.init();
+      if (typeof initNav === 'function') initNav();
+    });
+  </script>
+</body>
+</html>

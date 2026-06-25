@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Commission — BrightKey Portal</title>
+  <link rel="preconnect" href="https://fonts.bunny.net" />
+  <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../../../css/style.css" />
+  <link rel="stylesheet" href="../shared.css" />
+  <link rel="icon" type="image/svg+xml" href="../../../assets/favicon.svg?v=2" />
+</head>
+<body>
+  <div class="dash-layout">
+    <aside class="dash-sidebar" id="dash-sidebar"></aside>
+    <div class="dash-main">
+      <div class="top-bar">
+        <span class="top-bar-title">Payout Tracker</span>
+        <div style="flex:1"></div>
+        <span id="save-status" style="font-size:0.75rem;color:var(--text-muted);"></span>
+      </div>
+
+      <nav class="drawer-tabs" id="payout-nav">
+        <a href="../payout/"         class="tab-btn" data-page="payout">Payout</a>
+        <a href="../salary/"         class="tab-btn" data-page="salary">Salary</a>
+        <a href="../special-payout/" class="tab-btn" data-page="special-payout">Special Payout</a>
+        <a href="../adjustments/"    class="tab-btn" data-page="adjustments">Adjustments</a>
+        <a href="../commissions/"    class="tab-btn" data-page="commissions">Commission</a>
+        <a href="../reimbursements/" class="tab-btn" data-page="reimbursements">Reimbursement</a>
+        <a href="../schedules/"      class="tab-btn" data-page="schedules">Schedules</a>
+        <a href="../payslip/"        class="tab-btn" data-page="payslip">Payslip</a>
+      </nav>
+
+      <main style="overflow-y: auto; flex: 1;">
+        <div class="int-wrap">
+          <!-- Month selector -->
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem;background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-md);padding:0.75rem 1.25rem;width:100%;box-sizing:border-box;">
+            <div style="display:flex;align-items:center;gap:1rem;">
+              <button class="btn btn-outline btn-sm" id="btn-prev-month">&lt;</button>
+              <span id="commission-month-display" style="font-size:0.88rem;font-weight:700;color:var(--text-primary);min-width:140px;text-align:center;"></span>
+              <button class="btn btn-outline btn-sm" id="btn-next-month">&gt;</button>
+            </div>
+          </div>
+
+          <div class="table-card">
+            <div class="table-wrap">
+              <table class="salary-table" id="commission-table">
+                <thead id="commission-table-header"></thead>
+                <tbody id="commission-table-body">
+                  <tr><td colspan="5" style="text-align:center;padding:3rem;color:var(--text-muted);">Loading commission data...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <div id="toast-container" aria-live="polite"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="../../../js/auth.js"></script>
+  <script src="../../../js/sidebar.js"></script>
+  <script src="../../../js/main.js"></script>
+  <script>
+    'use strict';
+
+    (function () {
+      const parts = window.location.pathname.split('/').filter(Boolean);
+      let page = parts[parts.length - 1];
+      if (page === 'index.html') page = parts[parts.length - 2];
+      document.querySelectorAll('#payout-nav .tab-btn[data-page]').forEach(a => {
+        if (a.dataset.page === page) a.classList.add('active');
+      });
+    })();
+
+    const getSb = () => window.BKAuth.sb;
+    const toast = (msg, type = 'success') => {
+      const c = document.getElementById('toast-container');
+      if (!c) return;
+      const el = document.createElement('div');
+      el.className = `toast toast-${type}`;
+      el.textContent = msg;
+      c.appendChild(el);
+      setTimeout(() => el.remove(), 3500);
+    };
+    const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    const php = v => {
+      if (v === null || v === undefined || v === '' || Number(v) === 0) return '—';
+      return '₱' + Number(v).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    };
+    const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+    const App = {
+      tenantId: null,
+      companyId: null,
+      employees: [],
+      commissionSchedules: [],
+      commissionAssignments: [],
+      bookingsList: [],
+      commissionPayoutState: {},
+      selectedYear: new Date().getFullYear(),
+      selectedMonth: new Date().getMonth(),
+      saveTimeout: null,
+
+      async init() {
+        try {
+          const authInfo = await window.BKAuth.checkRoleGate(['HR', 'Finance'], '../../../admin.html');
+          if (!authInfo) return;
+          this.tenantId = authInfo.tenantId;
+          const { data: co } = await getSb().from('companies').select('id').eq('tenant_id', this.tenantId).limit(1).maybeSingle();
+          this.companyId = co?.id || null;
+          if (!this.companyId) { toast('Failed to resolve company.', 'error'); return; }
+          this.updateMonthDisplay();
+          await this.loadData();
+          this.render();
+          this.bindEvents();
+        } catch (e) {
+          console.error(e);
+          toast('Initialization failed: ' + e.message, 'error');
+        }
+      },
+
+      async loadData() {
+        const sb = getSb();
+
+        // Employee names
+        try {
+          const { data, error } = await sb.from('employees')
+            .select('id, first_name, last_name, employment_status')
+            .eq('company_id', this.companyId)
+            .neq('employment_status', 'Terminated');
+          if (error) throw error;
+          this.employees = data || [];
+        } catch (e) { this.employees = []; console.error(e); }
+
+        // Commission schedules
+        try {
+          const { data } = await sb.from('global_settings').select('value').eq('key', 'salary_tracker_config').eq('company_id', this.companyId).maybeSingle();
+          this.commissionSchedules = data?.value?.commissionSchedules || [15, 30];
+        } catch (_) { this.commissionSchedules = [15, 30]; }
+
+        // Commission assignments
+        try {
+          const { data, error } = await sb.from('commission_assignments')
+            .select('employee_id, booking_id, product_index, amount')
+            .eq('company_id', this.companyId);
+          if (error) throw error;
+          this.commissionAssignments = data || [];
+        } catch (e) { this.commissionAssignments = []; console.error(e); }
+
+        // Installation bookings (only fields needed for commission calculation)
+        try {
+          const { data, error } = await sb.from('installation_bookings')
+            .select('id, status, updated_at, created_at, doors')
+            .eq('company_id', this.companyId);
+          if (error) throw error;
+          this.bookingsList = data || [];
+        } catch (e) { this.bookingsList = []; console.error(e); }
+
+        // Commission payout state
+        try {
+          const { data } = await sb.from('global_settings').select('value').eq('key', 'commission_payout_state').eq('company_id', this.companyId).maybeSingle();
+          this.commissionPayoutState = data?.value || {};
+        } catch (_) { this.commissionPayoutState = {}; }
+      },
+
+      monthKey() {
+        return `${this.selectedYear}-${String(this.selectedMonth + 1).padStart(2, '0')}`;
+      },
+
+      updateMonthDisplay() {
+        const el = document.getElementById('commission-month-display');
+        if (el) el.textContent = `${MONTHS[this.selectedMonth]} ${this.selectedYear}`;
+      },
+
+      changeMonth(diff) {
+        let m = this.selectedMonth + diff;
+        let y = this.selectedYear;
+        if (m < 0)  { m = 11; y--; }
+        if (m > 11) { m = 0;  y++; }
+        this.selectedMonth = m;
+        this.selectedYear  = y;
+        this.updateMonthDisplay();
+        this.render();
+      },
+
+      bindEvents() {
+        document.getElementById('btn-prev-month').addEventListener('click', () => this.changeMonth(-1));
+        document.getElementById('btn-next-month').addEventListener('click', () => this.changeMonth(1));
+      },
+
+      _parseDoors(b) {
+        if (!b) return [];
+        if (Array.isArray(b.doors)) return b.doors;
+        try { return JSON.parse(b.doors); } catch (_) { return []; }
+      },
+
+      render() {
+        const header = document.getElementById('commission-table-header');
+        const tbody  = document.getElementById('commission-table-body');
+        if (!header || !tbody) return;
+
+        const mk       = this.monthKey();
+        const scheds   = [...this.commissionSchedules].sort((a, b) => a - b);
+        const schedDays = scheds.length > 0 ? scheds : [30];
+
+        const getSchedDay = (dateStr) => {
+          if (!dateStr) return schedDays[schedDays.length - 1];
+          const day = new Date(dateStr).getDate();
+          for (const s of schedDays) { if (day <= s) return s; }
+          return schedDays[schedDays.length - 1];
+        };
+
+        // Filter assignments completed in this month
+        const monthAssignments = this.commissionAssignments.filter(a => {
+          const b = this.bookingsList.find(x => x.id === a.booking_id);
+          if (!b || b.status === 'cancelled') return false;
+          const doors = this._parseDoors(b);
+          const door  = doors[a.product_index];
+          const isDone = (door && door.completed) || b.status === 'completed';
+          if (!isDone) return false;
+          const ds = (door && door.completed_at) || b.updated_at || b.created_at;
+          if (!ds) return false;
+          const d = new Date(ds);
+          return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}` === mk;
+        });
+
+        // Group by employee and schedule day
+        const empCommissions = {};
+        const empDoneDates   = {};
+        monthAssignments.forEach(a => {
+          if (!a.employee_id || !a.amount) return;
+          const b = this.bookingsList.find(x => x.id === a.booking_id);
+          const doors = this._parseDoors(b);
+          const door  = doors[a.product_index];
+          const ds    = (door && door.completed_at) || b?.updated_at || b?.created_at;
+          const schedDay = getSchedDay(ds);
+
+          empCommissions[a.employee_id] = empCommissions[a.employee_id] || {};
+          empCommissions[a.employee_id][schedDay] = (empCommissions[a.employee_id][schedDay] || 0) + a.amount;
+
+          if (ds) {
+            const label = new Date(ds).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            empDoneDates[a.employee_id] = empDoneDates[a.employee_id] || {};
+            empDoneDates[a.employee_id][schedDay] = empDoneDates[a.employee_id][schedDay] || [];
+            if (!empDoneDates[a.employee_id][schedDay].includes(label)) empDoneDates[a.employee_id][schedDay].push(label);
+          }
+        });
+
+        const activeEmpIds = Object.keys(empCommissions);
+
+        // Header
+        let headerHtml = `<tr><th style="padding-left:1.5rem;">Employee Name</th><th>Done</th>`;
+        schedDays.forEach(d => { headerHtml += `<th>Payout (Day ${d})</th>`; });
+        headerHtml += `</tr>`;
+        header.innerHTML = headerHtml;
+
+        if (activeEmpIds.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="${2 + schedDays.length}" style="text-align:center;padding:3rem;color:var(--text-muted);">No commissions earned this month.</td></tr>`;
+          return;
+        }
+
+        let bodyHtml = '';
+        activeEmpIds.forEach(empId => {
+          const emp      = this.employees.find(e => e.id === empId);
+          const fullName = emp ? [emp.first_name, emp.last_name].filter(Boolean).join(' ') : 'Unknown Employee';
+
+          const allDates = [];
+          schedDays.forEach(day => { (empDoneDates[empId]?.[day] || []).forEach(d => { if (!allDates.includes(d)) allDates.push(d); }); });
+
+          let cells = '';
+          schedDays.forEach(day => {
+            const amount = empCommissions[empId]?.[day] || 0;
+            cells += `<td style="font-weight:700;font-variant-numeric:tabular-nums;">${esc(php(amount / 100))}</td>`;
+          });
+
+          bodyHtml += `<tr class="employee-row" data-emp-id="${esc(empId)}">
+            <td class="col-name" style="padding-left:1.5rem;font-weight:600;color:var(--text-primary);">${esc(fullName)}</td>
+            <td style="font-weight:600;font-size:0.78rem;">${esc(allDates.join(', '))}</td>
+            ${cells}
+          </tr>`;
+        });
+
+        tbody.innerHTML = bodyHtml;
+      },
+
+      debouncedSave() {
+        const el = document.getElementById('save-status');
+        if (el) el.textContent = 'Saving changes...';
+        if (this.saveTimeout) clearTimeout(this.saveTimeout);
+        this.saveTimeout = setTimeout(() => this.saveStateSilent(), 1000);
+      },
+
+      async saveStateSilent() {
+        try {
+          await getSb().from('global_settings').upsert({ key: 'commission_payout_state', company_id: this.companyId, value: this.commissionPayoutState });
+          const el = document.getElementById('save-status');
+          if (el) { el.textContent = 'All changes saved'; setTimeout(() => { if (el.textContent === 'All changes saved') el.textContent = ''; }, 3000); }
+        } catch (e) {
+          console.error(e);
+          const el = document.getElementById('save-status');
+          if (el) el.textContent = 'Autosave failed';
+        }
+      },
+    };
+
+    document.addEventListener('DOMContentLoaded', () => {
+      App.init();
+      if (typeof initNav === 'function') initNav();
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Salary — BrightKey Portal</title>
+  <link rel="preconnect" href="https://fonts.bunny.net" />
+  <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../../../css/style.css" />
+  <link rel="stylesheet" href="../shared.css" />
+  <link rel="icon" type="image/svg+xml" href="../../../assets/favicon.svg?v=2" />
+</head>
+<body>
+  <div class="dash-layout">
+    <aside class="dash-sidebar" id="dash-sidebar"></aside>
+    <div class="dash-main">
+      <div class="top-bar">
+        <span class="top-bar-title">Payout Tracker</span>
+        <div style="flex:1"></div>
+      </div>
+
+      <nav class="drawer-tabs" id="payout-nav">
+        <a href="../payout/"         class="tab-btn" data-page="payout">Payout</a>
+        <a href="../salary/"         class="tab-btn" data-page="salary">Salary</a>
+        <a href="../special-payout/" class="tab-btn" data-page="special-payout">Special Payout</a>
+        <a href="../adjustments/"    class="tab-btn" data-page="adjustments">Adjustments</a>
+        <a href="../commissions/"    class="tab-btn" data-page="commissions">Commission</a>
+        <a href="../reimbursements/" class="tab-btn" data-page="reimbursements">Reimbursement</a>
+        <a href="../schedules/"      class="tab-btn" data-page="schedules">Schedules</a>
+        <a href="../payslip/"        class="tab-btn" data-page="payslip">Payslip</a>
+      </nav>
+
+      <main style="overflow-y: auto; flex: 1;">
+        <div class="int-wrap">
+          <div class="table-card">
+            <div class="table-wrap">
+              <table class="salary-table" id="salary-table">
+                <thead>
+                  <tr id="salary-table-header">
+                    <th>Employee Name</th>
+                    <th>Title / Position</th>
+                    <th>Base Monthly Salary</th>
+                  </tr>
+                </thead>
+                <tbody id="salary-table-body">
+                  <tr><td colspan="4" style="text-align:center;padding:3rem;color:var(--text-muted);">Loading salary data...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <div id="toast-container" aria-live="polite"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="../../../js/auth.js"></script>
+  <script src="../../../js/sidebar.js"></script>
+  <script src="../../../js/main.js"></script>
+  <script>
+    'use strict';
+
+    (function () {
+      const parts = window.location.pathname.split('/').filter(Boolean);
+      let page = parts[parts.length - 1];
+      if (page === 'index.html') page = parts[parts.length - 2];
+      document.querySelectorAll('#payout-nav .tab-btn[data-page]').forEach(a => {
+        if (a.dataset.page === page) a.classList.add('active');
+      });
+    })();
+
+    const getSb = () => window.BKAuth.sb;
+    const toast = (msg, type = 'success') => {
+      const c = document.getElementById('toast-container');
+      if (!c) return;
+      const el = document.createElement('div');
+      el.className = `toast toast-${type}`;
+      el.textContent = msg;
+      c.appendChild(el);
+      setTimeout(() => el.remove(), 3500);
+    };
+    const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    const php = v => {
+      if (v === null || v === undefined || v === '' || Number(v) === 0) return '—';
+      return '₱' + Number(v).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    };
+
+    const App = {
+      tenantId: null,
+      companyId: null,
+      employees: [],
+      companyStructure: { departments: [] },
+      payoutSchedules: [],
+
+      async init() {
+        try {
+          const authInfo = await window.BKAuth.checkRoleGate(['HR', 'Finance'], '../../../admin.html');
+          if (!authInfo) return;
+          this.tenantId = authInfo.tenantId;
+          const { data: co } = await getSb().from('companies').select('id').eq('tenant_id', this.tenantId).limit(1).maybeSingle();
+          this.companyId = co?.id || null;
+          if (!this.companyId) { toast('Failed to resolve company.', 'error'); return; }
+          await this.loadData();
+          this.render();
+        } catch (e) {
+          console.error(e);
+          toast('Initialization failed: ' + e.message, 'error');
+        }
+      },
+
+      async loadData() {
+        const sb = getSb();
+
+        // Company structure (for dept/team grouping)
+        try {
+          const { data } = await sb.from('global_settings').select('value').eq('key', 'company_structure').eq('company_id', this.companyId).maybeSingle();
+          this.companyStructure = data?.value || { departments: [] };
+        } catch (_) { this.companyStructure = { departments: [] }; }
+
+        // Employees — only fields needed for display
+        try {
+          const { data, error } = await sb.from('employees')
+            .select('id, first_name, last_name, salary, title, employment_status, department')
+            .eq('company_id', this.companyId)
+            .neq('employment_status', 'Terminated');
+          if (error) throw error;
+          this.employees = data || [];
+        } catch (e) { this.employees = []; console.error(e); }
+
+        // Payout schedules only from config
+        try {
+          const { data } = await sb.from('global_settings').select('value').eq('key', 'salary_tracker_config').eq('company_id', this.companyId).maybeSingle();
+          this.payoutSchedules = data?.value?.payoutSchedules || [15, 30];
+        } catch (_) { this.payoutSchedules = [15, 30]; }
+      },
+
+      groupEmployees() {
+        const empDeptMap = {};
+        const empSubteamsMap = {};
+        const deptHeadsSet = new Set();
+        (this.companyStructure?.departments || []).forEach(dept => {
+          const deptName = dept.name;
+          if (dept.managerId) { empDeptMap[dept.managerId] = deptName; deptHeadsSet.add(dept.managerId); }
+          (dept.subteams || []).forEach(sub => {
+            if (sub.managerId) {
+              empDeptMap[sub.managerId] = deptName;
+              empSubteamsMap[sub.managerId] = empSubteamsMap[sub.managerId] || [];
+              empSubteamsMap[sub.managerId].push(sub.name);
+            }
+            (sub.colleagueIds || []).forEach(id => {
+              empDeptMap[id] = deptName;
+              empSubteamsMap[id] = empSubteamsMap[id] || [];
+              empSubteamsMap[id].push(sub.name);
+            });
+          });
+        });
+        const grouped = {};
+        const unassigned = [];
+        this.employees.forEach(emp => {
+          const dept = empDeptMap[emp.id] || emp.department || '';
+          if (!dept) { unassigned.push(emp); return; }
+          grouped[dept] = grouped[dept] || {};
+          if (deptHeadsSet.has(emp.id)) {
+            grouped[dept]['Department Head'] = grouped[dept]['Department Head'] || [];
+            grouped[dept]['Department Head'].push(emp);
+          } else {
+            const subs = empSubteamsMap[emp.id] || [];
+            if (subs.length === 0) {
+              grouped[dept]['_unassigned_subteam'] = grouped[dept]['_unassigned_subteam'] || [];
+              grouped[dept]['_unassigned_subteam'].push(emp);
+            } else {
+              subs.forEach(sub => {
+                grouped[dept][sub] = grouped[dept][sub] || [];
+                grouped[dept][sub].push(emp);
+              });
+            }
+          }
+        });
+        return { grouped, unassigned };
+      },
+
+      render() {
+        const header = document.getElementById('salary-table-header');
+        const tbody  = document.getElementById('salary-table-body');
+        if (!header || !tbody) return;
+
+        const columns = [...this.payoutSchedules].sort((a, b) => a - b);
+        const colspan = 3 + columns.length;
+
+        let headerHtml = `<th>Employee Name</th><th>Title / Position</th><th>Base Monthly Salary</th>`;
+        columns.forEach(d => { headerHtml += `<th>Payout (Day ${d})</th>`; });
+        header.innerHTML = headerHtml;
+
+        const { grouped, unassigned } = this.groupEmployees();
+        let bodyHtml = '';
+
+        const renderEmpRow = (emp) => {
+          const baseSalary   = emp.salary || 0;
+          const numScheds    = columns.length || 1;
+          const perSched     = baseSalary / numScheds;
+          const positionText = emp.title || '';
+          const positionHtml = positionText
+            ? `<div style="font-size:0.75rem;font-weight:500;color:var(--text-secondary);">${esc(positionText)}</div>`
+            : `<span style="font-size:0.75rem;color:var(--text-muted);font-style:italic;">—</span>`;
+
+          let cells = '';
+          columns.forEach(() => {
+            cells += `<td style="text-align:left;"><div class="payout-cell-container" style="display:flex;align-items:center;gap:0.4rem;min-width:140px;"><span class="payout-val" style="min-width:65px;font-weight:700;color:var(--text-primary);font-variant-numeric:tabular-nums;">${esc(php(perSched))}</span></div></td>`;
+          });
+
+          return `<tr class="employee-row" data-emp-id="${esc(emp.id)}">
+            <td class="col-name">${esc([emp.first_name, emp.last_name].filter(Boolean).join(' '))}</td>
+            <td>${positionHtml}</td>
+            <td style="font-weight:600;font-variant-numeric:tabular-nums;">${esc(php(baseSalary))}</td>
+            ${cells}
+          </tr>`;
+        };
+
+        Object.keys(grouped).sort().forEach(dept => {
+          bodyHtml += `<tr class="dept-header-row"><td colspan="${colspan}">${esc(dept)} Department</td></tr>`;
+          const teams = Object.keys(grouped[dept]).sort((a, b) => {
+            if (a === 'Department Head') return -1;
+            if (b === 'Department Head') return 1;
+            return a.localeCompare(b);
+          });
+          teams.forEach(sub => {
+            if (sub !== '_unassigned_subteam') bodyHtml += `<tr class="team-header-row"><td colspan="${colspan}">${esc(sub)}</td></tr>`;
+            grouped[dept][sub].forEach(emp => { bodyHtml += renderEmpRow(emp); });
+          });
+        });
+
+        if (unassigned.length > 0) {
+          bodyHtml += `<tr class="dept-header-row"><td colspan="${colspan}">Unassigned Department / Pool</td></tr>`;
+          unassigned.forEach(emp => { bodyHtml += renderEmpRow(emp); });
+        }
+
+        tbody.innerHTML = bodyHtml || `<tr><td colspan="${colspan}" style="text-align:center;padding:3rem;color:var(--text-muted);">No employees found.</td></tr>`;
+      },
+    };
+
+    document.addEventListener('DOMContentLoaded', () => {
+      App.init();
+      if (typeof initNav === 'function') initNav();
+    });
+  </script>
+</body>
+</html>

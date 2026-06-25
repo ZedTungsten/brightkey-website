@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Payout — BrightKey Portal</title>
+  <link rel="preconnect" href="https://fonts.bunny.net" />
+  <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../../../css/style.css" />
+  <link rel="stylesheet" href="../shared.css" />
+  <link rel="icon" type="image/svg+xml" href="../../../assets/favicon.svg?v=2" />
+  <style>
+    /* ── Summary-table sticky columns (only needed on this page) ── */
+    #summary-table .col-sticky-1 {
+      position: sticky; left: 0; z-index: 10;
+      width: 200px; min-width: 200px; max-width: 200px;
+      background: var(--bg-surface);
+      box-shadow: 2px 0 5px -2px rgba(0,0,0,0.1);
+    }
+    #summary-table th.col-sticky-1 { background: var(--bg-elevated); z-index: 11; }
+
+    #summary-table .col-sticky-2 {
+      position: sticky; left: 200px; z-index: 10;
+      width: 140px; min-width: 140px; max-width: 140px;
+      background: var(--bg-surface);
+      box-shadow: 2px 0 5px -2px rgba(0,0,0,0.1);
+    }
+    #summary-table th.col-sticky-2 { background: var(--bg-elevated); z-index: 11; }
+
+    #summary-table .col-sticky-3 {
+      position: sticky; left: 340px; z-index: 10;
+      width: 180px; min-width: 180px; max-width: 180px;
+      background: var(--bg-surface);
+    }
+    #summary-table th.col-sticky-3 { background: var(--bg-elevated); z-index: 11; }
+    #summary-table .col-sticky-3::after {
+      content: "";
+      position: absolute; top: 0; right: -8px; bottom: 0; width: 8px;
+      background: linear-gradient(to right, rgba(0,0,0,0.08), rgba(0,0,0,0));
+      pointer-events: none;
+    }
+
+    #summary-table tr.employee-row:hover td.col-sticky-1,
+    #summary-table tr.employee-row:hover td.col-sticky-2,
+    #summary-table tr.employee-row:hover td.col-sticky-3 { background: var(--bg-elevated); }
+
+    #summary-table tr.dept-header-row td { background: #f4fcfd !important; }
+    #summary-table tr.team-header-row td { background: #f8fafc !important; }
+
+    #summary-table .dept-header-sticky { position: sticky; left: 0; display: inline-block; padding-left: 1.5rem; }
+    #summary-table .team-header-sticky { position: sticky; left: 0; display: inline-block; padding-left: 2.25rem; }
+  </style>
+</head>
+<body>
+  <div class="dash-layout">
+    <aside class="dash-sidebar" id="dash-sidebar"></aside>
+    <div class="dash-main">
+      <div class="top-bar">
+        <span class="top-bar-title">Payout Tracker</span>
+        <div style="flex:1"></div>
+        <span id="save-status" style="font-size:0.75rem; color:var(--text-muted);"></span>
+      </div>
+
+      <nav class="drawer-tabs" id="payout-nav">
+        <a href="../payout/"         class="tab-btn" data-page="payout">Payout</a>
+        <a href="../salary/"         class="tab-btn" data-page="salary">Salary</a>
+        <a href="../special-payout/" class="tab-btn" data-page="special-payout">Special Payout</a>
+        <a href="../adjustments/"    class="tab-btn" data-page="adjustments">Adjustments</a>
+        <a href="../commissions/"    class="tab-btn" data-page="commissions">Commission</a>
+        <a href="../reimbursements/" class="tab-btn" data-page="reimbursements">Reimbursement</a>
+        <a href="../schedules/"      class="tab-btn" data-page="schedules">Schedules</a>
+        <a href="../payslip/"        class="tab-btn" data-page="payslip">Payslip</a>
+      </nav>
+
+      <main style="overflow-y: auto; flex: 1;">
+        <div class="int-wrap">
+
+          <!-- Month selector -->
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1.5rem; background:var(--bg-surface); border:1px solid var(--border); border-radius:var(--radius-md); padding:0.75rem 1.25rem; width:100%; box-sizing:border-box;">
+            <div style="display:flex; align-items:center; gap:1rem;">
+              <button class="btn btn-outline btn-sm" id="btn-prev-month">&lt;</button>
+              <span id="summary-month-display" style="font-size:0.88rem; font-weight:700; color:var(--text-primary); min-width:140px; text-align:center;"></span>
+              <button class="btn btn-outline btn-sm" id="btn-next-month">&gt;</button>
+            </div>
+            <button class="btn btn-outline btn-sm" id="btn-clear-all" style="color:var(--danger); border-color:var(--danger);">Clear All</button>
+          </div>
+
+          <div class="table-card">
+            <div class="table-wrap">
+              <table class="salary-table" id="summary-table">
+                <thead>
+                  <tr id="summary-table-header">
+                    <th class="col-sticky-1">Employee Name</th>
+                    <th class="col-sticky-2">Title / Position</th>
+                    <th class="col-sticky-3">Payment Details</th>
+                    <th>Salary</th>
+                    <th>Commission</th>
+                    <th>Reimbursements</th>
+                    <th>Adjustments</th>
+                    <th style="border-right:2px solid var(--border); width:1px; padding:0;"></th>
+                  </tr>
+                </thead>
+                <tbody id="summary-table-body">
+                  <tr><td colspan="10" style="text-align:center; padding:3rem; color:var(--text-muted);">Loading payout summary...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- Clear All Modal -->
+  <div class="modal-overlay" id="clear-all-modal">
+    <div class="modal" style="max-width:400px; padding:2rem;">
+      <h3 style="font-size:1.1rem; font-weight:700; color:var(--text-primary); margin-bottom:0.5rem;">Confirm Action</h3>
+      <p style="font-size:0.88rem; color:var(--text-secondary); margin-bottom:1.5rem; line-height:1.5;">Clear all adjustments, reimbursements, and payout checkboxes?</p>
+      <div style="display:flex; justify-content:flex-end; gap:0.75rem;">
+        <button class="btn btn-outline btn-sm" id="btn-cancel-clear">No</button>
+        <button class="btn btn-sm" id="btn-confirm-clear" style="background:var(--danger); border-color:var(--danger); color:#fff;">Clear</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast-container" aria-live="polite"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <script src="../../../js/auth.js"></script>
+  <script src="../../../js/sidebar.js"></script>
+  <script src="../../../js/main.js"></script>
+  <script>
+    'use strict';
+
+    // Active tab highlight
+    (function () {
+      const parts = window.location.pathname.split('/').filter(Boolean);
+      let page = parts[parts.length - 1];
+      if (page === 'index.html') page = parts[parts.length - 2];
+      document.querySelectorAll('#payout-nav .tab-btn[data-page]').forEach(a => {
+        if (a.dataset.page === page) a.classList.add('active');
+      });
+    })();
+
+    const getSb = () => window.BKAuth.sb;
+
+    const toast = (msg, type = 'success') => {
+      const c = document.getElementById('toast-container');
+      if (!c) return;
+      const el = document.createElement('div');
+      el.className = `toast toast-${type}`;
+      el.textContent = msg;
+      c.appendChild(el);
+      setTimeout(() => el.remove(), 3500);
+    };
+
+    const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    const php = v => {
+      if (v === null || v === undefined || v === '' || Number(v) === 0) return '—';
+      return '₱' + Number(v).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    };
+    const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+    const App = {
+      tenantId: null,
+      companyId: null,
+      employees: [],
+      companyStructure: { departments: [] },
+      reportingToMap: {},
+      payoutSchedules: [],
+      commissionSchedules: [],
+      specialSchedules: [],
+      regularPayoutState: {},
+      specialPayoutState: {},
+      commissionPayoutState: {},
+      adjustmentsList: [],
+      reimbursementsList: [],
+      commissionAssignments: [],
+      bookingsList: [],
+
+      selectedYear: new Date().getFullYear(),
+      selectedMonth: new Date().getMonth(),
+
+      saveTimeout: null,
+
+      async init() {
+        try {
+          const authInfo = await window.BKAuth.checkRoleGate(['HR', 'Finance'], '../../../admin.html');
+          if (!authInfo) return;
+          this.tenantId = authInfo.tenantId;
+          const { data: co } = await getSb().from('companies').select('id').eq('tenant_id', this.tenantId).limit(1).maybeSingle();
+          this.companyId = co?.id || null;
+          if (!this.companyId) { toast('Failed to resolve company.', 'error'); return; }
+
+          this.updateMonthDisplay();
+          await this.loadData();
+          this.render();
+          this.bindEvents();
+        } catch (e) {
+          console.error(e);
+          toast('Initialization failed: ' + e.message, 'error');
+        }
+      },
+
+      async loadData() {
+        const sb = getSb();
+
+        // Company structure
+        try {
+          const { data } = await sb.from('global_settings').select('value').eq('key', 'company_structure').eq('company_id', this.companyId).maybeSingle();
+          this.companyStructure = data?.value || { departments: [] };
+          this.buildReportingToMap();
+        } catch (_) { this.companyStructure = { departments: [] }; }
+
+        // Employees
+        try {
+          const { data, error } = await sb.from('employees')
+            .select('id, first_name, middle_name, last_name, salary, employment_status, department, title, payout_details, payout_details_image, reporting_to')
+            .eq('company_id', this.companyId)
+            .neq('employment_status', 'Terminated');
+          if (error) throw error;
+          this.employees = data || [];
+        } catch (e) { this.employees = []; console.error(e); }
+
+        // Tracker config (schedules + special schedules)
+        try {
+          const { data } = await sb.from('global_settings').select('value').eq('key', 'salary_tracker_config').eq('company_id', this.companyId).maybeSingle();
+          const cfg = data?.value || {};
+          this.payoutSchedules = cfg.payoutSchedules || [15, 30];
+          this.commissionSchedules = cfg.commissionSchedules || [15, 30];
+          this.specialSchedules = cfg.specialSchedules || [];
+        } catch (_) { this.payoutSchedules = [15, 30]; this.commissionSchedules = [15, 30]; this.specialSchedules = []; }
+
+        // Payout states
+        const stateKeys = ['regular_payout_state', 'special_payout_state', 'commission_payout_state'];
+        const [regData, specData, commData] = await Promise.all(
+          stateKeys.map(key => sb.from('global_settings').select('value').eq('key', key).eq('company_id', this.companyId).maybeSingle().then(r => r.data))
+        );
+        this.regularPayoutState   = regData?.value  || {};
+        this.specialPayoutState   = specData?.value || {};
+        this.commissionPayoutState = commData?.value || {};
+
+        // Adjustments (all months — needed for per-schedule partitioning in summary)
+        try {
+          const { data } = await sb.from('employee_adjustments').select('id, employee_id, amount, date, label, paid').eq('company_id', this.companyId);
+          this.adjustmentsList = (data || []).map(a => ({ id: a.id, employeeId: a.employee_id, value: a.amount, date: a.date, label: a.label, paid: a.paid }));
+        } catch (e) { this.adjustmentsList = []; console.error(e); }
+
+        // Reimbursements
+        try {
+          const { data } = await sb.from('employee_reimbursements').select('id, employee_id, amount, date, label, paid').eq('company_id', this.companyId);
+          this.reimbursementsList = (data || []).map(r => ({ id: r.id, employeeId: r.employee_id, value: r.amount, date: r.date, label: r.label, paid: r.paid }));
+        } catch (e) { this.reimbursementsList = []; console.error(e); }
+
+        // Commission assignments
+        try {
+          const { data, error } = await sb.from('commission_assignments').select('employee_id, booking_id, product_index, amount, sku, rate_label').eq('company_id', this.companyId);
+          if (error) throw error;
+          this.commissionAssignments = data || [];
+        } catch (e) { this.commissionAssignments = []; console.error(e); }
+
+        // Installation bookings
+        try {
+          const { data, error } = await sb.from('installation_bookings').select('id, status, updated_at, created_at, doors').eq('company_id', this.companyId);
+          if (error) throw error;
+          this.bookingsList = data || [];
+        } catch (e) { this.bookingsList = []; console.error(e); }
+      },
+
+      monthKey() {
+        return `${this.selectedYear}-${String(this.selectedMonth + 1).padStart(2, '0')}`;
+      },
+
+      updateMonthDisplay() {
+        const el = document.getElementById('summary-month-display');
+        if (el) el.textContent = `${MONTHS[this.selectedMonth]} ${this.selectedYear}`;
+      },
+
+      changeMonth(diff) {
+        let m = this.selectedMonth + diff;
+        let y = this.selectedYear;
+        if (m < 0)  { m = 11; y--; }
+        if (m > 11) { m = 0;  y++; }
+        this.selectedMonth = m;
+        this.selectedYear  = y;
+        this.updateMonthDisplay();
+        this.render();
+      },
+
+      bindEvents() {
+        document.getElementById('btn-prev-month').addEventListener('click', () => this.changeMonth(-1));
+        document.getElementById('btn-next-month').addEventListener('click', () => this.changeMonth(1));
+        document.getElementById('btn-clear-all').addEventListener('click', () => document.getElementById('clear-all-modal').classList.add('open'));
+        document.getElementById('btn-cancel-clear').addEventListener('click', () => document.getElementById('clear-all-modal').classList.remove('open'));
+        document.getElementById('btn-confirm-clear').addEventListener('click', () => this.clearAllState());
+      },
+
+      buildReportingToMap() {
+        this.reportingToMap = {};
+        (this.companyStructure?.departments || []).forEach(dept => {
+          const deptHeadId = dept.managerId;
+          (dept.subteams || []).forEach(sub => {
+            const subMgrId = sub.managerId;
+            if (subMgrId && deptHeadId) this.reportingToMap[subMgrId] = deptHeadId;
+            (sub.colleagueIds || []).forEach(id => { this.reportingToMap[id] = subMgrId || deptHeadId; });
+          });
+        });
+      },
+
+      groupEmployees() {
+        const empDeptMap = {};
+        const empSubteamsMap = {};
+        const deptHeadsSet = new Set();
+        (this.companyStructure?.departments || []).forEach(dept => {
+          const deptName = dept.name;
+          if (dept.managerId) { empDeptMap[dept.managerId] = deptName; deptHeadsSet.add(dept.managerId); }
+          (dept.subteams || []).forEach(sub => {
+            const subName = sub.name;
+            if (sub.managerId) {
+              empDeptMap[sub.managerId] = deptName;
+              empSubteamsMap[sub.managerId] = empSubteamsMap[sub.managerId] || [];
+              empSubteamsMap[sub.managerId].push(subName);
+            }
+            (sub.colleagueIds || []).forEach(id => {
+              empDeptMap[id] = deptName;
+              empSubteamsMap[id] = empSubteamsMap[id] || [];
+              empSubteamsMap[id].push(subName);
+            });
+          });
+        });
+
+        const grouped = {};
+        const unassigned = [];
+        this.employees.forEach(emp => {
+          const dept = empDeptMap[emp.id] || emp.department || '';
+          const subs = empSubteamsMap[emp.id] || [];
+          if (!dept) { unassigned.push(emp); return; }
+          if (!grouped[dept]) grouped[dept] = {};
+          if (deptHeadsSet.has(emp.id)) {
+            grouped[dept]['Department Head'] = grouped[dept]['Department Head'] || [];
+            grouped[dept]['Department Head'].push(emp);
+          } else if (subs.length === 0) {
+            grouped[dept]['_unassigned_subteam'] = grouped[dept]['_unassigned_subteam'] || [];
+            grouped[dept]['_unassigned_subteam'].push(emp);
+          } else {
+            subs.forEach(sub => {
+              grouped[dept][sub] = grouped[dept][sub] || [];
+              grouped[dept][sub].push(emp);
+            });
+          }
+        });
+        return { grouped, unassigned };
+      },
+
+      isPastDay(day) {
+        const t = new Date();
+        if (this.selectedYear < t.getFullYear()) return true;
+        if (this.selectedYear > t.getFullYear()) return false;
+        if (this.selectedMonth < t.getMonth()) return true;
+        if (this.selectedMonth > t.getMonth()) return false;
+        return day < t.getDate();
+      },
+
+      getScheduleDayForItemDay(itemDay, sortedScheds) {
+        if (!sortedScheds.length) return 30;
+        for (const s of sortedScheds) { if (itemDay <= s) return s; }
+        return sortedScheds[sortedScheds.length - 1];
+      },
+
+      // ── Render ──
+      render() {
+        const header = document.getElementById('summary-table-header');
+        const tbody  = document.getElementById('summary-table-body');
+        if (!header || !tbody) return;
+
+        const mk = this.monthKey();
+        const specialDays  = [...new Set(this.specialSchedules.map(s => Number(s.day)))].sort((a, b) => a - b);
+        const sortedScheds = [...this.payoutSchedules].sort((a, b) => a - b);
+        const colspan = 8 + specialDays.length + sortedScheds.length + 2;
+
+        let headerHtml = `
+          <th class="col-sticky-1">Employee Name</th>
+          <th class="col-sticky-2">Title / Position</th>
+          <th class="col-sticky-3">Payment Details</th>
+          <th>Salary</th><th>Commission</th><th>Reimbursements</th><th>Adjustments</th>
+          <th style="border-right:2px solid var(--border); width:1px; padding:0;"></th>
+        `;
+        specialDays.forEach(d => { headerHtml += `<th>Special (Day ${d})</th>`; });
+        sortedScheds.forEach(d => { headerHtml += `<th>Payout (Day ${d})</th>`; });
+        headerHtml += `<th style="background:rgba(250,204,21,0.15);">Grand Total</th>`;
+        headerHtml += `<th style="width:100px; text-align:center;">Action</th>`;
+        header.innerHTML = headerHtml;
+
+        const { grouped, unassigned } = this.groupEmployees();
+        let bodyHtml = '';
+
+        const renderEmpRow = (emp) => {
+          const baseSalary    = emp.salary || 0;
+          const positionText  = emp.title || '';
+          const detailsText   = emp.payout_details || '';
+          const detailsImage  = emp.payout_details_image || '';
+
+          let detailsHtml = '';
+          if (detailsText) {
+            const isUrl   = /^(https?:\/\/|\/)/.test(detailsText.trim());
+            const isImage = isUrl && /\.(png|jpe?g|gif|webp|bmp|svg)(\?.*)?$/i.test(detailsText.trim());
+            detailsHtml = isImage
+              ? `<a href="${esc(detailsText.trim())}" target="_blank" style="color:var(--cyan); font-weight:600; text-decoration:underline;">View</a>`
+              : `<div style="white-space:pre-wrap; max-width:180px;">${esc(detailsText)}</div>`;
+          }
+          if (detailsImage) detailsHtml += `${detailsHtml ? ' / ' : ''}<a href="${esc(detailsImage)}" target="_blank" style="color:var(--cyan); font-weight:600; text-decoration:underline;">View</a>`;
+          if (!detailsHtml) detailsHtml = '—';
+
+          // Commission for this month
+          const empComms = this._commissionForEmpMonth(emp.id, mk);
+          // Reimbursements for this month
+          const empReimbs = this.reimbursementsList.filter(r => r.employeeId === emp.id && r.date?.startsWith(mk.substring(0,7))).reduce((s, r) => s + (Number(r.value) || 0), 0);
+          // Adjustments for this month
+          const empAdjs = this.adjustmentsList.filter(a => a.employeeId === emp.id && a.date?.startsWith(mk.substring(0,7))).reduce((s, a) => s + (Number(a.value) || 0), 0);
+
+          // Special payout cells
+          let specialCellsHtml = '';
+          let totalSpecials = 0;
+          specialDays.forEach(day => {
+            const specVal = this.specialSchedules.filter(s => s.employeeId === emp.id && Number(s.day) === day).reduce((s, x) => s + (Number(x.value) || 0), 0);
+            totalSpecials += specVal;
+            if (specVal > 0) {
+              const isPaid = this.specialPayoutState[mk]?.[`${emp.id}_${day}`] || false;
+              const isPast = this.isPastDay(day);
+              specialCellsHtml += `<td><div class="payout-cell-container" style="display:inline-flex;align-items:center;gap:0.4rem;">
+                <input type="checkbox" class="payout-checkbox" ${isPaid ? 'checked' : ''} onchange="App.toggleSpecialPayoutCheck('${emp.id}',${day},this.checked)">
+                <span class="payout-val ${isPast && !isPaid ? 'overdue' : ''}" id="val-spec-${emp.id}-${day}" style="${isPaid ? 'text-decoration:line-through;opacity:0.5;' : ''}">${esc(php(specVal))}</span>
+              </div></td>`;
+            } else {
+              specialCellsHtml += `<td style="color:var(--text-muted);">—</td>`;
+            }
+          });
+
+          // Payout columns
+          let payoutCellsHtml = '';
+          const numScheds = sortedScheds.length || 1;
+          const salaryPortion = baseSalary / numScheds;
+          sortedScheds.forEach(day => {
+            const adjsVal  = this._adjsForSchedule(emp.id, day, mk, sortedScheds);
+            const reimbsVal = this._reimbsForSchedule(emp.id, day, mk, sortedScheds);
+            const commsVal  = this._commsForSchedule(emp.id, day, mk, sortedScheds);
+            const totalSchedVal = salaryPortion + adjsVal + reimbsVal + commsVal;
+            const isPaid = this.regularPayoutState[mk]?.[`${emp.id}_${day}`] || false;
+            const isPast = this.isPastDay(day);
+            payoutCellsHtml += `<td><div class="payout-cell-container" style="display:inline-flex;align-items:center;gap:0.4rem;">
+              <input type="checkbox" class="payout-checkbox" ${isPaid ? 'checked' : ''} onchange="App.togglePayoutCheck('${emp.id}',${day},this.checked)">
+              <span class="payout-val ${isPast && !isPaid ? 'overdue' : ''}" id="val-${emp.id}-${day}" style="${isPaid ? 'text-decoration:line-through;opacity:0.5;' : ''}">${esc(php(totalSchedVal))}</span>
+            </div></td>`;
+          });
+
+          const grandTotal = baseSalary + empComms + empReimbs + empAdjs + totalSpecials;
+
+          return `<tr class="employee-row" data-emp-id="${esc(emp.id)}">
+            <td class="col-name col-sticky-1">${esc([emp.first_name, emp.last_name].filter(Boolean).join(' '))}</td>
+            <td class="col-sticky-2"><div style="font-size:0.75rem;color:var(--text-secondary);">${esc(positionText || '—')}</div></td>
+            <td class="col-sticky-3"><div style="font-size:0.75rem;color:var(--text-secondary);">${detailsHtml}</div></td>
+            <td>${esc(php(baseSalary))}</td>
+            <td>${esc(php(empComms))}</td>
+            <td>${esc(php(empReimbs))}</td>
+            <td style="color:${empAdjs < 0 ? 'var(--danger)' : 'var(--text-primary)'};">${esc(php(empAdjs))}</td>
+            <td style="border-right:2px solid var(--border);padding:0;"></td>
+            ${specialCellsHtml}${payoutCellsHtml}
+            <td style="font-weight:700;color:var(--text-primary);background:rgba(250,204,21,0.15);">${esc(php(grandTotal))}</td>
+            <td style="text-align:center;">
+              <button class="btn btn-outline btn-xs" onclick="App.shortcutSavePayslip('${emp.id}')" title="Save Payslip as PDF" style="padding:4px 8px;font-size:0.72rem;display:inline-flex;align-items:center;gap:4px;height:26px;">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>PDF
+              </button>
+            </td>
+          </tr>`;
+        };
+
+        // Render departments
+        Object.keys(grouped).sort().forEach(dept => {
+          bodyHtml += `<tr class="dept-header-row"><td colspan="${colspan}"><div class="dept-header-sticky">${esc(dept)} Department</div></td></tr>`;
+          const teams = Object.keys(grouped[dept]).sort((a, b) => {
+            if (a === 'Department Head') return -1;
+            if (b === 'Department Head') return 1;
+            return a.localeCompare(b);
+          });
+          teams.forEach(sub => {
+            if (sub !== '_unassigned_subteam') {
+              bodyHtml += `<tr class="team-header-row"><td colspan="${colspan}"><div class="team-header-sticky">${esc(sub)}</div></td></tr>`;
+            }
+            grouped[dept][sub].forEach(emp => { bodyHtml += renderEmpRow(emp); });
+          });
+        });
+
+        if (unassigned.length > 0) {
+          bodyHtml += `<tr class="dept-header-row"><td colspan="${colspan}">Unassigned Department / Pool</td></tr>`;
+          unassigned.forEach(emp => { bodyHtml += renderEmpRow(emp); });
+        }
+
+        tbody.innerHTML = bodyHtml || `<tr><td colspan="${colspan}" style="text-align:center;padding:3rem;color:var(--text-muted);">No employees found.</td></tr>`;
+      },
+
+      // ── Commission helpers ──
+      _parseDoors(b) {
+        if (!b) return [];
+        if (Array.isArray(b.doors)) return b.doors;
+        try { return JSON.parse(b.doors); } catch (_) { return []; }
+      },
+
+      _commissionForEmpMonth(empId, mk) {
+        return this.commissionAssignments.filter(a => {
+          if (a.employee_id !== empId) return false;
+          const b = this.bookingsList.find(x => x.id === a.booking_id);
+          if (!b || b.status === 'cancelled') return false;
+          const doors = this._parseDoors(b);
+          const door  = doors[a.product_index];
+          const isDone = (door && door.completed) || b.status === 'completed';
+          if (!isDone) return false;
+          const ds = (door && door.completed_at) || b.updated_at || b.created_at;
+          if (!ds) return false;
+          const d = new Date(ds);
+          return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}` === mk;
+        }).reduce((s, a) => s + (a.amount / 100), 0);
+      },
+
+      _adjsForSchedule(empId, schedDay, mk, sortedScheds) {
+        return this.adjustmentsList.filter(a => {
+          if (a.employeeId !== empId) return false;
+          const d = new Date(a.date);
+          if (`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}` !== mk) return false;
+          return this.getScheduleDayForItemDay(d.getDate(), sortedScheds) === schedDay;
+        }).reduce((s, a) => s + (Number(a.value) || 0), 0);
+      },
+
+      _reimbsForSchedule(empId, schedDay, mk, sortedScheds) {
+        return this.reimbursementsList.filter(r => {
+          if (r.employeeId !== empId) return false;
+          const d = new Date(r.date);
+          if (`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}` !== mk) return false;
+          return this.getScheduleDayForItemDay(d.getDate(), sortedScheds) === schedDay;
+        }).reduce((s, r) => s + (Number(r.value) || 0), 0);
+      },
+
+      _commsForSchedule(empId, schedDay, mk, sortedScheds) {
+        return this.commissionAssignments.filter(a => {
+          if (a.employee_id !== empId) return false;
+          const b = this.bookingsList.find(x => x.id === a.booking_id);
+          if (!b || b.status === 'cancelled') return false;
+          const doors = this._parseDoors(b);
+          const door  = doors[a.product_index];
+          const isDone = (door && door.completed) || b.status === 'completed';
+          if (!isDone) return false;
+          const ds = (door && door.completed_at) || b.updated_at || b.created_at;
+          if (!ds) return false;
+          const d = new Date(ds);
+          if (`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}` !== mk) return false;
+          return this.getScheduleDayForItemDay(d.getDate(), sortedScheds) === schedDay;
+        }).reduce((s, a) => s + (a.amount / 100), 0);
+      },
+
+      // ── Checkbox toggles ──
+      togglePayoutCheck(empId, schedDay, checked) {
+        const mk = this.monthKey();
+        this.regularPayoutState[mk] = this.regularPayoutState[mk] || {};
+        this.regularPayoutState[mk][`${empId}_${schedDay}`] = checked;
+        const valEl = document.getElementById(`val-${empId}-${schedDay}`);
+        if (valEl) {
+          if (checked) { valEl.classList.remove('overdue'); valEl.style.textDecoration = 'line-through'; valEl.style.opacity = '0.5'; }
+          else { valEl.style.textDecoration = ''; valEl.style.opacity = ''; if (this.isPastDay(schedDay)) valEl.classList.add('overdue'); }
+        }
+        this.debouncedSave();
+        this.syncPayslipRecord(empId);
+      },
+
+      toggleSpecialPayoutCheck(empId, day, checked) {
+        const mk = this.monthKey();
+        this.specialPayoutState[mk] = this.specialPayoutState[mk] || {};
+        this.specialPayoutState[mk][`${empId}_${day}`] = checked;
+        const valEl = document.getElementById(`val-spec-${empId}-${day}`);
+        if (valEl) {
+          if (checked) { valEl.classList.remove('overdue'); valEl.style.textDecoration = 'line-through'; valEl.style.opacity = '0.5'; }
+          else { valEl.style.textDecoration = ''; valEl.style.opacity = ''; if (this.isPastDay(day)) valEl.classList.add('overdue'); }
+        }
+        this.debouncedSave();
+      },
+
+      // ── Debounced save ──
+      debouncedSave() {
+        const el = document.getElementById('save-status');
+        if (el) el.textContent = 'Saving changes...';
+        if (this.saveTimeout) clearTimeout(this.saveTimeout);
+        this.saveTimeout = setTimeout(() => this.saveStateSilent(), 1000);
+      },
+
+      async saveStateSilent() {
+        try {
+          const sb = getSb();
+          await Promise.all([
+            sb.from('global_settings').upsert({ key: 'regular_payout_state', company_id: this.companyId, value: this.regularPayoutState }),
+            sb.from('global_settings').upsert({ key: 'special_payout_state', company_id: this.companyId, value: this.specialPayoutState }),
+            sb.from('global_settings').upsert({ key: 'commission_payout_state', company_id: this.companyId, value: this.commissionPayoutState }),
+          ]);
+          const el = document.getElementById('save-status');
+          if (el) { el.textContent = 'All changes saved'; setTimeout(() => { if (el.textContent === 'All changes saved') el.textContent = ''; }, 3000); }
+        } catch (e) {
+          console.error(e);
+          const el = document.getElementById('save-status');
+          if (el) el.textContent = 'Autosave failed';
+        }
+      },
+
+      // ── Sync payslip record (snapshot when all salary cutoffs are checked) ──
+      async syncPayslipRecord(empId) {
+        const emp = this.employees.find(e => e.id === empId);
+        if (!emp) return;
+        const mk     = this.monthKey();
+        const state  = this.regularPayoutState[mk];
+        const scheds = this.payoutSchedules.length > 0 ? this.payoutSchedules : [15, 30];
+        const allChecked = state && scheds.every(day => state[`${empId}_${day}`] === true);
+
+        if (allChecked) {
+          const baseSalary   = emp.salary || 0;
+          const empComms     = this._commissionForEmpMonth(empId, mk);
+          const empReimbObjs = this.reimbursementsList.filter(r => { const d = new Date(r.date); return r.employeeId === empId && `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}` === mk; });
+          const empAdjObjs   = this.adjustmentsList.filter(a => { const d = new Date(a.date); return a.employeeId === empId && `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}` === mk; });
+          const empSpecs     = this.specialSchedules.filter(s => s.employeeId === empId);
+          const totalReimbs  = empReimbObjs.reduce((s, r) => s + (Number(r.value) || 0), 0);
+          const totalAdjs    = empAdjObjs.reduce((s, a) => s + (Number(a.value) || 0), 0);
+          const totalSpecs   = empSpecs.reduce((s, x) => s + (Number(x.value) || 0), 0);
+          const grandTotal   = baseSalary + empComms + totalReimbs + totalAdjs + totalSpecs;
+
+          let resolvedDeptName = emp.department || '—';
+          const matchedDept = (this.companyStructure?.departments || []).find(d => d.managerId === empId || (d.subteams || []).some(s => s.managerId === empId || (s.colleagueIds || []).includes(empId)));
+          if (matchedDept) resolvedDeptName = matchedDept.name;
+
+          const payload = {
+            company_id: this.companyId, employee_id: empId, payout_month: mk,
+            department: resolvedDeptName, position: emp.title || '—',
+            salary: baseSalary, basic_paid: baseSalary,
+            commissions: empComms, adjustments: totalAdjs,
+            reimbursements: totalReimbs, special_payouts: totalSpecs,
+            total_payout: grandTotal,
+            adjustments_list: empAdjObjs,
+            reimbursements_list: empReimbObjs,
+            special_schedules: empSpecs
+          };
+          try { await getSb().from('payslip_records').upsert(payload, { onConflict: 'employee_id,payout_month' }); } catch (e) { console.error(e); }
+        } else {
+          try {
+            await getSb().from('payslip_records').delete().eq('employee_id', empId).eq('payout_month', mk);
+          } catch (e) { console.error(e); }
+        }
+      },
+
+      // ── Shortcut PDF save from summary row ──
+      async shortcutSavePayslip(empId) {
+        const emp = this.employees.find(e => e.id === empId);
+        if (!emp) return;
+        const mk = this.monthKey();
+
+        // Build payslip HTML inline
+        const baseSalary = emp.salary || 0;
+        const empComms   = this._commissionForEmpMonth(empId, mk);
+        const empReimbs  = this.reimbursementsList.filter(r => { const d = new Date(r.date); return r.employeeId === empId && `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}` === mk; });
+        const empAdjs    = this.adjustmentsList.filter(a => { const d = new Date(a.date); return a.employeeId === empId && `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}` === mk; });
+        const empSpecs   = this.specialSchedules.filter(s => s.employeeId === empId);
+        const totalReimbs = empReimbs.reduce((s, r) => s + (Number(r.value) || 0), 0);
+        const totalAdjs   = empAdjs.reduce((s, a) => s + (Number(a.value) || 0), 0);
+        const totalSpecs  = empSpecs.reduce((s, x) => s + (Number(x.value) || 0), 0);
+        const grandTotal  = baseSalary + empComms + totalReimbs + totalAdjs + totalSpecs;
+
+        // Fetch payslip config lazily
+        let payslipCfg = { logoStyle: 'light', signatoryName: 'Authorized Signatory', signatureUrl: '' };
+        let compCfg = {};
+        try {
+          const [{ data: pc }, { data: cc }] = await Promise.all([
+            getSb().from('global_settings').select('value').eq('key', 'payslip_template_config').eq('company_id', this.companyId).maybeSingle(),
+            getSb().from('global_settings').select('value').eq('key', 'company_profile_config').eq('company_id', this.companyId).maybeSingle(),
+          ]);
+          payslipCfg = pc?.value || payslipCfg;
+          compCfg    = cc?.value || {};
+        } catch (_) {}
+
+        const logoUrl    = payslipCfg.logoStyle === 'dark' ? compCfg.logoDark : compCfg.logoLight;
+        const compName   = compCfg.companyName || 'BrightKey Solutions';
+        const compAddr   = [compCfg.companyAddressLine1, compCfg.companyAddressLine2].filter(Boolean).join('<br>') || '';
+        const compContact = [compCfg.email, compCfg.phone].filter(Boolean).join('<br>');
+        const monthText  = `${MONTHS[this.selectedMonth]} ${this.selectedYear}`;
+        const empFullName = [emp.first_name, emp.last_name].filter(Boolean).join(' ');
+
+        let breakdownHtml = `<tr><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;font-weight:600;">Basic Salary</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;color:#4b5563;">Monthly Basic Salary</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;text-align:right;font-variant-numeric:tabular-nums;">${php(baseSalary)}</td></tr>`;
+        if (empComms > 0) breakdownHtml += `<tr><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;font-weight:600;">Commissions</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;color:#4b5563;">Sales Commissions</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;text-align:right;font-variant-numeric:tabular-nums;">${php(empComms)}</td></tr>`;
+
+        const sortedScheds = [...this.payoutSchedules].sort((a, b) => a - b) || [30];
+        let cutoffHtml = '';
+        let verifiedTotal = 0;
+        sortedScheds.forEach(day => {
+          const sp = baseSalary / sortedScheds.length;
+          const av = empAdjs.filter(a => { const d = new Date(a.date); return this.getScheduleDayForItemDay(d.getDate(), sortedScheds) === day; }).reduce((s, a) => s + (Number(a.value) || 0), 0);
+          const rv = empReimbs.filter(r => { const d = new Date(r.date); return this.getScheduleDayForItemDay(d.getDate(), sortedScheds) === day; }).reduce((s, r) => s + (Number(r.value) || 0), 0);
+          const cv = this._commsForSchedule(empId, day, mk, sortedScheds);
+          const xv = empSpecs.filter(s => this.getScheduleDayForItemDay(Number(s.day), sortedScheds) === day).reduce((s, x) => s + (Number(x.value) || 0), 0);
+          const total = sp + av + rv + cv + xv;
+          verifiedTotal += total;
+          cutoffHtml += `<div style="display:flex;justify-content:space-between;padding:0.5rem 0;font-size:0.85rem;border-bottom:1px dashed #e5e7eb;"><span style="font-weight:500;color:#4b5563;">Cutoff Payout (Day ${day})</span><span style="font-weight:700;color:#111827;font-variant-numeric:tabular-nums;">${php(total)}</span></div>`;
+        });
+
+        const sigImg = payslipCfg.signatureUrl ? `<img src="${payslipCfg.signatureUrl}" alt="Signature" style="max-height:100px;max-width:170px;object-fit:contain;display:block;">` : `<div style="height:100px;width:150px;"></div>`;
+        const logoImg = logoUrl ? `<img src="${esc(logoUrl)}" alt="Logo" style="max-height:48px;max-width:150px;display:block;margin-bottom:0.5rem;filter:grayscale(1);">` : '';
+
+        const sheetHtml = `<div style="display:flex;flex-direction:column;justify-content:space-between;min-height:250mm;padding:1.5rem;box-sizing:border-box;background:#fff;color:#111827;">
+          <div>
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:1rem;margin-bottom:1.5rem;">
+              <div>${logoImg}</div>
+              <div style="text-align:right;font-size:0.7rem;line-height:1.25;color:#4b5563;"><strong style="display:block;margin-bottom:3px;color:#111827;font-size:0.7rem;font-weight:800;">${esc(compName)}</strong>${compAddr}<br>${compContact}</div>
+            </div>
+            <div style="text-align:center;margin-bottom:1.5rem;"><div style="font-size:1.6rem;font-weight:900;letter-spacing:1px;color:#111827;text-transform:uppercase;">Payslip</div><div style="font-size:0.95rem;color:#4b5563;margin-top:0.1rem;"><strong>${esc(monthText)}</strong></div></div>
+            <div style="background:#f9fafb;padding:0.85rem;border-radius:6px;margin-bottom:1.5rem;border:1px solid #e5e7eb;display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;">
+              <div><span style="font-size:0.65rem;text-transform:uppercase;color:#6b7280;font-weight:600;display:block;">Employee Name</span><strong style="font-size:0.8rem;color:#111827;">${esc(empFullName)}</strong></div>
+              <div><span style="font-size:0.65rem;text-transform:uppercase;color:#6b7280;font-weight:600;display:block;">Position / Title</span><strong style="font-size:0.8rem;color:#111827;">${esc(emp.title || '—')}</strong></div>
+            </div>
+            <div style="margin-bottom:2rem;"><div style="font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:0.5rem;">Earnings Breakdown</div>
+              <table style="width:100%;border-collapse:collapse;font-size:0.85rem;"><thead><tr style="background:#f3f4f6;text-align:left;"><th style="padding:0.5rem 0.75rem;border-bottom:1px solid #d1d5db;font-weight:700;">Type</th><th style="padding:0.5rem 0.75rem;border-bottom:1px solid #d1d5db;font-weight:700;">Description</th><th style="padding:0.5rem 0.75rem;border-bottom:1px solid #d1d5db;text-align:right;font-weight:700;">Amount</th></tr></thead><tbody>${breakdownHtml}</tbody></table>
+            </div>
+            <div style="margin-bottom:2rem;max-width:400px;margin-left:auto;"><div style="font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:0.5rem;border-bottom:1px solid #111827;padding-bottom:0.25rem;">Payout Schedule Allocation</div>${cutoffHtml}<div style="display:flex;justify-content:space-between;padding:0.75rem 0;font-size:1rem;font-weight:800;border-top:2px solid #111827;"><span>TOTAL PAYOUT</span><span style="font-variant-numeric:tabular-nums;">${php(verifiedTotal)}</span></div></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:auto;padding-top:2rem;">
+            <div style="font-size:0.72rem;color:#6b7280;max-width:320px;line-height:1.2;">This payslip is generated through Brightkey ERP and serves as an official payroll record.</div>
+            <div style="display:flex;flex-direction:column;align-items:center;width:180px;"><div style="height:105px;display:flex;align-items:center;justify-content:center;width:100%;">${sigImg}</div><div style="font-size:0.85rem;font-weight:700;border-top:1px solid #111827;width:100%;text-align:center;padding-top:0.25rem;margin-top:0.25rem;">${esc(payslipCfg.signatoryName || 'Authorized Signatory')}</div><div style="font-size:0.72rem;color:#6b7280;width:100%;text-align:center;">Authorized Signatory</div></div>
+          </div>
+        </div>`;
+
+        // Render to off-screen element, export
+        const el = document.createElement('div');
+        el.style.cssText = 'position:fixed;left:-9999px;top:0;background:#fff;color:#111827;width:680px;padding:2rem;box-sizing:border-box;font-family:Inter,sans-serif;';
+        el.innerHTML = sheetHtml;
+        document.body.appendChild(el);
+
+        const fileName = `Payslip_${empFullName.replace(/\s+/g,'_')}_${monthText.replace(/\s+/g,'_')}.pdf`;
+        try {
+          await html2pdf().set({
+            margin: [10,10,10,10], filename: fileName,
+            image: { type: 'jpeg', quality: 0.98 },
+            html2canvas: { scale: 2, useCORS: true, letterRendering: true },
+            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+          }).from(el).save();
+          toast('Payslip PDF saved.', 'success');
+        } catch (err) {
+          console.error(err);
+          toast('PDF export failed: ' + err.message, 'error');
+        } finally {
+          document.body.removeChild(el);
+        }
+      },
+
+      // ── Clear All ──
+      async clearAllState() {
+        document.getElementById('clear-all-modal').classList.remove('open');
+        this.adjustmentsList = [];
+        this.reimbursementsList = [];
+        this.regularPayoutState   = {};
+        this.specialPayoutState   = {};
+        this.commissionPayoutState = {};
+        const el = document.getElementById('save-status');
+        if (el) el.textContent = 'Saving changes...';
+        try {
+          const sb = getSb();
+          await Promise.all([
+            sb.from('employee_adjustments').delete().eq('company_id', this.companyId),
+            sb.from('employee_reimbursements').delete().eq('company_id', this.companyId),
+            sb.from('payslip_records').delete().eq('company_id', this.companyId),
+            sb.from('global_settings').upsert({ key: 'regular_payout_state',    company_id: this.companyId, value: {} }),
+            sb.from('global_settings').upsert({ key: 'special_payout_state',    company_id: this.companyId, value: {} }),
+            sb.from('global_settings').upsert({ key: 'commission_payout_state', company_id: this.companyId, value: {} }),
+          ]);
+          toast('All data cleared.');
+          if (el) { el.textContent = 'All changes saved'; setTimeout(() => { if (el.textContent === 'All changes saved') el.textContent = ''; }, 3000); }
+          this.render();
+        } catch (e) {
+          console.error(e);
+          toast('Clear failed: ' + e.message, 'error');
+          if (el) el.textContent = 'Save failed';
+        }
+      },
+    };
+
+    document.addEventListener('DOMContentLoaded', () => {
+      App.init();
+      if (typeof initNav === 'function') initNav();
+    });
+  </script>
+</body>
+</html>

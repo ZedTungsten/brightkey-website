@@ -288,7 +288,7 @@
           <a class="dash-nav-child" data-role="hr" style="opacity: 0.5; cursor: not-allowed;">Company Events</a>
           <a class="dash-nav-child" data-role="hr" style="opacity: 0.5; cursor: not-allowed;">Announcements</a>
           <a class="dash-nav-child" data-role="hr" style="opacity: 0.5; cursor: not-allowed;">KPI</a>
-          <a href="/dashboard/payout-tracker.html" class="dash-nav-child" data-role="hr" style="display: flex; justify-content: space-between; align-items: center;">
+          <a href="/dashboard/payout-tracker/payout/" class="dash-nav-child" data-role="hr" style="display: flex; justify-content: space-between; align-items: center;">
             <span>Payout Tracker</span>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.6; margin-left: 0.5rem;" title="Shared with other roles">
               <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
@@ -316,7 +316,7 @@
           <a href="/dashboard/general-journal" class="dash-nav-child" data-role="accounting">General Journal</a>
           <a href="/dashboard/financial-statement" class="dash-nav-child" data-role="accounting">Financial Statements</a>
           <a href="/dashboard/ledgers" class="dash-nav-child" data-role="accounting">Ledgers</a>
-          <a href="/dashboard/payout-tracker.html" class="dash-nav-child" data-role="accounting" style="display: flex; justify-content: space-between; align-items: center;">
+          <a href="/dashboard/payout-tracker/payout/" class="dash-nav-child" data-role="accounting" style="display: flex; justify-content: space-between; align-items: center;">
             <span>Payout Tracker</span>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.6; margin-left: 0.5rem;" title="Shared with other roles">
               <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
@@ -524,7 +524,12 @@
     // Check sub-links and auto-expand active group
     document.querySelectorAll('.dash-nav-child').forEach(link => {
       const href = link.getAttribute('href');
-      if (href && (currentPath === href || currentPath === href + '.html' || (href === '/dashboard/warehouse' && currentPath.startsWith('/dashboard/warehouse')))) {
+      if (href && (
+        currentPath === href ||
+        currentPath === href + '.html' ||
+        (href === '/dashboard/warehouse' && currentPath.startsWith('/dashboard/warehouse')) ||
+        (href === '/dashboard/payout-tracker/payout/' && currentPath.startsWith('/dashboard/payout-tracker/'))
+      )) {
         link.classList.add('active');
         const group = link.closest('.dash-nav-group');
         if (group) {

@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Payslip — BrightKey Portal</title>
+  <link rel="preconnect" href="https://fonts.bunny.net" />
+  <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../../../css/style.css" />
+  <link rel="stylesheet" href="../shared.css" />
+  <link rel="icon" type="image/svg+xml" href="../../../assets/favicon.svg?v=2" />
+  <style>
+    .payslip-sidebar { width: 280px; min-width: 280px; background: var(--bg-surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 1.25rem; overflow-y: auto; }
+    .payslip-preview-area { flex: 1; overflow-y: auto; padding: 2rem; background: #e5e7eb; display: flex; flex-direction: column; align-items: center; }
+    .payslip-layout { display: flex; height: 100%; overflow: hidden; }
+    .payslip-a4-card { background: #fff; width: 680px; min-width: 680px; max-width: 680px; border-radius: 4px; box-shadow: 0 4px 24px rgba(0,0,0,0.12); }
+    .payslip-actions { display: flex; gap: 0.5rem; margin-bottom: 1rem; flex-wrap: wrap; }
+    .payslip-sidebar-section { border-top: 1px solid var(--border); padding-top: 1rem; margin-top: 1rem; }
+    .payslip-sidebar-section:first-child { border-top: none; margin-top: 0; padding-top: 0; }
+    .payslip-sidebar-label { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 0.5rem; display: block; }
+    .payslip-placeholder { color: var(--text-muted); font-size: 0.88rem; text-align: center; padding: 4rem 2rem; }
+  </style>
+</head>
+<body>
+  <div class="dash-layout">
+    <aside class="dash-sidebar" id="dash-sidebar"></aside>
+    <div class="dash-main">
+      <div class="top-bar">
+        <span class="top-bar-title">Payout Tracker</span>
+        <div style="flex:1"></div>
+      </div>
+
+      <nav class="drawer-tabs" id="payout-nav">
+        <a href="../payout/"         class="tab-btn" data-page="payout">Payout</a>
+        <a href="../salary/"         class="tab-btn" data-page="salary">Salary</a>
+        <a href="../special-payout/" class="tab-btn" data-page="special-payout">Special Payout</a>
+        <a href="../adjustments/"    class="tab-btn" data-page="adjustments">Adjustments</a>
+        <a href="../commissions/"    class="tab-btn" data-page="commissions">Commission</a>
+        <a href="../reimbursements/" class="tab-btn" data-page="reimbursements">Reimbursement</a>
+        <a href="../schedules/"      class="tab-btn" data-page="schedules">Schedules</a>
+        <a href="../payslip/"        class="tab-btn" data-page="payslip">Payslip</a>
+      </nav>
+
+      <div class="payslip-layout" style="flex:1; overflow:hidden;">
+        <!-- LEFT SIDEBAR: Employee selection + template config -->
+        <div class="payslip-sidebar">
+
+          <!-- Month selector -->
+          <div class="payslip-sidebar-section">
+            <span class="payslip-sidebar-label">Pay Month</span>
+            <div style="display:flex;align-items:center;gap:0.5rem;">
+              <button class="btn btn-outline btn-sm" id="btn-prev-month" style="padding:0.3rem 0.5rem;">&lt;</button>
+              <span id="payslip-month-display" style="font-size:0.82rem;font-weight:700;color:var(--text-primary);flex:1;text-align:center;"></span>
+              <button class="btn btn-outline btn-sm" id="btn-next-month" style="padding:0.3rem 0.5rem;">&gt;</button>
+            </div>
+          </div>
+
+          <!-- Department / Team / Employee drilldown -->
+          <div class="payslip-sidebar-section">
+            <span class="payslip-sidebar-label">Filter</span>
+            <div class="form-group" style="margin-bottom:0.6rem;">
+              <label class="form-label" for="payslip-department-select">Department</label>
+              <select id="payslip-department-select" class="form-select" onchange="App.handleDeptChange()"></select>
+            </div>
+            <div class="form-group" style="margin-bottom:0.6rem;">
+              <label class="form-label" for="payslip-team-select">Team</label>
+              <select id="payslip-team-select" class="form-select" onchange="App.handleTeamChange()"></select>
+            </div>
+            <div class="form-group" style="margin-bottom:0;">
+              <label class="form-label" for="payslip-employee-select">Employee</label>
+              <select id="payslip-employee-select" class="form-select" onchange="App.generatePreview()"></select>
+            </div>
+          </div>
+
+          <!-- Actions -->
+          <div class="payslip-sidebar-section">
+            <span class="payslip-sidebar-label">Export</span>
+            <div class="payslip-actions">
+              <button class="btn btn-cyan btn-sm" onclick="App.exportPayslipPDF()" style="flex:1;">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                Save PDF
+              </button>
+              <button class="btn btn-outline btn-sm" onclick="App.printPayslip()" style="flex:1;">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                Print
+              </button>
+            </div>
+            <button class="btn btn-outline btn-sm" style="width:100%;margin-top:0.25rem;" onclick="App.batchExportPDFs()">
+              Batch Export All Employees (PDF)
+            </button>
+          </div>
+
+          <!-- Template Settings -->
+          <div class="payslip-sidebar-section">
+            <span class="payslip-sidebar-label">Template</span>
+            <form id="payslip-template-form" onsubmit="App.saveTemplate(event)">
+              <div class="form-group" style="margin-bottom:0.6rem;">
+                <label class="form-label" for="payslip-logo-style">Logo Style</label>
+                <select id="payslip-logo-style" class="form-select" onchange="App.handleTemplateInput()">
+                  <option value="light">Light Logo</option>
+                  <option value="dark">Dark Logo</option>
+                </select>
+              </div>
+              <div class="form-group" style="margin-bottom:0.6rem;">
+                <label class="form-label" for="payslip-signatory-name">Signatory Name</label>
+                <input type="text" id="payslip-signatory-name" class="form-input" placeholder="e.g. John Doe" onchange="App.handleTemplateInput()" />
+              </div>
+              <div class="form-group" style="margin-bottom:0.75rem;">
+                <label class="form-label" for="payslip-signature-file">Signature Image</label>
+                <input type="file" id="payslip-signature-file" accept="image/*" onchange="App.handleSignatureFile(event)" style="font-size:0.75rem;color:var(--text-secondary);width:100%;" />
+                <div id="payslip-signature-preview" style="margin-top:0.4rem;display:none;">
+                  <img id="payslip-signature-img" src="" alt="Signature" style="max-height:60px;max-width:100%;object-fit:contain;border:1px solid var(--border);border-radius:4px;padding:4px;" />
+                </div>
+              </div>
+              <button type="submit" class="btn btn-outline btn-sm" style="width:100%;">Save Template</button>
+            </form>
+          </div>
+
+        </div>
+
+        <!-- RIGHT: Preview area -->
+        <div class="payslip-preview-area">
+          <div id="payslip-placeholder" class="payslip-placeholder">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--border);margin-bottom:1rem;"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 7h10M7 11h10M7 15h6"/></svg>
+            <div>Select an employee to preview the payslip</div>
+          </div>
+          <div id="payslip-canvas-wrapper" class="payslip-a4-card" style="display:none; padding:1.5rem; box-sizing:border-box;">
+            <div id="payslip-a4-sheet"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast-container" aria-live="polite"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <script src="../../../js/auth.js"></script>
+  <script src="../../../js/sidebar.js"></script>
+  <script src="../../../js/main.js"></script>
+  <script>
+    'use strict';
+
+    (function () {
+      const parts = window.location.pathname.split('/').filter(Boolean);
+      let page = parts[parts.length - 1];
+      if (page === 'index.html') page = parts[parts.length - 2];
+      document.querySelectorAll('#payout-nav .tab-btn[data-page]').forEach(a => {
+        if (a.dataset.page === page) a.classList.add('active');
+      });
+    })();
+
+    const getSb = () => window.BKAuth.sb;
+    const toast = (msg, type = 'success') => {
+      const c = document.getElementById('toast-container');
+      if (!c) return;
+      const el = document.createElement('div');
+      el.className = `toast toast-${type}`;
+      el.textContent = msg;
+      c.appendChild(el);
+      setTimeout(() => el.remove(), 3500);
+    };
+    const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    const php = v => {
+      if (v === null || v === undefined || v === '' || Number(v) === 0) return '—';
+      return '₱' + Number(v).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    };
+    const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+    const App = {
+      tenantId: null,
+      companyId: null,
+      employees: [],
+      companyStructure: { departments: [] },
+      reportingToMap: {},
+      payoutSchedules: [],
+      specialSchedules: [],
+      payslipConfig: { logoStyle: 'light', signatoryName: 'Authorized Signatory', signatureUrl: '' },
+      companyProfileConfig: {},
+      // Drilldown caches
+      payslipEmpDeptMap: {},
+      payslipEmpTeamMap: {},
+      selectedYear: new Date().getFullYear(),
+      selectedMonth: new Date().getMonth(),
+
+      async init() {
+        try {
+          const authInfo = await window.BKAuth.checkRoleGate(['HR', 'Finance'], '../../../admin.html');
+          if (!authInfo) return;
+          this.tenantId = authInfo.tenantId;
+          const { data: co } = await getSb().from('companies').select('id').eq('tenant_id', this.tenantId).limit(1).maybeSingle();
+          this.companyId = co?.id || null;
+          if (!this.companyId) { toast('Failed to resolve company.', 'error'); return; }
+          this.updateMonthDisplay();
+          await this.loadInitialData();
+          this.populateDrilldown();
+          this.bindEvents();
+        } catch (e) {
+          console.error(e);
+          toast('Initialization failed: ' + e.message, 'error');
+        }
+      },
+
+      async loadInitialData() {
+        const sb = getSb();
+
+        // Company structure
+        try {
+          const { data } = await sb.from('global_settings').select('value').eq('key', 'company_structure').eq('company_id', this.companyId).maybeSingle();
+          this.companyStructure = data?.value || { departments: [] };
+          this.buildReportingToMap();
+        } catch (_) { this.companyStructure = { departments: [] }; }
+
+        // Employees (all fields needed for payslip rendering)
+        try {
+          const { data, error } = await sb.from('employees')
+            .select('id, first_name, middle_name, last_name, salary, title, department, employment_status, reporting_to')
+            .eq('company_id', this.companyId)
+            .neq('employment_status', 'Terminated');
+          if (error) throw error;
+          this.employees = data || [];
+        } catch (e) { this.employees = []; console.error(e); }
+
+        // Config — payout schedules + payslip template + company profile
+        const [cfgRes, tplRes, profileRes] = await Promise.allSettled([
+          sb.from('global_settings').select('value').eq('key', 'salary_tracker_config').eq('company_id', this.companyId).maybeSingle(),
+          sb.from('global_settings').select('value').eq('key', 'payslip_template_config').eq('company_id', this.companyId).maybeSingle(),
+          sb.from('global_settings').select('value').eq('key', 'company_profile_config').eq('company_id', this.companyId).maybeSingle(),
+        ]);
+        this.payoutSchedules  = cfgRes.status === 'fulfilled'     ? (cfgRes.value.data?.value?.payoutSchedules || [15, 30]) : [15, 30];
+        this.specialSchedules = cfgRes.status === 'fulfilled'     ? (cfgRes.value.data?.value?.specialSchedules || []) : [];
+        if (tplRes.status === 'fulfilled' && tplRes.value.data?.value) this.payslipConfig = { ...this.payslipConfig, ...tplRes.value.data.value };
+        if (profileRes.status === 'fulfilled' && profileRes.value.data?.value) this.companyProfileConfig = profileRes.value.data.value;
+
+        // Restore template UI fields
+        const logoSel  = document.getElementById('payslip-logo-style');
+        const sigInput = document.getElementById('payslip-signatory-name');
+        const sigImgEl = document.getElementById('payslip-signature-img');
+        const sigPrev  = document.getElementById('payslip-signature-preview');
+        if (logoSel)  logoSel.value  = this.payslipConfig.logoStyle || 'light';
+        if (sigInput) sigInput.value = this.payslipConfig.signatoryName || '';
+        if (this.payslipConfig.signatureUrl && sigImgEl) {
+          sigImgEl.src = this.payslipConfig.signatureUrl;
+          if (sigPrev) sigPrev.style.display = 'block';
+        }
+      },
+
+      buildReportingToMap() {
+        this.reportingToMap = {};
+        (this.companyStructure?.departments || []).forEach(dept => {
+          const deptHeadId = dept.managerId;
+          (dept.subteams || []).forEach(sub => {
+            if (sub.managerId && deptHeadId) this.reportingToMap[sub.managerId] = deptHeadId;
+            (sub.colleagueIds || []).forEach(id => { this.reportingToMap[id] = sub.managerId || deptHeadId; });
+          });
+        });
+      },
+
+      populateDrilldown() {
+        const empDeptMap = {};
+        const empTeamMap = {};
+        (this.companyStructure?.departments || []).forEach(dept => {
+          const deptName = dept.name || '';
+          if (dept.managerId) empDeptMap[dept.managerId] = deptName;
+          (dept.subteams || []).forEach(sub => {
+            const subName = sub.name || '';
+            if (sub.managerId) { empDeptMap[sub.managerId] = deptName; empTeamMap[sub.managerId] = subName; }
+            (sub.colleagueIds || []).forEach(id => { empDeptMap[id] = deptName; empTeamMap[id] = subName; });
+          });
+        });
+        this.payslipEmpDeptMap = empDeptMap;
+        this.payslipEmpTeamMap = empTeamMap;
+
+        const depts = [...new Set(this.employees.map(e => empDeptMap[e.id] || e.department || 'Unassigned'))].sort();
+        const deptSel = document.getElementById('payslip-department-select');
+        if (deptSel) {
+          deptSel.innerHTML = `<option value="ALL">All Departments</option>` +
+            (depts.length > 0 ? `<option disabled>──────────</option>` + depts.map(d => `<option value="${esc(d)}">${esc(d)}</option>`).join('') : '');
+        }
+        this.handleDeptChange();
+      },
+
+      handleDeptChange() {
+        const deptSel = document.getElementById('payslip-department-select');
+        const teamSel = document.getElementById('payslip-team-select');
+        if (!deptSel || !teamSel) return;
+        const selectedDept = deptSel.value;
+
+        const deptEmps = this.employees.filter(e => selectedDept === 'ALL' || (this.payslipEmpDeptMap[e.id] || e.department || 'Unassigned') === selectedDept);
+        const teams = [...new Set(deptEmps.map(e => this.payslipEmpTeamMap[e.id] || 'No Team').filter(t => t !== 'No Team'))].sort();
+
+        teamSel.innerHTML = `<option value="ALL">All Teams</option><option value="No Team">No Team</option>` +
+          (teams.length > 0 ? `<option disabled>──────────</option>` + teams.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('') : '');
+        this.handleTeamChange();
+      },
+
+      handleTeamChange() {
+        const deptSel = document.getElementById('payslip-department-select');
+        const teamSel = document.getElementById('payslip-team-select');
+        const empSel  = document.getElementById('payslip-employee-select');
+        if (!deptSel || !teamSel || !empSel) return;
+        const selectedDept = deptSel.value;
+        const selectedTeam = teamSel.value;
+
+        let filtered = this.employees.filter(e => selectedDept === 'ALL' || (this.payslipEmpDeptMap[e.id] || e.department || 'Unassigned') === selectedDept);
+        if (selectedTeam !== 'ALL') filtered = filtered.filter(e => (this.payslipEmpTeamMap[e.id] || 'No Team') === selectedTeam);
+        filtered.sort((a, b) => [a.first_name, a.last_name].filter(Boolean).join(' ').localeCompare([b.first_name, b.last_name].filter(Boolean).join(' ')));
+
+        empSel.innerHTML = filtered.map(e => {
+          const name = [e.first_name, e.middle_name, e.last_name].filter(Boolean).join(' ');
+          return `<option value="${esc(e.id)}">${esc(name)}</option>`;
+        }).join('');
+        this.generatePreview();
+      },
+
+      monthKey() {
+        return `${this.selectedYear}-${String(this.selectedMonth + 1).padStart(2, '0')}`;
+      },
+
+      updateMonthDisplay() {
+        const el = document.getElementById('payslip-month-display');
+        if (el) el.textContent = `${MONTHS[this.selectedMonth]} ${this.selectedYear}`;
+      },
+
+      changeMonth(diff) {
+        let m = this.selectedMonth + diff;
+        let y = this.selectedYear;
+        if (m < 0)  { m = 11; y--; }
+        if (m > 11) { m = 0;  y++; }
+        this.selectedMonth = m;
+        this.selectedYear  = y;
+        this.updateMonthDisplay();
+        this.generatePreview();
+      },
+
+      bindEvents() {
+        document.getElementById('btn-prev-month').addEventListener('click', () => this.changeMonth(-1));
+        document.getElementById('btn-next-month').addEventListener('click', () => this.changeMonth(1));
+      },
+
+      handleTemplateInput() {
+        this.payslipConfig.logoStyle      = document.getElementById('payslip-logo-style')?.value || 'light';
+        this.payslipConfig.signatoryName  = document.getElementById('payslip-signatory-name')?.value || '';
+        if (document.getElementById('payslip-canvas-wrapper').style.display !== 'none') this.generatePreview();
+      },
+
+      handleSignatureFile(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = e => {
+          this.payslipConfig.signatureUrl = e.target.result;
+          const img  = document.getElementById('payslip-signature-img');
+          const prev = document.getElementById('payslip-signature-preview');
+          if (img)  img.src = e.target.result;
+          if (prev) prev.style.display = 'block';
+          if (document.getElementById('payslip-canvas-wrapper').style.display !== 'none') this.generatePreview();
+        };
+        reader.readAsDataURL(file);
+      },
+
+      async saveTemplate(event) {
+        if (event) event.preventDefault();
+        this.payslipConfig.logoStyle     = document.getElementById('payslip-logo-style')?.value || 'light';
+        this.payslipConfig.signatoryName = document.getElementById('payslip-signatory-name')?.value || '';
+        try {
+          const { error } = await getSb().from('global_settings').upsert({ key: 'payslip_template_config', company_id: this.companyId, value: this.payslipConfig });
+          if (error) throw error;
+          toast('Payslip template saved.', 'success');
+          if (document.getElementById('payslip-canvas-wrapper').style.display !== 'none') this.generatePreview();
+        } catch (e) {
+          console.error(e);
+          toast('Failed to save template: ' + e.message, 'error');
+        }
+      },
+
+      // ── Lazy load per-employee data for preview ──
+      async fetchEmployeeMonthData(empId) {
+        const mk   = this.monthKey();
+        const sb   = getSb();
+        const start = `${this.selectedYear}-${String(this.selectedMonth + 1).padStart(2, '0')}-01`;
+        const nextM = this.selectedMonth + 1 > 11 ? 0 : this.selectedMonth + 1;
+        const nextY = this.selectedMonth + 1 > 11 ? this.selectedYear + 1 : this.selectedYear;
+        const end   = `${nextY}-${String(nextM + 1).padStart(2, '0')}-01`;
+
+        const [adjRes, reimbRes, commRes] = await Promise.allSettled([
+          sb.from('employee_adjustments').select('id, amount, date, label').eq('company_id', this.companyId).eq('employee_id', empId).gte('date', start).lt('date', end),
+          sb.from('employee_reimbursements').select('id, amount, date, label').eq('company_id', this.companyId).eq('employee_id', empId).gte('date', start).lt('date', end),
+          sb.from('commission_assignments').select('booking_id, product_index, amount').eq('company_id', this.companyId).eq('employee_id', empId),
+        ]);
+
+        const adjs  = adjRes.status  === 'fulfilled' ? (adjRes.value.data || [])  : [];
+        const reimbs = reimbRes.status === 'fulfilled' ? (reimbRes.value.data || []) : [];
+        let commAssignments = commRes.status === 'fulfilled' ? (commRes.value.data || []) : [];
+
+        // Fetch relevant bookings for these assignments
+        let bookings = [];
+        const bookingIds = [...new Set(commAssignments.map(a => a.booking_id))];
+        if (bookingIds.length > 0) {
+          try {
+            const { data, error } = await sb.from('installation_bookings').select('id, status, updated_at, created_at, doors').in('id', bookingIds);
+            if (!error) bookings = data || [];
+          } catch (_) {}
+        }
+
+        // Compute commissions for this month
+        const parseDoors = (b) => { if (!b) return []; if (Array.isArray(b.doors)) return b.doors; try { return JSON.parse(b.doors); } catch (_) { return []; } };
+        const empComms = commAssignments.filter(a => {
+          const b = bookings.find(x => x.id === a.booking_id);
+          if (!b || b.status === 'cancelled') return false;
+          const doors = parseDoors(b);
+          const door  = doors[a.product_index];
+          const isDone = (door && door.completed) || b.status === 'completed';
+          if (!isDone) return false;
+          const ds = (door && door.completed_at) || b.updated_at || b.created_at;
+          if (!ds) return false;
+          const d = new Date(ds);
+          return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}` === mk;
+        }).reduce((s, a) => s + (a.amount / 100), 0);
+
+        return { adjs, reimbs, empComms };
+      },
+
+      async generatePreview() {
+        const empSel = document.getElementById('payslip-employee-select');
+        const empId  = empSel ? empSel.value : null;
+        if (!empId) return;
+
+        const emp = this.employees.find(e => e.id === empId);
+        if (!emp) { toast('Employee not found.', 'error'); return; }
+
+        const mk         = this.monthKey();
+        const monthText  = `${MONTHS[this.selectedMonth]} ${this.selectedYear}`;
+        const baseSalary = emp.salary || 0;
+        const empSpecs   = this.specialSchedules.filter(s => s.employeeId === emp.id);
+
+        // Lazy fetch per-employee data for this month
+        let adjs = [], reimbs = [], empComms = 0;
+        try {
+          ({ adjs, reimbs, empComms } = await this.fetchEmployeeMonthData(empId));
+        } catch (e) { console.error(e); }
+
+        const totalReimbs = reimbs.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+        const totalAdjs   = adjs.reduce((s, a) => s + (Number(a.amount) || 0), 0);
+        const totalSpecs  = empSpecs.reduce((s, x) => s + (Number(x.value) || 0), 0);
+
+        // Resolve dept and reporting-to
+        let resolvedDeptName = emp.department || '—';
+        let deptHeadId = null;
+        const matchedDept = (this.companyStructure?.departments || []).find(d => d.managerId === empId || (d.subteams || []).some(s => s.managerId === empId || (s.colleagueIds || []).includes(empId)));
+        if (matchedDept) { resolvedDeptName = matchedDept.name; deptHeadId = matchedDept.managerId; }
+        let mgrId = this.reportingToMap[empId] || emp.reporting_to;
+        if (!mgrId && deptHeadId && deptHeadId !== empId) mgrId = deptHeadId;
+        const manager = this.employees.find(e => e.id === mgrId);
+        const reportingToName = manager ? [manager.first_name, manager.last_name].filter(Boolean).join(' ') : '—';
+
+        // Breakdown rows
+        let breakdownHtml = `<tr><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;font-weight:600;">Basic Salary</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;color:#4b5563;">Monthly Basic Salary</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;text-align:right;font-variant-numeric:tabular-nums;">${php(baseSalary)}</td></tr>`;
+        if (empComms > 0) breakdownHtml += `<tr><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;font-weight:600;">Commissions</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;color:#4b5563;">Sales Commissions</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;text-align:right;font-variant-numeric:tabular-nums;">${php(empComms)}</td></tr>`;
+
+        const getSchedDay = (itemDay, sortedScheds) => { for (const s of sortedScheds) { if (itemDay <= s) return s; } return sortedScheds[sortedScheds.length - 1]; };
+        const sortedScheds = [...this.payoutSchedules].sort((a, b) => a - b) || [30];
+
+        if (adjs.length > 0) {
+          const SM = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+          const labels  = adjs.map(a => { const d = new Date(a.date); return esc(a.label || 'Salary Adjustment') + (!isNaN(d.getTime()) ? ` (${SM[d.getMonth()]} ${d.getDate()})` : ''); }).join('<br>');
+          const amounts = adjs.map(a => php(a.amount)).join('<br>');
+          breakdownHtml += `<tr><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;font-weight:600;vertical-align:top;">Adjustments</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;color:#4b5563;vertical-align:top;line-height:1.5;">${labels}</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;text-align:right;font-variant-numeric:tabular-nums;vertical-align:top;line-height:1.5;">${amounts}</td></tr>`;
+        }
+        if (reimbs.length > 0) {
+          const labels  = reimbs.map(r => esc(r.label || 'Expense Reimbursement')).join('<br>');
+          const amounts = reimbs.map(r => php(r.amount)).join('<br>');
+          breakdownHtml += `<tr><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;font-weight:600;vertical-align:top;">Reimbursements</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;color:#4b5563;vertical-align:top;line-height:1.5;">${labels}</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;text-align:right;font-variant-numeric:tabular-nums;vertical-align:top;line-height:1.5;">${amounts}</td></tr>`;
+        }
+        if (empSpecs.length > 0) {
+          const labels  = empSpecs.map(s => `${esc(s.label || 'Special Payout')} (Day ${s.day})`).join('<br>');
+          const amounts = empSpecs.map(s => php(s.value)).join('<br>');
+          breakdownHtml += `<tr><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;font-weight:600;vertical-align:top;">Special Payouts</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;color:#4b5563;vertical-align:top;line-height:1.5;">${labels}</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;text-align:right;font-variant-numeric:tabular-nums;vertical-align:top;line-height:1.5;">${amounts}</td></tr>`;
+        }
+
+        // Cutoff schedule rows
+        let cutoffHtml = '';
+        let verifiedTotal = 0;
+        sortedScheds.forEach(day => {
+          const sp = baseSalary / sortedScheds.length;
+          const av = adjs.filter(a => { const d = new Date(a.date); return getSchedDay(d.getDate(), sortedScheds) === day; }).reduce((s, a) => s + (Number(a.amount) || 0), 0);
+          const rv = reimbs.filter(r => { const d = new Date(r.date); return getSchedDay(d.getDate(), sortedScheds) === day; }).reduce((s, r) => s + (Number(r.amount) || 0), 0);
+          const xv = empSpecs.filter(s => getSchedDay(Number(s.day), sortedScheds) === day).reduce((s, x) => s + (Number(x.value) || 0), 0);
+          const total = sp + av + rv + xv;
+          verifiedTotal += total;
+          cutoffHtml += `<div style="display:flex;justify-content:space-between;padding:0.5rem 0;font-size:0.85rem;border-bottom:1px dashed #e5e7eb;"><span style="font-weight:500;color:#4b5563;">Cutoff Payout (Day ${day})</span><span style="font-weight:700;color:#111827;font-variant-numeric:tabular-nums;">${php(total)}</span></div>`;
+        });
+        verifiedTotal += empComms + totalSpecs;
+
+        // Company assets
+        const logoUrl     = this.payslipConfig.logoStyle === 'dark' ? this.companyProfileConfig.logoDark : this.companyProfileConfig.logoLight;
+        const compName    = this.companyProfileConfig.companyName || 'BrightKey Solutions';
+        const compAddr    = [this.companyProfileConfig.companyAddressLine1, this.companyProfileConfig.companyAddressLine2].filter(Boolean).join('<br>') || '';
+        const compContact = [this.companyProfileConfig.email, this.companyProfileConfig.phone].filter(Boolean).join('<br>');
+        const sigName     = this.payslipConfig.signatoryName || 'Authorized Signatory';
+        const sigImg      = this.payslipConfig.signatureUrl ? `<img src="${this.payslipConfig.signatureUrl}" alt="Signature" style="max-height:100px;max-width:170px;object-fit:contain;display:block;">` : `<div style="height:100px;width:150px;"></div>`;
+        const logoImg     = logoUrl ? `<img src="${esc(logoUrl)}" alt="Logo" style="max-height:48px;max-width:150px;display:block;margin-bottom:0.5rem;filter:grayscale(1);">` : '';
+        const empFullName = [emp.first_name, emp.last_name].filter(Boolean).join(' ');
+
+        document.getElementById('payslip-a4-sheet').innerHTML = `
+          <div style="display:flex;flex-direction:column;justify-content:space-between;min-height:250mm;box-sizing:border-box;background:#fff;color:#111827;">
+            <div>
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:1rem;margin-bottom:1.5rem;">
+                <div>${logoImg}</div>
+                <div style="text-align:right;font-size:0.7rem;line-height:1.25;color:#4b5563;"><strong style="display:block;margin-bottom:3px;color:#111827;font-size:0.7rem;font-weight:800;">${esc(compName)}</strong>${compAddr}<br>${compContact}</div>
+              </div>
+              <div style="text-align:center;margin-bottom:1.5rem;"><div style="font-size:1.6rem;font-weight:900;letter-spacing:1px;color:#111827;text-transform:uppercase;">Payslip</div><div style="font-size:0.95rem;color:#4b5563;margin-top:0.1rem;"><strong>${esc(monthText)}</strong></div></div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;background:#f9fafb;padding:0.85rem;border-radius:6px;margin-bottom:1.5rem;border:1px solid #e5e7eb;">
+                <div>
+                  <div style="margin-bottom:0.4rem;"><span style="font-size:0.65rem;text-transform:uppercase;color:#6b7280;font-weight:600;display:block;">Employee Name</span><strong style="font-size:0.8rem;color:#111827;">${esc(empFullName)}</strong></div>
+                  <div><span style="font-size:0.65rem;text-transform:uppercase;color:#6b7280;font-weight:600;display:block;">Department</span><strong style="font-size:0.8rem;color:#111827;">${esc(resolvedDeptName)}</strong></div>
+                </div>
+                <div>
+                  <div style="margin-bottom:0.4rem;"><span style="font-size:0.65rem;text-transform:uppercase;color:#6b7280;font-weight:600;display:block;">Reporting To</span><strong style="font-size:0.8rem;color:#111827;">${esc(reportingToName)}</strong></div>
+                  <div><span style="font-size:0.65rem;text-transform:uppercase;color:#6b7280;font-weight:600;display:block;">Position / Title</span><strong style="font-size:0.8rem;color:#111827;">${esc(emp.title || '—')}</strong></div>
+                </div>
+              </div>
+              <div style="margin-bottom:2rem;"><div style="font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:0.5rem;">Earnings &amp; Adjustments Breakdown</div>
+                <table style="width:100%;border-collapse:collapse;font-size:0.85rem;"><thead><tr style="background:#f3f4f6;text-align:left;"><th style="padding:0.5rem 0.75rem;border-bottom:1px solid #d1d5db;font-weight:700;">Type</th><th style="padding:0.5rem 0.75rem;border-bottom:1px solid #d1d5db;font-weight:700;">Description</th><th style="padding:0.5rem 0.75rem;border-bottom:1px solid #d1d5db;text-align:right;font-weight:700;">Amount</th></tr></thead><tbody>${breakdownHtml}</tbody></table>
+              </div>
+              <div style="margin-bottom:2rem;max-width:400px;margin-left:auto;"><div style="font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:0.5rem;border-bottom:1px solid #111827;padding-bottom:0.25rem;">Payout Schedule Allocation</div>${cutoffHtml}<div style="display:flex;justify-content:space-between;padding:0.75rem 0;font-size:1rem;font-weight:800;border-top:2px solid #111827;"><span>TOTAL PAYOUT</span><span style="font-variant-numeric:tabular-nums;">${php(verifiedTotal)}</span></div></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:auto;padding-top:2rem;">
+              <div style="font-size:0.72rem;color:#6b7280;max-width:320px;line-height:1.2;">This payslip is generated through Brightkey ERP and serves as an official payroll record. Any concerns regarding computation should be reported within seven (7) days of issuance.</div>
+              <div style="display:flex;flex-direction:column;align-items:center;width:180px;"><div style="height:105px;display:flex;align-items:center;justify-content:center;width:100%;">${sigImg}</div><div style="font-size:0.85rem;font-weight:700;border-top:1px solid #111827;width:100%;text-align:center;padding-top:0.25rem;margin-top:0.25rem;">${esc(sigName)}</div><div style="font-size:0.72rem;color:#6b7280;width:100%;text-align:center;">Authorized Signatory</div></div>
+            </div>
+          </div>`;
+
+        document.getElementById('payslip-placeholder').style.display = 'none';
+        document.getElementById('payslip-canvas-wrapper').style.display = 'block';
+      },
+
+      async exportPayslipPDF() {
+        const el = document.getElementById('payslip-a4-sheet');
+        if (!el || document.getElementById('payslip-canvas-wrapper').style.display === 'none') {
+          toast('No payslip preview to export. Select an employee first.', 'error');
+          return;
+        }
+        const empSel = document.getElementById('payslip-employee-select');
+        const emp    = this.employees.find(e => e.id === empSel?.value);
+        const name   = emp ? [emp.first_name, emp.last_name].filter(Boolean).join(' ') : 'Employee';
+        const month  = `${MONTHS[this.selectedMonth]} ${this.selectedYear}`;
+        const fname  = `Payslip_${name.replace(/\s+/g,'_')}_${month.replace(/\s+/g,'_')}.pdf`;
+        const wrapper = document.getElementById('payslip-canvas-wrapper');
+        const ob = wrapper.style.border, os = wrapper.style.boxShadow, or2 = wrapper.style.borderRadius;
+        wrapper.style.border = 'none'; wrapper.style.boxShadow = 'none'; wrapper.style.borderRadius = '0';
+        try {
+          await html2pdf().set({ margin:[10,10,10,10], filename:fname, image:{type:'jpeg',quality:0.98}, html2canvas:{scale:2,useCORS:true,letterRendering:true}, jsPDF:{unit:'mm',format:'a4',orientation:'portrait'} }).from(el).save();
+          toast('Payslip PDF saved.', 'success');
+        } catch (err) {
+          console.error(err);
+          toast('Export failed: ' + err.message, 'error');
+        } finally {
+          wrapper.style.border = ob; wrapper.style.boxShadow = os; wrapper.style.borderRadius = or2;
+        }
+      },
+
+      printPayslip() {
+        const sheetHtml = document.getElementById('payslip-a4-sheet')?.innerHTML;
+        if (!sheetHtml) { toast('No payslip to print. Select an employee first.', 'error'); return; }
+        const empSel = document.getElementById('payslip-employee-select');
+        const emp    = this.employees.find(e => e.id === empSel?.value);
+        const name   = emp ? [emp.first_name, emp.last_name].filter(Boolean).join(' ') : 'Employee';
+        const month  = `${MONTHS[this.selectedMonth]} ${this.selectedYear}`;
+        const win    = window.open('', '_blank');
+        if (!win) { toast('Popup blocked. Allow popups for this site.', 'error'); return; }
+        win.document.write(`<!DOCTYPE html><html><head><title>Payslip - ${name} - ${month}</title><link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet"><style>body{margin:0;padding:0;font-family:'Commissioner',sans-serif;background:#fff;}.payslip-page{width:210mm;min-height:297mm;padding:20mm;box-sizing:border-box;background:#fff;display:flex;flex-direction:column;justify-content:space-between;}@media print{.no-print{display:none!important;}}</style></head><body><div class="payslip-page">${sheetHtml}</div><script>window.onload=()=>window.print();<\/script></body></html>`);
+        win.document.close();
+      },
+
+      async batchExportPDFs() {
+        const empSel = document.getElementById('payslip-employee-select');
+        if (!empSel) return;
+        const empIds = Array.from(empSel.options).map(o => o.value).filter(v => v && v !== 'ALL' && v !== '');
+        if (empIds.length === 0) { toast('No employees to export.', 'info'); return; }
+        toast(`Exporting ${empIds.length} payslips...`, 'info');
+        const original = empSel.value;
+        for (const empId of empIds) {
+          empSel.value = empId;
+          await this.generatePreview();
+          await new Promise(r => setTimeout(r, 350));
+          await this.exportPayslipPDF();
+          await new Promise(r => setTimeout(r, 850));
+        }
+        empSel.value = original;
+        await this.generatePreview();
+        toast(`Exported ${empIds.length} payslips.`, 'success');
+      },
+    };
+
+    document.addEventListener('DOMContentLoaded', () => {
+      App.init();
+      if (typeof initNav === 'function') initNav();
+    });
+  </script>
+</body>
+</html>
