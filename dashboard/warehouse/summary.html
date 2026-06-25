@@ -268,6 +268,31 @@
       flex-shrink: 0;
     }
 
+    .inventory-pager-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 0.65rem 1.25rem;
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .inventory-pager-info {
+      color: var(--text-muted);
+      font-size: 0.78rem;
+      font-weight: 600;
+    }
+
+    .inventory-pager {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
     .table-responsive {
       flex: 1;
       overflow: auto;
@@ -652,6 +677,10 @@
 
                 </div>
               </div>
+              <div class="inventory-pager-bar">
+                <div class="inventory-pager-info" id="inventory-page-info">Loading products...</div>
+                <div class="inventory-pager" id="inventory-pager"></div>
+              </div>
               <div class="table-responsive">
                 <table class="ledger-table tally-table">
                   <thead>
@@ -794,6 +823,10 @@
     const supplierOrderPageSize = 10;
     let supplierOrderQuantities = {};
     let supplierOrderPosting = false;
+
+    // Inventory Summary Pagination
+    let inventoryPage = 1;
+    const inventoryPageSize = 15;
 
     // Premium Currency Formatter
     function formatMoney(cents) {
@@ -1188,6 +1221,7 @@
         const allThree = activeStockFilters.size === 3;
         btn.childNodes[0].textContent = allThree ? 'Stock Filter' : `Stock Filter (${activeStockFilters.size})`;
       }
+      inventoryPage = 1;
       renderInventorySummary();
     };
 
@@ -1198,6 +1232,7 @@
         uniqueCategories.forEach(cat => selectedCategories.add(cat));
       }
       populateCategoryFilter();
+      inventoryPage = 1;
       renderInventorySummary();
     };
 
@@ -1253,6 +1288,7 @@
       } else {
         selectedCategories.delete(cat);
       }
+      inventoryPage = 1;
       renderInventorySummary();
     };
 
@@ -1292,6 +1328,7 @@
         sortCol = col;
         sortDir = 'asc';
       }
+      inventoryPage = 1;
       renderInventorySummary();
     };
 
@@ -1378,13 +1415,86 @@
       }
     };
 
+    function renderInventoryPager(totalItems, totalPages) {
+      const pagerWrap = document.getElementById('inventory-pager');
+      const infoEl = document.getElementById('inventory-page-info');
+      if (!pagerWrap || !infoEl) return;
+
+      pagerWrap.innerHTML = '';
+
+      if (totalItems === 0) {
+        infoEl.innerText = '0 products';
+        return;
+      }
+
+      const start = (inventoryPage - 1) * inventoryPageSize + 1;
+      const end = Math.min(inventoryPage * inventoryPageSize, totalItems);
+      infoEl.innerText = `Showing ${start}-${end} of ${totalItems} products`;
+
+      function createButton(label, pageNum, disabled, active) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = active ? 'btn btn-primary' : 'btn btn-outline';
+        btn.innerText = label;
+        btn.disabled = disabled;
+        btn.style.padding = '0.3rem 0.6rem';
+        btn.style.fontSize = '0.74rem';
+        btn.style.height = '28px';
+        if (!disabled) {
+          btn.onclick = () => {
+            inventoryPage = pageNum;
+            renderInventorySummary();
+            const tableWrap = document.querySelector('#panel-inventory .table-responsive');
+            if (tableWrap) tableWrap.scrollTop = 0;
+          };
+        }
+        return btn;
+      }
+
+      pagerWrap.appendChild(createButton('Prev', inventoryPage - 1, inventoryPage <= 1, false));
+
+      const pageButtons = [];
+      const maxButtons = 5;
+      let startPage = Math.max(1, inventoryPage - 2);
+      let endPage = Math.min(totalPages, startPage + maxButtons - 1);
+      startPage = Math.max(1, endPage - maxButtons + 1);
+
+      if (startPage > 1) {
+        pageButtons.push(1);
+        if (startPage > 2) pageButtons.push('...');
+      }
+      for (let i = startPage; i <= endPage; i += 1) {
+        pageButtons.push(i);
+      }
+      if (endPage < totalPages) {
+        if (endPage < totalPages - 1) pageButtons.push('...');
+        pageButtons.push(totalPages);
+      }
+
+      pageButtons.forEach(item => {
+        if (item === '...') {
+          const span = document.createElement('span');
+          span.innerText = '...';
+          span.style.color = 'var(--text-muted)';
+          span.style.fontSize = '0.75rem';
+          span.style.padding = '0 0.15rem';
+          pagerWrap.appendChild(span);
+        } else {
+          pagerWrap.appendChild(createButton(String(item), item, false, item === inventoryPage));
+        }
+      });
+
+      pagerWrap.appendChild(createButton('Next', inventoryPage + 1, inventoryPage >= totalPages, false));
+    }
+
     // Render Tab 1: Inventory Summary
     function renderInventorySummary() { if (!document.getElementById('inventory-list')) return;
       const tbody = document.getElementById('inventory-list');
       tbody.innerHTML = '';
 
       if (allProducts.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="10" class="text-center">No products found in database.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="11" class="text-center">No products found in database.</td></tr>`;
+        renderInventoryPager(0, 1);
         return;
       }
 
@@ -1405,8 +1515,9 @@
       });
 
       if (filteredProducts.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="10" class="text-center">No products match the selected filters.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="11" class="text-center">No products match the selected filters.</td></tr>`;
         updateSortIndicators();
+        renderInventoryPager(0, 1);
         return;
       }
 
@@ -1438,8 +1549,17 @@
         }
       });
 
+      const totalItems = sortedProducts.length;
+      const totalPages = Math.max(1, Math.ceil(totalItems / inventoryPageSize));
+      if (inventoryPage > totalPages) inventoryPage = totalPages;
+      if (inventoryPage < 1) inventoryPage = 1;
+      renderInventoryPager(totalItems, totalPages);
+
+      const startIndex = (inventoryPage - 1) * inventoryPageSize;
+      const paginatedProducts = sortedProducts.slice(startIndex, startIndex + inventoryPageSize);
+
       // Render rows
-      sortedProducts.forEach(p => {
+      paginatedProducts.forEach(p => {
         const inv = allInventory[p.sku] || { available: 0, reserved: 0, inspect: 0, packed: 0, returned: 0, cancelled: 0 };
         
         const avail = inv.available || 0;
