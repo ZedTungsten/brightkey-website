@@ -848,8 +848,8 @@
         await loadWarehouseTabs(authInfo.tenantId);
         showLoadingState();
         await loadCoreData();
-        await runAutoSync();
         await refreshDashboard();
+        runAutoSyncInBackground();
 
         // Restore logs drawer state
         const logsOpen = localStorage.getItem('logs_drawer_open') === 'true';
@@ -980,7 +980,7 @@
           <td colspan="10">
             <div class="loading-wrapper">
               <div class="spinner-cyan"></div>
-              <span>Syncing and loading ledger data...</span>
+              <span>Loading warehouse data...</span>
             </div>
           </td>
         </tr>
@@ -1018,13 +1018,6 @@
       } else {
         invQuery = invQuery.is('warehouse_id', null);
       }
-      const { data: invData, error: invErr } = await invQuery;
-      if (invErr) throw invErr;
-
-      allInventory = {};
-      (invData || []).forEach(row => {
-        allInventory[row.sku] = row;
-      });
 
       // 3. Fetch transactions — scoped to active warehouse
       let txQuery = sb.from('inventory_transactions').select('*').order('created_at', { ascending: false });
@@ -1033,27 +1026,37 @@
       } else {
         txQuery = txQuery.is('warehouse_id', null);
       }
-      const { data: txData, error: txErr } = await txQuery;
+
+      const transferQuery = companyId
+        ? sb.from('warehouse_transfers').select('*')
+        : Promise.resolve({ data: [], error: null });
+
+      const [
+        { data: invData, error: invErr },
+        { data: txData, error: txErr },
+        { data: transData, error: transErr }
+      ] = await Promise.all([invQuery, txQuery, transferQuery]);
+
+      if (invErr) throw invErr;
       if (txErr) throw txErr;
+
+      allInventory = {};
+      (invData || []).forEach(row => {
+        allInventory[row.sku] = row;
+      });
       activeTransactions = txData || [];
+      if (transErr) {
+        console.error('Failed to fetch warehouse transfers:', transErr);
+        warehouseTransfers = [];
+      } else {
+        warehouseTransfers = transData || [];
+      }
 
       // Update warehouse name label in the inventory panel header
       const whNameEl = document.getElementById('panel-wh-name');
       if (whNameEl) {
         const wh = fulfillmentWarehouses.find(w => w.id === activeWarehouseId);
         whNameEl.textContent = wh ? wh.name : 'All Inventory';
-      }
-
-      // Fetch warehouse transfers
-      if (companyId) {
-        try {
-          const { data: transData, error: transErr } = await sb.from('warehouse_transfers').select('*');
-          if (!transErr) {
-            warehouseTransfers = transData || [];
-          }
-        } catch (e) {
-          console.error('Failed to fetch warehouse transfers:', e);
-        }
       }
 
       // Render all tabs
@@ -1070,6 +1073,15 @@
 
     function renderStatsStrip() {
       // Disabled - stats strip removed
+    }
+
+    async function runAutoSyncInBackground() {
+      try {
+        await runAutoSync();
+        await refreshDashboard();
+      } catch (err) {
+        console.warn('Background warehouse sync failed:', err.message || err);
+      }
     }
 
     // Auto-Sync Bookings logic
