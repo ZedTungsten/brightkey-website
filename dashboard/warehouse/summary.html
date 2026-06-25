@@ -293,6 +293,43 @@
       justify-content: flex-end;
     }
 
+    .inventory-search-wrap {
+      position: relative;
+      display: flex;
+      align-items: center;
+      width: 240px;
+      flex-shrink: 0;
+    }
+
+    .inventory-search-wrap svg {
+      position: absolute;
+      left: 0.65rem;
+      color: var(--text-muted);
+      pointer-events: none;
+    }
+
+    .inventory-search-input {
+      height: 30px;
+      width: 100%;
+      padding: 0.25rem 0.75rem 0.25rem 2rem;
+      font-size: 0.82rem;
+      background: var(--bg-surface);
+      color: var(--text-primary);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      outline: none;
+      transition: border 0.15s, box-shadow 0.15s;
+    }
+
+    .inventory-search-input::placeholder {
+      color: var(--text-muted);
+    }
+
+    .inventory-search-input:focus {
+      border-color: var(--cyan);
+      box-shadow: 0 0 0 2px var(--cyan-dim);
+    }
+
     .table-responsive {
       flex: 1;
       overflow: auto;
@@ -627,6 +664,22 @@
                 <span>Warehouse Tally <span id="panel-wh-name" style="font-weight:400; color:var(--text-muted); font-size:0.85em; margin-left:0.4rem;"></span></span>
                 <div style="display: flex; align-items: center; gap: 1rem; text-transform: none; font-weight: normal; font-size: 0.82rem;">
 
+                  <!-- Search Products -->
+                  <div class="inventory-search-wrap">
+                    <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                      <circle cx="11" cy="11" r="7"></circle>
+                      <line x1="16.5" y1="16.5" x2="21" y2="21"></line>
+                    </svg>
+                    <input
+                      type="search"
+                      id="inventory-search-input"
+                      class="inventory-search-input"
+                      placeholder="Search SKU or product"
+                      autocomplete="off"
+                      oninput="handleInventorySearch(this.value)"
+                    />
+                  </div>
+
                   <!-- Stock Filter Dropdown -->
                   <div class="dropdown" id="stock-filter-container" style="position: relative;">
                     <button type="button" id="stock-filter-btn" class="btn btn-outline" style="height: 30px; padding: 0.25rem 0.75rem; font-size: 0.82rem; display: inline-flex; align-items: center; gap: 0.35rem;" onclick="toggleStockFilterDropdown(event)">
@@ -834,6 +887,8 @@
     let inventoryPage = 1;
     const inventoryPageSize = 15;
     let inventoryRenderSeq = 0;
+    let inventorySearch = "";
+    let inventorySearchTimer = null;
 
     // Premium Currency Formatter
     function formatMoney(cents) {
@@ -1275,6 +1330,15 @@
       renderInventorySummary();
     };
 
+    window.handleInventorySearch = function(value) {
+      inventorySearch = String(value || '').trim();
+      inventoryPage = 1;
+      clearTimeout(inventorySearchTimer);
+      inventorySearchTimer = setTimeout(() => {
+        renderInventorySummary();
+      }, 220);
+    };
+
     window.selectAllCategories = function(selectActive, event) {
       if (event) event.stopPropagation();
       selectedCategories.clear();
@@ -1582,6 +1646,15 @@
       return skuList.length > 0 ? query.in('sku', skuList) : null;
     }
 
+    function applyInventorySearchFilter(query) {
+      if (!inventorySearch) return query;
+
+      const safeTerm = inventorySearch.replace(/[,%]/g, ' ').trim();
+      if (!safeTerm) return query;
+
+      return query.or(`sku.ilike.%${safeTerm}%,title.ilike.%${safeTerm}%`);
+    }
+
     function showInventoryLoading() {
       const tbody = document.getElementById('inventory-list');
       if (!tbody) return;
@@ -1665,6 +1738,7 @@
 
         query = applyInventoryCategoryFilter(query);
         query = query ? applyInventoryStockFilter(query) : null;
+        query = query ? applyInventorySearchFilter(query) : null;
 
         if (!query) {
           tbody.innerHTML = `<tr><td colspan="11" class="text-center">No products match the selected filters.</td></tr>`;
