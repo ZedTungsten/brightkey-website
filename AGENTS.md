@@ -155,3 +155,11 @@ Only run `npm run build` when one of the following is true:
 - The requested work directly affects generated product pages under `products/*.html`.
 
 For ordinary dashboard, JavaScript, CSS, migration, or non-product-page changes, prefer targeted checks instead of rebuilding product pages.
+
+---
+
+## 10. Strict UI Design System Compliance (`DESIGN.md`)
+> [!IMPORTANT]
+> Before modifying or writing any HTML, CSS, front-end JavaScript, layouts, modal animations, or stylesheet overrides, the agent **MUST read `/DESIGN.md` in its entirety**.
+> 
+> You are strictly forbidden from implementing custom scroll configurations, modal transitions, loading overlays, or sticky table columns/headers without verifying the established design systems and code blocks defined in `/DESIGN.md` first. Custom layouts must strictly conform to these patterns to prevent layout bugs.
