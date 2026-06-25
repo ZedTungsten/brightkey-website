@@ -668,13 +668,42 @@
 
     list.innerHTML = allEmployees.map(emp => {
       const color = emp.color || stringToColor(emp.id);
-      const empScheduleCount = schedules.filter(s => s.employee_id === emp.id).length;
+      const empSchedules = schedules.filter(s => s.employee_id === emp.id);
+      
+      let scheduleText = 'No schedule';
+      if (empSchedules.length > 0) {
+        // Group by day of week (1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat, 0=Sun)
+        const daysMap = {};
+        empSchedules.forEach(s => {
+          if (!daysMap[s.day_of_week]) daysMap[s.day_of_week] = [];
+          daysMap[s.day_of_week].push(s);
+        });
+
+        // Order days: Mon(1) to Sun(0)
+        const dayOrder = [1, 2, 3, 4, 5, 6, 0];
+        const activeDays = dayOrder.filter(d => daysMap[d] && daysMap[d].length > 0);
+        
+        const daysStr = activeDays.map(d => DAYS_SHORT[d]).join(', ');
+
+        // Aggregate unique range strings across all scheduled days
+        const uniqueRanges = [];
+        empSchedules.forEach(s => {
+          const rangeStr = `${hhmm(s.hour_start)} - ${hhmm(s.hour_end)}`;
+          if (!uniqueRanges.includes(rangeStr)) {
+            uniqueRanges.push(rangeStr);
+          }
+        });
+        const rangesStr = uniqueRanges.join(' | ');
+
+        scheduleText = `${daysStr} · ${rangesStr}`;
+      }
+
       return `
         <div class="emp-row" data-emp-id="${emp.id}">
           <div class="emp-avatar" style="background:${esc(color)}">${esc(initials(emp))}</div>
           <div>
             <div class="emp-name">${esc(emp.first_name)} ${esc(emp.last_name)}</div>
-            <div class="emp-sub">${esc(emp.assignment || '—')} · ${empScheduleCount > 0 ? empScheduleCount + ' blocks' : 'No schedule'}</div>
+            <div class="emp-sub">${esc(scheduleText)}</div>
           </div>
           <div class="emp-color-swatch" style="background:${esc(color)};"></div>
         </div>
