@@ -687,14 +687,40 @@
           const shiftBadgeWrap = document.getElementById('shift-badge-wrap');
           const shiftBadgeInner = document.getElementById('shift-badge-inner');
           if (shiftBadgeWrap && shiftBadgeInner) {
-            if (this.employee && (this.employee.shift_time_1 || this.employee.shift_time_2)) {
-              // Format from parsed hours
+            if (this.employee && (this.employee.shift_time_1 || this.employee.shift_time_2 || this.employee.shift_days)) {
+              // Format time from parsed hours
               const fmtH = (h, m) => {
                 const ampm = h >= 12 ? 'PM' : 'AM';
                 const h12 = h === 0 ? 12 : (h > 12 ? h - 12 : h);
                 return m > 0 ? `${h12}:${String(m).padStart(2,'0')} ${ampm}` : `${h12} ${ampm}`;
               };
-              shiftBadgeInner.textContent = `${fmtH(shiftStartHour, shiftStartMin)} – ${fmtH(shiftEndHour, shiftEndMin)}`;
+
+              // Format shift days (e.g. "Mon,Tue,Wed,Thu,Fri" → "Mon – Fri")
+              let daysStr = '';
+              if (this.employee.shift_days) {
+                const dayMap = {
+                  'M': 'Mon', 'Mo': 'Mon', 'Mon': 'Mon',
+                  'T': 'Tue', 'Tu': 'Tue', 'Tue': 'Tue',
+                  'W': 'Wed', 'We': 'Wed', 'Wed': 'Wed',
+                  'Th': 'Thu', 'Thu': 'Thu',
+                  'F': 'Fri', 'Fr': 'Fri', 'Fri': 'Fri',
+                  'S': 'Sat', 'Sa': 'Sat', 'Sat': 'Sat',
+                  'Su': 'Sun', 'Sun': 'Sun'
+                };
+                const mappedDays = this.employee.shift_days.split(',').map(d => {
+                  const trimmed = d.trim();
+                  return dayMap[trimmed] || trimmed;
+                });
+                // Condense consecutive ranges (e.g. Mon,Tue,Wed,Thu,Fri → Mon – Fri)
+                if (mappedDays.length > 1) {
+                  daysStr = `${mappedDays[0]} – ${mappedDays[mappedDays.length - 1]}`;
+                } else if (mappedDays.length === 1) {
+                  daysStr = mappedDays[0];
+                }
+              }
+
+              const timeStr = `${fmtH(shiftStartHour, shiftStartMin)} – ${fmtH(shiftEndHour, shiftEndMin)}`;
+              shiftBadgeInner.textContent = daysStr ? `${daysStr}  ${timeStr}` : timeStr;
               shiftBadgeWrap.style.display = 'flex';
             } else {
               shiftBadgeWrap.style.display = 'none';
