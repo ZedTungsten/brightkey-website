@@ -88,6 +88,37 @@
       text-align: center;
     }
 
+    /* ── Shift Badge ── */
+    .shift-badge-wrap {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .shift-badge-label {
+      font-size: 0.65rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+    }
+    .shift-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.3rem 0.75rem;
+      border-radius: 999px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      background: var(--cyan-dim, rgba(6,182,212,0.1));
+      color: var(--cyan-light, #22d3ee);
+      border: 1px solid rgba(6,182,212,0.25);
+      white-space: nowrap;
+    }
+    .shift-badge svg {
+      flex-shrink: 0;
+    }
+
     /* ── Week Block ── */
     .week-block {
       background: var(--bg-surface);
@@ -305,6 +336,14 @@
                   <button class="month-btn" onclick="AttendanceApp.changeMonth(-1)">&lt;</button>
                   <span class="month-title-display" id="month-display">Loading…</span>
                   <button class="month-btn" onclick="AttendanceApp.changeMonth(1)">&gt;</button>
+                  <!-- Shift Badge -->
+                  <div class="shift-badge-wrap" id="shift-badge-wrap" style="display:none;">
+                    <span class="shift-badge-label">Shift</span>
+                    <span class="shift-badge" id="shift-badge-text">
+                      <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="2.5" fill="none"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                      <span id="shift-badge-inner">—</span>
+                    </span>
+                  </div>
                 </div>
 
                 <!-- Dynamic Week Lists -->
@@ -597,21 +636,21 @@
           let shiftEndHour = 18;
           let shiftEndMin = 0;
 
-          if (this.employee) {
-            const parseTimeStr = (str) => {
-              if (!str) return null;
-              const match = str.match(/(\d+):(\d+)\s*(AM|PM)/i);
-              if (match) {
-                let h = parseInt(match[1], 10);
-                const m = parseInt(match[2], 10);
-                const ampm = match[3].toUpperCase();
-                if (ampm === 'PM' && h < 12) h += 12;
-                if (ampm === 'AM' && h === 12) h = 0;
-                return { hour: h, minute: m };
-              }
-              return null;
-            };
+          const parseTimeStr = (str) => {
+            if (!str) return null;
+            const match = str.match(/(\d+):(\d+)\s*(AM|PM)/i);
+            if (match) {
+              let h = parseInt(match[1], 10);
+              const m = parseInt(match[2], 10);
+              const ampm = match[3].toUpperCase();
+              if (ampm === 'PM' && h < 12) h += 12;
+              if (ampm === 'AM' && h === 12) h = 0;
+              return { hour: h, minute: m };
+            }
+            return null;
+          };
 
+          if (this.employee) {
             if (this.employee.shift_time_1) {
               const parts = this.employee.shift_time_1.split('-');
               if (parts.length === 2) {
@@ -641,6 +680,24 @@
                 shiftEndHour = end.hour;
                 shiftEndMin = end.minute;
               }
+            }
+          }
+
+          // ── Render shift badge ──
+          const shiftBadgeWrap = document.getElementById('shift-badge-wrap');
+          const shiftBadgeInner = document.getElementById('shift-badge-inner');
+          if (shiftBadgeWrap && shiftBadgeInner) {
+            if (this.employee && (this.employee.shift_time_1 || this.employee.shift_time_2)) {
+              // Format from parsed hours
+              const fmtH = (h, m) => {
+                const ampm = h >= 12 ? 'PM' : 'AM';
+                const h12 = h === 0 ? 12 : (h > 12 ? h - 12 : h);
+                return m > 0 ? `${h12}:${String(m).padStart(2,'0')} ${ampm}` : `${h12} ${ampm}`;
+              };
+              shiftBadgeInner.textContent = `${fmtH(shiftStartHour, shiftStartMin)} – ${fmtH(shiftEndHour, shiftEndMin)}`;
+              shiftBadgeWrap.style.display = 'flex';
+            } else {
+              shiftBadgeWrap.style.display = 'none';
             }
           }
 
