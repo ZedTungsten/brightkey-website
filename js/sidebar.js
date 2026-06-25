@@ -592,6 +592,19 @@
           }
         });
 
+        // Prioritize HR if user has access to both HR and Finance
+        const hasHrAccess = isOwnerOrAdmin || accessibleModules.includes('HR');
+        const hasFinanceAccess = isOwnerOrAdmin || accessibleModules.includes('Finance');
+        if (hasHrAccess && hasFinanceAccess) {
+          const financeGroup = document.getElementById('nav-group-finance');
+          if (financeGroup) {
+            const payoutTrackerLink = financeGroup.querySelector('a[href^="/dashboard/payout-tracker/"]');
+            if (payoutTrackerLink) {
+              payoutTrackerLink.style.display = 'none';
+            }
+          }
+        }
+
         // Handle user menu options role filtering
         document.querySelectorAll('#user-menu [data-role]').forEach(el => {
           const allowedRole = el.dataset.role;
