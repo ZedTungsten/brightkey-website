@@ -977,15 +977,8 @@
         whNameEl.textContent = wh ? wh.name : 'All Inventory';
       }
 
-      // Render all tabs
-      renderInventorySummary();
-      renderSupplierOrderTab();
+      // Render this page only; subpages carry their own focused render paths.
       renderReceiveTab();
-      renderPackTab();
-      renderInspectTab();
-      renderDispatchTab();
-      renderTransferTab();
-      renderActivityFeed();
       updateBadgeCounts();
     }
 
@@ -1000,6 +993,33 @@
       } catch (err) {
         console.warn('Background warehouse sync failed:', err.message || err);
       }
+    }
+
+    async function handleCancellationProcess(id, sku, qty, prevStatus) {
+      const now = new Date().toISOString();
+      const { error: txErr } = await sb.from('inventory_transactions').update({
+        status: 'cancelled',
+        timestamp_cancelled: now
+      }).eq('id', id);
+      if (txErr) throw txErr;
+
+      let invQ = sb.from('inventory').select('*').eq('sku', sku);
+      if (activeWarehouseId) invQ = invQ.eq('warehouse_id', activeWarehouseId);
+      else invQ = invQ.is('warehouse_id', null);
+      const { data: invRow, error: invErr } = await invQ;
+      if (invErr) throw invErr;
+      if (!invRow || invRow.length === 0) return;
+
+      const inv = invRow[0];
+      const updates = { cancelled: (inv.cancelled || 0) + qty };
+      if (prevStatus === 'packed') {
+        updates.packed = Math.max(0, (inv.packed || 0) - qty);
+      } else {
+        updates.reserved = Math.max(0, (inv.reserved || 0) - qty);
+      }
+
+      const { error: updErr } = await sb.from('inventory').update(updates).eq('id', inv.id);
+      if (updErr) throw updErr;
     }
 
     // Auto-Sync Bookings logic
