@@ -34,12 +34,12 @@
     .panel-header { padding: 0.85rem 1.25rem; font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-shrink: 0; }
 
     /* ── Calendar Grid ── */
-    .cal-outer { overflow: auto; position: relative; }
+    .cal-outer { overflow: auto; position: relative; max-height: 520px; }
     .cal-grid {
       display: grid;
       /* col 0 = time label, cols 1-7 = Mon–Sun */
-      grid-template-columns: 56px repeat(7, minmax(96px, 1fr));
-      min-width: 740px;
+      grid-template-columns: 52px repeat(7, minmax(80px, 1fr));
+      min-width: 620px;
       font-size: 0.72rem;
     }
 
@@ -51,7 +51,7 @@
       background: var(--bg-elevated);
       border-bottom: 1px solid var(--border);
       border-right: 1px solid var(--border);
-      padding: 0.5rem 0.35rem;
+      padding: 0.4rem 0.35rem;
       text-align: center;
       font-size: 0.72rem;
       font-weight: 700;
@@ -59,8 +59,8 @@
       text-transform: uppercase;
       letter-spacing: 0.06em;
       white-space: nowrap;
+      line-height: 1.2;
     }
-    .cal-day-header.today { color: var(--cyan-light); background: var(--cyan-dim, #ecfeff); }
 
     /* Time label cells */
     .cal-time-label {
@@ -70,15 +70,16 @@
       background: var(--bg-elevated);
       border-right: 1px solid var(--border);
       border-bottom: 1px solid var(--border);
-      padding: 0 6px;
+      padding: 0 5px 0 0;
+      height: 24px;
       display: flex;
-      align-items: flex-start;
+      align-items: center;
       justify-content: flex-end;
-      padding-top: 4px;
-      font-size: 0.65rem;
+      font-size: 0.6rem;
       font-weight: 600;
       color: var(--text-muted);
       user-select: none;
+      white-space: nowrap;
     }
 
     /* Top-left corner cell */
@@ -96,11 +97,10 @@
     .cal-cell {
       border-right: 1px solid var(--border);
       border-bottom: 1px solid var(--border);
-      min-height: 36px;
+      height: 24px;
       position: relative;
       overflow: hidden;
       background: var(--bg-base);
-      transition: background 0.1s;
     }
     .cal-cell:last-child { border-right: none; }
 
@@ -323,16 +323,7 @@
           <div class="panel">
             <div class="panel-header">
               <span>Weekly Schedule</span>
-              <div class="week-nav">
-                <button class="week-nav-btn" id="btn-prev-week" title="Previous week">
-                  <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none"><polyline points="15 18 9 12 15 6"/></svg>
-                </button>
-                <span class="week-label" id="week-label">—</span>
-                <button class="week-nav-btn" id="btn-next-week" title="Next week">
-                  <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none"><polyline points="9 18 15 12 9 6"/></svg>
-                </button>
-                <button class="btn btn-outline" id="btn-today" style="height:28px; font-size:0.72rem; padding:0 0.6rem;">Today</button>
-              </div>
+              <span style="font-size:0.72rem; font-weight:500; color:var(--text-muted);">Mon – Sun · 12 AM to 11 PM</span>
             </div>
             <!-- Calendar grid injected by JS -->
             <div class="cal-outer" id="cal-outer">
@@ -516,13 +507,8 @@
 
   function isValidHex(v) { return /^#[0-9A-Fa-f]{6}$/.test(v); }
 
-  /* ── Week label ── */
-  function updateWeekLabel() {
-    const mon = getWeekStart(weekOffset);
-    const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
-    document.getElementById('week-label').textContent =
-      formatDate(mon) + ' – ' + formatDate(sun) + ', ' + sun.getFullYear();
-  }
+  /* ── Week label (no longer needed, kept as no-op) ── */
+  function updateWeekLabel() {}
 
   /* ── Build Hour options ── */
   function buildHourOptions(selected) {
@@ -702,58 +688,39 @@
   }
 
   /* ── Build Calendar Grid ── */
+  // Static day order: Mon(1) Tue(2) Wed(3) Thu(4) Fri(5) Sat(6) Sun(0)
+  const GRID_DAYS = [1, 2, 3, 4, 5, 6, 0]; // wday values
+  const GRID_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
   function buildCalGrid() {
-    const mon = getWeekStart(weekOffset);
     const outer = document.getElementById('cal-outer');
     if (!outer) return;
 
-    // Check today
-    const today = new Date();
-    today.setHours(0,0,0,0);
-
-    // Build 7 day dates (Mon=0 … Sun=6 in grid, but actual wday Mon=1..Sun=0)
-    const weekDates = [];
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(mon);
-      d.setDate(mon.getDate() + i);
-      weekDates.push(d);
-    }
-
     let html = '<div class="cal-grid">';
 
-    /* ─ Header row ─ */
+    /* ─ Header row — static day names only ─ */
     html += '<div class="cal-corner"></div>';
-    weekDates.forEach(d => {
-      const isToday = d.getTime() === today.getTime();
-      const wday    = d.getDay(); // 0=Sun..6=Sat
-      html += `<div class="cal-day-header${isToday ? ' today' : ''}">
-        ${DAYS_SHORT[wday]}<br/>
-        <span style="font-size:0.68rem;font-weight:500;opacity:0.7;">${formatDate(d)}</span>
-      </div>`;
+    GRID_LABELS.forEach(lbl => {
+      html += `<div class="cal-day-header">${lbl}</div>`;
     });
 
     /* ─ Hour rows ─ */
     for (let h = HOUR_START; h <= HOUR_END; h++) {
       html += `<div class="cal-time-label">${hhmm(h)}</div>`;
 
-      weekDates.forEach(d => {
-        const wday = d.getDay(); // 0=Sun..6=Sat
+      GRID_DAYS.forEach(wday => {
         // Find all employee blocks that cover this hour on this weekday
-        const covering = schedules.filter(s => {
-          return s.day_of_week === wday && h >= s.hour_start && h < s.hour_end;
-        });
+        const covering = schedules.filter(s =>
+          s.day_of_week === wday && h >= s.hour_start && h < s.hour_end
+        );
 
-        // Multiple employees can overlap — stack them
-        const blockHtml = covering.map(s => {
+        // Multiple employees can overlap — stack them side by side
+        const blockHtml = covering.map((s, idx) => {
           const emp   = allEmployees.find(e => e.id === s.employee_id);
           const color = s.color || emp?.color || '#06b6d4';
           const lbl   = emp ? initials(emp) : '?';
-          const w     = Math.min(100 / covering.length, 100);
-          const idx   = covering.indexOf(s);
-          return `
-            <div class="cal-block-label" style="background:${esc(color)};
-              left:${idx * w}%; width:${w}%;">${esc(lbl)}</div>
-          `;
+          const w     = 100 / covering.length;
+          return `<div class="cal-block-label" style="background:${esc(color)};left:${idx*w}%;width:${w}%;">${esc(lbl)}</div>`;
         }).join('');
 
         html += `<div class="cal-cell">${blockHtml}</div>`;
@@ -763,9 +730,8 @@
     html += '</div>';
     outer.innerHTML = html;
 
-    // Scroll to 7 AM on init
-    const cellHeight = 36;
-    outer.scrollTop = 7 * cellHeight;
+    // Scroll to 7 AM on init (24px per row)
+    outer.scrollTop = 7 * 24;
   }
 
   /* ── Save Schedule ── */
