@@ -661,10 +661,11 @@
       try {
         await asyncFn();
       } catch (err) {
+        showToast('Operation failed: ' + err.message, true);
+      } finally {
         btn.disabled = false;
         btn.classList.remove('btn-loading');
         btn.innerHTML = originalHtml;
-        showToast('Operation failed: ' + err.message, true);
       }
     }
 
@@ -2473,14 +2474,40 @@
           }).eq('id', currentInv.id);
           if (updErr) throw updErr;
 
-          // Insert approved warehouse_transfer row
+          // Add stock to target warehouse immediately for direct transfers.
+          let targetInvQ = sb.from('inventory').select('*').eq('sku', item.sku).eq('warehouse_id', item.targetWarehouseId);
+          const { data: targetRows, error: targetErr } = await targetInvQ;
+          if (targetErr) throw targetErr;
+
+          if (targetRows && targetRows.length > 0) {
+            const targetInv = targetRows[0];
+            const { error: targetUpdErr } = await sb.from('inventory').update({
+              available: (targetInv.available || 0) + item.quantity
+            }).eq('id', targetInv.id);
+            if (targetUpdErr) throw targetUpdErr;
+          } else {
+            const { error: targetInsErr } = await sb.from('inventory').insert([{
+              sku: item.sku,
+              available: item.quantity,
+              reserved: 0,
+              inspect: 0,
+              packed: 0,
+              dispatched: 0,
+              returned: 0,
+              cancelled: 0,
+              warehouse_id: item.targetWarehouseId
+            }]);
+            if (targetInsErr) throw targetInsErr;
+          }
+
+          // Keep an audit trail, but mark direct transfers as already received.
           const { error: insErr } = await sb.from('warehouse_transfers').insert([{
             company_id: companyId,
             from_warehouse_id: activeWarehouseId,
             to_warehouse_id: item.targetWarehouseId,
             sku: item.sku,
             quantity: item.quantity,
-            status: 'approved',
+            status: 'received',
             requested_by: user?.id || null,
             approved_by: user?.id || null,
             created_at: new Date().toISOString(),
@@ -2494,6 +2521,7 @@
         renderDirectTransferItemsList();
         await refreshDashboard();
       });
+      renderDirectTransferItemsList();
     };
 
     window.submitTransferRequest = async function() {
