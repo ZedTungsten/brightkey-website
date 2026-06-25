@@ -804,6 +804,7 @@
     let sb;
 
     let allProducts = [];
+    let productMetaBySku = {};
     let allInventory = {};
     let isEditingAvailable = false;
     let activeTransactions = [];
@@ -832,6 +833,7 @@
     // Inventory Summary Pagination
     let inventoryPage = 1;
     const inventoryPageSize = 15;
+    let inventoryRenderSeq = 0;
 
     // Premium Currency Formatter
     function formatMoney(cents) {
@@ -980,6 +982,7 @@
       if (dropdown && dropdown.value !== whId) {
         dropdown.value = whId;
       }
+      inventoryPage = 1;
       refreshDashboard();
     };
 
@@ -997,7 +1000,7 @@
     function showLoadingState() {
       const loading = `
         <tr>
-          <td colspan="10">
+          <td colspan="11">
             <div class="loading-wrapper">
               <div class="spinner-cyan"></div>
               <span>Syncing and loading ledger data...</span>
@@ -1015,11 +1018,7 @@
     }
 
     async function loadCoreData() {
-      // 1. Fetch products (with image_main, category, business, dealer_price, and count_inventory columns)
-      const { data: pData, error: pErr } = await sb.from('products').select('id, sku, title, category, business, image_main, dealer_price, count_inventory').order('sku');
-      if (pErr) throw pErr;
-      allProducts = pData || [];
-      populateCategoryFilter();
+      await loadProductCategories();
 
       // Fetch employees
       try {
@@ -1028,6 +1027,40 @@
       } catch (e) {
         console.warn('Could not load employees:', e);
       }
+    }
+
+    async function loadProductCategories() {
+      const { data, error } = await sb
+        .from('products')
+        .select('category')
+        .or('count_inventory.is.null,count_inventory.neq.false')
+        .order('category');
+      if (error) throw error;
+
+      const cats = new Set();
+      (data || []).forEach(p => cats.add(p.category || ''));
+      uniqueCategories = Array.from(cats).sort();
+      populateCategoryFilter();
+    }
+
+    async function loadProductMetaForSkus(skus) {
+      const uniqueSkus = [...new Set((skus || []).filter(Boolean).map(sku => String(sku).trim().toUpperCase()))];
+      const missingSkus = uniqueSkus.filter(sku => !productMetaBySku[sku]);
+      if (missingSkus.length === 0) return;
+
+      const { data, error } = await sb
+        .from('products')
+        .select('sku, title, category, business, image_main, dealer_price, count_inventory')
+        .in('sku', missingSkus);
+      if (error) throw error;
+
+      (data || []).forEach(p => {
+        productMetaBySku[p.sku] = p;
+      });
+    }
+
+    function getProductMeta(sku, fallback = {}) {
+      return productMetaBySku[sku] || allProducts.find(prod => prod.sku === sku) || fallback;
     }
 
     async function refreshDashboard() {
@@ -1056,6 +1089,7 @@
       const { data: txData, error: txErr } = await txQuery;
       if (txErr) throw txErr;
       activeTransactions = txData || [];
+      await loadProductMetaForSkus(activeTransactions.map(tx => tx.sku));
 
       // Update warehouse name label in the inventory panel header
       const whNameEl = document.getElementById('panel-wh-name');
@@ -1070,6 +1104,7 @@
           const { data: transData, error: transErr } = await sb.from('warehouse_transfers').select('*');
           if (!transErr) {
             warehouseTransfers = transData || [];
+            await loadProductMetaForSkus(warehouseTransfers.map(tr => tr.sku));
           }
         } catch (e) {
           console.error('Failed to fetch warehouse transfers:', e);
@@ -1108,6 +1143,16 @@
         if (!existingRefs[tx.reference_id]) existingRefs[tx.reference_id] = [];
         existingRefs[tx.reference_id].push(tx.status);
       });
+
+      const bookingSkus = [];
+      bookings.forEach(booking => {
+        if (!booking.product_skus) return;
+        booking.product_skus.split('|').forEach(sku => {
+          const normalizedSku = sku.trim().toUpperCase();
+          if (normalizedSku) bookingSkus.push(normalizedSku);
+        });
+      });
+      await loadProductMetaForSkus(bookingSkus);
 
       for (const booking of bookings) {
         const orderNo = booking.order_no;
@@ -1150,7 +1195,7 @@
           }
 
           for (const item of items) {
-            const prod = allProducts.find(x => x.sku === item.sku);
+            const prod = productMetaBySku[item.sku];
             if (prod && prod.count_inventory === false) {
               console.log(`Skipping inventory update for service/non-stocked item: ${item.sku}`);
               continue;
@@ -1242,12 +1287,6 @@
     };
 
     function populateCategoryFilter() {
-      const cats = new Set();
-      allProducts.forEach(p => {
-        cats.add(p.category || '');
-      });
-      uniqueCategories = Array.from(cats).sort();
-
       const menu = document.getElementById('category-dropdown-menu');
       if (!menu) return;
 
@@ -1492,120 +1531,191 @@
       pagerWrap.appendChild(createButton('Next', inventoryPage + 1, inventoryPage >= totalPages, false));
     }
 
-    // Render Tab 1: Inventory Summary
-    function renderInventorySummary() { if (!document.getElementById('inventory-list')) return;
+    function formatPostgrestInList(values) {
+      return `(${values.map(value => `"${String(value).replace(/"/g, '\\"')}"`).join(',')})`;
+    }
+
+    function applyInventoryCategoryFilter(query) {
+      if (selectedCategories.size === 0) return null;
+      if (uniqueCategories.length > 0 && selectedCategories.size === uniqueCategories.length) return query;
+
+      const selected = Array.from(selectedCategories);
+      const namedCategories = selected.filter(cat => cat !== '');
+      const includeBlank = selected.includes('');
+      const orParts = [];
+
+      if (namedCategories.length > 0) {
+        orParts.push(`category.in.${formatPostgrestInList(namedCategories)}`);
+      }
+      if (includeBlank) {
+        orParts.push('category.is.null', 'category.eq.');
+      }
+
+      return orParts.length > 0 ? query.or(orParts.join(',')) : null;
+    }
+
+    function applyInventoryStockFilter(query) {
+      if (activeStockFilters.size === 0) return null;
+      if (activeStockFilters.size === 3) return query;
+
+      const inventoryRows = Object.values(allInventory || {});
+      const withStockSkus = inventoryRows.filter(row => (row.available || 0) > 0).map(row => row.sku);
+      const withDispatchedSkus = inventoryRows.filter(row => (row.dispatched || 0) > 0).map(row => row.sku);
+      const hasWithStocks = activeStockFilters.has('with_stocks');
+      const hasNoStocks = activeStockFilters.has('no_stocks');
+      const hasWithDispatched = activeStockFilters.has('with_dispatched');
+
+      if (hasWithStocks && hasNoStocks) return query;
+
+      if (hasNoStocks) {
+        const excludedSkus = inventoryRows
+          .filter(row => (row.available || 0) > 0 && (!hasWithDispatched || (row.dispatched || 0) < 1))
+          .map(row => row.sku);
+        return excludedSkus.length > 0 ? query.not('sku', 'in', formatPostgrestInList(excludedSkus)) : query;
+      }
+
+      const includedSkus = new Set();
+      if (hasWithStocks) withStockSkus.forEach(sku => includedSkus.add(sku));
+      if (hasWithDispatched) withDispatchedSkus.forEach(sku => includedSkus.add(sku));
+      const skuList = Array.from(includedSkus);
+
+      return skuList.length > 0 ? query.in('sku', skuList) : null;
+    }
+
+    function showInventoryLoading() {
       const tbody = document.getElementById('inventory-list');
-      tbody.innerHTML = '';
+      if (!tbody) return;
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="11">
+            <div class="loading-wrapper">
+              <div class="spinner-cyan"></div>
+              <span>Loading products...</span>
+            </div>
+          </td>
+        </tr>
+      `;
+    }
 
-      if (allProducts.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="11" class="text-center">No products found in database.</td></tr>`;
-        renderInventoryPager(0, 1);
-        return;
+    function appendInventoryRow(tbody, p) {
+      const inv = allInventory[p.sku] || { available: 0, reserved: 0, inspect: 0, packed: 0, returned: 0, cancelled: 0 };
+      
+      const avail = inv.available || 0;
+      let availColor = 'var(--text-primary)';
+      if (avail <= 0) {
+        availColor = 'var(--danger)';
       }
 
-      // Filter products by selected categories and count_inventory !== false
-      const catFiltered = allProducts.filter(p => selectedCategories.has(p.category || '') && p.count_inventory !== false);
+      const isStocked = p.count_inventory !== false;
+      const styleAvail = isStocked ? `color:${availColor}; font-weight:700;` : 'color:var(--text-muted) !important; opacity:0.4;';
+      const styleReserved = isStocked ? 'color:var(--warning); font-weight:600;' : 'color:var(--text-muted) !important; opacity:0.4;';
+      const styleInspect = isStocked ? 'color:#a855f7; font-weight:600;' : 'color:var(--text-muted) !important; opacity:0.4;';
+      const stylePacked = isStocked ? 'color:var(--cyan-light); font-weight:600;' : 'color:var(--text-muted) !important; opacity:0.4;';
+      const styleReturned = isStocked ? 'color:var(--danger);' : 'color:var(--text-muted) !important; opacity:0.4;';
+      const styleCancelled = isStocked ? 'color:var(--danger);' : 'color:var(--text-muted) !important; opacity:0.4;';
 
-      // Apply stock filter (OR logic: show row if any checked condition matches)
-      const filteredProducts = catFiltered.filter(p => {
-        if (activeStockFilters.size === 3) return true; // all checked = show all
-        if (activeStockFilters.size === 0) return false;
-        const inv = allInventory[p.sku] || {};
-        const avail = inv.available || 0;
-        const dispatched = inv.dispatched || 0;
-        if (activeStockFilters.has('with_stocks') && avail > 0) return true;
-        if (activeStockFilters.has('no_stocks') && avail < 1) return true;
-        if (activeStockFilters.has('with_dispatched') && dispatched > 0) return true;
-        return false;
-      });
-
-      if (filteredProducts.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="11" class="text-center">No products match the selected filters.</td></tr>`;
-        updateSortIndicators();
-        renderInventoryPager(0, 1);
-        return;
+      let imageSrc = p.image_main;
+      if (!imageSrc || !imageSrc.match(/^https?:\/\//)) {
+        imageSrc = '../../assets/og-image.png';
       }
 
-      // Sort
-      const sortedProducts = [...filteredProducts].sort((a, b) => {
-        let valA, valB;
-        if (sortCol === 'sku') {
-          valA = a.sku || '';
-          valB = b.sku || '';
-        } else if (sortCol === 'title') {
-          valA = a.title || '';
-          valB = b.title || '';
-        } else if (sortCol === 'category') {
-          valA = a.category || '';
-          valB = b.category || '';
-        } else if (sortCol === 'business') {
-          valA = a.business || '';
-          valB = b.business || '';
-        } else {
-          // available, reserved, packed, returned, cancelled
-          valA = (allInventory[a.sku]?.[sortCol]) || 0;
-          valB = (allInventory[b.sku]?.[sortCol]) || 0;
+      tbody.innerHTML += `
+        <tr>
+          <td>
+            <img src="${imageSrc}" alt="${p.sku}" style="width: 80px; height: 50px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-elevated); display: block;" />
+          </td>
+          <td><strong>${p.sku}</strong></td>
+          <td>${p.title}</td>
+          <td><span class="badge-status dispatched" style="font-size: 0.72rem; padding: 0.15rem 0.4rem; background: var(--bg-elevated); border: 1px solid var(--border); text-transform: capitalize;">${(p.category || '—').replace(/_/g, ' ')}</span></td>
+          <td><span class="badge-status dispatched" style="font-size: 0.72rem; padding: 0.15rem 0.4rem; background: var(--bg-elevated); border: 1px solid var(--border);">${(p.business || '—').replace(/_/g, ' ')}</span></td>
+          <td style="text-align: center; ${styleAvail}">
+            ${isEditingAvailable && isStocked ? `<input type="number" class="edit-avail-input" data-sku="${p.sku}" value="${avail}" style="width: 70px; text-align: center; padding: 2px 5px; font-size: 0.82rem; font-weight: bold; border: 1px solid var(--border); border-radius: 4px; background: var(--bg-surface); color: ${availColor};" />` : avail}
+          </td>
+          <td style="text-align: center; ${styleReserved}">${inv.reserved || 0}</td>
+          <td style="text-align: center; ${styleInspect}">${inv.inspect || 0}</td>
+          <td style="text-align: center; ${stylePacked}">${inv.packed || 0}</td>
+          <td style="text-align: center; ${styleReturned}">${inv.returned || 0}</td>
+          <td style="text-align: center; ${styleCancelled}">${inv.cancelled || 0}</td>
+        </tr>
+      `;
+    }
+
+    // Render Tab 1: Inventory Summary
+    async function renderInventorySummary() { if (!document.getElementById('inventory-list')) return;
+      const tbody = document.getElementById('inventory-list');
+      const renderSeq = ++inventoryRenderSeq;
+      showInventoryLoading();
+
+      try {
+        if (selectedCategories.size === 0 || activeStockFilters.size === 0) {
+          tbody.innerHTML = `<tr><td colspan="11" class="text-center">No products match the selected filters.</td></tr>`;
+          updateSortIndicators();
+          renderInventoryPager(0, 1);
+          return;
         }
 
-        if (typeof valA === 'string') {
-          return sortDir === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
-        } else {
-          return sortDir === 'asc' ? valA - valB : valB - valA;
-        }
-      });
+        const productSortCols = new Set(['sku', 'title', 'category', 'business']);
+        const querySortCol = productSortCols.has(sortCol) ? sortCol : 'sku';
+        const ascending = productSortCols.has(sortCol) ? sortDir === 'asc' : true;
 
-      const totalItems = sortedProducts.length;
-      const totalPages = Math.max(1, Math.ceil(totalItems / inventoryPageSize));
-      if (inventoryPage > totalPages) inventoryPage = totalPages;
-      if (inventoryPage < 1) inventoryPage = 1;
-      renderInventoryPager(totalItems, totalPages);
+        let query = sb
+          .from('products')
+          .select('id, sku, title, category, business, image_main, dealer_price, count_inventory', { count: 'exact' })
+          .or('count_inventory.is.null,count_inventory.neq.false');
 
-      const startIndex = (inventoryPage - 1) * inventoryPageSize;
-      const paginatedProducts = sortedProducts.slice(startIndex, startIndex + inventoryPageSize);
+        query = applyInventoryCategoryFilter(query);
+        query = query ? applyInventoryStockFilter(query) : null;
 
-      // Render rows
-      paginatedProducts.forEach(p => {
-        const inv = allInventory[p.sku] || { available: 0, reserved: 0, inspect: 0, packed: 0, returned: 0, cancelled: 0 };
-        
-        const avail = inv.available || 0;
-        let availColor = 'var(--text-primary)'; // default black/dark
-        if (avail <= 0) {
-          availColor = 'var(--danger)'; // red
+        if (!query) {
+          tbody.innerHTML = `<tr><td colspan="11" class="text-center">No products match the selected filters.</td></tr>`;
+          updateSortIndicators();
+          renderInventoryPager(0, 1);
+          return;
         }
 
-        const isStocked = p.count_inventory !== false;
-        const styleAvail = isStocked ? `color:${availColor}; font-weight:700;` : 'color:var(--text-muted) !important; opacity:0.4;';
-        const styleReserved = isStocked ? 'color:var(--warning); font-weight:600;' : 'color:var(--text-muted) !important; opacity:0.4;';
-        const styleInspect = isStocked ? 'color:#a855f7; font-weight:600;' : 'color:var(--text-muted) !important; opacity:0.4;';
-        const stylePacked = isStocked ? 'color:var(--cyan-light); font-weight:600;' : 'color:var(--text-muted) !important; opacity:0.4;';
-        const styleReturned = isStocked ? 'color:var(--danger);' : 'color:var(--text-muted) !important; opacity:0.4;';
-        const styleCancelled = isStocked ? 'color:var(--danger);' : 'color:var(--text-muted) !important; opacity:0.4;';
+        const startIndex = (inventoryPage - 1) * inventoryPageSize;
+        const endIndex = startIndex + inventoryPageSize - 1;
+        const { data, error, count } = await query
+          .order(querySortCol, { ascending, nullsFirst: false })
+          .range(startIndex, endIndex);
 
-        let imageSrc = p.image_main;
-        if (!imageSrc || !imageSrc.match(/^https?:\/\//)) {
-          imageSrc = '../../assets/og-image.png';
+        if (error) throw error;
+        if (renderSeq !== inventoryRenderSeq) return;
+
+        allProducts = data || [];
+        const totalItems = count || 0;
+        const totalPages = Math.max(1, Math.ceil(totalItems / inventoryPageSize));
+        if (inventoryPage > totalPages) {
+          inventoryPage = totalPages;
+          renderInventorySummary();
+          return;
+        }
+        if (inventoryPage < 1) inventoryPage = 1;
+
+        tbody.innerHTML = '';
+
+        if (allProducts.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="11" class="text-center">No products match the selected filters.</td></tr>`;
+          updateSortIndicators();
+          renderInventoryPager(0, 1);
+          return;
         }
 
-        tbody.innerHTML += `
-          <tr>
-            <td>
-              <img src="${imageSrc}" alt="${p.sku}" style="width: 80px; height: 50px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-elevated); display: block;" />
-            </td>
-            <td><strong>${p.sku}</strong></td>
-            <td>${p.title}</td>
-            <td><span class="badge-status dispatched" style="font-size: 0.72rem; padding: 0.15rem 0.4rem; background: var(--bg-elevated); border: 1px solid var(--border); text-transform: capitalize;">${(p.category || '—').replace(/_/g, ' ')}</span></td>
-            <td><span class="badge-status dispatched" style="font-size: 0.72rem; padding: 0.15rem 0.4rem; background: var(--bg-elevated); border: 1px solid var(--border);">${p.business.replace(/_/g, ' ')}</span></td>
-            <td style="text-align: center; ${styleAvail}">
-              ${isEditingAvailable && isStocked ? `<input type="number" class="edit-avail-input" data-sku="${p.sku}" value="${avail}" style="width: 70px; text-align: center; padding: 2px 5px; font-size: 0.82rem; font-weight: bold; border: 1px solid var(--border); border-radius: 4px; background: var(--bg-surface); color: ${availColor};" />` : avail}
-            </td>
-            <td style="text-align: center; ${styleReserved}">${inv.reserved || 0}</td>
-            <td style="text-align: center; ${styleInspect}">${inv.inspect || 0}</td>
-            <td style="text-align: center; ${stylePacked}">${inv.packed || 0}</td>
-            <td style="text-align: center; ${styleReturned}">${inv.returned || 0}</td>
-            <td style="text-align: center; ${styleCancelled}">${inv.cancelled || 0}</td>
-          </tr>
-        `;
-      });
+        if (!productSortCols.has(sortCol)) {
+          allProducts.sort((a, b) => {
+            const valA = (allInventory[a.sku]?.[sortCol]) || 0;
+            const valB = (allInventory[b.sku]?.[sortCol]) || 0;
+            return sortDir === 'asc' ? valA - valB : valB - valA;
+          });
+        }
+
+        renderInventoryPager(totalItems, totalPages);
+        allProducts.forEach(p => appendInventoryRow(tbody, p));
+      } catch (err) {
+        console.error('Error loading paged inventory products:', err);
+        tbody.innerHTML = `<tr><td colspan="11" class="text-center" style="color:var(--danger);">Failed to load products: ${escFulfillment(err.message || 'Unknown error')}</td></tr>`;
+        renderInventoryPager(0, 1);
+      }
 
       tbody.innerHTML += `<tr class="table-spacer-row" style="height: auto; border: none; background: transparent !important;"><td colspan="11" style="padding: 0; border: none; background: transparent !important; pointer-events: none;"></td></tr>`;
 
@@ -1626,7 +1736,7 @@
       }
 
       pending.forEach(t => {
-        const p = allProducts.find(prod => prod.sku === t.sku) || { title: 'Unknown Product', image_main: '' };
+        const p = getProductMeta(t.sku, { title: 'Unknown Product', image_main: '' });
         let sourceLabel = '';
         let badgeClass = '';
         if (t.status === 'ordered') {
@@ -1665,7 +1775,7 @@
       });
 
       incomingTransfers.forEach(tr => {
-        const p = allProducts.find(prod => prod.sku === tr.sku) || { title: 'Unknown Product', image_main: '' };
+        const p = getProductMeta(tr.sku, { title: 'Unknown Product', image_main: '' });
         const sourceWh = fulfillmentWarehouses.find(w => w.id === tr.from_warehouse_id) || { name: 'Unknown Warehouse' };
 
         let imageSrc = p.image_main;
@@ -1736,7 +1846,7 @@
         const date = group.timestamp_inspect ? new Date(group.timestamp_inspect).toLocaleString() : 'N/A';
 
         const imagesHtml = group.items.map(t => {
-          const p = allProducts.find(prod => prod.sku === t.sku) || { image_main: '' };
+          const p = getProductMeta(t.sku, { image_main: '' });
           let imageSrc = p.image_main;
           if (!imageSrc || !imageSrc.match(/^https?:\/\//)) {
             imageSrc = '../../assets/og-image.png';
@@ -1818,7 +1928,7 @@
         const dateOnly = group.timestamp_reserved ? new Date(group.timestamp_reserved).toLocaleDateString() : 'N/A';
 
         group.items.forEach((item, idx) => {
-          const p = allProducts.find(prod => prod.sku === item.sku) || { title: 'Unknown Product', image_main: '' };
+          const p = getProductMeta(item.sku, { title: 'Unknown Product', image_main: '' });
           let imageSrc = p.image_main;
           if (!imageSrc || !imageSrc.match(/^https?:\/\//)) {
             imageSrc = '../../assets/og-image.png';
@@ -1884,7 +1994,7 @@
       dispatchQueue.forEach(t => {
         const isDuplicate = (t.reference_id && t.reference_id === prevRefId);
         prevRefId = t.reference_id;
-        const p = allProducts.find(prod => prod.sku === t.sku) || { title: 'Unknown Product', image_main: '' };
+        const p = getProductMeta(t.sku, { title: 'Unknown Product', image_main: '' });
         const date = t.timestamp_packed ? new Date(t.timestamp_packed).toLocaleString() : 'N/A';
         
         let imageSrc = p.image_main;
@@ -2139,7 +2249,7 @@
       const row = Array.from(document.querySelectorAll('#supplier-product-list tr')).find(tr => tr.getAttribute('data-sku') === sku);
       if (row) {
         const lineTotalCell = row.querySelector('td[data-role="line-total"]');
-        const prod = allProducts.find(p => p.sku === sku);
+        const prod = getProductMeta(sku);
         if (lineTotalCell && prod) {
           const qty = supplierOrderQuantities[sku] || 0;
           lineTotalCell.innerText = qty > 0 ? formatMoney(prod.dealer_price * qty) : "";
@@ -2951,7 +3061,7 @@
         tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted" style="padding:2rem 0;">No pending transfer requests.</td></tr>`;
       } else {
         tbody.innerHTML = pendingTransfers.map(tr => {
-          const p = allProducts.find(prod => prod.sku === tr.sku) || { title: 'Unknown Product' };
+          const p = getProductMeta(tr.sku, { title: 'Unknown Product' });
           const targetWh = fulfillmentWarehouses.find(w => w.id === tr.to_warehouse_id) || { name: 'Unknown Warehouse' };
           const requesterEmp = allEmployees.find(e => e.id === tr.requested_by);
           const requesterName = requesterEmp ? `${requesterEmp.first_name} ${requesterEmp.last_name}` : 'Warehouse Manager';
