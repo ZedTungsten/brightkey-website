@@ -238,10 +238,6 @@
           </a>
           <a href="/dashboard/sales-schedule" class="dash-nav-child" data-role="sales">Schedule</a>
           <a href="/dashboard/sales-inventory" class="dash-nav-child" data-role="sales">Inventory</a>
-          <a class="dash-nav-child" data-role="sales" style="opacity: 0.5; cursor: not-allowed;">CRM</a>
-          <a class="dash-nav-child" data-role="sales" style="opacity: 0.5; cursor: not-allowed;">Goals</a>
-          <a class="dash-nav-child" data-role="sales" style="opacity: 0.5; cursor: not-allowed;">Calculators</a>
-          <a class="dash-nav-child" data-role="sales" style="opacity: 0.5; cursor: not-allowed;">Resources</a>
         </div>
       </div>
 
