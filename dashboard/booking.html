@@ -727,27 +727,54 @@
 
     function addDoorInstaller(doorId) {
       const container = document.getElementById(`${doorId}-installers`);
-      if (!container || container.querySelectorAll('.door-installer-select').length >= 2) return;
-      const rowId = `${doorId}-inst-2`;
-      container.insertAdjacentHTML('beforeend', `
-        <div id="${rowId}" style="display:flex; gap:0.4rem; align-items:center;">
-          <select class="form-input door-installer-select" style="height:auto; padding:0.4rem; flex:1;">
-            ${buildDoorInstallerOptions()}
-          </select>
-          <button type="button" class="btn btn-outline btn-sm"
-            style="padding:0.35rem 0.5rem; color:var(--danger); border-color:var(--border); flex-shrink:0;"
-            onclick="removeDoorInstaller('${rowId}','${doorId}')"<svg aria-hidden="true" viewBox="0 0 24 24" style="width:1em;height:1em;display:block;fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
-        </div>
-      `);
-      const addBtn = document.getElementById(`${doorId}-add-inst`);
-      if (addBtn) addBtn.style.display = 'none';
+      if (!container) return;
+      // Count existing assist rows (exclude lead row)
+      const assistRows = container.querySelectorAll('.door-assist-row');
+      if (assistRows.length >= 2) return;
+      const rowId = `${doorId}-assist-${assistRows.length + 1}`;
+      const div = document.createElement('div');
+      div.id = rowId;
+      div.className = 'door-assist-row';
+      div.style.cssText = 'display:flex; gap:0.4rem; align-items:center;';
+
+      const labelSpan = document.createElement('span');
+      labelSpan.style.cssText = 'font-size:0.7rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.04em; min-width:38px; flex-shrink:0;';
+      labelSpan.textContent = 'Assist';
+
+      const select = document.createElement('select');
+      select.className = 'form-input door-installer-select door-assist-select';
+      select.dataset.role = 'assist';
+      select.style.cssText = 'height:auto; padding:0.4rem; flex:1;';
+      select.innerHTML = buildDoorInstallerOptions();
+
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.title = 'Remove';
+      removeBtn.style.cssText = 'display:inline-flex; align-items:center; justify-content:center; background:none; border:none; padding:0.25rem; cursor:pointer; color:var(--danger); flex-shrink:0; border-radius:4px;';
+      removeBtn.innerHTML = '<svg viewBox="0 0 24 24" style="width:14px;height:14px;display:block;fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+      removeBtn.addEventListener('click', () => removeDoorInstaller(rowId, doorId));
+
+      div.appendChild(labelSpan);
+      div.appendChild(select);
+      div.appendChild(removeBtn);
+      container.appendChild(div);
+
+      // Hide add btn if we now have 2 assists
+      if (container.querySelectorAll('.door-assist-row').length >= 2) {
+        const addBtn = document.getElementById(`${doorId}-add-inst`);
+        if (addBtn) addBtn.style.display = 'none';
+      }
     }
 
     function removeDoorInstaller(rowId, doorId) {
       const el = document.getElementById(rowId);
       if (el) el.remove();
+      // Show add btn again if fewer than 2 assists remain
+      const container = document.getElementById(`${doorId}-installers`);
       const addBtn = document.getElementById(`${doorId}-add-inst`);
-      if (addBtn) addBtn.style.display = '';
+      if (addBtn && container && container.querySelectorAll('.door-assist-row').length < 2) {
+        addBtn.style.display = '';
+      }
     }
 
     // --- Dynamic Product Rows ---
@@ -1022,16 +1049,19 @@
             </div>
 
             <div style="margin-top:0.75rem; border-top:1px dashed var(--border); padding-top:0.75rem;">
-              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.35rem;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
                 <label class="form-label">Installers (Optional)</label>
                 <button type="button" class="btn btn-outline btn-sm" id="${doorId}-add-inst"
                   style="padding:0.2rem 0.5rem; font-size:0.72rem;"
-                  onclick="addDoorInstaller('${doorId}')">+ Add Installer</button>
+                  onclick="addDoorInstaller('${doorId}')">+ Add Assist</button>
               </div>
-              <div id="${doorId}-installers" style="display:flex; flex-direction:column; gap:0.35rem;">
-                <select class="form-input door-installer-select" style="height:auto; padding:0.4rem;">
-                  ${buildDoorInstallerOptions()}
-                </select>
+              <div id="${doorId}-installers" style="display:flex; flex-direction:column; gap:0.4rem;">
+                <div style="display:flex; gap:0.4rem; align-items:center;">
+                  <span style="font-size:0.7rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.04em; min-width:38px; flex-shrink:0;">Lead</span>
+                  <select class="form-input door-installer-select door-lead-select" data-role="lead" style="height:auto; padding:0.4rem; flex:1;">
+                    ${buildDoorInstallerOptions()}
+                  </select>
+                </div>
               </div>
             </div>
           </div>
@@ -1513,7 +1543,7 @@
           }
         }
 
-        // Collect per-door installers
+        // Collect per-door installers (with role: lead/assist)
         const doorInstallers = [];
         card.querySelectorAll('.door-installer-select').forEach(sel => {
           const empId = sel.value;
@@ -1521,7 +1551,8 @@
             const emp = (dbEmployees.length > 0 ? dbEmployees : MOCK_EMPLOYEES).find(e => e.id === empId);
             if (emp) {
               const lastName = emp.last_name ? ` ${emp.last_name.trim()}` : '';
-              doorInstallers.push({ id: emp.id, name: `${emp.first_name}${lastName}` });
+              const role = sel.dataset.role || 'lead';
+              doorInstallers.push({ id: emp.id, name: `${emp.first_name}${lastName}`, role });
             }
           }
         });

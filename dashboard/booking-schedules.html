@@ -1625,10 +1625,13 @@
             </div>
           `;
 
-          // Installers assigned to this door
+          // Installers assigned to this door — show with role labels if available
           let installersHtml = 'None Assigned';
           if (door?.installers && door.installers.length > 0) {
-            installersHtml = door.installers.map(inst => formatInstallerName(inst.name)).join(', ');
+            installersHtml = door.installers.map(inst => {
+              const role = inst.role ? `<span style="font-size:0.65rem;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-right:0.2rem;">${escapeHtml(inst.role)}:</span>` : '';
+              return role + escapeHtml(formatInstallerName(inst.name));
+            }).join(', ');
           } else if (selectedBooking.installers && selectedBooking.installers.length > 0) {
             let list = [];
             if (typeof selectedBooking.installers === 'string') {
@@ -1637,10 +1640,13 @@
               list = selectedBooking.installers;
             }
             if (list.length > 0) {
-              installersHtml = list.map(inst => formatInstallerName(inst.name)).join(', ');
+              installersHtml = list.map(inst => {
+                const role = inst.role ? `<span style="font-size:0.65rem;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-right:0.2rem;">${escapeHtml(inst.role)}:</span>` : '';
+                return role + escapeHtml(formatInstallerName(inst.name));
+              }).join(', ');
             }
           } else if (selectedBooking.installer_name) {
-            installersHtml = formatInstallerName(selectedBooking.installer_name);
+            installersHtml = escapeHtml(formatInstallerName(selectedBooking.installer_name));
           }
 
           const trStyle = anyProductCancelled ? 'style="opacity: 0.55; background-color: rgba(244, 244, 245, 0.4);"' : '';
@@ -1653,7 +1659,7 @@
               <td>
                 <div id="door-inst-container-${i}">
                   <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;">
-                    <span id="door-inst-text-${i}">${escapeHtml(installersHtml)}</span>
+                    <span id="door-inst-text-${i}">${installersHtml}</span>
                     ${anyProductCancelled ? '' : `
                     <button type="button" class="btn-minimal" onclick="editDoorInstallers(${i})" title="Edit Installers">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
@@ -3118,17 +3124,26 @@
       if (!door) return;
 
       const currentInstallers = door.installers || [];
-      const inst1 = currentInstallers[0]?.id || '';
-      const inst2 = currentInstallers[1]?.id || '';
+      const leadInst  = currentInstallers.find(i => i.role === 'lead') || currentInstallers[0];
+      const assistInsts = currentInstallers.filter(i => i.role === 'assist');
+      // Fallback for old data without roles: treat index 1+ as assist
+      const inst1Id  = leadInst?.id || '';
+      const inst2Id  = assistInsts[0]?.id || (currentInstallers[1]?.id || '');
+      const inst3Id  = assistInsts[1]?.id || (currentInstallers[2]?.id || '');
+      const hasAssist2 = !!inst2Id;
+      const hasAssist3 = !!inst3Id;
 
       const container = document.getElementById(`door-inst-container-${doorIndex}`);
       if (!container) return;
 
+      const roleLabel = (text) => `<span style="font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text-muted);letter-spacing:0.04em;min-width:36px;flex-shrink:0;">${text}</span>`;
+
       container.innerHTML = `
-        <div style="display: flex; flex-direction: column; gap: 0.35rem;">
+        <div style="display: flex; flex-direction: column; gap: 0.4rem;">
           <div style="display: flex; gap: 0.35rem; align-items: center;">
-            <select class="form-input" style="height:auto; padding:0.35rem; font-size:0.8rem; flex:1;" id="edit-inst-${doorIndex}-1">
-              ${buildDoorInstallerOptions(inst1)}
+            ${roleLabel('Lead')}
+            <select class="form-input" style="height:auto; padding:0.35rem; font-size:0.8rem; flex:1;" id="edit-inst-${doorIndex}-1" data-role="lead">
+              ${buildDoorInstallerOptions(inst1Id)}
             </select>
             <button type="button" class="btn-minimal btn-success" onclick="saveDoorInstallersEdit(${doorIndex})" title="Save">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
@@ -3137,31 +3152,58 @@
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
             </button>
           </div>
-          <div id="edit-inst-2-wrapper-${doorIndex}" style="display: ${inst2 ? 'flex' : 'none'}; gap: 0.35rem; align-items: center;">
-            <select class="form-input" style="height:auto; padding:0.35rem; font-size:0.8rem; flex:1;" id="edit-inst-${doorIndex}-2">
-              ${buildDoorInstallerOptions(inst2)}
+          <div id="edit-inst-2-wrapper-${doorIndex}" style="display: ${hasAssist2 ? 'flex' : 'none'}; gap: 0.35rem; align-items: center;">
+            ${roleLabel('Assist')}
+            <select class="form-input" style="height:auto; padding:0.35rem; font-size:0.8rem; flex:1;" id="edit-inst-${doorIndex}-2" data-role="assist">
+              ${buildDoorInstallerOptions(inst2Id)}
             </select>
-            <button type="button" class="btn-minimal btn-danger" onclick="removeSecondInstallerEdit(${doorIndex})" title="Remove"><svg aria-hidden="true" viewBox="0 0 24 24" style="width:1em;height:1em;display:block;fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+            <button type="button" class="btn-minimal btn-danger" onclick="removeAssistInstallerEdit(${doorIndex}, 2)" title="Remove"><svg viewBox="0 0 24 24" style="width:14px;height:14px;display:block;fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
           </div>
-          <button type="button" class="btn btn-outline btn-sm" id="btn-add-inst-edit-${doorIndex}" style="display: ${inst2 ? 'none' : 'inline-flex'}; font-size: 0.72rem; padding: 0.2rem 0.5rem;" onclick="addSecondInstallerEdit(${doorIndex})">+ Add Installer</button>
+          <div id="edit-inst-3-wrapper-${doorIndex}" style="display: ${hasAssist3 ? 'flex' : 'none'}; gap: 0.35rem; align-items: center;">
+            ${roleLabel('Assist')}
+            <select class="form-input" style="height:auto; padding:0.35rem; font-size:0.8rem; flex:1;" id="edit-inst-${doorIndex}-3" data-role="assist">
+              ${buildDoorInstallerOptions(inst3Id)}
+            </select>
+            <button type="button" class="btn-minimal btn-danger" onclick="removeAssistInstallerEdit(${doorIndex}, 3)" title="Remove"><svg viewBox="0 0 24 24" style="width:14px;height:14px;display:block;fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+          </div>
+          <button type="button" class="btn btn-outline btn-sm" id="btn-add-inst-edit-${doorIndex}"
+            style="display: ${(hasAssist2 && hasAssist3) ? 'none' : 'inline-flex'}; font-size: 0.72rem; padding: 0.2rem 0.5rem;"
+            onclick="addAssistInstallerEdit(${doorIndex})">+ Add Assist</button>
         </div>
       `;
     };
 
-    window.addSecondInstallerEdit = function(doorIndex) {
-      const wrapper = document.getElementById(`edit-inst-2-wrapper-${doorIndex}`);
-      if (wrapper) wrapper.style.display = 'flex';
+    window.addAssistInstallerEdit = function(doorIndex) {
+      // Show the first hidden assist wrapper
+      const w2 = document.getElementById(`edit-inst-2-wrapper-${doorIndex}`);
+      const w3 = document.getElementById(`edit-inst-3-wrapper-${doorIndex}`);
+      if (w2 && w2.style.display === 'none') {
+        w2.style.display = 'flex';
+      } else if (w3 && w3.style.display === 'none') {
+        w3.style.display = 'flex';
+      }
+      // Hide add btn if both assist slots are now visible
+      if (w2 && w3 && w2.style.display !== 'none' && w3.style.display !== 'none') {
+        const addBtn = document.getElementById(`btn-add-inst-edit-${doorIndex}`);
+        if (addBtn) addBtn.style.display = 'none';
+      }
+    };
+
+    // Keep old name as alias for backwards compatibility
+    window.addSecondInstallerEdit = window.addAssistInstallerEdit;
+
+    window.removeAssistInstallerEdit = function(doorIndex, slotNum) {
+      const wrapper = document.getElementById(`edit-inst-${slotNum}-wrapper-${doorIndex}`);
+      if (wrapper) wrapper.style.display = 'none';
+      const sel = document.getElementById(`edit-inst-${doorIndex}-${slotNum}`);
+      if (sel) sel.value = '';
+      // Show add btn again since a slot was freed
       const addBtn = document.getElementById(`btn-add-inst-edit-${doorIndex}`);
-      if (addBtn) addBtn.style.display = 'none';
+      if (addBtn) addBtn.style.display = 'inline-flex';
     };
 
     window.removeSecondInstallerEdit = function(doorIndex) {
-      const wrapper = document.getElementById(`edit-inst-2-wrapper-${doorIndex}`);
-      if (wrapper) wrapper.style.display = 'none';
-      const select2 = document.getElementById(`edit-inst-${doorIndex}-2`);
-      if (select2) select2.value = '';
-      const addBtn = document.getElementById(`btn-add-inst-edit-${doorIndex}`);
-      if (addBtn) addBtn.style.display = 'inline-flex';
+      window.removeAssistInstallerEdit(doorIndex, 2);
     };
 
     window.cancelDoorInstallersEdit = function(doorIndex) {
@@ -3181,21 +3223,17 @@
       const door = doorsArr[doorIndex];
       if (!door) return;
 
-      const sel1 = document.getElementById(`edit-inst-${doorIndex}-1`);
-      const sel2 = document.getElementById(`edit-inst-${doorIndex}-2`);
-      const wrapper2 = document.getElementById(`edit-inst-2-wrapper-${doorIndex}`);
-
-      const empId1 = sel1 ? sel1.value : '';
-      const empId2 = (sel2 && wrapper2 && wrapper2.style.display !== 'none') ? sel2.value : '';
-
       const doorInstallers = [];
-      [empId1, empId2].forEach(empId => {
-        if (empId) {
-          const emp = dbEmployees.find(e => e.id === empId);
-          if (emp) {
-            const lastName = emp.last_name ? ` ${emp.last_name.trim()}` : '';
-            doorInstallers.push({ id: emp.id, name: `${emp.first_name}${lastName}` });
-          }
+      [1, 2, 3].forEach(slot => {
+        const sel = document.getElementById(`edit-inst-${doorIndex}-${slot}`);
+        const wrapper = slot > 1 ? document.getElementById(`edit-inst-${slot}-wrapper-${doorIndex}`) : null;
+        const isVisible = slot === 1 || (wrapper && wrapper.style.display !== 'none');
+        if (!isVisible || !sel || !sel.value) return;
+        const emp = dbEmployees.find(e => e.id === sel.value);
+        if (emp) {
+          const lastName = emp.last_name ? ` ${emp.last_name.trim()}` : '';
+          const role = sel.dataset.role || (slot === 1 ? 'lead' : 'assist');
+          doorInstallers.push({ id: emp.id, name: `${emp.first_name}${lastName}`, role });
         }
       });
 
@@ -3206,7 +3244,7 @@
         const dInstallers = d.installers || [];
         dInstallers.forEach(inst => {
           if (inst.id && !allInstallersMap.has(inst.id)) {
-            allInstallersMap.set(inst.id, { id: inst.id, name: inst.name });
+            allInstallersMap.set(inst.id, { id: inst.id, name: inst.name, role: inst.role });
           }
         });
       });
