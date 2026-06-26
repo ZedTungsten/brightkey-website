@@ -597,7 +597,18 @@
       border-left-color: var(--text-muted) !important;
       opacity: 0.55;
     }
+    .calendar-slot.completed-media {
+      background: rgba(161,161,170,0.12) !important;
+      color: #71717A !important;
+      border-left-color: #71717A !important;
+      opacity: 0.55;
+      filter: grayscale(0.6);
+    }
     .list-card.aborted {
+      opacity: 0.5;
+      filter: grayscale(0.6);
+    }
+    .list-card.completed-media {
       opacity: 0.5;
       filter: grayscale(0.6);
     }
@@ -1005,7 +1016,8 @@
 
   <!-- Lightbox Modal -->
   <div class="modal-overlay" id="lightbox-modal" onclick="closeLightbox()">
-    <img id="lightbox-img" src="" alt="Preview Large" onclick="event.stopPropagation()" />
+    <img id="lightbox-img" src="" alt="Preview Large" style="display:none; max-width:90%; max-height:80vh; border-radius:6px; border:3px solid #fff; box-shadow: 0 10px 30px rgba(0,0,0,0.5);" onclick="event.stopPropagation()" />
+    <video id="lightbox-video" controls style="display:none; max-width:90%; max-height:80vh; border-radius:6px; border:3px solid #fff; box-shadow: 0 10px 30px rgba(0,0,0,0.5);" onclick="event.stopPropagation()"></video>
   </div>
 
   <script src="../js/auth.js"></script>
@@ -1020,6 +1032,7 @@
     let currentView = 'calendar'; // 'calendar' or 'list'
     let dbBookings = [];
     let dbEmployees = [];
+    let bookingMediaRequirements = [];
     let filteredBookings = [];
     let selectedBooking = null;
     let selectedDayDate = '';
@@ -1097,6 +1110,29 @@
         }
         dbBookings = data || [];
         dbEmployees = employeesRes.data || [];
+        
+        // Fetch booking media requirements
+        try {
+          const { data: mediaReqsRes } = await sb
+            .from('global_settings')
+            .select('value')
+            .eq('key', 'booking_media_requirements')
+            .eq('company_id', currentCompanyId)
+            .maybeSingle();
+
+          if (mediaReqsRes && mediaReqsRes.value && Array.isArray(mediaReqsRes.value)) {
+            bookingMediaRequirements = mediaReqsRes.value;
+          } else {
+            bookingMediaRequirements = [];
+          }
+          localStorage.setItem('bk_booking_media_requirements', JSON.stringify(bookingMediaRequirements));
+        } catch (mediaErr) {
+          console.error('Error loading media requirements:', mediaErr);
+          const cachedMediaReqs = localStorage.getItem('bk_booking_media_requirements');
+          if (cachedMediaReqs) {
+            try { bookingMediaRequirements = JSON.parse(cachedMediaReqs); } catch(_) {}
+          }
+        }
         
         window._installerAssignmentNames = (assignmentsRes.data || [])
           .filter(a => Array.isArray(a.visibility) && a.visibility.includes('booking.door_specifications'))
@@ -1195,12 +1231,35 @@
           const cityStr = getCityFromAddress(b.customer_address);
           const displayText = `${escapeHtml(b.customer_name)} (${escapeHtml(cityStr)})`;
           const isAborted = b.status === 'cancelled';
+          
+          let doorsArr = [];
+          if (b.doors) {
+            if (typeof b.doors === 'string') {
+              try { doorsArr = JSON.parse(b.doors); } catch(_) {}
+            } else if (Array.isArray(b.doors)) {
+              doorsArr = b.doors;
+            }
+          }
+          const isDone = doorsArr.length > 0 && doorsArr.every(d => d.completed);
+          const hasCompleteMedia = doorsArr.length > 0 && doorsArr.every(d => {
+            if (!bookingMediaRequirements || bookingMediaRequirements.length === 0) {
+              return d.media_urls && d.media_urls.length > 0;
+            }
+            return bookingMediaRequirements.every(req => d.required_media && d.required_media[req.label]);
+          });
+          const isFullyDone = isDone && hasCompleteMedia;
+
           const badgeHtml = isAborted
             ? `<span style="font-size:0.6rem;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Aborted</span>`
-            : (b.installer_name ? `<span class="calendar-inst-badge">${escapeHtml(formatInstallerName(b.installer_name))}</span>` : '');
+            : (isFullyDone 
+                ? `<div style="display:flex; flex-direction:column; gap:2px; align-items:flex-start;">
+                     <span class="calendar-inst-badge" style="background:#22C55E; color:#fff; border:none; font-size:0.6rem; margin-top:2px;">Done, Media Uploaded</span>
+                     ${b.installer_name ? `<span class="calendar-inst-badge" style="background:#E4E4E7; color:#71717A; font-size:0.58rem; margin-top:1px;">${escapeHtml(formatInstallerName(b.installer_name))}</span>` : ''}
+                   </div>`
+                : (b.installer_name ? `<span class="calendar-inst-badge">${escapeHtml(formatInstallerName(b.installer_name))}</span>` : ''));
 
           const slotHtml = `
-            <div class="calendar-slot ${isAfternoon(b.scheduled_time) ? 'pm' : 'am'}${isAborted ? ' aborted' : ''}" title="${displayText}" onclick="event.stopPropagation(); showBookingDetails('${b.id}')">
+            <div class="calendar-slot ${isAfternoon(b.scheduled_time) ? 'pm' : 'am'}${isAborted ? ' aborted' : ''}${isFullyDone ? ' completed-media' : ''}" title="${displayText}" onclick="event.stopPropagation(); showBookingDetails('${b.id}')">
               <div style="font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; width:100%;">${displayText}</div>
               ${badgeHtml}
             </div>
@@ -1255,10 +1314,33 @@
         const formattedProducts = b.product_names ? b.product_names.replace(/ \| /g, ', ') : 'No products';
         const isAborted = b.status === 'cancelled';
 
+        let doorsArr = [];
+        if (b.doors) {
+          if (typeof b.doors === 'string') {
+            try { doorsArr = JSON.parse(b.doors); } catch(_) {}
+          } else if (Array.isArray(b.doors)) {
+            doorsArr = b.doors;
+          }
+        }
+        const isDone = doorsArr.length > 0 && doorsArr.every(d => d.completed);
+        const hasCompleteMedia = doorsArr.length > 0 && doorsArr.every(d => {
+          if (!bookingMediaRequirements || bookingMediaRequirements.length === 0) {
+            return d.media_urls && d.media_urls.length > 0;
+          }
+          return bookingMediaRequirements.every(req => d.required_media && d.required_media[req.label]);
+        });
+        const isFullyDone = isDone && hasCompleteMedia;
+
+        const badgeHtml = isAborted 
+          ? '<span class="aborted-badge">Aborted</span>' 
+          : (isFullyDone 
+              ? '<span class="completed-media-badge" style="display:inline-block; font-size:0.68rem; font-weight:700; padding:2px 8px; border-radius:10px; background:rgba(34,197,94,0.15); color:#16a34a; text-transform:uppercase; letter-spacing:0.04em; margin-left:0.4rem; vertical-align:middle;">Done, Media Uploaded</span>'
+              : '');
+
         container.insertAdjacentHTML('beforeend', `
-          <div class="list-card${isAborted ? ' aborted' : ''}" onclick="showBookingDetails('${b.id}')">
+          <div class="list-card${isAborted ? ' aborted' : ''}${isFullyDone ? ' completed-media' : ''}" onclick="showBookingDetails('${b.id}')">
             <div class="list-card-left">
-              <span class="list-card-name">${escapeHtml(b.customer_name)}${isAborted ? '<span class="aborted-badge">Aborted</span>' : ''}</span>
+              <span class="list-card-name">${escapeHtml(b.customer_name)}${badgeHtml}</span>
               <div class="list-card-details">
                 <span><strong>Location:</strong> ${escapeHtml(cityStr)}</span>
                 <span><strong>Products:</strong> ${escapeHtml(formattedProducts)}</span>
@@ -1448,12 +1530,38 @@
           const trStyle = isCancelled ? 'style="opacity: 0.55; background-color: rgba(244, 244, 245, 0.4);"' : '';
           const prodTdStyle = (isSingleDoorGrouping && i < rowCount - 1) ? 'style="border-bottom: none;"' : '';
 
+          let installerMediaStripHtml = '';
+          const targetDoor = isSingleDoorGrouping ? doorsArr[0] : doorsArr[i];
+          if (targetDoor && targetDoor.media_urls && targetDoor.media_urls.length > 0) {
+            const mediaThumbs = targetDoor.media_urls.map(url => {
+              const isVid = /\.(mp4|mov|webm)(\?|$)/i.test(url);
+              if (isVid) {
+                return `
+                  <div class="door-thumbnail" style="display:inline-flex; align-items:center; justify-content:center; background:#000; color:#fff; cursor:pointer; width:36px; height:36px; border-radius:4px; border:1px solid var(--border); vertical-align:middle; margin-right:4px;" onclick="openLightbox('${url}')" title="Play Video">
+                    <svg viewBox="0 0 24 24" style="width:16px;height:16px;fill:currentColor;stroke:none"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                  </div>
+                `;
+              } else {
+                return `
+                  <img class="door-thumbnail" src="${url}" alt="Installer Media" onclick="openLightbox('${url}')" style="width:36px; height:36px; object-fit:cover; border-radius:4px; border:1px solid var(--border); vertical-align:middle; margin-right:4px; cursor:pointer;" />
+                `;
+              }
+            }).join('');
+            installerMediaStripHtml = `
+              <div style="margin-top: 0.5rem; display: flex; flex-direction: column; gap: 0.15rem;">
+                <span style="font-size: 0.65rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Installer Uploads</span>
+                <div style="display: flex; flex-wrap: wrap; gap: 4px; align-items: center;">${mediaThumbs}</div>
+              </div>
+            `;
+          }
+
           if (isSingleDoorGrouping) {
             if (i === 0) {
               tbody.insertAdjacentHTML('beforeend', `
                 <tr ${trStyle}>
                   <td ${prodTdStyle}>
                     <strong>${escapeHtml(sku)}</strong>
+                    ${installerMediaStripHtml}
                     ${isCancelled ? '<br/><span style="color:var(--danger);font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;">Cancelled</span>' : ''}
                   </td>
                   <td rowspan="${rowCount}">${doorTypeHtml}</td>
@@ -1479,6 +1587,7 @@
                 <tr ${trStyle}>
                   <td ${prodTdStyle}>
                     <strong>${escapeHtml(sku)}</strong>
+                    ${installerMediaStripHtml}
                     ${isCancelled ? '<br/><span style="color:var(--danger);font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;">Cancelled</span>' : ''}
                   </td>
                 </tr>
@@ -1489,6 +1598,7 @@
               <tr ${trStyle}>
                 <td>
                   <strong>${escapeHtml(sku)}</strong>
+                  ${installerMediaStripHtml}
                   ${isCancelled ? '<br/><span style="color:var(--danger);font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;">Cancelled</span>' : ''}
                 </td>
                 <td>${doorTypeHtml}</td>
@@ -2760,12 +2870,31 @@
     function openLightbox(src) {
       const modal = document.getElementById('lightbox-modal');
       const img = document.getElementById('lightbox-img');
-      img.src = src;
+      const vid = document.getElementById('lightbox-video');
+      
+      const isVid = /\.(mp4|mov|webm)(\?|$)/i.test(src);
+      if (isVid) {
+        img.style.display = 'none';
+        img.src = '';
+        vid.src = src;
+        vid.style.display = 'block';
+      } else {
+        vid.style.display = 'none';
+        vid.src = '';
+        img.src = src;
+        img.style.display = 'block';
+      }
       modal.classList.add('open');
     }
 
     function closeLightbox() {
-      document.getElementById('lightbox-modal').classList.remove('open');
+      const modal = document.getElementById('lightbox-modal');
+      modal.classList.remove('open');
+      const vid = document.getElementById('lightbox-video');
+      if (vid) {
+        vid.pause();
+        vid.src = '';
+      }
     }
 
     // Toast and HTML Helpers
