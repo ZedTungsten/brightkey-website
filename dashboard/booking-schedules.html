@@ -638,7 +638,7 @@
       opacity: 0.65;
       pointer-events: none;
     }
-    #upload-modal {
+    #upload-modal, #checklist-modal {
       z-index: 1100;
     }
   </style>
@@ -1019,6 +1019,45 @@
     </div>
   </div>
 
+  <!-- Done Checklist Modal -->
+  <div class="modal-overlay" id="checklist-modal" onclick="closeChecklistModal()">
+    <div class="modal-card" style="width: 460px; max-width: 95%;" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <div class="modal-title">Verification Checklist</div>
+        <button class="modal-close" onclick="closeChecklistModal()">
+          <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body" style="display:flex; flex-direction:column; gap:1.2rem; padding-bottom:1.5rem; max-height:70vh; overflow-y:auto;">
+        
+        <!-- Checklist -->
+        <div id="checklist-items-container" style="display:flex; flex-direction:column; gap:0.65rem; font-size:0.95rem; color:var(--text-secondary);">
+          <!-- Checklist items loaded dynamically -->
+        </div>
+
+        <div style="font-size:0.85rem; font-weight:700; color:var(--text-primary); text-transform:uppercase; letter-spacing:0.04em; margin-top:0.3rem; text-align:center;">
+          I confirm that all items listed above have been checked and verified
+        </div>
+
+        <div style="text-align:center; margin-top:0.2rem; display:flex; flex-direction:column; gap:0.25rem;">
+          <div id="checklist-customer-name" style="font-size:1.05rem; font-weight:700; color:var(--text-primary);">-</div>
+          <div id="checklist-install-date" style="font-size:0.88rem; color:var(--text-secondary); font-weight:500;">-</div>
+        </div>
+
+        <!-- Signature Preview -->
+        <div style="display:flex; flex-direction:column; gap:0.4rem;">
+          <label style="font-size:0.75rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; text-align:center;">Customer Signature</label>
+          <div style="border:1px dashed var(--border); border-radius:var(--radius-sm); background:#FAFAFA; overflow:hidden; display:flex; align-items:center; justify-content:center; padding:10px;">
+            <img id="signature-preview-img" style="max-width:100%; height:130px; object-fit:contain; background:#fff;" alt="Customer Signature" />
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer" style="padding: 1rem 1.5rem; display: flex; justify-content: center; gap: 0.5rem; background: var(--bg-elevated);">
+        <button type="button" class="btn btn-primary" onclick="closeChecklistModal()" style="padding: 0.5rem 2rem;">Close</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Upload Media Modal -->
   <div class="modal-overlay" id="upload-modal" onclick="closeUploadModal()">
     <div class="modal-card" style="width: 460px; max-width: 95%;" onclick="event.stopPropagation()">
@@ -1080,6 +1119,7 @@
     let dbBookings = [];
     let dbEmployees = [];
     let bookingMediaRequirements = [];
+    let bookingChecklist = [];
     let filteredBookings = [];
     let selectedBooking = null;
     let selectedDayDate = '';
@@ -1181,6 +1221,29 @@
           const cachedMediaReqs = localStorage.getItem('bk_booking_media_requirements');
           if (cachedMediaReqs) {
             try { bookingMediaRequirements = JSON.parse(cachedMediaReqs); } catch(_) {}
+          }
+        }
+        
+        // Fetch booking checklist
+        try {
+          const { data: checklistSetting } = await sb
+            .from('global_settings')
+            .select('value')
+            .eq('key', 'booking_checklist')
+            .eq('company_id', currentCompanyId)
+            .maybeSingle();
+
+          if (checklistSetting && checklistSetting.value && Array.isArray(checklistSetting.value)) {
+            bookingChecklist = checklistSetting.value;
+          } else {
+            bookingChecklist = [];
+          }
+          localStorage.setItem('bk_booking_checklist', JSON.stringify(bookingChecklist));
+        } catch (checklistErr) {
+          console.error('Error loading checklist:', checklistErr);
+          const cachedChecklist = localStorage.getItem('bk_booking_checklist');
+          if (cachedChecklist) {
+            try { bookingChecklist = JSON.parse(cachedChecklist); } catch(_) {}
           }
         }
         
@@ -1593,6 +1656,16 @@
             </div>
           `;
           productCellHtml += installerMediaStripHtml;
+
+          if (door && door.signature) {
+            const signatureHtml = `
+              <div style="margin-top: 0.6rem; display: flex; flex-direction: column; gap: 0.15rem;">
+                <span style="font-size: 0.65rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Customer Signature</span>
+                <img src="${door.signature}" alt="Customer Signature" style="max-height: 40px; width: auto; align-self: flex-start; background: #fff; border: 1px solid var(--border); border-radius: var(--radius-sm); cursor: pointer;" onclick="openChecklistModal(${i})" />
+              </div>
+            `;
+            productCellHtml += signatureHtml;
+          }
 
           // Door type html
           const doorMaterial = door?.doorMaterial || 'N/A';
@@ -3344,6 +3417,86 @@
       const detModal = document.getElementById('details-modal');
       if (detModal) detModal.classList.remove('stacked-under');
       uploadDoorIndex = null;
+    };
+
+    window.openChecklistModal = function(doorIndex) {
+      if (!selectedBooking) return;
+      
+      let doorsArr = [];
+      if (typeof selectedBooking.doors === 'string') {
+        try { doorsArr = JSON.parse(selectedBooking.doors); } catch(_) {}
+      } else if (Array.isArray(selectedBooking.doors)) {
+        doorsArr = selectedBooking.doors;
+      }
+      
+      const door = doorsArr[doorIndex];
+      if (!door) return;
+
+      const detModal = document.getElementById('details-modal');
+      if (detModal) {
+        detModal.classList.add('stacked-under');
+      }
+
+      const custNameEl = document.getElementById('checklist-customer-name');
+      const instDateEl = document.getElementById('checklist-install-date');
+      
+      if (custNameEl) {
+        custNameEl.innerText = selectedBooking.customer_name || 'N/A';
+      }
+      
+      if (instDateEl) {
+        if (door.completed_at) {
+          instDateEl.innerText = formatDateFriendly(door.completed_at);
+        } else if (selectedBooking.scheduled_date) {
+          instDateEl.innerText = formatDateFriendly(selectedBooking.scheduled_date);
+        } else {
+          instDateEl.innerText = 'N/A';
+        }
+      }
+
+      const checklistContainer = document.getElementById('checklist-items-container');
+      if (checklistContainer) {
+        let items = [];
+        if (Array.isArray(door.checklist) && door.checklist.length > 0) {
+          items = door.checklist.map(ch => ({ text: ch.item || ch.text || '', indent: ch.indent || false }));
+        } else {
+          items = (bookingChecklist && bookingChecklist.length > 0) ? bookingChecklist : [
+            { text: "Door opens and closes smoothly without obstruction", indent: false },
+            { text: "Smart lock operates properly (locking and unlocking)", indent: false },
+            { text: "Smart lock is successfully connected to the mobile app", indent: false },
+            { text: "I know how to create an account on the app", indent: true },
+            { text: "I have registered RFID card on the device", indent: true },
+            { text: "All components, including the camera, screen, handle, keypad, mechanical unlock, and deadbolt, are free of defects", indent: false },
+            { text: "Screws and fasteners are securely installed", indent: false },
+            { text: "I have been invited to leave a review for LOOCK Cavite and has consented to taking a photo with the device for documentation", indent: false },
+            { text: "Warranty coverage: 1 year on factory defects, 7 days on installation warranty (excludes user-caused damage, service may apply)", indent: false }
+          ];
+        }
+
+        checklistContainer.innerHTML = items.map(ch => {
+          return `
+            <label style="display:flex; align-items:flex-start; gap:0.55rem; cursor:pointer;${ch.indent ? ' margin-left:1.2rem;' : ''}">
+              <input type="checkbox" class="checklist-item" style="margin-top:0.15rem;" checked disabled />
+              <span>${escapeHtml(ch.text || '')}</span>
+            </label>
+          `;
+        }).join('');
+      }
+
+      const previewImgEl = document.getElementById('signature-preview-img');
+      if (previewImgEl) {
+        previewImgEl.src = door.signature || '';
+      }
+
+      document.getElementById('checklist-modal').classList.add('open');
+    };
+
+    window.closeChecklistModal = function() {
+      document.getElementById('checklist-modal').classList.remove('open');
+      const detModal = document.getElementById('details-modal');
+      if (detModal) {
+        detModal.classList.remove('stacked-under');
+      }
     };
 
     function renderRequiredMediaChecklist() {
