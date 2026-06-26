@@ -819,7 +819,7 @@
   </div>
   <!-- Upload Media Modal -->
   <div class="modal-overlay" id="upload-modal" onclick="closeUploadModal()">
-    <div class="modal-sheet" onclick="event.stopPropagation()">
+    <div class="modal-sheet" style="max-width: 760px;" onclick="event.stopPropagation()">
       <div class="modal-header">
         <h3 class="modal-title">Upload Media</h3>
         <button class="modal-close" onclick="closeUploadModal()"><svg aria-hidden="true" viewBox="0 0 24 24" style="width:1em;height:1em;display:block;fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
@@ -829,7 +829,7 @@
         <!-- Required Media Section -->
         <div id="required-media-section" style="display:flex; flex-direction:column; gap:0.75rem;">
           <h4 style="font-size:0.85rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-primary); margin:0;">Required Media</h4>
-          <div id="required-media-list" style="display:flex; flex-direction:column; gap:0.65rem;"></div>
+          <div id="required-media-list" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:0.75rem;"></div>
         </div>
 
         <!-- Other Media Section -->
@@ -838,7 +838,7 @@
           <p style="font-size:0.75rem; color:var(--text-secondary); margin:0;">Upload other photos/videos (max 5 items, video limit 30 seconds).</p>
           <input type="file" id="other-media-input" multiple accept="image/png, image/jpeg, image/jpg, video/mp4, video/quicktime, .mov" style="display:none;" onchange="handleOtherMediaSelect(event)" />
           <button type="button" class="btn btn-outline" style="height:36px; font-size:0.8rem;" onclick="document.getElementById('other-media-input').click()">Browse Other Media</button>
-          <div id="other-media-list" style="display:flex; flex-direction:column; gap:0.5rem; margin-top:0.25rem;"></div>
+          <div id="other-media-list" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:0.75rem; margin-top:0.25rem;"></div>
         </div>
 
         <!-- Progress Container -->
@@ -850,8 +850,8 @@
         </div>
 
         <div style="display:flex; justify-content:center; gap:0.75rem; margin-top:0.5rem;">
-          <button type="button" class="btn btn-outline" onclick="closeUploadModal()" style="width:auto; padding:0.5rem 1.5rem; font-size:0.9rem;">Cancel</button>
-          <button type="button" class="btn" id="btn-submit-upload" onclick="submitUploadMedia()" style="width:auto; padding:0.5rem 2rem; background:var(--success); color:#fff; border:none; font-size:0.9rem;" disabled>Upload</button>
+          <button type="button" class="btn btn-outline" onclick="closeUploadModal()" style="width:auto; padding:0.5rem 1.5rem; font-size:0.9rem;">Close</button>
+          <button type="button" class="btn" id="btn-submit-upload" onclick="closeUploadModal(); openDetailsModal(selectedBooking.id);" style="width:auto; padding:0.5rem 2rem; background:var(--cyan); color:#fff; border:none; font-size:0.9rem;" disabled>Done</button>
         </div>
       </div>
     </div>
@@ -2243,15 +2243,43 @@
 
     // --- Media Upload Modal Logic ---
     let uploadDoorIndex = null;
-    let slotFiles = {}; // idx -> File
-    let otherFiles = []; // array of Files
+    let slotFiles = {}; // idx -> { file: File, url: string, progress: number }
+    let otherFiles = []; // array of { name: string, url: string, progress: number }
 
     window.openUploadModal = function(doorIndex) {
       uploadDoorIndex = doorIndex;
       slotFiles = {};
       otherFiles = [];
-      
-      document.getElementById('other-media-list').innerHTML = '';
+
+      let doorsArr = [];
+      if (typeof selectedBooking.doors === 'string') {
+        try { doorsArr = JSON.parse(selectedBooking.doors); } catch(_) {}
+      } else if (Array.isArray(selectedBooking.doors)) {
+        doorsArr = selectedBooking.doors;
+      }
+      const door = doorsArr[doorIndex];
+      if (!door) return;
+
+      // Populate existing required media from DB
+      if (door.required_media) {
+        if (bookingMediaRequirements && bookingMediaRequirements.length > 0) {
+          bookingMediaRequirements.forEach((item, idx) => {
+            const savedUrl = door.required_media[item.label];
+            if (savedUrl) {
+              slotFiles[idx] = { url: savedUrl, progress: 100 };
+            }
+          });
+        }
+      }
+
+      // Populate existing other media from DB
+      if (door.other_media && Array.isArray(door.other_media)) {
+        door.other_media.forEach(url => {
+          const fileName = url.split('/').pop().split('_').slice(1).join('_') || 'Uploaded Media';
+          otherFiles.push({ name: fileName, url: url, progress: 100 });
+        });
+      }
+
       document.getElementById('other-media-input').value = '';
       document.getElementById('btn-submit-upload').disabled = true;
       document.getElementById('upload-progress-container').style.display = 'none';
@@ -2311,12 +2339,38 @@
         const currentFile = slotFiles[idx];
         let fileStatusHtml = '';
         if (currentFile) {
-          fileStatusHtml = `
-            <div style="display:flex; align-items:center; justify-content:space-between; font-size:0.8rem; background:var(--bg-elevated); padding:0.35rem 0.5rem; border-radius:4px; border:1px solid var(--border);">
-              <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:80%; font-weight:600;">${escapeHtml(currentFile.name)}</span>
-              <button type="button" style="background:none; border:none; color:var(--danger); cursor:pointer; font-weight:700; font-size:1rem; line-height:1;" onclick="removeSlotFile(${idx})">×</button>
-            </div>
-          `;
+          if (currentFile.progress < 100) {
+            // Uploading state
+            fileStatusHtml = `
+              <div style="display:flex; flex-direction:column; gap:0.35rem; padding:0.25rem 0;">
+                <div style="display:flex; align-items:center; justify-content:space-between; font-size:0.75rem; color:var(--text-secondary);">
+                  <span style="font-weight:600;">Uploading...</span>
+                  <span style="font-weight:700;">${currentFile.progress}%</span>
+                </div>
+                <div style="width:100%; height:6px; background:var(--border); border-radius:3px; overflow:hidden;">
+                  <div style="width:${currentFile.progress}%; height:100%; background:var(--cyan); transition:width 0.15s;"></div>
+                </div>
+              </div>
+            `;
+          } else {
+            // Uploaded state
+            const isImg = /\.(png|jpg|jpeg|gif|webp|heif|heic)(\?|$)/i.test(currentFile.url);
+            const previewThumb = isImg 
+              ? `<img src="${currentFile.url}" style="width:32px; height:32px; object-fit:cover; border-radius:4px; border:1px solid var(--border); cursor:pointer;" onclick="openLightbox('${currentFile.url}')" />` 
+              : `<div style="display:flex; align-items:center; justify-content:center; width:32px; height:32px; background:#000; color:#fff; border-radius:4px; cursor:pointer;" onclick="openLightbox('${currentFile.url}')">
+                   <svg viewBox="0 0 24 24" style="width:16px;height:16px;fill:currentColor;stroke:none"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                 </div>`;
+
+            fileStatusHtml = `
+              <div style="display:flex; align-items:center; justify-content:space-between; font-size:0.8rem; background:var(--bg-elevated); padding:0.35rem 0.5rem; border-radius:4px; border:1px solid var(--border);">
+                <div style="display:flex; align-items:center; gap:0.5rem; overflow:hidden; width:80%;">
+                  ${previewThumb}
+                  <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600; color:var(--text-primary);">Uploaded</span>
+                </div>
+                <button type="button" style="background:none; border:none; color:var(--danger); cursor:pointer; font-weight:700; font-size:1.1rem; line-height:1; padding:0 0.25rem;" onclick="removeSlotFile(${idx})">×</button>
+              </div>
+            `;
+          }
         } else {
           fileStatusHtml = `
             <button type="button" class="btn btn-outline" style="height:32px; font-size:0.75rem; width:100%;" onclick="document.getElementById('slot-file-input-${idx}').click()">Select File</button>
@@ -2340,7 +2394,7 @@
       });
     }
 
-    window.handleSlotFileSelect = function(event, idx) {
+    window.handleSlotFileSelect = async function(event, idx) {
       const file = event.target.files[0];
       if (!file) return;
 
@@ -2366,32 +2420,86 @@
 
       // Video duration check (max 60 seconds)
       if (file.type.startsWith('video/') || lowerName.endsWith('.mp4') || lowerName.endsWith('.mov')) {
-        const url = URL.createObjectURL(file);
-        const tempVideo = document.createElement('video');
-        tempVideo.preload = 'metadata';
-        tempVideo.src = url;
-        tempVideo.onloadedmetadata = function() {
-          URL.revokeObjectURL(url);
-          if (tempVideo.duration > 60) {
-            showToast('Required video must be 1 minute or less.', true);
-          } else {
-            slotFiles[idx] = file;
-            renderRequiredMediaChecklist();
-            validateAndToggleSubmit();
-          }
+        const checkDuration = () => {
+          return new Promise((resolve) => {
+            const url = URL.createObjectURL(file);
+            const tempVideo = document.createElement('video');
+            tempVideo.preload = 'metadata';
+            tempVideo.src = url;
+            tempVideo.onloadedmetadata = function() {
+              URL.revokeObjectURL(url);
+              resolve(tempVideo.duration <= 60);
+            };
+          });
         };
-        return;
+
+        const isValidDuration = await checkDuration();
+        if (!isValidDuration) {
+          showToast('Required video must be 1 minute or less.', true);
+          event.target.value = '';
+          return;
+        }
       }
 
-      slotFiles[idx] = file;
+      // Create local slot info and render progress immediately
+      slotFiles[idx] = { file: file, progress: 0 };
       renderRequiredMediaChecklist();
       validateAndToggleSubmit();
+
+      // Start automatic upload
+      uploadSlotFile(idx);
     };
 
-    window.removeSlotFile = function(idx) {
+    async function uploadSlotFile(idx) {
+      const slot = slotFiles[idx];
+      if (!slot || !slot.file) return;
+
+      const file = slot.file;
+      const cleanCustomerName = (selectedBooking.customer_name || 'Customer').replace(/[^a-zA-Z0-9]/g, '_');
+      const folderName = `${selectedBooking.id}_${cleanCustomerName}`;
+      const ext = file.name.split('.').pop();
+      const path = `companies/${currentInstaller.company_id}/reviews/finished_installations/${folderName}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+
+      try {
+        let progress = 0;
+        const progressInterval = setInterval(() => {
+          if (progress < 90) {
+            progress += 10;
+            if (slotFiles[idx]) {
+              slotFiles[idx].progress = progress;
+              renderRequiredMediaChecklist();
+            }
+          }
+        }, 150);
+
+        const { data, error } = await sb.storage.from('brightkey-assets').upload(path, file, {
+          cacheControl: '3600',
+          upsert: false
+        });
+
+        clearInterval(progressInterval);
+
+        if (error) throw error;
+
+        const { data: { publicUrl } } = sb.storage.from('brightkey-assets').getPublicUrl(path);
+
+        slotFiles[idx] = { url: publicUrl, progress: 100 };
+        renderRequiredMediaChecklist();
+
+        await saveCurrentMediaState();
+      } catch (err) {
+        console.error(`Upload error for slot ${idx}:`, err);
+        showToast(`Upload failed for ${file.name}: ${err.message}`, true);
+        delete slotFiles[idx];
+        renderRequiredMediaChecklist();
+        validateAndToggleSubmit();
+      }
+    }
+
+    window.removeSlotFile = async function(idx) {
       delete slotFiles[idx];
       renderRequiredMediaChecklist();
-      validateAndToggleSubmit();
+      await saveCurrentMediaState();
     };
 
     function renderOtherMediaList() {
@@ -2401,16 +2509,48 @@
 
       otherFiles.forEach((file, idx) => {
         const row = document.createElement('div');
-        row.style.cssText = 'display:flex; align-items:center; justify-content:space-between; font-size:0.8rem; background:var(--bg-elevated); padding:0.35rem 0.5rem; border-radius:4px; border:1px solid var(--border);';
-        row.innerHTML = `
-          <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:80%; font-weight:600;">${escapeHtml(file.name)}</span>
-          <button type="button" style="background:none; border:none; color:var(--danger); cursor:pointer; font-weight:700; font-size:1rem; line-height:1;" onclick="removeOtherFile(${idx})">×</button>
-        `;
+        row.style.cssText = 'display:flex; flex-direction:column; gap:0.5rem; padding:0.75rem; border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--bg-surface);';
+        
+        let fileStatusHtml = '';
+        if (file.progress < 100) {
+          // Uploading state
+          fileStatusHtml = `
+            <div style="display:flex; flex-direction:column; gap:0.35rem; padding:0.25rem 0;">
+              <div style="display:flex; align-items:center; justify-content:space-between; font-size:0.75rem; color:var(--text-secondary);">
+                <span style="font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:70%;">${escapeHtml(file.name)}</span>
+                <span style="font-weight:700;">${file.progress}%</span>
+              </div>
+              <div style="width:100%; height:6px; background:var(--border); border-radius:3px; overflow:hidden;">
+                <div style="width:${file.progress}%; height:100%; background:var(--cyan); transition:width 0.15s;"></div>
+              </div>
+            </div>
+          `;
+        } else {
+          // Uploaded state
+          const isImg = /\.(png|jpg|jpeg|gif|webp|heif|heic)(\?|$)/i.test(file.url);
+          const previewThumb = isImg 
+            ? `<img src="${file.url}" style="width:32px; height:32px; object-fit:cover; border-radius:4px; border:1px solid var(--border); cursor:pointer;" onclick="openLightbox('${file.url}')" />` 
+            : `<div style="display:flex; align-items:center; justify-content:center; width:32px; height:32px; background:#000; color:#fff; border-radius:4px; cursor:pointer;" onclick="openLightbox('${file.url}')">
+                 <svg viewBox="0 0 24 24" style="width:16px;height:16px;fill:currentColor;stroke:none"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+               </div>`;
+
+          fileStatusHtml = `
+            <div style="display:flex; align-items:center; justify-content:space-between; font-size:0.8rem; background:var(--bg-elevated); padding:0.35rem 0.5rem; border-radius:4px; border:1px solid var(--border);">
+              <div style="display:flex; align-items:center; gap:0.5rem; overflow:hidden; width:80%;">
+                ${previewThumb}
+                <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600; color:var(--text-primary);">${escapeHtml(file.name)}</span>
+              </div>
+              <button type="button" style="background:none; border:none; color:var(--danger); cursor:pointer; font-weight:700; font-size:1.1rem; line-height:1; padding:0 0.25rem;" onclick="removeOtherFile(${idx})">×</button>
+            </div>
+          `;
+        }
+
+        row.innerHTML = fileStatusHtml;
         container.appendChild(row);
       });
     }
 
-    window.handleOtherMediaSelect = function(event) {
+    window.handleOtherMediaSelect = async function(event) {
       const files = Array.from(event.target.files);
       const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'video/mp4', 'video/quicktime', '.mov'];
 
@@ -2430,34 +2570,84 @@
         }
 
         if (file.type.startsWith('video/') || lowerName.endsWith('.mp4') || lowerName.endsWith('.mov')) {
-          const url = URL.createObjectURL(file);
-          const tempVideo = document.createElement('video');
-          tempVideo.preload = 'metadata';
-          tempVideo.src = url;
-          tempVideo.onloadedmetadata = function() {
-            URL.revokeObjectURL(url);
-            if (tempVideo.duration > 30) {
-              showToast(`${file.name} exceeds 30 seconds limit for other videos.`, true);
-            } else {
-              otherFiles.push(file);
-              renderOtherMediaList();
-              validateAndToggleSubmit();
-            }
+          const checkDuration = () => {
+            return new Promise((resolve) => {
+              const url = URL.createObjectURL(file);
+              const tempVideo = document.createElement('video');
+              tempVideo.preload = 'metadata';
+              tempVideo.src = url;
+              tempVideo.onloadedmetadata = function() {
+                URL.revokeObjectURL(url);
+                resolve(tempVideo.duration <= 30);
+              };
+            });
           };
-          continue;
+
+          const isValidDuration = await checkDuration();
+          if (!isValidDuration) {
+            showToast(`${file.name} exceeds 30 seconds limit for other videos.`, true);
+            continue;
+          }
         }
 
-        otherFiles.push(file);
-      }
+        const otherIdx = otherFiles.length;
+        otherFiles.push({ name: file.name, progress: 0 });
+        renderOtherMediaList();
+        validateAndToggleSubmit();
 
-      renderOtherMediaList();
-      validateAndToggleSubmit();
+        uploadOtherFile(file, otherIdx);
+      }
     };
 
-    window.removeOtherFile = function(idx) {
+    async function uploadOtherFile(file, otherIdx) {
+      const cleanCustomerName = (selectedBooking.customer_name || 'Customer').replace(/[^a-zA-Z0-9]/g, '_');
+      const folderName = `${selectedBooking.id}_${cleanCustomerName}`;
+      const ext = file.name.split('.').pop();
+      const path = `companies/${currentInstaller.company_id}/reviews/finished_installations/${folderName}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+
+      try {
+        let progress = 0;
+        const progressInterval = setInterval(() => {
+          if (progress < 90) {
+            progress += 10;
+            if (otherFiles[otherIdx]) {
+              otherFiles[otherIdx].progress = progress;
+              renderOtherMediaList();
+            }
+          }
+        }, 150);
+
+        const { data, error } = await sb.storage.from('brightkey-assets').upload(path, file, {
+          cacheControl: '3600',
+          upsert: false
+        });
+
+        clearInterval(progressInterval);
+
+        if (error) throw error;
+
+        const { data: { publicUrl } } = sb.storage.from('brightkey-assets').getPublicUrl(path);
+
+        if (otherFiles[otherIdx]) {
+          otherFiles[otherIdx].url = publicUrl;
+          otherFiles[otherIdx].progress = 100;
+        }
+        renderOtherMediaList();
+
+        await saveCurrentMediaState();
+      } catch (err) {
+        console.error(`Upload error for other file ${otherIdx}:`, err);
+        showToast(`Upload failed for ${file.name}: ${err.message}`, true);
+        otherFiles.splice(otherIdx, 1);
+        renderOtherMediaList();
+        validateAndToggleSubmit();
+      }
+    }
+
+    window.removeOtherFile = async function(idx) {
       otherFiles.splice(idx, 1);
       renderOtherMediaList();
-      validateAndToggleSubmit();
+      await saveCurrentMediaState();
     };
 
     function validateAndToggleSubmit() {
@@ -2467,31 +2657,26 @@
       let allRequirementsFilled = true;
       if (bookingMediaRequirements && bookingMediaRequirements.length > 0) {
         for (let i = 0; i < bookingMediaRequirements.length; i++) {
-          if (!slotFiles[i]) {
+          const slot = slotFiles[i];
+          if (!slot || !slot.url || slot.progress < 100) {
             allRequirementsFilled = false;
             break;
           }
         }
       }
 
-      // Submit is enabled if all requirements are filled (or if there are no requirements, we require at least some other media to be uploaded)
+      // Check that other files currently uploading are not pending
+      const anyOtherUploading = otherFiles.some(f => f.progress < 100);
+
       if (bookingMediaRequirements && bookingMediaRequirements.length > 0) {
-        submitBtn.disabled = !allRequirementsFilled;
+        submitBtn.disabled = !allRequirementsFilled || anyOtherUploading;
       } else {
-        submitBtn.disabled = otherFiles.length === 0;
+        submitBtn.disabled = otherFiles.length === 0 || anyOtherUploading;
       }
     }
 
-    window.submitUploadMedia = async function() {
+    async function saveCurrentMediaState() {
       if (!selectedBooking || uploadDoorIndex === null) return;
-
-      const submitBtn = document.getElementById('btn-submit-upload');
-      const progressContainer = document.getElementById('upload-progress-container');
-      const progressText = document.getElementById('upload-progress-text');
-      const progressBarFill = document.getElementById('upload-progress-bar-fill');
-
-      submitBtn.disabled = true;
-      progressContainer.style.display = 'flex';
 
       let doorsArr = [];
       if (typeof selectedBooking.doors === 'string') {
@@ -2503,61 +2688,28 @@
       const door = doorsArr[uploadDoorIndex];
       if (!door) return;
 
-      // Consolidate all files to upload
-      const uploadList = [];
-      
-      // 1. Requirement slots
-      if (bookingMediaRequirements && bookingMediaRequirements.length > 0) {
-        for (let i = 0; i < bookingMediaRequirements.length; i++) {
-          if (slotFiles[i]) {
-            uploadList.push(slotFiles[i]);
-          }
+      // 1. Build door.required_media
+      door.required_media = {};
+      bookingMediaRequirements.forEach((item, idx) => {
+        const slot = slotFiles[idx];
+        if (slot && slot.url) {
+          door.required_media[item.label] = slot.url;
         }
-      }
-      // 2. Other files
-      otherFiles.forEach(file => {
-        uploadList.push(file);
       });
 
-      const totalFiles = uploadList.length;
-      const uploadedUrls = [];
-
-      const cleanCustomerName = (selectedBooking.customer_name || 'Customer').replace(/[^a-zA-Z0-9]/g, '_');
-      const folderName = `${selectedBooking.id}_${cleanCustomerName}`;
-
-      for (let i = 0; i < totalFiles; i++) {
-        const file = uploadList[i];
-        progressText.innerText = `Uploading ${i + 1} of ${totalFiles}: ${file.name}`;
-        progressBarFill.style.width = `${Math.round((i / totalFiles) * 100)}%`;
-
-        const ext = file.name.split('.').pop();
-        const path = `companies/${currentInstaller.company_id}/reviews/finished_installations/${folderName}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
-        try {
-          const { data, error } = await sb.storage.from('brightkey-assets').upload(path, file, {
-            cacheControl: '3600',
-            upsert: false
-          });
-
-          if (error) throw error;
-
-          const { data: { publicUrl } } = sb.storage.from('brightkey-assets').getPublicUrl(path);
-          uploadedUrls.push(publicUrl);
-        } catch (err) {
-          console.error(`Upload error for file ${file.name}:`, err);
-          showToast(`Upload failed for ${file.name}: ${err.message}`, true);
-          submitBtn.disabled = false;
-          progressContainer.style.display = 'none';
-          return;
+      // 2. Build door.other_media
+      door.other_media = [];
+      otherFiles.forEach(item => {
+        if (item && item.url) {
+          door.other_media.push(item.url);
         }
-      }
+      });
 
-      progressBarFill.style.width = '100%';
-      progressText.innerText = 'Finalizing upload...';
-
-      if (!door.media_urls) {
-        door.media_urls = [];
-      }
-      door.media_urls = [...door.media_urls, ...uploadedUrls];
+      // 3. Maintain flat door.media_urls for downstream views compatibility
+      door.media_urls = [
+        ...Object.values(door.required_media),
+        ...door.other_media
+      ];
 
       try {
         const { error } = await sb
@@ -2578,14 +2730,10 @@
           timestamp: new Date().toISOString()
         }));
 
-        showToast('Finished installation media uploaded successfully.');
-        closeUploadModal();
-        openDetailsModal(selectedBooking.id);
+        validateAndToggleSubmit();
       } catch (err) {
-        console.error('Failed to save media URLs to database:', err);
-        showToast('Database update failed: ' + err.message, true);
-        submitBtn.disabled = false;
-        progressContainer.style.display = 'none';
+        console.error('Failed to auto-save media state to database:', err);
+        showToast('Auto-save failed: ' + err.message, true);
       }
     };
   </script>
