@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Warehouse — BrightKey Admin</title>
+  
+  <link rel="preconnect" href="https://fonts.bunny.net" />
+  <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../../css/style.css" />
+  <link rel="icon" type="image/svg+xml" href="../../assets/favicon.svg?v=2" />
+  
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+
+  <style>
+    :root {
+      --bg-base: #FAFAFA;
+      --bg-surface: #FFFFFF;
+      --bg-elevated: #F4F4F5;
+      --bg-card: #FFFFFF;
+      --border: #E4E4E7;
+      --border-hover: #D4D4D8;
+      --text-primary: #09090B;
+      --text-secondary: #52525B;
+      --text-muted: #A1A1AA;
+      --cyan: #06B6D4;
+      --cyan-light: #0891B2;
+      --cyan-dim: rgba(6,182,212,0.12);
+      --cyan-border: rgba(6,182,212,0.25);
+      --success: #16A34A;
+      --danger: #DC2626;
+      --warning: #D97706;
+      --font-mono: 'Courier New', monospace;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    
+    body {
+      background: var(--bg-base);
+      color: var(--text-secondary);
+      font-family: 'Commissioner', sans-serif;
+      font-size: 0.9rem;
+      min-height: 100vh;
+    }
+
+    /* ── Page Layout ── */
+    .page-wrap {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    .top-bar {
+      flex-shrink: 0;
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 1.5rem;
+      display: flex;
+      align-items: center;
+      height: 60px;
+      justify-content: space-between;
+    }
+
+    .top-bar-title {
+      font-weight: 700;
+      color: var(--text-primary);
+      font-size: 1.1rem;
+    }
+
+    .content-area {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .main-workspace {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      padding: 1.5rem;
+      gap: 1.5rem;
+    }
+
+    /* ── Tab Navigation ── */
+    .drawer-tabs {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      overflow-x: auto;
+      background: var(--bg-surface);
+      border-radius: 8px 8px 0 0;
+    }
+
+    .tab-btn {
+      padding: 0.9rem 1.25rem;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-decoration: none;
+      border-bottom: 2px solid transparent;
+      white-space: nowrap;
+      transition: all 0.15s;
+    }
+
+    .tab-btn.active {
+      color: var(--cyan-light);
+      border-bottom-color: var(--cyan);
+    }
+
+    .tab-btn:hover:not(.active) {
+      color: var(--text-secondary);
+    }
+
+    /* ── Tables & Panels ── */
+    .table-scroll {
+      flex: 1;
+      overflow-y: auto;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 0 0 8px 8px;
+      border-top: none;
+    }
+
+    .panel {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+    }
+
+    .panel-header {
+      padding: 1rem 1.25rem;
+      font-weight: 700;
+      font-size: 0.9rem;
+      color: var(--text-primary);
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-surface);
+      flex-shrink: 0;
+    }
+
+    .table-responsive {
+      flex: 1;
+      overflow-x: auto;
+    }
+
+    .ledger-table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 0.82rem;
+    }
+
+    .ledger-table th {
+      background: var(--bg-elevated);
+      color: var(--text-secondary);
+      font-weight: 700;
+      padding: 0.75rem 1.25rem;
+      border-bottom: 1px solid var(--border);
+      text-transform: uppercase;
+      font-size: 0.7rem;
+      letter-spacing: 0.05em;
+    }
+
+    .ledger-table td {
+      padding: 0.85rem 1.25rem;
+      border-bottom: 1px solid var(--border);
+      color: var(--text-secondary);
+      vertical-align: middle;
+    }
+
+    .ledger-table tr:hover {
+      background: var(--bg-elevated);
+    }
+
+    .text-center { text-align: center !important; }
+    .text-muted { color: var(--text-muted) !important; }
+
+    /* ── Badges ── */
+    .badge-status {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.2rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: capitalize;
+    }
+    .badge-reserved { background: var(--cyan-dim); color: var(--cyan-light); border: 1px solid var(--cyan-border); }
+    .badge-inspect { background: rgba(217,119,6,0.12); color: var(--warning); border: 1px solid rgba(217,119,6,0.25); }
+    .badge-packed { background: rgba(22,163,74,0.12); color: var(--success); border: 1px solid rgba(22,163,74,0.25); }
+    .badge-dispatched { background: var(--bg-elevated); color: var(--text-secondary); border: 1px solid var(--border); }
+    .badge-cancelled { background: rgba(220,38,38,0.12); color: var(--danger); border: 1px solid rgba(220,38,38,0.25); }
+    .badge-returned { background: rgba(107,114,128,0.12); color: var(--text-secondary); border: 1px solid rgba(107,114,128,0.25); }
+
+    /* ── Loader ── */
+    .loading-wrapper { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 3rem 0; gap: 0.75rem; color: var(--text-muted); }
+    .spinner-cyan { width: 28px; height: 28px; border: 3px solid var(--cyan-dim); border-top-color: var(--cyan); border-radius: 50%; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Toast styling */
+    #toast-container { position: fixed; top: 1.5rem; right: 1.5rem; z-index: 99999; display: flex; flex-direction: column; gap: 0.5rem; }
+    .toast { padding: 0.75rem 1rem; border-radius: 6px; font-size: 0.82rem; font-weight: 600; color: #fff; min-width: 250px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); animation: slideIn 0.2s ease-out; }
+    .toast-success { background: var(--success); }
+    .toast-error { background: var(--danger); }
+    @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+  </style>
+</head>
+<body>
+  <div class="toast-container" id="toast-container"></div>
+
+  <div class="dash-layout">
+    <!-- Sidebar -->
+    <aside class="dash-sidebar" id="dash-sidebar"></aside>
+
+    <!-- Main Content -->
+    <div class="dash-main">
+
+      <div class="page-wrap">
+        
+        <!-- Top Bar -->
+        <div class="top-bar">
+          <span class="top-bar-title">Warehouse & Inventory Ledger</span>
+          <div style="flex:1;"></div>
+          <div style="display:flex; gap:0.5rem; align-items:center;">
+            <select id="wh-select-dropdown" class="wh-select-dropdown" style="display:none;" onchange="switchWarehouse(this.value)"></select>
+            <button id="btn-sync" class="btn btn-primary" onclick="refreshDashboard()">
+              <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: -2px; margin-right: 6px;"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Refresh
+            </button>
+          </div>
+        </div>
+
+        <!-- Content Area -->
+        <div class="content-area">
+          
+          <!-- Left Workspace (Tables & Stats) -->
+          <div class="main-workspace">
+
+            <!-- Level-2 Operation Tab Bar -->
+            <div class="drawer-tabs">
+              <a class="tab-btn" href="/dashboard/warehouse/summary">Inventory Summary</a>
+              <a class="tab-btn" href="/dashboard/warehouse/dispatch">Dispatch <span id="badge-count-dispatch" style="display:none; background:var(--cyan); color:white; font-size:0.75rem; padding:1px 6px; border-radius:10px; margin-left:4px;">0</span></a>
+              <a class="tab-btn" href="/dashboard/warehouse/pack">Pack <span id="badge-count-pack" style="display:none; background:var(--cyan); color:white; font-size:0.75rem; padding:1px 6px; border-radius:10px; margin-left:4px;">0</span></a>
+              <a class="tab-btn" href="/dashboard/warehouse/inspect">Inspect <span id="badge-count-inspect" style="display:none; background:var(--cyan); color:white; font-size:0.75rem; padding:1px 6px; border-radius:10px; margin-left:4px;">0</span></a>
+              <a class="tab-btn" href="/dashboard/warehouse/receive">Receive <span id="badge-count-receive" style="display:none; background:var(--cyan); color:white; font-size:0.75rem; padding:1px 6px; border-radius:10px; margin-left:4px;">0</span></a>
+              <a class="tab-btn" href="/dashboard/warehouse/order">Order Supplier</a>
+              <a class="tab-btn" href="/dashboard/warehouse/transfer">Transfer</a>
+              <a class="tab-btn active" href="/dashboard/warehouse/all-orders">All Orders</a>
+            </div>
+
+            <!-- Table Scroll workspace -->
+            <div class="table-scroll">
+              <!-- Tab Panel: All Orders -->
+              <div class="tab-panel active" id="panel-all-orders">
+                <div class="panel">
+                  <div class="panel-header" style="display:flex; justify-content:space-between; align-items:center;">
+                    <span>All Orders &amp; Movements</span>
+                    <div style="display:flex; align-items:center; gap:0.5rem; font-size:0.82rem; font-weight:normal; text-transform:none;">
+                      <span>Month Created:</span>
+                      <input type="month" id="filter-month" onchange="refreshDashboard()" style="background:var(--bg-elevated); border:1px solid var(--border); border-radius:6px; padding:0.25rem 0.5rem; color:var(--text-primary); font-size:0.82rem; font-family:inherit; outline:none;" />
+                    </div>
+                  </div>
+                  <div class="table-responsive">
+                    <table class="ledger-table">
+                      <thead>
+                        <tr>
+                          <th>Date Created</th>
+                          <th>Customer</th>
+                          <th>City</th>
+                          <th>SKU</th>
+                          <th class="text-center">Quantity</th>
+                          <th>Movement Stats</th>
+                          <th>Status (Edit)</th>
+                        </tr>
+                      </thead>
+                      <tbody id="all-orders-list">
+                        <tr><td colspan="7" class="text-center text-muted" style="padding:2rem 0;">No items found.</td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <script src="../../js/auth.js"></script>
+  <script src="../../js/sidebar.js"></script>
+  <script src="../../js/main.js"></script>
+  <script>
+    'use strict';
+
+    let sb;
+
+    let allProducts = [];
+    let allInventory = {};
+    let activeTransactions = [];
+    let fulfillmentWarehouses = [];
+    let activeWarehouseId = null;
+    let companyId = null;
+
+    function escFulfillment(str) {
+      if (!str) return '';
+      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    window.switchWarehouse = function(whId) {
+      activeWarehouseId = whId;
+      localStorage.setItem('active_warehouse_id', whId);
+      const dropdown = document.getElementById('wh-select-dropdown');
+      if (dropdown && dropdown.value !== whId) {
+        dropdown.value = whId;
+      }
+      refreshDashboard();
+    };
+
+    function showToast(msg, isError = false) {
+      const container = document.getElementById('toast-container');
+      if (!container) return;
+      const el = document.createElement('div');
+      el.className = `toast toast-${isError ? 'error' : 'success'}`;
+      el.innerText = msg;
+      container.appendChild(el);
+      setTimeout(() => el.remove(), 3500);
+    }
+
+    function showLoadingState() {
+      const tbody = document.getElementById('all-orders-list');
+      if (tbody) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="7">
+              <div class="loading-wrapper">
+                <div class="spinner-cyan"></div>
+                <span>Loading order history...</span>
+              </div>
+            </td>
+          </tr>
+        `;
+      }
+    }
+
+    // Initialize Page
+    async function init() {
+      try {
+        const authInfo = await BKAuth.checkRoleGate(['Logistics'], '../../admin.html');
+        if (!authInfo) return;
+        sb = BKAuth.sb;
+
+        // Resolve company_id using tenant_id
+        const { data: co } = await sb.from('companies').select('id').eq('tenant_id', authInfo.tenantId).limit(1).maybeSingle();
+        companyId = co?.id || null;
+
+        // Set Month Picker Default to Current Month
+        const filterMonthEl = document.getElementById('filter-month');
+        if (filterMonthEl && !filterMonthEl.value) {
+          const today = new Date();
+          filterMonthEl.value = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+        }
+
+        await loadWarehouseTabs(authInfo.tenantId);
+        showLoadingState();
+        await loadCoreData();
+        await refreshDashboard();
+      } catch (err) {
+        console.error('Initialization error:', err);
+      }
+    }
+
+    async function loadWarehouseTabs(tenantId) {
+      try {
+        const { data, error } = await sb
+          .from('warehouses')
+          .select('id, name, is_active')
+          .eq('tenant_id', tenantId)
+          .order('created_at', { ascending: true });
+
+        if (error) throw error;
+        fulfillmentWarehouses = (data || []).filter(w => w.is_active);
+
+        const dropdown = document.getElementById('wh-select-dropdown');
+        if (!dropdown) return;
+
+        if (fulfillmentWarehouses.length === 0) {
+          dropdown.style.display = 'none';
+          activeWarehouseId = null;
+          return;
+        }
+
+        dropdown.style.display = 'inline-block';
+        dropdown.innerHTML = fulfillmentWarehouses.map(wh => `
+          <option value="${wh.id}">${escFulfillment(wh.name)}</option>
+        `).join('');
+
+        const storedWhId = localStorage.getItem('active_warehouse_id');
+        if (storedWhId && fulfillmentWarehouses.some(w => w.id === storedWhId)) {
+          activeWarehouseId = storedWhId;
+        } else {
+          activeWarehouseId = fulfillmentWarehouses[0]?.id || null;
+        }
+        dropdown.value = activeWarehouseId;
+      } catch (err) {
+        console.warn('Could not load warehouse dropdown:', err.message);
+      }
+    }
+
+    async function loadCoreData() {
+      const { data: pData, error: pErr } = await sb.from('products').select('id, sku, title, category, business, image_main, dealer_price, count_inventory').order('sku');
+      if (pErr) throw pErr;
+      allProducts = pData || [];
+    }
+
+    async function refreshDashboard() {
+      const tbody = document.getElementById('all-orders-list');
+      if (!tbody) return;
+
+      const filterMonthEl = document.getElementById('filter-month');
+      const selectedMonth = filterMonthEl ? filterMonthEl.value : null;
+
+      let invQuery = sb.from('inventory').select('*');
+      if (activeWarehouseId) {
+        invQuery = invQuery.eq('warehouse_id', activeWarehouseId);
+      } else {
+        invQuery = invQuery.is('warehouse_id', null);
+      }
+
+      let txQuery = sb.from('inventory_transactions').select('*').order('created_at', { ascending: false });
+      if (activeWarehouseId) {
+        txQuery = txQuery.eq('warehouse_id', activeWarehouseId);
+      } else {
+        txQuery = txQuery.is('warehouse_id', null);
+      }
+
+      if (selectedMonth) {
+        const [year, month] = selectedMonth.split('-');
+        const startDate = new Date(year, month - 1, 1).toISOString();
+        const endDate = new Date(year, month, 1).toISOString();
+        txQuery = txQuery.gte('created_at', startDate).lt('created_at', endDate);
+      }
+
+      const [
+        { data: invData, error: invErr },
+        { data: txData, error: txErr }
+      ] = await Promise.all([invQuery, txQuery]);
+
+      if (invErr) throw invErr;
+      if (txErr) throw txErr;
+
+      allInventory = {};
+      (invData || []).forEach(row => {
+        allInventory[row.sku] = row;
+      });
+      activeTransactions = txData || [];
+
+      renderAllOrdersTab();
+      updateBadgeCounts();
+    }
+
+    function renderAllOrdersTab() {
+      const tbody = document.getElementById('all-orders-list');
+      if (!tbody) return;
+
+      const orders = activeTransactions.filter(t => t.type === 'customer_order');
+      if (orders.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted" style="padding:2rem 0;">No customer orders found for the selected month.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = orders.map(t => {
+        const dateCreated = t.created_at ? new Date(t.created_at).toLocaleString() : '—';
+        const client = t.customer_name || '—';
+        const city = t.customer_city || '—';
+        const sku = t.sku || '—';
+        const qty = t.quantity || 0;
+
+        const tsReserved = t.timestamp_reserved ? new Date(t.timestamp_reserved).toLocaleString() : '—';
+        const tsInspect = t.timestamp_inspect ? new Date(t.timestamp_inspect).toLocaleString() : '—';
+        const tsPacked = t.timestamp_packed ? new Date(t.timestamp_packed).toLocaleString() : '—';
+        const tsDispatched = t.timestamp_dispatched ? new Date(t.timestamp_dispatched).toLocaleString() : '—';
+
+        const statsHtml = `
+          <div style="font-size: 0.72rem; line-height: 1.45; color:var(--text-secondary);">
+            <div><strong>Booked:</strong> ${tsReserved}</div>
+            <div><strong>Inspected:</strong> ${tsInspect}</div>
+            <div><strong>Packed:</strong> ${tsPacked}</div>
+            <div><strong>Dispatched:</strong> ${tsDispatched}</div>
+          </div>
+        `;
+
+        const dropdownHtml = `
+          <select class="btn btn-outline btn-sm" onchange="window.updateOrderStatus(this, '${t.id}', '${sku}', ${qty}, '${t.status}')" style="font-size:0.75rem; padding:0.15rem 0.4rem; height:28px; font-weight:600; cursor:pointer;">
+            <option value="reserved" ${t.status === 'reserved' ? 'selected' : ''}>Booked (Reserved)</option>
+            <option value="inspect" ${t.status === 'inspect' ? 'selected' : ''}>Inspected</option>
+            <option value="packed" ${t.status === 'packed' ? 'selected' : ''}>Packed</option>
+            <option value="dispatched" ${t.status === 'dispatched' ? 'selected' : ''}>Dispatched</option>
+            <option value="cancelled" ${t.status === 'cancelled' ? 'selected' : ''}>Cancelled</option>
+            <option value="returned" ${t.status === 'returned' ? 'selected' : ''}>Returned</option>
+          </select>
+        `;
+
+        return `
+          <tr>
+            <td>${escFulfillment(dateCreated)}</td>
+            <td><strong>${escFulfillment(client)}</strong></td>
+            <td>${escFulfillment(city)}</td>
+            <td><code>${escFulfillment(sku)}</code></td>
+            <td class="text-center"><strong>${qty}</strong></td>
+            <td>${statsHtml}</td>
+            <td>${dropdownHtml}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    window.updateOrderStatus = async function(selectEl, id, sku, qty, oldStatus) {
+      const newStatus = selectEl.value;
+      if (newStatus === oldStatus) return;
+
+      selectEl.disabled = true;
+      try {
+        const now = new Date().toISOString();
+        const statusToCol = {
+          'reserved': 'reserved',
+          'inspect': 'inspect',
+          'packed': 'packed',
+          'dispatched': 'dispatched',
+          'cancelled': 'cancelled',
+          'returned': 'returned'
+        };
+
+        const oldCol = statusToCol[oldStatus];
+        const newCol = statusToCol[newStatus];
+
+        const updateData = { status: newStatus };
+        const timestampCol = `timestamp_${newStatus}`;
+        updateData[timestampCol] = now;
+
+        const { error: txErr } = await sb.from('inventory_transactions').update(updateData).eq('id', id);
+        if (txErr) throw txErr;
+
+        let invQ = sb.from('inventory').select('*').eq('sku', sku);
+        if (activeWarehouseId) invQ = invQ.eq('warehouse_id', activeWarehouseId);
+        else invQ = invQ.is('warehouse_id', null);
+        const { data: invRow, error: invErr } = await invQ;
+        if (invErr) throw invErr;
+        if (invRow && invRow.length > 0) {
+          const inv = invRow[0];
+          const updates = {};
+          if (oldCol && oldCol in inv) {
+            updates[oldCol] = Math.max(0, (inv[oldCol] || 0) - qty);
+          }
+          if (newCol && newCol in inv) {
+            updates[newCol] = (inv[newCol] || 0) + qty;
+          }
+          if (Object.keys(updates).length > 0) {
+            const { error: updErr } = await sb.from('inventory').update(updates).eq('id', inv.id);
+            if (updErr) throw updErr;
+          }
+        }
+
+        showToast('Order status updated successfully.');
+        await refreshDashboard();
+      } catch (err) {
+        console.error('Failed to update status:', err);
+        showToast('Failed to update status: ' + err.message, true);
+        selectEl.value = oldStatus;
+      } finally {
+        selectEl.disabled = false;
+      }
+    };
+
+    async function updateBadgeCounts() {
+      try {
+        const counts = { dispatch: 0, pack: 0, inspect: 0, receive: 0 };
+        activeTransactions.forEach(t => {
+          if (t.type !== 'customer_order') return;
+          if (t.status === 'packed') counts.dispatch++;
+          if (t.status === 'inspect') counts.pack++;
+          if (t.status === 'reserved') counts.inspect++;
+        });
+
+        // Add receive count
+        const pendingCount = activeTransactions.filter(t => ['ordered', 'returned', 'cancelled'].includes(t.status)).length;
+        counts.receive = pendingCount;
+
+        for (const [key, val] of Object.entries(counts)) {
+          const badge = document.getElementById(`badge-count-${key}`);
+          if (badge) {
+            if (val > 0) {
+              badge.textContent = val;
+              badge.style.display = 'inline-block';
+            } else {
+              badge.style.display = 'none';
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    init();
+  </script>
+</body>
+</html>
