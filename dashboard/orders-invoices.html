@@ -451,6 +451,9 @@
     </div>
   </div>
 
+  <!-- Hidden capture area for html2pdf -->
+  <div id="preview-capture-area" style="position: absolute; left: -9999px; top: -9999px; width: 794px; background: #ffffff; z-index: -9999; overflow: hidden;"></div>
+
   <div id="toast-container" aria-live="polite" style="position: fixed; top: 24px; right: 24px; z-index: 99999; display: flex; flex-direction: column; gap: 10px;"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -1408,48 +1411,22 @@
       const saved = await updateBookingInDatabase();
       if (!saved) return;
 
-      const iframe = document.getElementById('preview-iframe');
-      const doc = iframe.contentDocument || iframe.contentWindow.document;
-      const wrapper = doc.querySelector('.receipt-preview-wrapper');
-      const element = doc.querySelector('.receipt-page');
-
-      // Save original styles
-      const origTransform = element ? element.style.transform : '';
-      const origTransformOrigin = element ? element.style.transformOrigin : '';
-      const origBoxShadow = element ? element.style.boxShadow : '';
-      const origBorderRadius = element ? element.style.borderRadius : '';
-      const origMargin = element ? element.style.margin : '';
-
-      const origWrapperDisplay = wrapper ? wrapper.style.display : '';
-      const origWrapperPadding = wrapper ? wrapper.style.padding : '';
-      const origWrapperBackground = wrapper ? wrapper.style.background : '';
-      const origWrapperOverflowY = wrapper ? wrapper.style.overflowY : '';
-      const origWrapperOverflowX = wrapper ? wrapper.style.overflowX : '';
-
-      const origBodyBg = doc.body.style.background;
-      const origBodyMargin = doc.body.style.margin;
-      const origBodyHeight = doc.body.style.height;
-      const origBodyOverflowY = doc.body.style.overflowY;
-
-      // Apply temporary print-ready styles to element & wrapper
-      if (element) {
-        element.style.transform = 'none';
-        element.style.transformOrigin = 'initial';
-        element.style.boxShadow = 'none';
-        element.style.borderRadius = '0';
-        element.style.margin = '0 auto';
+      const captureContainer = document.getElementById('preview-capture-area');
+      if (!captureContainer) {
+        showNotification('PDF export capture container missing.', 'error');
+        return;
       }
-      if (wrapper) {
-        wrapper.style.display = 'block';
-        wrapper.style.padding = '0';
-        wrapper.style.background = '#ffffff';
-        wrapper.style.overflowY = 'visible';
-        wrapper.style.overflowX = 'visible';
+
+      // Inject the compiled HTML directly into the parent document hidden container
+      captureContainer.innerHTML = window.compiledReceiptHtml;
+
+      // Select the receipt page inside the parent document (full scale, no iframe transforms)
+      const element = captureContainer.querySelector('.receipt-page');
+      if (!element) {
+        showNotification('Failed to locate receipt page for export.', 'error');
+        captureContainer.innerHTML = '';
+        return;
       }
-      doc.body.style.background = '#ffffff';
-      doc.body.style.margin = '0';
-      doc.body.style.height = 'auto';
-      doc.body.style.overflowY = 'visible';
 
       const opt = {
         margin:       0,
@@ -1458,6 +1435,7 @@
         html2canvas:  { 
           scale: 2, 
           useCORS: true, 
+          letterRendering: true,
           scrollY: 0,
           allowTaint: true,
           logging: false
@@ -1472,25 +1450,8 @@
         console.error('PDF Compile error:', err);
         showNotification('Error compiling PDF: ' + err.message, 'error');
       } finally {
-        // Restore original styles
-        if (element) {
-          element.style.transform = origTransform;
-          element.style.transformOrigin = origTransformOrigin;
-          element.style.boxShadow = origBoxShadow;
-          element.style.borderRadius = origBorderRadius;
-          element.style.margin = origMargin;
-        }
-        if (wrapper) {
-          wrapper.style.display = origWrapperDisplay;
-          wrapper.style.padding = origWrapperPadding;
-          wrapper.style.background = origWrapperBackground;
-          wrapper.style.overflowY = origWrapperOverflowY;
-          wrapper.style.overflowX = origWrapperOverflowX;
-        }
-        doc.body.style.background = origBodyBg;
-        doc.body.style.margin = origBodyMargin;
-        doc.body.style.height = origBodyHeight;
-        doc.body.style.overflowY = origBodyOverflowY;
+        // Clear the hidden capture container to clean up parent page styles/DOM
+        captureContainer.innerHTML = '';
       }
     };
 
