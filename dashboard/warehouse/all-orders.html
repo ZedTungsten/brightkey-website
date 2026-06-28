@@ -809,17 +809,22 @@
 
     async function updateBadgeCounts() {
       try {
-        const counts = { dispatch: 0, pack: 0, inspect: 0, receive: 0 };
-        activeTransactions.forEach(t => {
-          if (t.type !== 'customer_order') return;
-          if (t.status === 'packed') counts.dispatch++;
-          if (t.status === 'inspect') counts.pack++;
-          if (t.status === 'reserved') counts.inspect++;
-        });
+        const receiveCount = activeTransactions.filter(t => ['ordered', 'returned', 'cancelled'].includes(t.status)).length;
+        const inspectCount = [...new Set(activeTransactions.filter(t => t.status === 'reserved' && t.type === 'customer_order').map(t => t.reference_id))].length;
+        const packCount = [...new Set(activeTransactions.filter(t => t.status === 'inspect' && t.type === 'customer_order').map(t => t.reference_id))].length;
+        const dispatchCount = activeTransactions.filter(t => {
+          if (t.status !== 'packed') return false;
+          if (t.reference_id) {
+            const hasUnpacked = activeTransactions.some(other => 
+              other.reference_id === t.reference_id && 
+              ['reserved', 'inspect'].includes(other.status)
+            );
+            if (hasUnpacked) return false;
+          }
+          return true;
+        }).length;
 
-        // Add receive count
-        const pendingCount = activeTransactions.filter(t => ['ordered', 'returned', 'cancelled'].includes(t.status)).length;
-        counts.receive = pendingCount;
+        const counts = { dispatch: dispatchCount, pack: packCount, inspect: inspectCount, receive: receiveCount };
 
         for (const [key, val] of Object.entries(counts)) {
           const badge = document.getElementById(`badge-count-${key}`);
