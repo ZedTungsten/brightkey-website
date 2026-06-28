@@ -461,6 +461,24 @@
   <script>
     'use strict';
 
+    async function toDataURL(url) {
+      if (!url) return '';
+      if (url.startsWith('data:')) return url;
+      try {
+        const response = await fetch(url);
+        const blob = await response.blob();
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+      } catch (e) {
+        console.warn('Failed to convert image to data URL:', e);
+        return url;
+      }
+    }
+
     let sb;
     let dbProducts = [];
     let bookingsList = [];
@@ -482,13 +500,13 @@
       margin: 0;
       padding: 0;
       background: #ffffff;
-      font-family: "Inter", sans-serif;
+      font-family: "Inter", system-ui, -apple-system, sans-serif;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }
     .receipt-preview-wrapper { padding: 0; background: #ffffff; }
     .receipt-page { width: 794px; min-height: 1123px; margin: 0 auto; background: #ffffff; color: #616161; overflow: hidden; }
-    .header-bar { position: relative; height: 140px; padding: 0 48px; background: linear-gradient(135deg, {{headerColor1}} 55%, {{headerColor2}} 100%) !important; display: flex; align-items: center; justify-content: space-between; overflow: hidden; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .header-bar { position: relative; height: 140px; padding: 0 48px; background-color: {{headerColor1}} !important; background: linear-gradient(135deg, {{headerColor1}} 55%, {{headerColor2}} 100%) !important; display: flex; align-items: center; justify-content: space-between; overflow: hidden; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .header-bar::after { content: ""; position: absolute; top: 0; right: -120px; width: 380px; height: 220px; background: rgba(255, 255, 255, 0.06); transform: skewX(-28deg); }
     .logo-image { position: relative; z-index: 2; width: 150px; height: auto; display: block; object-fit: contain; }
     .store-info { position: relative; z-index: 2; text-align: right; color: #f3f3f3; font-size: 13px; line-height: 1.45; font-weight: 400; }
@@ -685,6 +703,12 @@
 
         if (profileData && profileData.value) {
           companyProfileConfig = profileData.value;
+          if (companyProfileConfig.logoLight) {
+            companyProfileConfig.logoLightBase64 = await toDataURL(companyProfileConfig.logoLight);
+          }
+          if (companyProfileConfig.logoDark) {
+            companyProfileConfig.logoDarkBase64 = await toDataURL(companyProfileConfig.logoDark);
+          }
           document.getElementById('ref-company-name').textContent = companyProfileConfig.companyName || '';
           document.getElementById('ref-company-address').textContent = [companyProfileConfig.companyAddressLine1, companyProfileConfig.companyAddressLine2].filter(Boolean).join('\n');
           document.getElementById('ref-company-email').textContent = companyProfileConfig.email || '';
@@ -1250,7 +1274,7 @@
 
       // Logo url resolution based on user selection
       const logoStyle = document.getElementById('tpl-logo-style')?.value || 'light';
-      const finalLogo = (logoStyle === 'dark' ? companyProfileConfig.logoDark : companyProfileConfig.logoLight) || '../assets/og-image.png';
+      const finalLogo = (logoStyle === 'dark' ? (companyProfileConfig.logoDarkBase64 || companyProfileConfig.logoDark) : (companyProfileConfig.logoLightBase64 || companyProfileConfig.logoLight)) || '../assets/og-image.png';
 
       // Compile template
       let outputHtml = DEFAULT_TEMPLATE;
@@ -1375,7 +1399,99 @@
     };
 
     window.exportReceiptPDF = async function() {
-      await window.printReceiptHtml();
+      if (!window.compiledReceiptHtml) {
+        showNotification('No compiled invoice content available.', 'error');
+        return;
+      }
+
+      // Save changes back to DB first
+      const saved = await updateBookingInDatabase();
+      if (!saved) return;
+
+      const iframe = document.getElementById('preview-iframe');
+      const doc = iframe.contentDocument || iframe.contentWindow.document;
+      const wrapper = doc.querySelector('.receipt-preview-wrapper');
+      const element = doc.querySelector('.receipt-page');
+
+      // Save original styles
+      const origTransform = element ? element.style.transform : '';
+      const origTransformOrigin = element ? element.style.transformOrigin : '';
+      const origBoxShadow = element ? element.style.boxShadow : '';
+      const origBorderRadius = element ? element.style.borderRadius : '';
+      const origMargin = element ? element.style.margin : '';
+
+      const origWrapperDisplay = wrapper ? wrapper.style.display : '';
+      const origWrapperPadding = wrapper ? wrapper.style.padding : '';
+      const origWrapperBackground = wrapper ? wrapper.style.background : '';
+      const origWrapperOverflowY = wrapper ? wrapper.style.overflowY : '';
+      const origWrapperOverflowX = wrapper ? wrapper.style.overflowX : '';
+
+      const origBodyBg = doc.body.style.background;
+      const origBodyMargin = doc.body.style.margin;
+      const origBodyHeight = doc.body.style.height;
+      const origBodyOverflowY = doc.body.style.overflowY;
+
+      // Apply temporary print-ready styles to element & wrapper
+      if (element) {
+        element.style.transform = 'none';
+        element.style.transformOrigin = 'initial';
+        element.style.boxShadow = 'none';
+        element.style.borderRadius = '0';
+        element.style.margin = '0 auto';
+      }
+      if (wrapper) {
+        wrapper.style.display = 'block';
+        wrapper.style.padding = '0';
+        wrapper.style.background = '#ffffff';
+        wrapper.style.overflowY = 'visible';
+        wrapper.style.overflowX = 'visible';
+      }
+      doc.body.style.background = '#ffffff';
+      doc.body.style.margin = '0';
+      doc.body.style.height = 'auto';
+      doc.body.style.overflowY = 'visible';
+
+      const opt = {
+        margin:       0,
+        filename:     window.invoiceFilename || 'receipt.pdf',
+        image:        { type: 'jpeg', quality: 0.98 },
+        html2canvas:  { 
+          scale: 2, 
+          useCORS: true, 
+          scrollY: 0,
+          allowTaint: true,
+          logging: false
+        },
+        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      };
+
+      try {
+        await html2pdf().set(opt).from(element).save();
+        showNotification('Invoice PDF downloaded successfully!', 'success');
+      } catch (err) {
+        console.error('PDF Compile error:', err);
+        showNotification('Error compiling PDF: ' + err.message, 'error');
+      } finally {
+        // Restore original styles
+        if (element) {
+          element.style.transform = origTransform;
+          element.style.transformOrigin = origTransformOrigin;
+          element.style.boxShadow = origBoxShadow;
+          element.style.borderRadius = origBorderRadius;
+          element.style.margin = origMargin;
+        }
+        if (wrapper) {
+          wrapper.style.display = origWrapperDisplay;
+          wrapper.style.padding = origWrapperPadding;
+          wrapper.style.background = origWrapperBackground;
+          wrapper.style.overflowY = origWrapperOverflowY;
+          wrapper.style.overflowX = origWrapperOverflowX;
+        }
+        doc.body.style.background = origBodyBg;
+        doc.body.style.margin = origBodyMargin;
+        doc.body.style.height = origBodyHeight;
+        doc.body.style.overflowY = origBodyOverflowY;
+      }
     };
 
      // Automatically cancels removed products from inventory transactions and updates inventory counts.
