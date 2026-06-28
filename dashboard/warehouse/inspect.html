@@ -2286,6 +2286,9 @@
       confirmBtn.disabled = true;
       confirmBtn.innerHTML = `Confirming...`;
 
+      // Close the modal immediately to remove visual lag
+      closeQaInspectModal();
+
       try {
         await wrapActionWithLoading(qaInspectBtn, async () => {
           const now = new Date().toISOString();
@@ -2298,7 +2301,8 @@
 
           if (txsToInspect.length === 0) return;
 
-          for (const tx of txsToInspect) {
+          // Run transaction updates in parallel to speed up database execution
+          const promises = txsToInspect.map(async (tx) => {
             const { error: txErr } = await sb.from('inventory_transactions').update({
               status: 'inspect',
               timestamp_inspect: now
@@ -2318,9 +2322,10 @@
               }).eq('id', inv.id);
               if (updErr) throw updErr;
             }
-          }
+          });
 
-          closeQaInspectModal();
+          await Promise.all(promises);
+
           await refreshDashboard();
           showToast('Item QA inspected. Moved to Pack.');
         });
