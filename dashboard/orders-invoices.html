@@ -1375,54 +1375,7 @@
     };
 
     window.exportReceiptPDF = async function() {
-      if (!window.compiledReceiptHtml) {
-        showNotification('No compiled invoice content available.', 'error');
-        return;
-      }
-
-      // Save changes back to DB first
-      const saved = await updateBookingInDatabase();
-      if (!saved) return;
-
-      // Temporarily remove margin/padding in the rendering iframe body for clean capture
-      const iframe = document.getElementById('preview-iframe');
-      const doc = iframe.contentDocument || iframe.contentWindow.document;
-      const wrapper = doc.querySelector('.receipt-preview-wrapper');
-      const element = doc.querySelector('.receipt-page');
-
-      if (wrapper) {
-        wrapper.style.padding = '0';
-        wrapper.style.background = '#ffffff';
-      }
-      if (element) {
-        element.style.margin = '0';
-      }
-
-      const opt = {
-        margin:       0,
-        filename:     window.invoiceFilename || 'receipt.pdf',
-        image:        { type: 'jpeg', quality: 0.98 },
-        html2canvas:  { scale: 2, useCORS: true, scrollY: 0 },
-        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
-      };
-
-      try {
-        // Trigger download
-        await html2pdf().set(opt).from(element).save();
-        showNotification('Invoice PDF downloaded successfully!', 'success');
-      } catch (err) {
-        console.error('PDF Compile error:', err);
-        showNotification('Error compiling PDF: ' + err.message, 'error');
-      } finally {
-        // Restore styling in iframe
-        if (wrapper) {
-          wrapper.style.padding = '';
-          wrapper.style.background = '';
-        }
-        if (element) {
-          element.style.margin = '';
-        }
-      }
+      await window.printReceiptHtml();
     };
 
      // Automatically cancels removed products from inventory transactions and updates inventory counts.
