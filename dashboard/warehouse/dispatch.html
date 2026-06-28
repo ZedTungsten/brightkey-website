@@ -339,52 +339,15 @@
     .badge-returned    { background: rgba(220,38,38,0.1); color: var(--danger); }
     .badge-cancelled   { background: rgba(75,85,99,0.1); color: #4b5563; }
 
-    /* ── Side Workspace (Logs) ── */
-    .side-workspace {
-      position: absolute;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      height: 185px;
-      z-index: 100;
-      display: flex;
-      flex-direction: column;
-      background: var(--bg-surface);
-      border-top: 1px solid var(--border);
-      box-shadow: 0 -4px 16px rgba(0,0,0,0.08);
-      transform: translateY(100%);
-      transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-    }
+    
 
-    .side-workspace.open {
-      transform: translateY(0);
-    }
+    
 
-    #btn-logs.active {
-      background: var(--bg-elevated) !important;
-      border-color: var(--cyan) !important;
-      color: var(--cyan-light) !important;
-      box-shadow: inset 0 2px 4px rgba(6, 182, 212, 0.12) !important;
-    }
+    
 
-    .side-header {
-      padding: 0.6rem 1rem;
-      border-bottom: 1px solid var(--border);
-      font-weight: 700;
-      color: var(--text-primary);
-      font-size: 0.85rem;
-      flex-shrink: 0;
-    }
+    
 
-    .log-container {
-      flex: 1;
-      overflow-y: auto;
-      padding: 0.75rem 1rem;
-      font-family: var(--font-mono);
-      font-size: 0.75rem;
-      line-height: 1.5;
-      background: #FAFAFA;
-    }
+    
 
     @keyframes spin {
       from { transform: rotate(0deg); }
@@ -419,11 +382,7 @@
       pointer-events: none !important;
     }
 
-    .log-entry {
-      border-bottom: 1px solid var(--border);
-      padding: 0.5rem 0;
-      color: var(--text-secondary);
-    }
+    
 
     .log-entry:last-child {
       border-bottom: none;
@@ -567,9 +526,7 @@
               <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: -2px; margin-right: 6px;"><path d="M3 7v6h6M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg>Undo
             </button>
             <select id="wh-select-dropdown" class="wh-select-dropdown" style="display:none;" onchange="switchWarehouse(this.value)"></select>
-            <button id="btn-logs" class="btn btn-outline" onclick="toggleLogs()">
-              <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none" style="vertical-align: -2px; margin-right: 6px;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>Logs
-            </button>
+            
             <button id="btn-sync" class="btn btn-primary">
               <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: -2px; margin-right: 6px;"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Refresh
             </button>
@@ -624,13 +581,7 @@
 
       </div>
 
-      <!-- Right Workspace (Logs Feed) -->
-      <div class="side-workspace">
-        <div class="side-header">Ledger Activity Feed</div>
-        <div class="log-container" id="activity-feed">
-          <div class="log-entry" style="color:var(--text-muted); text-align:center; padding: 2rem 0;">Loading activity logs...</div>
-        </div>
-      </div>
+      
 
       </div>
 
@@ -770,14 +721,7 @@
         await refreshDashboard();
         runAutoSyncInBackground();
 
-        // Restore logs drawer state
-        const logsOpen = localStorage.getItem('logs_drawer_open') === 'true';
-        if (logsOpen) {
-          const sideWorkspace = document.querySelector('.side-workspace');
-          const btnLogs = document.getElementById('btn-logs');
-          if (sideWorkspace) sideWorkspace.classList.add('open');
-          if (btnLogs) btnLogs.classList.add('active');
-        }
+        
 
         // Setup Drag & Drop for Pack Photo Modal
         const zone = document.getElementById('photo-preview-container');
@@ -1548,45 +1492,7 @@
     }
 
 
-    // Render Activity Feed Logs
-    function renderActivityFeed() { if (!document.getElementById('activity-feed')) return;
-      const feed = document.getElementById('activity-feed');
-      feed.innerHTML = '';
-
-      const logs = activeTransactions.slice(0, 3); // limit to 3 latest logs
-      
-      if (logs.length === 0) {
-        feed.innerHTML = `<div class="log-entry" style="color:var(--text-muted); text-align:center; padding: 2rem 0;">No ledger activity logged.</div>`;
-        return;
-      }
-
-      logs.forEach(t => {
-        const time = new Date(t.updated_at).toLocaleTimeString();
-        let message = '';
-
-        if (t.status === 'ordered') {
-          message = `ordered supplier replenishment: ${t.quantity}x ${t.sku}`;
-        } else if (t.status === 'received') {
-          message = `received/re-shelved: ${t.quantity}x ${t.sku} to Available`;
-        } else if (t.status === 'reserved') {
-          message = `order reserved: ${t.quantity}x ${t.sku} for order no. ${t.reference_id || 'N/A'} (${t.customer_name || 'N/A'})`;
-        } else if (t.status === 'packed') {
-          message = `order packed: ${t.quantity}x ${t.sku} for order no. ${t.reference_id || 'N/A'} (${t.customer_name || 'N/A'})`;
-        } else if (t.status === 'dispatched') {
-          message = `order dispatched: ${t.quantity}x ${t.sku} sent to ${t.customer_city || 'N/A'} for order no. ${t.reference_id || 'N/A'}`;
-        } else if (t.status === 'returned') {
-          message = `returned dispatch order: ${t.quantity}x ${t.sku} for order no. ${t.reference_id || 'N/A'} (pending warehouse receive)`;
-        } else if (t.status === 'cancelled') {
-          message = `cancelled queue reservation: ${t.quantity}x ${t.sku} for order no. ${t.reference_id || 'N/A'} (pending warehouse receive)`;
-        }
-
-        feed.innerHTML += `
-          <div class="log-entry">
-            <span style="color:var(--cyan); font-weight:600;">[${time}]</span> ${message}
-          </div>
-        `;
-      });
-    }
+    
 
     // Badge counts updates
     function updateBadgeCounts() {
@@ -2107,20 +2013,7 @@
       }
     });
 
-    // Toggle logs drawer overlay
-    window.toggleLogs = function() {
-      const sidebar = document.querySelector('.side-workspace');
-      const btn = document.getElementById('btn-logs');
-      if (sidebar.classList.contains('open')) {
-        sidebar.classList.remove('open');
-        btn.classList.remove('active');
-        localStorage.setItem('logs_drawer_open', 'false');
-      } else {
-        sidebar.classList.add('open');
-        btn.classList.add('active');
-        localStorage.setItem('logs_drawer_open', 'true');
-      }
-    };
+    
 
     // ── WAREHOUSE TRANSFER TAB FUNCTIONALITY ──
     let directTransferDraft = [];
