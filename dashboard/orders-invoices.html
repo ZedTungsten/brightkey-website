@@ -234,10 +234,16 @@
                 <!-- Search Selector -->
                 <div class="panel" style="padding: 1.25rem;">
                   <h3 style="margin-bottom: 0.75rem;">Select Installation Booking</h3>
+                  <div class="form-group-row" style="margin-bottom: 0.75rem;">
+                    <div class="form-group" style="flex: 1;">
+                      <label class="form-label">Month &amp; Year Filter</label>
+                      <input type="month" class="form-input" id="filter-booking-month" style="height: auto; padding: 0.75rem;" onchange="loadBookingsDropdown()" />
+                    </div>
+                  </div>
                   <div class="form-group">
                     <label class="form-label">Search / Load Order</label>
                     <select class="form-input" id="booking-selector" style="height: auto; padding: 0.75rem;" onchange="loadSelectedBooking()">
-                      <option value="">-- Select a booking to edit/print --</option>
+                      <option value="">-- Choose Order / Last Name --</option>
                     </select>
                   </div>
                 </div>
@@ -696,10 +702,28 @@
       }
     }
 
-    // Load bookings sorted by date created
+    // Load bookings sorted by date created and filtered by selected Month & Year
     async function loadBookingsDropdown() {
       try {
-        const { data, error } = await sb.from('installation_bookings').select('id, order_no, customer_name, created_at').order('created_at', { ascending: false });
+        const filterMonthEl = document.getElementById('filter-booking-month');
+        let selectedMonth = filterMonthEl ? filterMonthEl.value : '';
+        
+        if (!selectedMonth) {
+          const today = new Date();
+          selectedMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+          if (filterMonthEl) filterMonthEl.value = selectedMonth;
+        }
+
+        let query = sb.from('installation_bookings').select('id, order_no, customer_name, created_at');
+
+        if (selectedMonth) {
+          const [year, month] = selectedMonth.split('-');
+          const startDate = new Date(year, month - 1, 1).toISOString();
+          const endDate = new Date(year, month, 1).toISOString();
+          query = query.gte('created_at', startDate).lt('created_at', endDate);
+        }
+
+        const { data, error } = await query.order('created_at', { ascending: false });
         if (error) throw error;
 
         bookingsList = data || [];
