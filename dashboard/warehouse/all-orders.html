@@ -288,7 +288,7 @@
                       </div>
                       <div style="display:flex; align-items:center; gap:0.5rem; font-size:0.82rem; font-weight:normal; text-transform:none;">
                         <span>Month Created:</span>
-                        <input type="month" id="filter-month" onchange="refreshDashboard()" onclick="this.showPicker()" style="background:var(--bg-elevated); border:1px solid var(--border); border-radius:6px; padding:0.25rem 0.5rem; color:var(--text-primary); font-size:0.82rem; font-family:inherit; outline:none; cursor:pointer;" />
+                        <input type="month" id="filter-month" onchange="refreshDashboard()" onclick="if (typeof this.showPicker === 'function') this.showPicker()" style="background:var(--bg-elevated); border:1px solid var(--border); border-radius:6px; padding:0.25rem 0.5rem; color:var(--text-primary); font-size:0.82rem; font-family:inherit; outline:none; cursor:pointer;" />
                       </div>
                     </div>
                   </div>
@@ -495,13 +495,6 @@
         txQuery = txQuery.is('warehouse_id', null);
       }
 
-      if (selectedMonth) {
-        const [year, month] = selectedMonth.split('-');
-        const startDate = new Date(year, month - 1, 1).toISOString();
-        const endDate = new Date(year, month, 1).toISOString();
-        txQuery = txQuery.gte('created_at', startDate).lt('created_at', endDate);
-      }
-
       const [
         { data: invData, error: invErr },
         { data: txData, error: txErr }
@@ -514,7 +507,18 @@
       (invData || []).forEach(row => {
         allInventory[row.sku] = row;
       });
-      activeTransactions = txData || [];
+
+      let txDataFiltered = txData || [];
+      if (selectedMonth) {
+        const [year, month] = selectedMonth.split('-');
+        const start = new Date(year, month - 1, 1);
+        const end = new Date(year, month, 1);
+        txDataFiltered = txDataFiltered.filter(t => {
+          const tDate = new Date(t.created_at);
+          return tDate >= start && tDate < end;
+        });
+      }
+      activeTransactions = txDataFiltered;
 
       // Check permissions for current user on active warehouse
       if (cachedAuthInfo) {
