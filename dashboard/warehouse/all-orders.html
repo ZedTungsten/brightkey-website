@@ -357,6 +357,7 @@
     let fulfillmentWarehouses = [];
     let activeWarehouseId = null;
     let companyId = null;
+    let cachedAuthInfo = null;
     let userPermissions = {
       canManageAllOrders: false
     };
@@ -408,6 +409,7 @@
         const authInfo = await BKAuth.checkRoleGate(['Logistics'], '../../admin.html');
         if (!authInfo) return;
         sb = BKAuth.sb;
+        cachedAuthInfo = authInfo;
 
         // Resolve company_id using tenant_id
         const { data: co } = await sb.from('companies').select('id').eq('tenant_id', authInfo.tenantId).limit(1).maybeSingle();
@@ -515,13 +517,12 @@
       activeTransactions = txData || [];
 
       // Check permissions for current user on active warehouse
-      const authInfo = await BKAuth.getUserRole();
-      if (authInfo) {
-        const isOwnerOrAdmin = authInfo.role === 'owner' || authInfo.role === 'admin';
+      if (cachedAuthInfo) {
+        const isOwnerOrAdmin = cachedAuthInfo.role === 'owner' || cachedAuthInfo.role === 'admin';
         if (isOwnerOrAdmin) {
           userPermissions.canManageAllOrders = true;
         } else {
-          await updateManagerPermissions(authInfo.user.id);
+          await updateManagerPermissions(cachedAuthInfo.user.id);
         }
       }
 
