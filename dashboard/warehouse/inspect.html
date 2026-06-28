@@ -652,7 +652,7 @@
       <!-- Footer Buttons -->
       <div style="display:flex; justify-content:flex-end; gap:0.75rem; border-top:1px solid var(--border); padding-top:1rem; margin-top:0.25rem; flex-shrink:0;">
         <button type="button" class="btn btn-outline" onclick="closeQaInspectModal()" style="height:36px; font-size:0.82rem; padding:0 1.25rem;">Cancel</button>
-        <button type="button" id="btn-confirm-qa-inspect" class="btn btn-cyan" onclick="executeQaInspect()" style="height:36px; font-size:0.82rem; padding:0 1.25rem;">Confirm QA Inspected</button>
+        <button type="button" id="btn-confirm-qa-inspect" class="btn btn-cyan" onclick="executeQaInspect()" style="height:36px; font-size:0.82rem; padding:0 1.25rem; opacity:0.5; pointer-events:none;" disabled>Confirm QA Inspected</button>
       </div>
     </div>
   </div>
@@ -2191,7 +2191,7 @@
                               ${part.notes ? `<div style="font-size:0.7rem; color:var(--text-secondary); word-break:break-word; margin-top:2px;">${escFulfillment(part.notes)}</div>` : ''}
                             </div>
                           </div>
-                          <input type="checkbox" data-qa-part-checkbox style="width:18px; height:18px; cursor:pointer; flex-shrink:0; margin-left:0.5rem;" />
+                          <input type="checkbox" data-qa-part-checkbox onchange="window.validateQaChecklist()" style="width:18px; height:18px; cursor:pointer; flex-shrink:0; margin-left:0.5rem;" />
                         </label>
                       `).join('')}
                     </div>
@@ -2227,6 +2227,7 @@
           container.appendChild(productCard);
         });
 
+        window.validateQaChecklist();
       } catch (err) {
         console.error(err);
         document.getElementById('qa-guides-container').innerHTML = `<div style="color:var(--danger); text-align:center; padding:2rem 0;">Error loading QA Guides: ${err.message}</div>`;
@@ -2251,6 +2252,30 @@
       groupCard.querySelectorAll('[data-qa-part-checkbox]').forEach(cb => {
         cb.checked = chk.checked;
       });
+      window.validateQaChecklist();
+    };
+
+    window.validateQaChecklist = function() {
+      const confirmBtn = document.getElementById('btn-confirm-qa-inspect');
+      if (!confirmBtn) return;
+
+      const checkboxes = document.querySelectorAll('[data-qa-part-checkbox]');
+      if (checkboxes.length === 0) {
+        // Enable if there are no items/checkboxes
+        confirmBtn.disabled = false;
+        confirmBtn.style.opacity = '1';
+        confirmBtn.style.pointerEvents = 'auto';
+      } else {
+        const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+        confirmBtn.disabled = !allChecked;
+        if (!allChecked) {
+          confirmBtn.style.opacity = '0.5';
+          confirmBtn.style.pointerEvents = 'none';
+        } else {
+          confirmBtn.style.opacity = '1';
+          confirmBtn.style.pointerEvents = 'auto';
+        }
+      }
     };
 
     window.executeQaInspect = async function() {
