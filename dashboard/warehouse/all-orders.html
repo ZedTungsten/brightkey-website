@@ -282,15 +282,20 @@
                 <div class="panel">
                   <div class="panel-header" style="display:flex; justify-content:space-between; align-items:center;">
                     <span>All Orders &amp; Movements</span>
-                    <div style="display:flex; align-items:center; gap:0.5rem; font-size:0.82rem; font-weight:normal; text-transform:none;">
-                      <span>Month Created:</span>
-                      <input type="month" id="filter-month" onchange="refreshDashboard()" style="background:var(--bg-elevated); border:1px solid var(--border); border-radius:6px; padding:0.25rem 0.5rem; color:var(--text-primary); font-size:0.82rem; font-family:inherit; outline:none;" />
+                    <div style="display:flex; align-items:center; gap:0.75rem;">
+                      <div id="bulk-edit-container">
+                        <button class="btn btn-outline btn-sm" onclick="enterBulkEditMode()" style="height:32px; font-size:0.8rem; font-weight:600; cursor:pointer; background:var(--bg-surface); border:1px solid var(--border); border-radius:6px; padding:0 0.75rem; color:var(--text-secondary);">Bulk Edit</button>
+                      </div>
+                      <div style="display:flex; align-items:center; gap:0.5rem; font-size:0.82rem; font-weight:normal; text-transform:none;">
+                        <span>Month Created:</span>
+                        <input type="month" id="filter-month" onchange="refreshDashboard()" style="background:var(--bg-elevated); border:1px solid var(--border); border-radius:6px; padding:0.25rem 0.5rem; color:var(--text-primary); font-size:0.82rem; font-family:inherit; outline:none;" />
+                      </div>
                     </div>
                   </div>
                   <div class="table-responsive">
                     <table class="ledger-table">
                       <thead>
-                        <tr>
+                        <tr id="table-headers-row">
                           <th>Date Created</th>
                           <th>Customer</th>
                           <th>City</th>
@@ -321,6 +326,17 @@
           <div style="display:flex; justify-content:center; gap:0.75rem; margin-top:0.5rem;">
             <button type="button" class="btn btn-outline" onclick="closeDeleteConfirmModal()" style="height:36px; font-size:0.82rem; padding:0 1.5rem;">Cancel</button>
             <button type="button" id="btn-delete-confirm-action" class="btn btn-danger" onclick="executeDeleteTransaction()" style="height:36px; font-size:0.82rem; padding:0 1.5rem; background:var(--danger); color:#fff; border:none; border-radius:6px; font-weight:600; cursor:pointer;">Delete</button>
+          </div>
+        </div>
+      </div>
+      <!-- Custom Bulk Delete Confirmation Modal -->
+      <div id="bulk-delete-confirm-modal" class="modal-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); backdrop-filter:blur(4px); z-index:99999; align-items:center; justify-content:center;">
+        <div class="modal-content" style="width:100%; max-width:400px; background:var(--bg-surface); border:1px solid var(--border); border-radius:12px; padding:1.75rem; box-shadow:0 12px 48px rgba(0,0,0,0.25); display:flex; flex-direction:column; gap:1.25rem; position:relative; text-align:center;">
+          <h3 style="margin:0; font-size:1.15rem; font-weight:700; color:var(--danger);">Delete Selected Transactions</h3>
+          <p style="margin:0; font-size:0.85rem; color:var(--text-secondary); line-height:1.5;">Are you sure you want to delete all selected transactions? This action will permanently remove them from the database and cannot be undone.</p>
+          <div style="display:flex; justify-content:center; gap:0.75rem; margin-top:0.5rem;">
+            <button type="button" class="btn btn-outline" onclick="closeBulkDeleteConfirmModal()" style="height:36px; font-size:0.82rem; padding:0 1.5rem;">Cancel</button>
+            <button type="button" id="btn-bulk-delete-confirm-action" class="btn btn-danger" onclick="executeBulkDelete()" style="height:36px; font-size:0.82rem; padding:0 1.5rem; background:var(--danger); color:#fff; border:none; border-radius:6px; font-weight:600; cursor:pointer;">Delete</button>
           </div>
         </div>
       </div>
@@ -503,9 +519,35 @@
       const tbody = document.getElementById('all-orders-list');
       if (!tbody) return;
 
+      const headersRow = document.getElementById('table-headers-row');
+      if (headersRow) {
+        if (isBulkEditMode) {
+          headersRow.innerHTML = `
+            <th style="width: 40px; text-align: center;"><input type="checkbox" id="bulk-select-all" onchange="window.toggleBulkSelectAll(this)" style="width: 16px; height: 16px; cursor: pointer;" /></th>
+            <th>Date Created</th>
+            <th>Customer</th>
+            <th>City</th>
+            <th>SKU</th>
+            <th class="text-center">Quantity</th>
+            <th>Movement Stats</th>
+            <th>Status (Edit)</th>
+          `;
+        } else {
+          headersRow.innerHTML = `
+            <th>Date Created</th>
+            <th>Customer</th>
+            <th>City</th>
+            <th>SKU</th>
+            <th class="text-center">Quantity</th>
+            <th>Movement Stats</th>
+            <th>Status (Edit)</th>
+          `;
+        }
+      }
+
       const orders = activeTransactions.filter(t => t.type === 'customer_order');
       if (orders.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted" style="padding:2rem 0;">No customer orders found for the selected month.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="${isBulkEditMode ? 8 : 7}" class="text-center text-muted" style="padding:2rem 0;">No customer orders found for the selected month.</td></tr>`;
         return;
       }
 
@@ -546,8 +588,15 @@
           </div>
         `;
 
+        const checkboxCell = isBulkEditMode ? `
+          <td style="text-align: center;">
+            <input type="checkbox" data-bulk-checkbox="${t.id}" data-sku="${sku}" data-qty="${qty}" data-status="${t.status}" onchange="window.updateBulkSelectedCount()" style="width: 16px; height: 16px; cursor: pointer;" />
+          </td>
+        ` : '';
+
         return `
           <tr>
+            ${checkboxCell}
             <td>${escFulfillment(dateCreated)}</td>
             <td><strong>${escFulfillment(client)}</strong></td>
             <td>${escFulfillment(city)}</td>
@@ -742,6 +791,241 @@
         }
       } catch (_) {}
     }
+
+    let isBulkEditMode = false;
+
+    window.enterBulkEditMode = function() {
+      isBulkEditMode = true;
+      renderBulkControls();
+      renderAllOrdersTab();
+    };
+
+    window.exitBulkEditMode = function() {
+      isBulkEditMode = false;
+      renderBulkControls();
+      renderAllOrdersTab();
+    };
+
+    function renderBulkControls() {
+      const container = document.getElementById('bulk-edit-container');
+      if (!container) return;
+
+      if (!isBulkEditMode) {
+        container.innerHTML = `
+          <button class="btn btn-outline btn-sm" onclick="enterBulkEditMode()" style="height:32px; font-size:0.8rem; font-weight:600; cursor:pointer; background:var(--bg-surface); border:1px solid var(--border); border-radius:6px; padding:0 0.75rem; color:var(--text-secondary);">Bulk Edit</button>
+        `;
+      } else {
+        container.innerHTML = `
+          <div style="display:flex; align-items:center; gap:0.75rem;">
+            <span id="bulk-selected-count" style="font-size:0.8rem; font-weight:600; color:var(--text-secondary);">0 selected</span>
+            <select class="wh-select-dropdown" onchange="executeBulkAction(this)" style="font-size:0.8rem; height:32px; min-width:160px; padding:0 2rem 0 0.75rem;" id="bulk-action-select">
+              <option value="">Bulk Actions...</option>
+              <option value="reserved">Move to Booked</option>
+              <option value="inspect">Move to Inspected</option>
+              <option value="packed">Move to Packed</option>
+              <option value="dispatched">Move to Dispatched</option>
+              <option value="cancelled">Move to Cancelled</option>
+              <option value="returned">Move to Returned</option>
+              <option value="delete">Delete Selected</option>
+            </select>
+            <button class="btn btn-outline btn-sm" onclick="exitBulkEditMode()" style="height:32px; font-size:0.8rem; font-weight:600; cursor:pointer; background:var(--bg-surface); border:1px solid var(--border); border-radius:6px; padding:0 0.75rem; color:var(--text-secondary);">Cancel</button>
+          </div>
+        `;
+      }
+    }
+
+    window.toggleBulkSelectAll = function(headerChk) {
+      const checkboxes = document.querySelectorAll('[data-bulk-checkbox]');
+      checkboxes.forEach(chk => {
+        chk.checked = headerChk.checked;
+      });
+      window.updateBulkSelectedCount();
+    };
+
+    window.updateBulkSelectedCount = function() {
+      const countEl = document.getElementById('bulk-selected-count');
+      if (!countEl) return;
+      const checkedCount = document.querySelectorAll('[data-bulk-checkbox]:checked').length;
+      countEl.textContent = `${checkedCount} selected`;
+    };
+
+    window.executeBulkAction = async function(selectEl) {
+      const action = selectEl.value;
+      if (!action) return;
+
+      const checkedBoxes = Array.from(document.querySelectorAll('[data-bulk-checkbox]:checked'));
+      if (checkedBoxes.length === 0) {
+        showToast('No items selected.', true);
+        selectEl.value = '';
+        return;
+      }
+
+      try {
+        if (action === 'delete') {
+          window.confirmBulkDelete();
+          selectEl.value = '';
+          return;
+        }
+
+        selectEl.disabled = true;
+        const now = new Date().toISOString();
+        const statusToCol = {
+          'reserved': 'reserved',
+          'inspect': 'inspect',
+          'packed': 'packed',
+          'dispatched': 'dispatched',
+          'cancelled': 'cancelled',
+          'returned': 'returned'
+        };
+
+        const newStatus = action;
+        const newCol = statusToCol[newStatus];
+
+        const promises = checkedBoxes.map(async (chk) => {
+          const id = chk.getAttribute('data-bulk-checkbox');
+          const sku = chk.getAttribute('data-sku');
+          const qty = parseInt(chk.getAttribute('data-qty') || '0', 10);
+          const oldStatus = chk.getAttribute('data-status');
+
+          if (oldStatus === newStatus) return;
+
+          const oldCol = statusToCol[oldStatus];
+
+          const updateData = { status: newStatus };
+          const timestampCol = `timestamp_${newStatus}`;
+          updateData[timestampCol] = now;
+
+          const clearTimestamps = {
+            'reserved': ['timestamp_inspect', 'timestamp_packed', 'timestamp_dispatched', 'timestamp_cancelled', 'timestamp_returned'],
+            'inspect': ['timestamp_packed', 'timestamp_dispatched', 'timestamp_cancelled', 'timestamp_returned'],
+            'packed': ['timestamp_dispatched', 'timestamp_cancelled', 'timestamp_returned'],
+            'dispatched': ['timestamp_cancelled', 'timestamp_returned'],
+            'cancelled': [],
+            'returned': []
+          };
+          const colsToClear = clearTimestamps[newStatus] || [];
+          colsToClear.forEach(col => {
+            updateData[col] = null;
+          });
+
+          const { error: txErr } = await sb.from('inventory_transactions').update(updateData).eq('id', id);
+          if (txErr) throw txErr;
+
+          let invQ = sb.from('inventory').select('*').eq('sku', sku);
+          if (activeWarehouseId) invQ = invQ.eq('warehouse_id', activeWarehouseId);
+          else invQ = invQ.is('warehouse_id', null);
+          const { data: invRow, error: invErr } = await invQ;
+          if (invErr) throw invErr;
+          if (invRow && invRow.length > 0) {
+            const inv = invRow[0];
+            const updates = {};
+            if (oldCol && oldCol in inv) {
+              updates[oldCol] = Math.max(0, (inv[oldCol] || 0) - qty);
+            }
+            if (newCol && newCol in inv) {
+              updates[newCol] = (inv[newCol] || 0) + qty;
+            }
+            if (Object.keys(updates).length > 0) {
+              const { error: updErr } = await sb.from('inventory').update(updates).eq('id', inv.id);
+              if (updErr) throw updErr;
+            }
+          }
+        });
+
+        await Promise.all(promises);
+        showToast('Bulk status update applied successfully.');
+        isBulkEditMode = false;
+        renderBulkControls();
+        await refreshDashboard();
+      } catch (err) {
+        console.error(err);
+        showToast('Failed to apply bulk update: ' + err.message, true);
+      } finally {
+        selectEl.disabled = false;
+        selectEl.value = '';
+      }
+    };
+
+    window.confirmBulkDelete = function() {
+      const modal = document.getElementById('bulk-delete-confirm-modal');
+      if (modal) {
+        modal.style.display = 'flex';
+        modal.offsetHeight;
+        modal.classList.add('open');
+      }
+    };
+
+    window.closeBulkDeleteConfirmModal = function() {
+      const modal = document.getElementById('bulk-delete-confirm-modal');
+      if (modal) {
+        modal.classList.remove('open');
+        setTimeout(() => {
+          modal.style.display = 'none';
+        }, 150);
+      }
+    };
+
+    window.executeBulkDelete = async function() {
+      const confirmBtn = document.getElementById('btn-bulk-delete-confirm-action');
+      const originalHtml = confirmBtn.innerHTML;
+      confirmBtn.disabled = true;
+      confirmBtn.innerHTML = 'Deleting...';
+
+      try {
+        const checkedBoxes = Array.from(document.querySelectorAll('[data-bulk-checkbox]:checked'));
+        const ids = checkedBoxes.map(chk => chk.getAttribute('data-bulk-checkbox'));
+
+        const { error: delErr } = await sb.from('inventory_transactions').delete().in('id', ids);
+        if (delErr) throw delErr;
+
+        const statusToCol = {
+          'reserved': 'reserved',
+          'inspect': 'inspect',
+          'packed': 'packed',
+          'dispatched': 'dispatched',
+          'cancelled': 'cancelled',
+          'returned': 'returned'
+        };
+
+        const promises = checkedBoxes.map(async (chk) => {
+          const sku = chk.getAttribute('data-sku');
+          const qty = parseInt(chk.getAttribute('data-qty') || '0', 10);
+          const status = chk.getAttribute('data-status');
+          const col = statusToCol[status];
+
+          if (col) {
+            let invQ = sb.from('inventory').select('*').eq('sku', sku);
+            if (activeWarehouseId) invQ = invQ.eq('warehouse_id', activeWarehouseId);
+            else invQ = invQ.is('warehouse_id', null);
+            const { data: invRow, error: invErr } = await invQ;
+            if (invErr) throw invErr;
+            if (invRow && invRow.length > 0) {
+              const inv = invRow[0];
+              if (col in inv) {
+                const { error: updErr } = await sb.from('inventory').update({
+                  [col]: Math.max(0, (inv[col] || 0) - qty)
+                }).eq('id', inv.id);
+                if (updErr) throw updErr;
+              }
+            }
+          }
+        });
+
+        await Promise.all(promises);
+
+        showToast('Selected transactions deleted successfully.');
+        closeBulkDeleteConfirmModal();
+        isBulkEditMode = false;
+        renderBulkControls();
+        await refreshDashboard();
+      } catch (err) {
+        console.error(err);
+        showToast('Failed to delete transactions: ' + err.message, true);
+      } finally {
+        confirmBtn.disabled = false;
+        confirmBtn.innerHTML = originalHtml;
+      }
+    };
 
     init();
   </script>
