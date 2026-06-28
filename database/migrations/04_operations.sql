@@ -252,7 +252,7 @@ CREATE TABLE public.support_messages (
 CREATE TABLE public.team_tasks (
   id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   company_id   UUID REFERENCES public.companies(id) ON DELETE CASCADE,
-  assigned_to  UUID REFERENCES public.employees(id) ON DELETE CASCADE NOT NULL,
+  assigned_to  UUID REFERENCES public.employees(id) ON DELETE CASCADE ON UPDATE CASCADE NOT NULL,
   assigned_by  UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
   title        TEXT NOT NULL,
   description  VARCHAR(500),
@@ -266,7 +266,7 @@ CREATE TABLE public.team_tasks (
 CREATE TABLE public.team_milestones (
   id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   company_id   UUID REFERENCES public.companies(id) ON DELETE CASCADE,
-  assigned_to  UUID REFERENCES public.employees(id) ON DELETE CASCADE NOT NULL,
+  assigned_to  UUID REFERENCES public.employees(id) ON DELETE CASCADE ON UPDATE CASCADE NOT NULL,
   assigned_by  UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
   title        TEXT NOT NULL,
   description  VARCHAR(500),

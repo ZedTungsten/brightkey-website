@@ -11,7 +11,7 @@ DROP TABLE IF EXISTS public.employee_reimbursements CASCADE;
 CREATE TABLE public.employee_adjustments (
   id             UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   company_id     UUID REFERENCES public.companies(id) ON DELETE CASCADE NOT NULL,
-  employee_id    UUID REFERENCES public.employees(id) ON DELETE CASCADE NOT NULL,
+  employee_id    UUID REFERENCES public.employees(id) ON DELETE CASCADE ON UPDATE CASCADE NOT NULL,
   amount         NUMERIC(12, 2) NOT NULL,
   date           DATE NOT NULL,
   label          TEXT NOT NULL,
@@ -24,7 +24,7 @@ CREATE TABLE public.employee_adjustments (
 CREATE TABLE public.employee_reimbursements (
   id             UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   company_id     UUID REFERENCES public.companies(id) ON DELETE CASCADE NOT NULL,
-  employee_id    UUID REFERENCES public.employees(id) ON DELETE CASCADE NOT NULL,
+  employee_id    UUID REFERENCES public.employees(id) ON DELETE CASCADE ON UPDATE CASCADE NOT NULL,
   amount         NUMERIC(12, 2) NOT NULL,
   date           DATE NOT NULL,
   label          TEXT NOT NULL,

@@ -83,7 +83,7 @@ CREATE TABLE IF NOT EXISTS public.team_projects (
 -- ── 2. Create Project Members Join Table ──────────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.project_members (
   project_id   UUID REFERENCES public.team_projects(id) ON DELETE CASCADE,
-  employee_id  UUID REFERENCES public.employees(id) ON DELETE CASCADE,
+  employee_id  UUID REFERENCES public.employees(id) ON DELETE CASCADE ON UPDATE CASCADE,
   PRIMARY KEY (project_id, employee_id)
 );
 

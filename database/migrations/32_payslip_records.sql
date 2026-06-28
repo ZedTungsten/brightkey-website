@@ -9,7 +9,7 @@ DROP TABLE IF EXISTS public.payslip_records CASCADE;
 CREATE TABLE public.payslip_records (
   id                  UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   company_id          UUID REFERENCES public.companies(id) ON DELETE CASCADE NOT NULL,
-  employee_id         UUID REFERENCES public.employees(id) ON DELETE CASCADE NOT NULL,
+  employee_id         UUID REFERENCES public.employees(id) ON DELETE CASCADE ON UPDATE CASCADE NOT NULL,
   payout_month        TEXT NOT NULL, -- Format: YYYY-MM
   
   -- Snapshotted Career/Payment Information

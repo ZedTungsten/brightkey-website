@@ -109,7 +109,7 @@ $$ LANGUAGE plpgsql;
 CREATE TABLE public.attendance_logs (
   id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   company_id   UUID REFERENCES public.companies(id) ON DELETE CASCADE,
-  employee_id  UUID REFERENCES public.employees(id) ON DELETE CASCADE NOT NULL,
+  employee_id  UUID REFERENCES public.employees(id) ON DELETE CASCADE ON UPDATE CASCADE NOT NULL,
   status       VARCHAR(20) NOT NULL CHECK (status IN ('available', 'break', 'offline')),
   created_at   TIMESTAMPTZ DEFAULT NOW()
 );
@@ -117,7 +117,7 @@ CREATE TABLE public.attendance_logs (
 -- ── Employee Update Requests Table ───────────────────────────────────────────
 CREATE TABLE public.employee_update_requests (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    employee_id UUID REFERENCES public.employees(id) ON DELETE CASCADE NOT NULL,
+    employee_id UUID REFERENCES public.employees(id) ON DELETE CASCADE ON UPDATE CASCADE NOT NULL,
     tenant_id UUID NOT NULL,
     requested_data JSONB NOT NULL,
     status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
@@ -130,7 +130,7 @@ CREATE TABLE public.employee_update_requests (
 CREATE TABLE public.leave_requests (
   id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   company_id       UUID REFERENCES public.companies(id) ON DELETE CASCADE NOT NULL,
-  employee_id      UUID REFERENCES public.employees(id) ON DELETE CASCADE NOT NULL,
+  employee_id      UUID REFERENCES public.employees(id) ON DELETE CASCADE ON UPDATE CASCADE NOT NULL,
   leave_type       VARCHAR(20) NOT NULL CHECK (leave_type IN ('sick', 'vacation')),
   date_from        DATE NOT NULL,
   date_to          DATE NOT NULL,
@@ -146,8 +146,8 @@ CREATE TABLE public.leave_requests (
 CREATE TABLE public.employee_chats (
   id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   company_id   UUID REFERENCES public.companies(id) ON DELETE CASCADE NOT NULL,
-  sender_id    UUID REFERENCES public.employees(id) ON DELETE CASCADE NOT NULL,
-  receiver_id  UUID REFERENCES public.employees(id) ON DELETE CASCADE NOT NULL,
+  sender_id    UUID REFERENCES public.employees(id) ON DELETE CASCADE ON UPDATE CASCADE NOT NULL,
+  receiver_id  UUID REFERENCES public.employees(id) ON DELETE CASCADE ON UPDATE CASCADE NOT NULL,
   message      TEXT NOT NULL,
   created_at   TIMESTAMPTZ DEFAULT now() NOT NULL
 );

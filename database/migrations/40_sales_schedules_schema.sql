@@ -6,7 +6,7 @@
 CREATE TABLE IF NOT EXISTS public.sales_schedules (
   id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   company_id   UUID NOT NULL REFERENCES public.companies(id) ON DELETE CASCADE,
-  employee_id  UUID NOT NULL REFERENCES public.employees(id) ON DELETE CASCADE,
+  employee_id  UUID NOT NULL REFERENCES public.employees(id) ON DELETE CASCADE ON UPDATE CASCADE,
   day_of_week  SMALLINT NOT NULL CHECK (day_of_week BETWEEN 0 AND 6),
   hour_start   SMALLINT NOT NULL CHECK (hour_start BETWEEN 0 AND 23),
   hour_end     SMALLINT NOT NULL CHECK (hour_end   BETWEEN 1 AND 24),
