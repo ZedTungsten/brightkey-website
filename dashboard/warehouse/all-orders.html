@@ -557,6 +557,20 @@
         const timestampCol = `timestamp_${newStatus}`;
         updateData[timestampCol] = now;
 
+        // Clear later stage timestamps if moving back to an earlier stage
+        const clearTimestamps = {
+          'reserved': ['timestamp_inspect', 'timestamp_packed', 'timestamp_dispatched', 'timestamp_cancelled', 'timestamp_returned'],
+          'inspect': ['timestamp_packed', 'timestamp_dispatched', 'timestamp_cancelled', 'timestamp_returned'],
+          'packed': ['timestamp_dispatched', 'timestamp_cancelled', 'timestamp_returned'],
+          'dispatched': ['timestamp_cancelled', 'timestamp_returned'],
+          'cancelled': [],
+          'returned': []
+        };
+        const colsToClear = clearTimestamps[newStatus] || [];
+        colsToClear.forEach(col => {
+          updateData[col] = null;
+        });
+
         const { error: txErr } = await sb.from('inventory_transactions').update(updateData).eq('id', id);
         if (txErr) throw txErr;
 
