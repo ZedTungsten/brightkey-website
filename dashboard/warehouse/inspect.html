@@ -569,11 +569,12 @@
                       <th>SKU</th>
                       <th>Qty</th>
                       <th>Request Date</th>
+                      <th>Install Date</th>
                       <th>Action</th>
                     </tr>
                   </thead>
                   <tbody id="inspect-list">
-                    <tr><td colspan="8" class="text-center text-muted" style="padding:2rem 0;">No items waiting to be inspected.</td></tr>
+                    <tr><td colspan="9" class="text-center text-muted" style="padding:2rem 0;">No items waiting to be inspected.</td></tr>
                   </tbody>
                 </table>
               </div>
@@ -831,14 +832,22 @@
         ? sb.from('warehouse_transfers').select('*')
         : Promise.resolve({ data: [], error: null });
 
+      const bookingsQuery = sb.from('installation_bookings').select('order_no, scheduled_date');
+
       const [
         { data: invData, error: invErr },
         { data: txData, error: txErr },
-        { data: transData, error: transErr }
-      ] = await Promise.all([invQuery, txQuery, transferQuery]);
+        { data: transData, error: transErr },
+        { data: bData, error: bErr }
+      ] = await Promise.all([invQuery, txQuery, transferQuery, bookingsQuery]);
 
       if (invErr) throw invErr;
       if (txErr) throw txErr;
+      if (bErr) {
+        console.error('Failed to fetch installation bookings:', bErr);
+      } else {
+        bookings = bData || [];
+      }
 
       allInventory = {};
       (invData || []).forEach(row => {
@@ -1355,7 +1364,7 @@
       );
 
       if (inspectQueue.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted" style="padding:2rem 0;">No orders currently in inspection queue.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="9" class="text-center text-muted" style="padding:2rem 0;">No orders currently in inspection queue.</td></tr>`;
         return;
       }
 
@@ -1364,11 +1373,13 @@
       inspectQueue.forEach(t => {
         const refId = t.reference_id || 'N/A';
         if (!groups[refId]) {
+          const booking = bookings.find(b => b.order_no === refId);
           groups[refId] = {
             reference_id: refId,
             customer_name: t.customer_name || 'N/A',
             customer_city: t.customer_city || 'N/A',
             timestamp_reserved: t.timestamp_reserved || t.created_at,
+            install_date: booking?.scheduled_date ? new Date(booking.scheduled_date) : null,
             items: []
           };
         }
@@ -1379,6 +1390,12 @@
       });
 
       const orderGroups = Object.values(groups).sort((a, b) => {
+        if (a.install_date && b.install_date) {
+          return a.install_date.getTime() - b.install_date.getTime();
+        }
+        if (a.install_date) return -1;
+        if (b.install_date) return 1;
+
         const timeA = a.timestamp_reserved ? new Date(a.timestamp_reserved).getTime() : 0;
         const timeB = b.timestamp_reserved ? new Date(b.timestamp_reserved).getTime() : 0;
         return timeA - timeB;
@@ -1387,6 +1404,7 @@
       orderGroups.forEach(group => {
         const rowSpan = group.items.length;
         const dateOnly = group.timestamp_reserved ? new Date(group.timestamp_reserved).toLocaleDateString() : 'N/A';
+        const installDateFriendly = group.install_date ? group.install_date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
 
         group.items.forEach((item, idx) => {
           const p = allProducts.find(prod => prod.sku === item.sku) || { title: 'Unknown Product', image_main: '' };
@@ -1412,6 +1430,7 @@
                 <td><code>${item.sku}</code></td>
                 <td><strong>${item.quantity}</strong></td>
                 <td rowspan="${rowSpan}">${dateOnly}</td>
+                <td rowspan="${rowSpan}"><strong>${installDateFriendly}</strong></td>
                 <td>${actionButtonHtml}</td>
               </tr>
             `;
