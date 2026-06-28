@@ -286,9 +286,28 @@
                       <div id="bulk-edit-container">
                         <button class="btn btn-outline btn-sm" onclick="enterBulkEditMode()" style="height:32px; font-size:0.8rem; font-weight:600; cursor:pointer; background:var(--bg-surface); border:1px solid var(--border); border-radius:6px; padding:0 0.75rem; color:var(--text-secondary);">Bulk Edit</button>
                       </div>
-                      <div style="display:flex; align-items:center; gap:0.5rem; font-size:0.82rem; font-weight:normal; text-transform:none;">
+                      <div style="display:flex; align-items:center; gap:0.35rem; font-size:0.82rem; font-weight:normal; text-transform:none;">
                         <span>Month Created:</span>
-                        <input type="month" id="filter-month" onchange="refreshDashboard()" onclick="if (typeof this.showPicker === 'function') this.showPicker()" style="background:var(--bg-elevated); border:1px solid var(--border); border-radius:6px; padding:0.25rem 0.5rem; color:var(--text-primary); font-size:0.82rem; font-family:inherit; outline:none; cursor:pointer;" />
+                        <select id="filter-month" onchange="refreshDashboard()" style="background:var(--bg-elevated); border:1px solid var(--border); border-radius:6px; padding:0.25rem 0.5rem; color:var(--text-primary); font-size:0.82rem; font-family:inherit; outline:none; cursor:pointer;">
+                          <option value="01">January</option>
+                          <option value="02">February</option>
+                          <option value="03">March</option>
+                          <option value="04">April</option>
+                          <option value="05">May</option>
+                          <option value="06">June</option>
+                          <option value="07">July</option>
+                          <option value="08">August</option>
+                          <option value="09">September</option>
+                          <option value="10">October</option>
+                          <option value="11">November</option>
+                          <option value="12">December</option>
+                        </select>
+                        <select id="filter-year" onchange="refreshDashboard()" style="background:var(--bg-elevated); border:1px solid var(--border); border-radius:6px; padding:0.25rem 0.5rem; color:var(--text-primary); font-size:0.82rem; font-family:inherit; outline:none; cursor:pointer;">
+                          <option value="2024">2024</option>
+                          <option value="2025">2025</option>
+                          <option value="2026">2026</option>
+                          <option value="2027">2027</option>
+                        </select>
                       </div>
                     </div>
                   </div>
@@ -415,11 +434,13 @@
         const { data: co } = await sb.from('companies').select('id').eq('tenant_id', authInfo.tenantId).limit(1).maybeSingle();
         companyId = co?.id || null;
 
-        // Set Month Picker Default to Current Month
+        // Set Month & Year picker defaults to current month
         const filterMonthEl = document.getElementById('filter-month');
-        if (filterMonthEl && !filterMonthEl.value) {
+        const filterYearEl = document.getElementById('filter-year');
+        if (filterMonthEl && filterYearEl && !filterMonthEl.value) {
           const today = new Date();
-          filterMonthEl.value = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+          filterMonthEl.value = String(today.getMonth() + 1).padStart(2, '0');
+          filterYearEl.value = String(today.getFullYear());
         }
 
         await loadWarehouseTabs(authInfo.tenantId);
@@ -479,7 +500,11 @@
       if (!tbody) return;
 
       const filterMonthEl = document.getElementById('filter-month');
-      const selectedMonth = filterMonthEl ? filterMonthEl.value : null;
+      const filterYearEl = document.getElementById('filter-year');
+      let selectedMonth = null;
+      if (filterMonthEl && filterYearEl) {
+        selectedMonth = `${filterYearEl.value}-${filterMonthEl.value}`;
+      }
 
       let invQuery = sb.from('inventory').select('*');
       if (activeWarehouseId) {
