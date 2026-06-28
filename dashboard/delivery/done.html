@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Done Deliveries — BrightKey ERP</title>
+  <link rel="preconnect" href="https://fonts.bunny.net" />
+  <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../../css/style.css" />
+  <link rel="icon" type="image/svg+xml" href="../../assets/favicon.svg?v=2" />
+
+  <style>
+    /* ── Layout ── */
+    .top-bar { flex-shrink: 0; background: var(--bg-surface); border-bottom: 1px solid var(--border); padding: 0 1.5rem; display: flex; align-items: center; gap: 1rem; height: 56px; }
+    .top-bar-title { font-size: 1rem; font-weight: 800; color: var(--text-primary); letter-spacing: -0.03em; }
+    .content-area { display: flex; flex: 1; overflow: hidden; height: calc(100vh - 56px); }
+    .main-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+    
+    .scroll-area { flex: 1; overflow: auto; padding: 2rem; display: flex; flex-direction: column; }
+    .delivery-container { max-width: 1200px; width: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: 2rem; }
+
+    /* ── Tabs Navigation ── */
+    .drawer-tabs {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      background: var(--bg-surface);
+    }
+    .tab-btn {
+      padding: 0.9rem 1.25rem;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      border: none;
+      background: none;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      white-space: nowrap;
+      transition: all 0.15s;
+    }
+    .tab-btn.active {
+      color: var(--cyan-light);
+      border-bottom-color: var(--cyan);
+    }
+    .tab-btn:hover:not(.active) {
+      color: var(--text-secondary);
+    }
+
+    .tab-content {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+    }
+
+    /* ── Panels & Tables ── */
+    .panel {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      box-shadow: var(--shadow-sm);
+      overflow: hidden;
+    }
+    .panel-header {
+      padding: 1rem 1.25rem;
+      font-size: 0.85rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .table-responsive {
+      width: 100%;
+      overflow-x: auto;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.82rem;
+    }
+    thead th {
+      background: var(--bg-elevated);
+      color: var(--text-secondary);
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      padding: 0.75rem 1.25rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+    tbody tr {
+      border-bottom: 1px solid var(--border);
+      transition: background 0.15s;
+    }
+    tbody tr:last-child {
+      border-bottom: none;
+    }
+    tbody tr:hover {
+      background: var(--bg-elevated);
+    }
+    tbody td {
+      padding: 0.85rem 1.25rem;
+      color: var(--text-secondary);
+      vertical-align: middle;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.45rem 1rem;
+      border-radius: 6px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+    .btn-primary { background: var(--cyan); color: #fff; border-color: var(--cyan); }
+    .btn-primary:hover { background: var(--cyan-light); border-color: var(--cyan-light); }
+    .btn-outline { background: var(--bg-surface); color: var(--text-secondary); border-color: var(--border); }
+    .btn-outline:hover { border-color: var(--cyan); color: var(--cyan-light); }
+
+    /* ── Form Inputs ── */
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+    .form-label {
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .form-input {
+      padding: 0.55rem 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 0.85rem;
+      background: var(--bg-base);
+      color: var(--text-primary);
+      outline: none;
+      transition: border 0.15s;
+    }
+    .form-input:focus {
+      border-color: var(--cyan);
+    }
+
+    /* ── Modal Overlay ── */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(4px);
+      z-index: 9999;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-overlay.open {
+      display: flex;
+    }
+    .modal-content {
+      width: 100%;
+      max-width: 500px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.75rem;
+      box-shadow: 0 12px 48px rgba(0,0,0,0.25);
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+    .modal-title {
+      margin: 0;
+      font-size: 1.15rem;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="dash-layout">
+    <!-- Sidebar -->
+    <aside class="dash-sidebar" id="dash-sidebar"></aside>
+
+    <!-- Main -->
+    <div class="dash-main">
+      <!-- Top Bar -->
+      <div class="top-bar">
+        <span class="top-bar-title">Logistics Delivery</span>
+      </div>
+
+      <div class="content-area">
+        <main class="main-panel">
+          <!-- Tabs Navigation -->
+          <div class="drawer-tabs">
+            <a class="tab-btn" href="/dashboard/delivery/book">Book</a>
+            <a class="tab-btn" href="/dashboard/delivery/pickup">Pickup</a>
+            <a class="tab-btn active" href="/dashboard/delivery/done">Done</a>
+          </div>
+
+          <div class="scroll-area">
+            <div class="delivery-container">
+
+              <!-- Done Tab Content -->
+              <div class="tab-content" id="tab-content-done">
+                <div class="panel">
+                  <div class="panel-header">Picked Up Deliveries (Completed / In Progress)</div>
+                  <div class="table-responsive">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Ref Order</th>
+                          <th>Full Name</th>
+                          <th>City</th>
+                          <th>SKU</th>
+                          <th>Qty</th>
+                          <th>Date Completed</th>
+                          <th>Action</th>
+                        </tr>
+                      </thead>
+                      <tbody id="done-list">
+                        <tr>
+                          <td colspan="7">
+                            <div style="text-align:center; padding:3rem; color:var(--text-muted);">
+                              <div class="bk-spinner" style="margin:0 auto 1rem;"></div>
+                              Loading done queue…
+                            </div>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <div id="done-pagination" style="display:flex; justify-content:space-between; align-items:center; padding:0.75rem 1.25rem; border-top:1px solid var(--border); background:var(--bg-surface); font-size:0.8rem; color:var(--text-muted);"></div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+  </div>
+
+  <!-- Done Confirmation Modal -->
+  <div id="done-modal" class="modal-overlay">
+    <div class="modal-content">
+      <h3 class="modal-title">Confirm Product Delivery</h3>
+      
+      <div style="font-size: 0.82rem; color: var(--text-secondary); line-height: 1.5; background: var(--bg-elevated); padding: 0.75rem; border-radius: 6px; border: 1px solid var(--border);">
+        <div><strong>Order No:</strong> <span id="dmodal-order-no" style="color: var(--text-primary);"></span></div>
+        <div><strong>Name:</strong> <span id="dmodal-customer-name" style="color: var(--text-primary);"></span></div>
+        <div><strong>City:</strong> <span id="dmodal-customer-city" style="color: var(--text-primary);"></span></div>
+      </div>
+
+      <!-- Upload delivery confirmation screenshot -->
+      <div class="form-group">
+        <label class="form-label">Screenshot of Customer Receipt Confirmation</label>
+        <div id="done-upload-container" style="width:100%; aspect-ratio:16/10; background:var(--bg-elevated); border:2px dashed var(--border); border-radius:8px; display:flex; flex-direction:column; align-items:center; justify-content:center; overflow:hidden; position:relative; cursor:pointer;" onclick="document.getElementById('done-file-input').click()">
+          <img id="done-photo-preview" src="" style="width:100%; height:100%; object-fit:cover; display:none;" />
+          
+          <div id="done-upload-placeholder" style="display:flex; flex-direction:column; align-items:center; gap:0.5rem; color:var(--text-muted); text-align:center; padding:1rem;">
+            <svg viewBox="0 0 24 24" width="28" height="28" stroke="currentColor" stroke-width="1.5" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+            <span style="font-size:0.78rem; font-weight:600;">Drag & drop screenshot here or click to select</span>
+          </div>
+          <input type="file" id="done-file-input" accept="image/*" style="display:none;" onchange="handleDoneFileSelect(event)" />
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div style="display: flex; justify-content: flex-end; gap: 0.75rem; border-top: 1px solid var(--border); padding-top: 1rem; margin-top: 0.25rem;">
+        <button type="button" class="btn btn-outline" onclick="closeDoneModal()">Cancel</button>
+        <button type="button" id="btn-confirm-done" class="btn btn-primary" onclick="confirmDone()" disabled>Confirm Delivery</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="../../js/auth.js"></script>
+  <script src="../../js/sidebar.js"></script>
+  <script src="../../js/main.js"></script>
+
+  <script>
+    'use strict';
+
+    function esc(s) {
+      return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    const DeliveryApp = {
+      currentUser: null,
+      companyId: null,
+      activeTransactions: [],
+      deliveryBookings: [],
+      selectedBooking: null,
+      donePhotoBlob: null,
+      currentPageDone: 1,
+      itemsPerPage: 10,
+
+      async init() {
+        if (!window.BKAuth) return;
+
+        const authInfo = await window.BKAuth.checkRoleGate(['owner', 'admin', 'warehouse', 'logistics'], '../../admin.html');
+        if (!authInfo) return;
+
+        this.currentUser = authInfo.user;
+        this.companyId = await this.getCompanyId(authInfo.tenantId);
+
+        if (this.companyId) {
+          await this.loadData();
+        }
+      },
+
+      async getCompanyId(tenantId) {
+        try {
+          const sb = window.BKAuth.sb;
+          const { data } = await sb.from('companies').select('id').eq('tenant_id', tenantId).limit(1).maybeSingle();
+          return data?.id || null;
+        } catch (err) {
+          console.error(err);
+          return null;
+        }
+      },
+
+      async loadData() {
+        try {
+          const sb = window.BKAuth.sb;
+          
+          const { data: txs, error: txErr } = await sb.from('inventory_transactions')
+            .select('*')
+            .eq('type', 'customer_order');
+          if (txErr) throw txErr;
+          this.activeTransactions = txs || [];
+
+          const { data: dbData, error: dbErr } = await sb.from('delivery_bookings')
+            .select('*')
+            .order('created_at', { ascending: false });
+          if (dbErr) throw dbErr;
+          this.deliveryBookings = dbData || [];
+
+          this.renderDoneQueue();
+        } catch (err) {
+          console.error(err);
+          Toast.error('Failed to load logistics queue: ' + err.message);
+        }
+      },
+
+      renderDoneQueue() {
+        const tbody = document.getElementById('done-list');
+        if (!tbody) return;
+        tbody.innerHTML = '';
+
+        const doneQueue = this.deliveryBookings.filter(db => ['picked_up', 'delivered'].includes(db.status));
+
+        if (doneQueue.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:3rem; color:var(--text-muted);">No completed or picked up orders.</td></tr>`;
+          this.renderPagination(0, this.currentPageDone, 'done-pagination');
+          return;
+        }
+
+        const totalItems = doneQueue.length;
+
+        const maxPage = Math.ceil(totalItems / this.itemsPerPage) || 1;
+        if (this.currentPageDone > maxPage) {
+          this.currentPageDone = maxPage;
+        }
+
+        const startIdx = (this.currentPageDone - 1) * this.itemsPerPage;
+        const endIdx = startIdx + this.itemsPerPage;
+        const paginatedDone = doneQueue.slice(startIdx, endIdx);
+
+        paginatedDone.forEach(db => {
+          const items = this.activeTransactions.filter(t => t.reference_id === db.reference_id && t.status === 'dispatched');
+          const skusHtml = items.map(t => `<code>${t.sku}</code>`).join('<br/>') || '—';
+          const qtysHtml = items.map(t => `<strong>${t.quantity}</strong>`).join('<br/>') || '—';
+
+          const dateText = db.status === 'delivered' && db.delivered_at 
+            ? new Date(db.delivered_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) 
+            : '—';
+
+          let actionHtml = '';
+          if (db.status === 'delivered') {
+            actionHtml = `<span style="font-size:0.75rem; color:var(--text-muted); font-weight:600;">Completed</span>`;
+          } else {
+            actionHtml = `
+              <button class="btn btn-cyan btn-sm" onclick="DeliveryApp.openDoneModal('${db.id}')">
+                Done
+              </button>
+            `;
+          }
+
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td><strong>${esc(db.reference_id)}</strong></td>
+            <td>${esc(db.customer_name || 'N/A')}</td>
+            <td>${esc(db.customer_city || 'N/A')}</td>
+            <td>${skusHtml}</td>
+            <td>${qtysHtml}</td>
+            <td>${dateText}</td>
+            <td>${actionHtml}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+
+        this.renderPagination(totalItems, this.currentPageDone, 'done-pagination');
+      },
+
+      renderPagination(totalItems, currentPage, containerId) {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+
+        if (totalItems <= 10) {
+          container.style.display = 'none';
+          return;
+        }
+        container.style.display = 'flex';
+
+        const totalPages = Math.ceil(totalItems / this.itemsPerPage) || 1;
+        const start = (currentPage - 1) * this.itemsPerPage + 1;
+        const end = Math.min(currentPage * this.itemsPerPage, totalItems);
+
+        container.innerHTML = `
+          <span>Showing <strong>${start}</strong> to <strong>${end}</strong> of <strong>${totalItems}</strong> entries</span>
+          <div style="display:flex; gap:0.5rem; align-items:center;">
+            <button class="btn btn-outline btn-sm" style="padding:0.25rem 0.5rem; font-size:0.75rem;" ${currentPage === 1 ? 'disabled' : ''} onclick="DeliveryApp.changePage(${currentPage - 1})">Previous</button>
+            <span style="font-weight:600; color:var(--text-primary); font-size:0.75rem; padding:0 0.25rem;">Page ${currentPage} of ${totalPages}</span>
+            <button class="btn btn-outline btn-sm" style="padding:0.25rem 0.5rem; font-size:0.75rem;" ${currentPage === totalPages ? 'disabled' : ''} onclick="DeliveryApp.changePage(${currentPage + 1})">Next</button>
+          </div>
+        `;
+      },
+
+      changePage(newPage) {
+        this.currentPageDone = newPage;
+        this.renderDoneQueue();
+      },
+
+      openDoneModal(bookingId) {
+        const booking = this.deliveryBookings.find(b => b.id === bookingId);
+        if (!booking) return;
+
+        this.selectedBooking = booking;
+        this.donePhotoBlob = null;
+
+        document.getElementById('dmodal-order-no').textContent = booking.reference_id;
+        document.getElementById('dmodal-customer-name').textContent = booking.customer_name || 'N/A';
+        document.getElementById('dmodal-customer-city').textContent = booking.customer_city || 'N/A';
+
+        document.getElementById('done-photo-preview').style.display = 'none';
+        document.getElementById('done-photo-preview').src = '';
+        document.getElementById('done-upload-placeholder').style.display = 'flex';
+        document.getElementById('btn-confirm-done').disabled = true;
+
+        document.getElementById('done-modal').classList.add('open');
+      }
+    };
+
+    window.closeDoneModal = function() {
+      document.getElementById('done-modal').classList.remove('open');
+    };
+
+    window.handleDoneFileSelect = function(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      
+      DeliveryApp.donePhotoBlob = file;
+
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        const img = document.getElementById('done-photo-preview');
+        img.src = evt.target.result;
+        img.style.display = 'block';
+        document.getElementById('done-upload-placeholder').style.display = 'none';
+        document.getElementById('btn-confirm-done').disabled = false;
+      };
+      reader.readAsDataURL(file);
+    };
+
+    window.confirmDone = async function() {
+      const btn = document.getElementById('btn-confirm-done');
+      if (btn.disabled || !DeliveryApp.selectedBooking || !DeliveryApp.donePhotoBlob) return;
+
+      btn.disabled = true;
+      const originalText = btn.textContent;
+      btn.innerHTML = `<span class="bk-spinner" style="width:12px; height:12px; border-width:2px; display:inline-block; vertical-align:middle; margin-right:6px;"></span>Saving...`;
+
+      try {
+        const base64 = await blobToBase64(DeliveryApp.donePhotoBlob);
+        const fileName = `received_${DeliveryApp.selectedBooking.reference_id}_${Date.now()}.jpg`;
+
+        const uploadRes = await fetch('/api/upload', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fileBase64: base64,
+            fileName: fileName,
+            category: 'installations',
+            refId: DeliveryApp.selectedBooking.reference_id,
+            type: 'proof',
+            companyId: DeliveryApp.companyId || 'general'
+          })
+        });
+
+        if (!uploadRes.ok) throw new Error('Delivery screenshot upload failed');
+        const uploadResult = await uploadRes.json();
+
+        const sb = window.BKAuth.sb;
+
+        const { error: updErr } = await sb.from('delivery_bookings')
+          .update({
+            status: 'delivered',
+            received_photo_url: uploadResult.url,
+            delivered_at: new Date().toISOString()
+          })
+          .eq('id', DeliveryApp.selectedBooking.id);
+
+        if (updErr) throw updErr;
+
+        Toast.success('Delivery marked as completed.');
+        closeDoneModal();
+        await DeliveryApp.loadData();
+      } catch (err) {
+        console.error(err);
+        Toast.error('Failed to confirm delivery: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = originalText;
+      }
+    };
+
+    function blobToBase64(blob) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result.split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    }
+
+    window.DeliveryApp = DeliveryApp;
+
+    document.addEventListener('DOMContentLoaded', () => {
+      DeliveryApp.init();
+    });
+  </script>
+</body>
+</html>

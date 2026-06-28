@@ -518,6 +518,7 @@
         currentPath === href ||
         currentPath === href + '.html' ||
         (href === '/dashboard/warehouse' && currentPath.startsWith('/dashboard/warehouse')) ||
+        (href === '/dashboard/delivery' && currentPath.startsWith('/dashboard/delivery')) ||
         (href === '/dashboard/payout-tracker/payout/' && currentPath.startsWith('/dashboard/payout-tracker/'))
       )) {
         link.classList.add('active');

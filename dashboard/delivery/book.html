@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Book Deliveries — BrightKey ERP</title>
+  <link rel="preconnect" href="https://fonts.bunny.net" />
+  <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../../css/style.css" />
+  <link rel="icon" type="image/svg+xml" href="../../assets/favicon.svg?v=2" />
+
+  <style>
+    /* ── Layout ── */
+    .top-bar { flex-shrink: 0; background: var(--bg-surface); border-bottom: 1px solid var(--border); padding: 0 1.5rem; display: flex; align-items: center; gap: 1rem; height: 56px; }
+    .top-bar-title { font-size: 1rem; font-weight: 800; color: var(--text-primary); letter-spacing: -0.03em; }
+    .content-area { display: flex; flex: 1; overflow: hidden; height: calc(100vh - 56px); }
+    .main-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+    
+    .scroll-area { flex: 1; overflow: auto; padding: 2rem; display: flex; flex-direction: column; }
+    .delivery-container { max-width: 1200px; width: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: 2rem; }
+
+    /* ── Tabs Navigation ── */
+    .drawer-tabs {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      background: var(--bg-surface);
+    }
+    .tab-btn {
+      padding: 0.9rem 1.25rem;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      border: none;
+      background: none;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      white-space: nowrap;
+      transition: all 0.15s;
+    }
+    .tab-btn.active {
+      color: var(--cyan-light);
+      border-bottom-color: var(--cyan);
+    }
+    .tab-btn:hover:not(.active) {
+      color: var(--text-secondary);
+    }
+
+    .tab-content {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+    }
+
+    /* ── Panels & Tables ── */
+    .panel {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      box-shadow: var(--shadow-sm);
+      overflow: hidden;
+    }
+    .panel-header {
+      padding: 1rem 1.25rem;
+      font-size: 0.85rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .table-responsive {
+      width: 100%;
+      overflow-x: auto;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.82rem;
+    }
+    thead th {
+      background: var(--bg-elevated);
+      color: var(--text-secondary);
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      padding: 0.75rem 1.25rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+    tbody tr {
+      border-bottom: 1px solid var(--border);
+      transition: background 0.15s;
+    }
+    tbody tr:last-child {
+      border-bottom: none;
+    }
+    tbody tr:hover {
+      background: var(--bg-elevated);
+    }
+    tbody td {
+      padding: 0.85rem 1.25rem;
+      color: var(--text-secondary);
+      vertical-align: middle;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.45rem 1rem;
+      border-radius: 6px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+    .btn-primary { background: var(--cyan); color: #fff; border-color: var(--cyan); }
+    .btn-primary:hover { background: var(--cyan-light); border-color: var(--cyan-light); }
+    .btn-outline { background: var(--bg-surface); color: var(--text-secondary); border-color: var(--border); }
+    .btn-outline:hover { border-color: var(--cyan); color: var(--cyan-light); }
+
+    /* ── Form Inputs ── */
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+    .form-label {
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .form-input {
+      padding: 0.55rem 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 0.85rem;
+      background: var(--bg-base);
+      color: var(--text-primary);
+      outline: none;
+      transition: border 0.15s;
+    }
+    .form-input:focus {
+      border-color: var(--cyan);
+    }
+
+    /* ── Modal Overlay ── */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(4px);
+      z-index: 9999;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-overlay.open {
+      display: flex;
+    }
+    .modal-content {
+      width: 100%;
+      max-width: 500px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.75rem;
+      box-shadow: 0 12px 48px rgba(0,0,0,0.25);
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+    .modal-title {
+      margin: 0;
+      font-size: 1.15rem;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="dash-layout">
+    <!-- Sidebar -->
+    <aside class="dash-sidebar" id="dash-sidebar"></aside>
+
+    <!-- Main -->
+    <div class="dash-main">
+      <!-- Top Bar -->
+      <div class="top-bar">
+        <span class="top-bar-title">Logistics Delivery</span>
+      </div>
+
+      <div class="content-area">
+        <main class="main-panel">
+          <!-- Tabs Navigation -->
+          <div class="drawer-tabs">
+            <a class="tab-btn active" href="/dashboard/delivery/book">Book</a>
+            <a class="tab-btn" href="/dashboard/delivery/pickup">Pickup</a>
+            <a class="tab-btn" href="/dashboard/delivery/done">Done</a>
+          </div>
+
+          <div class="scroll-area">
+            <div class="delivery-container">
+
+              <!-- Book Tab Content -->
+              <div class="tab-content" id="tab-content-book">
+                <div class="panel">
+                  <div class="panel-header">Packed Orders Awaiting Delivery</div>
+                  <div class="table-responsive">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Packed Photo</th>
+                          <th>Ref Order</th>
+                          <th>Customer Name</th>
+                          <th>City</th>
+                          <th>SKU</th>
+                          <th>Qty</th>
+                          <th>Install Date</th>
+                          <th>Action</th>
+                        </tr>
+                      </thead>
+                      <tbody id="sendout-list">
+                        <tr>
+                          <td colspan="8">
+                            <div style="text-align:center; padding:3rem; color:var(--text-muted);">
+                              <div class="bk-spinner" style="margin:0 auto 1rem;"></div>
+                              Loading dispatch queue…
+                            </div>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <div id="sendout-pagination" style="display:flex; justify-content:space-between; align-items:center; padding:0.75rem 1.25rem; border-top:1px solid var(--border); background:var(--bg-surface); font-size:0.8rem; color:var(--text-muted);"></div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+  </div>
+
+  <!-- Book Delivery Modal -->
+  <div id="booking-modal" class="modal-overlay">
+    <div class="modal-content">
+      <h3 class="modal-title">Book Delivery</h3>
+      
+      <!-- Order details -->
+      <div style="font-size: 0.82rem; color: var(--text-secondary); line-height: 1.5; background: var(--bg-elevated); padding: 0.75rem; border-radius: 6px; border: 1px solid var(--border);">
+        <div><strong>Order No:</strong> <span id="modal-order-no" style="color: var(--text-primary);"></span></div>
+        <div><strong>Name:</strong> <span id="modal-customer-name" style="color: var(--text-primary);"></span></div>
+        <div><strong>City:</strong> <span id="modal-customer-city" style="color: var(--text-primary);"></span></div>
+      </div>
+
+      <!-- Packed Photo Display -->
+      <div id="modal-packed-photo-container" style="width: 100%; aspect-ratio: 16/10; border-radius: 6px; overflow: hidden; background: var(--bg-elevated); border: 1px solid var(--border); display: none; cursor: pointer;" onclick="maximizePhoto(document.getElementById('modal-packed-photo').src)">
+        <img id="modal-packed-photo" src="" style="width: 100%; height: 100%; object-fit: cover;" />
+      </div>
+
+      <!-- Upload Delivery Details Photo -->
+      <div class="form-group">
+        <label class="form-label">Delivery Information Screenshot</label>
+        <div id="upload-container" style="width:100%; aspect-ratio:16/10; background:var(--bg-elevated); border:2px dashed var(--border); border-radius:8px; display:flex; flex-direction:column; align-items:center; justify-content:center; overflow:hidden; position:relative; cursor:pointer;" onclick="document.getElementById('delivery-file-input').click()">
+          <img id="delivery-photo-preview" src="" style="width:100%; height:100%; object-fit:cover; display:none;" />
+          
+          <div id="upload-placeholder" style="display:flex; flex-direction:column; align-items:center; gap:0.5rem; color:var(--text-muted); text-align:center; padding:1rem;">
+            <svg viewBox="0 0 24 24" width="28" height="28" stroke="currentColor" stroke-width="1.5" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+            <span style="font-size:0.78rem; font-weight:600;">Drag & drop photo here or click to select</span>
+          </div>
+          <input type="file" id="delivery-file-input" accept="image/*" style="display:none;" onchange="handleDeliveryFileSelect(event)" />
+        </div>
+      </div>
+
+      <!-- Fee inputs -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+        <div class="form-group">
+          <label class="form-label" for="base-fee">Base Fee (₱)</label>
+          <input type="number" id="base-fee" class="form-input" placeholder="0.00" step="0.01" min="0" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="tip-1">Tip 1 (₱)</label>
+          <input type="number" id="tip-1" class="form-input" placeholder="0.00" step="0.01" min="0" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="tip-2">Tip 2 (₱)</label>
+          <input type="number" id="tip-2" class="form-input" placeholder="0.00" step="0.01" min="0" />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="toll">Toll (₱)</label>
+          <input type="number" id="toll" class="form-input" placeholder="0.00" step="0.01" min="0" />
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div style="display: flex; justify-content: flex-end; gap: 0.75rem; border-top: 1px solid var(--border); padding-top: 1rem; margin-top: 0.25rem;">
+        <button type="button" class="btn btn-outline" onclick="closeBookingModal()">Cancel</button>
+        <button type="button" id="btn-confirm-booking" class="btn btn-primary" onclick="confirmBooking()" disabled>Confirm Booking</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Lightbox Modal -->
+  <div id="lightbox-modal" class="modal-overlay" onclick="closeLightbox()" style="background: rgba(0,0,0,0.85); cursor: zoom-out;">
+    <div style="position: relative; max-width: 90vw; max-height: 90vh;">
+      <img id="lightbox-img" src="" style="max-width: 100%; max-height: 90vh; border-radius: 8px; box-shadow: 0 12px 48px rgba(0,0,0,0.5); object-fit: contain; cursor: default;" onclick="event.stopPropagation()" />
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="../../js/auth.js"></script>
+  <script src="../../js/sidebar.js"></script>
+  <script src="../../js/main.js"></script>
+
+  <script>
+    'use strict';
+
+    function esc(s) {
+      return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    const DeliveryApp = {
+      currentUser: null,
+      companyId: null,
+      activeTransactions: [],
+      bookings: [],
+      deliveryBookings: [],
+      selectedOrder: null,
+      deliveryPhotoBlob: null,
+      currentPageSendOut: 1,
+      itemsPerPage: 10,
+
+      async init() {
+        if (!window.BKAuth) return;
+
+        const authInfo = await window.BKAuth.checkRoleGate(['owner', 'admin', 'warehouse', 'logistics'], '../../admin.html');
+        if (!authInfo) return;
+
+        this.currentUser = authInfo.user;
+        this.companyId = await this.getCompanyId(authInfo.tenantId);
+
+        if (this.companyId) {
+          await this.loadData();
+        }
+      },
+
+      async getCompanyId(tenantId) {
+        try {
+          const sb = window.BKAuth.sb;
+          const { data } = await sb.from('companies').select('id').eq('tenant_id', tenantId).limit(1).maybeSingle();
+          return data?.id || null;
+        } catch (err) {
+          console.error(err);
+          return null;
+        }
+      },
+
+      async loadData() {
+        try {
+          const sb = window.BKAuth.sb;
+          
+          const { data: txs, error: txErr } = await sb.from('inventory_transactions')
+            .select('*')
+            .eq('type', 'customer_order');
+          if (txErr) throw txErr;
+          this.activeTransactions = txs || [];
+
+          const { data: bData, error: bErr } = await sb.from('installation_bookings')
+            .select('order_no, scheduled_date');
+          if (bErr) throw bErr;
+          this.bookings = bData || [];
+
+          const { data: dbData, error: dbErr } = await sb.from('delivery_bookings')
+            .select('*')
+            .order('created_at', { ascending: false });
+          if (dbErr) throw dbErr;
+          this.deliveryBookings = dbData || [];
+
+          this.renderSendOutQueue();
+        } catch (err) {
+          console.error(err);
+          Toast.error('Failed to load logistics queue: ' + err.message);
+        }
+      },
+
+      renderSendOutQueue() {
+        const tbody = document.getElementById('sendout-list');
+        if (!tbody) return;
+        tbody.innerHTML = '';
+
+        const dispatchQueue = this.activeTransactions.filter(t => {
+          if (t.status !== 'packed') return false;
+          const isBooked = this.deliveryBookings.some(db => db.reference_id === t.reference_id);
+          if (isBooked) return false;
+
+          if (t.reference_id) {
+            const hasUnpacked = this.activeTransactions.some(other => 
+              other.reference_id === t.reference_id && 
+              ['reserved', 'inspect'].includes(other.status)
+            );
+            if (hasUnpacked) return false;
+          }
+          return true;
+        });
+
+        if (dispatchQueue.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:3rem; color:var(--text-muted);">No packed orders ready for delivery.</td></tr>`;
+          this.renderPagination(0, this.currentPageSendOut, 'sendout-pagination');
+          return;
+        }
+
+        const groups = {};
+        dispatchQueue.forEach(t => {
+          const refId = t.reference_id || 'N/A';
+          if (!groups[refId]) {
+            groups[refId] = {
+              reference_id: refId,
+              customer_name: t.customer_name || 'N/A',
+              customer_city: t.customer_city || 'N/A',
+              packed_photo_url: t.packed_photo_url || '',
+              items: []
+            };
+          }
+          groups[refId].items.push(t);
+          if (t.packed_photo_url && !groups[refId].packed_photo_url) {
+            groups[refId].packed_photo_url = t.packed_photo_url;
+          }
+        });
+
+        const groupList = Object.values(groups);
+        const totalItems = groupList.length;
+
+        const maxPage = Math.ceil(totalItems / this.itemsPerPage) || 1;
+        if (this.currentPageSendOut > maxPage) {
+          this.currentPageSendOut = maxPage;
+        }
+
+        const startIdx = (this.currentPageSendOut - 1) * this.itemsPerPage;
+        const endIdx = startIdx + this.itemsPerPage;
+        const paginatedGroups = groupList.slice(startIdx, endIdx);
+
+        paginatedGroups.forEach(group => {
+          const skusHtml = group.items.map(t => `<code>${t.sku}</code>`).join('<br/>');
+          const qtysHtml = group.items.map(t => `<strong>${t.quantity}</strong>`).join('<br/>');
+          
+          const booking = this.bookings.find(b => b.order_no === group.reference_id);
+          const dateFriendly = booking?.scheduled_date ? new Date(booking.scheduled_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
+
+          let photoHtml = '—';
+          if (group.packed_photo_url) {
+            photoHtml = `<img src="${group.packed_photo_url}" alt="Packed Proof" style="width:80px; height:50px; object-fit:cover; border-radius:6px; border:1px solid var(--border); cursor:pointer;" onclick="maximizePhoto('${esc(group.packed_photo_url)}')" />`;
+          }
+
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${photoHtml}</td>
+            <td><strong>${esc(group.reference_id)}</strong></td>
+            <td>${esc(group.customer_name)}</td>
+            <td>${esc(group.customer_city)}</td>
+            <td>${skusHtml}</td>
+            <td>${qtysHtml}</td>
+            <td><strong>${dateFriendly}</strong></td>
+            <td>
+              <button class="btn btn-cyan btn-sm" onclick="DeliveryApp.openBookingModal('${group.reference_id}')">
+                Book Delivery
+              </button>
+            </td>
+          `;
+          tbody.appendChild(tr);
+        });
+
+        this.renderPagination(totalItems, this.currentPageSendOut, 'sendout-pagination');
+      },
+
+      renderPagination(totalItems, currentPage, containerId) {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+
+        if (totalItems <= 10) {
+          container.style.display = 'none';
+          return;
+        }
+        container.style.display = 'flex';
+
+        const totalPages = Math.ceil(totalItems / this.itemsPerPage) || 1;
+        const start = (currentPage - 1) * this.itemsPerPage + 1;
+        const end = Math.min(currentPage * this.itemsPerPage, totalItems);
+
+        container.innerHTML = `
+          <span>Showing <strong>${start}</strong> to <strong>${end}</strong> of <strong>${totalItems}</strong> entries</span>
+          <div style="display:flex; gap:0.5rem; align-items:center;">
+            <button class="btn btn-outline btn-sm" style="padding:0.25rem 0.5rem; font-size:0.75rem;" ${currentPage === 1 ? 'disabled' : ''} onclick="DeliveryApp.changePage(${currentPage - 1})">Previous</button>
+            <span style="font-weight:600; color:var(--text-primary); font-size:0.75rem; padding:0 0.25rem;">Page ${currentPage} of ${totalPages}</span>
+            <button class="btn btn-outline btn-sm" style="padding:0.25rem 0.5rem; font-size:0.75rem;" ${currentPage === totalPages ? 'disabled' : ''} onclick="DeliveryApp.changePage(${currentPage + 1})">Next</button>
+          </div>
+        `;
+      },
+
+      changePage(newPage) {
+        this.currentPageSendOut = newPage;
+        this.renderSendOutQueue();
+      },
+
+      openBookingModal(referenceId) {
+        const matchingTx = this.activeTransactions.find(t => t.reference_id === referenceId);
+        if (!matchingTx) return;
+
+        this.selectedOrder = {
+          reference_id: referenceId,
+          customer_name: matchingTx.customer_name || 'N/A',
+          customer_city: matchingTx.customer_city || 'N/A',
+          packed_photo_url: matchingTx.packed_photo_url || '',
+          items: this.activeTransactions.filter(t => t.reference_id === referenceId && t.status === 'packed')
+        };
+
+        this.deliveryPhotoBlob = null;
+
+        document.getElementById('modal-order-no').textContent = referenceId;
+        document.getElementById('modal-customer-name').textContent = this.selectedOrder.customer_name;
+        document.getElementById('modal-customer-city').textContent = this.selectedOrder.customer_city;
+
+        const photoContainer = document.getElementById('modal-packed-photo-container');
+        const photoImg = document.getElementById('modal-packed-photo');
+        if (this.selectedOrder.packed_photo_url) {
+          photoImg.src = this.selectedOrder.packed_photo_url;
+          photoContainer.style.display = 'block';
+        } else {
+          photoContainer.style.display = 'none';
+        }
+
+        document.getElementById('delivery-photo-preview').style.display = 'none';
+        document.getElementById('delivery-photo-preview').src = '';
+        document.getElementById('upload-placeholder').style.display = 'flex';
+        document.getElementById('base-fee').value = '';
+        document.getElementById('tip-1').value = '';
+        document.getElementById('tip-2').value = '';
+        document.getElementById('toll').value = '';
+
+        document.getElementById('btn-confirm-booking').disabled = true;
+
+        document.getElementById('booking-modal').classList.add('open');
+      }
+    };
+
+    window.closeBookingModal = function() {
+      document.getElementById('booking-modal').classList.remove('open');
+    };
+
+    window.maximizePhoto = function(src) {
+      if (!src) return;
+      const modal = document.getElementById('lightbox-modal');
+      const img = document.getElementById('lightbox-img');
+      img.src = src;
+      modal.classList.add('open');
+    };
+
+    window.closeLightbox = function() {
+      const modal = document.getElementById('lightbox-modal');
+      modal.classList.remove('open');
+    };
+
+    window.handleDeliveryFileSelect = function(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      
+      DeliveryApp.deliveryPhotoBlob = file;
+
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        const img = document.getElementById('delivery-photo-preview');
+        img.src = evt.target.result;
+        img.style.display = 'block';
+        document.getElementById('upload-placeholder').style.display = 'none';
+        document.getElementById('btn-confirm-booking').disabled = false;
+      };
+      reader.readAsDataURL(file);
+    };
+
+    window.confirmBooking = async function() {
+      const btn = document.getElementById('btn-confirm-booking');
+      if (btn.disabled || !DeliveryApp.selectedOrder || !DeliveryApp.deliveryPhotoBlob) return;
+
+      btn.disabled = true;
+      const originalText = btn.textContent;
+      btn.innerHTML = `<span class="bk-spinner" style="width:12px; height:12px; border-width:2px; display:inline-block; vertical-align:middle; margin-right:6px;"></span>Booking...`;
+
+      try {
+        const baseFeeVal = parseFloat(document.getElementById('base-fee').value) || 0;
+        const tip1Val = parseFloat(document.getElementById('tip-1').value) || 0;
+        const tip2Val = parseFloat(document.getElementById('tip-2').value) || 0;
+        const tollVal = parseFloat(document.getElementById('toll').value) || 0;
+
+        const base64 = await blobToBase64(DeliveryApp.deliveryPhotoBlob);
+        const fileName = `delivery_${DeliveryApp.selectedOrder.reference_id}_${Date.now()}.jpg`;
+
+        const uploadRes = await fetch('/api/upload', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fileBase64: base64,
+            fileName: fileName,
+            category: 'installations',
+            refId: DeliveryApp.selectedOrder.reference_id,
+            type: 'proof',
+            companyId: DeliveryApp.companyId || 'general'
+          })
+        });
+
+        if (!uploadRes.ok) throw new Error('Delivery photo upload failed');
+        const uploadResult = await uploadRes.json();
+
+        const sb = window.BKAuth.sb;
+
+        const { error: dbErr } = await sb.from('delivery_bookings').insert([{
+          company_id: DeliveryApp.companyId,
+          reference_id: DeliveryApp.selectedOrder.reference_id,
+          customer_name: DeliveryApp.selectedOrder.customer_name,
+          customer_city: DeliveryApp.selectedOrder.customer_city,
+          delivery_photo_url: uploadResult.url,
+          base_fee: Math.round(baseFeeVal * 100),
+          tip_1: Math.round(tip1Val * 100),
+          tip_2: Math.round(tip2Val * 100),
+          toll: Math.round(tollVal * 100)
+        }]);
+        if (dbErr) throw dbErr;
+
+        const now = new Date().toISOString();
+        const txIds = DeliveryApp.selectedOrder.items.map(t => t.id);
+
+        const { error: txErr } = await sb.from('inventory_transactions').update({
+          status: 'dispatched',
+          timestamp_dispatched: now
+        }).in('id', txIds);
+        if (txErr) throw txErr;
+
+        for (const item of DeliveryApp.selectedOrder.items) {
+          let invQDisp = sb.from('inventory').select('*').eq('sku', item.sku);
+          if (item.warehouse_id) invQDisp = invQDisp.eq('warehouse_id', item.warehouse_id);
+          else invQDisp = invQDisp.is('warehouse_id', null);
+          const { data: invRow, error: invErr } = await invQDisp;
+          if (invErr) throw invErr;
+          if (invRow && invRow.length > 0) {
+            const inv = invRow[0];
+            const { error: updErr } = await sb.from('inventory').update({
+              packed: Math.max(0, inv.packed - item.quantity),
+              dispatched: inv.dispatched + item.quantity
+            }).eq('id', inv.id);
+            if (updErr) throw updErr;
+          }
+        }
+
+        Toast.success('Delivery booked successfully.');
+        closeBookingModal();
+        await DeliveryApp.loadData();
+      } catch (err) {
+        console.error(err);
+        Toast.error('Failed to book delivery: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = originalText;
+      }
+    };
+
+    function blobToBase64(blob) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result.split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    }
+
+    window.DeliveryApp = DeliveryApp;
+
+    document.addEventListener('DOMContentLoaded', () => {
+      DeliveryApp.init();
+    });
+  </script>
+</body>
+</html>
