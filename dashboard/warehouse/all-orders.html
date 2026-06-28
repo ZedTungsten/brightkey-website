@@ -357,6 +357,9 @@
     let fulfillmentWarehouses = [];
     let activeWarehouseId = null;
     let companyId = null;
+    let userPermissions = {
+      canManageAllOrders: false
+    };
 
     function escFulfillment(str) {
       if (!str) return '';
@@ -511,13 +514,48 @@
       });
       activeTransactions = txData || [];
 
+      // Check permissions for current user on active warehouse
+      const authInfo = await BKAuth.getUserRole();
+      if (authInfo) {
+        const isOwnerOrAdmin = authInfo.role === 'owner' || authInfo.role === 'admin';
+        if (isOwnerOrAdmin) {
+          userPermissions.canManageAllOrders = true;
+        } else {
+          await updateManagerPermissions(authInfo.user.id);
+        }
+      }
+
       renderAllOrdersTab();
       updateBadgeCounts();
+    }
+
+    async function updateManagerPermissions(userId) {
+      if (!sb || !activeWarehouseId) {
+        userPermissions.canManageAllOrders = false;
+        return;
+      }
+      const { data: managers } = await sb
+        .from('warehouse_managers')
+        .select('can_manage_all_orders')
+        .eq('user_id', userId)
+        .eq('warehouse_id', activeWarehouseId)
+        .limit(1);
+
+      if (managers && managers.length > 0) {
+        userPermissions.canManageAllOrders = !!managers[0].can_manage_all_orders;
+      } else {
+        userPermissions.canManageAllOrders = false;
+      }
     }
 
     function renderAllOrdersTab() {
       const tbody = document.getElementById('all-orders-list');
       if (!tbody) return;
+
+      const bulkBtnContainer = document.getElementById('bulk-edit-container');
+      if (bulkBtnContainer) {
+        bulkBtnContainer.style.display = userPermissions.canManageAllOrders ? 'block' : 'none';
+      }
 
       const headersRow = document.getElementById('table-headers-row');
       if (headersRow) {
@@ -572,9 +610,15 @@
           </div>
         `;
 
+        const deleteButtonHtml = userPermissions.canManageAllOrders ? `
+          <button class="btn btn-outline btn-sm" onclick="window.confirmDeleteTransaction('${t.id}', '${sku}', ${qty}, '${t.status}')" style="height:28px; width:28px; padding:0; display:inline-flex; align-items:center; justify-content:center; border-color:var(--danger); color:var(--danger); cursor:pointer; background:none;" title="Delete Transaction">
+            <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+          </button>
+        ` : '';
+
         const actionHtml = `
           <div style="display:flex; align-items:center; gap:0.5rem;">
-            <select class="btn btn-outline btn-sm" onchange="window.updateOrderStatus(this, '${t.id}', '${sku}', ${qty}, '${t.status}')" style="font-size:0.75rem; padding:0.15rem 0.4rem; height:28px; font-weight:600; cursor:pointer;">
+            <select class="btn btn-outline btn-sm" onchange="window.updateOrderStatus(this, '${t.id}', '${sku}', ${qty}, '${t.status}')" ${userPermissions.canManageAllOrders ? '' : 'disabled'} style="font-size:0.75rem; padding:0.15rem 0.4rem; height:28px; font-weight:600; cursor:pointer;">
               <option value="reserved" ${t.status === 'reserved' ? 'selected' : ''}>Booked (Reserved)</option>
               <option value="inspect" ${t.status === 'inspect' ? 'selected' : ''}>Inspected</option>
               <option value="packed" ${t.status === 'packed' ? 'selected' : ''}>Packed</option>
@@ -582,9 +626,7 @@
               <option value="cancelled" ${t.status === 'cancelled' ? 'selected' : ''}>Cancelled</option>
               <option value="returned" ${t.status === 'returned' ? 'selected' : ''}>Returned</option>
             </select>
-            <button class="btn btn-outline btn-sm" onclick="window.confirmDeleteTransaction('${t.id}', '${sku}', ${qty}, '${t.status}')" style="height:28px; width:28px; padding:0; display:inline-flex; align-items:center; justify-content:center; border-color:var(--danger); color:var(--danger); cursor:pointer; background:none;" title="Delete Transaction">
-              <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
-            </button>
+            ${deleteButtonHtml}
           </div>
         `;
 
