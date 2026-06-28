@@ -262,8 +262,8 @@
           <svg class="dash-nav-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
         </button>
         <div class="dash-nav-children">
-          <a href="/dashboard/warehouse" class="dash-nav-child" data-role="logistics">Warehouse</a>
-          <a href="/dashboard/delivery" class="dash-nav-child" data-role="logistics">Delivery</a>
+          <a href="/dashboard/warehouse/inspect" class="dash-nav-child" data-role="logistics">Warehouse</a>
+          <a href="/dashboard/delivery/book" class="dash-nav-child" data-role="logistics">Delivery</a>
           <a href="/dashboard/shipping-rates" class="dash-nav-child" data-role="logistics">Shipping Rates</a>
           <a href="/dashboard/qa-guide" class="dash-nav-child" data-role="logistics">QA Guide</a>
         </div>
@@ -517,8 +517,8 @@
       if (href && (
         currentPath === href ||
         currentPath === href + '.html' ||
-        (href === '/dashboard/warehouse' && currentPath.startsWith('/dashboard/warehouse')) ||
-        (href === '/dashboard/delivery' && currentPath.startsWith('/dashboard/delivery')) ||
+        (href === '/dashboard/warehouse/inspect' && currentPath.startsWith('/dashboard/warehouse/')) ||
+        (href === '/dashboard/delivery/book' && currentPath.startsWith('/dashboard/delivery/')) ||
         (href === '/dashboard/payout-tracker/payout/' && currentPath.startsWith('/dashboard/payout-tracker/'))
       )) {
         link.classList.add('active');
