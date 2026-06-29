@@ -774,7 +774,7 @@
 
     // Validate ranges
     for (const r of ranges) {
-      if (r.from >= r.to) { showToast('Each range must have start before end.', true); return; }
+      if (r.from === r.to) { showToast('Each range must have a duration of at least 1 hour.', true); return; }
     }
 
     const btn = document.getElementById('btn-save-schedule');
@@ -793,14 +793,36 @@
       const rows = [];
       selectedDays.forEach(day => {
         ranges.forEach(r => {
-          rows.push({
-            company_id:  companyId,
-            employee_id: selectedEmpId,
-            day_of_week: day,
-            hour_start:  r.from,
-            hour_end:    r.to,
-            color:       pickedColor,
-          });
+          if (r.from < r.to) {
+            rows.push({
+              company_id:  companyId,
+              employee_id: selectedEmpId,
+              day_of_week: day,
+              hour_start:  r.from,
+              hour_end:    r.to,
+              color:       pickedColor,
+            });
+          } else {
+            // Crosses midnight! Split into two rows
+            // Row 1: day, r.from to 24
+            rows.push({
+              company_id:  companyId,
+              employee_id: selectedEmpId,
+              day_of_week: day,
+              hour_start:  r.from,
+              hour_end:    24,
+              color:       pickedColor,
+            });
+            // Row 2: (day + 1) % 7, 0 to r.to
+            rows.push({
+              company_id:  companyId,
+              employee_id: selectedEmpId,
+              day_of_week: (day + 1) % 7,
+              hour_start:  0,
+              hour_end:    r.to,
+              color:       pickedColor,
+            });
+          }
         });
       });
 
