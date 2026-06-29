@@ -232,11 +232,12 @@
           <svg class="dash-nav-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
         </button>
         <div class="dash-nav-children">
+          <a href="/dashboard/sales-goals" class="dash-nav-child" data-role="sales">Goals</a>
+          <a href="/dashboard/sales-schedule" class="dash-nav-child" data-role="sales">Schedule</a>
           <a href="/dashboard/sales-commissions" class="dash-nav-child" data-role="sales" style="display: flex; align-items: center; justify-content: space-between;">
             <span>Commissions</span>
             <span id="commissions-badge-dot" style="display: none; width: 6px; height: 6px; border-radius: 50%; background-color: #ef4444;"></span>
           </a>
-          <a href="/dashboard/sales-schedule" class="dash-nav-child" data-role="sales">Schedule</a>
           <a href="/dashboard/sales-inventory" class="dash-nav-child" data-role="sales">Inventory</a>
         </div>
       </div>
