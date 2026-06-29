@@ -35,8 +35,12 @@ export default async function handler(req, res) {
     const fullName = emp ? `${emp.first_name} ${emp.last_name}` : email.split('@')[0];
 
     // 2. Generate Supabase recovery link
-    const origin = 'https://www.brightkeysolutions.com';
-    const redirectTo = `${origin}/admin.html`;
+    let origin = 'https://brightkeysolutions.com';
+    const referer = req.headers.referer || '';
+    if (referer.includes('localhost') || referer.includes('127.0.0.1')) {
+      origin = 'http://localhost:3000';
+    }
+    const redirectTo = `${origin}/admin`;
 
     const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
       type: 'recovery',
