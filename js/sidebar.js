@@ -356,7 +356,7 @@
             <div class="dash-user-email" id="user-email"></div>
             <div id="user-status-container" style="display: flex; align-items: center; gap: 0.35rem; margin-top: 0.25rem;">
               <span id="user-status-dot" style="width: 8px; height: 8px; border-radius: 50%; display: inline-block; background-color: #71717a;"></span>
-              <span id="user-status-text" style="font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted);">Offline</span>
+              <span id="user-status-text" style="font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted);">Time out</span>
             </div>
           </div>
         </div>
@@ -680,15 +680,15 @@
                 if (statusDot && statusText) {
                   if (currentStatus === 'available') {
                     statusDot.style.backgroundColor = '#22c55e'; // Green
-                    statusText.textContent = 'Online';
+                    statusText.textContent = 'Time in';
                     statusText.style.color = '#22c55e';
                   } else if (currentStatus === 'break') {
                     statusDot.style.backgroundColor = '#f97316'; // Orange
-                    statusText.textContent = 'Away';
+                    statusText.textContent = 'Break';
                     statusText.style.color = '#f97316';
                   } else {
                     statusDot.style.backgroundColor = '#ef4444'; // Red
-                    statusText.textContent = 'Offline';
+                    statusText.textContent = 'Time out';
                     statusText.style.color = '#ef4444';
                   }
                 }
