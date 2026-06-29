@@ -775,6 +775,7 @@
       chatInterval: null,
       presenceInterval: null,
       tasks: [],
+      taskCompletions: [],
       milestones: [],
       activeModalMilestoneId: null,
       calendarDate: new Date(),
@@ -1102,20 +1103,86 @@
 
       async loadMyTasks() {
         try {
-          const { data, error } = await BKAuth.sb
-            .from('team_tasks')
-            .select('*')
-            .eq('assigned_to', this.employeeId)
-            .order('created_at', { ascending: true });
+          const [tasksRes, compsRes] = await Promise.all([
+            BKAuth.sb.from('team_tasks').select('*').eq('assigned_to', this.employeeId).order('created_at', { ascending: true }),
+            BKAuth.sb.from('team_task_completions').select('*').eq('employee_id', this.employeeId)
+          ]);
 
-          if (error) throw error;
-          this.tasks = data || [];
+          if (tasksRes.error) throw tasksRes.error;
+          if (compsRes.error) throw compsRes.error;
+
+          this.tasks = tasksRes.data || [];
+          this.taskCompletions = compsRes.data || [];
           this.renderMyTasks();
         } catch (err) {
           console.error('Error loading my tasks:', err);
           document.getElementById('daily-tasks-list').innerHTML = '<div style="color: var(--text-muted); font-size: 0.8rem; font-style: italic; padding: 0.5rem 0.75rem;">Failed to load tasks.</div>';
           document.getElementById('weekly-tasks-list').innerHTML = '<div style="color: var(--text-muted); font-size: 0.8rem; font-style: italic; padding: 0.5rem 0.75rem;">Failed to load tasks.</div>';
           document.getElementById('monthly-tasks-list').innerHTML = '<div style="color: var(--text-muted); font-size: 0.8rem; font-style: italic; padding: 0.5rem 0.75rem;">Failed to load tasks.</div>';
+        }
+      },
+
+      getValidCompletion(taskId) {
+        const task = this.tasks.find(t => t.id === taskId);
+        if (!task) return null;
+
+        const comps = this.taskCompletions.filter(c => c.task_id === taskId);
+        if (comps.length === 0) return null;
+
+        const now = new Date();
+        let boundary = new Date();
+
+        if (task.task_type === 'daily') {
+          boundary = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        } else if (task.task_type === 'weekly') {
+          const day = now.getDay();
+          const diff = (day === 0 ? -6 : 1) - day;
+          boundary = new Date(now.getFullYear(), now.getMonth(), now.getDate() + diff);
+        } else if (task.task_type === 'monthly') {
+          boundary = new Date(now.getFullYear(), now.getMonth(), 1);
+        }
+
+        return comps.find(c => new Date(c.completed_at) >= boundary) || null;
+      },
+
+      isTaskCompleted(taskId) {
+        return this.getValidCompletion(taskId) !== null;
+      },
+
+      async toggleTaskCompletion(taskId, isChecked) {
+        try {
+          const existing = this.getValidCompletion(taskId);
+
+          if (isChecked) {
+            if (!existing) {
+              const { data, error } = await BKAuth.sb
+                .from('team_task_completions')
+                .insert([{
+                  company_id: this.companyId,
+                  task_id: taskId,
+                  employee_id: this.employeeId,
+                  completed_at: new Date().toISOString()
+                }])
+                .select();
+              if (error) throw error;
+              if (data && data.length > 0) {
+                this.taskCompletions.push(data[0]);
+              }
+            }
+          } else {
+            if (existing) {
+              const { error } = await BKAuth.sb
+                .from('team_task_completions')
+                .delete()
+                .eq('id', existing.id);
+              if (error) throw error;
+              this.taskCompletions = this.taskCompletions.filter(c => c.id !== existing.id);
+            }
+          }
+          this.renderMyTasks();
+        } catch (err) {
+          console.error('Error toggling task completion:', err);
+          toast('Failed to update task state. Please try again.', 'error');
         }
       },
 
@@ -1136,10 +1203,18 @@
               ? `<div style="font-size: 0.72rem; font-weight: 600; padding: 0.15rem 0.5rem; background: var(--cyan-dim); color: var(--cyan-light); border: 1px solid var(--cyan-border); border-radius: 4px; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${esc(task.kpi)}">${esc(task.kpi)}</div>`
               : `<div style="font-size: 0.72rem; font-weight: 500; font-style: italic; padding: 0.15rem 0.5rem; background: var(--bg-elevated); color: var(--text-muted); border-radius: 4px;">No KPI</div>`;
 
+            const isCompleted = this.isTaskCompleted(task.id);
+            const checkedAttr = isCompleted ? 'checked' : '';
+
             return `
-              <div class="dashboard-task-item" onclick="App.showTaskDetailModal('${esc(task.id)}')" style="display: flex; justify-content: space-between; align-items: center; padding: 0.65rem 0.85rem; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px; cursor: pointer; transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1); gap: 1rem; box-sizing: border-box;" onmouseover="this.style.borderColor='var(--cyan)'; this.style.transform='translateY(-1px)'; this.style.boxShadow='var(--shadow-sm)';" onmouseout="this.style.borderColor='var(--border)'; this.style.transform='none'; this.style.boxShadow='none';">
-                <div style="font-size: 0.84rem; font-weight: 600; color: var(--text-primary); word-break: break-word; overflow-wrap: break-word; line-height: 1.4;">${esc(task.title)}</div>
-                ${kpiBadge}
+              <div class="dashboard-task-item" style="display: flex; justify-content: space-between; align-items: center; padding: 0.65rem 0.85rem; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px; cursor: pointer; transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1); gap: 1rem; box-sizing: border-box;" onmouseover="this.style.borderColor='var(--cyan)'; this.style.transform='translateY(-1px)'; this.style.boxShadow='var(--shadow-sm)';" onmouseout="this.style.borderColor='var(--border)'; this.style.transform='none'; this.style.boxShadow='none';">
+                <div style="display: flex; align-items: center; gap: 0.75rem; flex: 1; min-width: 0;" onclick="event.stopPropagation()">
+                  <input type="checkbox" ${checkedAttr} onchange="App.toggleTaskCompletion('${esc(task.id)}', this.checked)" style="width: 18px; height: 18px; cursor: pointer; flex-shrink: 0;" />
+                  <div onclick="App.showTaskDetailModal('${esc(task.id)}')" style="font-size: 0.84rem; font-weight: 600; color: var(--text-primary); word-break: break-word; overflow-wrap: break-word; line-height: 1.4; cursor: pointer; flex: 1; min-width: 0;">${esc(task.title)}</div>
+                </div>
+                <div onclick="App.showTaskDetailModal('${esc(task.id)}')" style="cursor: pointer; flex-shrink: 0;">
+                  ${kpiBadge}
+                </div>
               </div>
             `;
           }).join('');
