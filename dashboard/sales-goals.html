@@ -784,6 +784,7 @@
     let currentSelectedMonth = '';
     
     let allEmployees = []; // List of all employees to populate dropdowns
+    let isGoalSettingsChangeAllowed = true;
 
     document.addEventListener("DOMContentLoaded", async () => {
       if (window.BKAuth) {
@@ -983,7 +984,23 @@
       });
 
       // Update visibility of Add Goal button
-      document.getElementById('btn-add-goal').style.display = globalGoals.length >= 5 ? 'none' : 'block';
+      const btnAdd = document.getElementById('btn-add-goal');
+      if (btnAdd) {
+        btnAdd.style.display = globalGoals.length >= 5 ? 'none' : 'block';
+        if (!isGoalSettingsChangeAllowed) {
+          btnAdd.disabled = true;
+          btnAdd.style.opacity = '0.6';
+          btnAdd.style.cursor = 'not-allowed';
+        }
+      }
+
+      if (!isGoalSettingsChangeAllowed) {
+        container.querySelectorAll('input, button').forEach(el => {
+          el.disabled = true;
+          el.style.opacity = '0.6';
+          el.style.cursor = 'not-allowed';
+        });
+      }
     }
 
     window.addNewGoalRow = function() {
@@ -1048,6 +1065,14 @@
           </label>
         `);
       });
+
+      if (!isGoalSettingsChangeAllowed) {
+        container.querySelectorAll('input').forEach(el => {
+          el.disabled = true;
+          el.style.opacity = '0.6';
+          el.style.cursor = 'not-allowed';
+        });
+      }
     };
 
     window.toggleCategorySetting = function(cb, category) {
@@ -1582,7 +1607,9 @@
           }
         }
 
-        if (!isOwnerOrAdmin && !isSalesManager) {
+        isGoalSettingsChangeAllowed = isOwnerOrAdmin || isSalesManager;
+
+        if (!isGoalSettingsChangeAllowed) {
           // Gray out all inputs in settings tab
           const inputs = document.querySelectorAll('#content-settings input, #content-settings select, #content-settings button');
           inputs.forEach(el => {
@@ -1592,10 +1619,10 @@
           });
           
           // Show read-only warning
-          const settingsHeader = document.querySelector('#content-settings .panel-title');
+          const settingsHeader = document.querySelector('#content-settings .goals-header .goals-title-group');
           if (settingsHeader) {
             settingsHeader.insertAdjacentHTML('beforeend', `
-              <span style="font-size: 0.72rem; font-weight: 600; padding: 2px 8px; background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.2); border-radius: 4px; margin-left: 0.75rem;">
+              <span style="font-size: 0.72rem; font-weight: 600; padding: 2px 8px; background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.2); border-radius: 4px; display: inline-block; margin-top: 0.5rem; width: fit-content;">
                 Read-Only Mode
               </span>
             `);
