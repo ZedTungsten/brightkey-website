@@ -967,9 +967,10 @@
       }
 
       globalGoals.forEach((g, idx) => {
+        const displayVal = g.amount ? formatCurrency(g.amount) : '';
         container.insertAdjacentHTML('beforeend', `
           <div class="goal-settings-row">
-            <input type="number" class="form-input goal-amount-input" placeholder="Goal (₱)" style="flex: 1; font-weight:700;" value="${g.amount || ''}" min="0" required />
+            <input type="text" class="form-input goal-amount-input" placeholder="Goal (₱)" style="flex: 1; font-weight:700;" value="${displayVal}" onfocus="onGoalAmountFocus(this)" onblur="onGoalAmountBlur(this)" required />
             <input type="text" class="form-input goal-reward-input" placeholder="Reward Description" style="flex: 2;" value="${escapeHtml(g.reward || '')}" required />
             ${globalGoals.length > 1 ? `
               <button type="button" class="btn-row-remove" onclick="removeGoalRow(${idx})" title="Remove goal row">
@@ -1000,11 +1001,22 @@
       renderSettingsGoalRows();
     };
 
+    window.onGoalAmountFocus = function(input) {
+      const val = input.value.replace(/[^0-9.-]+/g, "");
+      input.value = val ? parseFloat(val) : '';
+    };
+
+    window.onGoalAmountBlur = function(input) {
+      const val = parseFloat(input.value) || 0;
+      input.value = val > 0 ? formatCurrency(val) : '';
+    };
+
     function readGoalRowsFromInputs() {
       const rows = document.querySelectorAll('.goal-settings-row');
       const tempGoals = [];
       rows.forEach(row => {
-        const amt = parseFloat(row.querySelector('.goal-amount-input').value) || 0;
+        const rawVal = row.querySelector('.goal-amount-input').value;
+        const amt = parseFloat(rawVal.replace(/[^0-9.-]+/g, "")) || 0;
         const reward = row.querySelector('.goal-reward-input').value.trim();
         tempGoals.push({ amount: amt, reward: reward });
       });
