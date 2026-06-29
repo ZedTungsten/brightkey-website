@@ -260,7 +260,10 @@
       <div style="font-size: 0.82rem; color: var(--text-secondary); line-height: 1.5; background: var(--bg-elevated); padding: 0.75rem; border-radius: 6px; border: 1px solid var(--border);">
         <div><strong>Order No:</strong> <span id="modal-order-no" style="color: var(--text-primary);"></span></div>
         <div><strong>Name:</strong> <span id="modal-customer-name" style="color: var(--text-primary);"></span></div>
+        <div><strong>Phone:</strong> <span id="modal-customer-phone" style="color: var(--text-primary);"></span></div>
         <div><strong>City:</strong> <span id="modal-customer-city" style="color: var(--text-primary);"></span></div>
+        <div><strong>Province:</strong> <span id="modal-customer-province" style="color: var(--text-primary);"></span></div>
+        <div><strong>Address:</strong> <span id="modal-customer-address" style="color: var(--text-primary);"></span></div>
       </div>
 
       <!-- Packed Photo Display -->
@@ -376,7 +379,7 @@
           this.activeTransactions = txs || [];
 
           const { data: bData, error: bErr } = await sb.from('installation_bookings')
-            .select('order_no, scheduled_date');
+            .select('order_no, scheduled_date, customer_address, customer_phone');
           if (bErr) throw bErr;
           this.bookings = bData || [];
 
@@ -515,10 +518,21 @@
         const matchingTx = this.activeTransactions.find(t => t.reference_id === referenceId);
         if (!matchingTx) return;
 
+        const booking = this.bookings.find(b => b.order_no === referenceId);
+        const addressParts = (booking?.customer_address || '').split(',');
+        let city = matchingTx.customer_city || 'N/A';
+        let province = 'N/A';
+        if (addressParts.length >= 2) {
+          city = addressParts[addressParts.length - 2].trim();
+          province = addressParts[addressParts.length - 1].trim();
+        } else if (booking?.customer_address) {
+          city = booking.customer_address;
+        }
+
         this.selectedOrder = {
           reference_id: referenceId,
           customer_name: matchingTx.customer_name || 'N/A',
-          customer_city: matchingTx.customer_city || 'N/A',
+          customer_city: city,
           packed_photo_url: matchingTx.packed_photo_url || '',
           items: this.activeTransactions.filter(t => t.reference_id === referenceId && t.status === 'packed')
         };
@@ -527,7 +541,10 @@
 
         document.getElementById('modal-order-no').textContent = referenceId;
         document.getElementById('modal-customer-name').textContent = this.selectedOrder.customer_name;
-        document.getElementById('modal-customer-city').textContent = this.selectedOrder.customer_city;
+        document.getElementById('modal-customer-phone').textContent = booking?.customer_phone || 'N/A';
+        document.getElementById('modal-customer-city').textContent = city;
+        document.getElementById('modal-customer-province').textContent = province;
+        document.getElementById('modal-customer-address').textContent = booking?.customer_address || 'N/A';
 
         const photoContainer = document.getElementById('modal-packed-photo-container');
         const photoImg = document.getElementById('modal-packed-photo');
