@@ -549,11 +549,25 @@
     list.querySelectorAll('.range-from').forEach(sel => {
       sel.addEventListener('change', e => {
         ranges[+e.target.dataset.idx].from = +e.target.value;
+        e.target.style.border = '';
+        e.target.style.boxShadow = '';
+        const toSel = e.target.parentElement.querySelector('.range-to');
+        if (toSel) {
+          toSel.style.border = '';
+          toSel.style.boxShadow = '';
+        }
       });
     });
     list.querySelectorAll('.range-to').forEach(sel => {
       sel.addEventListener('change', e => {
         ranges[+e.target.dataset.idx].to = +e.target.value;
+        e.target.style.border = '';
+        e.target.style.boxShadow = '';
+        const fromSel = e.target.parentElement.querySelector('.range-from');
+        if (fromSel) {
+          fromSel.style.border = '';
+          fromSel.style.boxShadow = '';
+        }
       });
     });
     list.querySelectorAll('.btn-remove-range').forEach(btn => {
@@ -773,8 +787,28 @@
     if (ranges.length === 0)     { showToast('Add at least one time range.', true); return; }
 
     // Validate ranges
-    for (const r of ranges) {
-      if (r.from === r.to) { showToast('Each range must have a duration of at least 1 hour.', true); return; }
+    let hasError = false;
+    document.querySelectorAll('.time-select').forEach(sel => {
+      sel.style.border = '';
+      sel.style.boxShadow = '';
+    });
+
+    ranges.forEach((r, idx) => {
+      if (r.from >= r.to) {
+        hasError = true;
+        const row = document.querySelector(`.range-row[data-idx="${idx}"]`);
+        if (row) {
+          row.querySelectorAll('.time-select').forEach(sel => {
+            sel.style.setProperty('border', '1.5px solid #ef4444', 'important');
+            sel.style.setProperty('box-shadow', '0 0 0 2px rgba(239, 68, 68, 0.15)', 'important');
+          });
+        }
+      }
+    });
+
+    if (hasError) {
+      showToast('Each range must have start before end.', true);
+      return;
     }
 
     const btn = document.getElementById('btn-save-schedule');
@@ -793,36 +827,14 @@
       const rows = [];
       selectedDays.forEach(day => {
         ranges.forEach(r => {
-          if (r.from < r.to) {
-            rows.push({
-              company_id:  companyId,
-              employee_id: selectedEmpId,
-              day_of_week: day,
-              hour_start:  r.from,
-              hour_end:    r.to,
-              color:       pickedColor,
-            });
-          } else {
-            // Crosses midnight! Split into two rows
-            // Row 1: day, r.from to 24
-            rows.push({
-              company_id:  companyId,
-              employee_id: selectedEmpId,
-              day_of_week: day,
-              hour_start:  r.from,
-              hour_end:    24,
-              color:       pickedColor,
-            });
-            // Row 2: (day + 1) % 7, 0 to r.to
-            rows.push({
-              company_id:  companyId,
-              employee_id: selectedEmpId,
-              day_of_week: (day + 1) % 7,
-              hour_start:  0,
-              hour_end:    r.to,
-              color:       pickedColor,
-            });
-          }
+          rows.push({
+            company_id:  companyId,
+            employee_id: selectedEmpId,
+            day_of_week: day,
+            hour_start:  r.from,
+            hour_end:    r.to,
+            color:       pickedColor,
+          });
         });
       });
 
