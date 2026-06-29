@@ -713,7 +713,12 @@
   <div class="modal-overlay" id="details-modal" onclick="closeDetailsModal()">
     <div class="modal-sheet" onclick="event.stopPropagation()">
       <div class="modal-header">
-        <h3 class="modal-title">Installation Details</h3>
+        <div style="display:flex; align-items:center; gap:0.5rem;">
+          <h3 class="modal-title">Installation Details</h3>
+          <span id="det-device-received-badge" style="display:none; font-size:0.68rem; font-weight:700; background:#F97316; color:#fff; padding:0.15rem 0.4rem; border-radius:4px; text-transform:uppercase; letter-spacing:0.02em; line-height:1.2;">
+            Device Received
+          </span>
+        </div>
         <button class="modal-close" onclick="closeDetailsModal()"><svg aria-hidden="true" viewBox="0 0 24 24" style="width:1em;height:1em;display:block;fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
       </div>
 
@@ -903,6 +908,7 @@
     // State variables
     let currentInstaller = null; // { id, first_name, last_name, company_id, password }
     let dbBookings = [];
+    let deliveryBookingsMap = {};
 
     const defaultChecklist = [
       { text: "Door opens and closes smoothly without obstruction", indent: false },
@@ -1200,6 +1206,13 @@
           bookingMediaRequirements = JSON.parse(cachedMediaReqs);
         } catch (_) {}
       }
+
+      const cachedDelivery = localStorage.getItem('bk_delivery_bookings_map');
+      if (cachedDelivery) {
+        try {
+          deliveryBookingsMap = JSON.parse(cachedDelivery);
+        } catch (_) {}
+      }
     }
 
     async function syncData() {
@@ -1252,6 +1265,23 @@
           .eq('company_id', currentInstaller.company_id);
 
         if (error) throw error;
+
+        // Fetch delivery bookings to map order_no/reference_id to status
+        try {
+          const { data: delivData } = await sb
+            .from('delivery_bookings')
+            .select('reference_id, status')
+            .eq('company_id', currentInstaller.company_id);
+          deliveryBookingsMap = {};
+          if (delivData) {
+            delivData.forEach(d => {
+              deliveryBookingsMap[d.reference_id] = d.status;
+            });
+          }
+          localStorage.setItem('bk_delivery_bookings_map', JSON.stringify(deliveryBookingsMap));
+        } catch (delivErr) {
+          console.error('Error syncing delivery bookings map:', delivErr);
+        }
 
         // Filter bookings client side where installer is assigned to the booking or any of its doors
         const myId = currentInstaller.id;
@@ -1568,10 +1598,21 @@
           badgesHtml += `</div>`;
         }
 
+        const isDeviceReceived = deliveryBookingsMap[b.order_no] === 'delivered';
+        let deviceBadgeHtml = '';
+        if (isDeviceReceived) {
+          deviceBadgeHtml = `
+            <span style="font-size:0.68rem; font-weight:700; background:#F97316; color:#fff; padding:0.15rem 0.4rem; border-radius:4px; text-transform:uppercase; letter-spacing:0.02em; line-height:1.2;">
+              Device Received
+            </span>
+          `;
+        }
+
         list.insertAdjacentHTML('beforeend', `
           <div class="${cardClass}" onclick="openDetailsModal('${b.id}')">
             <div class="booking-card-top">
               <span class="booking-time">${escapeHtml(timeVal)}</span>
+              ${deviceBadgeHtml}
             </div>
             ${badgesHtml}
             <div class="booking-client">${escapeHtml(b.customer_name)}</div>
@@ -1593,6 +1634,12 @@
       if (!b) return;
 
       selectedBooking = b;
+
+      const isDeviceReceived = deliveryBookingsMap[b.order_no] === 'delivered';
+      const badgeEl = document.getElementById('det-device-received-badge');
+      if (badgeEl) {
+        badgeEl.style.display = isDeviceReceived ? 'inline-block' : 'none';
+      }
 
       document.getElementById('det-date').innerText = b.scheduled_date ? formatDateFriendly(b.scheduled_date) : 'N/A';
       document.getElementById('det-time').innerText = b.scheduled_time || 'AM Slot';
