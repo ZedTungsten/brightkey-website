@@ -1259,11 +1259,16 @@
       if (!email) return;
       showConfirmModal('Are you sure you want to send a reset password email to ' + email + '?', async () => {
         try {
-          const { error } = await sb.auth.resetPasswordForEmail(email, {
-            redirectTo: window.location.origin + '/login.html'
+          const res = await fetch('/api/send-reset-password', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email })
           });
-          if (error) throw error;
-          showToast('Password reset email sent to ' + email + '.');
+          const data = await res.json();
+          if (!res.ok) {
+            throw new Error(data.error || 'Failed to send reset password email.');
+          }
+          showToast(data.email_sent ? 'Password reset email sent to ' + email + '.' : 'Password reset link generated successfully.');
         } catch (err) {
           console.error('Reset password error:', err);
           showToast('Failed to send reset password email: ' + err.message, true);
