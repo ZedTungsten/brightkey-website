@@ -569,10 +569,11 @@
                       <th>SKU</th>
                       <th>Qty</th>
                       <th>Packed Date</th>
+                      <th style="width: 120px; text-align: center;">Action</th>
                     </tr>
                   </thead>
                   <tbody id="dispatch-list">
-                    <tr><td colspan="8" class="text-center text-muted" style="padding:2rem 0;">No items waiting to be dispatched.</td></tr>
+                    <tr><td colspan="9" class="text-center text-muted" style="padding:2rem 0;">No items waiting to be dispatched.</td></tr>
                   </tbody>
                 </table>
               </div>
@@ -631,6 +632,72 @@
     </div>
   </div>
 
+  <!-- Modal: Confirm Delivery Pickup -->
+  <div id="pickup-modal" class="modal-overlay" onclick="closePickupModalOuter(event)">
+    <div class="modal" onclick="event.stopPropagation()" style="max-width: 550px; background: var(--bg-surface); padding: 1.5rem; border-radius: 8px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border); padding-bottom:1rem; margin-bottom:1rem;">
+        <h3 class="modal-title" style="font-size:1.1rem; font-weight:700; color:var(--text-primary);">Confirm Delivery Pickup</h3>
+      </div>
+      
+      <!-- Order details card -->
+      <div style="font-size: 0.82rem; color: var(--text-secondary); line-height: 1.5; background: var(--bg-elevated); padding: 0.75rem; border-radius: 6px; border: 1px solid var(--border); margin-bottom:1rem;">
+        <div><strong>Order No:</strong> <span id="pmodal-order-no" style="color: var(--text-primary); font-weight:600;"></span></div>
+        <div><strong>Name:</strong> <span id="pmodal-customer-name" style="color: var(--text-primary);"></span></div>
+        <div><strong>City:</strong> <span id="pmodal-customer-city" style="color: var(--text-primary);"></span></div>
+      </div>
+
+      <!-- Fees editing area -->
+      <div class="form-group" style="margin-bottom:1rem;">
+        <label class="form-label" style="margin-bottom: 0.25rem; font-size:0.75rem; font-weight:700; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.05em;">Confirm / Edit Delivery Fees</label>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; background: var(--bg-elevated); padding: 1rem; border-radius: 8px; border: 1px solid var(--border);">
+          <!-- Base Fee -->
+          <div class="form-group">
+            <label class="form-label" style="font-size: 0.7rem; color: var(--text-muted);">Base Fee (₱)</label>
+            <input type="number" id="p-base-fee" class="form-input" placeholder="0.00" step="0.01" min="0" style="background:var(--bg-surface); border:1px solid var(--border);" />
+          </div>
+
+          <!-- Tip 1 -->
+          <div class="form-group">
+            <label class="form-label" style="font-size: 0.7rem; color: var(--text-muted);">Tip 1 (₱)</label>
+            <input type="number" id="p-tip-1" class="form-input" placeholder="0.00" step="0.01" min="0" style="background:var(--bg-surface); border:1px solid var(--border);" />
+          </div>
+
+          <!-- Tip 2 -->
+          <div class="form-group">
+            <label class="form-label" style="font-size: 0.7rem; color: var(--text-muted);">Tip 2 (₱)</label>
+            <input type="number" id="p-tip-2" class="form-input" placeholder="0.00" step="0.01" min="0" style="background:var(--bg-surface); border:1px solid var(--border);" />
+          </div>
+
+          <!-- Toll -->
+          <div class="form-group">
+            <label class="form-label" style="font-size: 0.7rem; color: var(--text-muted);">Toll (₱)</label>
+            <input type="number" id="p-toll" class="form-input" placeholder="0.00" step="0.01" min="0" style="background:var(--bg-surface); border:1px solid var(--border);" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Single Upload Pickup Photo -->
+      <div class="form-group" style="margin-bottom:1rem;">
+        <label class="form-label" style="font-size:0.75rem; font-weight:700; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:0.25rem;">Upload Pickup Photo (1 image: Picked up)</label>
+        <div id="pickup-upload-container" style="width:100%; aspect-ratio:16/10; background:var(--bg-elevated); border:2px dashed var(--border); border-radius:8px; display:flex; flex-direction:column; align-items:center; justify-content:center; overflow:hidden; position:relative; cursor:pointer;" onclick="document.getElementById('pickup-file-input').click()">
+          <img id="pickup-photo-preview" src="" style="width:100%; height:100%; object-fit:cover; display:none;" />
+          
+          <div id="pickup-upload-placeholder" style="display:flex; flex-direction:column; align-items:center; gap:0.5rem; color:var(--text-muted); text-align:center; padding:1rem;">
+            <svg viewBox="0 0 24 24" width="28" height="28" stroke="currentColor" stroke-width="1.5" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+            <span style="font-size:0.78rem; font-weight:600;">Drag & drop photo here or click to select</span>
+          </div>
+          <input type="file" id="pickup-file-input" accept="image/*" style="display:none;" onchange="handlePickupFileSelect(event)" />
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div style="display: flex; justify-content: flex-end; gap: 0.75rem; border-top: 1px solid var(--border); padding-top: 1rem; margin-top: 0.25rem;">
+        <button type="button" class="btn btn-outline" onclick="closePickupModal()" style="height:36px; font-size:0.82rem; padding:0 1.25rem;">Cancel</button>
+        <button type="button" id="btn-confirm-pickup" class="btn btn-cyan" onclick="confirmPickup()" disabled style="height:36px; font-size:0.82rem; padding:0 1.25rem;">Confirm Pickup</button>
+      </div>
+    </div>
+  </div>
+
   
   </div>
 
@@ -663,6 +730,7 @@
     let isEditingAvailable = false;
     let activeTransactions = [];
     let bookings = [];
+    let dbDeliveryBookings = [];
     let warehouseTransfers = [];
     let allEmployees = [];
     let companyId = null;
@@ -895,11 +963,16 @@
         ? sb.from('warehouse_transfers').select('*')
         : Promise.resolve({ data: [], error: null });
 
+      const deliveryQuery = companyId
+        ? sb.from('delivery_bookings').select('*')
+        : Promise.resolve({ data: [], error: null });
+
       const [
         { data: invData, error: invErr },
         { data: txData, error: txErr },
-        { data: transData, error: transErr }
-      ] = await Promise.all([invQuery, txQuery, transferQuery]);
+        { data: transData, error: transErr },
+        { data: delivData, error: delivErr }
+      ] = await Promise.all([invQuery, txQuery, transferQuery, deliveryQuery]);
 
       if (invErr) throw invErr;
       if (txErr) throw txErr;
@@ -909,6 +982,7 @@
         allInventory[row.sku] = row;
       });
       activeTransactions = txData || [];
+      dbDeliveryBookings = delivData || [];
       if (transErr) {
         console.error('Failed to fetch warehouse transfers:', transErr);
         warehouseTransfers = [];
@@ -1477,6 +1551,11 @@
                 <td ${innerCellBorder}><code>${item.sku}</code></td>
                 <td ${innerCellBorder}><strong>${item.quantity}</strong></td>
                 <td rowspan="${rowSpan}" style="vertical-align: middle; border-bottom: 1px solid var(--border);">${date}</td>
+                <td rowspan="${rowSpan}" style="vertical-align: middle; border-bottom: 1px solid var(--border); text-align: center;">
+                  <button class="btn btn-primary" onclick="openPickupModal('${group.reference_id}', '${escFulfillment(group.customer_name)}', '${escFulfillment(group.customer_city)}')" style="padding: 0.3rem 0.6rem; font-size: 0.75rem;">
+                    Picked up
+                  </button>
+                </td>
               </tr>
             `;
           } else {
@@ -2284,6 +2363,189 @@
     
 
     
+
+    // ── PICKUP LOGISTICS FOR DISPATCH ──
+    let pickupPhotoBlob = null;
+    let pickupOrderReferenceId = null;
+    let pickupCustomerName = "";
+    let pickupCustomerCity = "";
+
+    async function blobToBase64(blob) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    }
+
+    window.openPickupModal = function(referenceId, customerName, customerCity) {
+      pickupOrderReferenceId = referenceId;
+      pickupCustomerName = customerName;
+      pickupCustomerCity = customerCity;
+
+      document.getElementById('pmodal-order-no').textContent = referenceId;
+      document.getElementById('pmodal-customer-name').textContent = customerName;
+      document.getElementById('pmodal-customer-city').textContent = customerCity;
+
+      // Reset fields
+      document.getElementById('p-base-fee').value = '';
+      document.getElementById('p-tip-1').value = '';
+      document.getElementById('p-tip-2').value = '';
+      document.getElementById('p-toll').value = '';
+
+      // Find existing delivery booking to prefill
+      const existing = dbDeliveryBookings.find(b => b.reference_id === referenceId);
+      if (existing) {
+        document.getElementById('p-base-fee').value = existing.base_fee ? (existing.base_fee / 100).toFixed(2) : '';
+        document.getElementById('p-tip-1').value = existing.tip_1 ? (existing.tip_1 / 100).toFixed(2) : '';
+        document.getElementById('p-tip-2').value = existing.tip_2 ? (existing.tip_2 / 100).toFixed(2) : '';
+        document.getElementById('p-toll').value = existing.toll ? (existing.toll / 100).toFixed(2) : '';
+      }
+
+      // Reset upload preview
+      pickupPhotoBlob = null;
+      document.getElementById('pickup-photo-preview').style.display = 'none';
+      document.getElementById('pickup-photo-preview').src = '';
+      document.getElementById('pickup-upload-placeholder').style.display = 'flex';
+      document.getElementById('pickup-file-input').value = '';
+      document.getElementById('btn-confirm-pickup').disabled = true;
+
+      document.getElementById('pickup-modal').classList.add('open');
+    };
+
+    window.closePickupModal = function() {
+      document.getElementById('pickup-modal').classList.remove('open');
+    };
+
+    window.closePickupModalOuter = function(e) {
+      if (e.target.id === 'pickup-modal') {
+        closePickupModal();
+      }
+    };
+
+    window.handlePickupFileSelect = function(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      pickupPhotoBlob = file;
+
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        document.getElementById('pickup-photo-preview').src = evt.target.result;
+        document.getElementById('pickup-photo-preview').style.display = 'block';
+        document.getElementById('pickup-upload-placeholder').style.display = 'none';
+        document.getElementById('btn-confirm-pickup').disabled = false;
+      };
+      reader.readAsDataURL(file);
+    };
+
+    window.confirmPickup = async function() {
+      if (!pickupPhotoBlob || !pickupOrderReferenceId) return;
+      const btn = document.getElementById('btn-confirm-pickup');
+      btn.disabled = true;
+      btn.innerHTML = `<svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: -2px; margin-right: 6px; animation: spin 1s linear infinite;"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Uploading...`;
+
+      try {
+        const base64 = await blobToBase64(pickupPhotoBlob);
+        const fileName = `pickup_${pickupOrderReferenceId}_${Date.now()}.jpg`;
+
+        // 1. Upload the handover/pickup screenshot
+        const r = await fetch('/api/upload', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fileBase64: base64,
+            fileName: fileName,
+            category: 'installations',
+            refId: pickupOrderReferenceId,
+            type: 'proof',
+            companyId: companyId || 'general'
+          })
+        });
+
+        if (!r.ok) throw new Error('Photo upload failed');
+        const uploadResult = await r.json();
+
+        // Parse fees
+        const baseVal = Math.round((parseFloat(document.getElementById('p-base-fee').value) || 0) * 100);
+        const t1Val = Math.round((parseFloat(document.getElementById('p-tip-1').value) || 0) * 100);
+        const t2Val = Math.round((parseFloat(document.getElementById('p-tip-2').value) || 0) * 100);
+        const tollVal = Math.round((parseFloat(document.getElementById('p-toll').value) || 0) * 100);
+
+        const now = new Date().toISOString();
+
+        // 2. Insert or update delivery_bookings
+        const existing = dbDeliveryBookings.find(b => b.reference_id === pickupOrderReferenceId);
+        if (existing) {
+          const { error: dbErr } = await sb.from('delivery_bookings').update({
+            status: 'picked_up',
+            pickup_photos: [uploadResult.url],
+            picked_up_at: now,
+            base_fee: baseVal,
+            tip_1: t1Val,
+            tip_2: t2Val,
+            toll: tollVal
+          }).eq('id', existing.id);
+          if (dbErr) throw dbErr;
+        } else {
+          const { error: dbErr } = await sb.from('delivery_bookings').insert([{
+            company_id: companyId,
+            reference_id: pickupOrderReferenceId,
+            customer_name: pickupCustomerName,
+            customer_city: pickupCustomerCity,
+            status: 'picked_up',
+            pickup_photos: [uploadResult.url],
+            picked_up_at: now,
+            base_fee: baseVal,
+            tip_1: t1Val,
+            tip_2: t2Val,
+            toll: tollVal
+          }]);
+          if (dbErr) throw dbErr;
+        }
+
+        // 3. Mark all transactions for this reference_id as 'dispatched'
+        const txsToDispatch = activeTransactions.filter(t => 
+          t.reference_id === pickupOrderReferenceId && 
+          t.status === 'packed' && 
+          t.type === 'customer_order'
+        );
+
+        for (const tx of txsToDispatch) {
+          const { error: txErr } = await sb.from('inventory_transactions').update({
+            status: 'dispatched',
+            timestamp_dispatched: now
+          }).eq('id', tx.id);
+          if (txErr) throw txErr;
+
+          // Adjust inventory stock levels
+          let invQDisp = sb.from('inventory').select('*').eq('sku', tx.sku);
+          if (activeWarehouseId) invQDisp = invQDisp.eq('warehouse_id', activeWarehouseId);
+          else invQDisp = invQDisp.is('warehouse_id', null);
+          
+          const { data: invRow, error: invErr } = await invQDisp;
+          if (invErr) throw invErr;
+          if (invRow && invRow.length > 0) {
+            const inv = invRow[0];
+            const { error: updErr } = await sb.from('inventory').update({
+              packed: Math.max(0, inv.packed - tx.quantity),
+              dispatched: inv.dispatched + tx.quantity
+            }).eq('id', inv.id);
+            if (updErr) throw updErr;
+          }
+        }
+
+        showToast(`Order ${pickupOrderReferenceId} successfully marked as picked up!`);
+        closePickupModal();
+        await refreshDashboard();
+      } catch (err) {
+        console.error(err);
+        showToast('Failed to confirm pickup: ' + err.message, true);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = 'Confirm Pickup';
+      }
+    };
 
     // Run Initial Load
     init();
