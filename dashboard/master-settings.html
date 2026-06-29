@@ -209,12 +209,13 @@
                     <th>Owner Email</th>
                     <th>Company</th>
                     <th>Subdomain</th>
+                    <th>Used so far (GB)</th>
                     <th style="width: 180px;">Storage Limit (GB)</th>
                     <th style="width: 90px; text-align: center;">Action</th>
                   </tr>
                 </thead>
                 <tbody id="storage-alloc-body">
-                  <tr><td colspan="5" style="text-align:center; color:var(--text-muted); padding:2rem;">Loading tenants...</td></tr>
+                  <tr><td colspan="6" style="text-align:center; color:var(--text-muted); padding:2rem;">Loading tenants...</td></tr>
                 </tbody>
               </table>
             </div>
@@ -722,16 +723,54 @@
       }
     }
 
+    async function calculateUsage(companyId, elementId) {
+      const el = document.getElementById(elementId);
+      if (!el) return;
+      try {
+        let totalBytes = 0;
+        const buckets = ['brightkey-assets', 'brightkey-internal'];
+        
+        async function traverse(bucket, path) {
+          const { data: files, error } = await sb.storage.from(bucket).list(path, {
+            limit: 100
+          });
+          if (error) {
+            console.warn('Error listing:', path, error);
+            return;
+          }
+          if (!files) return;
+          
+          for (const file of files) {
+            if (file.id === null) {
+              await traverse(bucket, `${path}/${file.name}`);
+            } else {
+              totalBytes += file.metadata?.size || 0;
+            }
+          }
+        }
+
+        for (const bucket of buckets) {
+          await traverse(bucket, `companies/${companyId}`);
+        }
+
+        const gb = (totalBytes / (1024 * 1024 * 1024)).toFixed(3);
+        el.textContent = `${gb} GB`;
+      } catch (e) {
+        console.error(e);
+        el.textContent = 'Error';
+      }
+    }
+
     async function loadStorageAlloc() {
       const tbody = document.getElementById('storage-alloc-body');
       if (!tbody) return;
-      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:2rem;">Loading...</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:2rem;">Loading...</td></tr>';
       try {
         // Fetch all tenants
         const { data: tenants, error: tErr } = await sb.from('tenants').select('id, owner_email, storage_limit_mb').order('created_at');
         if (tErr) throw tErr;
         if (!tenants || tenants.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:2rem;">No tenants found.</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:2rem;">No tenants found.</td></tr>';
           return;
         }
         // Fetch all companies
@@ -749,6 +788,9 @@
             <td>${co ? escapeHtml(co.name) : '<span style="color:var(--text-muted);">—</span>'}</td>
             <td><code style="font-size:0.78rem;background:var(--bg-elevated);padding:0.1rem 0.35rem;border-radius:3px;">${co ? escapeHtml(co.subdomain || '—') : '—'}</code></td>
             <td>
+              <span id="used-loader-${escapeHtml(t.id)}" style="font-size:0.82rem;font-weight:600;color:var(--text-secondary);">Calculating...</span>
+            </td>
+            <td>
               <div style="display:flex;align-items:center;gap:0.4rem;">
                 <input type="number" id="gb-input-${escapeHtml(t.id)}" value="${gbVal}" min="0.5" step="0.5"
                   style="width:80px;padding:0.35rem 0.5rem;border:1px solid var(--border);border-radius:5px;font-size:0.82rem;background:var(--bg-base);color:var(--text-primary);" />
@@ -762,10 +804,16 @@
             </td>
           `;
           tbody.appendChild(tr);
+          
+          if (co) {
+            calculateUsage(co.id, `used-loader-${t.id}`);
+          } else {
+            document.getElementById(`used-loader-${t.id}`).textContent = '0.000 GB';
+          }
         });
       } catch (err) {
         console.error('loadStorageAlloc:', err);
-        tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:var(--danger);padding:2rem;">Failed to load: ${escapeHtml(err.message)}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--danger);padding:2rem;">Failed to load: ${escapeHtml(err.message)}</td></tr>`;
       }
     }
 
