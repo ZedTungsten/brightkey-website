@@ -832,7 +832,7 @@
         ? sb.from('warehouse_transfers').select('*')
         : Promise.resolve({ data: [], error: null });
 
-      const bookingsQuery = sb.from('installation_bookings').select('order_no, scheduled_date');
+      const bookingsQuery = sb.from('installation_bookings').select('order_no, scheduled_date, scheduled_time');
 
       const [
         { data: invData, error: invErr },
@@ -1380,6 +1380,7 @@
             customer_city: t.customer_city || 'N/A',
             timestamp_reserved: t.timestamp_reserved || t.created_at,
             install_date: booking?.scheduled_date ? new Date(booking.scheduled_date) : null,
+            scheduled_time: booking?.scheduled_time || '',
             items: []
           };
         }
@@ -1391,7 +1392,15 @@
 
       const orderGroups = Object.values(groups).sort((a, b) => {
         if (a.install_date && b.install_date) {
-          return a.install_date.getTime() - b.install_date.getTime();
+          const dateDiff = a.install_date.getTime() - b.install_date.getTime();
+          if (dateDiff !== 0) return dateDiff;
+
+          // Same day: compare time slots (Morning/AM first)
+          const aPM = a.scheduled_time.toLowerCase().includes('pm') || a.scheduled_time.toLowerCase().includes('afternoon');
+          const bPM = b.scheduled_time.toLowerCase().includes('pm') || b.scheduled_time.toLowerCase().includes('afternoon');
+          if (aPM && !bPM) return 1;
+          if (!aPM && bPM) return -1;
+          return 0;
         }
         if (a.install_date) return -1;
         if (b.install_date) return 1;
@@ -1404,7 +1413,13 @@
       orderGroups.forEach(group => {
         const rowSpan = group.items.length;
         const dateOnly = group.timestamp_reserved ? new Date(group.timestamp_reserved).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
-        const installDateFriendly = group.install_date ? group.install_date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
+        
+        let installDateFriendly = '—';
+        if (group.install_date) {
+          const formatted = group.install_date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+          const isPM = group.scheduled_time.toLowerCase().includes('pm') || group.scheduled_time.toLowerCase().includes('afternoon');
+          installDateFriendly = formatted + (isPM ? ' Afternoon' : ' Morning');
+        }
 
         group.items.forEach((item, idx) => {
           const p = allProducts.find(prod => prod.sku === item.sku) || { title: 'Unknown Product', image_main: '' };
