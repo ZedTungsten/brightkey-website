@@ -389,7 +389,7 @@
             <button class="tab-btn" id="tab-access" onclick="switchTab('access')">Access</button>
             <button class="tab-btn" id="tab-assignments" onclick="switchTab('assignments')">Assignments</button>
             <button class="tab-btn" id="tab-warehouse" onclick="switchTab('warehouse')">Warehouse</button>
-            <button class="tab-btn" id="tab-commissions" onclick="switchTab('commissions')">Commissions</button>
+            <button class="tab-btn" id="tab-commissions" onclick="switchTab('commissions')">Sales</button>
             <button class="tab-btn" id="tab-hr" onclick="switchTab('hr')">HR</button>
             <button class="tab-btn" id="tab-booking" onclick="switchTab('booking')">Booking</button>
           </div>
@@ -656,6 +656,38 @@
                   <div>
                     <button class="btn btn-outline btn-sm" onclick="addAdjustmentRow()">+ Add Adjustment</button>
                   </div>
+                </div>
+                
+                <!-- Section: Sales Managers & Permissions -->
+                <div class="wh-card" style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1.25rem; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px; margin-top: 1.5rem;">
+                  <h3 style="font-size: 0.95rem; font-weight: 700; color: var(--text-primary); border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; margin-bottom: 0.5rem;">Sales Managers &amp; Permissions</h3>
+                  <div style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.5rem;">
+                    Assigned Sales Managers have permission to change Goal Settings.
+                  </div>
+                  
+                  <div style="display: flex; gap: 1rem; align-items: flex-end; max-width: 500px; margin-bottom: 0.75rem;">
+                    <div class="form-group" style="flex: 2;">
+                      <label class="form-label" style="font-size: 0.65rem;">Select Employee</label>
+                      <select id="sales-manager-select" class="form-select">
+                        <option value="">-- Select Employee --</option>
+                      </select>
+                    </div>
+                    <button class="btn btn-outline" onclick="assignSalesManager()" style="height: 38px;">+ Assign</button>
+                  </div>
+
+                  <!-- Assigned Sales Managers List -->
+                  <table class="wh-managers-table" style="max-width: 500px;">
+                    <thead>
+                      <tr>
+                        <th>Sales Manager</th>
+                        <th>Permission</th>
+                        <th style="width: 80px; text-align: right;">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody id="sales-managers-tbody">
+                      <!-- List will be loaded dynamically -->
+                    </tbody>
+                  </table>
                 </div>
 
               </div>
@@ -956,6 +988,8 @@
       }
 
       await loadCommissionsSettings();
+      await loadSalesManagers();
+      await populateSalesManagersDropdown();
       await loadHRSettings();
       await loadCompanySettings();
       await loadBookingSettings();
@@ -2389,6 +2423,128 @@
         showToast('Failed to save commissions settings.', true);
       }
     };
+    
+    // ── Sales Managers & Permissions Logic ──
+    let salesManagers = [];
+
+    async function loadSalesManagers() {
+      try {
+        const { data } = await sb
+          .from('global_settings')
+          .select('value')
+          .eq('key', 'sales_managers')
+          .eq('company_id', currentCompanyId)
+          .maybeSingle();
+
+        if (data?.value && Array.isArray(data.value.managers)) {
+          salesManagers = data.value.managers;
+        } else {
+          salesManagers = [];
+        }
+        
+        await renderSalesManagersTable();
+      } catch(e) {
+        console.error('Error loading sales managers:', e);
+      }
+    }
+
+    async function renderSalesManagersTable() {
+      const tbody = document.getElementById('sales-managers-tbody');
+      if (!tbody) return;
+      tbody.innerHTML = '';
+
+      if (salesManagers.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="3" style="text-align: center; color: var(--text-muted); padding: 1rem;">No sales managers assigned.</td></tr>';
+        return;
+      }
+
+      // Fetch names of these employees to be sure
+      const { data: emps } = await sb
+        .from('employees')
+        .select('id, first_name, last_name')
+        .in('id', salesManagers);
+
+      const empMap = {};
+      if (emps) {
+        emps.forEach(e => { empMap[e.id] = `${e.first_name} ${e.last_name}`; });
+      }
+
+      salesManagers.forEach(empId => {
+        const name = empMap[empId] || 'Unknown Employee';
+        tbody.insertAdjacentHTML('beforeend', `
+          <tr>
+            <td><span style="font-weight: 600;">${escapeHtml(name)}</span></td>
+            <td><span class="badge badge-cyan" style="font-size:0.7rem;">Goal Settings change</span></td>
+            <td style="text-align: right;">
+              <button class="btn btn-danger" style="padding: 0.28rem 0.55rem; font-size: 0.73rem;" onclick="removeSalesManager('${empId}')">Remove</button>
+            </td>
+          </tr>
+        `);
+      });
+    }
+
+    window.assignSalesManager = async function() {
+      const select = document.getElementById('sales-manager-select');
+      const empId = select.value;
+      if (!empId) return;
+
+      if (salesManagers.includes(empId)) {
+        showToast('Employee is already assigned as a Sales Manager.', true);
+        return;
+      }
+
+      salesManagers.push(empId);
+      await saveSalesManagers();
+    };
+
+    window.removeSalesManager = async function(empId) {
+      salesManagers = salesManagers.filter(id => id !== empId);
+      await saveSalesManagers();
+    };
+
+    async function saveSalesManagers() {
+      try {
+        const { error } = await sb
+          .from('global_settings')
+          .upsert({
+            key: 'sales_managers',
+            company_id: currentCompanyId,
+            value: { managers: salesManagers },
+            updated_at: new Date().toISOString()
+          });
+
+        if (error) throw error;
+        showToast('Sales managers updated successfully!');
+        await renderSalesManagersTable();
+      } catch(e) {
+        console.error(e);
+        showToast('Failed to save sales managers: ' + e.message, true);
+      }
+    }
+
+    async function populateSalesManagersDropdown() {
+      const select = document.getElementById('sales-manager-select');
+      if (!select) return;
+      
+      try {
+        const { data } = await sb
+          .from('employees')
+          .select('id, first_name, last_name')
+          .eq('company_id', currentCompanyId);
+          
+        select.innerHTML = '<option value="">-- Select Employee --</option>';
+        if (data) {
+          data.forEach(emp => {
+            const opt = document.createElement('option');
+            opt.value = emp.id;
+            opt.textContent = `${emp.first_name} ${emp.last_name}`;
+            select.appendChild(opt);
+          });
+        }
+      } catch(e) {
+        console.error('Failed to populate sales managers dropdown:', e);
+      }
+    }
 
     // ── HR Settings ──
     async function loadHRSettings() {

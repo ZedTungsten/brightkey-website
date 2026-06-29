@@ -809,6 +809,7 @@
         initMonthsDropdowns();
         await loadAllSettings();
         await loadGoalsDashboard();
+        await enforceSettingsPermissions(authInfo);
       } else {
         showToast('Authentication module missing.', true);
       }
@@ -1558,6 +1559,51 @@
         toast.style.animation = 'fadeOut 0.3s ease forwards';
         setTimeout(() => toast.remove(), 300);
       }, 4000);
+    }
+
+    async function enforceSettingsPermissions(authInfo) {
+      try {
+        const isOwnerOrAdmin = authInfo.role === 'owner' || authInfo.role === 'admin';
+        let isSalesManager = false;
+
+        // Fetch current employee id
+        const emp = await window.BKAuth.getEmployee(authInfo.user.email);
+        if (emp && emp.id) {
+          // Fetch sales managers list from settings
+          const { data } = await sb
+            .from('global_settings')
+            .select('value')
+            .eq('key', 'sales_managers')
+            .eq('company_id', currentCompanyId)
+            .maybeSingle();
+
+          if (data?.value && Array.isArray(data.value.managers)) {
+            isSalesManager = data.value.managers.includes(emp.id);
+          }
+        }
+
+        if (!isOwnerOrAdmin && !isSalesManager) {
+          // Gray out all inputs in settings tab
+          const inputs = document.querySelectorAll('#content-settings input, #content-settings select, #content-settings button');
+          inputs.forEach(el => {
+            el.disabled = true;
+            el.style.opacity = '0.6';
+            el.style.cursor = 'not-allowed';
+          });
+          
+          // Show read-only warning
+          const settingsHeader = document.querySelector('#content-settings .panel-title');
+          if (settingsHeader) {
+            settingsHeader.insertAdjacentHTML('beforeend', `
+              <span style="font-size: 0.72rem; font-weight: 600; padding: 2px 8px; background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.2); border-radius: 4px; margin-left: 0.75rem;">
+                Read-Only Mode
+              </span>
+            `);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to enforce settings permissions:', err);
+      }
     }
   </script>
 </body>
