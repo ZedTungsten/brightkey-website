@@ -222,65 +222,6 @@
       text-transform: uppercase;
     }
 
-    /* List View Styles */
-    .list-view-container {
-      display: flex;
-      flex-direction: column;
-      gap: 0.75rem;
-      max-width: 900px;
-      margin: 0 auto;
-      width: 100%;
-    }
-    .list-card {
-      background: var(--bg-surface);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 1rem 1.25rem;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      cursor: pointer;
-      transition: all 0.2s;
-      box-shadow: var(--shadow-sm, 0 1px 2px rgba(0,0,0,0.05));
-    }
-    .list-card:hover {
-      border-color: var(--border-hover);
-      transform: translateY(-1px);
-      box-shadow: var(--shadow-md, 0 4px 6px rgba(0,0,0,0.05));
-    }
-    .list-card-left {
-      display: flex;
-      flex-direction: column;
-      gap: 0.35rem;
-    }
-    .list-card-name {
-      font-size: 0.95rem;
-      font-weight: 700;
-      color: var(--text-primary);
-    }
-    .list-card-details {
-      font-size: 0.8rem;
-      color: var(--text-secondary);
-      display: flex;
-      gap: 1.5rem;
-    }
-    .list-card-right {
-      display: flex;
-      align-items: center;
-      gap: 1rem;
-    }
-    .list-card-date {
-      font-size: 0.85rem;
-      font-weight: 700;
-      color: var(--text-primary);
-      text-align: right;
-    }
-    .list-card-time {
-      font-size: 0.75rem;
-      color: var(--text-muted);
-      text-align: right;
-    }
-
     /* Modal Styling */
     .modal-overlay {
       display: none;
@@ -668,12 +609,6 @@
         </div>
 
         <div style="flex:1"></div>
-
-        <!-- View Selector Buttons -->
-        <div class="btn-group">
-          <button class="btn-group-item active" id="btn-toggle-calendar" onclick="switchView('calendar')">Calendar View</button>
-          <button class="btn-group-item" id="btn-toggle-list" onclick="switchView('list')">List View</button>
-        </div>
       </div>
 
       <div class="content-area">
@@ -700,13 +635,6 @@
                 <div class="calendar-grid-cells" id="calendar-cells" style="display:contents;">
                   <!-- Dynamic content -->
                 </div>
-              </div>
-            </div>
-
-            <!-- List View Content Container -->
-            <div id="view-list" class="view-container">
-              <div class="list-view-container" id="list-schedules-container">
-                <!-- Dynamic content -->
               </div>
             </div>
 
@@ -1120,7 +1048,6 @@
     let sb;
     let currentTenantId;
     let currentCompanyId;
-    let currentView = 'calendar'; // 'calendar' or 'list'
     let dbBookings = [];
     let dbEmployees = [];
     let bookingMediaRequirements = [];
@@ -1280,24 +1207,7 @@
         });
       }
 
-      if (currentView === 'calendar') {
-        drawCalendar();
-      } else {
-        drawList();
-      }
-    }
-
-    function switchView(view) {
-      currentView = view;
-      document.getElementById('btn-toggle-calendar').classList.toggle('active', view === 'calendar');
-      document.getElementById('btn-toggle-list').classList.toggle('active', view === 'list');
-      
-      document.getElementById('view-calendar').classList.toggle('active', view === 'calendar');
-      document.getElementById('view-list').classList.toggle('active', view === 'list');
-      
-      document.getElementById('calendar-month-navigator').style.display = view === 'calendar' ? 'flex' : 'none';
-
-      applyFilterAndRender();
+      drawCalendar();
     }
 
     function changeMonth(direction) {
@@ -1413,75 +1323,7 @@
       }
     }
 
-    function drawList() {
-      const container = document.getElementById('list-schedules-container');
-      container.innerHTML = '';
 
-      // Sort bookings chronologically by scheduled_date
-      const listBookings = [...filteredBookings].sort((a, b) => {
-        if (!a.scheduled_date) return 1;
-        if (!b.scheduled_date) return -1;
-        return new Date(a.scheduled_date) - new Date(b.scheduled_date);
-      });
-
-      if (listBookings.length === 0) {
-        container.innerHTML = `<div style="color:var(--text-muted); text-align:center; padding: 4rem;">No matching schedules found.</div>`;
-        return;
-      }
-
-      listBookings.forEach(b => {
-        const cityStr = getCityFromAddress(b.customer_address);
-        const formattedDate = b.scheduled_date ? formatDateFriendly(b.scheduled_date) : 'Unscheduled';
-        const formattedProducts = b.product_names ? b.product_names.replace(/ \| /g, ', ') : 'No products';
-        const isAborted = b.status === 'cancelled';
-
-        let doorsArr = [];
-        if (b.doors) {
-          if (typeof b.doors === 'string') {
-            try { doorsArr = JSON.parse(b.doors); } catch(_) {}
-          } else if (Array.isArray(b.doors)) {
-            doorsArr = b.doors;
-          }
-        }
-        const isDone = doorsArr.length > 0 && doorsArr.every(d => d.completed);
-        const hasCompleteMedia = doorsArr.length > 0 && doorsArr.every(d => {
-          if (!bookingMediaRequirements || bookingMediaRequirements.length === 0) {
-            return d.media_urls && d.media_urls.length > 0;
-          }
-          return bookingMediaRequirements.every(req => d.required_media && d.required_media[req.label]);
-        });
-        const isFullyDone = isDone && hasCompleteMedia;
-
-        const badgeHtml = isAborted 
-          ? '<span class="aborted-badge">Aborted</span>' 
-          : (isFullyDone 
-              ? '<span class="completed-media-badge" style="display:inline-block; font-size:0.68rem; font-weight:700; padding:2px 8px; border-radius:10px; background:rgba(34,197,94,0.15); color:#16a34a; text-transform:uppercase; letter-spacing:0.04em; margin-left:0.4rem; vertical-align:middle;">Done, Media Uploaded</span>'
-              : '');
-
-        const alertIcon = (b.needs_work_permit && !b.work_permit_image_url) 
-          ? ` <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#DC2626" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block; vertical-align:middle; margin-left: 2px;"><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>` 
-          : '';
-
-        container.insertAdjacentHTML('beforeend', `
-          <div class="list-card${isAborted ? ' aborted' : ''}${isFullyDone ? ' completed-media' : ''}" onclick="showBookingDetails('${b.id}')">
-            <div class="list-card-left">
-              <span class="list-card-name">${escapeHtml(b.customer_name)} (${escapeHtml(cityStr)})${alertIcon}${badgeHtml}</span>
-              <div class="list-card-details">
-                <span><strong>Location:</strong> ${escapeHtml(cityStr)}</span>
-                <span><strong>Products:</strong> ${escapeHtml(formattedProducts)}</span>
-                <span><strong>Installer:</strong> ${escapeHtml(formatInstallerName(b.installer_name))}</span>
-              </div>
-            </div>
-            <div class="list-card-right">
-              <div>
-                <div class="list-card-date">${formattedDate}</div>
-                <div class="list-card-time">${escapeHtml(b.scheduled_time || 'AM Slot')}</div>
-              </div>
-            </div>
-          </div>
-        `);
-      });
-    }
 
     function getCityFromAddress(address) {
       if (!address) return 'N/A';
