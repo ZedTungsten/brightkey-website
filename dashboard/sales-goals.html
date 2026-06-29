@@ -352,7 +352,7 @@
 
     /* ── Settings Form ── */
     .settings-form {
-      max-width: 440px;
+      max-width: 500px;
       margin-top: 1rem;
       display: flex;
       flex-direction: column;
@@ -480,6 +480,35 @@
     .tab-content.active {
       display: block;
     }
+
+    /* ── Dynamic Goal Row Styling ── */
+    .goal-settings-row {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      animation: fadeIn 0.2s ease-out forwards;
+    }
+
+    .btn-row-remove {
+      background: none;
+      border: none;
+      color: #ef4444;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.5rem;
+      transition: opacity 0.15s;
+    }
+
+    .btn-row-remove:hover {
+      opacity: 0.7;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
   </style>
 </head>
 <body>
@@ -545,6 +574,12 @@
                       <div id="txt-goal-revenue" style="font-size: 1rem; font-weight: 800; margin-top: 2px;">₱0.00</div>
                     </div>
                   </div>
+
+                  <!-- Reward Banner -->
+                  <div id="reward-banner" style="margin-top: 1.25rem; padding: 0.75rem 1rem; border-radius: 8px; background: rgba(34, 197, 94, 0.08); border: 1px solid rgba(34, 197, 94, 0.2); font-size: 0.85rem; font-weight: 600; color: #10b981; display: none; align-items: center; gap: 0.5rem;">
+                    <span style="font-weight: 800; text-transform: uppercase; font-size: 0.7rem; letter-spacing: 0.05em; background: #10b981; color: #fff; padding: 3px 6px; border-radius: 4px; line-height: 1;">Reward</span>
+                    <span id="txt-reward-desc" style="color: var(--text-primary);">No immediate reward set.</span>
+                  </div>
                 </div>
               </div>
 
@@ -577,16 +612,21 @@
             <div class="goals-header">
               <div class="goals-title-group">
                 <h1>Goal Settings</h1>
-                <p>Configure sales revenue milestones and catalog display settings.</p>
+                <p>Configure sales revenue milestones, rewards, and catalog filters.</p>
               </div>
             </div>
 
-            <div class="goals-panel" style="max-width: 550px;">
+            <div class="goals-panel" style="max-width: 600px;">
               <div class="settings-form">
                 
                 <div class="form-group" style="border-bottom: 1px solid var(--border); padding-bottom: 1.5rem;">
-                  <label class="form-label" for="input-goal-amount">Monthly Revenue Goal (₱)</label>
-                  <input type="number" id="input-goal-amount" class="form-input" placeholder="e.g. 1500000" min="0" />
+                  <label class="form-label">Monthly Revenue Goals & Rewards (Max 5)</label>
+                  <div id="goals-list-container" style="display: flex; flex-direction: column; gap: 0.75rem; margin-top: 0.5rem;">
+                    <!-- Dynamic goal rows load here -->
+                  </div>
+                  <button type="button" id="btn-add-goal" class="btn btn-outline btn-sm" onclick="addNewGoalRow()" style="margin-top: 0.75rem; width: fit-content;">
+                    + Add Goal
+                  </button>
                 </div>
 
                 <div class="form-group">
@@ -633,7 +673,7 @@
     let currentCompanyId;
 
     // State Variables
-    let globalGoal = 0; // single global goal
+    let globalGoals = []; // Array of { amount: 500000, reward: 'Team outing' }
     let allowedCategories = []; // array of categories to show on top 3 products
     let categoriesByBusiness = {}; // business -> Array of categories
     let productDetailsMap = {}; // SKU -> product details
@@ -723,7 +763,7 @@
       });
 
       if (tabName === 'settings') {
-        document.getElementById('input-goal-amount').value = globalGoal || '';
+        renderSettingsGoalRows();
         const currentBiz = document.getElementById('settings-business-select').value;
         onSettingsBusinessChange(currentBiz);
       } else {
@@ -743,7 +783,14 @@
           .eq('company_id', currentCompanyId)
           .maybeSingle();
 
-        globalGoal = data?.value?.goal || 0;
+        // Migrate/Fallback from old single goal format
+        if (data?.value && Array.isArray(data.value.goals)) {
+          globalGoals = data.value.goals;
+        } else if (data?.value?.goal) {
+          globalGoals = [{ amount: data.value.goal, reward: 'Revenue milestone bonus!' }];
+        } else {
+          globalGoals = [{ amount: 500000, reward: 'Sales milestone bonus!' }];
+        }
         
         // 2. Fetch all products of the company to map details & build category filters
         const { data: dbProds } = await sb
@@ -795,6 +842,60 @@
       }
     }
 
+    // Render Goals and Rewards Row inputs in Settings Tab
+    function renderSettingsGoalRows() {
+      const container = document.getElementById('goals-list-container');
+      container.innerHTML = '';
+
+      if (globalGoals.length === 0) {
+        globalGoals.push({ amount: 500000, reward: '' });
+      }
+
+      globalGoals.forEach((g, idx) => {
+        container.insertAdjacentHTML('beforeend', `
+          <div class="goal-settings-row">
+            <input type="number" class="form-input goal-amount-input" placeholder="Goal (₱)" style="flex: 1; font-weight:700;" value="${g.amount || ''}" min="0" required />
+            <input type="text" class="form-input goal-reward-input" placeholder="Reward Description" style="flex: 2;" value="${escapeHtml(g.reward || '')}" required />
+            ${globalGoals.length > 1 ? `
+              <button type="button" class="btn-row-remove" onclick="removeGoalRow(${idx})" title="Remove goal row">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+              </button>
+            ` : ''}
+          </div>
+        `);
+      });
+
+      // Update visibility of Add Goal button
+      document.getElementById('btn-add-goal').style.display = globalGoals.length >= 5 ? 'none' : 'block';
+    }
+
+    window.addNewGoalRow = function() {
+      if (globalGoals.length >= 5) return;
+      
+      // Save current input values into state before adding
+      readGoalRowsFromInputs();
+      
+      globalGoals.push({ amount: '', reward: '' });
+      renderSettingsGoalRows();
+    };
+
+    window.removeGoalRow = function(index) {
+      readGoalRowsFromInputs();
+      globalGoals.splice(index, 1);
+      renderSettingsGoalRows();
+    };
+
+    function readGoalRowsFromInputs() {
+      const rows = document.querySelectorAll('.goal-settings-row');
+      const tempGoals = [];
+      rows.forEach(row => {
+        const amt = parseFloat(row.querySelector('.goal-amount-input').value) || 0;
+        const reward = row.querySelector('.goal-reward-input').value.trim();
+        tempGoals.push({ amount: amt, reward: reward });
+      });
+      globalGoals = tempGoals;
+    }
+
     // Dropdown change handlers
     window.onMonthChange = function(val) {
       currentSelectedMonth = val;
@@ -841,15 +942,15 @@
       // Show skeletal loading state or reset bars
       document.getElementById('goal-progress-fill').style.width = '0%';
       document.getElementById('goal-progress-txt').textContent = '0%';
-      document.getElementById('txt-percent-complete').textContent = '0%';
+      document.getElementById('txt-percent-complete').textContent = '0% left';
       document.getElementById('txt-mtd-revenue').textContent = '₱0.00';
       document.getElementById('txt-goal-revenue').textContent = '₱0.00';
+      
+      const rewardBanner = document.getElementById('reward-banner');
+      rewardBanner.style.display = 'none';
 
       try {
-        // 1. Resolve Global Revenue Goal
-        document.getElementById('txt-goal-revenue').textContent = formatCurrency(globalGoal);
-
-        // 2. Fetch bookings for this month
+        // Fetch bookings for this month
         const [year, month] = currentSelectedMonth.split('-');
         const startDate = `${year}-${month}-01`;
         const endDate = new Date(parseInt(year), parseInt(month), 0).toISOString().split('T')[0];
@@ -878,20 +979,59 @@
         const totalRevenue = totalRevenueCentavos / 100;
         document.getElementById('txt-mtd-revenue').textContent = formatCurrency(totalRevenue);
 
-        // Render progress bar
-        let percent = 0;
-        if (globalGoal > 0) {
-          percent = Math.round((totalRevenue / globalGoal) * 100);
-        } else if (totalRevenue > 0) {
-          percent = 100; // 100% if revenue exists but no goal set
+        // 1. Resolve Current Goal and Reward Milestones
+        // Sort goals ascending by amount to find the immediate unreached goal
+        const sortedGoals = [...globalGoals]
+          .filter(g => g.amount > 0)
+          .sort((a, b) => a.amount - b.amount);
+
+        let activeGoalObj = sortedGoals[sortedGoals.length - 1] || { amount: 500000, reward: 'Milestone bonus!' };
+        let allReached = false;
+
+        // Find the first goal that is greater than current totalRevenue (immediate target)
+        const immediateGoal = sortedGoals.find(g => totalRevenue < g.amount);
+        if (immediateGoal) {
+          activeGoalObj = immediateGoal;
+        } else if (sortedGoals.length > 0) {
+          // If all goals are reached
+          allReached = true;
         }
 
-        const remaining = Math.max(0, globalGoal - totalRevenue);
+        const activeGoalAmount = activeGoalObj.amount;
+        document.getElementById('txt-goal-revenue').textContent = formatCurrency(activeGoalAmount);
+
+        // Render progress bar
+        let percent = 0;
+        if (activeGoalAmount > 0) {
+          percent = Math.round((totalRevenue / activeGoalAmount) * 100);
+        } else if (totalRevenue > 0) {
+          percent = 100; 
+        }
+
+        const remaining = Math.max(0, activeGoalAmount - totalRevenue);
         const fillPercent = Math.min(percent, 100);
         const fillBar = document.getElementById('goal-progress-fill');
         fillBar.style.width = `${fillPercent}%`;
         document.getElementById('goal-progress-txt').textContent = `${percent}%`;
-        document.getElementById('txt-percent-complete').textContent = remaining <= 0 ? 'Goal Reached!' : `${formatCurrency(remaining)} left`;
+        
+        if (allReached) {
+          document.getElementById('txt-percent-complete').textContent = 'All Goals Reached!';
+        } else {
+          document.getElementById('txt-percent-complete').textContent = remaining <= 0 ? 'Goal Reached!' : `${formatCurrency(remaining)} left`;
+        }
+
+        // Show reward description banner
+        if (activeGoalObj.reward) {
+          rewardBanner.style.display = 'flex';
+          document.getElementById('txt-reward-desc').textContent = activeGoalObj.reward;
+          if (allReached) {
+            rewardBanner.style.background = 'rgba(16,185,129,0.12)';
+            rewardBanner.style.borderColor = 'rgba(16,185,129,0.3)';
+          } else {
+            rewardBanner.style.background = 'rgba(6,182,212,0.06)';
+            rewardBanner.style.borderColor = 'rgba(6,182,212,0.2)';
+          }
+        }
 
         // 3. Load top products (Last 30 Days)
         await loadTopProducts();
@@ -1094,22 +1234,33 @@
 
     // Save Settings
     window.saveGoalSettings = async function() {
-      const amountVal = parseFloat(document.getElementById('input-goal-amount').value);
-      if (isNaN(amountVal) || amountVal < 0) {
-        showToast('Please enter a valid positive goal amount.', true);
+      // 1. Read input rows into globalGoals state
+      readGoalRowsFromInputs();
+
+      // Validate inputs
+      let isValid = true;
+      globalGoals.forEach(g => {
+        if (isNaN(g.amount) || g.amount <= 0 || !g.reward) {
+          isValid = false;
+        }
+      });
+
+      if (!isValid) {
+        showToast('Please enter valid positive amounts and rewards for all goals.', true);
         return;
       }
 
-      try {
-        globalGoal = amountVal;
+      // Sort goals ascending by amount before saving
+      globalGoals.sort((a, b) => a.amount - b.amount);
 
+      try {
         const { error } = await sb
           .from('global_settings')
           .upsert({
             key: 'sales_goals_settings',
             company_id: currentCompanyId,
             value: {
-              goal: globalGoal,
+              goals: globalGoals,
               categories: allowedCategories
             },
             updated_at: new Date().toISOString()
@@ -1117,7 +1268,8 @@
 
         if (error) throw error;
 
-        showToast('Goal settings updated successfully!');
+        showToast('Goal milestones and rewards updated successfully!');
+        renderSettingsGoalRows(); // re-render sorted goals
       } catch (err) {
         console.error('Error saving goals setting:', err);
         showToast('Error saving settings: ' + err.message, true);
