@@ -76,7 +76,10 @@ export default async function handler(req, res) {
     const signature = createHash('sha256').update(msg).digest('hex');
 
     // 5. Construct invite URL
-    const origin = req.headers.referer ? new URL(req.headers.referer).origin : 'https://www.brightkeysolutions.com';
+    let origin = req.headers.referer ? new URL(req.headers.referer).origin : 'https://www.brightkeysolutions.com';
+    if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
+      origin = 'https://www.brightkeysolutions.com';
+    }
     const pagePath = invite_type === 'directory' ? 'employee-directory-registration.html' : 'employee-registration';
     const inviteLink = `${origin}/${pagePath}?tenant=${encodeURIComponent(tenant_id)}&company=${encodeURIComponent(company_id)}&role=${encodeURIComponent(role || '')}&email=${encodeURIComponent(email.toLowerCase().trim())}&sig=${signature}`;
 
