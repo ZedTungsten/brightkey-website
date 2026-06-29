@@ -1347,7 +1347,10 @@
         dayBookings.forEach(b => {
           // Parse city from address or fallback
           const cityStr = getCityFromAddress(b.customer_address);
-          const displayText = `${escapeHtml(b.customer_name)} (${escapeHtml(cityStr)})`;
+          const alertIcon = b.needs_work_permit 
+            ? ` <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#DC2626" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block; vertical-align:middle; margin-left: 2px;"><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>` 
+            : '';
+          const displayText = `${escapeHtml(b.customer_name)} (${escapeHtml(cityStr)})${alertIcon}`;
           const isAborted = b.status === 'cancelled';
           
           let doorsArr = [];
@@ -1377,7 +1380,7 @@
                 : (b.installer_name ? `<span class="calendar-inst-badge">${escapeHtml(formatInstallerName(b.installer_name))}</span>` : ''));
 
           const slotHtml = `
-            <div class="calendar-slot ${isAfternoon(b.scheduled_time) ? 'pm' : 'am'}${isAborted ? ' aborted' : ''}${isFullyDone ? ' completed-media' : ''}" title="${displayText}" onclick="event.stopPropagation(); showBookingDetails('${b.id}')">
+            <div class="calendar-slot ${isAfternoon(b.scheduled_time) ? 'pm' : 'am'}${isAborted ? ' aborted' : ''}${isFullyDone ? ' completed-media' : ''}" title="${escapeHtml(b.customer_name)} (${escapeHtml(cityStr)})" onclick="event.stopPropagation(); showBookingDetails('${b.id}')">
               <div style="font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; width:100%;">${displayText}</div>
               ${badgeHtml}
             </div>
@@ -1455,10 +1458,14 @@
               ? '<span class="completed-media-badge" style="display:inline-block; font-size:0.68rem; font-weight:700; padding:2px 8px; border-radius:10px; background:rgba(34,197,94,0.15); color:#16a34a; text-transform:uppercase; letter-spacing:0.04em; margin-left:0.4rem; vertical-align:middle;">Done, Media Uploaded</span>'
               : '');
 
+        const alertIcon = b.needs_work_permit 
+          ? ` <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#DC2626" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block; vertical-align:middle; margin-left: 2px;"><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>` 
+          : '';
+
         container.insertAdjacentHTML('beforeend', `
           <div class="list-card${isAborted ? ' aborted' : ''}${isFullyDone ? ' completed-media' : ''}" onclick="showBookingDetails('${b.id}')">
             <div class="list-card-left">
-              <span class="list-card-name">${escapeHtml(b.customer_name)}${badgeHtml}</span>
+              <span class="list-card-name">${escapeHtml(b.customer_name)} (${escapeHtml(cityStr)})${alertIcon}${badgeHtml}</span>
               <div class="list-card-details">
                 <span><strong>Location:</strong> ${escapeHtml(cityStr)}</span>
                 <span><strong>Products:</strong> ${escapeHtml(formattedProducts)}</span>
@@ -1818,6 +1825,7 @@
       const uploadContainer = document.getElementById('upload-work-permit-container');
       const previewContainer = document.getElementById('preview-work-permit-container');
       const imgElement = document.getElementById('img-work-permit');
+      const wpCard = document.getElementById('card-work-permit');
       
       if (selectedBooking.work_permit_image_url) {
         uploadContainer.style.display = 'none';
@@ -1827,6 +1835,16 @@
         uploadContainer.style.display = 'flex';
         previewContainer.style.display = 'none';
         imgElement.src = '';
+      }
+
+      if (wpCard) {
+        if (selectedBooking.needs_work_permit) {
+          wpCard.style.border = '2px solid #DC2626';
+          wpCard.style.boxShadow = '0 0 8px rgba(220, 38, 38, 0.2)';
+        } else {
+          wpCard.style.border = '';
+          wpCard.style.boxShadow = '';
+        }
       }
     }
 
