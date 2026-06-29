@@ -1492,7 +1492,9 @@
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem;">
           <div class="form-group">
             <label class="form-label" for="new-emp-department" style="font-size: 0.72rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); display: block; margin-bottom: 0.25rem;">Department (Optional)</label>
-            <input type="text" id="new-emp-department" class="form-input" style="width:100%; border:1px solid var(--border); border-radius:6px; padding:0.55rem 0.75rem;" />
+            <select id="new-emp-department" class="form-select" style="width:100%; border:1px solid var(--border); border-radius:6px; padding:0.55rem 0.75rem; background: var(--bg-surface); color: var(--text-primary); font-size: 0.82rem; height: 38px;">
+              <option value="">Select Department</option>
+            </select>
           </div>
           <div class="form-group">
             <label class="form-label" for="new-emp-title" style="font-size: 0.72rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); display: block; margin-bottom: 0.25rem;">Title / Position (Optional)</label>
@@ -2182,7 +2184,22 @@
       updateDeptFilter() {
         const sel = document.getElementById('filter-dept');
         const current = sel.value;
-        const depts = [...new Set(this.allEmployees.map(e => e.department).filter(Boolean))].sort();
+
+        // Load departments from companyStructure (Org Map)
+        let depts = [];
+        if (this.companyStructure && Array.isArray(this.companyStructure.departments)) {
+          depts = this.companyStructure.departments.map(d => d.name).filter(Boolean);
+        }
+
+        // Union with any departments from existing employees so no data is orphaned
+        const empDepts = this.allEmployees.map(e => e.department).filter(Boolean);
+        empDepts.forEach(d => {
+          if (!depts.includes(d)) depts.push(d);
+        });
+
+        depts.sort();
+
+        // Populate search filter
         sel.innerHTML = '<option value="">All Departments</option>';
         depts.forEach(d => {
           const o = document.createElement('option');
@@ -2190,6 +2207,19 @@
           sel.appendChild(o);
         });
         sel.value = current;
+
+        // Populate "Add Employee" modal dropdown
+        const modalSel = document.getElementById('new-emp-department');
+        if (modalSel) {
+          const modalCurrent = modalSel.value;
+          modalSel.innerHTML = '<option value="">Select Department</option>';
+          depts.forEach(d => {
+            const o = document.createElement('option');
+            o.value = o.textContent = d;
+            modalSel.appendChild(o);
+          });
+          modalSel.value = modalCurrent;
+        }
       },
 
       /* ── Filter + sort ── */
