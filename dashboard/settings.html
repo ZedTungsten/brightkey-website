@@ -535,10 +535,11 @@
                         <th>Status</th>
                         <th style="width:120px; text-align:center;">Actions</th>
                         <th style="width:120px; text-align:center;">Invitation Link</th>
+                        <th style="width:140px; text-align:center;">Reset Password</th>
                       </tr>
                     </thead>
                     <tbody id="members-list-body">
-                      <tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 2rem;">Loading team members...</td></tr>
+                      <tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 2rem;">Loading team members...</td></tr>
                     </tbody>
                   </table>
                 </div>
@@ -1078,7 +1079,7 @@
       tbody.innerHTML = '';
 
       if (activeData.length === 0 && inviteData.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 2rem;">No members found. Use "Add Member" to invite your first team member.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 2rem;">No members found. Use "Add Member" to invite your first team member.</td></tr>`;
         return;
       }
 
@@ -1124,6 +1125,10 @@
           actionsCellHtml = `<div style="display:flex; flex-direction:column; align-items:center; gap:0.35rem;">${actionsCellHtml}</div>`;
         }
 
+        const resetPasswordBtn = row.user_email
+          ? `<button class="btn btn-outline" style="padding:0.3rem 0.65rem;font-size:0.75rem;" onclick="sendResetPassword('${row.user_email}')">Send Reset Password</button>`
+          : '<span style="color:var(--text-muted);font-size:0.75rem;">—</span>';
+
         tr.innerHTML = `
           <td><div style="font-weight:600;">${row.user_email || 'No email registered'}</div>${isSelf ? '<div style="font-size:0.75rem;color:var(--text-muted);">You</div>' : ''}</td>
           <td>${row.full_name || '—'}</td>
@@ -1132,13 +1137,14 @@
           <td><span class="badge badge-green">Active</span></td>
           <td style="text-align:center; white-space:nowrap;">${actionsCellHtml}</td>
           <td style="text-align:center;"><span style="color:var(--text-muted);font-size:0.75rem;">—</span></td>
+          <td style="text-align:center;">${resetPasswordBtn}</td>
         `;
         tbody.appendChild(tr);
       });
 
       if (inviteError) {
         const errTr = document.createElement('tr');
-        errTr.innerHTML = `<td colspan="7" style="padding:1rem; background:rgba(220,38,38,0.04); border-top:1px solid rgba(220,38,38,0.15);"><div style="display:flex;align-items:flex-start;gap:0.6rem;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#DC2626" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg><div><div style="font-size:0.8rem;font-weight:700;color:#B91C1C;">Could not load pending invitations</div><div style="font-size:0.75rem;color:#6B7280;margin-top:0.2rem;">${inviteError}</div></div></div></td>`;
+        errTr.innerHTML = `<td colspan="8" style="padding:1rem; background:rgba(220,38,38,0.04); border-top:1px solid rgba(220,38,38,0.15);"><div style="display:flex;align-items:flex-start;gap:0.6rem;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#DC2626" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg><div><div style="font-size:0.8rem;font-weight:700;color:#B91C1C;">Could not load pending invitations</div><div style="font-size:0.75rem;color:#6B7280;margin-top:0.2rem;">${inviteError}</div></div></div></td>`;
         tbody.appendChild(errTr);
       }
 
@@ -1161,6 +1167,7 @@
           <td><span class="badge badge-orange">Invited</span></td>
           <td style="text-align:center;"><button class="btn btn-danger" style="padding:0.3rem 0.65rem;font-size:0.75rem;" onclick="cancelInvitation('${row.id}')">Cancel</button></td>
           <td style="text-align:center;"><button class="btn btn-outline" style="padding:0.3rem 0.75rem;font-size:0.78rem;gap:0.35rem;" onclick="copyInviteLink('${row.email}', '${row.role}')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Copy Invitation Link</button></td>
+          <td style="text-align:center;"><span style="color:var(--text-muted);font-size:0.75rem;">—</span></td>
         `;
         tbody.appendChild(tr);
       });
@@ -1244,6 +1251,22 @@
           loadAllMembers();
         } catch (err) {
           showToast('Failed to cancel invitation.', true);
+        }
+      });
+    }
+
+    function sendResetPassword(email) {
+      if (!email) return;
+      showConfirmModal('Are you sure you want to send a reset password email to ' + email + '?', async () => {
+        try {
+          const { error } = await sb.auth.resetPasswordForEmail(email, {
+            redirectTo: window.location.origin + '/login.html'
+          });
+          if (error) throw error;
+          showToast('Password reset email sent to ' + email + '.');
+        } catch (err) {
+          console.error('Reset password error:', err);
+          showToast('Failed to send reset password email: ' + err.message, true);
         }
       });
     }
