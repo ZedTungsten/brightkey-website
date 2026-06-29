@@ -352,7 +352,7 @@
 
     /* ── Settings Form ── */
     .settings-form {
-      max-width: 400px;
+      max-width: 440px;
       margin-top: 1rem;
       display: flex;
       flex-direction: column;
@@ -388,6 +388,26 @@
 
     .form-input:focus {
       border-color: var(--cyan);
+    }
+
+    /* ── Category Checkbox Items ── */
+    .category-checkbox-item {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      font-size: 0.82rem;
+      font-weight: 500;
+      color: var(--text-primary);
+      cursor: pointer;
+      user-select: none;
+      padding: 0.2rem 0;
+    }
+
+    .category-checkbox-item input {
+      accent-color: var(--cyan);
+      cursor: pointer;
+      width: 15px;
+      height: 15px;
     }
 
     /* ── Curved Pill Select Dropdown ── */
@@ -557,25 +577,37 @@
             <div class="goals-header">
               <div class="goals-title-group">
                 <h1>Goal Settings</h1>
-                <p>Configure monthly revenue milestones for the company.</p>
+                <p>Configure sales revenue milestones and catalog display settings.</p>
               </div>
             </div>
 
-            <div class="goals-panel" style="max-width: 500px;">
+            <div class="goals-panel" style="max-width: 550px;">
               <div class="settings-form">
                 
-                <div class="form-group">
-                  <label class="form-label" for="settings-month-select">Select Month</label>
-                  <select id="settings-month-select" class="form-input" onchange="onSettingsMonthChange(this.value)"></select>
-                </div>
-
-                <div class="form-group">
+                <div class="form-group" style="border-bottom: 1px solid var(--border); padding-bottom: 1.5rem;">
                   <label class="form-label" for="input-goal-amount">Monthly Revenue Goal (₱)</label>
                   <input type="number" id="input-goal-amount" class="form-input" placeholder="e.g. 1500000" min="0" />
                 </div>
 
+                <div class="form-group">
+                  <label class="form-label" for="settings-business-select">Filter Product Categories for Top Products</label>
+                  <select id="settings-business-select" class="form-input" onchange="onSettingsBusinessChange(this.value)" style="margin-bottom: 0.5rem;">
+                    <option value="smart_lock">Smart Lock</option>
+                    <option value="solar_power">Solar Power</option>
+                    <option value="cctv">CCTV</option>
+                    <option value="fire_extinguisher">Fire Extinguisher</option>
+                  </select>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">Select Categories to Include</label>
+                  <div id="settings-categories-checklist" style="display: flex; flex-direction: column; gap: 0.5rem; max-height: 180px; overflow-y: auto; padding: 0.75rem; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-elevated);">
+                    <!-- Dynamic checkboxes load here -->
+                  </div>
+                </div>
+
                 <button class="btn btn-primary" onclick="saveGoalSettings()" style="margin-top: 0.5rem; height: 38px;">
-                  Save Goal Milestones
+                  Save Goal Settings
                 </button>
 
               </div>
@@ -601,9 +633,11 @@
     let currentCompanyId;
 
     // State Variables
-    let allGoals = {}; // YYYY-MM -> Goal in pesos
+    let globalGoal = 0; // single global goal
+    let allowedCategories = []; // array of categories to show on top 3 products
+    let categoriesByBusiness = {}; // business -> Array of categories
+    let productDetailsMap = {}; // SKU -> product details
     let currentSelectedMonth = '';
-    let currentSettingsMonth = '';
 
     document.addEventListener("DOMContentLoaded", async () => {
       if (window.BKAuth) {
@@ -637,7 +671,6 @@
     // Generate Month Options (Current, next, and past 12 months)
     function initMonthsDropdowns() {
       const dashboardSelect = document.getElementById('goals-month-select');
-      const settingsSelect = document.getElementById('settings-month-select');
 
       const months = [];
       const d = new Date();
@@ -652,24 +685,20 @@
         months.push(getYearMonthStr(target));
       }
 
-      // Populate dropdowns
-      [dashboardSelect, settingsSelect].forEach(sel => {
-        sel.innerHTML = '';
-        months.forEach(m => {
-          const opt = document.createElement('option');
-          opt.value = m;
-          opt.textContent = formatMonthName(m);
-          sel.appendChild(opt);
-        });
+      // Populate dashboard dropdown
+      dashboardSelect.innerHTML = '';
+      months.forEach(m => {
+        const opt = document.createElement('option');
+        opt.value = m;
+        opt.textContent = formatMonthName(m);
+        dashboardSelect.appendChild(opt);
       });
 
       // Default active month to current month
       const currentMonthStr = getYearMonthStr(d);
       currentSelectedMonth = currentMonthStr;
-      currentSettingsMonth = currentMonthStr;
       
       dashboardSelect.value = currentSelectedMonth;
-      settingsSelect.value = currentSettingsMonth;
     }
 
     function getYearMonthStr(dateObj) {
@@ -694,27 +723,73 @@
       });
 
       if (tabName === 'settings') {
-        // Refresh values inside settings tab inputs
-        document.getElementById('settings-month-select').value = currentSettingsMonth;
-        document.getElementById('input-goal-amount').value = allGoals[currentSettingsMonth] || '';
+        document.getElementById('input-goal-amount').value = globalGoal || '';
+        const currentBiz = document.getElementById('settings-business-select').value;
+        onSettingsBusinessChange(currentBiz);
       } else {
-        // Refresh dashboard tab
         document.getElementById('goals-month-select').value = currentSelectedMonth;
         loadGoalsDashboard();
       }
     };
 
-    // Load Settings
+    // Load Settings & Product Categories
     async function loadAllSettings() {
       try {
+        // 1. Fetch settings
         const { data } = await sb
           .from('global_settings')
           .select('value')
-          .eq('key', 'sales_monthly_goals')
+          .eq('key', 'sales_goals_settings')
           .eq('company_id', currentCompanyId)
           .maybeSingle();
 
-        allGoals = data?.value || {};
+        globalGoal = data?.value?.goal || 0;
+        
+        // 2. Fetch all products of the company to map details & build category filters
+        const { data: dbProds } = await sb
+          .from('products')
+          .select('sku, title, category, image_main, installation_price, business')
+          .eq('company_id', currentCompanyId);
+
+        productDetailsMap = {};
+        categoriesByBusiness = {
+          smart_lock: [],
+          solar_power: [],
+          cctv: [],
+          fire_extinguisher: []
+        };
+
+        if (dbProds) {
+          dbProds.forEach(p => {
+            productDetailsMap[p.sku] = p;
+            if (p.business && p.category) {
+              const biz = p.business;
+              const cat = p.category.trim();
+              if (categoriesByBusiness[biz] && !categoriesByBusiness[biz].includes(cat)) {
+                categoriesByBusiness[biz].push(cat);
+              }
+            }
+          });
+        }
+
+        // Set allowed categories list
+        if (data?.value && Array.isArray(data.value.categories)) {
+          allowedCategories = data.value.categories;
+        } else {
+          // Default: Allow all categories
+          allowedCategories = [];
+          if (dbProds) {
+            dbProds.forEach(p => {
+              if (p.category) {
+                const cat = p.category.trim();
+                if (!allowedCategories.includes(cat)) {
+                  allowedCategories.push(cat);
+                }
+              }
+            });
+          }
+        }
+
       } catch (err) {
         console.error('Error fetching monthly goals:', err);
       }
@@ -726,9 +801,34 @@
       loadGoalsDashboard();
     };
 
-    window.onSettingsMonthChange = function(val) {
-      currentSettingsMonth = val;
-      document.getElementById('input-goal-amount').value = allGoals[val] || '';
+    // Populate Category Checklist under Settings tab
+    window.onSettingsBusinessChange = function(biz) {
+      const container = document.getElementById('settings-categories-checklist');
+      container.innerHTML = '';
+      const cats = categoriesByBusiness[biz] || [];
+      if (cats.length === 0) {
+        container.innerHTML = `<div style="color: var(--text-muted); font-size: 0.8rem; padding: 0.5rem 0;">No categories found for this business unit.</div>`;
+        return;
+      }
+      cats.sort().forEach(cat => {
+        const isChecked = allowedCategories.includes(cat);
+        container.insertAdjacentHTML('beforeend', `
+          <label class="category-checkbox-item">
+            <input type="checkbox" ${isChecked ? 'checked' : ''} onchange="toggleCategorySetting(this, '${escapeHtml(cat)}')">
+            <span>${escapeHtml(cat)}</span>
+          </label>
+        `);
+      });
+    };
+
+    window.toggleCategorySetting = function(cb, category) {
+      if (cb.checked) {
+        if (!allowedCategories.includes(category)) {
+          allowedCategories.push(category);
+        }
+      } else {
+        allowedCategories = allowedCategories.filter(c => c !== category);
+      }
     };
 
     // Main dashboard loader
@@ -746,12 +846,10 @@
       document.getElementById('txt-goal-revenue').textContent = '₱0.00';
 
       try {
-        // 1. Resolve Monthly Goal
-        const goalValue = allGoals[currentSelectedMonth] || 0;
-        document.getElementById('txt-goal-revenue').textContent = formatCurrency(goalValue);
+        // 1. Resolve Global Revenue Goal
+        document.getElementById('txt-goal-revenue').textContent = formatCurrency(globalGoal);
 
         // 2. Fetch bookings for this month
-        // Formulate date range of selected month
         const [year, month] = currentSelectedMonth.split('-');
         const startDate = `${year}-${month}-01`;
         const endDate = new Date(parseInt(year), parseInt(month), 0).toISOString().split('T')[0];
@@ -782,8 +880,8 @@
 
         // Render progress bar
         let percent = 0;
-        if (goalValue > 0) {
-          percent = Math.round((totalRevenue / goalValue) * 100);
+        if (globalGoal > 0) {
+          percent = Math.round((totalRevenue / globalGoal) * 100);
         } else if (totalRevenue > 0) {
           percent = 100; // 100% if revenue exists but no goal set
         }
@@ -842,6 +940,14 @@
           skus.forEach((sku, idx) => {
             const cleanSku = sku.trim();
             if (!cleanSku) return;
+            
+            // Check allowed category filter
+            const prodDetail = productDetailsMap[cleanSku];
+            const cat = prodDetail?.category || '';
+            if (allowedCategories.length > 0 && !allowedCategories.includes(cat)) {
+              return;
+            }
+
             const qty = parseFloat(qtys[idx]) || 0;
             const name = (names[idx] || cleanSku).trim();
 
@@ -863,29 +969,14 @@
         const top3 = productList.slice(0, 3);
 
         if (top3.length === 0) {
-          container.innerHTML = `<div style="grid-column: span 3; text-align: center; color: var(--text-muted); font-size: 0.85rem; padding: 2rem;">No units sold in the last 30 days.</div>`;
+          container.innerHTML = `<div style="grid-column: span 3; text-align: center; color: var(--text-muted); font-size: 0.85rem; padding: 2rem;">No units sold in the selected categories.</div>`;
           return;
-        }
-
-        // Fetch product images and details from products table
-        const skusToFetch = top3.map(p => p.sku);
-        const { data: dbProds } = await sb
-          .from('products')
-          .select('sku, image_main, installation_price')
-          .eq('company_id', currentCompanyId)
-          .in('sku', skusToFetch);
-
-        const prodMap = {};
-        if (dbProds) {
-          dbProds.forEach(dp => {
-            prodMap[dp.sku] = dp;
-          });
         }
 
         // Render top products
         container.innerHTML = '';
         top3.forEach(p => {
-          const detail = prodMap[p.sku] || {};
+          const detail = productDetailsMap[p.sku] || {};
           const imageSrc = detail.image_main || '';
           const installPrice = detail.installation_price ? (detail.installation_price / 100) : 0;
 
@@ -924,7 +1015,6 @@
 
       try {
         // Query commission assignments for the month
-        // We link assignments to bookings scheduled inside this month, or directly via created_at
         const { data: commissions } = await sb
           .from('commission_assignments')
           .select('employee_id, amount, created_at')
@@ -1001,7 +1091,7 @@
       }
     }
 
-    // Save Goal Settings
+    // Save Settings
     window.saveGoalSettings = async function() {
       const amountVal = parseFloat(document.getElementById('input-goal-amount').value);
       if (isNaN(amountVal) || amountVal < 0) {
@@ -1010,23 +1100,26 @@
       }
 
       try {
-        allGoals[currentSettingsMonth] = amountVal;
+        globalGoal = amountVal;
 
         const { error } = await sb
           .from('global_settings')
           .upsert({
-            key: 'sales_monthly_goals',
+            key: 'sales_goals_settings',
             company_id: currentCompanyId,
-            value: allGoals,
+            value: {
+              goal: globalGoal,
+              categories: allowedCategories
+            },
             updated_at: new Date().toISOString()
           });
 
         if (error) throw error;
 
-        showToast('Goal milestone updated successfully!');
+        showToast('Goal settings updated successfully!');
       } catch (err) {
         console.error('Error saving goals setting:', err);
-        showToast('Error saving goals: ' + err.message, true);
+        showToast('Error saving settings: ' + err.message, true);
       }
     };
 
