@@ -262,8 +262,9 @@
           .maybeSingle();
         if (error || !data) return 'offline';
         const logTime = new Date(data.created_at);
-        const twelveHoursAgo = new Date(Date.now() - 12 * 60 * 60 * 1000);
-        if (logTime < twelveHoursAgo) {
+        const logDate = logTime.toLocaleDateString('en-US');
+        const todayDate = new Date().toLocaleDateString('en-US');
+        if (logDate !== todayDate) {
           return 'offline';
         }
         return data.status || 'offline';
