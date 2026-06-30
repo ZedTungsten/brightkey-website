@@ -1053,61 +1053,62 @@
         if (!container) return;
         container.innerHTML = '';
 
-        const activeEmpIds = new Set();
+        const teammatesMap = {};
+        allEmployees.forEach(emp => {
+          teammatesMap[emp.id] = {
+            id: emp.id,
+            first_name: emp.first_name,
+            last_name: emp.last_name,
+            picture_link: emp.picture_link,
+            status_text: emp.status_text || '',
+            unread_count: 0,
+            has_messages: false
+          };
+        });
 
-        const getSortScore = (id) => {
-          const status = presenceMap[id] || 'offline';
-          if (status === 'available') return 2;
-          if (status === 'break') return 1;
-          return 0;
-        };
-
-        // 1. Draw active threads first, sorted by online presence
-        if (inbox.length > 0) {
-          const sortedInbox = [...inbox].sort((a, b) => {
-            const scoreA = getSortScore(a.other_employee_id);
-            const scoreB = getSortScore(b.other_employee_id);
-            return scoreB - scoreA;
-          });
-
-          sortedInbox.forEach(thread => {
-            activeEmpIds.add(thread.other_employee_id);
-            const status = presenceMap[thread.other_employee_id] || 'offline';
-            const item = this.createTeammateItemElement({
+        inbox.forEach(thread => {
+          if (!teammatesMap[thread.other_employee_id]) {
+            teammatesMap[thread.other_employee_id] = {
               id: thread.other_employee_id,
               first_name: thread.first_name,
               last_name: thread.last_name,
               picture_link: thread.picture_link,
-              status_text: thread.last_message_preview || thread.status_text || '',
-              unread_count: thread.unread_count || 0
-            }, status);
-            container.appendChild(item);
-          });
-        }
+              status_text: '',
+              unread_count: 0,
+              has_messages: true
+            };
+          }
+          teammatesMap[thread.other_employee_id].status_text = thread.last_message_preview || thread.status_text || teammatesMap[thread.other_employee_id].status_text || '';
+          teammatesMap[thread.other_employee_id].unread_count = thread.unread_count || 0;
+          teammatesMap[thread.other_employee_id].has_messages = true;
+        });
 
-        // 2. Draw remaining active employees, sorted by online presence
-        const remaining = allEmployees.filter(e => !activeEmpIds.has(e.id));
-        if (remaining.length > 0) {
-          const header = document.createElement('div');
-          header.style.cssText = 'padding: 0.5rem 1rem 0.25rem; font-size: 0.65rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;';
-          header.textContent = 'Directory';
-          container.appendChild(header);
+        const unifiedTeammates = Object.values(teammatesMap);
 
-          const sortedRemaining = [...remaining].sort((a, b) => {
-            const scoreA = getSortScore(a.id);
-            const scoreB = getSortScore(b.id);
-            if (scoreA !== scoreB) return scoreB - scoreA;
-            const nameA = `${a.first_name} ${a.last_name}`.toLowerCase();
-            const nameB = `${b.first_name} ${b.last_name}`.toLowerCase();
-            return nameA.localeCompare(nameB);
-          });
+        const getPriorityScore = (t) => {
+          const status = presenceMap[t.id] || 'offline';
+          if (status === 'available') return 3;
+          if (status === 'break') return 2;
+          if (t.has_messages) return 1;
+          return 0;
+        };
 
-          sortedRemaining.forEach(emp => {
-            const status = presenceMap[emp.id] || 'offline';
-            const item = this.createTeammateItemElement(emp, status);
-            container.appendChild(item);
-          });
-        }
+        const sorted = [...unifiedTeammates].sort((a, b) => {
+          const scoreA = getPriorityScore(a);
+          const scoreB = getPriorityScore(b);
+          if (scoreA !== scoreB) {
+            return scoreB - scoreA;
+          }
+          const nameA = `${a.first_name} ${a.last_name}`.toLowerCase();
+          const nameB = `${b.first_name} ${b.last_name}`.toLowerCase();
+          return nameA.localeCompare(nameB);
+        });
+
+        sorted.forEach(teammate => {
+          const status = presenceMap[teammate.id] || 'offline';
+          const item = this.createTeammateItemElement(teammate, status);
+          container.appendChild(item);
+        });
       },
 
       createTeammateItemElement(emp, status) {
