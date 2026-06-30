@@ -730,11 +730,12 @@
                     <th style="padding: 0.75rem 0.5rem; font-size: 0.8rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Additional</th>
                     <th style="padding: 0.75rem 0.5rem; font-size: 0.8rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Deductions</th>
                     <th style="padding: 0.75rem 0.5rem; font-size: 0.8rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; text-align: right;">Grand Total</th>
+                    <th style="padding: 0.75rem 0.5rem; font-size: 0.8rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; text-align: right;">Revenue</th>
                   </tr>
                 </thead>
                 <tbody id="orders-table-body">
                   <tr>
-                    <td colspan="8" style="text-align: center; padding: 3rem; color: var(--text-muted);">Loading orders…</td>
+                    <td colspan="9" style="text-align: center; padding: 3rem; color: var(--text-muted);">Loading orders…</td>
                   </tr>
                 </tbody>
               </table>
@@ -1161,7 +1162,7 @@
 
         const { data: bookings, error: bErr } = await sb
           .from('installation_bookings')
-          .select('grand_total, deposit_amount, balance_due, status')
+          .select('grand_total, deposit_amount, balance_due, charge_labels, charge_values, status')
           .eq('company_id', currentCompanyId)
           .neq('status', 'cancelled')
           .gte('scheduled_date', startDate)
@@ -1169,7 +1170,7 @@
 
         if (bErr) throw bErr;
 
-        // Sum up revenues: Grand Total / Remaining Balance (balance_due) + Deposit
+        // Sum up revenues: (Grand Total + Deposit) - Credit Card fees
         let totalRevenueCentavos = 0;
         if (bookings) {
           bookings.forEach(b => {
@@ -1177,11 +1178,21 @@
             const balanceDue = parseInt(b.balance_due) || 0;
             const depositAmount = parseInt(b.deposit_amount) || 0;
 
-            if (grandTotal > 0) {
-              totalRevenueCentavos += grandTotal;
-            } else {
-              totalRevenueCentavos += (balanceDue + depositAmount);
+            const orderGrandTotal = grandTotal > 0 ? grandTotal : (balanceDue + depositAmount);
+
+            let ccFeeCentavos = 0;
+            if (b.charge_labels && b.charge_values) {
+              const labels = b.charge_labels.split('|').map(s => s.trim().toLowerCase());
+              const values = b.charge_values.split('|').map(s => s.trim());
+              labels.forEach((label, idx) => {
+                if (label.includes('credit card fee')) {
+                  ccFeeCentavos += Math.round((parseFloat(values[idx]) || 0) * 100);
+                }
+              });
             }
+
+            const revenueCentavos = orderGrandTotal + depositAmount - ccFeeCentavos;
+            totalRevenueCentavos += revenueCentavos;
           });
         }
 
@@ -1265,7 +1276,7 @@
       const tbody = document.getElementById('orders-table-body');
       if (!tbody) return;
 
-      tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 3rem; color: var(--text-muted);"><div class="bk-spinner" style="margin: 0 auto;"></div>Loading orders…</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="9" style="text-align: center; padding: 3rem; color: var(--text-muted);"><div class="bk-spinner" style="margin: 0 auto;"></div>Loading orders…</td></tr>`;
 
       try {
         const [year, month] = currentSelectedMonth.split('-').map(Number);
@@ -1284,15 +1295,15 @@
         if (error) throw error;
 
         if (!bookings || bookings.length === 0) {
-          tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 3rem; color: var(--text-muted);">No orders found for this month.</td></tr>`;
+          tbody.innerHTML = `<tr><td colspan="9" style="text-align: center; padding: 3rem; color: var(--text-muted);">No orders found for this month.</td></tr>`;
           return;
         }
 
-        // Sort by customer name alphabetically
+        // Sort by Book Date (created_at) chronologically
         bookings.sort((a, b) => {
-          const nameA = (a.customer_name || '').trim().toLowerCase();
-          const nameB = (b.customer_name || '').trim().toLowerCase();
-          return nameA.localeCompare(nameB);
+          const dateA = a.created_at ? new Date(a.created_at) : new Date(0);
+          const dateB = b.created_at ? new Date(b.created_at) : new Date(0);
+          return dateA - dateB;
         });
 
         tbody.innerHTML = bookings.map(b => {
@@ -1316,10 +1327,14 @@
           const cLabels = b.charge_labels ? b.charge_labels.split('|').map(s => s.trim()) : [];
           const cValues = b.charge_values ? b.charge_values.split('|').map(s => s.trim()) : [];
           const additionalParts = [];
+          let ccFeeCentavos = 0;
           cLabels.forEach((label, idx) => {
             const val = parseFloat(cValues[idx]) || 0;
             if (val > 0) {
               additionalParts.push(`${escapeHtml(label)}: ₱${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+            }
+            if (label.toLowerCase().includes('credit card fee')) {
+              ccFeeCentavos += Math.round(val * 100);
             }
           });
           const additionalHtml = additionalParts.length > 0 ? additionalParts.map(p => `<div style="font-size: 0.8rem; color: var(--text-secondary);">${p}</div>`).join('') : '—';
@@ -1338,9 +1353,14 @@
           const grandTotal = parseInt(b.grand_total) || 0;
           const balanceDue = parseInt(b.balance_due) || 0;
           const depositAmount = parseInt(b.deposit_amount) || 0;
-          const totalVal = grandTotal > 0 ? grandTotal : (balanceDue + depositAmount);
-          const totalPHP = totalVal / 100;
-          const grandTotalStr = `₱${totalPHP.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+          const orderGrandTotal = grandTotal > 0 ? grandTotal : (balanceDue + depositAmount);
+          const grandTotalPHP = orderGrandTotal / 100;
+          const grandTotalStr = `₱${grandTotalPHP.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+          // Revenue = Grand Total + Deposit - Credit Card fees
+          const revenueCentavos = orderGrandTotal + depositAmount - ccFeeCentavos;
+          const revenuePHP = revenueCentavos / 100;
+          const revenueStr = `₱${revenuePHP.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
           return `
             <tr style="border-bottom: 1px solid var(--border);">
@@ -1352,13 +1372,14 @@
               <td style="padding: 0.75rem 0.5rem; font-size: 0.85rem;">${additionalHtml}</td>
               <td style="padding: 0.75rem 0.5rem; font-size: 0.85rem;">${deductionsHtml}</td>
               <td style="padding: 0.75rem 0.5rem; font-size: 0.85rem; text-align: right; font-weight: 700; color: var(--text-primary);">${grandTotalStr}</td>
+              <td style="padding: 0.75rem 0.5rem; font-size: 0.85rem; text-align: right; font-weight: 700; color: var(--cyan-light);">${revenueStr}</td>
             </tr>
           `;
         }).join('');
 
       } catch (err) {
         console.error('Error rendering orders tab:', err);
-        tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 3rem; color: var(--danger);">Failed to load orders: ${escapeHtml(err.message)}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="9" style="text-align: center; padding: 3rem; color: var(--danger);">Failed to load orders: ${escapeHtml(err.message)}</td></tr>`;
       }
     };
 
