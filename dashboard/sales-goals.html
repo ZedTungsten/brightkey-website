@@ -1111,7 +1111,7 @@
 
         const { data: bookings, error: bErr } = await sb
           .from('installation_bookings')
-          .select('product_skus, product_qtys, product_unit_prices, deposit_amount, deduction_labels, deduction_values, charge_labels, charge_values, scheduled_date, status')
+          .select('grand_total, deposit_amount, balance_due, status')
           .eq('company_id', currentCompanyId)
           .neq('status', 'cancelled')
           .gte('scheduled_date', startDate)
@@ -1119,62 +1119,19 @@
 
         if (bErr) throw bErr;
 
-        // Sum up revenues: Grand Total / Remaining Balance + Deposit
+        // Sum up revenues: Grand Total / Remaining Balance (balance_due) + Deposit
         let totalRevenueCentavos = 0;
         if (bookings) {
           bookings.forEach(b => {
-            const skus = b.product_skus ? b.product_skus.split(' | ').map(s => s.trim()) : [];
-            const qtys = b.product_qtys ? b.product_qtys.split(' | ').map(s => s.trim()) : [];
-            const unitPrices = b.product_unit_prices ? b.product_unit_prices.split(' | ').map(s => s.trim()) : [];
+            const grandTotal = parseInt(b.grand_total) || 0;
+            const balanceDue = parseInt(b.balance_due) || 0;
+            const depositAmount = parseInt(b.deposit_amount) || 0;
 
-            let allSkuSumCentavos = 0;
-            const numItems = Math.max(skus.length, qtys.length);
-            for (let i = 0; i < numItems; i++) {
-              const sku = skus[i] || '';
-              if (!sku) continue;
-              const qty = parseInt(qtys[i]) || 1;
-              const unitPriceDec = parseFloat(unitPrices[i]) || 0;
-              allSkuSumCentavos += Math.round(unitPriceDec * qty * 100);
+            if (grandTotal > 0) {
+              totalRevenueCentavos += grandTotal;
+            } else {
+              totalRevenueCentavos += (balanceDue + depositAmount);
             }
-
-            let depositCentavos = Math.round(Math.abs(parseInt(b.deposit_amount) || 0));
-            let discountCentavos = 0;
-            let freebiesCentavos = 0;
-            let customCentavos = 0;
-
-            if (b.deduction_labels && b.deduction_values) {
-              const labels = b.deduction_labels.split('|').map(s => s.trim().toLowerCase());
-              const values = b.deduction_values.split('|').map(s => s.trim());
-              labels.forEach((label, idx) => {
-                const valPHP = parseFloat(values[idx]) || 0;
-                const valCentavos = Math.round(Math.abs(valPHP) * 100);
-                if (label.includes('discount')) {
-                  discountCentavos += valCentavos;
-                } else if (label.includes('freebie')) {
-                  freebiesCentavos += valCentavos;
-                } else if (label.includes('custom')) {
-                  customCentavos += valCentavos;
-                } else if (label.includes('deposit')) {
-                  depositCentavos += valCentavos;
-                }
-              });
-            }
-
-            let chargesCentavos = 0;
-            if (b.charge_labels && b.charge_values) {
-              const labels = b.charge_labels.split('|').map(s => s.trim().toLowerCase());
-              const values = b.charge_values.split('|').map(s => s.trim());
-              labels.forEach((label, idx) => {
-                const valPHP = parseFloat(values[idx]) || 0;
-                const valCentavos = Math.round(Math.abs(valPHP) * 100);
-                if (!label.includes('credit card fee')) {
-                  chargesCentavos += valCentavos;
-                }
-              });
-            }
-
-            const totalPriceCentavos = allSkuSumCentavos + depositCentavos - discountCentavos - freebiesCentavos - customCentavos + chargesCentavos;
-            totalRevenueCentavos += totalPriceCentavos;
           });
         }
 
