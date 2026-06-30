@@ -614,6 +614,7 @@
         <!-- Navigation Tabs -->
         <div class="drawer-tabs">
           <button class="tab-btn active" id="btn-tab-goals" onclick="switchTab('goals')">Goals</button>
+          <button class="tab-btn" id="btn-tab-orders" onclick="switchTab('orders')">Orders</button>
           <button class="tab-btn" id="btn-tab-settings" onclick="switchTab('settings')">Settings</button>
         </div>
 
@@ -703,6 +704,41 @@
 
             </div>
 
+          </div>
+
+          <!-- TAB: ORDERS -->
+          <div id="content-orders" class="tab-content">
+            <div class="goals-header">
+              <div class="goals-title-group">
+                <h1>All Scheduled Orders</h1>
+                <p>Detailed view of booked orders, products, additional charges, and deductions for the selected month.</p>
+              </div>
+              <div>
+                <select id="orders-month-select" class="filter-select" onchange="onOrdersMonthChange(this.value)" style="min-width: 150px;"></select>
+              </div>
+            </div>
+
+            <div class="goals-panel" style="overflow-x: auto; padding: 1.25rem;">
+              <table class="prod-table" style="width: 100%; border-collapse: collapse;">
+                <thead>
+                  <tr style="border-bottom: 2px solid var(--border); text-align: left;">
+                    <th style="padding: 0.75rem 0.5rem; font-size: 0.8rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Book Date</th>
+                    <th style="padding: 0.75rem 0.5rem; font-size: 0.8rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Name</th>
+                    <th style="padding: 0.75rem 0.5rem; font-size: 0.8rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">City</th>
+                    <th style="padding: 0.75rem 0.5rem; font-size: 0.8rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">SKUs</th>
+                    <th style="padding: 0.75rem 0.5rem; font-size: 0.8rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; text-align: center;">Total SKUs</th>
+                    <th style="padding: 0.75rem 0.5rem; font-size: 0.8rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Additional</th>
+                    <th style="padding: 0.75rem 0.5rem; font-size: 0.8rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Deductions</th>
+                    <th style="padding: 0.75rem 0.5rem; font-size: 0.8rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; text-align: right;">Grand Total</th>
+                  </tr>
+                </thead>
+                <tbody id="orders-table-body">
+                  <tr>
+                    <td colspan="8" style="text-align: center; padding: 3rem; color: var(--text-muted);">Loading orders…</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
 
           <!-- TAB 2: SETTINGS -->
@@ -847,6 +883,18 @@
       currentSelectedMonth = currentMonthStr;
       
       dashboardSelect.value = currentSelectedMonth;
+
+      const ordersSelect = document.getElementById('orders-month-select');
+      if (ordersSelect) {
+        ordersSelect.innerHTML = '';
+        months.forEach(m => {
+          const opt = document.createElement('option');
+          opt.value = m;
+          opt.textContent = formatMonthName(m);
+          ordersSelect.appendChild(opt);
+        });
+        ordersSelect.value = currentSelectedMonth;
+      }
     }
 
     function getYearMonthStr(dateObj) {
@@ -874,6 +922,8 @@
         renderSettingsGoalRows();
         const currentBiz = document.getElementById('settings-business-select').value;
         onSettingsBusinessChange(currentBiz);
+      } else if (tabName === 'orders') {
+        renderOrdersTab();
       } else {
         document.getElementById('goals-month-select').value = currentSelectedMonth;
         loadGoalsDashboard();
@@ -1203,6 +1253,114 @@
         showToast('Error loading sales goals: ' + err.message, true);
       }
     }
+
+    window.onOrdersMonthChange = function(val) {
+      currentSelectedMonth = val;
+      const goalsSelect = document.getElementById('goals-month-select');
+      if (goalsSelect) goalsSelect.value = val;
+      renderOrdersTab();
+    };
+
+    window.renderOrdersTab = async function() {
+      const tbody = document.getElementById('orders-table-body');
+      if (!tbody) return;
+
+      tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 3rem; color: var(--text-muted);"><div class="bk-spinner" style="margin: 0 auto;"></div>Loading orders…</td></tr>`;
+
+      try {
+        const [year, month] = currentSelectedMonth.split('-').map(Number);
+        const lastDay = new Date(year, month, 0).getDate();
+        const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+        const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+
+        const { data: bookings, error } = await sb
+          .from('installation_bookings')
+          .select('created_at, customer_name, customer_address, product_skus, product_qtys, charge_labels, charge_values, deduction_labels, deduction_values, grand_total, balance_due, deposit_amount, status')
+          .eq('company_id', currentCompanyId)
+          .neq('status', 'cancelled')
+          .gte('scheduled_date', startDate)
+          .lte('scheduled_date', endDate);
+
+        if (error) throw error;
+
+        if (!bookings || bookings.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 3rem; color: var(--text-muted);">No orders found for this month.</td></tr>`;
+          return;
+        }
+
+        // Sort by customer name alphabetically
+        bookings.sort((a, b) => {
+          const nameA = (a.customer_name || '').trim().toLowerCase();
+          const nameB = (b.customer_name || '').trim().toLowerCase();
+          return nameA.localeCompare(nameB);
+        });
+
+        tbody.innerHTML = bookings.map(b => {
+          const bookDate = b.created_at ? new Date(b.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
+          const name = escapeHtml(b.customer_name || '—');
+
+          const addressParts = (b.customer_address || '').split(',');
+          let city = '—';
+          if (addressParts.length >= 2) {
+            city = escapeHtml(addressParts[addressParts.length - 2].trim());
+          } else if (b.customer_address) {
+            city = escapeHtml(b.customer_address.trim());
+          }
+
+          const skus = b.product_skus ? b.product_skus.split(' | ').map(s => s.trim()) : [];
+          const skusHtml = skus.map(s => `<div class="sku-badge" style="margin-bottom: 2px;">${escapeHtml(s)}</div>`).join('');
+
+          const qtys = b.product_qtys ? b.product_qtys.split(' | ').map(Number) : [];
+          const totalSkus = qtys.reduce((sum, q) => sum + (q || 0), 0);
+
+          const cLabels = b.charge_labels ? b.charge_labels.split('|').map(s => s.trim()) : [];
+          const cValues = b.charge_values ? b.charge_values.split('|').map(s => s.trim()) : [];
+          const additionalParts = [];
+          cLabels.forEach((label, idx) => {
+            const val = parseFloat(cValues[idx]) || 0;
+            if (val > 0) {
+              additionalParts.push(`${escapeHtml(label)}: ₱${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+            }
+          });
+          const additionalHtml = additionalParts.length > 0 ? additionalParts.map(p => `<div style="font-size: 0.8rem; color: var(--text-secondary);">${p}</div>`).join('') : '—';
+
+          const dLabels = b.deduction_labels ? b.deduction_labels.split('|').map(s => s.trim()) : [];
+          const dValues = b.deduction_values ? b.deduction_values.split('|').map(s => s.trim()) : [];
+          const deductionParts = [];
+          dLabels.forEach((label, idx) => {
+            const val = parseFloat(dValues[idx]) || 0;
+            if (val > 0) {
+              deductionParts.push(`${escapeHtml(label)}: ₱${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+            }
+          });
+          const deductionsHtml = deductionParts.length > 0 ? deductionParts.map(p => `<div style="font-size: 0.8rem; color: var(--text-secondary);">${p}</div>`).join('') : '—';
+
+          const grandTotal = parseInt(b.grand_total) || 0;
+          const balanceDue = parseInt(b.balance_due) || 0;
+          const depositAmount = parseInt(b.deposit_amount) || 0;
+          const totalVal = grandTotal > 0 ? grandTotal : (balanceDue + depositAmount);
+          const totalPHP = totalVal / 100;
+          const grandTotalStr = `₱${totalPHP.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+          return `
+            <tr style="border-bottom: 1px solid var(--border);">
+              <td style="padding: 0.75rem 0.5rem; font-size: 0.85rem; white-space: nowrap;">${bookDate}</td>
+              <td style="padding: 0.75rem 0.5rem; font-size: 0.85rem; font-weight: 600; color: var(--text-primary);">${name}</td>
+              <td style="padding: 0.75rem 0.5rem; font-size: 0.85rem;">${city}</td>
+              <td style="padding: 0.75rem 0.5rem; font-size: 0.85rem;">${skusHtml}</td>
+              <td style="padding: 0.75rem 0.5rem; font-size: 0.85rem; text-align: center; font-weight: 600;">${totalSkus}</td>
+              <td style="padding: 0.75rem 0.5rem; font-size: 0.85rem;">${additionalHtml}</td>
+              <td style="padding: 0.75rem 0.5rem; font-size: 0.85rem;">${deductionsHtml}</td>
+              <td style="padding: 0.75rem 0.5rem; font-size: 0.85rem; text-align: right; font-weight: 700; color: var(--text-primary);">${grandTotalStr}</td>
+            </tr>
+          `;
+        }).join('');
+
+      } catch (err) {
+        console.error('Error rendering orders tab:', err);
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 3rem; color: var(--danger);">Failed to load orders: ${escapeHtml(err.message)}</td></tr>`;
+      }
+    };
 
     // Top Products (Last 30 Days) Loader - 6 total products
     async function loadTopProducts() {
