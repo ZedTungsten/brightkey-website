@@ -736,26 +736,33 @@
           </div>
         </div>`;
 
-        // Render to off-screen element, export
-        const el = document.createElement('div');
-        el.style.cssText = 'position:fixed;left:0;top:0;z-index:-9999;opacity:1;pointer-events:none;background:#fff;color:#111827;width:646px;padding:2rem;box-sizing:border-box;font-family:Inter,sans-serif;';
-        el.innerHTML = sheetHtml;
-        document.body.appendChild(el);
+        const container = document.getElementById('payslip-a4-sheet');
+        container.innerHTML = sheetHtml;
 
         const fileName = `Payslip_${empFullName.replace(/\s+/g,'_')}_${monthText.replace(/\s+/g,'_')}.pdf`;
+        const opt = {
+          margin:       [10, 10, 10, 10],
+          filename:     fileName,
+          image:        { type: 'jpeg', quality: 0.98 },
+          html2canvas:  { scale: 2, useCORS: true, letterRendering: true },
+          jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+        };
+
+        const originalBorder = container.style.border;
+        const originalShadow = container.style.boxShadow;
+        container.style.border = 'none';
+        container.style.boxShadow = 'none';
+
         try {
-          await html2pdf().set({
-            margin: [10, 10, 10, 10], filename: fileName,
-            image: { type: 'jpeg', quality: 0.98 },
-            html2canvas: { scale: 2, useCORS: true, letterRendering: true },
-            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-          }).from(el).save();
+          await html2pdf().set(opt).from(container).save();
           toast('Payslip PDF saved.', 'success');
         } catch (err) {
           console.error(err);
           toast('PDF export failed: ' + err.message, 'error');
         } finally {
-          document.body.removeChild(el);
+          container.style.border = originalBorder;
+          container.style.boxShadow = originalShadow;
+          container.innerHTML = ''; // Clear container
         }
       },
 
@@ -795,5 +802,10 @@
       if (typeof initNav === 'function') initNav();
     });
   </script>
+
+  <!-- Hidden wrapper for generating payslip PDF -->
+  <div id="payslip-hidden-wrapper" style="position: absolute; left: -9999px; top: -9999px; width: 210mm; height: 297mm; background: #fff;">
+    <div id="payslip-a4-sheet"></div>
+  </div>
 </body>
 </html>
