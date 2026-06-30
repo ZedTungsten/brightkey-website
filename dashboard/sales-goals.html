@@ -1162,7 +1162,7 @@
 
         const { data: bookings, error: bErr } = await sb
           .from('installation_bookings')
-          .select('grand_total, deposit_amount, balance_due, charge_labels, charge_values, deduction_labels, deduction_values, status')
+          .select('grand_total, deposit_amount, balance_due, deduction_labels, deduction_values, status')
           .eq('company_id', currentCompanyId)
           .neq('status', 'cancelled')
           .gte('scheduled_date', startDate)
@@ -1170,7 +1170,7 @@
 
         if (bErr) throw bErr;
 
-        // Sum up revenues: Grand Total + Deposit + Credit Card fees
+        // Sum up revenues: Grand Total + Deposit
         let totalRevenueCentavos = 0;
         if (bookings) {
           bookings.forEach(b => {
@@ -1190,19 +1190,7 @@
             }
 
             const orderGrandTotal = grandTotal > 0 ? grandTotal : (balanceDue + depositCentavos);
-
-            let ccFeeCentavos = 0;
-            if (b.charge_labels && b.charge_values) {
-              const labels = b.charge_labels.split('|').map(s => s.trim().toLowerCase());
-              const values = b.charge_values.split('|').map(s => s.trim());
-              labels.forEach((label, idx) => {
-                if (label.includes('credit card fee') || label.includes('credit card charge')) {
-                  ccFeeCentavos += Math.round((parseFloat(values[idx]) || 0) * 100);
-                }
-              });
-            }
-
-            const revenueCentavos = orderGrandTotal + depositCentavos + ccFeeCentavos;
+            const revenueCentavos = orderGrandTotal + depositCentavos;
             totalRevenueCentavos += revenueCentavos;
           });
         }
@@ -1338,14 +1326,10 @@
           const cLabels = b.charge_labels ? b.charge_labels.split('|').map(s => s.trim()) : [];
           const cValues = b.charge_values ? b.charge_values.split('|').map(s => s.trim()) : [];
           const additionalParts = [];
-          let ccFeeCentavos = 0;
           cLabels.forEach((label, idx) => {
             const val = parseFloat(cValues[idx]) || 0;
             if (val > 0) {
               additionalParts.push(`${escapeHtml(label)}: ₱${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
-            }
-            if (label.toLowerCase().includes('credit card fee') || label.toLowerCase().includes('credit card charge')) {
-              ccFeeCentavos += Math.round(val * 100);
             }
           });
           const additionalHtml = additionalParts.length > 0 ? additionalParts.map(p => `<div style="font-size: 0.8rem; color: var(--text-secondary);">${p}</div>`).join('') : '—';
@@ -1373,8 +1357,8 @@
           const grandTotalPHP = orderGrandTotal / 100;
           const grandTotalStr = `₱${grandTotalPHP.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-          // Revenue = Grand Total + Deposit + Credit Card charges
-          const revenueCentavos = orderGrandTotal + depositCentavos + ccFeeCentavos;
+          // Revenue = Grand Total + Deposit
+          const revenueCentavos = orderGrandTotal + depositCentavos;
           const revenuePHP = revenueCentavos / 100;
           const revenueStr = `₱${revenuePHP.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
