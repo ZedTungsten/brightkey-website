@@ -766,7 +766,7 @@
       }
     }
 
-    // Load bookings sorted by date created and filtered by selected Month & Year
+    // Load bookings sorted by name and filtered by selected Month & Year of installation (scheduled_date)
     async function loadBookingsDropdown() {
       try {
         const filterMonthEl = document.getElementById('filter-booking-month');
@@ -779,14 +779,20 @@
         }
 
         let query = sb.from('installation_bookings')
-          .select('id, order_no, customer_name, created_at, status')
+          .select('id, order_no, customer_name, scheduled_date, status')
           .neq('status', 'cancelled');
 
         if (selectedMonth) {
-          const [year, month] = selectedMonth.split('-');
-          const startDate = new Date(year, month - 1, 1).toISOString();
-          const endDate = new Date(year, month, 1).toISOString();
-          query = query.gte('created_at', startDate).lt('created_at', endDate);
+          const [year, month] = selectedMonth.split('-').map(Number);
+          const startDateStr = `${year}-${String(month).padStart(2, '0')}-01`;
+          let nextYear = year;
+          let nextMonth = month + 1;
+          if (nextMonth > 12) {
+            nextMonth = 1;
+            nextYear += 1;
+          }
+          const endDateStr = `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`;
+          query = query.gte('scheduled_date', startDateStr).lt('scheduled_date', endDateStr);
         }
 
         const { data, error } = await query;
@@ -801,7 +807,9 @@
         const selector = document.getElementById('booking-selector');
         selector.innerHTML = '<option value="">-- Choose Order / Last Name --</option>';
         bookingsList.forEach(b => {
-          const dateStr = new Date(b.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+          const dateStr = b.scheduled_date 
+            ? new Date(b.scheduled_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) 
+            : 'Unscheduled';
           selector.innerHTML += `<option value="${b.id}">${b.customer_name} - ${dateStr} [${b.order_no}]</option>`;
         });
       } catch (e) {
