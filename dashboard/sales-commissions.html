@@ -804,12 +804,28 @@
         });
       }
 
+      let chargesCentavos = 0;
+      if (b.charge_labels && b.charge_values) {
+        const labels = b.charge_labels.split('|').map(s => s.trim().toLowerCase());
+        const values = b.charge_values.split('|').map(s => s.trim());
+        labels.forEach((label, idx) => {
+          const valPHP = parseFloat(values[idx]) || 0;
+          const valCentavos = Math.round(Math.abs(valPHP) * 100);
+          if (!label.includes('credit card fee')) {
+            chargesCentavos += valCentavos;
+          }
+        });
+      }
+
       const depositCentavos = Math.round(Math.abs(parseInt(b.deposit_amount) || 0));
 
       const finalEligibleCentavos = skuSumCentavos + depositCentavos - discountCentavos - customCentavos;
+      const totalPriceCentavos = skuSumCentavos + depositCentavos - discountCentavos - freebiesCentavos + chargesCentavos;
+
       return {
         skuSumCentavos,
-        finalEligibleCentavos
+        finalEligibleCentavos,
+        totalPriceCentavos
       };
     }
 
@@ -901,32 +917,9 @@
         // If there are no eligible products in this booking, skip it completely!
         if (eligibleSkusList.length === 0) return;
 
-        // Deductions
-        let discountCentavos = 0;
-        let freebiesCentavos = 0;
-        let customCentavos = 0;
-
-        if (b.deduction_labels && b.deduction_values) {
-          const labels = b.deduction_labels.split('|').map(s => s.trim().toLowerCase());
-          const values = b.deduction_values.split('|').map(s => s.trim());
-          labels.forEach((label, idx) => {
-            const valPHP = parseFloat(values[idx]) || 0;
-            const valCentavos = Math.round(Math.abs(valPHP) * 100);
-            if (label.includes('discount')) {
-              discountCentavos += valCentavos;
-            } else if (label.includes('freebie')) {
-              freebiesCentavos += valCentavos;
-            } else if (label.includes('custom')) {
-              customCentavos += valCentavos;
-            }
-          });
-        }
-
-        // Deposit
-        const depositCentavos = Math.round(Math.abs(parseInt(b.deposit_amount) || 0));
-
-        // Calculate final eligible total commission basis
-        const finalEligibleCentavos = skuSumCentavos + depositCentavos - discountCentavos - customCentavos;
+        const calc = getBookingEligibleCentavos(b, productMap, commissionsConfig.eligibility_rules);
+        const finalEligibleCentavos = calc.finalEligibleCentavos;
+        const totalPriceCentavos = calc.totalPriceCentavos;
 
         let doorsArr = [];
         if (typeof b.doors === 'string') {
@@ -1084,7 +1077,7 @@
             <td>${escapeHtml(city)}</td>
             <td><div style="display: flex; flex-wrap: wrap; gap: 0.25rem;">${skuBadges}</div></td>
             <td>${eligibleQtySum}</td>
-            <td style="font-variant-numeric: tabular-nums">${fmtPHP(skuSumCentavos)}</td>
+            <td style="font-variant-numeric: tabular-nums">${fmtPHP(totalPriceCentavos)}</td>
             <td style="font-variant-numeric: tabular-nums; font-weight: 600; color: var(--success);">
               ${fmtPHP(finalEligibleCentavos)}
             </td>
