@@ -1055,9 +1055,22 @@
 
         const activeEmpIds = new Set();
 
-        // 1. Draw active threads first
+        const getSortScore = (id) => {
+          const status = presenceMap[id] || 'offline';
+          if (status === 'available') return 2;
+          if (status === 'break') return 1;
+          return 0;
+        };
+
+        // 1. Draw active threads first, sorted by online presence
         if (inbox.length > 0) {
-          inbox.forEach(thread => {
+          const sortedInbox = [...inbox].sort((a, b) => {
+            const scoreA = getSortScore(a.other_employee_id);
+            const scoreB = getSortScore(b.other_employee_id);
+            return scoreB - scoreA;
+          });
+
+          sortedInbox.forEach(thread => {
             activeEmpIds.add(thread.other_employee_id);
             const status = presenceMap[thread.other_employee_id] || 'offline';
             const item = this.createTeammateItemElement({
@@ -1072,7 +1085,7 @@
           });
         }
 
-        // 2. Draw remaining active employees
+        // 2. Draw remaining active employees, sorted by online presence
         const remaining = allEmployees.filter(e => !activeEmpIds.has(e.id));
         if (remaining.length > 0) {
           const header = document.createElement('div');
@@ -1080,7 +1093,16 @@
           header.textContent = 'Directory';
           container.appendChild(header);
 
-          remaining.forEach(emp => {
+          const sortedRemaining = [...remaining].sort((a, b) => {
+            const scoreA = getSortScore(a.id);
+            const scoreB = getSortScore(b.id);
+            if (scoreA !== scoreB) return scoreB - scoreA;
+            const nameA = `${a.first_name} ${a.last_name}`.toLowerCase();
+            const nameB = `${b.first_name} ${b.last_name}`.toLowerCase();
+            return nameA.localeCompare(nameB);
+          });
+
+          sortedRemaining.forEach(emp => {
             const status = presenceMap[emp.id] || 'offline';
             const item = this.createTeammateItemElement(emp, status);
             container.appendChild(item);
