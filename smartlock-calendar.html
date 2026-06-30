@@ -1586,9 +1586,9 @@
         const isDone = doorsArr.length > 0 && doorsArr.every(d => d.completed);
         const hasMedia = doorsArr.some(d => d.media_urls && d.media_urls.length > 0);
 
-        // Check if all configured required media are uploaded for every door
+        const isEvent = b.product_skus === 'Backjob' || b.product_skus === 'Ocular';
         const hasCompleteMedia = doorsArr.length > 0 && doorsArr.every(d => {
-          if (!bookingMediaRequirements || bookingMediaRequirements.length === 0) {
+          if (isEvent || !bookingMediaRequirements || bookingMediaRequirements.length === 0) {
             return d.media_urls && d.media_urls.length > 0;
           }
           return bookingMediaRequirements.every(req => d.required_media && d.required_media[req.label]);
@@ -1881,6 +1881,7 @@
               </div>
             `;
           } else if (isAssignedToThisDoor) {
+            const isEvent = selectedBooking.product_skus === 'Backjob' || selectedBooking.product_skus === 'Ocular';
             if (door?.completed) {
               doneButtonHtml = `
                 <div style="position: absolute; top: 0.85rem; right: 1rem; display: flex; flex-direction: column; gap: 0.4rem; align-items: flex-end;">
@@ -1889,9 +1890,10 @@
                 </div>
               `;
             } else {
+              const clickAction = isEvent ? `markEventDoorDone(${i}, this)` : `openChecklistModal(${i})`;
               doneButtonHtml = `
                 <div style="position: absolute; top: 0.85rem; right: 1rem; display: flex; flex-direction: column; gap: 0.4rem; align-items: flex-end;">
-                  <button type="button" class="btn btn-sm" style="width: auto; font-size: 0.83rem; padding: 0.3rem 0.7rem; border-radius: var(--radius-sm); background: var(--success); color: #fff; border: none; cursor: pointer;" onclick="openChecklistModal(${i})">Done</button>
+                  <button type="button" class="btn btn-sm" style="width: auto; font-size: 0.83rem; padding: 0.3rem 0.7rem; border-radius: var(--radius-sm); background: var(--success); color: #fff; border: none; cursor: pointer;" onclick="${clickAction}">Done</button>
                 </div>
               `;
             }
@@ -2178,6 +2180,71 @@
       }
     }
 
+    window.markEventDoorDone = async function(doorIndex, buttonEl) {
+      if (!selectedBooking) return;
+      if (buttonEl) {
+        buttonEl.disabled = true;
+        buttonEl.innerText = 'Completing...';
+      }
+
+      let doorsArr = [];
+      if (typeof selectedBooking.doors === 'string') {
+        try { doorsArr = JSON.parse(selectedBooking.doors); } catch(_) {}
+      } else if (Array.isArray(selectedBooking.doors)) {
+        doorsArr = selectedBooking.doors;
+      }
+
+      while (doorsArr.length <= doorIndex) {
+        doorsArr.push({
+          doorMaterial: 'N/A',
+          jambMaterial: 'N/A',
+          swing: 'N/A',
+          completed: false,
+          signature: null,
+          media_urls: []
+        });
+      }
+
+      const door = doorsArr[doorIndex];
+      if (!door) return;
+
+      door.completed = true;
+      door.completed_at = new Date().toISOString();
+      door.signature = null;
+      door.checklist = [];
+
+      try {
+        const { error } = await sb
+          .from('installation_bookings')
+          .update({ doors: doorsArr })
+          .eq('id', selectedBooking.id);
+
+        if (error) throw error;
+
+        const idx = dbBookings.findIndex(b => b.id === selectedBooking.id);
+        if (idx !== -1) {
+          dbBookings[idx].doors = doorsArr;
+          selectedBooking.doors = doorsArr;
+        }
+
+        localStorage.setItem(`bk_cache_${currentInstaller.id}`, JSON.stringify({
+          data: dbBookings,
+          timestamp: new Date().toISOString()
+        }));
+
+        showToast('Event marked as completed.');
+        openDetailsModal(selectedBooking.id); // Refresh details modal
+        drawAgenda(); // Refresh lists
+      } catch (err) {
+        console.error('Failed to complete event:', err);
+        showToast('Failed to complete: ' + err.message, true);
+        if (buttonEl) {
+          buttonEl.disabled = false;
+          buttonEl.innerText = 'Done';
+        }
+      }
+    };
+
     window.openChecklistModal = function(doorIndex, isReadOnly = false) {
       signatureIndex = doorIndex;
       
@@ -2414,9 +2481,11 @@
       if (!door) return;
 
       // Populate existing required media from DB
+      const isEvent = selectedBooking && (selectedBooking.product_skus === 'Backjob' || selectedBooking.product_skus === 'Ocular');
+      const activeReqs = isEvent ? [] : bookingMediaRequirements;
       if (door.required_media) {
-        if (bookingMediaRequirements && bookingMediaRequirements.length > 0) {
-          bookingMediaRequirements.forEach((item, idx) => {
+        if (activeReqs && activeReqs.length > 0) {
+          activeReqs.forEach((item, idx) => {
             const savedUrl = door.required_media[item.label];
             if (savedUrl) {
               slotFiles[idx] = { url: savedUrl, progress: 100 };
@@ -2460,7 +2529,9 @@
       const section = document.getElementById('required-media-section');
       if (!container) return;
 
-      if (!bookingMediaRequirements || bookingMediaRequirements.length === 0) {
+      const isEvent = selectedBooking && (selectedBooking.product_skus === 'Backjob' || selectedBooking.product_skus === 'Ocular');
+      const activeReqs = isEvent ? [] : bookingMediaRequirements;
+      if (!activeReqs || activeReqs.length === 0) {
         section.style.display = 'none';
         return;
       }
@@ -2811,9 +2882,12 @@
       const submitBtn = document.getElementById('btn-submit-upload');
       if (!submitBtn) return;
 
+      const isEvent = selectedBooking && (selectedBooking.product_skus === 'Backjob' || selectedBooking.product_skus === 'Ocular');
+      const activeReqs = isEvent ? [] : bookingMediaRequirements;
+
       let allRequirementsFilled = true;
-      if (bookingMediaRequirements && bookingMediaRequirements.length > 0) {
-        for (let i = 0; i < bookingMediaRequirements.length; i++) {
+      if (activeReqs && activeReqs.length > 0) {
+        for (let i = 0; i < activeReqs.length; i++) {
           const slot = slotFiles[i];
           if (!slot || !slot.url || slot.progress < 100) {
             allRequirementsFilled = false;
@@ -2825,7 +2899,10 @@
       // Check that other files currently uploading are not pending
       const anyOtherUploading = otherFiles.some(f => f.progress < 100);
 
-      if (bookingMediaRequirements && bookingMediaRequirements.length > 0) {
+      if (isEvent) {
+        // Just 1 image required for Backjob/Ocular
+        submitBtn.disabled = otherFiles.length === 0 || anyOtherUploading;
+      } else if (activeReqs && activeReqs.length > 0) {
         submitBtn.disabled = !allRequirementsFilled || anyOtherUploading;
       } else {
         submitBtn.disabled = otherFiles.length === 0 || anyOtherUploading;
@@ -2846,8 +2923,10 @@
       if (!door) return;
 
       // 1. Build door.required_media
+      const isEvent = selectedBooking && (selectedBooking.product_skus === 'Backjob' || selectedBooking.product_skus === 'Ocular');
+      const activeReqs = isEvent ? [] : bookingMediaRequirements;
       door.required_media = {};
-      bookingMediaRequirements.forEach((item, idx) => {
+      activeReqs.forEach((item, idx) => {
         const slot = slotFiles[idx];
         if (slot && slot.url) {
           door.required_media[item.label] = slot.url;
