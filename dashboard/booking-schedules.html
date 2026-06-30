@@ -929,6 +929,7 @@
             <label class="form-label" for="event-type">Event Type</label>
             <select id="event-type" class="form-input">
               <option value="backjob">Backjob</option>
+              <option value="ocular">Ocular</option>
             </select>
           </div>
           <div class="form-group">
@@ -2763,6 +2764,7 @@
       // Clear inputs
       document.getElementById('event-cust-name').value = '';
       document.getElementById('event-time-slot').value = 'Morning';
+      document.getElementById('event-type').value = 'backjob';
       
       // Uncheck all checkboxes
       const checkboxes = document.querySelectorAll('input[name="event-installers"]');
@@ -2798,25 +2800,29 @@
       const installerIdStr = installersList.length > 0 ? installersList.map(i => i.id).join(' | ') : null;
       const installerNameStr = installersList.length > 0 ? installersList.map(i => i.name).join(' | ') : null;
 
+      const eventType = document.getElementById('event-type').value;
+      const eventTypeName = eventType === 'ocular' ? 'Ocular' : 'Backjob';
+      const typePrefix = eventType === 'ocular' ? 'OC' : 'BJ';
+
       // Find matched previous customer to copy details from
       const sorted = [...dbBookings].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
       const matched = sorted.find(b => b.customer_name && b.customer_name.trim().toLowerCase() === customerName.toLowerCase());
 
       const randomSuffix = Date.now();
-      const folderRefId = `BJ-${randomSuffix}`;
-      const orderNo = `BJ-${randomSuffix}`;
+      const folderRefId = `${typePrefix}-${randomSuffix}`;
+      const orderNo = `${typePrefix}-${randomSuffix}`;
 
       // Product details mapping
       const installerNamesList = installersList.map(i => formatInstallerName(i.name));
       const installerNamesJoined = installerNamesList.join(', ');
-      const productName = installerNamesJoined ? `Backjob - ${installerNamesJoined}` : 'Backjob';
+      const productName = installerNamesJoined ? `${eventTypeName} - ${installerNamesJoined}` : eventTypeName;
 
       const payload = {
         company_id: currentCompanyId,
         folder_ref_id: folderRefId,
         order_no: orderNo,
         customer_name: customerName,
-        customer_address: matched ? (matched.customer_address || 'Backjob') : 'Backjob',
+        customer_address: matched ? (matched.customer_address || eventTypeName) : eventTypeName,
         customer_social: matched ? matched.customer_social : null,
         customer_email: matched ? matched.customer_email : null,
         customer_phone: matched ? matched.customer_phone : null,
@@ -2829,13 +2835,13 @@
         status: 'scheduled',
         grand_total: 0,
         subtotal: 0,
-        product_skus: 'Backjob',
+        product_skus: eventTypeName,
         product_names: productName,
         product_qtys: '1',
         product_unit_prices: '0',
         product_totals: '0',
         products: [{
-          sku: 'Backjob',
+          sku: eventTypeName,
           name: productName,
           quantity: 1,
           price: 0,
@@ -2851,7 +2857,7 @@
 
         if (error) throw error;
 
-        showToast('Backjob created successfully.');
+        showToast(`${eventTypeName} created successfully.`);
         toggleDayEventsModal(false);
         await loadData();
       } catch (err) {
