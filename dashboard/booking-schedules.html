@@ -584,6 +584,52 @@
     #upload-modal, #checklist-modal {
       z-index: 1100;
     }
+
+    /* ── Tab Container Bar ── */
+    .drawer-tabs {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      overflow-x: auto;
+      background: var(--bg-surface);
+      margin-bottom: 1.5rem;
+    }
+
+    /* ── Tab Buttons ── */
+    .tab-btn {
+      padding: 0.9rem 1.25rem;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      border: none;
+      background: none;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      white-space: nowrap;
+      transition: all 0.15s;
+    }
+
+    /* ── Active Tab Styling ── */
+    .tab-btn.active {
+      color: var(--cyan-light);
+      border-bottom-color: var(--cyan);
+    }
+
+    /* ── Hover State ── */
+    .tab-btn:hover:not(.active) {
+      color: var(--text-secondary);
+    }
+
+    .order-no-pill {
+      display: inline-block;
+      font-size: 0.75rem;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 4px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+    }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 </head>
@@ -623,21 +669,52 @@
               <button class="btn btn-outline btn-sm" onclick="changeMonth(1)">▶</button>
             </div>
 
-            <!-- Calendar View Content Container -->
-            <div id="view-calendar" class="view-container active">
-              <div style="overflow-x: auto; width: 100%; -webkit-overflow-scrolling: touch;">
-                <div class="calendar-grid">
-                  <div class="calendar-day-label">Su</div>
-                  <div class="calendar-day-label">Mo</div>
-                  <div class="calendar-day-label">Tu</div>
-                  <div class="calendar-day-label">We</div>
-                  <div class="calendar-day-label">Th</div>
-                  <div class="calendar-day-label">Fr</div>
-                  <div class="calendar-day-label">Sa</div>
-                  <div class="calendar-grid-cells" id="calendar-cells" style="display:contents;">
-                    <!-- Dynamic content -->
+            <!-- Tabs -->
+            <div class="drawer-tabs" style="margin-top: 1rem;">
+              <button class="tab-btn active" id="tab-schedules" onclick="switchMainTab('schedules')">Schedules</button>
+              <button class="tab-btn" id="tab-all-bookings" onclick="switchMainTab('all-bookings')">All Bookings</button>
+            </div>
+
+            <!-- Schedules Tab Panel -->
+            <div id="tab-panel-schedules">
+              <!-- Calendar View Content Container -->
+              <div id="view-calendar" class="view-container active">
+                <div style="overflow-x: auto; width: 100%; -webkit-overflow-scrolling: touch;">
+                  <div class="calendar-grid">
+                    <div class="calendar-day-label">Su</div>
+                    <div class="calendar-day-label">Mo</div>
+                    <div class="calendar-day-label">Tu</div>
+                    <div class="calendar-day-label">We</div>
+                    <div class="calendar-day-label">Th</div>
+                    <div class="calendar-day-label">Fr</div>
+                    <div class="calendar-day-label">Sa</div>
+                    <div class="calendar-grid-cells" id="calendar-cells" style="display:contents;">
+                      <!-- Dynamic content -->
+                    </div>
                   </div>
                 </div>
+              </div>
+            </div>
+
+            <!-- All Bookings Tab Panel -->
+            <div id="tab-panel-all-bookings" style="display: none;">
+              <div class="table-responsive" style="margin-top: 1rem;">
+                <table class="prod-table" style="width: 100%;">
+                  <thead>
+                    <tr>
+                      <th style="width: 15%;">Install Date</th>
+                      <th style="width: 20%;">Name</th>
+                      <th style="width: 15%;">Order Number</th>
+                      <th style="width: 15%;">City</th>
+                      <th style="width: 20%;">SKU</th>
+                      <th style="width: 8%; text-align: center;">Qty</th>
+                      <th style="width: 7%; text-align: center;">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody id="all-bookings-tbody">
+                    <!-- Dynamic content -->
+                  </tbody>
+                </table>
               </div>
             </div>
 
@@ -1276,6 +1353,7 @@
       });
 
       drawCalendar();
+      drawAllBookingsList();
     }
 
     function changeMonth(direction) {
@@ -1288,7 +1366,120 @@
         currentYear++;
       }
       drawCalendar();
+      drawAllBookingsList();
     }
+
+    window.switchMainTab = function(tab) {
+      const tabSchedules = document.getElementById('tab-schedules');
+      const tabAllBookings = document.getElementById('tab-all-bookings');
+      
+      const panelSchedules = document.getElementById('tab-panel-schedules');
+      const panelAllBookings = document.getElementById('tab-panel-all-bookings');
+
+      if (tab === 'schedules') {
+        if (tabSchedules) tabSchedules.classList.add('active');
+        if (tabAllBookings) tabAllBookings.classList.remove('active');
+        if (panelSchedules) panelSchedules.style.display = 'block';
+        if (panelAllBookings) panelAllBookings.style.display = 'none';
+      } else {
+        if (tabSchedules) tabSchedules.classList.remove('active');
+        if (tabAllBookings) tabAllBookings.classList.add('active');
+        if (panelSchedules) panelSchedules.style.display = 'none';
+        if (panelAllBookings) panelAllBookings.style.display = 'block';
+        drawAllBookingsList();
+      }
+    };
+
+    function drawAllBookingsList() {
+      const tbody = document.getElementById('all-bookings-tbody');
+      if (!tbody) return;
+
+      const yearStr = String(currentYear);
+      const monthStr = String(currentMonth + 1).padStart(2, '0');
+      const prefix = `${yearStr}-${monthStr}`;
+
+      const bookingsInMonth = filteredBookings.filter(b => b.scheduled_date && b.scheduled_date.startsWith(prefix));
+
+      if (bookingsInMonth.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted" style="padding: 2rem 0;">No bookings found for the selected month.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = bookingsInMonth.map(b => {
+        const installDate = b.scheduled_date ? formatDateFriendly(b.scheduled_date) : 'Unscheduled';
+        const name = escapeHtml(b.customer_name || '—');
+        const orderNo = escapeHtml(b.order_no || '—');
+        
+        // City
+        const addressParts = (b.customer_address || '').split(',');
+        let city = '—';
+        if (addressParts.length >= 2) {
+          city = escapeHtml(addressParts[addressParts.length - 2].trim());
+        } else if (b.customer_address) {
+          city = escapeHtml(b.customer_address.trim());
+        }
+
+        // Group SKUs under name
+        let skus = [];
+        let qtys = [];
+        if (b.product_skus) {
+          skus = b.product_skus.split(' | ').map(s => s.trim());
+        }
+        if (b.product_qtys) {
+          qtys = b.product_qtys.split(' | ').map(q => q.trim());
+        }
+        
+        const skuHtml = skus.map(s => `<div style="font-weight: 600;">${escapeHtml(s)}</div>`).join('');
+        const qtyHtml = qtys.map(q => `<div>${escapeHtml(q)}</div>`).join('');
+
+        const deleteButton = `
+          <button class="btn-minimal btn-danger" onclick="deleteBookingFromDb('${b.id}')" title="Delete Booking" style="display: inline-flex; align-items: center; justify-content: center; cursor: pointer;">
+            <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+          </button>
+        `;
+
+        return `
+          <tr style="cursor: pointer;" onclick="showBookingDetails('${b.id}')">
+            <td>${installDate}</td>
+            <td style="font-weight: 700; color: var(--text-primary);">${name}</td>
+            <td><span class="order-no-pill">${orderNo}</span></td>
+            <td>${city}</td>
+            <td>${skuHtml}</td>
+            <td style="text-align: center;">${qtyHtml}</td>
+            <td style="text-align: center;" onclick="event.stopPropagation()">${deleteButton}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    window.deleteBookingFromDb = async function(id) {
+      if (!window.BKDialog) {
+        if (!confirm('Are you sure you want to permanently delete this booking?')) return;
+      } else {
+        const ok = await window.BKDialog.ask({
+          title: 'Delete Booking',
+          message: 'Are you sure you want to permanently delete this booking? This will remove all associated installation details and cannot be undone.',
+          okText: 'Yes, Delete',
+          cancelText: 'Cancel'
+        });
+        if (!ok) return;
+      }
+
+      try {
+        const { error } = await sb
+          .from('installation_bookings')
+          .delete()
+          .eq('id', id);
+
+        if (error) throw error;
+
+        showToast('Booking deleted successfully.');
+        await loadData();
+      } catch (err) {
+        console.error('Failed to delete booking:', err);
+        showToast('Failed to delete booking: ' + err.message, true);
+      }
+    };
 
     function drawCalendar() {
       const title = document.getElementById('calendar-month-title');
