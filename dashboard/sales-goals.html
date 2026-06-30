@@ -1162,7 +1162,7 @@
 
         const { data: bookings, error: bErr } = await sb
           .from('installation_bookings')
-          .select('grand_total, deposit_amount, balance_due, charge_labels, charge_values, status')
+          .select('grand_total, deposit_amount, balance_due, charge_labels, charge_values, deduction_labels, deduction_values, status')
           .eq('company_id', currentCompanyId)
           .neq('status', 'cancelled')
           .gte('scheduled_date', startDate)
@@ -1176,9 +1176,20 @@
           bookings.forEach(b => {
             const grandTotal = parseInt(b.grand_total) || 0;
             const balanceDue = parseInt(b.balance_due) || 0;
-            const depositAmount = parseInt(b.deposit_amount) || 0;
+            
+            // Resolve deposit from column and deduction labels
+            let depositCentavos = parseInt(b.deposit_amount) || 0;
+            if (b.deduction_labels && b.deduction_values) {
+              const dLabels = b.deduction_labels.split('|').map(s => s.trim().toLowerCase());
+              const dValues = b.deduction_values.split('|').map(s => s.trim());
+              dLabels.forEach((label, idx) => {
+                if (label.includes('deposit')) {
+                  depositCentavos += Math.round((parseFloat(dValues[idx]) || 0) * 100);
+                }
+              });
+            }
 
-            const orderGrandTotal = grandTotal > 0 ? grandTotal : (balanceDue + depositAmount);
+            const orderGrandTotal = grandTotal > 0 ? grandTotal : (balanceDue + depositCentavos);
 
             let ccFeeCentavos = 0;
             if (b.charge_labels && b.charge_values) {
@@ -1191,7 +1202,7 @@
               });
             }
 
-            const revenueCentavos = orderGrandTotal + depositAmount - ccFeeCentavos;
+            const revenueCentavos = orderGrandTotal + depositCentavos - ccFeeCentavos;
             totalRevenueCentavos += revenueCentavos;
           });
         }
@@ -1339,26 +1350,31 @@
           });
           const additionalHtml = additionalParts.length > 0 ? additionalParts.map(p => `<div style="font-size: 0.8rem; color: var(--text-secondary);">${p}</div>`).join('') : '—';
 
-          const dLabels = b.deduction_labels ? b.deduction_labels.split('|').map(s => s.trim()) : [];
+          let depositCentavos = parseInt(b.deposit_amount) || 0;
+          const dLabels = b.deduction_labels ? b.deduction_labels.split('|').map(s => s.trim().toLowerCase()) : [];
           const dValues = b.deduction_values ? b.deduction_values.split('|').map(s => s.trim()) : [];
           const deductionParts = [];
           dLabels.forEach((label, idx) => {
             const val = parseFloat(dValues[idx]) || 0;
             if (val > 0) {
-              deductionParts.push(`${escapeHtml(label)}: ₱${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+              // Retrieve original casing for label
+              const origLabel = b.deduction_labels.split('|')[idx].trim();
+              deductionParts.push(`${escapeHtml(origLabel)}: ₱${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+            }
+            if (label.includes('deposit')) {
+              depositCentavos += Math.round(val * 100);
             }
           });
           const deductionsHtml = deductionParts.length > 0 ? deductionParts.map(p => `<div style="font-size: 0.8rem; color: var(--text-secondary);">${p}</div>`).join('') : '—';
 
           const grandTotal = parseInt(b.grand_total) || 0;
           const balanceDue = parseInt(b.balance_due) || 0;
-          const depositAmount = parseInt(b.deposit_amount) || 0;
-          const orderGrandTotal = grandTotal > 0 ? grandTotal : (balanceDue + depositAmount);
+          const orderGrandTotal = grandTotal > 0 ? grandTotal : (balanceDue + depositCentavos);
           const grandTotalPHP = orderGrandTotal / 100;
           const grandTotalStr = `₱${grandTotalPHP.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
           // Revenue = Grand Total + Deposit - Credit Card fees
-          const revenueCentavos = orderGrandTotal + depositAmount - ccFeeCentavos;
+          const revenueCentavos = orderGrandTotal + depositCentavos - ccFeeCentavos;
           const revenuePHP = revenueCentavos / 100;
           const revenueStr = `₱${revenuePHP.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
