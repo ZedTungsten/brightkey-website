@@ -13,6 +13,23 @@
   <style>
     body { background-color: var(--bg-elevated); }
     
+    .promo-biz-row {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      padding: 0.5rem 0.75rem;
+      border-bottom: 1px solid var(--border);
+      flex-wrap: wrap;
+    }
+    
+    .promo-gift-row {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.5rem 0.75rem;
+      border-bottom: 1px solid var(--border);
+    }
+    
     .promo-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -1807,29 +1824,73 @@
 
 
     // --- Delivery Lead Time Rows ---
+    // --- Delivery Lead Time Rows ---
     function renderLtRows() {
       const container = document.getElementById('lt-business-rows');
       container.innerHTML = '';
       ltBusiness.forEach((biz, idx) => {
         const row = document.createElement('div');
-        row.style.cssText = 'display:flex;align-items:center;gap:0.6rem;padding:0.5rem 0.75rem;border-bottom:1px solid var(--border);flex-wrap:wrap;';
+        row.className = 'promo-biz-row';
         row.innerHTML = `
-          <input type="checkbox" ${biz.enabled ? 'checked' : ''} onchange="ltBusiness[${idx}].enabled=this.checked; checkDirty();" style="width:16px;height:16px;cursor:pointer;flex-shrink:0;" />
+          <input type="checkbox" ${biz.enabled ? 'checked' : ''} data-index="${idx}" style="width:16px;height:16px;cursor:pointer;flex-shrink:0;" />
           <span style="flex:1;min-width:80px;font-size:0.9rem;">${biz.label}</span>
           <div style="display:flex;align-items:center;gap:0.4rem;flex-wrap:wrap;flex-shrink:0;">
             <span style="font-size:0.8rem;color:var(--text-secondary);">From</span>
-            <input type="number" class="form-input" value="${biz.from_value}" oninput="ltBusiness[${idx}].from_value=parseInt(this.value)||0; checkDirty();" style="width:52px;" min="0" step="1" />
-            <select class="form-select" onchange="ltBusiness[${idx}].from_unit=this.value; checkDirty();" style="width:90px;">${unitOptions(biz.from_unit)}</select>
+            <input type="number" class="form-input from-value" value="${biz.from_value}" data-index="${idx}" style="width:52px;" min="0" step="1" />
+            <select class="form-select from-unit" data-index="${idx}" style="width:90px;">${unitOptions(biz.from_unit)}</select>
             <span style="font-size:0.8rem;color:var(--text-secondary);">To</span>
-            <input type="number" class="form-input" value="${biz.to_value}" oninput="ltBusiness[${idx}].to_value=parseInt(this.value)||0; checkDirty();" style="width:52px;" min="0" step="1" />
-            <select class="form-select" onchange="ltBusiness[${idx}].to_unit=this.value; checkDirty();" style="width:90px;">${unitOptions(biz.to_unit)}</select>
+            <input type="number" class="form-input to-value" value="${biz.to_value}" data-index="${idx}" style="width:52px;" min="0" step="1" />
+            <select class="form-select to-unit" data-index="${idx}" style="width:90px;">${unitOptions(biz.to_unit)}</select>
           </div>
-          <button onclick="removeLtRow(${idx}); checkDirty();" style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:1.2rem;line-height:1;padding:0 0.25rem;flex-shrink:0;"><svg aria-hidden="true" viewBox="0 0 24 24" style="width:1em;height:1em;display:block;fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+          <button class="btn-remove-lt" data-index="${idx}" style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:1.2rem;line-height:1;padding:0 0.25rem;flex-shrink:0;"><svg aria-hidden="true" viewBox="0 0 24 24" style="width:1em;height:1em;display:block;fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
         `;
         container.appendChild(row);
       });
       checkDirty();
     }
+
+    // Set up delegated events for Lead Time rows
+    document.addEventListener('DOMContentLoaded', () => {
+      const ltContainer = document.getElementById('lt-business-rows');
+      if (ltContainer) {
+        ltContainer.addEventListener('change', (e) => {
+          const idx = parseInt(e.target.dataset.index);
+          if (isNaN(idx)) return;
+          if (e.target.type === 'checkbox') {
+            ltBusiness[idx].enabled = e.target.checked;
+          } else if (e.target.tagName === 'SELECT') {
+            if (e.target.classList.contains('from-unit')) {
+              ltBusiness[idx].from_unit = e.target.value;
+            } else {
+              ltBusiness[idx].to_unit = e.target.value;
+            }
+          }
+          checkDirty();
+        });
+        ltContainer.addEventListener('input', (e) => {
+          const idx = parseInt(e.target.dataset.index);
+          if (isNaN(idx)) return;
+          if (e.target.type === 'number') {
+            if (e.target.classList.contains('from-value')) {
+              ltBusiness[idx].from_value = parseInt(e.target.value) || 0;
+            } else {
+              ltBusiness[idx].to_value = parseInt(e.target.value) || 0;
+            }
+          }
+          checkDirty();
+        });
+        ltContainer.addEventListener('click', (e) => {
+          const btn = e.target.closest('.btn-remove-lt');
+          if (btn) {
+            const idx = parseInt(btn.dataset.index);
+            if (!isNaN(idx)) {
+              removeLtRow(idx);
+              checkDirty();
+            }
+          }
+        });
+      }
+    });
 
     window.showLtAddRow = () => {
       const avail = availableForDropdown(ltBusiness);
@@ -1860,20 +1921,45 @@
       container.innerHTML = '';
       fgRules.forEach((rule, idx) => {
         const row = document.createElement('div');
-        row.style.cssText = 'display:flex; align-items:center; gap:0.75rem; padding:0.5rem 0.75rem; border-bottom:1px solid var(--border);';
+        row.className = 'promo-gift-row';
         row.innerHTML = `
-          <input type="checkbox" ${rule.enabled ? 'checked' : ''} onchange="fgRules[${idx}].enabled=this.checked; checkDirty();" style="width:16px;height:16px;cursor:pointer;flex-shrink:0;" />
+          <input type="checkbox" ${rule.enabled ? 'checked' : ''} data-index="${idx}" style="width:16px;height:16px;cursor:pointer;flex-shrink:0;" />
           <span style="flex:1; font-size:0.85rem; line-height:1.4;">
             <span style="color:var(--text-secondary);">Buy:</span> ${rule.trigger_sku} — ${rule.trigger_title}
             <span style="color:var(--text-muted); margin:0 0.35rem;">→</span>
             <span style="color:var(--text-secondary);">Free:</span> ${rule.gift_sku} — ${rule.gift_title}
           </span>
-          <button onclick="removeFgRule(${idx}); checkDirty();" style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:1.2rem;line-height:1;padding:0 0.25rem;flex-shrink:0;"><svg aria-hidden="true" viewBox="0 0 24 24" style="width:1em;height:1em;display:block;fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+          <button class="btn-remove-fg" data-index="${idx}" style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:1.2rem;line-height:1;padding:0 0.25rem;flex-shrink:0;"><svg aria-hidden="true" viewBox="0 0 24 24" style="width:1em;height:1em;display:block;fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
         `;
         container.appendChild(row);
       });
       checkDirty();
     }
+
+    // Set up delegated events for Free Gift rows
+    document.addEventListener('DOMContentLoaded', () => {
+      const fgContainer = document.getElementById('fg-rules-rows');
+      if (fgContainer) {
+        fgContainer.addEventListener('change', (e) => {
+          const idx = parseInt(e.target.dataset.index);
+          if (isNaN(idx)) return;
+          if (e.target.type === 'checkbox') {
+            fgRules[idx].enabled = e.target.checked;
+            checkDirty();
+          }
+        });
+        fgContainer.addEventListener('click', (e) => {
+          const btn = e.target.closest('.btn-remove-fg');
+          if (btn) {
+            const idx = parseInt(btn.dataset.index);
+            if (!isNaN(idx)) {
+              removeFgRule(idx);
+              checkDirty();
+            }
+          }
+        });
+      }
+    });
 
     window.showFgAddRow = () => {
       if (!allProducts.length) { showToast('No products loaded yet. Try again in a moment.'); return; }

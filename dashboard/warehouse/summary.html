@@ -788,46 +788,38 @@
   <script src="../../js/auth.js"></script>
   <script src="../../js/sidebar.js"></script>
   <script src="../../js/main.js"></script>
+  <script src="shared.js"></script>
   <script>
     'use strict';
 
-    async function wrapActionWithLoading(btn, asyncFn) {
-      if (!btn || btn.disabled) return;
-      const originalHtml = btn.innerHTML;
-      btn.disabled = true;
-      btn.classList.add('btn-loading');
-      btn.innerHTML = `<svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: -2px; margin-right: 6px; animation: spin 1s linear infinite;"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Processing...`;
-      try {
-        await asyncFn();
-      } catch (err) {
-        btn.disabled = false;
-        btn.classList.remove('btn-loading');
-        btn.innerHTML = originalHtml;
-        showToast('Operation failed: ' + err.message, true);
-      }
-    }
+    // Bridge window globals to WarehousePage properties
+    Object.defineProperty(window, 'sb', { get() { return WarehousePage.sb; }, set(val) { WarehousePage.sb = val; } });
+    Object.defineProperty(window, 'companyId', { get() { return WarehousePage.companyId; }, set(val) { WarehousePage.companyId = val; } });
+    Object.defineProperty(window, 'activeWarehouseId', { get() { return WarehousePage.activeWarehouseId; }, set(val) { WarehousePage.activeWarehouseId = val; } });
+    Object.defineProperty(window, 'fulfillmentWarehouses', { get() { return WarehousePage.fulfillmentWarehouses; }, set(val) { WarehousePage.fulfillmentWarehouses = val; } });
+    Object.defineProperty(window, 'allEmployees', { get() { return WarehousePage.allEmployees; }, set(val) { WarehousePage.allEmployees = val; } });
+    Object.defineProperty(window, 'bookings', { get() { return WarehousePage.bookings; }, set(val) { WarehousePage.bookings = val; } });
+    Object.defineProperty(window, 'activeTransactions', { get() { return WarehousePage.activeTransactions; }, set(val) { WarehousePage.activeTransactions = val; } });
+    Object.defineProperty(window, 'lastAction', { get() { return WarehousePage.lastAction; }, set(val) { WarehousePage.lastAction = val; } });
 
-    let sb;
+    // Global helper functions mapped to WarehousePage
+    const wrapActionWithLoading = (btn, asyncFn) => WarehousePage.wrapActionWithLoading(btn, asyncFn);
+    const updateUndoButtonState = () => WarehousePage.updateUndoButtonState();
+    const formatMoney = (cents) => WarehousePage.formatMoney(cents);
+    const escFulfillment = (str) => WarehousePage.escFulfillment(str);
+    const showToast = (msg, isError) => WarehousePage.showToast(msg, isError);
+    const showLoadingState = () => WarehousePage.showLoadingState();
+    const loadWarehouseTabs = (tenantId) => WarehousePage.loadWarehouseTabs(tenantId);
+    const updateBadgeCounts = () => WarehousePage.updateBadgeCounts();
+    const runAutoSyncInBackground = () => WarehousePage.runAutoSyncInBackground();
+    const handleCancellationProcess = (id, sku, qty, prevStatus) => WarehousePage.handleCancellationProcess(id, sku, qty, prevStatus);
+    const runAutoSync = () => WarehousePage.runAutoSync();
 
     let allProducts = [];
     let productMetaBySku = {};
     let allInventory = {};
     let isEditingAvailable = false;
-    let activeTransactions = [];
-    let bookings = [];
     let warehouseTransfers = [];
-    let allEmployees = [];
-    let companyId = null;
-
-    // Last action for Undo
-    let lastAction = null;
-
-    function updateUndoButtonState() {
-      const undoBtn = document.getElementById('btn-undo');
-      if (undoBtn) {
-        undoBtn.style.display = lastAction ? 'inline-flex' : 'none';
-      }
-    }
 
     // Supplier Order State
     let supplierOrderSearch = "";
@@ -842,27 +834,6 @@
     let inventoryRenderSeq = 0;
     let inventorySearch = "";
     let inventorySearchTimer = null;
-
-    // Premium Currency Formatter
-    function formatMoney(cents) {
-      const php = (cents || 0) / 100;
-      return "₱" + php.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    }
-
-    // Switch between tabs
-    window.switchTab = function(tabId) {
-      const tabMap = {
-        'inventory': 'summary',
-        'dispatch': 'dispatch',
-        'pack': 'pack',
-        'inspect': 'inspect',
-        'receive': 'receive',
-        'order': 'order',
-        'transfer': 'transfer'
-      };
-      const target = tabMap[tabId] || 'summary';
-      window.location.href = `/dashboard/warehouse/${target}`;
-    };
 
     // Initialize Page
     async function init() {
@@ -928,97 +899,14 @@
       }
     }
 
-    // ── Warehouse Level-1 Tabs ──
-    let fulfillmentWarehouses = [];
-    let activeWarehouseId = null;
-
-    async function loadWarehouseTabs(tenantId) {
-      try {
-        const { data, error } = await sb
-          .from('warehouses')
-          .select('id, name, is_active')
-          .eq('tenant_id', tenantId)
-          .order('created_at', { ascending: true });
-
-        if (error) throw error;
-        fulfillmentWarehouses = (data || []).filter(w => w.is_active);
-
-        const dropdown = document.getElementById('wh-select-dropdown');
-        if (!dropdown) return;
-
-        if (fulfillmentWarehouses.length === 0) {
-          dropdown.style.display = 'none';
-          activeWarehouseId = null;
-          return;
-        }
-
-        // Show select dropdown
-        dropdown.style.display = 'inline-block';
-        dropdown.innerHTML = fulfillmentWarehouses.map(wh => `
-          <option value="${wh.id}">${escFulfillment(wh.name)}</option>
-        `).join('');
-
-        const storedWhId = localStorage.getItem('active_warehouse_id');
-        if (storedWhId && fulfillmentWarehouses.some(w => w.id === storedWhId)) {
-          activeWarehouseId = storedWhId;
-        } else {
-          activeWarehouseId = fulfillmentWarehouses[0]?.id || null;
-        }
-        dropdown.value = activeWarehouseId;
-        dropdown.value = activeWarehouseId;
-      } catch (err) {
-        console.warn('Could not load warehouse dropdown:', err.message);
-      }
-    }
-
-    function escFulfillment(str) {
-      if (!str) return '';
-      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-    }
-
+    // Switch Warehouse with pagination reset
     window.switchWarehouse = function(whId) {
-      activeWarehouseId = whId;
-      localStorage.setItem('active_warehouse_id', whId);
-      const dropdown = document.getElementById('wh-select-dropdown');
-      if (dropdown && dropdown.value !== whId) {
-        dropdown.value = whId;
-      }
       inventoryPage = 1;
-      refreshDashboard();
+      WarehousePage.switchWarehouse(whId);
     };
 
-
-    function showToast(msg, isError = false) {
-      const container = document.getElementById('toast-container');
-      if (!container) return;
-      const el = document.createElement('div');
-      el.className = `toast toast-${isError ? 'error' : 'success'}`;
-      el.innerText = msg;
-      container.appendChild(el);
-      setTimeout(() => el.remove(), 3500);
-    }
-
-    function showLoadingState() {
-      const loading = `
-        <tr>
-          <td colspan="11">
-            <div class="loading-wrapper">
-              <div class="spinner-cyan"></div>
-              <span>Loading warehouse data...</span>
-            </div>
-          </td>
-        </tr>
-      `;
-      const lists = ['inventory-list', 'dispatch-list', 'pack-list', 'inspect-list', 'receive-list', 'supplier-product-list', 'transfer-requests-list', 'transfer-requests-list'];
-      for (const id of lists) {
-        const el = document.getElementById(id);
-        if (el) {
-          el.innerHTML = loading;
-        }
-      }
-    }
-
     async function loadCoreData() {
+      await WarehousePage.loadCoreData();
       await loadProductCategories();
 
       // Fetch employees
@@ -1121,157 +1009,7 @@
     }
 
 
-    async function runAutoSyncInBackground() {
-      try {
-        await runAutoSync();
-        await refreshDashboard();
-      } catch (err) {
-        console.warn('Background warehouse sync failed:', err.message || err);
-      }
-    }
 
-    async function handleCancellationProcess(id, sku, qty, prevStatus) {
-      const now = new Date().toISOString();
-      const { error: txErr } = await sb.from('inventory_transactions').update({
-        status: 'cancelled',
-        timestamp_cancelled: now
-      }).eq('id', id);
-      if (txErr) throw txErr;
-
-      let invQ = sb.from('inventory').select('*').eq('sku', sku);
-      if (activeWarehouseId) invQ = invQ.eq('warehouse_id', activeWarehouseId);
-      else invQ = invQ.is('warehouse_id', null);
-      const { data: invRow, error: invErr } = await invQ;
-      if (invErr) throw invErr;
-      if (!invRow || invRow.length === 0) return;
-
-      const inv = invRow[0];
-      const updates = { cancelled: (inv.cancelled || 0) + qty };
-      if (prevStatus === 'packed') {
-        updates.packed = Math.max(0, (inv.packed || 0) - qty);
-      } else {
-        updates.reserved = Math.max(0, (inv.reserved || 0) - qty);
-      }
-
-      const { error: updErr } = await sb.from('inventory').update(updates).eq('id', inv.id);
-      if (updErr) throw updErr;
-    }
-
-    // Auto-Sync Bookings logic
-    async function runAutoSync() {
-      // 1. Fetch bookings
-      const { data: bData, error: bErr } = await sb.from('installation_bookings').select('*').neq('status', 'completed');
-      if (bErr) throw bErr;
-      bookings = bData || [];
-
-      // Get existing transaction reference IDs
-      const { data: txRefs, error: refErr } = await sb.from('inventory_transactions').select('reference_id, status').eq('type', 'customer_order');
-      if (refErr) throw refErr;
-
-      const existingRefs = {};
-      (txRefs || []).forEach(tx => {
-        if (!existingRefs[tx.reference_id]) existingRefs[tx.reference_id] = [];
-        existingRefs[tx.reference_id].push(tx.status);
-      });
-
-      const bookingSkus = [];
-      bookings.forEach(booking => {
-        if (!booking.product_skus) return;
-        booking.product_skus.split('|').forEach(sku => {
-          const normalizedSku = sku.trim().toUpperCase();
-          if (normalizedSku) bookingSkus.push(normalizedSku);
-        });
-      });
-      await loadProductMetaForSkus(bookingSkus);
-
-      for (const booking of bookings) {
-        const orderNo = booking.order_no;
-        const address = booking.customer_address || '';
-        const addrParts = address.split(',');
-        const city = booking.customer_city ||
-          (addrParts.length >= 2 ? addrParts[addrParts.length - 2].trim() : (addrParts[0]?.trim() || 'N/A'));
-
-        // Check if booking is cancelled
-        if (booking.status === 'cancelled') {
-          // If we have active reserved/packed transactions for this booking, cancel them
-          const txsToCancel = activeTransactions.filter(t => t.reference_id === orderNo && ['reserved', 'packed'].includes(t.status));
-          for (const tx of txsToCancel) {
-            await handleCancellationProcess(tx.id, tx.sku, tx.quantity, tx.status);
-          }
-          continue;
-        }
-
-        // Patch customer_city on existing transactions that have a wrong value
-        const wrongCityTxs = activeTransactions.filter(t =>
-          t.reference_id === orderNo && t.customer_city !== city
-        );
-        for (const tx of wrongCityTxs) {
-          await sb.from('inventory_transactions').update({ customer_city: city }).eq('id', tx.id);
-          tx.customer_city = city; // update in-memory too
-        }
-
-        // If booking is active but has no transactions logged yet, reserve it
-        if (!existingRefs[orderNo]) {
-          // Parse products from pipe-separated strings or products JSONB
-          let items = [];
-          if (booking.product_skus && booking.product_qtys) {
-            const skus = booking.product_skus.split('|').map(s => s.trim().toUpperCase());
-            const qtys = booking.product_qtys.split('|').map(q => parseInt(q.trim()) || 0);
-            skus.forEach((sku, idx) => {
-              if (sku && qtys[idx] > 0) {
-                items.push({ sku, qty: qtys[idx] });
-              }
-            });
-          }
-
-          for (const item of items) {
-            const prod = productMetaBySku[item.sku];
-            if (prod && prod.count_inventory === false) {
-              console.log(`Skipping inventory update for service/non-stocked item: ${item.sku}`);
-              continue;
-            }
-            console.log(`Syncing reserved item: ${item.qty}x ${item.sku} for order ${orderNo}`);
-
-            // Create transaction record (scoped to active warehouse)
-            const txPayload = {
-              sku: item.sku,
-              quantity: item.qty,
-              type: 'customer_order',
-              status: 'reserved',
-              reference_id: orderNo,
-              customer_name: booking.customer_name,
-              customer_city: city,
-              timestamp_reserved: booking.created_at || new Date().toISOString(),
-              warehouse_id: activeWarehouseId || null
-            };
-            const { error: insTxErr } = await sb.from('inventory_transactions').insert([txPayload]);
-            if (insTxErr) console.error('Error inserting transaction during sync:', insTxErr);
-
-            // Update inventory totals for this warehouse
-            let invQ = sb.from('inventory').select('*').eq('sku', item.sku);
-            if (activeWarehouseId) invQ = invQ.eq('warehouse_id', activeWarehouseId);
-            else invQ = invQ.is('warehouse_id', null);
-            const { data: invRow } = await invQ;
-            if (invRow && invRow.length > 0) {
-              const current = invRow[0];
-              await sb.from('inventory').update({
-                available: current.available - item.qty,
-                reserved: current.reserved + item.qty
-              }).eq('id', current.id);
-            } else {
-              // Create new inventory row for this warehouse
-              await sb.from('inventory').insert([{
-                sku: item.sku,
-                available: -item.qty,
-                reserved: item.qty,
-                warehouse_id: activeWarehouseId || null
-              }]);
-            }
-          }
-        }
-      }
-      console.log('Auto-sync complete.');
-    }
 
     let sortCol = 'sku';
     let sortDir = 'asc';
@@ -1786,48 +1524,7 @@
 
     
 
-    // Badge counts updates
-    function updateBadgeCounts() {
-      const receiveCount = activeTransactions.filter(t => ['ordered', 'returned', 'cancelled'].includes(t.status)).length;
-      const inspectCount = [...new Set(activeTransactions.filter(t => t.status === 'reserved' && t.type === 'customer_order').map(t => t.reference_id))].length;
-      const packCount = [...new Set(activeTransactions.filter(t => t.status === 'inspect' && t.type === 'customer_order').map(t => t.reference_id))].length;
-      const dispatchCount = activeTransactions.filter(t => {
-        if (t.status !== 'packed') return false;
-        if (t.reference_id) {
-          const hasUnpacked = activeTransactions.some(other => 
-            other.reference_id === t.reference_id && 
-            ['reserved', 'inspect'].includes(other.status)
-          );
-          if (hasUnpacked) return false;
-        }
-        return true;
-      }).length;
 
-      const badgeRec = document.getElementById('badge-count-receive');
-      const badgePck = document.getElementById('badge-count-pack');
-      const badgeDsp = document.getElementById('badge-count-dispatch');
-      const badgeInsp = document.getElementById('badge-count-inspect');
-
-      if (badgeRec) {
-        if (receiveCount > 0) { badgeRec.innerText = receiveCount; badgeRec.style.display = 'inline-block'; }
-        else badgeRec.style.display = 'none';
-      }
-
-      if (badgePck) {
-        if (packCount > 0) { badgePck.innerText = packCount; badgePck.style.display = 'inline-block'; }
-        else badgePck.style.display = 'none';
-      }
-
-      if (badgeDsp) {
-        if (dispatchCount > 0) { badgeDsp.innerText = dispatchCount; badgeDsp.style.display = 'inline-block'; }
-        else badgeDsp.style.display = 'none';
-      }
-
-      if (badgeInsp) {
-        if (inspectCount > 0) { badgeInsp.innerText = inspectCount; badgeInsp.style.display = 'inline-block'; }
-        else badgeInsp.style.display = 'none';
-      }
-    }
 
     // Render Tab 2: Supplier Order Catalog
     window.renderSupplierOrderTab = function() { if (!document.getElementById('supplier-product-list')) return;
