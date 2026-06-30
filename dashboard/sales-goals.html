@@ -704,6 +704,36 @@
 
             </div>
 
+            <!-- Stats Panel -->
+            <div class="goals-panel" id="stats-panel" style="margin-top: 1.5rem;">
+              <div class="panel-title">
+                <span>Monthly Statistics (by Book Date)</span>
+              </div>
+              <div class="stats-overview-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.25rem; margin-bottom: 1.5rem; margin-top: 0.5rem;">
+                <div class="stat-card" style="background: var(--bg-surface); border: 1px solid var(--border); padding: 1.25rem; border-radius: var(--radius-md);">
+                  <div style="font-size: 0.75rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">Total Orders</div>
+                  <div id="stat-total-orders" style="font-size: 1.75rem; font-weight: 700; color: var(--text-primary); margin-top: 0.25rem;">0</div>
+                </div>
+                <div class="stat-card" style="background: var(--bg-surface); border: 1px solid var(--border); padding: 1.25rem; border-radius: var(--radius-md);">
+                  <div style="font-size: 0.75rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">Average Order Value</div>
+                  <div id="stat-avg-value" style="font-size: 1.75rem; font-weight: 700; color: var(--text-primary); margin-top: 0.25rem;">₱0.00</div>
+                </div>
+                <div class="stat-card" style="background: var(--bg-surface); border: 1px solid var(--border); padding: 1.25rem; border-radius: var(--radius-md);">
+                  <div style="font-size: 0.75rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">Orders per Week</div>
+                  <div id="stat-orders-per-week" style="font-size: 1.75rem; font-weight: 700; color: var(--text-primary); margin-top: 0.25rem;">0.0</div>
+                </div>
+                <div class="stat-card" style="background: var(--bg-surface); border: 1px solid var(--border); padding: 1.25rem; border-radius: var(--radius-md);">
+                  <div style="font-size: 0.75rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">Revenue per Week</div>
+                  <div id="stat-rev-per-week" style="font-size: 1.75rem; font-weight: 700; color: var(--text-primary); margin-top: 0.25rem;">₱0.00</div>
+                </div>
+              </div>
+
+              <div style="font-size: 0.85rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 1.25rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">Weekly Distribution (Monday - Sunday)</div>
+              <div style="display: flex; flex-direction: column; gap: 1rem;" id="weekly-distribution-bars">
+                <!-- Wk1 to Wk5 bars rendered here -->
+              </div>
+            </div>
+
           </div>
 
           <!-- TAB: ORDERS -->
@@ -1258,6 +1288,9 @@
         // 5. Load Commission Adjustments rules (MTD)
         await loadAdjustmentsDashboard(startDate, endDate);
 
+        // 6. Render Monthly statistics panel
+        await renderStatsPanel(bookings);
+
       } catch (err) {
         console.error('Error loading dashboard:', err);
         showToast('Error loading sales goals: ' + err.message, true);
@@ -1382,6 +1415,140 @@
         tbody.innerHTML = `<tr><td colspan="9" style="text-align: center; padding: 3rem; color: var(--danger);">Failed to load orders: ${escapeHtml(err.message)}</td></tr>`;
       }
     };
+
+    async function renderStatsPanel(bookings) {
+      const totalOrdersEl = document.getElementById('stat-total-orders');
+      const avgValueEl = document.getElementById('stat-avg-value');
+      const ordersPerWeekEl = document.getElementById('stat-orders-per-week');
+      const revPerWeekEl = document.getElementById('stat-rev-per-week');
+      const distBarsEl = document.getElementById('weekly-distribution-bars');
+
+      if (!totalOrdersEl || !avgValueEl || !ordersPerWeekEl || !revPerWeekEl || !distBarsEl) return;
+
+      if (!bookings || bookings.length === 0) {
+        totalOrdersEl.textContent = '0';
+        avgValueEl.textContent = '₱0.00';
+        ordersPerWeekEl.textContent = '0.0';
+        revPerWeekEl.textContent = '₱0.00';
+        distBarsEl.innerHTML = `<div style="text-align: center; color: var(--text-muted); font-size: 0.85rem; padding: 1.5rem;">No stats data available.</div>`;
+        return;
+      }
+
+      // Calculate stats based on bookings
+      const totalOrders = bookings.length;
+      let totalRevenueCentavos = 0;
+      
+      const weeksData = [
+        { label: 'Wk 1', count: 0, revenue: 0 },
+        { label: 'Wk 2', count: 0, revenue: 0 },
+        { label: 'Wk 3', count: 0, revenue: 0 },
+        { label: 'Wk 4', count: 0, revenue: 0 },
+        { label: 'Wk 5', count: 0, revenue: 0 }
+      ];
+
+      bookings.forEach(b => {
+        const grandTotal = parseInt(b.grand_total) || 0;
+        const balanceDue = parseInt(b.balance_due) || 0;
+        
+        let depositCentavos = parseInt(b.deposit_amount) || 0;
+        if (b.deduction_labels && b.deduction_values) {
+          const dLabels = b.deduction_labels.split('|').map(s => s.trim().toLowerCase());
+          const dValues = b.deduction_values.split('|').map(s => s.trim());
+          dLabels.forEach((label, idx) => {
+            if (label.includes('deposit')) {
+              depositCentavos += Math.round((parseFloat(dValues[idx]) || 0) * 100);
+            }
+          });
+        }
+        const orderGrandTotal = grandTotal > 0 ? grandTotal : (balanceDue + depositCentavos);
+        const revenueCentavos = orderGrandTotal + depositCentavos;
+        totalRevenueCentavos += revenueCentavos;
+
+        if (b.created_at) {
+          const date = new Date(b.created_at);
+          const weekIdx = getWeekOfMonthIndex(date);
+          if (weekIdx >= 0 && weekIdx < 5) {
+            weeksData[weekIdx].count++;
+            weeksData[weekIdx].revenue += (revenueCentavos / 100);
+          }
+        }
+      });
+
+      const totalRevenuePHP = totalRevenueCentavos / 100;
+      const avgValuePHP = totalOrders > 0 ? (totalRevenuePHP / totalOrders) : 0;
+
+      const numWeeks = 5; 
+      const avgOrdersPerWeek = totalOrders / numWeeks;
+      const avgRevPerWeek = totalRevenuePHP / numWeeks;
+
+      totalOrdersEl.textContent = totalOrders.toLocaleString();
+      avgValueEl.textContent = `₱${avgValuePHP.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      ordersPerWeekEl.textContent = avgOrdersPerWeek.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+      revPerWeekEl.textContent = `₱${avgRevPerWeek.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+      const maxWeeklyRev = Math.max(...weeksData.map(w => w.revenue), 1);
+
+      distBarsEl.innerHTML = weeksData.map((w, idx) => {
+        const percent = Math.min(100, Math.round((w.revenue / maxWeeklyRev) * 100));
+        const weekDatesLabel = getWeekDatesRangeLabel(currentSelectedMonth, idx);
+
+        return `
+          <div style="display: flex; flex-direction: column; gap: 0.25rem;">
+            <div style="display: flex; justify-content: space-between; font-size: 0.8rem; font-weight: 600;">
+              <span style="color: var(--text-primary);">${w.label} <span style="font-weight: 400; color: var(--text-muted); font-size: 0.75rem; margin-left: 4px;">(${weekDatesLabel})</span></span>
+              <span style="color: var(--text-muted);">${w.count} ${w.count === 1 ? 'order' : 'orders'} • <span style="color: var(--cyan-light); font-weight: 700;">₱${w.revenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></span>
+            </div>
+            <div style="background: var(--border); height: 8px; border-radius: 4px; overflow: hidden;">
+              <div style="background: linear-gradient(90deg, var(--cyan) 0%, var(--cyan-light) 100%); width: ${percent}%; height: 100%; transition: width 0.4s ease-out; border-radius: 4px;"></div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function getWeekOfMonthIndex(date) {
+      const startOfMonth = new Date(date.getFullYear(), date.getMonth(), 1);
+      const startDay = startOfMonth.getDay() === 0 ? 7 : startOfMonth.getDay();
+      const dayOfMonth = date.getDate();
+      
+      const daysToFirstMonday = startDay === 1 ? 0 : (8 - startDay);
+      if (dayOfMonth <= daysToFirstMonday) {
+        return 0;
+      }
+      const remainingDays = dayOfMonth - daysToFirstMonday - 1;
+      const weekIndex = 1 + Math.floor(remainingDays / 7);
+      return Math.min(weekIndex, 4);
+    }
+
+    function getWeekDatesRangeLabel(yearMonthStr, weekIdx) {
+      const [y, m] = yearMonthStr.split('-').map(Number);
+      const startOfMonth = new Date(y, m - 1, 1);
+      const lastDayOfMonth = new Date(y, m, 0).getDate();
+      
+      const startDay = startOfMonth.getDay() === 0 ? 7 : startOfMonth.getDay();
+      const daysToFirstMonday = startDay === 1 ? 0 : (8 - startDay);
+
+      if (weekIdx === 0) {
+        return `${getMonthShort(m)} 1 - ${daysToFirstMonday}`;
+      }
+
+      const wkStartDay = daysToFirstMonday + 1 + (weekIdx - 1) * 7;
+      let wkEndDay = wkStartDay + 6;
+
+      if (wkStartDay > lastDayOfMonth) {
+        return '—';
+      }
+      if (wkEndDay > lastDayOfMonth) {
+        wkEndDay = lastDayOfMonth;
+      }
+
+      return `${getMonthShort(m)} ${wkStartDay} - ${wkEndDay}`;
+    }
+
+    function getMonthShort(monthNum) {
+      const date = new Date(2000, monthNum - 1, 1);
+      return date.toLocaleDateString('en-US', { month: 'short' });
+    }
 
     // Top Products (Last 30 Days) Loader - 6 total products
     async function loadTopProducts() {
