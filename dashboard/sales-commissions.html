@@ -679,7 +679,7 @@
       try {
         // Parallel data fetch
         const [bookingsRes, productsRes, configRes, employeesRes, assignmentsRes, dbAssignmentsRes] = await Promise.all([
-          sb.from('installation_bookings').select('*').eq('company_id', currentCompanyId).order('created_at', { ascending: true }),
+          sb.from('installation_bookings').select('*').eq('company_id', currentCompanyId).order('scheduled_date', { ascending: true, nullsFirst: false }),
           sb.from('products').select('sku, business, category, tags'),
           sb.from('global_settings').select('value').eq('key', 'commissions_config').eq('company_id', currentCompanyId).maybeSingle(),
           sb.from('employees').select('id, first_name, last_name, employee_number, assignment').eq('company_id', currentCompanyId),
@@ -841,7 +841,7 @@
       
       // Reset headers
       headerRow.innerHTML = `
-        <th>Date booked</th>
+        <th>Date installed</th>
         <th>Order No.</th>
         <th>Full Name</th>
         <th>City</th>
@@ -871,8 +871,8 @@
       let filteredBookings = dbBookings;
       if (selectedMonth) {
         filteredBookings = dbBookings.filter(b => {
-          if (!b.created_at) return false;
-          const date = new Date(b.created_at);
+          if (!b.scheduled_date) return false;
+          const date = new Date(b.scheduled_date);
           const yyyy = date.getFullYear();
           const mm = String(date.getMonth() + 1).padStart(2, '0');
           return `${yyyy}-${mm}` === selectedMonth;
@@ -894,7 +894,7 @@
       const rowsHtml = [];
 
       filteredBookings.forEach(b => {
-        const dateBooked = b.created_at ? new Date(b.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
+        const dateInstalled = b.scheduled_date ? new Date(b.scheduled_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
         const city = b.customer_address ? (b.customer_address.split(',')[1]?.trim() || '') : '';
         
         const skus = (b.product_skus || '').split(' | ').map(s => s.trim());
@@ -1077,7 +1077,7 @@
 
         rowsHtml.push(`
           <tr>
-            <td>${escapeHtml(dateBooked)}</td>
+            <td>${escapeHtml(dateInstalled)}</td>
             <td>${escapeHtml(b.order_no || '—')}</td>
             <td>${escapeHtml(b.customer_name || '—')}</td>
             <td>${escapeHtml(city)}</td>
