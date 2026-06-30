@@ -1192,7 +1192,7 @@
 
         const { data: bookings, error: bErr } = await sb
           .from('installation_bookings')
-          .select('grand_total, deposit_amount, balance_due, deduction_labels, deduction_values, status')
+          .select('created_at, grand_total, deposit_amount, balance_due, deduction_labels, deduction_values, status')
           .eq('company_id', currentCompanyId)
           .neq('status', 'cancelled')
           .gte('scheduled_date', startDate)
@@ -1508,16 +1508,17 @@
 
     function getWeekOfMonthIndex(date) {
       const startOfMonth = new Date(date.getFullYear(), date.getMonth(), 1);
-      const startDay = startOfMonth.getDay() === 0 ? 7 : startOfMonth.getDay();
+      const startDayVal = startOfMonth.getDay();
+      const startDay = startDayVal === 0 ? 7 : startDayVal;
+      const firstSundayDate = 1 + (7 - startDay) % 7;
       const dayOfMonth = date.getDate();
-      
-      const daysToFirstMonday = startDay === 1 ? 0 : (8 - startDay);
-      if (dayOfMonth <= daysToFirstMonday) {
-        return 0;
+
+      if (dayOfMonth <= firstSundayDate) {
+        return 0; // Week 1
       }
-      const remainingDays = dayOfMonth - daysToFirstMonday - 1;
+      const remainingDays = dayOfMonth - firstSundayDate - 1;
       const weekIndex = 1 + Math.floor(remainingDays / 7);
-      return Math.min(weekIndex, 4);
+      return Math.min(weekIndex, 4); // Max Wk 5 (index 4)
     }
 
     function getWeekDatesRangeLabel(yearMonthStr, weekIdx) {
@@ -1525,14 +1526,17 @@
       const startOfMonth = new Date(y, m - 1, 1);
       const lastDayOfMonth = new Date(y, m, 0).getDate();
       
-      const startDay = startOfMonth.getDay() === 0 ? 7 : startOfMonth.getDay();
-      const daysToFirstMonday = startDay === 1 ? 0 : (8 - startDay);
+      const startDayVal = startOfMonth.getDay();
+      const startDay = startDayVal === 0 ? 7 : startDayVal;
+      const firstSundayDate = 1 + (7 - startDay) % 7;
+
+      const monthShort = getMonthShort(m);
 
       if (weekIdx === 0) {
-        return `${getMonthShort(m)} 1 - ${daysToFirstMonday}`;
+        return `${monthShort} 1 - ${firstSundayDate}`;
       }
 
-      const wkStartDay = daysToFirstMonday + 1 + (weekIdx - 1) * 7;
+      const wkStartDay = firstSundayDate + 1 + (weekIdx - 1) * 7;
       let wkEndDay = wkStartDay + 6;
 
       if (wkStartDay > lastDayOfMonth) {
@@ -1542,7 +1546,7 @@
         wkEndDay = lastDayOfMonth;
       }
 
-      return `${getMonthShort(m)} ${wkStartDay} - ${wkEndDay}`;
+      return `${monthShort} ${wkStartDay} - ${wkEndDay}`;
     }
 
     function getMonthShort(monthNum) {
