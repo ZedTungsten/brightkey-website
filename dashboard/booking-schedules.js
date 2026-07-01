@@ -3202,7 +3202,7 @@
                     </span>
                   ` : ''}
                 </div>
-                ${!hasInst ? `
+                ${isCancelled || !hasInst ? `
                   <button type="button" class="btn-minimal ${isCancelled ? 'btn-success' : 'btn-danger'}" 
                     onclick="event.stopPropagation(); toggleSkuCancelled('${sku}', ${doorIdx}, ${prodIdx})" 
                     title="${isCancelled ? 'Undo Cancel Product' : 'Cancel Product'}" 
