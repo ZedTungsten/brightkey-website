@@ -627,14 +627,12 @@
 
           // Build product cell content
           let productCellHtml = `<div style="font-weight: 800; color: var(--text-primary); margin-bottom: 0.4rem; font-size: 0.85rem;">Door ${i + 1}</div>`;
-          let anyProductCancelled = false;
           
           if (doorProducts.length === 0) {
             productCellHtml += `<span style="color:var(--text-muted); font-size:0.75rem;">No products attached</span>`;
           } else {
             productCellHtml += doorProducts.map(p => {
               const isCancelled = p.cancelled || false;
-              if (isCancelled) anyProductCancelled = true;
               let title = p.name || p.title || p.sku || 'N/A';
               if (title.startsWith(p.sku + ' - ')) {
                 title = title.substring(p.sku.length + 3);
@@ -642,9 +640,9 @@
                 title = title.substring(p.sku.length + 1);
               }
               return `
-                <div style="margin-bottom: 0.25rem;">
+                <div style="margin-bottom: 0.25rem; ${isCancelled ? 'opacity: 0.55; text-decoration: line-through;' : ''}">
                   <strong>${escapeHtml(p.sku)}</strong> - <span style="color: var(--text-secondary);">${escapeHtml(title)}</span>
-                  ${isCancelled ? '<span style="color:var(--danger);font-size:0.7rem;font-weight:700;text-transform:uppercase;margin-left:0.3rem;">Cancelled</span>' : ''}
+                  ${isCancelled ? '<span style="color:var(--danger);font-size:0.7rem;font-weight:700;text-transform:uppercase;margin-left:0.3rem;text-decoration:none;display:inline-block;">Cancelled</span>' : ''}
                 </div>
               `;
             }).join('');
@@ -750,7 +748,8 @@
             installersHtml = escapeHtml(formatInstallerName(selectedBooking.installer_name));
           }
 
-          const trStyle = anyProductCancelled ? 'style="opacity: 0.55; background-color: rgba(244, 244, 245, 0.4);"' : '';
+          const allProductsCancelled = doorProducts.length > 0 && doorProducts.every(p => p.cancelled);
+          const trStyle = allProductsCancelled ? 'style="opacity: 0.55; background-color: rgba(244, 244, 245, 0.4);"' : '';
 
           tbody.insertAdjacentHTML('beforeend', `
             <tr ${trStyle}>
@@ -761,7 +760,7 @@
                 <div id="door-inst-container-${i}">
                   <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;">
                     <span id="door-inst-text-${i}">${installersHtml}</span>
-                    ${anyProductCancelled ? '' : `
+                    ${allProductsCancelled ? '' : `
                     <button type="button" class="btn-minimal" onclick="editDoorInstallers(${i})" title="Edit Installers">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
                     </button>
