@@ -733,7 +733,8 @@
         const manager = this.employees.find(e => e.id === mgrId);
         const reportingToName = manager ? [manager.first_name, manager.last_name].filter(Boolean).join(' ') : '—';
 
-        const instPayouts = this.calculateInstallerPayouts(empId, mk);
+        const sortedScheds = [...this.payoutSchedules].sort((a, b) => a - b) || [30];
+        const instPayouts = this.calculateInstallerPayouts(empId, mk, sortedScheds);
         const thresholdEarnings = instPayouts.thresholdEarnings;
         const thresholdDescription = instPayouts.thresholdDescription;
         const serviceEarnings = instPayouts.serviceEarnings;
@@ -750,7 +751,6 @@
         if (empComms > 0) breakdownHtml += `<tr><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;font-weight:600;">Commissions</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;color:#4b5563;">Sales Commissions</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;text-align:right;font-variant-numeric:tabular-nums;width:120px;">${php(empComms)}</td></tr>`;
 
         const getSchedDay = (itemDay, sortedScheds) => { for (const s of sortedScheds) { if (itemDay <= s) return s; } return sortedScheds[sortedScheds.length - 1]; };
-        const sortedScheds = [...this.payoutSchedules].sort((a, b) => a - b) || [30];
  
         if (adjs.length > 0) {
           const SM = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -778,8 +778,7 @@
           const cv = parsedCommAssignments.filter(c => { const d = new Date(c.date); return getSchedDay(d.getUTCDate(), sortedScheds) === day; }).reduce((s, c) => s + c.amount, 0);
           const xv = empSpecs.filter(s => getSchedDay(Number(s.day), sortedScheds) === day).reduce((s, x) => s + (Number(x.value) || 0), 0);
           
-          const isLast = (sIdx === sortedScheds.length - 1);
-          const instPortion = isLast ? instPayouts.totalInstallationPayout : 0;
+          const instPortion = instPayouts.cutoffPayouts[day] || 0;
 
           const total = sp + av + rv + cv + xv + instPortion;
           cutoffHtml += `<div style="display:flex;justify-content:space-between;padding:0.5rem 0;font-size:0.85rem;border-bottom:1px dashed #e5e7eb;"><span style="font-weight:500;color:#4b5563;">Cutoff Payout (Day ${day})</span><span style="font-weight:700;color:#111827;font-variant-numeric:tabular-nums;margin-right:12px;">${php(total)}</span></div>`;
