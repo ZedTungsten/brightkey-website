@@ -3254,9 +3254,15 @@
     let dragSourceDoorIdx = null;
     let dragSourceProdIdx = null;
 
+    function hasValidInstallers(door) {
+      if (!door || !door.installers) return false;
+      const list = Array.isArray(door.installers) ? door.installers : [];
+      return list.some(inst => inst && (inst.id || inst.name));
+    }
+
     window.handleDragStart = function(event, doorIdx, prodIdx) {
       const sourceDoor = tempEditDoors[doorIdx];
-      if (sourceDoor && sourceDoor.installers && sourceDoor.installers.length > 0) {
+      if (sourceDoor && hasValidInstallers(sourceDoor)) {
         event.preventDefault();
         showDragWarning('Installers Assigned', 'Cannot move products from a door with assigned installers. Please remove the assigned installers first.');
         return;
@@ -3300,7 +3306,7 @@
       if (dragSourceDoorIdx === targetDoorIdx) return;
 
       const targetDoor = tempEditDoors[targetDoorIdx];
-      if (targetDoor && targetDoor.installers && targetDoor.installers.length > 0) {
+      if (targetDoor && hasValidInstallers(targetDoor)) {
         showDragWarning('Installers Assigned', 'Cannot move products to a door with assigned installers. Please remove the assigned installers first.');
         return;
       }
