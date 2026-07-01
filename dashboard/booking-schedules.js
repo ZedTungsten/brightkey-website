@@ -2280,14 +2280,23 @@
       if (!door) return;
 
       const currentInstallers = door.installers || [];
-      const leadInst  = currentInstallers.find(i => i.role === 'lead') || currentInstallers[0];
-      const assistInsts = currentInstallers.filter(i => i.role === 'assist');
-      const serviceInst = currentInstallers.find(i => i.role === 'service');
+      const hasAnyRole = currentInstallers.some(i => i.role);
+
+      const leadInst  = hasAnyRole
+        ? (currentInstallers.find(i => i.role === 'lead') || null)
+        : currentInstallers[0];
+
+      const assistInsts = hasAnyRole
+        ? currentInstallers.filter(i => i.role === 'assist')
+        : currentInstallers.slice(1);
+
+      const serviceInst = hasAnyRole
+        ? currentInstallers.find(i => i.role === 'service')
+        : null;
       
-      // Fallback for old data without roles: treat index 1+ as assist
       const inst1Id  = leadInst?.id || '';
-      const inst2Id  = assistInsts[0]?.id || (currentInstallers[1]?.id || '');
-      const inst3Id  = assistInsts[1]?.id || (currentInstallers[2]?.id || '');
+      const inst2Id  = assistInsts[0]?.id || '';
+      const inst3Id  = assistInsts[1]?.id || '';
       const hasAssist2 = !!inst2Id;
       const hasAssist3 = !!inst3Id;
 
