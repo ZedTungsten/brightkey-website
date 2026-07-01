@@ -37,3 +37,8 @@
     overflow: auto;
   }
   ```
+
+## 4. HTML Syntax & Tag Validation (Anti-Overcomplication Policy)
+- **First Action for Invisible/Misaligned Elements**: Whenever a UI element (such as a modal, button, card, or tab panel) is unexpectedly invisible, misaligned, or unresponsive:
+  - **First Action**: Always check the HTML file structure first for unclosed, misplaced, or mismatched tags (especially unclosed `</div>` tags).
+  - **No Complex Overrides First**: Do not construct complex CSS styles, transitions, custom JS reflows, or animations before verifying that the basic HTML DOM tree structure is 100% syntactically correct.

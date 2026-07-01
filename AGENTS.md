@@ -163,3 +163,11 @@ For ordinary dashboard, JavaScript, CSS, migration, or non-product-page changes,
 > Before modifying or writing any HTML, CSS, front-end JavaScript, layouts, modal animations, or stylesheet overrides, the agent **MUST read `/DESIGN.md` in its entirety**.
 > 
 > You are strictly forbidden from implementing custom scroll configurations, modal transitions, loading overlays, or sticky table columns/headers without verifying the established design systems and code blocks defined in `/DESIGN.md` first. Custom layouts must strictly conform to these patterns to prevent layout bugs.
+
+---
+
+## 11. HTML Syntax & Tag Validation (Anti-Overcomplication Policy)
+> [!IMPORTANT]
+> Whenever a UI element (like a modal, button, overlay, or panel) is unexpectedly invisible, misaligned, or unresponsive:
+> - **First Action**: Always check the HTML file for missing, misplaced, or unclosed tags (specifically unclosed `</div>` tags).
+> - **Never Overcomplicate**: Do not attempt complex CSS overrides, custom JavaScript frame-reflow logic, or transitions before confirming that the basic HTML DOM nesting structure is 100% syntactically correct.
