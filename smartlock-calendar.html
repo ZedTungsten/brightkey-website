@@ -2148,38 +2148,61 @@
         return bookingMonthKey === targetMonthKey;
       });
 
-      let leadCount = 0;
-      let assistCount = 0;
-      let serviceEarnings = 0;
-      const serviceCounts = {}; // sku -> count
-
+      const doorJobs = [];
       monthBookings.forEach(b => {
         const assignedDoors = getInstallerAssignedDoorsForBooking(b, myId);
         assignedDoors.forEach(d => {
-          // Only count completed doors
-          if (!d.completed) return;
-
-          if (d.roles.includes('lead')) {
-            leadCount++;
-          } else if (d.roles.includes('assist')) {
-            assistCount++;
-          }
-
-          // Count special paid services from this door's assigned product SKUs if explicitly assigned as Service
-          if (d.roles.includes('service')) {
-            d.skus.forEach(sku => {
-              const matchedService = extraServicesList.find(es => es.sku === sku);
-              if (matchedService) {
-                serviceCounts[sku] = (serviceCounts[sku] || 0) + 1;
-                serviceEarnings += matchedService.rate;
-              }
+          if (d.completed) {
+            doorJobs.push({
+              completed_at: d.completed_at || b.updated_at || b.created_at || b.scheduled_date,
+              roles: d.roles,
+              skus: d.skus
             });
           }
         });
       });
 
-      // Calculate credits
-      const totalCredit = (leadCount * leadWeight) + (assistCount * assistWeight);
+      // Sort doorJobs chronologically by completed_at
+      doorJobs.sort((a, b) => new Date(a.completed_at) - new Date(b.completed_at));
+
+      let leadCount = 0;
+      let assistCount = 0;
+      let serviceEarnings = 0;
+      const serviceCounts = {};
+
+      let runningCredit = 0;
+      let thresholdEarnings = 0;
+
+      doorJobs.forEach(job => {
+        let weight = 0;
+        if (job.roles.includes('lead')) {
+          leadCount++;
+          weight = leadWeight;
+        } else if (job.roles.includes('assist')) {
+          assistCount++;
+          weight = assistWeight;
+        }
+
+        if (job.roles.includes('service')) {
+          job.skus.forEach(sku => {
+            const matchedService = extraServicesList.find(es => es.sku === sku);
+            if (matchedService) {
+              serviceCounts[sku] = (serviceCounts[sku] || 0) + 1;
+              serviceEarnings += matchedService.rate;
+            }
+          });
+        }
+
+        const previousCredit = runningCredit;
+        const newCredit = previousCredit + weight;
+        if (newCredit > thresholdVal) {
+          const extraCredit = weight;
+          thresholdEarnings += extraCredit * leadRateVal;
+        }
+        runningCredit = newCredit;
+      });
+
+      const totalCredit = runningCredit;
       
       // Update Threshold Progress
       const thresholdSummary = `${totalCredit.toFixed(1)} / ${thresholdVal} Counts`;
@@ -2196,14 +2219,10 @@
       if (percentEl) percentEl.textContent = `${Math.round(percent)}%`;
 
       // 2. Calculate threshold earnings (extra works past threshold)
-      let thresholdEarnings = 0;
       let thresholdEarningsDetailsHtml = '';
 
       if (totalCredit > thresholdVal) {
-        const extraCredit = totalCredit - thresholdVal;
-        
-        // Payout = extraCredit * leadRateVal (which naturally scales: 1.0 credit = leadRateVal, 0.5 credit = assistRateVal = leadRateVal * 0.5)
-        thresholdEarnings = extraCredit * leadRateVal;
+        const extraCredit = thresholdEarnings / leadRateVal;
 
         thresholdEarningsDetailsHtml = `
           <div style="display:flex; justify-content:space-between;">
