@@ -3492,41 +3492,52 @@
       submitBtn.disabled = true;
       submitBtn.innerText = 'Submitting...';
 
-      let doorsArr = [];
-      if (typeof selectedBooking.doors === 'string') {
-        try { doorsArr = JSON.parse(selectedBooking.doors); } catch(_) {}
-      } else if (Array.isArray(selectedBooking.doors)) {
-        doorsArr = selectedBooking.doors;
-      }
-
-      while (doorsArr.length <= signatureIndex) {
-        doorsArr.push({
-          doorMaterial: 'N/A',
-          jambMaterial: 'N/A',
-          swing: 'N/A',
-          completed: false,
-          signature: null,
-          media_urls: []
-        });
-      }
-
-      const door = doorsArr[signatureIndex];
-      if (!door) return;
-
-      const dataUrl = canvas.toDataURL('image/png');
-
-      door.completed = true;
-      door.signature = dataUrl;
-      door.completed_at = new Date().toISOString();
-      door.checklist = Array.from(document.querySelectorAll('.checklist-item')).map((cb, idx) => {
-        return {
-          item: cb.nextElementSibling ? cb.nextElementSibling.innerText.trim() : '',
-          checked: cb.checked,
-          indent: bookingChecklist[idx]?.indent || false
-        };
-      });
-
       try {
+        // Fetch fresh doors array from DB first to prevent concurrent overwrite
+        const { data: freshBooking, error: fetchErr } = await sb
+          .from('installation_bookings')
+          .select('doors')
+          .eq('id', selectedBooking.id)
+          .single();
+
+        if (fetchErr) throw fetchErr;
+
+        let doorsArr = [];
+        if (freshBooking && freshBooking.doors) {
+          if (typeof freshBooking.doors === 'string') {
+            try { doorsArr = JSON.parse(freshBooking.doors); } catch(_) {}
+          } else if (Array.isArray(freshBooking.doors)) {
+            doorsArr = freshBooking.doors;
+          }
+        }
+
+        while (doorsArr.length <= signatureIndex) {
+          doorsArr.push({
+            doorMaterial: 'N/A',
+            jambMaterial: 'N/A',
+            swing: 'N/A',
+            completed: false,
+            signature: null,
+            media_urls: []
+          });
+        }
+
+        const door = doorsArr[signatureIndex];
+        if (!door) return;
+
+        const dataUrl = canvas.toDataURL('image/png');
+
+        door.completed = true;
+        door.signature = dataUrl;
+        door.completed_at = new Date().toISOString();
+        door.checklist = Array.from(document.querySelectorAll('.checklist-item')).map((cb, idx) => {
+          return {
+            item: cb.nextElementSibling ? cb.nextElementSibling.innerText.trim() : '',
+            checked: cb.checked,
+            indent: bookingChecklist[idx]?.indent || false
+          };
+        });
+
         const { error } = await sb
           .from('installation_bookings')
           .update({ doors: doorsArr })
@@ -4036,42 +4047,53 @@
     async function saveCurrentMediaState() {
       if (!selectedBooking || uploadDoorIndex === null) return;
 
-      let doorsArr = [];
-      if (typeof selectedBooking.doors === 'string') {
-        try { doorsArr = JSON.parse(selectedBooking.doors); } catch(_) {}
-      } else if (Array.isArray(selectedBooking.doors)) {
-        doorsArr = selectedBooking.doors;
-      }
-
-      const door = doorsArr[uploadDoorIndex];
-      if (!door) return;
-
-      // 1. Build door.required_media
-      const isEvent = selectedBooking && (selectedBooking.product_skus === 'Backjob' || selectedBooking.product_skus === 'Ocular');
-      const activeReqs = isEvent ? [] : bookingMediaRequirements;
-      door.required_media = {};
-      activeReqs.forEach((item, idx) => {
-        const slot = slotFiles[idx];
-        if (slot && slot.url) {
-          door.required_media[item.label] = slot.url;
-        }
-      });
-
-      // 2. Build door.other_media
-      door.other_media = [];
-      otherFiles.forEach(item => {
-        if (item && item.url) {
-          door.other_media.push(item.url);
-        }
-      });
-
-      // 3. Maintain flat door.media_urls for downstream views compatibility
-      door.media_urls = [
-        ...Object.values(door.required_media),
-        ...door.other_media
-      ];
-
       try {
+        // Fetch fresh doors array from DB first to prevent concurrent overwrite
+        const { data: freshBooking, error: fetchErr } = await sb
+          .from('installation_bookings')
+          .select('doors')
+          .eq('id', selectedBooking.id)
+          .single();
+
+        if (fetchErr) throw fetchErr;
+
+        let doorsArr = [];
+        if (freshBooking && freshBooking.doors) {
+          if (typeof freshBooking.doors === 'string') {
+            try { doorsArr = JSON.parse(freshBooking.doors); } catch(_) {}
+          } else if (Array.isArray(freshBooking.doors)) {
+            doorsArr = freshBooking.doors;
+          }
+        }
+
+        const door = doorsArr[uploadDoorIndex];
+        if (!door) return;
+
+        // 1. Build door.required_media
+        const isEvent = selectedBooking && (selectedBooking.product_skus === 'Backjob' || selectedBooking.product_skus === 'Ocular');
+        const activeReqs = isEvent ? [] : bookingMediaRequirements;
+        door.required_media = {};
+        activeReqs.forEach((item, idx) => {
+          const slot = slotFiles[idx];
+          if (slot && slot.url) {
+            door.required_media[item.label] = slot.url;
+          }
+        });
+
+        // 2. Build door.other_media
+        door.other_media = [];
+        otherFiles.forEach(item => {
+          if (item && item.url) {
+            door.other_media.push(item.url);
+          }
+        });
+
+        // 3. Maintain flat door.media_urls for downstream views compatibility
+        door.media_urls = [
+          ...Object.values(door.required_media),
+          ...door.other_media
+        ];
+
         const { error } = await sb
           .from('installation_bookings')
           .update({ doors: doorsArr })
