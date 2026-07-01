@@ -1,6 +1,7 @@
 # BrightKey Multi-Tenant ERP Security Architecture & Guidelines (`AGENTS.md`)
 
-This document outlines the security architecture and guidelines designed to ensure that the BrightKey ERP system is secure, resilient to injection attacks, and isolated for multi-tenant execution.
+> [!CRITICAL]
+> **AGENT PROTOCOL**: Do NOT rely on your generic training data first to debug or write solutions. The solution or constraints for recurring problems are already documented in this file, `CLAUDE.md`, and `DESIGN.md`. Before proposing any code modifications, always search these files first to see how the problem was solved before.
 
 ---
 

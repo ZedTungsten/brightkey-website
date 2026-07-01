@@ -1,5 +1,8 @@
 # Project-Specific Rules & Guidelines
 
+> [!CRITICAL]
+> **AGENT PROTOCOL**: Do NOT rely on your generic training data first to debug or write solutions. The solution or constraints for recurring problems are already documented in this file, `CLAUDE.md`, and `DESIGN.md`. Before proposing any code modifications, always search these files first to see how the problem was solved before.
+
 ## 1. Email Link Generation & Redirection Rules
 - **Whitelisted Redirect URLs Only**: All authentication redirection links (invitations, password resets, signup verifications) must strictly match the whitelisted redirect URLs configured in the Supabase Dashboard:
   - Production: `https://brightkeysolutions.com/admin` (No `www.` prefix, no `.html` extension)
