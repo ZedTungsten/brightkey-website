@@ -133,9 +133,24 @@
   <script>
     'use strict';
 
+    let serviceProducts = [];
+
     const showToast = (msg, isError) => SettingsPage.showToast(msg, isError);
 
     window.initSettingsPage = async function() {
+      // Fetch service products
+      try {
+        const { data, error } = await sb
+          .from('products')
+          .select('sku, title, category')
+          .eq('category', 'Service')
+          .eq('company_id', currentCompanyId);
+        if (!error && data) {
+          serviceProducts = data;
+        }
+      } catch (err) {
+        console.error('Error fetching service products:', err);
+      }
       await loadInstallerPayoutSettings();
     };
 
@@ -169,11 +184,11 @@
 
           if (Array.isArray(v.extra_services)) {
             v.extra_services.forEach(s => {
-              addExtraServiceRow(s.name, s.rate);
+              addExtraServiceRow(s.sku || s.name || '', s.rate);
             });
           } else {
-            addExtraServiceRow('Welding Baseplate Metal', 700);
-            addExtraServiceRow('Welding Baseplate Stainless', 700);
+            addExtraServiceRow('WELD-MET', 700);
+            addExtraServiceRow('WELD-SS', 700);
           }
         } else {
           // Defaults
@@ -183,23 +198,38 @@
           if (leadRateInput) leadRateInput.value = 1000;
           if (assistRateInput) assistRateInput.value = 500;
 
-          addExtraServiceRow('Welding Baseplate Metal', 700);
-          addExtraServiceRow('Welding Baseplate Stainless', 700);
+          addExtraServiceRow('WELD-MET', 700);
+          addExtraServiceRow('WELD-SS', 700);
         }
       } catch (err) {
         console.error('Error loading installer payout settings:', err);
       }
     }
 
-    window.addExtraServiceRow = function(name = '', rate = '') {
+    window.addExtraServiceRow = function(sku = '', rate = '') {
       const container = document.getElementById('extra-services-container');
       if (!container) return;
 
       const rowId = 'service-row-' + Date.now() + Math.random().toString(36).slice(2, 6);
+      
+      let optionsHtml = '<option value="">-- Select Service SKU --</option>';
+      let found = false;
+      serviceProducts.forEach(p => {
+        const selected = p.sku === sku ? 'selected' : '';
+        if (p.sku === sku) found = true;
+        optionsHtml += `<option value="${escapeHtml(p.sku)}" ${selected}>${escapeHtml(p.sku)} - ${escapeHtml(p.title)}</option>`;
+      });
+
+      if (sku && !found) {
+        optionsHtml += `<option value="${escapeHtml(sku)}" selected>${escapeHtml(sku)}</option>`;
+      }
+
       const html = `
         <div class="extra-service-row" id="${rowId}" style="display: flex; align-items: center; gap: 0.75rem;">
           <div style="flex: 2;">
-            <input type="text" class="form-input service-name-input" placeholder="Service Name (e.g. Welding)" value="${escapeHtml(name)}" required />
+            <select class="form-select service-sku-select" required style="background: var(--bg-surface); height: 38px; width: 100%;">
+              ${optionsHtml}
+            </select>
           </div>
           <div style="flex: 1; position: relative; display: flex; align-items: center;">
             <span style="position: absolute; left: 0.75rem; font-weight: 600; color: var(--text-muted); pointer-events: none;">₱</span>
@@ -228,10 +258,10 @@
       const extra_services = [];
       const serviceRows = document.querySelectorAll('#extra-services-container .extra-service-row');
       serviceRows.forEach(row => {
-        const name = row.querySelector('.service-name-input').value.trim();
+        const sku = row.querySelector('.service-sku-select').value;
         const rate = parseFloat(row.querySelector('.service-rate-input').value) || 0;
-        if (name) {
-          extra_services.push({ name, rate });
+        if (sku) {
+          extra_services.push({ sku, rate });
         }
       });
 
