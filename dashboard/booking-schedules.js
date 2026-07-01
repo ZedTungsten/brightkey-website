@@ -3082,6 +3082,36 @@
       // Deep copy to prevent mutating original until saved
       tempEditDoors = JSON.parse(JSON.stringify(doorsArr));
 
+      // Parse booking level products & skus to determine door count
+      let productsArr = [];
+      if (typeof selectedBooking.products === 'string') {
+        try { productsArr = JSON.parse(selectedBooking.products); } catch(_) {}
+      } else if (Array.isArray(selectedBooking.products)) {
+        productsArr = selectedBooking.products;
+      }
+      let skus = [];
+      if (selectedBooking.sku) {
+        skus = selectedBooking.sku.split(' | ');
+      }
+
+      // Ensure tempEditDoors has at least rowCount doors to match the details view
+      const rowCount = Math.max(productsArr.length, doorsArr.length, skus.length);
+      while (tempEditDoors.length < rowCount) {
+        const nextIdx = tempEditDoors.length + 1;
+        tempEditDoors.push({
+          index: nextIdx,
+          swing: 'N/A',
+          doorMaterial: 'N/A',
+          jambMaterial: 'N/A',
+          photos: [],
+          checklist: [],
+          completed: false,
+          signature: null,
+          installers: [],
+          products: []
+        });
+      }
+
       // Make sure every door has a products array initialized
       tempEditDoors.forEach((d, idx) => {
         if (!d.products) d.products = [];
@@ -3089,19 +3119,6 @@
 
       const anyDoorHasProducts = tempEditDoors.some(d => d.products && d.products.length > 0);
       if (!anyDoorHasProducts) {
-        // Fallback: Map booking products to doors
-        let productsArr = [];
-        if (typeof selectedBooking.products === 'string') {
-          try { productsArr = JSON.parse(selectedBooking.products); } catch(_) {}
-        } else if (Array.isArray(selectedBooking.products)) {
-          productsArr = selectedBooking.products;
-        }
-        
-        let skus = [];
-        if (selectedBooking.sku) {
-          skus = selectedBooking.sku.split(' | ');
-        }
-
         const isSingleDoor = (tempEditDoors.length === 1 && (productsArr.length > 0 || skus.length > 0));
 
         if (isSingleDoor) {
