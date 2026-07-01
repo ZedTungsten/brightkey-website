@@ -2277,8 +2277,42 @@
       const hasAssist2 = !!inst2Id;
       const hasAssist3 = !!inst3Id;
 
-      const hasServiceProduct = (door.products || []).some(sku => {
-        const prod = dbProducts.find(p => p.sku && p.sku.toUpperCase() === sku.toUpperCase());
+      let productsArr = [];
+      if (typeof selectedBooking.products === 'string') {
+        try { productsArr = JSON.parse(selectedBooking.products); } catch(_) {}
+      } else if (Array.isArray(selectedBooking.products)) {
+        productsArr = selectedBooking.products;
+      }
+
+      let skus = [];
+      if (selectedBooking.sku) {
+        skus = selectedBooking.sku.split(' | ');
+      }
+      let names = [];
+      if (selectedBooking.product_name) {
+        names = selectedBooking.product_name.split(' | ');
+      }
+
+      const anyDoorHasAttachedProducts = doorsArr.some(d => Array.isArray(d.products) && d.products.length > 0);
+      const isSingleDoorGrouping = (doorsArr.length === 1 && productsArr.length > 0);
+
+      let doorProducts = [];
+      if (anyDoorHasAttachedProducts) {
+        const attachedSkus = door.products || [];
+        doorProducts = productsArr.filter(p => attachedSkus.includes(p.sku));
+      } else if (isSingleDoorGrouping) {
+        doorProducts = productsArr.filter(p => p.sku !== 'ADD-ON LABOR');
+      } else {
+        if (productsArr[doorIndex]) {
+          doorProducts = [productsArr[doorIndex]];
+        } else if (skus[doorIndex]) {
+          const nameFallback = names[doorIndex] || skus[doorIndex];
+          doorProducts = [{ sku: skus[doorIndex], name: nameFallback, title: nameFallback }];
+        }
+      }
+
+      const hasServiceProduct = doorProducts.some(p => {
+        const prod = dbProducts.find(dbP => dbP.sku && dbP.sku.toUpperCase() === p.sku.toUpperCase());
         return prod && prod.category === 'Service';
       });
 
