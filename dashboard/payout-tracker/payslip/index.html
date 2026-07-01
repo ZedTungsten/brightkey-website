@@ -320,7 +320,8 @@
             assignedDoors.push({
               completed: b.status === 'done' || b.status === 'completed' || b.status === 'finished',
               roles: roles,
-              skus: activeSkus
+              skus: activeSkus,
+              completed_at: b.updated_at || b.created_at || b.scheduled_date
             });
           }
           return assignedDoors;
@@ -401,7 +402,8 @@
             assignedDoors.push({
               completed: !!door.completed,
               roles: roles,
-              skus: doorSkus
+              skus: doorSkus,
+              completed_at: door.completed_at || b.updated_at || b.created_at || b.scheduled_date
             });
           } else {
             if (anyDoorHasAttachedProducts && door) {
@@ -417,7 +419,7 @@
         return assignedDoors;
       },
 
-      calculateInstallerPayouts(empId, monthKey) {
+      calculateInstallerPayouts(empId, monthKey, sortedScheds = [15, 30]) {
         const payoutSettings = this.installerPayoutSettings || {
           installations_before_crediting: 15,
           lead_credit: 1.0,
@@ -434,7 +436,6 @@
         const leadWeight = payoutSettings.lead_credit !== undefined ? payoutSettings.lead_credit : 1.0;
         const assistWeight = payoutSettings.assist_credit !== undefined ? payoutSettings.assist_credit : 0.5;
         const leadRateVal = payoutSettings.lead_rate || 1000;
-        const assistRateVal = payoutSettings.assist_rate || 500;
 
         const extraServicesList = (payoutSettings.extra_services || []).map(es => {
           let sku = es.sku || es.name || '';
@@ -451,47 +452,78 @@
           return bookingMonthKey === monthKey;
         });
 
-        let leadCount = 0;
-        let assistCount = 0;
-        let serviceEarnings = 0;
-        const serviceCounts = {};
-
+        const doorJobs = [];
         monthBookings.forEach(b => {
           const assignedDoors = this.getAssignedDoorsForBookingAndEmployee(b, empId);
           assignedDoors.forEach(d => {
-            if (!d.completed) return;
-
-            if (d.roles.includes('lead')) {
-              leadCount++;
-            } else if (d.roles.includes('assist')) {
-              assistCount++;
-            }
-
-            if (d.roles.includes('service')) {
-              d.skus.forEach(sku => {
-                const matchedService = extraServicesList.find(es => es.sku === sku);
-                if (matchedService) {
-                  serviceCounts[sku] = (serviceCounts[sku] || 0) + 1;
-                  serviceEarnings += matchedService.rate;
-                }
-              });
+            if (d.completed) {
+              doorJobs.push(d);
             }
           });
         });
 
-        const totalCredit = (leadCount * leadWeight) + (assistCount * assistWeight);
-        let thresholdEarnings = 0;
+        // Sort doors chronologically by completed_at
+        doorJobs.sort((a, b) => new Date(a.completed_at) - new Date(b.completed_at));
+
+        let runningCredit = 0;
+        let totalThresholdEarnings = 0;
+        let totalServiceEarnings = 0;
+        const cutoffPayouts = {};
+        const serviceCounts = {};
+
+        sortedScheds.forEach(day => { cutoffPayouts[day] = 0; });
+
+        doorJobs.forEach(job => {
+          let weight = 0;
+          if (job.roles.includes('lead')) weight = leadWeight;
+          else if (job.roles.includes('assist')) weight = assistWeight;
+
+          // 1. Service pay
+          let servicePayForJob = 0;
+          if (job.roles.includes('service')) {
+            job.skus.forEach(sku => {
+              const matchedService = extraServicesList.find(es => es.sku === sku);
+              if (matchedService) {
+                serviceCounts[sku] = (serviceCounts[sku] || 0) + 1;
+                servicePayForJob += matchedService.rate;
+              }
+            });
+          }
+
+          // 2. Extra threshold pay
+          let thresholdPayForJob = 0;
+          const previousCredit = runningCredit;
+          const newCredit = previousCredit + weight;
+          if (newCredit > thresholdVal) {
+            const extraCredit = newCredit - Math.max(thresholdVal, previousCredit);
+            thresholdPayForJob = extraCredit * leadRateVal;
+          }
+          runningCredit = newCredit;
+
+          totalThresholdEarnings += thresholdPayForJob;
+          totalServiceEarnings += servicePayForJob;
+
+          // Determine cutoff day
+          const date = new Date(job.completed_at);
+          const dayVal = date.getUTCDate();
+          const cutoffDay = this.getScheduleDayForItemDay(dayVal, sortedScheds);
+          
+          if (cutoffPayouts[cutoffDay] !== undefined) {
+            cutoffPayouts[cutoffDay] += (thresholdPayForJob + servicePayForJob);
+          } else {
+            cutoffPayouts[sortedScheds[sortedScheds.length - 1]] += (thresholdPayForJob + servicePayForJob);
+          }
+        });
+
         let thresholdDescription = '';
-        if (totalCredit > thresholdVal) {
-          const extraCredit = totalCredit - thresholdVal;
-          thresholdEarnings = extraCredit * leadRateVal;
+        if (totalThresholdEarnings > 0) {
           thresholdDescription = `₱${leadRateVal.toLocaleString()} per extra work`;
         } else {
           thresholdDescription = `Threshold of ${thresholdVal} counts not reached`;
         }
 
         let serviceDescription = '';
-        if (serviceEarnings > 0) {
+        if (totalServiceEarnings > 0) {
           const parts = [];
           Object.keys(serviceCounts).forEach(sku => {
             const matched = extraServicesList.find(es => es.sku === sku);
@@ -504,12 +536,13 @@
         }
 
         return {
-          totalCredit,
-          thresholdEarnings,
+          totalCredit: runningCredit,
+          thresholdEarnings: totalThresholdEarnings,
           thresholdDescription,
-          serviceEarnings,
+          serviceEarnings: totalServiceEarnings,
           serviceDescription,
-          totalInstallationPayout: thresholdEarnings + serviceEarnings
+          totalInstallationPayout: totalThresholdEarnings + totalServiceEarnings,
+          cutoffPayouts
         };
       },
 
