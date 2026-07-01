@@ -645,6 +645,122 @@
       opacity: 0.55;
       cursor: not-allowed;
     }
+
+    /* Burger Button */
+    .burger-btn {
+      background: none;
+      border: none;
+      color: var(--text-secondary);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.5rem;
+      border-radius: var(--radius-sm);
+      transition: background-color 0.2s, color 0.2s;
+    }
+    .burger-btn:hover {
+      background-color: var(--bg-elevated);
+      color: var(--text-primary);
+    }
+
+    /* Sidebar Drawer Overlay */
+    .drawer-overlay {
+      position: absolute; /* Relative to #app-screen */
+      inset: 0;
+      background: rgba(9, 9, 11, 0.4);
+      backdrop-filter: blur(4px);
+      z-index: 100;
+      display: none;
+      opacity: 0;
+      transition: opacity 0.2s ease-out;
+    }
+    .drawer-overlay.open {
+      display: flex;
+      opacity: 1;
+    }
+
+    /* Drawer Content */
+    .drawer-content {
+      position: absolute;
+      top: 0;
+      right: -280px;
+      width: 280px;
+      height: 100%;
+      background: var(--bg-surface);
+      box-shadow: -4px 0 20px rgba(0,0,0,0.08);
+      display: flex;
+      flex-direction: column;
+      transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      z-index: 101;
+    }
+    .drawer-overlay.open .drawer-content {
+      transform: translateX(-280px);
+    }
+
+    .drawer-header {
+      padding: 1.25rem 1.5rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .drawer-title {
+      font-size: 1.1rem;
+      font-weight: 800;
+      color: var(--text-primary);
+    }
+    .drawer-close {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 0.25rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .drawer-menu-list {
+      padding: 1.5rem 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      flex: 1;
+    }
+    .drawer-menu-item {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      width: 100%;
+      padding: 0.85rem 1rem;
+      border: none;
+      background: none;
+      border-radius: var(--radius-sm);
+      color: var(--text-secondary);
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      text-align: left;
+      font-family: var(--font-sans);
+      transition: all 0.15s;
+    }
+    .drawer-menu-item:hover {
+      background: var(--bg-elevated);
+      color: var(--text-primary);
+    }
+    .drawer-menu-item.active {
+      background: var(--cyan-dim);
+      color: var(--cyan-light);
+    }
+    .drawer-menu-item.logout {
+      margin-top: auto;
+      color: var(--danger);
+    }
+    .drawer-menu-item.logout:hover {
+      background: rgba(239, 68, 68, 0.08);
+      color: var(--danger);
+    }
   </style>
 </head>
 <body>
@@ -679,7 +795,13 @@
         <span class="user-welcome">Hello,</span>
         <span class="user-name" id="display-installer-name">Loading...</span>
       </div>
-      <button class="logout-btn" onclick="handleLogout()">Sign Out</button>
+      <button class="burger-btn" onclick="toggleSidebar(true)" aria-label="Menu">
+        <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="3" y1="12" x2="21" y2="12"></line>
+          <line x1="3" y1="6" x2="21" y2="6"></line>
+          <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+      </button>
     </header>
 
     <div class="sync-banner" id="sync-status">
@@ -687,48 +809,136 @@
       <span id="sync-time"></span>
     </div>
 
-    <!-- Month Navigator -->
-    <div class="month-nav">
-      <button class="nav-arrow" onclick="changeMonth(-1)">◀</button>
-      <span class="month-title" id="month-title">June 2026</span>
-      <button class="nav-arrow" onclick="changeMonth(1)">▶</button>
+    <!-- Job Tracker Tab View -->
+    <div id="job-tracker-view" style="display: flex; flex-direction: column; flex: 1; width: 100%;">
+      <!-- Month Navigator -->
+      <div class="month-nav">
+        <button class="nav-arrow" onclick="changeMonth(-1)">◀</button>
+        <span class="month-title" id="month-title">June 2026</span>
+        <button class="nav-arrow" onclick="changeMonth(1)">▶</button>
+      </div>
+
+      <!-- Calendar View -->
+      <div class="calendar-grid">
+        <div class="weekdays-row">
+          <div>Su</div><div>Mo</div><div>Tu</div><div>We</div><div>Th</div><div>Fr</div><div>Sa</div>
+        </div>
+        <div class="days-grid" id="days-container">
+          <!-- Filled by JS -->
+        </div>
+      </div>
+
+      <!-- Agenda View -->
+      <div class="agenda-section">
+        <div class="agenda-header" id="agenda-header-title">Installations on Select Date</div>
+        <div class="agenda-list" id="agenda-list">
+          <!-- Filled by JS -->
+        </div>
+      </div>
+
+      <!-- Legend -->
+      <div style="background:var(--bg-surface); border-top:1px solid var(--border); padding:0.6rem 1rem; display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:0.6rem 1.25rem; font-size:0.72rem; font-weight:600; color:var(--text-secondary); width:100%; flex-shrink:0;">
+        <div style="display:flex; align-items:center; gap:0.35rem;">
+          <div style="width:12px; height:4px; background:#ea580c; border-radius:2px;"></div>
+          <span>Morning</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:0.35rem;">
+          <div style="width:12px; height:4px; background:#2563eb; border-radius:2px;"></div>
+          <span>Afternoon</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:0.35rem;">
+          <div style="width:12px; height:4px; background:#eab308; border-radius:2px;"></div>
+          <span>Done (No Media)</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:0.35rem;">
+          <div style="width:12px; height:4px; background:#22c55e; border-radius:2px;"></div>
+          <span>Done (With Media)</span>
+        </div>
+      </div>
     </div>
 
-    <!-- Calendar View -->
-    <div class="calendar-grid">
-      <div class="weekdays-row">
-        <div>Su</div><div>Mo</div><div>Tu</div><div>We</div><div>Th</div><div>Fr</div><div>Sa</div>
+    <!-- Profile Tab View -->
+    <div id="profile-view" style="display: none; padding: 1.5rem; flex-direction: column; gap: 1.5rem; flex: 1; width: 100%;">
+      <div style="display: flex; flex-direction: column; align-items: center; gap: 0.75rem; margin-top: 1rem;">
+        <div style="width: 72px; height: 72px; border-radius: 50%; background: var(--cyan-dim); border: 2px solid var(--cyan); display: flex; align-items: center; justify-content: center;">
+          <svg viewBox="0 0 24 24" width="36" height="36" stroke="var(--cyan)" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+            <circle cx="12" cy="7" r="4"></circle>
+          </svg>
+        </div>
+        <div style="text-align: center;">
+          <h2 style="font-size: 1.25rem; font-weight: 800; color: var(--text-primary);" id="profile-full-name">-</h2>
+          <p style="font-size: 0.82rem; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; margin-top: 0.15rem;" id="profile-title">-</p>
+        </div>
       </div>
-      <div class="days-grid" id="days-container">
-        <!-- Filled by JS -->
+      
+      <div style="display: flex; flex-direction: column; gap: 1rem; background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.25rem; margin-top: 0.5rem;">
+        <div style="font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; margin-bottom: 0.5rem;">
+          Employment Information
+        </div>
+        <div style="display: flex; justify-content: space-between; font-size: 0.88rem;">
+          <span style="color: var(--text-secondary); font-weight: 500;">Department</span>
+          <strong style="color: var(--text-primary);" id="profile-dept">-</strong>
+        </div>
+        <div style="display: flex; justify-content: space-between; font-size: 0.88rem;">
+          <span style="color: var(--text-secondary); font-weight: 500;">Status</span>
+          <strong style="color: var(--text-primary);" id="profile-status">-</strong>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 1rem; background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.25rem;">
+        <div style="font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; margin-bottom: 0.5rem;">
+          Contact Details
+        </div>
+        <div style="display: flex; justify-content: space-between; font-size: 0.88rem;">
+          <span style="color: var(--text-secondary); font-weight: 500;">Email</span>
+          <strong style="color: var(--text-primary);" id="profile-email">-</strong>
+        </div>
+        <div style="display: flex; justify-content: space-between; font-size: 0.88rem;">
+          <span style="color: var(--text-secondary); font-weight: 500;">Phone</span>
+          <strong style="color: var(--text-primary);" id="profile-phone">-</strong>
+        </div>
       </div>
     </div>
 
-    <!-- Agenda View -->
-    <div class="agenda-section">
-      <div class="agenda-header" id="agenda-header-title">Installations on Select Date</div>
-      <div class="agenda-list" id="agenda-list">
-        <!-- Filled by JS -->
-      </div>
-    </div>
-
-    <!-- Legend -->
-    <div style="background:var(--bg-surface); border-top:1px solid var(--border); padding:0.6rem 1rem; display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:0.6rem 1.25rem; font-size:0.72rem; font-weight:600; color:var(--text-secondary); width:100%; flex-shrink:0;">
-      <div style="display:flex; align-items:center; gap:0.35rem;">
-        <div style="width:12px; height:4px; background:#ea580c; border-radius:2px;"></div>
-        <span>Morning</span>
-      </div>
-      <div style="display:flex; align-items:center; gap:0.35rem;">
-        <div style="width:12px; height:4px; background:#2563eb; border-radius:2px;"></div>
-        <span>Afternoon</span>
-      </div>
-      <div style="display:flex; align-items:center; gap:0.35rem;">
-        <div style="width:12px; height:4px; background:#eab308; border-radius:2px;"></div>
-        <span>Done (No Media)</span>
-      </div>
-      <div style="display:flex; align-items:center; gap:0.35rem;">
-        <div style="width:12px; height:4px; background:#22c55e; border-radius:2px;"></div>
-        <span>Done (With Media)</span>
+    <!-- Sidebar Drawer Menu -->
+    <div id="sidebar-drawer-overlay" class="drawer-overlay" onclick="toggleSidebar(false)">
+      <div class="drawer-content" onclick="event.stopPropagation()">
+        <div class="drawer-header">
+          <div class="drawer-title">Menu</div>
+          <button class="drawer-close" onclick="toggleSidebar(false)" aria-label="Close menu">
+            <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+        <div class="drawer-menu-list">
+          <button class="drawer-menu-item active" onclick="switchView('job-tracker')">
+            <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+              <line x1="16" y1="2" x2="16" y2="6"></line>
+              <line x1="8" y1="2" x2="8" y2="6"></line>
+              <line x1="3" y1="10" x2="21" y2="10"></line>
+            </svg>
+            Job Tracker
+          </button>
+          <button class="drawer-menu-item" onclick="switchView('profile')">
+            <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+              <circle cx="12" cy="7" r="4"></circle>
+            </svg>
+            Profile
+          </button>
+          <button class="drawer-menu-item logout" onclick="handleLogout()">
+            <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+              <polyline points="16 17 21 12 16 7"></polyline>
+              <line x1="21" y1="12" x2="9" y2="12"></line>
+            </svg>
+            Sign Out
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -1118,6 +1328,7 @@
         try {
           currentInstaller = JSON.parse(savedInstaller);
           document.getElementById('display-installer-name').innerText = `${currentInstaller.first_name} ${currentInstaller.last_name}`;
+          populateProfile();
           document.getElementById('login-screen').style.display = 'none';
           document.getElementById('app-screen').style.display = 'flex';
           
@@ -1144,10 +1355,10 @@
       submitBtn.innerText = 'Verifying...';
 
       try {
-        // Fetch all active employees
+        // Fetch all active employees with full details
         const { data: employees, error } = await sb
           .from('employees')
-          .select('id, first_name, last_name, contact_number, emergency_contact_number, company_id, assignment')
+          .select('id, first_name, last_name, contact_number, emergency_contact_number, company_id, assignment, email, department, title, employment_status')
           .eq('employment_status', 'Active');
 
         if (error) throw error;
@@ -1171,6 +1382,7 @@
           currentInstaller = matchingInstaller;
           localStorage.setItem('bk_active_installer', JSON.stringify(matchingInstaller));
           document.getElementById('display-installer-name').innerText = `${currentInstaller.first_name} ${currentInstaller.last_name}`;
+          populateProfile();
           
           // Slide screen transition
           document.getElementById('login-screen').style.display = 'none';
@@ -1200,6 +1412,70 @@
       document.getElementById('login-pass').value = '';
       document.getElementById('app-screen').style.display = 'none';
       document.getElementById('login-screen').style.display = 'flex';
+      
+      // Reset view to Job Tracker
+      const trackerTab = document.getElementById('job-tracker-view');
+      const profileTab = document.getElementById('profile-view');
+      trackerTab.style.display = 'flex';
+      profileTab.style.display = 'none';
+      
+      const menuItems = document.querySelectorAll('.drawer-menu-list .drawer-menu-item');
+      menuItems.forEach(item => {
+        if (item.getAttribute('onclick').includes('job-tracker')) {
+          item.classList.add('active');
+        } else {
+          item.classList.remove('active');
+        }
+      });
+    }
+
+    function toggleSidebar(show) {
+      const overlay = document.getElementById('sidebar-drawer-overlay');
+      if (show) {
+        overlay.style.display = 'block';
+        overlay.offsetHeight; // force reflow
+        overlay.classList.add('open');
+      } else {
+        overlay.classList.remove('open');
+        setTimeout(() => {
+          overlay.style.display = 'none';
+        }, 200);
+      }
+    }
+
+    function switchView(view) {
+      const trackerTab = document.getElementById('job-tracker-view');
+      const profileTab = document.getElementById('profile-view');
+      const menuItems = document.querySelectorAll('.drawer-menu-list .drawer-menu-item');
+      
+      if (view === 'job-tracker') {
+        trackerTab.style.display = 'flex';
+        profileTab.style.display = 'none';
+      } else if (view === 'profile') {
+        trackerTab.style.display = 'none';
+        profileTab.style.display = 'flex';
+        populateProfile();
+      }
+
+      menuItems.forEach(item => {
+        if (item.getAttribute('onclick').includes(view)) {
+          item.classList.add('active');
+        } else {
+          item.classList.remove('active');
+        }
+      });
+
+      toggleSidebar(false);
+    }
+
+    function populateProfile() {
+      if (!currentInstaller) return;
+      document.getElementById('profile-full-name').textContent = `${currentInstaller.first_name || ''} ${currentInstaller.last_name || ''}`;
+      document.getElementById('profile-title').textContent = currentInstaller.title || currentInstaller.assignment || 'Installer';
+      document.getElementById('profile-dept').textContent = currentInstaller.department || 'Operations';
+      document.getElementById('profile-status').textContent = currentInstaller.employment_status || 'Active';
+      document.getElementById('profile-email').textContent = currentInstaller.email || '—';
+      document.getElementById('profile-phone').textContent = currentInstaller.contact_number || '—';
     }
 
     // --- Offline Caching & Sync ---
@@ -1248,6 +1524,19 @@
       banner.classList.remove('offline');
 
       try {
+        // Fetch fresh installer record
+        const { data: freshEmp } = await sb
+          .from('employees')
+          .select('id, first_name, last_name, contact_number, emergency_contact_number, company_id, assignment, email, department, title, employment_status')
+          .eq('id', currentInstaller.id)
+          .maybeSingle();
+        if (freshEmp) {
+          currentInstaller = freshEmp;
+          localStorage.setItem('bk_active_installer', JSON.stringify(freshEmp));
+          document.getElementById('display-installer-name').innerText = `${currentInstaller.first_name} ${currentInstaller.last_name}`;
+          populateProfile();
+        }
+
         // Fetch booking checklist
         const { data: checklistRes } = await sb
           .from('global_settings')
