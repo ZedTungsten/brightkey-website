@@ -1851,19 +1851,23 @@
       // If there are no doors defined, treat the booking itself as one implicit door
       if (doorsArr.length === 0) {
         if (isBookingLevelInstaller) {
-          let role = 'lead';
-          const myBIndex = bInsts.findIndex(inst => inst.id === myId);
-          if (myBIndex !== -1) {
-            const inst = bInsts[myBIndex];
-            if (inst.role === 'assist') role = 'assist';
-            else if (inst.role === 'lead') role = 'lead';
-            else role = myBIndex === 0 ? 'lead' : 'assist';
+          let roles = [];
+          const matchedBInsts = bInsts.filter(inst => inst && inst.id === myId);
+          if (matchedBInsts.length > 0) {
+            matchedBInsts.forEach(inst => {
+              const r = inst.role || 'lead';
+              if (!roles.includes(r)) roles.push(r);
+            });
           } else if (b.installer_id) {
             const ids = b.installer_id.split(' | ');
             const myIdIdx = ids.indexOf(myId);
             if (myIdIdx !== -1) {
-              role = myIdIdx === 0 ? 'lead' : 'assist';
+              roles.push(myIdIdx === 0 ? 'lead' : 'assist');
             }
+          }
+          
+          if (roles.length === 0) {
+            roles.push('lead');
           }
           
           let productsArr = [];
@@ -1882,7 +1886,7 @@
           assignedDoors.push({
             doorName: 'Standard Installation',
             completed: b.status === 'done' || b.status === 'completed' || b.status === 'finished',
-            role: role,
+            roles: roles,
             skus: activeSkus
           });
         }
@@ -1904,36 +1908,32 @@
 
       doorsArr.forEach((door, index) => {
         let isAssignedToThisDoor = false;
-        let role = 'lead';
+        let roles = [];
 
         if (door && Array.isArray(door.installers)) {
-          const myIndex = door.installers.findIndex(inst => inst && inst.id === myId);
-          if (myIndex !== -1) {
+          const matchedInsts = door.installers.filter(inst => inst && inst.id === myId);
+          if (matchedInsts.length > 0) {
             isAssignedToThisDoor = true;
-            const inst = door.installers[myIndex];
-            if (inst.role === 'assist') {
-              role = 'assist';
-            } else if (inst.role === 'lead') {
-              role = 'lead';
-            } else {
-              role = myIndex === 0 ? 'lead' : 'assist';
-            }
+            matchedInsts.forEach(inst => {
+              const r = inst.role || 'lead';
+              if (!roles.includes(r)) roles.push(r);
+            });
           }
         } else if (bookingHasDoorLevelInstallers) {
           isAssignedToThisDoor = false;
         } else {
           isAssignedToThisDoor = isBookingLevelInstaller;
-          const myBIndex = bInsts.findIndex(inst => inst.id === myId);
-          if (myBIndex !== -1) {
-            const inst = bInsts[myBIndex];
-            if (inst.role === 'assist') role = 'assist';
-            else if (inst.role === 'lead') role = 'lead';
-            else role = myBIndex === 0 ? 'lead' : 'assist';
+          const matchedBInsts = bInsts.filter(inst => inst && inst.id === myId);
+          if (matchedBInsts.length > 0) {
+            matchedBInsts.forEach(inst => {
+              const r = inst.role || 'lead';
+              if (!roles.includes(r)) roles.push(r);
+            });
           } else if (b.installer_id) {
             const ids = b.installer_id.split(' | ');
             const myIdIdx = ids.indexOf(myId);
             if (myIdIdx !== -1) {
-              role = myIdIdx === 0 ? 'lead' : 'assist';
+              roles.push(myIdIdx === 0 ? 'lead' : 'assist');
             }
           }
         }
@@ -1968,7 +1968,7 @@
           assignedDoors.push({
             doorName: door.name || `Door ${index + 1}`,
             completed: !!door.completed,
-            role: role,
+            roles: roles,
             skus: doorSkus
           });
         } else {
@@ -2046,9 +2046,9 @@
       monthBookings.forEach(b => {
         const assignedDoors = getInstallerAssignedDoorsForBooking(b, myId);
         assignedDoors.forEach(d => {
-          if (d.role === 'lead') {
+          if (d.roles.includes('lead')) {
             leadCount++;
-          } else if (d.role === 'assist') {
+          } else if (d.roles.includes('assist')) {
             assistCount++;
           }
 
@@ -2059,9 +2059,16 @@
             ? `<span style="font-size:0.68rem; font-weight:700; background:#D1FAE5; color:#065F46; padding:0.15rem 0.4rem; border-radius:4px; text-transform:uppercase;">Completed</span>`
             : `<span style="font-size:0.68rem; font-weight:700; background:#FEF3C7; color:#92400E; padding:0.15rem 0.4rem; border-radius:4px; text-transform:uppercase;">Scheduled</span>`;
           
-          const roleBadge = d.role === 'lead'
-            ? `<span style="font-size:0.68rem; font-weight:700; background:#CFFAFE; color:#0891B2; padding:0.15rem 0.4rem; border-radius:4px; text-transform:uppercase;">Lead</span>`
-            : `<span style="font-size:0.68rem; font-weight:700; background:#F3F4F6; color:#374151; padding:0.15rem 0.4rem; border-radius:4px; text-transform:uppercase;">Assist</span>`;
+          let roleBadgesHtml = '';
+          if (d.roles.includes('lead')) {
+            roleBadgesHtml += `<span style="font-size:0.68rem; font-weight:700; background:#CFFAFE; color:#0891B2; padding:0.15rem 0.4rem; border-radius:4px; text-transform:uppercase;">Lead</span>`;
+          }
+          if (d.roles.includes('assist')) {
+            roleBadgesHtml += `<span style="font-size:0.68rem; font-weight:700; background:#F3F4F6; color:#374151; padding:0.15rem 0.4rem; border-radius:4px; text-transform:uppercase;">Assist</span>`;
+          }
+          if (d.roles.includes('service')) {
+            roleBadgesHtml += `<span style="font-size:0.68rem; font-weight:700; background:#F3E8FF; color:#7E22CE; padding:0.15rem 0.4rem; border-radius:4px; text-transform:uppercase;">Service</span>`;
+          }
 
           const displayLabel = `${b.customer_name || 'Client'} (${d.doorName})`;
           const skuLabel = d.skus.join(' | ') || 'No Lock';
@@ -2071,7 +2078,7 @@
               <div style="display: flex; justify-content: space-between; align-items: center;">
                 <span style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted);">${b.order_no || 'Job'}</span>
                 <div style="display: flex; gap: 0.35rem; align-items: center;">
-                  ${roleBadge}
+                  ${roleBadgesHtml}
                   ${statusBadge}
                 </div>
               </div>
@@ -2085,7 +2092,7 @@
         });
       });
 
-      if (leadCount === 0 && assistCount === 0) {
+      if (!listHtml) {
         listHtml = `<div style="text-align: center; padding: 2rem; color: var(--text-muted); font-size: 0.88rem; font-style: italic;">No job assignments recorded for this month.</div>`;
       }
 
@@ -2147,9 +2154,9 @@
           // Only count completed doors
           if (!d.completed) return;
 
-          if (d.role === 'lead') {
+          if (d.roles.includes('lead')) {
             leadCount++;
-          } else if (d.role === 'assist') {
+          } else if (d.roles.includes('assist')) {
             assistCount++;
           }
 
