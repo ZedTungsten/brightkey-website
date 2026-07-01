@@ -807,10 +807,8 @@
     <div class="sync-banner" id="sync-status">
       <div><span class="dot-pulse"></span><span id="sync-text">Connecting to database...</span></div>
       <span id="sync-time"></span>
-    </div>
-
-    <!-- Job Tracker Tab View -->
-    <div id="job-tracker-view" style="display: flex; flex-direction: column; flex: 1; width: 100%;">
+    </div>    <!-- Calendar Tab View -->
+    <div id="calendar-view" style="display: flex; flex-direction: column; flex: 1; width: 100%;">
       <!-- Month Navigator -->
       <div class="month-nav">
         <button class="nav-arrow" onclick="changeMonth(-1)">◀</button>
@@ -818,7 +816,7 @@
         <button class="nav-arrow" onclick="changeMonth(1)">▶</button>
       </div>
 
-      <!-- Calendar View -->
+      <!-- Calendar Grid -->
       <div class="calendar-grid">
         <div class="weekdays-row">
           <div>Su</div><div>Mo</div><div>Tu</div><div>We</div><div>Th</div><div>Fr</div><div>Sa</div>
@@ -853,6 +851,42 @@
         <div style="display:flex; align-items:center; gap:0.35rem;">
           <div style="width:12px; height:4px; background:#22c55e; border-radius:2px;"></div>
           <span>Done (With Media)</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Job Tracker Tab View -->
+    <div id="job-tracker-view" style="display: none; padding: 1.5rem; flex-direction: column; gap: 1.25rem; flex: 1; width: 100%;">
+      <!-- Month Filter Row -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+        <h2 style="font-size: 1.15rem; font-weight: 800; color: var(--text-primary);">Monthly Jobs Summary</h2>
+        <select id="tracker-month-select" class="form-input" style="width: auto; padding: 0.4rem 2rem 0.4rem 0.75rem; font-size: 0.85rem; height: auto;" onchange="drawJobTracker()">
+          <!-- Populated by JS -->
+        </select>
+      </div>
+
+      <!-- Stats Grid -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+        <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1rem; display: flex; flex-direction: column; gap: 0.25rem;">
+          <span style="font-size: 0.72rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Lead Jobs</span>
+          <strong style="font-size: 1.6rem; font-weight: 800; color: var(--cyan-light);" id="tracker-lead-count">0</strong>
+        </div>
+        <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1rem; display: flex; flex-direction: column; gap: 0.25rem;">
+          <span style="font-size: 0.72rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Assist Jobs</span>
+          <strong style="font-size: 1.6rem; font-weight: 800; color: var(--success);" id="tracker-assist-count">0</strong>
+        </div>
+      </div>
+      
+      <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.25rem; display: flex; flex-direction: column; gap: 0.25rem;">
+        <span style="font-size: 0.72rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Total Assignments</span>
+        <strong style="font-size: 1.8rem; font-weight: 900; color: var(--text-primary);" id="tracker-total-count">0</strong>
+      </div>
+
+      <!-- Job List -->
+      <div style="flex: 1; display: flex; flex-direction: column; gap: 0.75rem; margin-top: 0.5rem; overflow-y: auto;">
+        <div style="font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); margin-bottom: 0.25rem;">Job Assignments List</div>
+        <div id="tracker-job-list" style="display: flex; flex-direction: column; gap: 0.65rem;">
+          <!-- Populated by JS -->
         </div>
       </div>
     </div>
@@ -914,12 +948,19 @@
           </button>
         </div>
         <div class="drawer-menu-list">
-          <button class="drawer-menu-item active" onclick="switchView('job-tracker')">
+          <button class="drawer-menu-item active" onclick="switchView('calendar')">
             <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
               <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
               <line x1="16" y1="2" x2="16" y2="6"></line>
               <line x1="8" y1="2" x2="8" y2="6"></line>
               <line x1="3" y1="10" x2="21" y2="10"></line>
+            </svg>
+            Calendar
+          </button>
+          <button class="drawer-menu-item" onclick="switchView('job-tracker')">
+            <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+              <polyline points="22 4 12 14.01 9 11.01"></polyline>
             </svg>
             Job Tracker
           </button>
@@ -1329,6 +1370,7 @@
           currentInstaller = JSON.parse(savedInstaller);
           document.getElementById('display-installer-name').innerText = `${currentInstaller.first_name} ${currentInstaller.last_name}`;
           populateProfile();
+          populateTrackerMonthSelect();
           document.getElementById('login-screen').style.display = 'none';
           document.getElementById('app-screen').style.display = 'flex';
           
@@ -1383,6 +1425,7 @@
           localStorage.setItem('bk_active_installer', JSON.stringify(matchingInstaller));
           document.getElementById('display-installer-name').innerText = `${currentInstaller.first_name} ${currentInstaller.last_name}`;
           populateProfile();
+          populateTrackerMonthSelect();
           
           // Slide screen transition
           document.getElementById('login-screen').style.display = 'none';
@@ -1413,15 +1456,17 @@
       document.getElementById('app-screen').style.display = 'none';
       document.getElementById('login-screen').style.display = 'flex';
       
-      // Reset view to Job Tracker
+      // Reset view to Calendar
+      const calendarTab = document.getElementById('calendar-view');
       const trackerTab = document.getElementById('job-tracker-view');
       const profileTab = document.getElementById('profile-view');
-      trackerTab.style.display = 'flex';
+      calendarTab.style.display = 'flex';
+      trackerTab.style.display = 'none';
       profileTab.style.display = 'none';
       
       const menuItems = document.querySelectorAll('.drawer-menu-list .drawer-menu-item');
       menuItems.forEach(item => {
-        if (item.getAttribute('onclick').includes('job-tracker')) {
+        if (item.getAttribute('onclick').includes('calendar')) {
           item.classList.add('active');
         } else {
           item.classList.remove('active');
@@ -1444,14 +1489,22 @@
     }
 
     function switchView(view) {
+      const calendarTab = document.getElementById('calendar-view');
       const trackerTab = document.getElementById('job-tracker-view');
       const profileTab = document.getElementById('profile-view');
       const menuItems = document.querySelectorAll('.drawer-menu-list .drawer-menu-item');
       
-      if (view === 'job-tracker') {
+      if (view === 'calendar') {
+        calendarTab.style.display = 'flex';
+        trackerTab.style.display = 'none';
+        profileTab.style.display = 'none';
+      } else if (view === 'job-tracker') {
+        calendarTab.style.display = 'none';
         trackerTab.style.display = 'flex';
         profileTab.style.display = 'none';
+        drawJobTracker();
       } else if (view === 'profile') {
+        calendarTab.style.display = 'none';
         trackerTab.style.display = 'none';
         profileTab.style.display = 'flex';
         populateProfile();
@@ -1476,6 +1529,170 @@
       document.getElementById('profile-status').textContent = currentInstaller.employment_status || 'Active';
       document.getElementById('profile-email').textContent = currentInstaller.email || '—';
       document.getElementById('profile-phone').textContent = currentInstaller.contact_number || '—';
+    }
+
+    function getInstallerRoleForBooking(b, myId) {
+      let isLead = false;
+      let isAssist = false;
+
+      // 1. Check doors installers
+      let doorsArr = [];
+      if (b.doors) {
+        if (typeof b.doors === 'string') {
+          try { doorsArr = JSON.parse(b.doors); } catch(_) {}
+        } else if (Array.isArray(b.doors)) {
+          doorsArr = b.doors;
+        }
+      }
+
+      let foundInDoors = false;
+      for (let door of doorsArr) {
+        const dInsts = door.installers || [];
+        const myIndex = dInsts.findIndex(inst => inst.id === myId);
+        if (myIndex !== -1) {
+          foundInDoors = true;
+          const inst = dInsts[myIndex];
+          if (inst.role === 'assist') {
+            isAssist = true;
+          } else if (inst.role === 'lead') {
+            isLead = true;
+          } else {
+            // Fallback for old data without roles: first installer is lead, rest are assist
+            if (myIndex === 0) isLead = true;
+            else isAssist = true;
+          }
+        }
+      }
+
+      if (foundInDoors) {
+        return isLead ? 'lead' : 'assist';
+      }
+
+      // 2. Check booking-level installers
+      let bInsts = [];
+      if (b.installers) {
+        if (typeof b.installers === 'string') {
+          try { bInsts = JSON.parse(b.installers); } catch(_) {}
+        } else if (Array.isArray(b.installers)) {
+          bInsts = b.installers;
+        }
+      }
+
+      const myBIndex = bInsts.findIndex(inst => inst.id === myId);
+      if (myBIndex !== -1) {
+        const inst = bInsts[myBIndex];
+        if (inst.role === 'assist') return 'assist';
+        if (inst.role === 'lead') return 'lead';
+        return myBIndex === 0 ? 'lead' : 'assist';
+      }
+
+      // 3. Check installer_id mapping
+      if (b.installer_id) {
+        const ids = b.installer_id.split(' | ');
+        const myIdIdx = ids.indexOf(myId);
+        if (myIdIdx !== -1) {
+          return myIdIdx === 0 ? 'lead' : 'assist';
+        }
+      }
+
+      return null;
+    }
+
+    function populateTrackerMonthSelect() {
+      const select = document.getElementById('tracker-month-select');
+      if (!select) return;
+      
+      select.innerHTML = '';
+      const now = new Date();
+      // Generate options for past 6 months
+      for (let i = 0; i < 6; i++) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const optVal = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        const optText = `${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+        const opt = document.createElement('option');
+        opt.value = optVal;
+        opt.textContent = optText;
+        select.appendChild(opt);
+      }
+    }
+
+    function drawJobTracker() {
+      if (!currentInstaller) return;
+      const select = document.getElementById('tracker-month-select');
+      if (!select) return;
+      
+      const targetMonthKey = select.value; // e.g. "2026-06"
+      const myId = currentInstaller.id;
+
+      let leadCount = 0;
+      let assistCount = 0;
+      let listHtml = '';
+
+      // Filter and count from dbBookings
+      const monthBookings = dbBookings.filter(b => {
+        if (!b.schedule_date) return false;
+        const d = new Date(b.schedule_date);
+        const bookingMonthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        return bookingMonthKey === targetMonthKey;
+      });
+
+      monthBookings.forEach(b => {
+        const role = getInstallerRoleForBooking(b, myId);
+        if (role === 'lead') {
+          leadCount++;
+        } else if (role === 'assist') {
+          assistCount++;
+        }
+        
+        if (role) {
+          const date = new Date(b.schedule_date);
+          const dateLabel = `${MONTHS[date.getMonth()]} ${date.getDate()}`;
+          
+          let doorsArr = [];
+          if (b.doors) {
+            if (typeof b.doors === 'string') {
+              try { doorsArr = JSON.parse(b.doors); } catch(_) {}
+            } else if (Array.isArray(b.doors)) {
+              doorsArr = b.doors;
+            }
+          }
+          const isDone = doorsArr.length > 0 && doorsArr.every(d => d.completed);
+          
+          const statusBadge = isDone 
+            ? `<span style="font-size:0.68rem; font-weight:700; background:#D1FAE5; color:#065F46; padding:0.15rem 0.4rem; border-radius:4px; text-transform:uppercase;">Completed</span>`
+            : `<span style="font-size:0.68rem; font-weight:700; background:#FEF3C7; color:#92400E; padding:0.15rem 0.4rem; border-radius:4px; text-transform:uppercase;">Scheduled</span>`;
+          
+          const roleBadge = role === 'lead'
+            ? `<span style="font-size:0.68rem; font-weight:700; background:#CFFAFE; color:#0891B2; padding:0.15rem 0.4rem; border-radius:4px; text-transform:uppercase;">Lead</span>`
+            : `<span style="font-size:0.68rem; font-weight:700; background:#F3F4F6; color:#374151; padding:0.15rem 0.4rem; border-radius:4px; text-transform:uppercase;">Assist</span>`;
+
+          listHtml += `
+            <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0.85rem; display: flex; flex-direction: column; gap: 0.5rem; cursor: pointer;" onclick="openDetailsModal('${b.id}')">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted);">${b.booking_number || 'Job'}</span>
+                <div style="display: flex; gap: 0.35rem; align-items: center;">
+                  ${roleBadge}
+                  ${statusBadge}
+                </div>
+              </div>
+              <div style="font-size: 0.9rem; font-weight: 700; color: var(--text-primary);">${escapeHtml(b.customer_name || 'Client')}</div>
+              <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.15rem;">
+                <span>${dateLabel}</span>
+                <span style="font-weight: 600; color: var(--cyan-light);">${escapeHtml(b.product_skus || '')}</span>
+              </div>
+            </div>
+          `;
+        }
+      });
+
+      if (monthBookings.length === 0 || (leadCount === 0 && assistCount === 0)) {
+        listHtml = `<div style="text-align: center; padding: 2rem; color: var(--text-muted); font-size: 0.88rem; font-style: italic;">No job assignments recorded for this month.</div>`;
+      }
+
+      document.getElementById('tracker-lead-count').textContent = leadCount;
+      document.getElementById('tracker-assist-count').textContent = assistCount;
+      document.getElementById('tracker-total-count').textContent = leadCount + assistCount;
+      document.getElementById('tracker-job-list').innerHTML = listHtml;
     }
 
     // --- Offline Caching & Sync ---
@@ -1643,6 +1860,7 @@
         updateSyncBanner(false, new Date());
         drawCalendar();
         drawAgenda();
+        drawJobTracker();
       } catch (err) {
         console.error('Sync failed:', err);
         updateSyncBanner(true);
