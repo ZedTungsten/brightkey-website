@@ -3295,6 +3295,11 @@
       }
     };
 
+    // Pending drag action variables
+    let pendingDragSourceDoorIdx = null;
+    let pendingDragSourceProdIdx = null;
+    let pendingDragTargetDoorIdx = null;
+
     window.handleDrop = function(event, targetDoorIdx) {
       event.preventDefault();
       const box = document.getElementById(`edit-door-box-${targetDoorIdx}`);
@@ -3313,8 +3318,38 @@
 
       const sourceDoor = tempEditDoors[dragSourceDoorIdx];
       const productSku = sourceDoor.products[dragSourceProdIdx];
+
+      pendingDragSourceDoorIdx = dragSourceDoorIdx;
+      pendingDragSourceProdIdx = dragSourceProdIdx;
+      pendingDragTargetDoorIdx = targetDoorIdx;
+
+      // Ask for double confirmation before moving the product and deleting target door data
+      const targetDoorNum = targetDoor.index || (targetDoorIdx + 1);
+      const msg = `Are you sure you want to move Product ${productSku} to Door ${targetDoorNum}? All attachments, signature, swing, and photos for Door ${targetDoorNum} will be cleared.`;
       
-      sourceDoor.products.splice(dragSourceProdIdx, 1);
+      document.getElementById('drag-confirm-message').textContent = msg;
+      document.getElementById('drag-confirm-modal').classList.add('open');
+
+      dragSourceDoorIdx = null;
+      dragSourceProdIdx = null;
+    };
+
+    window.closeDragConfirmModal = function() {
+      document.getElementById('drag-confirm-modal').classList.remove('open');
+      pendingDragSourceDoorIdx = null;
+      pendingDragSourceProdIdx = null;
+      pendingDragTargetDoorIdx = null;
+    };
+
+    window.proceedWithDragMove = function() {
+      if (pendingDragSourceDoorIdx === null || pendingDragSourceProdIdx === null || pendingDragTargetDoorIdx === null) return;
+
+      const sourceDoor = tempEditDoors[pendingDragSourceDoorIdx];
+      const targetDoor = tempEditDoors[pendingDragTargetDoorIdx];
+      const productSku = sourceDoor.products[pendingDragSourceProdIdx];
+
+      // Move SKU from source to target
+      sourceDoor.products.splice(pendingDragSourceProdIdx, 1);
       if (!targetDoor.products) targetDoor.products = [];
       targetDoor.products.push(productSku);
 
@@ -3329,11 +3364,7 @@
       targetDoor.completed_at = null;
 
       renderEditDoors();
-      
-      showDragWarning('Door Layout Updated', `Product ${productSku} has been moved to Door ${targetDoor.index || (targetDoorIdx + 1)}. All attachments, signature, swing, and photos for Door ${targetDoor.index || (targetDoorIdx + 1)} have been cleared.`);
-
-      dragSourceDoorIdx = null;
-      dragSourceProdIdx = null;
+      closeDragConfirmModal();
     };
 
     window.saveEditDoorsLayout = async function() {
