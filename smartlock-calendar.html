@@ -1822,6 +1822,169 @@
       return assignedSkus.join(' | ');
     }
 
+    function getInstallerAssignedDoorsForBooking(b, myId) {
+      let doorsArr = [];
+      if (b.doors) {
+        if (typeof b.doors === 'string') {
+          try { doorsArr = JSON.parse(b.doors); } catch(_) {}
+        } else if (Array.isArray(b.doors)) {
+          doorsArr = b.doors;
+        }
+      }
+
+      let bInsts = [];
+      if (b.installers) {
+        if (typeof b.installers === 'string') {
+          try { bInsts = JSON.parse(b.installers); } catch(_) {}
+        } else if (Array.isArray(b.installers)) {
+          bInsts = b.installers;
+        }
+      }
+
+      const isBookingLevelInstaller = bInsts.some(inst => inst && inst.id === myId) || 
+                                      (b.installer_id && b.installer_id.split(' | ').includes(myId));
+
+      const bookingHasDoorLevelInstallers = doorsArr.some(d => d && Array.isArray(d.installers) && d.installers.some(inst => inst && (inst.id || inst.name)));
+
+      const assignedDoors = [];
+
+      // If there are no doors defined, treat the booking itself as one implicit door
+      if (doorsArr.length === 0) {
+        if (isBookingLevelInstaller) {
+          let role = 'lead';
+          const myBIndex = bInsts.findIndex(inst => inst.id === myId);
+          if (myBIndex !== -1) {
+            const inst = bInsts[myBIndex];
+            if (inst.role === 'assist') role = 'assist';
+            else if (inst.role === 'lead') role = 'lead';
+            else role = myBIndex === 0 ? 'lead' : 'assist';
+          } else if (b.installer_id) {
+            const ids = b.installer_id.split(' | ');
+            const myIdIdx = ids.indexOf(myId);
+            if (myIdIdx !== -1) {
+              role = myIdIdx === 0 ? 'lead' : 'assist';
+            }
+          }
+          
+          let productsArr = [];
+          if (b.products) {
+            if (typeof b.products === 'string') {
+              try { productsArr = JSON.parse(b.products); } catch(_) {}
+            } else if (Array.isArray(b.products)) {
+              productsArr = b.products;
+            }
+          }
+          const skus = (b.product_skus || '').split(' | ').filter(Boolean);
+          const activeSkus = productsArr.length > 0 
+            ? productsArr.filter(p => !p.cancelled && p.sku !== 'ADD-ON LABOR').map(p => p.sku)
+            : skus;
+
+          assignedDoors.push({
+            doorName: 'Standard Installation',
+            completed: b.status === 'done' || b.status === 'completed' || b.status === 'finished',
+            role: role,
+            skus: activeSkus
+          });
+        }
+        return assignedDoors;
+      }
+
+      let productsArr = [];
+      if (b.products) {
+        if (typeof b.products === 'string') {
+          try { productsArr = JSON.parse(b.products); } catch(_) {}
+        } else if (Array.isArray(b.products)) {
+          productsArr = b.products;
+        }
+      }
+      const skus = (b.product_skus || '').split(' | ');
+      const anyDoorHasAttachedProducts = doorsArr.some(d => Array.isArray(d.products) && d.products.length > 0);
+      const isSingleDoorGrouping = (doorsArr.length === 1 && productsArr.length > 0);
+      const skuOccurrenceCount = new Map();
+
+      doorsArr.forEach((door, index) => {
+        let isAssignedToThisDoor = false;
+        let role = 'lead';
+
+        if (door && Array.isArray(door.installers)) {
+          const myIndex = door.installers.findIndex(inst => inst && inst.id === myId);
+          if (myIndex !== -1) {
+            isAssignedToThisDoor = true;
+            const inst = door.installers[myIndex];
+            if (inst.role === 'assist') {
+              role = 'assist';
+            } else if (inst.role === 'lead') {
+              role = 'lead';
+            } else {
+              role = myIndex === 0 ? 'lead' : 'assist';
+            }
+          }
+        } else if (bookingHasDoorLevelInstallers) {
+          isAssignedToThisDoor = false;
+        } else {
+          isAssignedToThisDoor = isBookingLevelInstaller;
+          const myBIndex = bInsts.findIndex(inst => inst.id === myId);
+          if (myBIndex !== -1) {
+            const inst = bInsts[myBIndex];
+            if (inst.role === 'assist') role = 'assist';
+            else if (inst.role === 'lead') role = 'lead';
+            else role = myBIndex === 0 ? 'lead' : 'assist';
+          } else if (b.installer_id) {
+            const ids = b.installer_id.split(' | ');
+            const myIdIdx = ids.indexOf(myId);
+            if (myIdIdx !== -1) {
+              role = myIdIdx === 0 ? 'lead' : 'assist';
+            }
+          }
+        }
+
+        if (isAssignedToThisDoor) {
+          const doorSkus = [];
+          if (anyDoorHasAttachedProducts && door) {
+            const attachedSkus = door.products || [];
+            attachedSkus.forEach(sku => {
+              const matchingProds = productsArr.filter(p => p.sku === sku);
+              const occurrenceIndex = skuOccurrenceCount.get(sku) || 0;
+              const matchedProd = matchingProds[occurrenceIndex];
+              if (matchedProd && !matchedProd.cancelled) {
+                doorSkus.push(matchedProd.sku);
+              }
+              skuOccurrenceCount.set(sku, occurrenceIndex + 1);
+            });
+          } else if (isSingleDoorGrouping) {
+            productsArr.forEach(p => {
+              if (p.sku !== 'ADD-ON LABOR' && !p.cancelled) {
+                doorSkus.push(p.sku);
+              }
+            });
+          } else {
+            if (productsArr[index] && !productsArr[index].cancelled) {
+              doorSkus.push(productsArr[index].sku);
+            } else if (skus[index]) {
+              doorSkus.push(skus[index]);
+            }
+          }
+
+          assignedDoors.push({
+            doorName: door.name || `Door ${index + 1}`,
+            completed: !!door.completed,
+            role: role,
+            skus: doorSkus
+          });
+        } else {
+          if (anyDoorHasAttachedProducts && door) {
+            const attachedSkus = door.products || [];
+            attachedSkus.forEach(sku => {
+              const occurrenceIndex = skuOccurrenceCount.get(sku) || 0;
+              skuOccurrenceCount.set(sku, occurrenceIndex + 1);
+            });
+          }
+        }
+      });
+
+      return assignedDoors;
+    }
+
     function populateTrackerMonthSelect() {
       const select = document.getElementById('tracker-month-select');
       const paySelect = document.getElementById('payouts-month-select');
@@ -1869,7 +2032,7 @@
       let assistCount = 0;
       let listHtml = '';
 
-      // Filter and count from dbBookings
+      // Filter from dbBookings
       const monthBookings = dbBookings.filter(b => {
         if (!b.scheduled_date) return false;
         const d = new Date(b.scheduled_date);
@@ -1881,34 +2044,27 @@
       monthBookings.sort((a, b) => new Date(a.scheduled_date) - new Date(b.scheduled_date));
 
       monthBookings.forEach(b => {
-        const role = getInstallerRoleForBooking(b, myId);
-        if (role === 'lead') {
-          leadCount++;
-        } else if (role === 'assist') {
-          assistCount++;
-        }
-        
-        if (role) {
+        const assignedDoors = getInstallerAssignedDoorsForBooking(b, myId);
+        assignedDoors.forEach(d => {
+          if (d.role === 'lead') {
+            leadCount++;
+          } else if (d.role === 'assist') {
+            assistCount++;
+          }
+
           const date = new Date(b.scheduled_date);
           const dateLabel = `${MONTH_NAMES[date.getMonth()]} ${date.getDate()}`;
           
-          let doorsArr = [];
-          if (b.doors) {
-            if (typeof b.doors === 'string') {
-              try { doorsArr = JSON.parse(b.doors); } catch(_) {}
-            } else if (Array.isArray(b.doors)) {
-              doorsArr = b.doors;
-            }
-          }
-          const isDone = doorsArr.length > 0 && doorsArr.every(d => d.completed);
-          
-          const statusBadge = isDone 
+          const statusBadge = d.completed 
             ? `<span style="font-size:0.68rem; font-weight:700; background:#D1FAE5; color:#065F46; padding:0.15rem 0.4rem; border-radius:4px; text-transform:uppercase;">Completed</span>`
             : `<span style="font-size:0.68rem; font-weight:700; background:#FEF3C7; color:#92400E; padding:0.15rem 0.4rem; border-radius:4px; text-transform:uppercase;">Scheduled</span>`;
           
-          const roleBadge = role === 'lead'
+          const roleBadge = d.role === 'lead'
             ? `<span style="font-size:0.68rem; font-weight:700; background:#CFFAFE; color:#0891B2; padding:0.15rem 0.4rem; border-radius:4px; text-transform:uppercase;">Lead</span>`
             : `<span style="font-size:0.68rem; font-weight:700; background:#F3F4F6; color:#374151; padding:0.15rem 0.4rem; border-radius:4px; text-transform:uppercase;">Assist</span>`;
+
+          const displayLabel = `${b.customer_name || 'Client'} (${d.doorName})`;
+          const skuLabel = d.skus.join(' | ') || 'No Lock';
 
           listHtml += `
             <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0.85rem; display: flex; flex-direction: column; gap: 0.5rem; cursor: pointer;" onclick="openDetailsModal('${b.id}')">
@@ -1919,17 +2075,17 @@
                   ${statusBadge}
                 </div>
               </div>
-              <div style="font-size: 0.9rem; font-weight: 700; color: var(--text-primary);">${escapeHtml(b.customer_name || 'Client')}</div>
+              <div style="font-size: 0.9rem; font-weight: 700; color: var(--text-primary);">${escapeHtml(displayLabel)}</div>
               <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.15rem;">
                 <span>${dateLabel}</span>
-                <span style="font-weight: 600; color: var(--cyan-light);">${escapeHtml(getInstallerAssignedSkus(b, myId))}</span>
+                <span style="font-weight: 600; color: var(--cyan-light);">${escapeHtml(skuLabel)}</span>
               </div>
             </div>
           `;
-        }
+        });
       });
 
-      if (monthBookings.length === 0 || (leadCount === 0 && assistCount === 0)) {
+      if (leadCount === 0 && assistCount === 0) {
         listHtml = `<div style="text-align: center; padding: 2rem; color: var(--text-muted); font-size: 0.88rem; font-style: italic;">No job assignments recorded for this month.</div>`;
       }
 
@@ -1972,7 +2128,7 @@
       document.getElementById('payout-assist-weight').textContent = assistWeight.toFixed(1);
       document.getElementById('payout-target-threshold').textContent = thresholdVal + ' Counts';
 
-      // 1. Gather all bookings for selected month where this installer has completed jobs
+      // 1. Gather all bookings for selected month
       const monthBookings = dbBookings.filter(b => {
         if (!b.scheduled_date) return false;
         const d = new Date(b.scheduled_date);
@@ -1986,33 +2142,25 @@
       const serviceCounts = {}; // sku -> count
 
       monthBookings.forEach(b => {
-        // Only count completed bookings
-        let doorsArr = [];
-        if (b.doors) {
-          if (typeof b.doors === 'string') {
-            try { doorsArr = JSON.parse(b.doors); } catch(_) {}
-          } else if (Array.isArray(b.doors)) {
-            doorsArr = b.doors;
-          }
-        }
-        const isDone = doorsArr.length > 0 && doorsArr.every(d => d.completed);
-        if (!isDone) return;
+        const assignedDoors = getInstallerAssignedDoorsForBooking(b, myId);
+        assignedDoors.forEach(d => {
+          // Only count completed doors
+          if (!d.completed) return;
 
-        const role = getInstallerRoleForBooking(b, myId);
-        if (role === 'lead') {
-          leadCount++;
-        } else if (role === 'assist') {
-          assistCount++;
-        }
-
-        // Count special paid services from the assigned product SKUs
-        const assignedSkus = getInstallerAssignedSkus(b, myId).split(',').map(s => s.trim());
-        assignedSkus.forEach(sku => {
-          const matchedService = extraServicesList.find(es => es.sku === sku);
-          if (matchedService) {
-            serviceCounts[sku] = (serviceCounts[sku] || 0) + 1;
-            serviceEarnings += matchedService.rate;
+          if (d.role === 'lead') {
+            leadCount++;
+          } else if (d.role === 'assist') {
+            assistCount++;
           }
+
+          // Count special paid services from this door's assigned product SKUs
+          d.skus.forEach(sku => {
+            const matchedService = extraServicesList.find(es => es.sku === sku);
+            if (matchedService) {
+              serviceCounts[sku] = (serviceCounts[sku] || 0) + 1;
+              serviceEarnings += matchedService.rate;
+            }
+          });
         });
       });
 
