@@ -760,6 +760,63 @@
       background: rgba(239, 68, 68, 0.08);
       color: var(--danger);
     }
+
+    /* Gamified progress bar styling */
+    .progress-bar-container {
+      width: 100%;
+      height: 24px;
+      background: var(--bg-elevated);
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+      position: relative;
+      border: 1px solid var(--border);
+    }
+    .progress-bar-fill {
+      height: 100%;
+      width: 0%;
+      border-radius: var(--radius-sm);
+      background: linear-gradient(
+        135deg,
+        #06B6D4,
+        #0891B2,
+        #22c55e,
+        #0891B2,
+        #06B6D4
+      );
+      background-size: 400% 400%;
+      animation: gradientMove 3s ease infinite;
+      box-shadow: 0 0 10px rgba(6, 182, 212, 0.4);
+      transition: width 1.2s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      box-sizing: border-box;
+    }
+    .progress-bar-fill::after {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: linear-gradient(
+        90deg,
+        rgba(255, 255, 255, 0) 0%,
+        rgba(255, 255, 255, 0.2) 20%,
+        rgba(255, 255, 255, 0.45) 40%,
+        rgba(255, 255, 255, 0.2) 60%,
+        rgba(255, 255, 255, 0) 80%
+      );
+      background-size: 200% 100%;
+      animation: shimmer 1.8s infinite linear;
+      pointer-events: none;
+    }
+    .progress-bar-percent {
+      font-size: 0.78rem;
+      font-weight: 800;
+      color: #ffffff;
+      padding-right: 10px;
+      z-index: 10;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+    }
   </style>
 </head>
 <body>
@@ -936,7 +993,67 @@
 
     <!-- Payouts Tab View -->
     <div id="payouts-view" style="display: none; padding: 1.5rem; flex-direction: column; gap: 1.25rem; flex: 1; width: 100%;">
-      <!-- Left blank for now -->
+      <!-- Month Filter Row -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+        <h2 style="font-size: 1.15rem; font-weight: 800; color: var(--text-primary);">Monthly Payouts</h2>
+        <select id="payouts-month-select" class="form-input" style="width: auto; padding: 0.4rem 2rem 0.4rem 0.75rem; font-size: 0.85rem; height: auto;" onchange="drawPayouts()">
+          <!-- Populated by JS -->
+        </select>
+      </div>
+
+      <!-- Threshold Count Gamified Card -->
+      <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.25rem; display: flex; flex-direction: column; gap: 0.75rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span style="font-size: 0.72rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Installations Threshold Progress</span>
+          <strong style="font-size: 1rem; font-weight: 800; color: var(--text-primary);" id="payout-threshold-summary">0 / 15 Counts</strong>
+        </div>
+        
+        <div class="progress-bar-container">
+          <div class="progress-bar-fill" id="payout-threshold-fill" style="width: 0%;">
+            <span class="progress-bar-percent" id="payout-threshold-percent">0%</span>
+          </div>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; font-size: 0.82rem; color: var(--text-secondary);">
+          <span>Lead Jobs: <strong id="payout-lead-count" style="color: var(--cyan-light);">0</strong> (<span id="payout-lead-weight">1.0</span> credit)</span>
+          <span>Assist Jobs: <strong id="payout-assist-count" style="color: var(--success);">0</strong> (<span id="payout-assist-weight">0.5</span> credit)</span>
+        </div>
+        <div style="font-size: 0.75rem; color: var(--text-muted); border-top: 1px dashed var(--border); padding-top: 0.5rem; display: flex; justify-content: space-between;">
+          <span>Calculated Credit: <strong id="payout-accumulated-credit" style="color: var(--text-primary);">0</strong></span>
+          <span>Target Threshold: <strong id="payout-target-threshold" style="color: var(--text-primary);">15</strong></span>
+        </div>
+      </div>
+
+      <!-- Past Threshold Payout Card -->
+      <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.25rem; display: flex; flex-direction: column; gap: 0.75rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span style="font-size: 0.72rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Earnings Past Threshold</span>
+          <strong style="font-size: 1.4rem; font-weight: 800; color: var(--cyan-light);" id="payout-extra-total">₱0</strong>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 0.4rem; font-size: 0.85rem; color: var(--text-secondary);" id="payout-extra-details">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+
+      <!-- Services Payout Card -->
+      <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.25rem; display: flex; flex-direction: column; gap: 0.75rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span style="font-size: 0.72rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Service Job Earnings</span>
+          <strong style="font-size: 1.4rem; font-weight: 800; color: var(--success);" id="payout-services-total">₱0</strong>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 0.4rem; font-size: 0.85rem; color: var(--text-secondary);" id="payout-services-details">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+
+      <!-- Grand Total Card -->
+      <div style="background: linear-gradient(135deg, rgba(6,182,212,0.1) 0%, rgba(16,185,129,0.1) 100%); border: 1.5px solid var(--cyan-light); border-radius: var(--radius-md); padding: 1.25rem; display: flex; justify-content: space-between; align-items: center;">
+        <div style="display: flex; flex-direction: column;">
+          <span style="font-size: 0.72rem; font-weight: 800; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em;">Estimated Monthly Payout</span>
+          <span style="font-size: 0.75rem; color: var(--text-muted);">Threshold + Services flat rates</span>
+        </div>
+        <strong style="font-size: 1.8rem; font-weight: 900; color: var(--text-primary);" id="payout-grand-total">₱0</strong>
+      </div>
     </div>
 
     <!-- Sidebar Drawer Menu -->
@@ -1195,6 +1312,7 @@
     let currentInstaller = null; // { id, first_name, last_name, company_id, password }
     let dbBookings = [];
     let deliveryBookingsMap = {};
+    let installerPayoutSettings = null;
 
     const defaultChecklist = [
       { text: "Door opens and closes smoothly without obstruction", indent: false },
@@ -1517,6 +1635,8 @@
         drawJobTracker();
       } else if (view === 'profile') {
         populateProfile();
+      } else if (view === 'payouts') {
+        drawPayouts();
       }
       
       // Close sidebar drawer after switching view
@@ -1704,19 +1824,36 @@
 
     function populateTrackerMonthSelect() {
       const select = document.getElementById('tracker-month-select');
-      if (!select) return;
+      const paySelect = document.getElementById('payouts-month-select');
+      if (!select && !paySelect) return;
       
-      select.innerHTML = '';
+      const options = [];
       const now = new Date();
-      // Generate options for past 6 months
       for (let i = 0; i < 6; i++) {
         const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
         const optVal = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
         const optText = `${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}`;
-        const opt = document.createElement('option');
-        opt.value = optVal;
-        opt.textContent = optText;
-        select.appendChild(opt);
+        options.push({ val: optVal, text: optText });
+      }
+
+      if (select) {
+        select.innerHTML = '';
+        options.forEach(o => {
+          const opt = document.createElement('option');
+          opt.value = o.val;
+          opt.textContent = o.text;
+          select.appendChild(opt);
+        });
+      }
+
+      if (paySelect) {
+        paySelect.innerHTML = '';
+        options.forEach(o => {
+          const opt = document.createElement('option');
+          opt.value = o.val;
+          opt.textContent = o.text;
+          paySelect.appendChild(opt);
+        });
       }
     }
 
@@ -1802,6 +1939,157 @@
       document.getElementById('tracker-job-list').innerHTML = listHtml;
     }
 
+    function drawPayouts() {
+      if (!currentInstaller) return;
+      const select = document.getElementById('payouts-month-select');
+      if (!select) return;
+      
+      const targetMonthKey = select.value;
+      const myId = currentInstaller.id;
+
+      // Get configuration settings
+      const config = installerPayoutSettings || {
+        installations_before_crediting: 15,
+        lead_credit: 1.0,
+        assist_credit: 0.5,
+        lead_rate: 1000,
+        assist_rate: 500,
+        extra_services: [
+          { sku: 'BASEPLATE-M', rate: 700 },
+          { sku: 'BASEPLATE-S', rate: 700 }
+        ]
+      };
+
+      const thresholdVal = config.installations_before_crediting || 15;
+      const leadWeight = config.lead_credit !== undefined ? config.lead_credit : 1.0;
+      const assistWeight = config.assist_credit !== undefined ? config.assist_credit : 0.5;
+      const leadRateVal = config.lead_rate || 1000;
+      const assistRateVal = config.assist_rate || 500;
+      const extraServicesList = config.extra_services || [];
+
+      // Update threshold settings labels in UI
+      document.getElementById('payout-lead-weight').textContent = leadWeight.toFixed(1);
+      document.getElementById('payout-assist-weight').textContent = assistWeight.toFixed(1);
+      document.getElementById('payout-target-threshold').textContent = thresholdVal + ' Counts';
+
+      // 1. Gather all bookings for selected month where this installer has completed jobs
+      const monthBookings = dbBookings.filter(b => {
+        if (!b.scheduled_date) return false;
+        const d = new Date(b.scheduled_date);
+        const bookingMonthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        return bookingMonthKey === targetMonthKey;
+      });
+
+      let leadCount = 0;
+      let assistCount = 0;
+      let serviceEarnings = 0;
+      const serviceCounts = {}; // sku -> count
+
+      monthBookings.forEach(b => {
+        // Only count completed bookings
+        let doorsArr = [];
+        if (b.doors) {
+          if (typeof b.doors === 'string') {
+            try { doorsArr = JSON.parse(b.doors); } catch(_) {}
+          } else if (Array.isArray(b.doors)) {
+            doorsArr = b.doors;
+          }
+        }
+        const isDone = doorsArr.length > 0 && doorsArr.every(d => d.completed);
+        if (!isDone) return;
+
+        const role = getInstallerRoleForBooking(b, myId);
+        if (role === 'lead') {
+          leadCount++;
+        } else if (role === 'assist') {
+          assistCount++;
+        }
+
+        // Count special paid services from the assigned product SKUs
+        const assignedSkus = getInstallerAssignedSkus(b, myId).split(',').map(s => s.trim());
+        assignedSkus.forEach(sku => {
+          const matchedService = extraServicesList.find(es => es.sku === sku);
+          if (matchedService) {
+            serviceCounts[sku] = (serviceCounts[sku] || 0) + 1;
+            serviceEarnings += matchedService.rate;
+          }
+        });
+      });
+
+      // Calculate credits
+      const totalCredit = (leadCount * leadWeight) + (assistCount * assistWeight);
+      
+      // Update Threshold Progress
+      const thresholdSummary = `${totalCredit.toFixed(1)} / ${thresholdVal} Counts`;
+      document.getElementById('payout-threshold-summary').textContent = thresholdSummary;
+      document.getElementById('payout-lead-count').textContent = leadCount;
+      document.getElementById('payout-assist-count').textContent = assistCount;
+      document.getElementById('payout-accumulated-credit').textContent = totalCredit.toFixed(1);
+
+      // Render gamified progress bar
+      const percent = Math.min(100, Math.max(0, (totalCredit / thresholdVal) * 100));
+      const fillEl = document.getElementById('payout-threshold-fill');
+      const percentEl = document.getElementById('payout-threshold-percent');
+      if (fillEl) fillEl.style.width = `${percent}%`;
+      if (percentEl) percentEl.textContent = `${Math.round(percent)}%`;
+
+      // 2. Calculate threshold earnings (extra works past threshold)
+      let thresholdEarnings = 0;
+      let thresholdEarningsDetailsHtml = '';
+
+      if (totalCredit > thresholdVal) {
+        const extraCredit = totalCredit - thresholdVal;
+        
+        // Payout = extraCredit * leadRateVal (which naturally scales: 1.0 credit = leadRateVal, 0.5 credit = assistRateVal = leadRateVal * 0.5)
+        thresholdEarnings = extraCredit * leadRateVal;
+
+        thresholdEarningsDetailsHtml = `
+          <div style="display:flex; justify-content:space-between;">
+            <span>Extra Credits:</span>
+            <strong>+${extraCredit.toFixed(1)}</strong>
+          </div>
+          <div style="display:flex; justify-content:space-between; font-size:0.78rem; color:var(--text-muted);">
+            <span>Lead Payout Rate (1.0 cr):</span>
+            <span>₱${leadRateVal.toLocaleString()}</span>
+          </div>
+          <div style="display:flex; justify-content:space-between; font-size:0.78rem; color:var(--text-muted);">
+            <span>Assist Payout Rate (0.5 cr):</span>
+            <span>₱${assistRateVal.toLocaleString()}</span>
+          </div>
+        `;
+      } else {
+        thresholdEarningsDetailsHtml = `<div style="font-style:italic; color:var(--text-muted); font-size:0.8rem;">Threshold not reached yet (${totalCredit.toFixed(1)} / ${thresholdVal}).</div>`;
+      }
+
+      document.getElementById('payout-extra-total').textContent = `₱${thresholdEarnings.toLocaleString()}`;
+      document.getElementById('payout-extra-details').innerHTML = thresholdEarningsDetailsHtml;
+
+      // 3. Render flat services payout
+      let servicesDetailsHtml = '';
+      if (Object.keys(serviceCounts).length > 0) {
+        Object.entries(serviceCounts).forEach(([sku, count]) => {
+          const matched = extraServicesList.find(es => es.sku === sku);
+          const rate = matched ? matched.rate : 0;
+          const subtotal = count * rate;
+          servicesDetailsHtml += `
+            <div style="display:flex; justify-content:space-between;">
+              <span>${escapeHtml(sku)} (${count} x ₱${rate.toLocaleString()}):</span>
+              <strong>₱${subtotal.toLocaleString()}</strong>
+            </div>
+          `;
+        });
+      } else {
+        servicesDetailsHtml = `<div style="font-style:italic; color:var(--text-muted); font-size:0.8rem;">No extra paid services recorded this month.</div>`;
+      }
+
+      document.getElementById('payout-services-total').textContent = `₱${serviceEarnings.toLocaleString()}`;
+      document.getElementById('payout-services-details').innerHTML = servicesDetailsHtml;
+
+      // 4. Grand Total
+      const grandTotal = thresholdEarnings + serviceEarnings;
+      document.getElementById('payout-grand-total').textContent = `₱${grandTotal.toLocaleString()}`;
+    }
+
     // --- Offline Caching & Sync ---
     function loadCachedBookings() {
       if (!currentInstaller) return;
@@ -1835,6 +2123,13 @@
       if (cachedDelivery) {
         try {
           deliveryBookingsMap = JSON.parse(cachedDelivery);
+        } catch (_) {}
+      }
+
+      const cachedPayoutSettings = localStorage.getItem('bk_installer_payout_settings');
+      if (cachedPayoutSettings) {
+        try {
+          installerPayoutSettings = JSON.parse(cachedPayoutSettings);
         } catch (_) {}
       }
     }
@@ -1893,6 +2188,35 @@
           localStorage.setItem('bk_booking_media_requirements', JSON.stringify(bookingMediaRequirements));
         } catch (mediaErr) {
           console.error('Error syncing media requirements:', mediaErr);
+        }
+
+        // Fetch installer payout settings
+        try {
+          const { data: payoutSettingsRes } = await sb
+            .from('global_settings')
+            .select('value')
+            .eq('key', 'installer_payout_settings')
+            .eq('company_id', currentInstaller.company_id)
+            .maybeSingle();
+
+          if (payoutSettingsRes && payoutSettingsRes.value) {
+            installerPayoutSettings = payoutSettingsRes.value;
+          } else {
+            installerPayoutSettings = {
+              installations_before_crediting: 15,
+              lead_credit: 1.0,
+              assist_credit: 0.5,
+              lead_rate: 1000,
+              assist_rate: 500,
+              extra_services: [
+                { sku: 'BASEPLATE-M', rate: 700 },
+                { sku: 'BASEPLATE-S', rate: 700 }
+              ]
+            };
+          }
+          localStorage.setItem('bk_installer_payout_settings', JSON.stringify(installerPayoutSettings));
+        } catch (payoutSettingsErr) {
+          console.error('Error syncing installer payout settings:', payoutSettingsErr);
         }
 
         // Fetch bookings for this company
