@@ -3201,18 +3201,16 @@
                     </span>
                   ` : ''}
                 </div>
-                ${isCancelled || !hasInst ? `
-                  <button type="button" class="btn-minimal ${isCancelled ? 'btn-success' : 'btn-danger'}" 
-                    onclick="event.stopPropagation(); toggleSkuCancelled('${sku}', ${doorIdx}, ${prodIdx})" 
-                    title="${isCancelled ? 'Undo Cancel Product' : 'Cancel Product'}" 
-                    style="display:inline-flex; padding: 4px; margin-left: 0.5rem; z-index: 10;">
-                    ${isCancelled ? `
-                      <svg viewBox="0 0 24 24" style="width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
-                    ` : `
-                      <svg viewBox="0 0 24 24" style="width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                    `}
-                  </button>
-                ` : ''}
+                <button type="button" class="btn-minimal ${isCancelled ? 'btn-success' : 'btn-danger'}" 
+                  onclick="event.stopPropagation(); toggleSkuCancelled('${sku}', ${doorIdx}, ${prodIdx})" 
+                  title="${isCancelled ? 'Undo Cancel Product' : 'Cancel Product'}" 
+                  style="display:inline-flex; padding: 4px; margin-left: 0.5rem; z-index: 10;">
+                  ${isCancelled ? `
+                    <svg viewBox="0 0 24 24" style="width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+                  ` : `
+                    <svg viewBox="0 0 24 24" style="width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                  `}
+                </button>
               </div>
             `;
           });
@@ -3379,6 +3377,10 @@
             const matchedProd = matchingProds[occurrenceIndex];
             if (matchedProd) {
               matchedProd.cancelled = !matchedProd.cancelled;
+              // If the product has been cancelled, clear the installers on this door automatically
+              if (matchedProd.cancelled) {
+                door.installers = [];
+              }
             }
             renderEditDoors();
             return;
