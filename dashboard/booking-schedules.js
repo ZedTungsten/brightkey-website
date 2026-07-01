@@ -719,15 +719,19 @@
             </div>
           `;
 
+          const allProductsCancelled = doorProducts.length > 0 && doorProducts.every(p => p.cancelled);
+
           // Installers assigned to this door — show with role labels if available
           let installersHtml = 'None Assigned';
-          if (door && Array.isArray(door.installers)) {
+          if (allProductsCancelled) {
+            installersHtml = 'N/A';
+          } else if (door && Array.isArray(door.installers)) {
             if (door.installers.length > 0) {
-              installersHtml = door.installers.map(inst => {
-                const roleText = inst.role ? inst.role.charAt(0).toUpperCase() + inst.role.slice(1) : '';
-                const role = roleText ? `<span style="font-size:0.65rem;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-right:0.2rem;">${escapeHtml(roleText)}:</span>` : '';
-                return role + escapeHtml(formatInstallerName(inst.name));
-              }).join(', ');
+               installersHtml = door.installers.map(inst => {
+                 const roleText = inst.role ? inst.role.charAt(0).toUpperCase() + inst.role.slice(1) : '';
+                 const role = roleText ? `<span style="font-size:0.65rem;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-right:0.2rem;">${escapeHtml(roleText)}:</span>` : '';
+                 return role + escapeHtml(formatInstallerName(inst.name));
+               }).join(', ');
             } else {
               installersHtml = 'None Assigned';
             }
@@ -748,7 +752,6 @@
             installersHtml = escapeHtml(formatInstallerName(selectedBooking.installer_name));
           }
 
-          const allProductsCancelled = doorProducts.length > 0 && doorProducts.every(p => p.cancelled);
           const trStyle = allProductsCancelled ? 'style="opacity: 0.55; background-color: rgba(244, 244, 245, 0.4);"' : '';
 
           tbody.insertAdjacentHTML('beforeend', `
