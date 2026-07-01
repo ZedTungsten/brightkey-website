@@ -1597,6 +1597,94 @@
       return null;
     }
 
+    function getInstallerAssignedSkus(b, myId) {
+      let doorsArr = [];
+      if (b.doors) {
+        if (typeof b.doors === 'string') {
+          try { doorsArr = JSON.parse(b.doors); } catch(_) {}
+        } else if (Array.isArray(b.doors)) {
+          doorsArr = b.doors;
+        }
+      }
+
+      let bInsts = [];
+      if (b.installers) {
+        if (typeof b.installers === 'string') {
+          try { bInsts = JSON.parse(b.installers); } catch(_) {}
+        } else if (Array.isArray(b.installers)) {
+          bInsts = b.installers;
+        }
+      }
+      const isBookingLevelInstaller = bInsts.some(inst => inst && inst.id === myId) || 
+                                      (b.installer_id && b.installer_id.split(' | ').includes(myId));
+
+      const assignedSkus = [];
+
+      let productsArr = [];
+      if (b.products) {
+        if (typeof b.products === 'string') {
+          try { productsArr = JSON.parse(b.products); } catch(_) {}
+        } else if (Array.isArray(b.products)) {
+          productsArr = b.products;
+        }
+      }
+      const skus = (b.product_skus || '').split(' | ');
+      const names = (b.product_names || '').split(' | ');
+      const rowCount = Math.max(productsArr.length, doorsArr.length, skus.length);
+
+      const anyDoorHasAttachedProducts = doorsArr.some(d => Array.isArray(d.products) && d.products.length > 0);
+      const isSingleDoorGrouping = (doorsArr.length === 1 && productsArr.length > 0);
+      const skuOccurrenceCount = new Map();
+
+      for (let i = 0; i < rowCount; i++) {
+        const door = doorsArr[i];
+        
+        let isAssignedToThisDoor = false;
+        if (door && Array.isArray(door.installers)) {
+          isAssignedToThisDoor = door.installers.some(inst => inst && inst.id === myId);
+        } else {
+          isAssignedToThisDoor = isBookingLevelInstaller;
+        }
+
+        if (isAssignedToThisDoor) {
+          if (anyDoorHasAttachedProducts && door) {
+            const attachedSkus = door.products || [];
+            attachedSkus.forEach(sku => {
+              const matchingProds = productsArr.filter(p => p.sku === sku);
+              const occurrenceIndex = skuOccurrenceCount.get(sku) || 0;
+              const matchedProd = matchingProds[occurrenceIndex];
+              if (matchedProd && !matchedProd.cancelled) {
+                assignedSkus.push(matchedProd.sku);
+              }
+              skuOccurrenceCount.set(sku, occurrenceIndex + 1);
+            });
+          } else if (isSingleDoorGrouping) {
+            productsArr.forEach(p => {
+              if (p.sku !== 'ADD-ON LABOR' && !p.cancelled) {
+                assignedSkus.push(p.sku);
+              }
+            });
+          } else {
+            if (productsArr[i] && !productsArr[i].cancelled) {
+              assignedSkus.push(productsArr[i].sku);
+            } else if (skus[i]) {
+              assignedSkus.push(skus[i]);
+            }
+          }
+        } else {
+          if (anyDoorHasAttachedProducts && door) {
+            const attachedSkus = door.products || [];
+            attachedSkus.forEach(sku => {
+              const occurrenceIndex = skuOccurrenceCount.get(sku) || 0;
+              skuOccurrenceCount.set(sku, occurrenceIndex + 1);
+            });
+          }
+        }
+      }
+
+      return assignedSkus.join(' | ');
+    }
+
     function populateTrackerMonthSelect() {
       const select = document.getElementById('tracker-month-select');
       if (!select) return;
@@ -1680,7 +1768,7 @@
               <div style="font-size: 0.9rem; font-weight: 700; color: var(--text-primary);">${escapeHtml(b.customer_name || 'Client')}</div>
               <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.15rem;">
                 <span>${dateLabel}</span>
-                <span style="font-weight: 600; color: var(--cyan-light);">${escapeHtml(b.product_skus || '')}</span>
+                <span style="font-weight: 600; color: var(--cyan-light);">${escapeHtml(getInstallerAssignedSkus(b, myId))}</span>
               </div>
             </div>
           `;
