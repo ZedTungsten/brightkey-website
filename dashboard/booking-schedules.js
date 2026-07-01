@@ -3067,6 +3067,7 @@
 
     // --- Edit Doors Drag-and-Drop Editor State & Functions ---
     let tempEditDoors = [];
+    let tempEditProducts = [];
 
     window.openEditDoorsModal = function() {
       if (!selectedBooking) return;
@@ -3089,6 +3090,7 @@
       } else if (Array.isArray(selectedBooking.products)) {
         productsArr = selectedBooking.products;
       }
+      tempEditProducts = JSON.parse(JSON.stringify(productsArr));
       let skus = [];
       if (selectedBooking.sku) {
         skus = selectedBooking.sku.split(' | ');
@@ -3184,6 +3186,7 @@
           doorProducts.forEach((sku, prodIdx) => {
             const catalogItem = productsCatalog.find(p => p.sku === sku);
             const title = catalogItem ? (catalogItem.name || catalogItem.title) : sku;
+            const isCancelled = isSkuCancelled(sku, doorIdx, prodIdx);
             productsHtml += `
               <div class="drag-product-item" draggable="${hasInst ? 'false' : 'true'}" 
                 ondragstart="handleDragStart(event, ${doorIdx}, ${prodIdx})"
@@ -3193,7 +3196,24 @@
                 </div>
                 <div class="drag-product-text">
                   <strong>${escapeHtml(sku)}</strong> - <span style="font-weight:normal; color:var(--text-secondary);">${escapeHtml(title)}</span>
+                  ${isCancelled ? `
+                    <span style="color:var(--danger); font-size:0.7rem; font-weight:700; text-transform:uppercase; margin-left:0.35rem;">
+                      Cancelled
+                    </span>
+                  ` : ''}
                 </div>
+                ${!hasInst ? `
+                  <button type="button" class="btn-minimal ${isCancelled ? 'btn-success' : 'btn-danger'}" 
+                    onclick="event.stopPropagation(); toggleSkuCancelled('${sku}', ${doorIdx}, ${prodIdx})" 
+                    title="${isCancelled ? 'Undo Cancel Product' : 'Cancel Product'}" 
+                    style="display:inline-flex; padding: 4px; margin-left: 0.5rem; z-index: 10;">
+                    ${isCancelled ? `
+                      <svg viewBox="0 0 24 24" style="width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+                    ` : `
+                      <svg viewBox="0 0 24 24" style="width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                    `}
+                  </button>
+                ` : ''}
               </div>
             `;
           });
@@ -3330,6 +3350,47 @@
       dragSourceProdIdx = null;
     };
 
+    function isSkuCancelled(sku, doorIdx, prodIdx) {
+      const matchingProds = tempEditProducts.filter(p => p.sku === sku);
+      let occurrenceIndex = 0;
+      for (let d = 0; d < tempEditDoors.length; d++) {
+        const door = tempEditDoors[d];
+        const dProds = door.products || [];
+        for (let p = 0; p < dProds.length; p++) {
+          if (d === doorIdx && p === prodIdx) {
+            const matchedProd = matchingProds[occurrenceIndex];
+            return matchedProd ? !!matchedProd.cancelled : false;
+          }
+          if (dProds[p] === sku) {
+            occurrenceIndex++;
+          }
+        }
+      }
+      return false;
+    }
+
+    window.toggleSkuCancelled = function(sku, doorIdx, prodIdx) {
+      const matchingProds = tempEditProducts.filter(p => p.sku === sku);
+      let occurrenceIndex = 0;
+      for (let d = 0; d < tempEditDoors.length; d++) {
+        const door = tempEditDoors[d];
+        const dProds = door.products || [];
+        for (let p = 0; p < dProds.length; p++) {
+          if (d === doorIdx && p === prodIdx) {
+            const matchedProd = matchingProds[occurrenceIndex];
+            if (matchedProd) {
+              matchedProd.cancelled = !matchedProd.cancelled;
+            }
+            renderEditDoors();
+            return;
+          }
+          if (dProds[p] === sku) {
+            occurrenceIndex++;
+          }
+        }
+      }
+    };
+
     window.saveEditDoorsLayout = async function() {
       if (!selectedBooking) return;
 
@@ -3377,6 +3438,7 @@
           .from('installation_bookings')
           .update({
             doors: tempEditDoors,
+            products: tempEditProducts,
             installer_id: installerIdStr,
             installer_name: installerNameStr,
             installers: installersList
@@ -3388,11 +3450,13 @@
         const idx = dbBookings.findIndex(b => b.id === selectedBooking.id);
         if (idx !== -1) {
           dbBookings[idx].doors = tempEditDoors;
+          dbBookings[idx].products = tempEditProducts;
           dbBookings[idx].installer_id = installerIdStr;
           dbBookings[idx].installer_name = installerNameStr;
           dbBookings[idx].installers = installersList;
 
           selectedBooking.doors = tempEditDoors;
+          selectedBooking.products = tempEditProducts;
           selectedBooking.installer_id = installerIdStr;
           selectedBooking.installer_name = installerNameStr;
           selectedBooking.installers = installersList;
