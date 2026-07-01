@@ -172,3 +172,31 @@ For ordinary dashboard, JavaScript, CSS, migration, or non-product-page changes,
 > Whenever a UI element (like a modal, button, overlay, or panel) is unexpectedly invisible, misaligned, or unresponsive:
 > - **First Action**: Always check the HTML file for missing, misplaced, or unclosed tags (specifically unclosed `</div>` tags).
 > - **Never Overcomplicate**: Do not attempt complex CSS overrides, custom JavaScript frame-reflow logic, or transitions before confirming that the basic HTML DOM nesting structure is 100% syntactically correct.
+
+---
+
+## 12. Dashboard Modal Implementation Patterns
+We use two distinct patterns for modal overlays. Do NOT mix them:
+
+### Pattern A: Keyframe-based (Used in `/dashboard/team`)
+- **CSS**: Overlay transitions instantly via `display: none` / `display: flex`. The card handles fading and sliding using a `@keyframes` animation.
+  ```css
+  .modal-overlay { display: none; position: fixed; inset: 0; z-index: 1000; align-items: center; justify-content: center; }
+  .modal-overlay.open { display: flex; }
+  .modal-card { background: var(--bg-surface); animation: modalSlide 0.2s forwards; }
+  @keyframes modalSlide { from { transform: translateY(15px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+  ```
+- **JavaScript**: Toggling the `.open` class is sufficient. No inline styles or timeouts are required.
+  ```javascript
+  modal.classList.add('open');
+  modal.classList.remove('open');
+  ```
+
+### Pattern B: Transition-based (Global Standard in `DESIGN.md`)
+- **CSS**: Overlay is hidden by default using `opacity: 0` and `pointer-events: none` to support fade transitions.
+- **JavaScript**: Requires setting the display, triggering reflow, and adding the class:
+  ```javascript
+  modal.style.display = 'flex';
+  modal.offsetHeight; // reflow
+  modal.classList.add('open');
+  ```
