@@ -720,11 +720,15 @@
 
           // Installers assigned to this door — show with role labels if available
           let installersHtml = 'None Assigned';
-          if (door?.installers && door.installers.length > 0) {
-            installersHtml = door.installers.map(inst => {
-              const role = inst.role ? `<span style="font-size:0.65rem;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-right:0.2rem;">${escapeHtml(inst.role)}:</span>` : '';
-              return role + escapeHtml(formatInstallerName(inst.name));
-            }).join(', ');
+          if (door && Array.isArray(door.installers)) {
+            if (door.installers.length > 0) {
+              installersHtml = door.installers.map(inst => {
+                const role = inst.role ? `<span style="font-size:0.65rem;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-right:0.2rem;">${escapeHtml(inst.role)}:</span>` : '';
+                return role + escapeHtml(formatInstallerName(inst.name));
+              }).join(', ');
+            } else {
+              installersHtml = 'None Assigned';
+            }
           } else if (selectedBooking.installers && selectedBooking.installers.length > 0) {
             let list = [];
             if (typeof selectedBooking.installers === 'string') {
