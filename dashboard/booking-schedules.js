@@ -3064,3 +3064,329 @@
         showToast('Failed to save media upload: ' + err.message, true);
       }
     }
+
+    // --- Edit Doors Drag-and-Drop Editor State & Functions ---
+    let tempEditDoors = [];
+
+    window.openEditDoorsModal = function() {
+      if (!selectedBooking) return;
+
+      // Parse doors array
+      let doorsArr = [];
+      if (typeof selectedBooking.doors === 'string') {
+        try { doorsArr = JSON.parse(selectedBooking.doors); } catch(_) {}
+      } else if (Array.isArray(selectedBooking.doors)) {
+        doorsArr = selectedBooking.doors;
+      }
+
+      // Deep copy to prevent mutating original until saved
+      tempEditDoors = JSON.parse(JSON.stringify(doorsArr));
+
+      // Make sure every door has a products array initialized
+      tempEditDoors.forEach((d, idx) => {
+        if (!d.products) d.products = [];
+      });
+
+      const anyDoorHasProducts = tempEditDoors.some(d => d.products && d.products.length > 0);
+      if (!anyDoorHasProducts) {
+        // Fallback: Map booking products to doors
+        let productsArr = [];
+        if (typeof selectedBooking.products === 'string') {
+          try { productsArr = JSON.parse(selectedBooking.products); } catch(_) {}
+        } else if (Array.isArray(selectedBooking.products)) {
+          productsArr = selectedBooking.products;
+        }
+        
+        let skus = [];
+        if (selectedBooking.sku) {
+          skus = selectedBooking.sku.split(' | ');
+        }
+
+        const isSingleDoor = (tempEditDoors.length === 1 && (productsArr.length > 0 || skus.length > 0));
+
+        if (isSingleDoor) {
+          const list = productsArr.length > 0 ? productsArr.map(p => p.sku) : skus;
+          tempEditDoors[0].products = list.filter(sku => sku !== 'ADD-ON LABOR');
+        } else {
+          // Map one-to-one
+          tempEditDoors.forEach((d, idx) => {
+            if (productsArr[idx]) {
+              d.products = [productsArr[idx].sku];
+            } else if (skus[idx]) {
+              d.products = [skus[idx]];
+            } else {
+              d.products = [];
+            }
+          });
+        }
+      }
+
+      renderEditDoors();
+      document.getElementById('edit-doors-modal').classList.add('open');
+    };
+
+    window.closeEditDoorsModal = function(e) {
+      document.getElementById('edit-doors-modal').classList.remove('open');
+    };
+
+    window.closeDragWarningModal = function() {
+      document.getElementById('drag-warning-modal').classList.remove('open');
+    };
+
+    function showDragWarning(title, msg) {
+      document.getElementById('drag-warning-title').textContent = title;
+      document.getElementById('drag-warning-message').textContent = msg;
+      document.getElementById('drag-warning-modal').classList.add('open');
+    }
+
+    function renderEditDoors() {
+      const container = document.getElementById('edit-doors-container');
+      if (!container) return;
+      container.innerHTML = '';
+
+      // Load products catalog list to get titles
+      let productsCatalog = [];
+      if (typeof selectedBooking.products === 'string') {
+        try { productsCatalog = JSON.parse(selectedBooking.products); } catch(_) {}
+      } else if (Array.isArray(selectedBooking.products)) {
+        productsCatalog = selectedBooking.products;
+      }
+
+      tempEditDoors.forEach((door, doorIdx) => {
+        const doorProducts = door.products || [];
+        
+        let productsHtml = '';
+        if (doorProducts.length === 0) {
+          productsHtml = `
+            <div style="color: var(--text-muted); font-size: 0.75rem; text-align: center; padding: 1rem; border: 1px dashed var(--border); border-radius: 6px;">
+              No products inside this door. Drag here to add.
+            </div>
+          `;
+        } else {
+          doorProducts.forEach((sku, prodIdx) => {
+            const catalogItem = productsCatalog.find(p => p.sku === sku);
+            const title = catalogItem ? (catalogItem.name || catalogItem.title) : sku;
+            productsHtml += `
+              <div class="drag-product-item" draggable="true" 
+                ondragstart="handleDragStart(event, ${doorIdx}, ${prodIdx})"
+                ondragend="handleDragEnd(event)">
+                <div class="drag-handle">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="5" r="2"></circle><circle cx="9" cy="12" r="2"></circle><circle cx="9" cy="19" r="2"></circle><circle cx="15" cy="5" r="2"></circle><circle cx="15" cy="12" r="2"></circle><circle cx="15" cy="19" r="2"></circle></svg>
+                </div>
+                <div class="drag-product-text">
+                  <strong>${escapeHtml(sku)}</strong> - <span style="font-weight:normal; color:var(--text-secondary);">${escapeHtml(title)}</span>
+                </div>
+              </div>
+            `;
+          });
+        }
+
+        const isUnassignedDoor = doorProducts.length === 0;
+
+        const doorHtml = `
+          <div class="edit-door-box" id="edit-door-box-${doorIdx}"
+            ondragover="handleDragOver(event, ${doorIdx})"
+            ondragleave="handleDragLeave(event, ${doorIdx})"
+            ondrop="handleDrop(event, ${doorIdx})">
+            <div class="edit-door-header">
+              <span class="edit-door-title">Door ${door.index || (doorIdx + 1)}</span>
+              ${isUnassignedDoor ? `
+                <button type="button" class="btn-minimal btn-danger" onclick="deleteDoorEdit(${doorIdx})" title="Delete Door" style="display:inline-flex;padding:2px;">
+                  <svg viewBox="0 0 24 24" style="width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                </button>
+              ` : ''}
+            </div>
+            <div class="edit-door-products-list">
+              ${productsHtml}
+            </div>
+          </div>
+        `;
+        container.insertAdjacentHTML('beforeend', doorHtml);
+      });
+    }
+
+    window.addNewDoorEdit = function() {
+      const nextIndex = tempEditDoors.length > 0 ? Math.max(...tempEditDoors.map(d => d.index || 0)) + 1 : 1;
+      const newDoor = {
+        index: nextIndex,
+        swing: 'N/A',
+        doorMaterial: 'N/A',
+        jambMaterial: 'N/A',
+        photos: [],
+        checklist: [],
+        completed: false,
+        signature: null,
+        installers: [],
+        products: []
+      };
+      tempEditDoors.push(newDoor);
+      renderEditDoors();
+    };
+
+    window.deleteDoorEdit = function(doorIdx) {
+      const door = tempEditDoors[doorIdx];
+      if (door && door.products && door.products.length > 0) {
+        showDragWarning('Cannot Delete Door', 'You can only delete doors that have no products assigned to them.');
+        return;
+      }
+      tempEditDoors.splice(doorIdx, 1);
+      renderEditDoors();
+    };
+
+    // --- HTML5 Drag and Drop Handlers ---
+    let dragSourceDoorIdx = null;
+    let dragSourceProdIdx = null;
+
+    window.handleDragStart = function(event, doorIdx, prodIdx) {
+      const sourceDoor = tempEditDoors[doorIdx];
+      if (sourceDoor && sourceDoor.installers && sourceDoor.installers.length > 0) {
+        event.preventDefault();
+        showDragWarning('Installers Assigned', 'Cannot move products from a door with assigned installers. Please remove the assigned installers first.');
+        return;
+      }
+
+      dragSourceDoorIdx = doorIdx;
+      dragSourceProdIdx = prodIdx;
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData('text/plain', '');
+
+      event.target.classList.add('dragging');
+    };
+
+    window.handleDragEnd = function(event) {
+      event.target.classList.remove('dragging');
+    };
+
+    window.handleDragOver = function(event, doorIdx) {
+      event.preventDefault();
+      const box = document.getElementById(`edit-door-box-${doorIdx}`);
+      if (box && doorIdx !== dragSourceDoorIdx) {
+        box.classList.add('drag-over');
+      }
+    };
+
+    window.handleDragLeave = function(event, doorIdx) {
+      const box = document.getElementById(`edit-door-box-${doorIdx}`);
+      if (box) {
+        box.classList.remove('drag-over');
+      }
+    };
+
+    window.handleDrop = function(event, targetDoorIdx) {
+      event.preventDefault();
+      const box = document.getElementById(`edit-door-box-${targetDoorIdx}`);
+      if (box) {
+        box.classList.remove('drag-over');
+      }
+
+      if (dragSourceDoorIdx === null || dragSourceProdIdx === null) return;
+      if (dragSourceDoorIdx === targetDoorIdx) return;
+
+      const targetDoor = tempEditDoors[targetDoorIdx];
+      if (targetDoor && targetDoor.installers && targetDoor.installers.length > 0) {
+        showDragWarning('Installers Assigned', 'Cannot move products to a door with assigned installers. Please remove the assigned installers first.');
+        return;
+      }
+
+      const sourceDoor = tempEditDoors[dragSourceDoorIdx];
+      const productSku = sourceDoor.products[dragSourceProdIdx];
+      
+      sourceDoor.products.splice(dragSourceProdIdx, 1);
+      if (!targetDoor.products) targetDoor.products = [];
+      targetDoor.products.push(productSku);
+
+      // Scrape target door info clean
+      targetDoor.signature = null;
+      targetDoor.doorMaterial = 'N/A';
+      targetDoor.jambMaterial = 'N/A';
+      targetDoor.swing = 'N/A';
+      targetDoor.photos = [];
+      targetDoor.installers = [];
+      targetDoor.completed = false;
+      targetDoor.completed_at = null;
+
+      renderEditDoors();
+      
+      showDragWarning('Door Layout Updated', `Product ${productSku} has been moved to Door ${targetDoor.index || (targetDoorIdx + 1)}. All attachments, signature, swing, and photos for Door ${targetDoor.index || (targetDoorIdx + 1)} have been cleared.`);
+
+      dragSourceDoorIdx = null;
+      dragSourceProdIdx = null;
+    };
+
+    window.saveEditDoorsLayout = async function() {
+      if (!selectedBooking) return;
+
+      let originalSkus = [];
+      let productsArr = [];
+      if (typeof selectedBooking.products === 'string') {
+        try { productsArr = JSON.parse(selectedBooking.products); } catch(_) {}
+      } else if (Array.isArray(selectedBooking.products)) {
+        productsArr = selectedBooking.products;
+      }
+      if (productsArr.length > 0) {
+        originalSkus = productsArr.map(p => p.sku).filter(sku => sku !== 'ADD-ON LABOR');
+      } else if (selectedBooking.sku) {
+        originalSkus = selectedBooking.sku.split(' | ').filter(sku => sku !== 'ADD-ON LABOR');
+      }
+
+      const allocatedSkus = [];
+      tempEditDoors.forEach(d => {
+        if (d.products) {
+          d.products.forEach(sku => allocatedSkus.push(sku));
+        }
+      });
+
+      const missingSkus = originalSkus.filter(sku => !allocatedSkus.includes(sku));
+      if (missingSkus.length > 0) {
+        showDragWarning('Incomplete Allocation', `Please allocate all purchased products to doors. Unallocated products: ${missingSkus.join(', ')}`);
+        return;
+      }
+
+      const allInstallersMap = new Map();
+      tempEditDoors.forEach(d => {
+        const dInstallers = d.installers || [];
+        dInstallers.forEach(inst => {
+          if (inst.id && !allInstallersMap.has(inst.id)) {
+            allInstallersMap.set(inst.id, { id: inst.id, name: inst.name, role: inst.role });
+          }
+        });
+      });
+      const installersList = Array.from(allInstallersMap.values());
+      const installerIdStr   = installersList.length > 0 ? installersList.map(i => i.id).join(' | ')   : null;
+      const installerNameStr = installersList.length > 0 ? installersList.map(i => i.name).join(' | ') : null;
+
+      try {
+        const { error } = await sb
+          .from('installation_bookings')
+          .update({
+            doors: tempEditDoors,
+            installer_id: installerIdStr,
+            installer_name: installerNameStr,
+            installers: installersList
+          })
+          .eq('id', selectedBooking.id);
+
+        if (error) throw error;
+
+        const idx = dbBookings.findIndex(b => b.id === selectedBooking.id);
+        if (idx !== -1) {
+          dbBookings[idx].doors = tempEditDoors;
+          dbBookings[idx].installer_id = installerIdStr;
+          dbBookings[idx].installer_name = installerNameStr;
+          dbBookings[idx].installers = installersList;
+
+          selectedBooking.doors = tempEditDoors;
+          selectedBooking.installer_id = installerIdStr;
+          selectedBooking.installer_name = installerNameStr;
+          selectedBooking.installers = installersList;
+        }
+
+        showToast('Door layout updated successfully.');
+        closeEditDoorsModal();
+        showBookingDetails(selectedBooking.id);
+        applyFilterAndRender();
+      } catch (err) {
+        console.error('Failed to save edit doors layout:', err);
+        showToast('Failed to save layout: ' + err.message, true);
+      }
+    };
