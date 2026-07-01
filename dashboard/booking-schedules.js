@@ -3171,6 +3171,7 @@
 
       tempEditDoors.forEach((door, doorIdx) => {
         const doorProducts = door.products || [];
+        const hasInst = hasValidInstallers(door);
         
         let productsHtml = '';
         if (doorProducts.length === 0) {
@@ -3184,7 +3185,7 @@
             const catalogItem = productsCatalog.find(p => p.sku === sku);
             const title = catalogItem ? (catalogItem.name || catalogItem.title) : sku;
             productsHtml += `
-              <div class="drag-product-item" draggable="true" 
+              <div class="drag-product-item" draggable="${hasInst ? 'false' : 'true'}" 
                 ondragstart="handleDragStart(event, ${doorIdx}, ${prodIdx})"
                 ondragend="handleDragEnd(event)">
                 <div class="drag-handle">
@@ -3201,13 +3202,14 @@
         const isUnassignedDoor = doorProducts.length === 0;
 
         const doorHtml = `
-          <div class="edit-door-box" id="edit-door-box-${doorIdx}"
+          <div class="edit-door-box ${hasInst ? 'door-has-installers' : ''}" id="edit-door-box-${doorIdx}"
+            ${hasInst ? `onclick="handleDisabledDoorClick(event, ${doorIdx})"` : ''}
             ondragover="handleDragOver(event, ${doorIdx})"
             ondragleave="handleDragLeave(event, ${doorIdx})"
             ondrop="handleDrop(event, ${doorIdx})">
             <div class="edit-door-header">
               <span class="edit-door-title">Door ${door.index || (doorIdx + 1)}</span>
-              ${isUnassignedDoor ? `
+              ${isUnassignedDoor && !hasInst ? `
                 <button type="button" class="btn-minimal btn-danger" onclick="deleteDoorEdit(${doorIdx})" title="Delete Door" style="display:inline-flex;padding:2px;">
                   <svg viewBox="0 0 24 24" style="width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
                 </button>
@@ -3295,10 +3297,12 @@
       }
     };
 
-    // Pending drag action variables
-    let pendingDragSourceDoorIdx = null;
-    let pendingDragSourceProdIdx = null;
-    let pendingDragTargetDoorIdx = null;
+    window.handleDisabledDoorClick = function(event, doorIdx) {
+      event.stopPropagation();
+      const door = tempEditDoors[doorIdx];
+      const doorNum = door.index || (doorIdx + 1);
+      showDragWarning('Installers Assigned', `Door ${doorNum} has installers assigned. Please remove the assigned installers first in the dashboard before moving products.`);
+    };
 
     window.handleDrop = function(event, targetDoorIdx) {
       event.preventDefault();
@@ -3311,60 +3315,19 @@
       if (dragSourceDoorIdx === targetDoorIdx) return;
 
       const targetDoor = tempEditDoors[targetDoorIdx];
-      if (targetDoor && hasValidInstallers(targetDoor)) {
-        showDragWarning('Installers Assigned', 'Cannot move products to a door with assigned installers. Please remove the assigned installers first.');
-        return;
-      }
-
       const sourceDoor = tempEditDoors[dragSourceDoorIdx];
       const productSku = sourceDoor.products[dragSourceProdIdx];
 
-      pendingDragSourceDoorIdx = dragSourceDoorIdx;
-      pendingDragSourceProdIdx = dragSourceProdIdx;
-      pendingDragTargetDoorIdx = targetDoorIdx;
-
-      // Ask for double confirmation before moving the product and deleting target door data
-      const targetDoorNum = targetDoor.index || (targetDoorIdx + 1);
-      const msg = `Are you sure you want to move Product ${productSku} to Door ${targetDoorNum}? All attachments, signature, swing, and photos for Door ${targetDoorNum} will be cleared.`;
-      
-      document.getElementById('drag-confirm-message').textContent = msg;
-      document.getElementById('drag-confirm-modal').classList.add('open');
-
-      dragSourceDoorIdx = null;
-      dragSourceProdIdx = null;
-    };
-
-    window.closeDragConfirmModal = function() {
-      document.getElementById('drag-confirm-modal').classList.remove('open');
-      pendingDragSourceDoorIdx = null;
-      pendingDragSourceProdIdx = null;
-      pendingDragTargetDoorIdx = null;
-    };
-
-    window.proceedWithDragMove = function() {
-      if (pendingDragSourceDoorIdx === null || pendingDragSourceProdIdx === null || pendingDragTargetDoorIdx === null) return;
-
-      const sourceDoor = tempEditDoors[pendingDragSourceDoorIdx];
-      const targetDoor = tempEditDoors[pendingDragTargetDoorIdx];
-      const productSku = sourceDoor.products[pendingDragSourceProdIdx];
-
-      // Move SKU from source to target
-      sourceDoor.products.splice(pendingDragSourceProdIdx, 1);
+      // Move product immediately and adopt target door configurations
+      sourceDoor.products.splice(dragSourceProdIdx, 1);
       if (!targetDoor.products) targetDoor.products = [];
       targetDoor.products.push(productSku);
 
-      // Scrape target door info clean
-      targetDoor.signature = null;
-      targetDoor.doorMaterial = 'N/A';
-      targetDoor.jambMaterial = 'N/A';
-      targetDoor.swing = 'N/A';
-      targetDoor.photos = [];
-      targetDoor.installers = [];
-      targetDoor.completed = false;
-      targetDoor.completed_at = null;
-
       renderEditDoors();
-      closeDragConfirmModal();
+      showToast('Product moved successfully.');
+
+      dragSourceDoorIdx = null;
+      dragSourceProdIdx = null;
     };
 
     window.saveEditDoorsLayout = async function() {
