@@ -53,6 +53,7 @@
     let currentCompanyId;
     let dbBookings = [];
     let dbEmployees = [];
+    let dbProducts = [];
     let bookingMediaRequirements = [];
     let bookingChecklist = [];
     let filteredBookings = [];
@@ -130,13 +131,15 @@
     async function loadData() {
       renderSkeletons();
       try {
-        // Fetch bookings matching company_id, employees, and assignments in parallel
-        const [bookingsRes, employeesRes, assignmentsRes] = await Promise.all([
+        // Fetch bookings matching company_id, employees, assignments, and products in parallel
+        const [bookingsRes, employeesRes, assignmentsRes, productsRes] = await Promise.all([
           sb.from('installation_bookings').select('*').eq('company_id', currentCompanyId),
           sb.from('employees').select('id, employee_number, first_name, last_name, title, department, assignment'),
-          sb.from('employee_assignments').select('id, name, visibility').eq('company_id', currentCompanyId || '')
+          sb.from('employee_assignments').select('id, name, visibility').eq('company_id', currentCompanyId || ''),
+          sb.from('products').select('sku, category')
         ]);
 
+        dbProducts = productsRes?.data || [];
         let data = bookingsRes.data;
         if (bookingsRes.error) {
           // Fallback if company_id column does not exist in this database instance yet
@@ -723,7 +726,8 @@
           if (door && Array.isArray(door.installers)) {
             if (door.installers.length > 0) {
               installersHtml = door.installers.map(inst => {
-                const role = inst.role ? `<span style="font-size:0.65rem;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-right:0.2rem;">${escapeHtml(inst.role)}:</span>` : '';
+                const roleText = inst.role ? inst.role.charAt(0).toUpperCase() + inst.role.slice(1) : '';
+                const role = roleText ? `<span style="font-size:0.65rem;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-right:0.2rem;">${escapeHtml(roleText)}:</span>` : '';
                 return role + escapeHtml(formatInstallerName(inst.name));
               }).join(', ');
             } else {
@@ -2264,6 +2268,8 @@
       const currentInstallers = door.installers || [];
       const leadInst  = currentInstallers.find(i => i.role === 'lead') || currentInstallers[0];
       const assistInsts = currentInstallers.filter(i => i.role === 'assist');
+      const serviceInst = currentInstallers.find(i => i.role === 'service');
+      
       // Fallback for old data without roles: treat index 1+ as assist
       const inst1Id  = leadInst?.id || '';
       const inst2Id  = assistInsts[0]?.id || (currentInstallers[1]?.id || '');
@@ -2271,10 +2277,25 @@
       const hasAssist2 = !!inst2Id;
       const hasAssist3 = !!inst3Id;
 
+      const hasServiceProduct = (door.products || []).some(sku => {
+        const prod = dbProducts.find(p => p.sku && p.sku.toUpperCase() === sku.toUpperCase());
+        return prod && prod.category === 'Service';
+      });
+
       const container = document.getElementById(`door-inst-container-${doorIndex}`);
       if (!container) return;
 
       const roleLabel = (text) => `<span style="font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text-muted);letter-spacing:0.04em;min-width:36px;flex-shrink:0;">${text}</span>`;
+
+      const serviceHtml = hasServiceProduct ? `
+          <div style="display: flex; gap: 0.35rem; align-items: center;">
+            ${roleLabel('Service')}
+            <select class="form-input" style="height:auto; padding:0.35rem; font-size:0.8rem; flex:1;" id="edit-inst-${doorIndex}-service" data-role="service">
+              ${buildDoorInstallerOptions(serviceInst?.id || '')}
+            </select>
+            <div style="width: 28px;"></div>
+          </div>
+      ` : '';
 
       container.innerHTML = `
         <div style="display: flex; flex-direction: column; gap: 0.4rem;">
@@ -2304,6 +2325,7 @@
             </select>
             <button type="button" class="btn-minimal btn-danger" onclick="removeAssistInstallerEdit(${doorIndex}, 3)" title="Remove"><svg viewBox="0 0 24 24" style="width:14px;height:14px;display:block;fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
           </div>
+          ${serviceHtml}
           <button type="button" class="btn btn-outline btn-sm" id="btn-add-inst-edit-${doorIndex}"
             style="display: ${(hasAssist2 && hasAssist3) ? 'none' : 'inline-flex'}; font-size: 0.72rem; padding: 0.2rem 0.5rem;"
             onclick="addAssistInstallerEdit(${doorIndex})">+ Add Assist</button>
@@ -2374,6 +2396,15 @@
           doorInstallers.push({ id: emp.id, name: `${emp.first_name}${lastName}`, role });
         }
       });
+
+      const serviceSel = document.getElementById(`edit-inst-${doorIndex}-service`);
+      if (serviceSel && serviceSel.value) {
+        const emp = dbEmployees.find(e => e.id === serviceSel.value);
+        if (emp) {
+          const lastName = emp.last_name ? ` ${emp.last_name.trim()}` : '';
+          doorInstallers.push({ id: emp.id, name: `${emp.first_name}${lastName}`, role: 'service' });
+        }
+      }
 
       door.installers = doorInstallers;
 
