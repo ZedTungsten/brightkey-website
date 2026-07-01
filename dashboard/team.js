@@ -1810,6 +1810,9 @@
       },
 
       openDirectionModal(id = null) {
+        console.log('openDirectionModal called, id:', id);
+        const modalEl = document.getElementById('direction-modal');
+        console.log('modal element:', modalEl);
         document.getElementById('direction-modal-id').value = id || '';
         const titleInput = document.getElementById('direction-modal-title-input');
         const descInput = document.getElementById('direction-modal-desc-input');
