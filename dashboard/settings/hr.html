@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HR Settings — BrightKey Admin</title>
+  <link rel="preconnect" href="https://fonts.bunny.net" />
+  <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../../css/style.css" />
+  <link rel="icon" type="image/svg+xml" href="../../assets/favicon.svg?v=2" />
+
+  <link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+  <div class="toast-container" id="toast-container"></div>
+
+  <div class="dash-layout">
+    <!-- Sidebar -->
+    <aside class="dash-sidebar" id="dash-sidebar"></aside>
+
+    <!-- Main Content -->
+    <div class="dash-main">
+      <!-- Top Bar -->
+      <div class="top-bar">
+        <span class="top-bar-title">Company Settings</span>
+        <div style="flex:1;"></div>
+        <span id="topbar-date" style="font-size: 0.85rem; font-weight: 500; color: var(--text-secondary);"></span>
+      </div>
+
+      <div class="content-area" style="height: calc(100vh - 56px); overflow: hidden;">
+        <main class="main-panel">
+          <!-- Tab navigation -->
+          <div class="tabs-nav">
+            <a class="tab-btn" href="/dashboard/settings/company">Company</a>
+            <a class="tab-btn" href="/dashboard/settings/access">Access</a>
+            <a class="tab-btn" href="/dashboard/settings/assignments">Assignments</a>
+            <a class="tab-btn" href="/dashboard/settings/warehouse">Warehouse</a>
+            <a class="tab-btn" href="/dashboard/settings/sales">Sales</a>
+            <a class="tab-btn active" href="/dashboard/settings/hr">HR</a>
+            <a class="tab-btn" href="/dashboard/settings/booking">Booking</a>
+          </div>
+
+          <div class="scroll-area">
+            <!-- HR Content -->
+            <div class="tab-panel active">
+              <div class="panel-header">
+                <div class="panel-title">HR Prefix Setup</div>
+                <button class="btn btn-primary" onclick="saveHRSettings()">Save HR Settings</button>
+              </div>
+              <div class="table-scroll">
+                <div class="wh-card" style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1.25rem; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px; max-width: 500px;">
+                  <h3 style="font-size: 0.95rem; font-weight: 700; color: var(--text-primary); border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; margin-bottom: 0.5rem;">Employee &amp; Contractor Prefixes</h3>
+                  
+                  <div class="form-group">
+                    <label class="form-label" for="hr-employee-prefix">Employee ID Prefix</label>
+                    <input type="text" id="hr-employee-prefix" class="form-input" placeholder="e.g. BK" style="max-width: 150px;" required />
+                    <span style="font-size: 0.72rem; color: var(--text-muted);">Used for auto-generating employee numbers (e.g. BK-0001). Maximum 3 capital letters.</span>
+                  </div>
+
+                  <div class="form-group">
+                    <label class="form-label" for="hr-contractor-prefix">Contractor ID Prefix</label>
+                    <input type="text" id="hr-contractor-prefix" class="form-input" placeholder="e.g. BKC" style="max-width: 150px;" required />
+                    <span style="font-size: 0.72rem; color: var(--text-muted);">Used for auto-generating contractor numbers. Maximum 3 capital letters.</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="../../js/auth.js"></script>
+  <script src="../../js/sidebar.js"></script>
+  <script src="../../js/main.js"></script>
+  <script src="shared.js"></script>
+  <script>
+    'use strict';
+
+    let employeePrefix = 'BK';
+    const showToast = (msg, isError) => SettingsPage.showToast(msg, isError);
+
+    window.initSettingsPage = async function() {
+      await loadHRSettings();
+    };
+
+    async function loadHRSettings() {
+      try {
+        const { data, error } = await sb
+          .from('global_settings')
+          .select('value')
+          .eq('key', 'hr_config')
+          .eq('company_id', currentCompanyId)
+          .maybeSingle();
+
+        if (error) throw error;
+        if (data && data.value) {
+          employeePrefix = data.value.employee_prefix || 'BK';
+          document.getElementById('hr-employee-prefix').value = employeePrefix;
+          document.getElementById('hr-contractor-prefix').value = data.value.contractor_prefix || '';
+        } else {
+          employeePrefix = 'BK';
+          document.getElementById('hr-employee-prefix').value = 'BK';
+          document.getElementById('hr-contractor-prefix').value = '';
+        }
+      } catch (err) {
+        console.error('Error loading HR settings:', err);
+      }
+    }
+
+    window.saveHRSettings = async function() {
+      const empPrefix = document.getElementById('hr-employee-prefix').value.trim().toUpperCase();
+      const conPrefix = document.getElementById('hr-contractor-prefix').value.trim().toUpperCase();
+
+      if (empPrefix.length < 1 || empPrefix.length > 3) {
+        showToast('Employee prefix must be 1 to 3 letters.', true);
+        return;
+      }
+      if (conPrefix.length < 1 || conPrefix.length > 3) {
+        showToast('Contractor prefix must be 1 to 3 letters.', true);
+        return;
+      }
+
+      try {
+        const { error } = await sb.from('global_settings').upsert({
+          key: 'hr_config',
+          company_id: currentCompanyId,
+          value: {
+            employee_prefix: empPrefix,
+            contractor_prefix: conPrefix
+          }
+        });
+        if (error) throw error;
+        employeePrefix = empPrefix;
+
+        // Backfill employee numbers for existing employees with new prefix
+        try {
+          const { data: emps, error: fetchErr } = await sb
+            .from('employees')
+            .select('id, employee_number')
+            .eq('company_id', currentCompanyId);
+          if (fetchErr) throw fetchErr;
+
+          const updates = [];
+          (emps || []).forEach(emp => {
+            const num = emp.employee_number || '';
+            const match = num.match(/^([A-Z]{1,3})-(\d+)$/);
+            if (match) {
+              const oldPref = match[1];
+              const suffix = match[2];
+              if (oldPref !== empPrefix) {
+                updates.push({
+                  id: emp.id,
+                  employee_number: `${empPrefix}-${suffix}`
+                });
+              }
+            }
+          });
+
+          if (updates.length > 0) {
+            for (const u of updates) {
+              await sb
+                .from('employees')
+                .update({ employee_number: u.employee_number })
+                .eq('id', u.id);
+            }
+          }
+        } catch (backfillErr) {
+          console.error('Failed to backfill employee prefixes:', backfillErr);
+        }
+
+        showToast('HR settings saved and employee numbers backfilled successfully!');
+      } catch (err) {
+        console.error('Error saving HR settings:', err);
+        showToast('Failed to save HR settings.', true);
+      }
+    };
+  </script>
+</body>
+</html>

@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Access Settings — BrightKey Admin</title>
+  <link rel="preconnect" href="https://fonts.bunny.net" />
+  <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../../css/style.css" />
+  <link rel="icon" type="image/svg+xml" href="../../assets/favicon.svg?v=2" />
+
+  <link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+  <div class="toast-container" id="toast-container"></div>
+
+  <div class="dash-layout">
+    <!-- Sidebar -->
+    <aside class="dash-sidebar" id="dash-sidebar"></aside>
+
+    <!-- Main Content -->
+    <div class="dash-main">
+      <!-- Top Bar -->
+      <div class="top-bar">
+        <span class="top-bar-title">Company Settings</span>
+        <div style="flex:1;"></div>
+        <span id="topbar-date" style="font-size: 0.85rem; font-weight: 500; color: var(--text-secondary);"></span>
+      </div>
+
+      <div class="content-area" style="height: calc(100vh - 56px); overflow: hidden;">
+        <main class="main-panel">
+          <!-- Tab navigation -->
+          <div class="tabs-nav">
+            <a class="tab-btn" href="/dashboard/settings/company">Company</a>
+            <a class="tab-btn active" href="/dashboard/settings/access">Access</a>
+            <a class="tab-btn" href="/dashboard/settings/assignments">Assignments</a>
+            <a class="tab-btn" href="/dashboard/settings/warehouse">Warehouse</a>
+            <a class="tab-btn" href="/dashboard/settings/sales">Sales</a>
+            <a class="tab-btn" href="/dashboard/settings/hr">HR</a>
+            <a class="tab-btn" href="/dashboard/settings/booking">Booking</a>
+          </div>
+
+          <div class="scroll-area">
+            <!-- Access Content -->
+            <div class="tab-panel active">
+              <div class="panel-header">
+                <div class="panel-title">Access Control</div>
+                <button class="btn btn-primary" onclick="openAddMemberModal()">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                  Add Member
+                </button>
+              </div>
+              <div class="table-scroll">
+                <div class="card-table">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Email</th>
+                        <th>Name</th>
+                        <th>Access</th>
+                        <th>Date Added</th>
+                        <th>Status</th>
+                        <th style="width:120px; text-align:center;">Actions</th>
+                        <th style="width:120px; text-align:center;">Invitation Link</th>
+                        <th style="width:140px; text-align:center;">Reset Password</th>
+                      </tr>
+                    </thead>
+                    <tbody id="members-list-body">
+                      <tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 2rem;">Loading team members...</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Member Modal -->
+  <div class="modal-overlay" id="add-member-modal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title">Invite New Team Member</div>
+        <button class="modal-close" onclick="closeAddMemberModal()">
+          <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <form id="invite-form" onsubmit="sendInvitation(event)">
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label" for="invite-email">Email Address</label>
+            <input type="email" id="invite-email" class="form-input" placeholder="e.g. employee@company.com" required />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="invite-name">Full Name</label>
+            <input type="text" id="invite-name" class="form-input" placeholder="e.g. Juan dela Cruz" required />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="invite-role">Assign Access</label>
+            <select id="invite-role" class="form-select" onchange="handleRoleChange(this.value)">
+              <!-- Populated by JS -->
+            </select>
+            <div id="invite-custom-access-container" style="display:none; flex-direction:column; gap:0.4rem; margin-top:0.5rem; padding:0.75rem; background:var(--bg-elevated); border:1px solid var(--border); border-radius:6px;">
+              <label class="form-label" style="margin-bottom:0.2rem;">Select Access Modules</label>
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; font-size:0.82rem;">
+                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="invite-custom-access" value="Products" /> Products</label>
+                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="invite-custom-access" value="Operations" /> Operations</label>
+                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="invite-custom-access" value="Marketing" /> Marketing</label>
+                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="invite-custom-access" value="Sales" /> Sales</label>
+                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="invite-custom-access" value="Customer Service" /> Customer Service</label>
+                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="invite-custom-access" value="Logistics" /> Logistics</label>
+                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="invite-custom-access" value="HR" /> HR</label>
+                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="invite-custom-access" value="Finance" /> Finance</label>
+              </div>
+            </div>
+          </div>
+          <div class="warning-box" id="admin-warning">
+            <strong>WARNING:</strong> Assigning the Administrator role grants full read and write access to all settings, team members, and databases.
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" onclick="closeAddMemberModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-submit-invite">Send Invitation</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Edit Member Access Modal -->
+  <div class="modal-overlay" id="edit-role-modal">
+    <div class="modal-card" style="width: 400px; max-width: 90%;">
+      <div class="modal-header">
+        <div class="modal-title">Edit Member Access</div>
+        <button class="modal-close" onclick="closeEditRoleModal()">
+          <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <form id="edit-role-form" onsubmit="submitEditRole(event)">
+        <div class="modal-body">
+          <input type="hidden" id="edit-role-member-id" />
+          <div class="form-group">
+            <label class="form-label">Member</label>
+            <div id="edit-role-member-name" style="font-weight:600; color:var(--text-primary);"></div>
+            <div id="edit-role-member-email" style="font-size:0.8rem; color:var(--text-secondary); margin-top:0.25rem;"></div>
+          </div>
+          <div class="form-group" style="margin-top:0.5rem;">
+            <label class="form-label" for="edit-role-select">Select Access Level</label>
+            <select id="edit-role-select" class="form-select" onchange="handleEditRoleSelectChange(this.value)">
+              <!-- Filled by JS -->
+            </select>
+            <div id="edit-custom-access-container" style="display:none; flex-direction:column; gap:0.4rem; margin-top:0.5rem; padding:0.75rem; background:var(--bg-elevated); border:1px solid var(--border); border-radius:6px;">
+              <label class="form-label" style="margin-bottom:0.2rem;">Select Access Modules</label>
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; font-size:0.82rem;">
+                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="edit-custom-access" value="Products" /> Products</label>
+                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="edit-custom-access" value="Operations" /> Operations</label>
+                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="edit-custom-access" value="Marketing" /> Marketing</label>
+                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="edit-custom-access" value="Sales" /> Sales</label>
+                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="edit-custom-access" value="Customer Service" /> Customer Service</label>
+                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="edit-custom-access" value="Logistics" /> Logistics</label>
+                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="edit-custom-access" value="HR" /> HR</label>
+                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="edit-custom-access" value="Finance" /> Finance</label>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" onclick="closeEditRoleModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Access</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Custom Confirmation Dialog -->
+  <div class="modal-overlay" id="confirm-modal">
+    <div class="modal-card" style="width: 400px; max-width: 90%;">
+      <div class="modal-header">
+        <div class="modal-title">Confirm Action</div>
+        <button class="modal-close" onclick="SettingsPage.closeConfirmModal()">
+          <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body" style="padding: 1.5rem; text-align: center;">
+        <p id="confirm-message" style="font-size: 0.9rem; color: var(--text-secondary); line-height: 1.4;"></p>
+      </div>
+      <div class="modal-footer" style="background: var(--bg-elevated); padding: 1rem 1.5rem; display: flex; justify-content: flex-end; gap: 0.75rem;">
+        <button type="button" class="btn btn-outline" onclick="SettingsPage.closeConfirmModal()">Cancel</button>
+        <button type="button" class="btn btn-primary" id="btn-confirm-yes" style="background: var(--danger); border-color: var(--danger);">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="../../js/auth.js"></script>
+  <script src="../../js/sidebar.js"></script>
+  <script src="../../js/main.js"></script>
+  <script src="shared.js"></script>
+  <script>
+    'use strict';
+
+    let employeePrefix = 'BK';
+    const showToast = (msg, isError) => SettingsPage.showToast(msg, isError);
+    const showConfirmModal = (msg, onConfirm) => SettingsPage.showConfirmModal(msg, onConfirm);
+
+    window.initSettingsPage = async function() {
+      // Load Employee Prefix
+      try {
+        const { data } = await sb.from('global_settings').select('value').eq('key', 'hr_settings').eq('company_id', currentCompanyId).maybeSingle();
+        if (data && data.value && data.value.employeePrefix) {
+          employeePrefix = data.value.employeePrefix;
+        }
+      } catch (err) { console.warn('Prefix load failed:', err); }
+
+      loadRolesDropdown();
+      await loadAllMembers();
+    };
+
+    async function loadRolesDropdown() {
+      const select = document.getElementById('invite-role');
+      if (!select) return;
+      select.innerHTML = '<option value="admin">Admin</option><option value="custom">User</option>';
+      select.value = 'admin';
+      handleRoleChange(select.value);
+    }
+
+    window.openAddMemberModal = function() {
+      document.getElementById('invite-email').value = '';
+      document.getElementById('invite-name').value = '';
+      const select = document.getElementById('invite-role');
+      if (select) { select.value = 'admin'; handleRoleChange(select.value); }
+      document.getElementById('admin-warning').style.display = 'none';
+      document.getElementById('add-member-modal').classList.add('open');
+    };
+
+    window.closeAddMemberModal = function() {
+      document.getElementById('add-member-modal').classList.remove('open');
+    };
+
+    window.handleRoleChange = function(role) {
+      const warning = document.getElementById('admin-warning');
+      if (warning) warning.style.display = (role === 'admin') ? 'block' : 'none';
+      const customContainer = document.getElementById('invite-custom-access-container');
+      if (customContainer) customContainer.style.display = (role === 'custom') ? 'flex' : 'none';
+      document.querySelectorAll('.invite-custom-access').forEach(cb => cb.checked = (role === 'admin'));
+    };
+
+    window.handleEditRoleSelectChange = function(role) {
+      const customContainer = document.getElementById('edit-custom-access-container');
+      if (customContainer) customContainer.style.display = (role === 'user') ? 'flex' : 'none';
+      document.querySelectorAll('.edit-custom-access').forEach(cb => cb.checked = false);
+    };
+
+    function formatDateAdded(isoString) {
+      if (!isoString) return '—';
+      const d = new Date(isoString);
+      if (isNaN(d.getTime())) return '—';
+      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    }
+
+    async function loadAllMembers() {
+      const tbody = document.getElementById('members-list-body');
+      tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 2rem;">Loading team members...</td></tr>`;
+
+      let activeData = [];
+      let inviteData = [];
+
+      let employeeUserIds = new Set();
+      let employeeEmails = new Set();
+      try {
+        const { data: empData, error: empErr } = await sb.from('employees').select('id, email').eq('company_id', currentCompanyId);
+        if (!empErr && empData) {
+          empData.forEach(e => {
+            if (e.id) employeeUserIds.add(e.id);
+            if (e.email) employeeEmails.add(e.email.toLowerCase().trim());
+          });
+        }
+      } catch (err) { console.error('Failed to query employees for mapping:', err); }
+
+      try {
+        const { data, error } = await sb.from('tenant_members').select('id, user_email, full_name, role, user_id, created_at, accessible_modules').eq('tenant_id', currentTenantId);
+        if (error && error.message && error.message.includes('full_name')) {
+          const { data: d2 } = await sb.from('tenant_members').select('id, user_email, role, user_id, created_at, accessible_modules').eq('tenant_id', currentTenantId);
+          activeData = (d2 || []).map(r => ({ ...r, full_name: null }));
+        } else if (error) {
+          console.error('tenant_members error:', error.message);
+        } else {
+          activeData = data || [];
+        }
+      } catch (err) { console.error('tenant_members fetch failed:', err); }
+
+      SettingsPage.allTeamMembers = activeData;
+
+      let inviteError = null;
+      try {
+        const { data, error } = await sb.from('company_invitations').select('id, email, full_name, role, created_at').eq('tenant_id', currentTenantId);
+        if (error && error.message && error.message.includes('full_name')) {
+          const { data: d2, error: e2 } = await sb.from('company_invitations').select('id, email, role, created_at').eq('tenant_id', currentTenantId);
+          if (e2) { inviteError = e2.message; } else { inviteData = (d2 || []).map(r => ({ ...r, full_name: null })); }
+        } else if (error) {
+          inviteError = error.message;
+        } else {
+          inviteData = data || [];
+        }
+      } catch (err) { inviteError = err.message; }
+
+      const activeEmails = new Set(activeData.map(r => (r.user_email || '').toLowerCase().trim()));
+      inviteData = inviteData.filter(r => !activeEmails.has((r.email || '').toLowerCase().trim()));
+
+      tbody.innerHTML = '';
+
+      if (activeData.length === 0 && inviteData.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 2rem;">No members found. Use "Add Member" to invite your first team member.</td></tr>`;
+        return;
+      }
+
+      activeData.forEach(row => {
+        const tr = document.createElement('tr');
+        const isSelf = row.user_id === currentUser.id;
+        const isOwner = row.role === 'owner';
+
+        const rowModules = Array.isArray(row.accessible_modules) ? row.accessible_modules : [];
+        let roleInnerHtml = '';
+        if (row.role === 'owner') {
+          roleInnerHtml = `<span class="badge badge-cyan">Owner</span>`;
+        } else if (row.role === 'admin') {
+          roleInnerHtml = `<span class="badge badge-cyan">Administrator</span>`;
+        } else {
+          const listItems = rowModules.length
+            ? rowModules.map(m => `<li style="font-weight:400; color:var(--text-secondary); margin-bottom:0.1rem;">${escapeHtml(m)}</li>`).join('')
+            : '<li style="font-weight:400; color:var(--text-muted);">No Access</li>';
+          roleInnerHtml = `<div><div style="font-weight:700; color:var(--text-primary);">User</div><ul style="margin:0.2rem 0 0 0.5rem; padding-left:0.75rem; list-style-type:disc; font-size:0.8rem;">${listItems}</ul></div>`;
+        }
+
+        let roleCell = '';
+        if (isOwner || isSelf) {
+          roleCell = roleInnerHtml;
+        } else {
+          const modulesEncoded = encodeURIComponent(JSON.stringify(rowModules));
+          roleCell = `<div style="display:flex; align-items:flex-start; justify-content:space-between; width:100%; gap:0.5rem;">${roleInnerHtml}<button type="button" style="background:none; border:none; color:var(--text-muted); cursor:pointer; display:inline-flex; align-items:center; padding:2px; margin-top:2px; vertical-align:middle; transition:color 0.15s;" onmouseover="this.style.color='var(--cyan-light)'" onmouseout="this.style.color='var(--text-muted)'" onclick="openEditRoleModal('${row.id}', '${escapeHtml(row.user_email)}', '${escapeHtml(row.full_name || '')}', '${escapeHtml(row.role || '')}', decodeURIComponent('${modulesEncoded}'))" title="Edit Access"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg></button></div>`;
+        }
+
+        const isEmployee = (row.user_id && employeeUserIds.has(row.user_id)) || (row.user_email && employeeEmails.has(row.user_email.toLowerCase().trim()));
+
+        let actionsCellHtml = '';
+        if (!isEmployee) {
+          actionsCellHtml += `<button class="btn btn-outline btn-sm" style="color: var(--cyan-light); border-color: var(--cyan-border); padding: 0.35rem 0.65rem;" onclick="addToDirectory('${row.user_id || ''}', '${escapeHtml(row.user_email || '')}', '${escapeHtml(row.full_name || '')}')">Add to Directory</button>`;
+        }
+        if (!isOwner && !isSelf) {
+          actionsCellHtml += `<button class="btn btn-danger" style="padding: 0.35rem 0.65rem;" onclick="removeMember('${row.id}')">Remove</button>`;
+        }
+        if (actionsCellHtml === '') {
+          actionsCellHtml = '<span style="color:var(--text-muted);font-size:0.75rem;">—</span>';
+        } else {
+          actionsCellHtml = `<div style="display:flex; flex-direction:column; align-items:center; gap:0.35rem;">${actionsCellHtml}</div>`;
+        }
+
+        const resetPasswordBtn = row.user_email
+          ? `<button class="btn btn-outline" style="padding:0.3rem 0.65rem;font-size:0.75rem;" onclick="sendResetPassword('${row.user_email}')">Send Reset Password</button>`
+          : '<span style="color:var(--text-muted);font-size:0.75rem;">—</span>';
+
+        tr.innerHTML = `
+          <td><div style="font-weight:600;">${row.user_email || 'No email registered'}</div>${isSelf ? '<div style="font-size:0.75rem;color:var(--text-muted);">You</div>' : ''}</td>
+          <td>${row.full_name || '—'}</td>
+          <td>${roleCell}</td>
+          <td>${formatDateAdded(row.created_at)}</td>
+          <td><span class="badge badge-green">Active</span></td>
+          <td style="text-align:center; white-space:nowrap;">${actionsCellHtml}</td>
+          <td style="text-align:center;"><span style="color:var(--text-muted);font-size:0.75rem;">—</span></td>
+          <td style="text-align:center;">${resetPasswordBtn}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      if (inviteError) {
+        const errTr = document.createElement('tr');
+        errTr.innerHTML = `<td colspan="8" style="padding:1rem; background:rgba(220,38,38,0.04); border-top:1px solid rgba(220,38,38,0.15);"><div style="display:flex;align-items:flex-start;gap:0.6rem;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#DC2626" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg><div><div style="font-size:0.8rem;font-weight:700;color:#B91C1C;">Could not load pending invitations</div><div style="font-size:0.75rem;color:#6B7280;margin-top:0.2rem;">${inviteError}</div></div></div></td>`;
+        tbody.appendChild(errTr);
+      }
+
+      inviteData.forEach(row => {
+        const tr = document.createElement('tr');
+        tr.style.background = 'rgba(217,119,6,0.03)';
+        let inviteRoleCell = '';
+        if (row.role === 'admin') inviteRoleCell = `<span class="badge badge-gray">Administrator</span>`;
+        else if (row.role && row.role.startsWith('access:')) {
+          const mods = row.role.substring(7).split(',').map(s => s.trim());
+          inviteRoleCell = `<div><div style="font-weight:700; color:var(--text-primary);">User</div><ul style="margin:0.2rem 0 0 0.5rem; padding-left:0.75rem; list-style-type:disc; font-size:0.8rem;">${mods.map(m => `<li>${escapeHtml(m)}</li>`).join('')}</ul></div>`;
+        } else {
+          inviteRoleCell = `<span class="badge badge-gray">${escapeHtml(row.role || 'None')}</span>`;
+        }
+        tr.innerHTML = `
+          <td><div style="font-weight:600;">${row.email}</div><div style="font-size:0.72rem;color:var(--text-muted);">Awaiting registration</div></td>
+          <td>${row.full_name || '—'}</td>
+          <td>${inviteRoleCell}</td>
+          <td>${formatDateAdded(row.created_at)}</td>
+          <td><span class="badge badge-orange">Invited</span></td>
+          <td style="text-align:center;"><button class="btn btn-danger" style="padding:0.3rem 0.65rem;font-size:0.75rem;" onclick="cancelInvitation('${row.id}')">Cancel</button></td>
+          <td style="text-align:center;"><button class="btn btn-outline" style="padding:0.3rem 0.75rem;font-size:0.78rem;gap:0.35rem;" onclick="copyInviteLink('${row.email}', '${row.role}')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Copy Invitation Link</button></td>
+          <td style="text-align:center;"><span style="color:var(--text-muted);font-size:0.75rem;">—</span></td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    window.sendInvitation = async function(e) {
+      e.preventDefault();
+      const emailInput = document.getElementById('invite-email');
+      const nameInput = document.getElementById('invite-name');
+      const roleSelect = document.getElementById('invite-role');
+      const btn = document.getElementById('btn-submit-invite');
+
+      const email = emailInput.value.trim().toLowerCase();
+      const fullName = nameInput.value.trim();
+      let role = roleSelect.value;
+      if (!email || !fullName) return;
+
+      btn.disabled = true;
+      btn.innerText = 'Inviting...';
+
+      if (role === 'custom') {
+        const checkedModules = Array.from(document.querySelectorAll('.invite-custom-access:checked')).map(cb => cb.value);
+        if (checkedModules.length === 0) {
+          showToast('Please check at least one access module for Custom role.', true);
+          btn.disabled = false;
+          btn.innerText = 'Send Invitation';
+          return;
+        }
+        role = 'access:' + checkedModules.join(',');
+      }
+
+      try {
+        const { data: { session } } = await sb.auth.getSession();
+        const token = session?.access_token;
+        const res = await fetch('/api/send-invitation', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ tenant_id: currentTenantId, company_id: currentCompanyId, email, full_name: fullName, role, invited_by: currentUser.id })
+        });
+        const data = await res.json();
+        if (!res.ok) { showToast(data.error || 'Invitation failed.', true); return; }
+        showToast(data.email_sent ? `Invitation email sent to ${email}.` : `Member invited! Copy invite link from Actions column.`);
+        closeAddMemberModal();
+        loadAllMembers();
+      } catch (err) {
+        console.error('Invitation error:', err);
+        showToast('System error sending invitation.', true);
+      } finally {
+        btn.disabled = false;
+        btn.innerText = 'Send Invitation';
+      }
+    };
+
+    async function generateSignature(tenant, company, role, email) {
+      const msg = `${tenant}:${company}:${role || ''}:${email}:brightkey_invite_salt`;
+      const encoder = new TextEncoder();
+      const data = encoder.encode(msg);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    window.copyInviteLink = async function(email, role) {
+      try {
+        const sig = await generateSignature(currentTenantId, currentCompanyId, role, email);
+        const link = `${window.location.origin}/employee-registration?tenant=${encodeURIComponent(currentTenantId)}&company=${encodeURIComponent(currentCompanyId)}&role=${encodeURIComponent(role || '')}&email=${encodeURIComponent(email)}&sig=${sig}`;
+        await navigator.clipboard.writeText(link);
+        showToast('Invite link copied to clipboard!');
+      } catch (err) {
+        showToast('Failed to copy invite link', true);
+      }
+    };
+
+    window.cancelInvitation = function(inviteId) {
+      showConfirmModal('Are you sure you want to cancel this invitation?', async () => {
+        try {
+          const { error } = await sb.from('company_invitations').delete().eq('id', inviteId);
+          if (error) throw error;
+          showToast('Invitation cancelled.');
+          loadAllMembers();
+        } catch (err) {
+          showToast('Failed to cancel invitation.', true);
+        }
+      });
+    };
+
+    window.sendResetPassword = function(email) {
+      if (!email) return;
+      showConfirmModal('Are you sure you want to send a reset password email to ' + email + '?', async () => {
+        try {
+          const res = await fetch('/api/send-reset-password', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email })
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            throw new Error(data.error || 'Failed to send reset password email.');
+          }
+          showToast(data.email_sent ? 'Password reset email sent to ' + email + '.' : 'Password reset link generated successfully.');
+        } catch (err) {
+          console.error('Reset password error:', err);
+          showToast('Failed to send reset password email: ' + err.message, true);
+        }
+      });
+    };
+
+    window.removeMember = function(memberId) {
+      showConfirmModal('Are you sure you want to remove this member from your team? They will immediately lose dashboard access.', async () => {
+        try {
+          const { error } = await sb.from('tenant_members').delete().eq('id', memberId);
+          if (error) throw error;
+          showToast('Member removed successfully.');
+          loadAllMembers();
+        } catch (err) {
+          showToast('Failed to remove member.', true);
+        }
+      });
+    };
+
+    window.addToDirectory = async function(userId, email, fullName) {
+      if (!email) { showToast('Cannot add member: Email is missing.', true); return; }
+      const parts = (fullName || '').trim().split(/\s+/);
+      const lastName = parts.pop() || '';
+      const firstName = parts.join(' ') || '';
+      try {
+        showToast('Adding employee to directory...');
+        let empNum = '';
+        try {
+          const { data, error: seqError } = await sb.rpc('generate_employee_number');
+          if (!seqError && data) empNum = data;
+        } catch (seqErr) { console.warn('RPC generate_employee_number failed:', seqErr); }
+        if (!empNum) {
+          const { count, error: countErr } = await sb.from('employees').select('*', { count: 'exact', head: true });
+          if (countErr) throw countErr;
+          empNum = employeePrefix + '-' + String((count || 0) + 1).padStart(4, '0');
+        }
+        const insertPayload = {
+          email: email.toLowerCase().trim(),
+          first_name: firstName || 'N/A',
+          last_name: lastName || 'N/A',
+          employee_number: empNum,
+          company_id: currentCompanyId || null,
+          employment_status: 'Active',
+          date_of_birth: '1970-01-01',
+          address: 'N/A',
+          contact_number: 'N/A',
+          emergency_contact_number: 'N/A'
+        };
+        if (userId) insertPayload.id = userId;
+        const { error: insertErr } = await sb.from('employees').insert([insertPayload]);
+        if (insertErr) throw insertErr;
+        showToast('Successfully added to Employee Directory!');
+        await loadAllMembers();
+      } catch (err) {
+        showToast('Failed to add employee: ' + err.message, true);
+      }
+    };
+
+    window.openEditRoleModal = function(memberId, email, name, currentRole, modulesJson) {
+      document.getElementById('edit-role-member-id').value = memberId;
+      document.getElementById('edit-role-member-name').innerText = name || '—';
+      document.getElementById('edit-role-member-email').innerText = email;
+      const currentModules = (() => { try { return JSON.parse(modulesJson || '[]'); } catch(e) { return []; } })();
+      const select = document.getElementById('edit-role-select');
+      if (select) {
+        select.innerHTML = '<option value="admin">Administrator</option><option value="user">User (Custom Modules)</option>';
+        const customContainer = document.getElementById('edit-custom-access-container');
+        document.querySelectorAll('.edit-custom-access').forEach(cb => cb.checked = false);
+        if (currentRole === 'admin') {
+          select.value = 'admin';
+          customContainer.style.display = 'none';
+        } else {
+          select.value = 'user';
+          customContainer.style.display = 'flex';
+          currentModules.forEach(mod => {
+            const cb = document.querySelector(`.edit-custom-access[value="${mod}"]`);
+            if (cb) cb.checked = true;
+          });
+        }
+      }
+      document.getElementById('edit-role-modal').classList.add('open');
+    };
+
+    window.closeEditRoleModal = function() {
+      document.getElementById('edit-role-modal').classList.remove('open');
+    };
+
+    window.submitEditRole = async function(e) {
+      e.preventDefault();
+      const memberId = document.getElementById('edit-role-member-id').value;
+      const selectedAccess = document.getElementById('edit-role-select').value;
+      let newRole = null;
+      let newModules = [];
+      if (selectedAccess === 'admin') {
+        newRole = 'admin';
+      } else {
+        newModules = Array.from(document.querySelectorAll('.edit-custom-access:checked')).map(cb => cb.value);
+        if (newModules.length === 0) { showToast('Please check at least one access module.', true); return; }
+      }
+      try {
+        const { error } = await sb.from('tenant_members').update({
+          role: newRole,
+          accessible_modules: newModules
+        }).eq('id', memberId);
+        if (error) throw error;
+        showToast('Member access updated.');
+        closeEditRoleModal();
+        loadAllMembers();
+      } catch (err) {
+        showToast('Failed to update member access.', true);
+      }
+    };
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    }
+  </script>
+</body>
+</html>

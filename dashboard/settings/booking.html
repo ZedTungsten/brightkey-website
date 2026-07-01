@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Booking Settings — BrightKey Admin</title>
+  <link rel="preconnect" href="https://fonts.bunny.net" />
+  <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../../css/style.css" />
+  <link rel="icon" type="image/svg+xml" href="../../assets/favicon.svg?v=2" />
+
+  <link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+  <div class="toast-container" id="toast-container"></div>
+
+  <div class="dash-layout">
+    <!-- Sidebar -->
+    <aside class="dash-sidebar" id="dash-sidebar"></aside>
+
+    <!-- Main Content -->
+    <div class="dash-main">
+      <!-- Top Bar -->
+      <div class="top-bar">
+        <span class="top-bar-title">Company Settings</span>
+        <div style="flex:1;"></div>
+        <span id="topbar-date" style="font-size: 0.85rem; font-weight: 500; color: var(--text-secondary);"></span>
+      </div>
+
+      <div class="content-area" style="height: calc(100vh - 56px); overflow: hidden;">
+        <main class="main-panel">
+          <!-- Tab navigation -->
+          <div class="tabs-nav">
+            <a class="tab-btn" href="/dashboard/settings/company">Company</a>
+            <a class="tab-btn" href="/dashboard/settings/access">Access</a>
+            <a class="tab-btn" href="/dashboard/settings/assignments">Assignments</a>
+            <a class="tab-btn" href="/dashboard/settings/warehouse">Warehouse</a>
+            <a class="tab-btn" href="/dashboard/settings/sales">Sales</a>
+            <a class="tab-btn" href="/dashboard/settings/hr">HR</a>
+            <a class="tab-btn active" href="/dashboard/settings/booking">Booking</a>
+          </div>
+
+          <div class="scroll-area">
+            <!-- Booking Settings Content -->
+            <div class="tab-panel active">
+              
+              <!-- Section 1: Checklist Builder -->
+              <div class="panel-header">
+                <div class="panel-title">Installer Checklist Builder</div>
+                <div id="autosave-status" style="font-size: 0.78rem; font-weight: 600; color: var(--text-muted); transition: color 0.2s;">Saved</div>
+              </div>
+              
+              <div class="table-scroll" style="padding-bottom: 0;">
+                <div class="wh-card" style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1.25rem; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px;">
+                  <div style="font-size: 0.82rem; color: var(--text-secondary);">
+                    Define the installation checklist that technicians must complete before checking out of a job. Drag handles to reorder items, and toggle <strong>Sub-item</strong> to indent them. Changes are saved automatically.
+                  </div>
+                  
+                  <div id="booking-checklist-container" style="display: flex; flex-direction: column; gap: 0.75rem;">
+                    <!-- Checklist items will be rendered here -->
+                  </div>
+                  
+                  <div>
+                    <button type="button" class="btn btn-primary" onclick="addChecklistItem()">+ Add Item</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Section 2: Media Requirements -->
+              <div class="panel-header" style="margin-top: 1.5rem; border-top: 1px solid var(--border);">
+                <div class="panel-title">Fulfillment Media Requirements</div>
+                <div id="media-autosave-status" style="font-size: 0.78rem; font-weight: 600; color: var(--text-muted); transition: color 0.2s;">Saved</div>
+              </div>
+
+              <div class="table-scroll">
+                <div class="wh-card" style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1.25rem; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px;">
+                  <div style="font-size: 0.82rem; color: var(--text-secondary);">
+                    Configure specific photo/video requirements that technicians must upload upon completing an installation. Optionally upload a reference guide/sample photo for the installers to see. Changes are saved automatically.
+                  </div>
+
+                  <div id="booking-media-container" style="display: flex; flex-direction: column; gap: 0.75rem;">
+                    <!-- Media items will be rendered here -->
+                  </div>
+
+                  <div>
+                    <button type="button" class="btn btn-primary" onclick="addMediaRequirementItem()">+ Add Media Requirement</button>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="../../js/auth.js"></script>
+  <script src="../../js/sidebar.js"></script>
+  <script src="../../js/main.js"></script>
+  <script src="shared.js"></script>
+  <script>
+    'use strict';
+
+    let bookingChecklist = [];
+    let bookingMediaRequirements = [];
+
+    const defaultChecklist = [
+      { text: "Door opens and closes smoothly without obstruction", indent: false },
+      { text: "Smart lock operates properly (locking and unlocking)", indent: false },
+      { text: "Smart lock is successfully connected to the mobile app", indent: false },
+      { text: "I know how to create an account on the app", indent: true },
+      { text: "I have registered RFID card on the device", indent: true },
+      { text: "All components, including the camera, screen, handle, keypad, mechanical unlock, and deadbolt, are free of defects", indent: false },
+      { text: "Screws and fasteners are securely installed", indent: false },
+      { text: "I have been invited to leave a review for LOOCK Cavite and has consented to taking a photo with the device for documentation", indent: false },
+      { text: "Warranty coverage: 1 year on factory defects, 7 days on installation warranty (excludes user-caused damage, service may apply)", indent: false }
+    ];
+
+    const showToast = (msg, isError) => SettingsPage.showToast(msg, isError);
+
+    window.initSettingsPage = async function() {
+      await loadBookingSettings();
+      await loadBookingMediaRequirements();
+    };
+
+    async function loadBookingSettings() {
+      try {
+        const { data, error } = await sb
+          .from('global_settings')
+          .select('value')
+          .eq('key', 'booking_checklist')
+          .eq('company_id', currentCompanyId)
+          .maybeSingle();
+
+        if (error) throw error;
+        if (data && data.value && Array.isArray(data.value)) {
+          bookingChecklist = data.value;
+        } else {
+          bookingChecklist = [...defaultChecklist];
+        }
+        renderBookingChecklist();
+      } catch (err) {
+        console.error('Error loading Booking settings:', err);
+        bookingChecklist = [...defaultChecklist];
+        renderBookingChecklist();
+      }
+    }
+
+    let autosaveTimeout = null;
+    function triggerAutosave(immediate = false) {
+      updateAutosaveStatus('Saving...');
+      if (autosaveTimeout) clearTimeout(autosaveTimeout);
+      
+      const saveFn = async () => {
+        const validItems = bookingChecklist.map(item => ({
+          text: (item.text || '').trim(),
+          indent: !!item.indent
+        })).filter(item => item.text !== '');
+
+        try {
+          const { error } = await sb.from('global_settings').upsert({
+            key: 'booking_checklist',
+            company_id: currentCompanyId,
+            value: validItems
+          }, { onConflict: 'key, company_id' });
+
+          if (error) throw error;
+          updateAutosaveStatus('Saved');
+        } catch (err) {
+          console.error('Autosave failed:', err);
+          updateAutosaveStatus('Failed to save changes', true);
+        }
+      };
+
+      if (immediate) {
+        saveFn();
+      } else {
+        autosaveTimeout = setTimeout(saveFn, 1000);
+      }
+    }
+
+    function updateAutosaveStatus(text, isError = false) {
+      const statusEl = document.getElementById('autosave-status');
+      if (!statusEl) return;
+      statusEl.textContent = text;
+      if (isError) {
+        statusEl.style.color = 'var(--danger)';
+      } else if (text === 'Saving...') {
+        statusEl.style.color = 'var(--cyan-light)';
+      } else {
+        statusEl.style.color = 'var(--text-muted)';
+      }
+    }
+
+    window.addChecklistItem = function() {
+      bookingChecklist.push({ text: '', indent: false });
+      renderBookingChecklist();
+      triggerAutosave(true);
+    };
+
+    window.updateChecklistItem = function(index, field, value) {
+      if (bookingChecklist[index]) {
+        bookingChecklist[index][field] = value;
+        triggerAutosave(false);
+      }
+    };
+
+    window.toggleIndent = function(index) {
+      if (bookingChecklist[index]) {
+        bookingChecklist[index].indent = !bookingChecklist[index].indent;
+        renderBookingChecklist();
+        triggerAutosave(true);
+        
+        const input = document.getElementById(`checklist-text-input-${index}`);
+        if (input) {
+          input.focus();
+          const val = input.value;
+          input.value = '';
+          input.value = val;
+        }
+      }
+    };
+
+    window.removeChecklistItem = function(index) {
+      bookingChecklist.splice(index, 1);
+      renderBookingChecklist();
+      triggerAutosave(true);
+    };
+
+    let draggedIndex = null;
+
+    window.handleDragStart = function(e, index) {
+      draggedIndex = index;
+      e.dataTransfer.effectAllowed = 'move';
+      const row = e.target.closest('.checklist-builder-row');
+      if (row) row.classList.add('dragging');
+    };
+
+    window.handleDragOver = function(e, index) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      e.currentTarget.classList.add('drag-over');
+    };
+
+    window.handleDragLeave = function(e) {
+      e.currentTarget.classList.remove('drag-over');
+    };
+
+    window.handleDrop = function(e, targetIndex) {
+      e.preventDefault();
+      e.currentTarget.classList.remove('drag-over');
+      if (draggedIndex !== null && draggedIndex !== targetIndex) {
+        const item = bookingChecklist[draggedIndex];
+        bookingChecklist.splice(draggedIndex, 1);
+        bookingChecklist.splice(targetIndex, 0, item);
+        renderBookingChecklist();
+        triggerAutosave(true);
+      }
+      draggedIndex = null;
+    };
+
+    window.handleDragEnd = function(e) {
+      const row = e.target.closest('.checklist-builder-row');
+      if (row) row.classList.remove('dragging');
+      draggedIndex = null;
+    };
+
+    function renderBookingChecklist() {
+      const container = document.getElementById('booking-checklist-container');
+      if (!container) return;
+
+      if (bookingChecklist.length === 0) {
+        container.innerHTML = `<div style="text-align: center; font-size: 0.82rem; color: var(--text-muted); padding: 1rem 0;">No checklist items configured. Click "+ Add Item" to create one.</div>`;
+        return;
+      }
+
+      container.innerHTML = '';
+      bookingChecklist.forEach((item, index) => {
+        const itemRow = document.createElement('div');
+        itemRow.className = `checklist-builder-row ${item.indent ? 'indented' : ''}`;
+        itemRow.setAttribute('ondragover', `handleDragOver(event, ${index})`);
+        itemRow.setAttribute('ondragleave', 'handleDragLeave(event)');
+        itemRow.setAttribute('ondrop', `handleDrop(event, ${index})`);
+
+        itemRow.innerHTML = `
+          <div class="drag-handle" title="Drag to reorder" draggable="true" ondragstart="handleDragStart(event, ${index})" ondragend="handleDragEnd(event)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="12" r="1.5"></circle><circle cx="9" cy="5" r="1.5"></circle><circle cx="9" cy="19" r="1.5"></circle><circle cx="15" cy="12" r="1.5"></circle><circle cx="15" cy="5" r="1.5"></circle><circle cx="15" cy="19" r="1.5"></circle></svg>
+          </div>
+          <button type="button" class="btn-indent-toggle ${item.indent ? 'active' : ''}" onclick="toggleIndent(${index})" title="Toggle Sub-item/Indentation">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="transform: ${item.indent ? 'rotate(180deg)' : 'none'}; transition: transform 0.2s;"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            Sub-item
+          </button>
+          <input type="text" id="checklist-text-input-${index}" class="form-input" style="flex: 1; padding: 0.35rem 0.6rem; font-size: 0.82rem; height: 32px; background: var(--bg-surface);" value="${escapeHtml(item.text)}" oninput="updateChecklistItem(${index}, 'text', this.value)" placeholder="Enter checklist item text..." />
+          <div style="display: flex; align-items: center; gap: 0.35rem; flex-shrink: 0;">
+            <button type="button" class="btn-action-danger" onclick="removeChecklistItem(${index})" title="Remove Item">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+            </button>
+          </div>
+        `;
+        container.appendChild(itemRow);
+      });
+    }
+
+    async function loadBookingMediaRequirements() {
+      try {
+        const { data, error } = await sb
+          .from('global_settings')
+          .select('value')
+          .eq('key', 'booking_media_requirements')
+          .eq('company_id', currentCompanyId)
+          .maybeSingle();
+
+        if (error) throw error;
+        if (data && data.value && Array.isArray(data.value)) {
+          bookingMediaRequirements = data.value;
+        } else {
+          bookingMediaRequirements = [];
+        }
+        renderBookingMediaRequirements();
+      } catch (err) {
+        console.error('Error loading Booking media requirements:', err);
+        bookingMediaRequirements = [];
+        renderBookingMediaRequirements();
+      }
+    }
+
+    let mediaAutosaveTimeout = null;
+    function triggerMediaAutosave(immediate = false) {
+      updateMediaAutosaveStatus('Saving...');
+      if (mediaAutosaveTimeout) clearTimeout(mediaAutosaveTimeout);
+      
+      const saveFn = async () => {
+        const validItems = bookingMediaRequirements.map(item => ({
+          label: (item.label || '').trim(),
+          type: item.type || 'image',
+          guide_url: item.guide_url || ''
+        })).filter(item => item.label !== '');
+
+        try {
+          const { error } = await sb.from('global_settings').upsert({
+            key: 'booking_media_requirements',
+            company_id: currentCompanyId,
+            value: validItems
+          }, { onConflict: 'key, company_id' });
+
+          if (error) throw error;
+          updateMediaAutosaveStatus('Saved');
+        } catch (err) {
+          console.error('Media autosave failed:', err);
+          updateMediaAutosaveStatus('Failed to save changes', true);
+        }
+      };
+
+      if (immediate) {
+        saveFn();
+      } else {
+        mediaAutosaveTimeout = setTimeout(saveFn, 1000);
+      }
+    }
+
+    function updateMediaAutosaveStatus(text, isError = false) {
+      const statusEl = document.getElementById('media-autosave-status');
+      if (!statusEl) return;
+      statusEl.textContent = text;
+      if (isError) {
+        statusEl.style.color = 'var(--danger)';
+      } else if (text === 'Saving...') {
+        statusEl.style.color = 'var(--cyan-light)';
+      } else {
+        statusEl.style.color = 'var(--text-muted)';
+      }
+    }
+
+    window.addMediaRequirementItem = function() {
+      bookingMediaRequirements.push({ label: '', type: 'image', guide_url: '' });
+      renderBookingMediaRequirements();
+      triggerMediaAutosave(true);
+    };
+
+    window.updateMediaRequirementItem = function(index, field, value) {
+      if (bookingMediaRequirements[index]) {
+        bookingMediaRequirements[index][field] = value;
+        triggerMediaAutosave(false);
+      }
+    };
+
+    window.handleGuideImageUpload = function(event, index) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      if (file.size > 1024 * 1024) {
+        showToast('Guide image must be less than 1MB.', true);
+        event.target.value = '';
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const base64Url = e.target.result;
+        if (bookingMediaRequirements[index]) {
+          bookingMediaRequirements[index].guide_url = base64Url;
+          renderBookingMediaRequirements();
+          triggerMediaAutosave(true);
+        }
+      };
+      reader.readAsDataURL(file);
+    };
+
+    window.removeMediaRequirementItem = function(index) {
+      bookingMediaRequirements.splice(index, 1);
+      renderBookingMediaRequirements();
+      triggerMediaAutosave(true);
+    };
+
+    function renderBookingMediaRequirements() {
+      const container = document.getElementById('booking-media-container');
+      if (!container) return;
+
+      if (bookingMediaRequirements.length === 0) {
+        container.innerHTML = `<div style="text-align: center; font-size: 0.82rem; color: var(--text-muted); padding: 1rem 0;">No media requirements configured. Click "+ Add Media Requirement" to create one.</div>`;
+        return;
+      }
+
+      container.innerHTML = '';
+      bookingMediaRequirements.forEach((item, index) => {
+        const itemRow = document.createElement('div');
+        itemRow.style.cssText = 'display: grid; grid-template-columns: 1fr auto auto auto; gap: 0.75rem; align-items: center; padding: 0.75rem; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-elevated);';
+
+        const guidePreviewHtml = item.guide_url
+          ? `<div style="position: relative; width: 48px; height: 48px; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; background: #000;">
+               <img src="${escapeHtml(item.guide_url)}" style="width: 100%; height: 100%; object-fit: contain;" />
+               <button type="button" style="position: absolute; top: 0; right: 0; background: rgba(220,38,38,0.85); color: #fff; border: none; border-radius: 0 0 0 4px; width: 16px; height: 16px; font-size: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; font-family: monospace;" onclick="event.stopPropagation(); updateMediaRequirementItem(${index}, 'guide_url', ''); renderBookingMediaRequirements(); triggerMediaAutosave(true);">×</button>
+             </div>`
+          : `<div style="width: 48px; height: 48px; border: 1px dashed var(--border); border-radius: 4px; display: flex; align-items: center; justify-content: center; background: var(--bg-surface); cursor: pointer;" onclick="document.getElementById('guide-file-input-${index}').click();">
+               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-muted);"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+             </div>`;
+
+        itemRow.innerHTML = `
+          <input type="text" class="form-input" style="padding: 0.35rem 0.6rem; font-size: 0.82rem; height: 36px; background: var(--bg-surface);" value="${escapeHtml(item.label)}" oninput="updateMediaRequirementItem(${index}, 'label', this.value)" placeholder="Requirement Label (e.g. Front Door View)" />
+          
+          <select class="form-select" style="width: 140px; height: 36px; padding: 0.35rem 1.75rem 0.35rem 0.6rem; font-size: 0.82rem; background: var(--bg-surface);" onchange="updateMediaRequirementItem(${index}, 'type', this.value)">
+            <option value="image" ${item.type === 'image' ? 'selected' : ''}>Image Only</option>
+            <option value="video" ${item.type === 'video' ? 'selected' : ''}>Video Only</option>
+            <option value="both" ${item.type === 'both' ? 'selected' : ''}>Image or Video</option>
+          </select>
+ 
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <input type="file" id="guide-file-input-${index}" style="display: none;" accept="image/*" onchange="handleGuideImageUpload(event, ${index})" />
+            ${guidePreviewHtml}
+          </div>
+ 
+          <button type="button" class="btn-action-danger" style="height: 36px; width: 36px;" onclick="removeMediaRequirementItem(${index})" title="Remove Requirement">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+          </button>
+        `;
+        container.appendChild(itemRow);
+      });
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    }
+  </script>
+</body>
+</html>

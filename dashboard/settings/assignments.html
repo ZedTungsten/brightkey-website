@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Assignments Settings — BrightKey Admin</title>
+  <link rel="preconnect" href="https://fonts.bunny.net" />
+  <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../../css/style.css" />
+  <link rel="icon" type="image/svg+xml" href="../../assets/favicon.svg?v=2" />
+
+  <link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+  <div class="toast-container" id="toast-container"></div>
+
+  <div class="dash-layout">
+    <!-- Sidebar -->
+    <aside class="dash-sidebar" id="dash-sidebar"></aside>
+
+    <!-- Main Content -->
+    <div class="dash-main">
+      <!-- Top Bar -->
+      <div class="top-bar">
+        <span class="top-bar-title">Company Settings</span>
+        <div style="flex:1;"></div>
+        <span id="topbar-date" style="font-size: 0.85rem; font-weight: 500; color: var(--text-secondary);"></span>
+      </div>
+
+      <div class="content-area" style="height: calc(100vh - 56px); overflow: hidden;">
+        <main class="main-panel">
+          <!-- Tab navigation -->
+          <div class="tabs-nav">
+            <a class="tab-btn" href="/dashboard/settings/company">Company</a>
+            <a class="tab-btn" href="/dashboard/settings/access">Access</a>
+            <a class="tab-btn active" href="/dashboard/settings/assignments">Assignments</a>
+            <a class="tab-btn" href="/dashboard/settings/warehouse">Warehouse</a>
+            <a class="tab-btn" href="/dashboard/settings/sales">Sales</a>
+            <a class="tab-btn" href="/dashboard/settings/hr">HR</a>
+            <a class="tab-btn" href="/dashboard/settings/booking">Booking</a>
+          </div>
+
+          <div class="scroll-area">
+            <!-- Assignments Content -->
+            <div class="tab-panel active">
+              <div class="panel-header">
+                <div class="panel-title">Assignments</div>
+                <button class="btn btn-primary btn-sm" onclick="saveAssignments()">Save Assignments</button>
+              </div>
+
+              <div class="table-scroll">
+                <div class="card-table">
+                  <table class="assign-table">
+                    <thead>
+                      <tr>
+                        <th style="width: 220px;">Assignment Name</th>
+                        <th>Visibility</th>
+                        <th style="width: 60px;"></th>
+                      </tr>
+                    </thead>
+                    <tbody id="assignments-tbody">
+                      <tr><td colspan="3" class="empty-state">Loading assignments...</td></tr>
+                    </tbody>
+                  </table>
+                  <div style="padding: 0.85rem 1.25rem; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; background: var(--bg-surface);">
+                    <button class="btn btn-primary" onclick="addAssignment()">+ Add Assignment</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="../../js/auth.js"></script>
+  <script src="../../js/sidebar.js"></script>
+  <script src="../../js/main.js"></script>
+  <script src="shared.js"></script>
+  <script>
+    'use strict';
+
+    let assignments = [];
+    const VISIBILITY_OPTIONS = [
+      { key: 'booking.door_specifications', label: 'Booking › Door Specifications' },
+      { key: 'sales.commissions', label: 'Sales › Commissions' }
+    ];
+    const showToast = (msg, isError) => SettingsPage.showToast(msg, isError);
+
+    window.initSettingsPage = async function() {
+      await loadAssignments();
+    };
+
+    async function loadAssignments() {
+      const tbody = document.getElementById('assignments-tbody');
+      if (!tbody) return;
+      tbody.innerHTML = '<tr><td colspan="3" class="empty-state">Loading assignments…</td></tr>';
+      try {
+        const { data, error } = await sb.from('employee_assignments').select('*').eq('company_id', currentCompanyId).order('created_at', { ascending: true });
+        if (error) throw error;
+        assignments = (data || []).map(r => ({ id: r.id, name: r.name, visibility: Array.isArray(r.visibility) ? r.visibility : [] }));
+        renderAssignments();
+      } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="3" class="empty-state" style="color:var(--danger);">Failed to load: ${e.message}</td></tr>`;
+      }
+    }
+
+    function renderAssignments() {
+      const tbody = document.getElementById('assignments-tbody');
+      if (!tbody) return;
+      if (assignments.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="3" class="empty-state">No assignments yet. Click "+ Add Assignment" to create one.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = assignments.map((a, idx) => `
+        <tr>
+          <td><input type="text" class="form-input" value="${escapeHtml(a.name)}" oninput="assignments[${idx}].name = this.value" placeholder="e.g. Installer" style="max-width: 200px;" /></td>
+          <td><div class="vis-group">${VISIBILITY_OPTIONS.map(opt => `<label class="vis-label"><input type="checkbox" value="${opt.key}" ${a.visibility.includes(opt.key) ? 'checked' : ''} onchange="toggleVisibility(${idx}, '${opt.key}', this.checked)" />${opt.label}</label>`).join('')}</div></td>
+          <td><button class="btn btn-danger btn-sm" onclick="deleteAssignment(${idx}, '${a.id || ''}')" title="Delete assignment" style="padding: 0.35rem 0.55rem;"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button></td>
+        </tr>
+      `).join('');
+    }
+
+    window.addAssignment = function() {
+      assignments.push({ id: null, name: '', visibility: [] });
+      renderAssignments();
+      const inputs = document.querySelectorAll('#assignments-tbody input[type="text"]');
+      if (inputs.length) inputs[inputs.length - 1].focus();
+    };
+
+    window.toggleVisibility = function(idx, key, checked) {
+      const vis = assignments[idx].visibility;
+      if (checked && !vis.includes(key)) vis.push(key);
+      if (!checked) assignments[idx].visibility = vis.filter(v => v !== key);
+    };
+
+    window.deleteAssignment = async function(idx, id) {
+      if (id) {
+        try {
+          const { error } = await sb.from('employee_assignments').delete().eq('id', id);
+          if (error) throw error;
+        } catch (e) {
+          showToast('Delete failed: ' + e.message, true);
+          return;
+        }
+      }
+      assignments.splice(idx, 1);
+      renderAssignments();
+      showToast('Assignment removed.');
+    };
+
+    window.saveAssignments = async function() {
+      for (const a of assignments) {
+        if (!a.name.trim()) { showToast('Assignment name cannot be empty.', true); return; }
+      }
+      try {
+        for (const a of assignments) {
+          if (a.id) {
+            const { error } = await sb.from('employee_assignments').update({ name: a.name.trim(), visibility: a.visibility }).eq('id', a.id);
+            if (error) throw error;
+          } else {
+            const { data, error } = await sb.from('employee_assignments').insert([{ company_id: currentCompanyId, name: a.name.trim(), visibility: a.visibility }]).select().single();
+            if (error) throw error;
+            a.id = data.id;
+          }
+        }
+        showToast('Assignments saved.');
+        renderAssignments();
+      } catch (e) {
+        showToast('Save failed: ' + e.message, true);
+      }
+    };
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    }
+  </script>
+</body>
+</html>
