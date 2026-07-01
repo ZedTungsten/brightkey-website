@@ -406,7 +406,7 @@
 
         // Compute commissions for this month
         const parseDoors = (b) => { if (!b) return []; if (Array.isArray(b.doors)) return b.doors; try { return JSON.parse(b.doors); } catch (_) { return []; } };
-        const empComms = commAssignments.filter(a => {
+        const parsedCommAssignments = commAssignments.filter(a => {
           const b = bookings.find(x => x.id === a.booking_id);
           if (!b || b.status === 'cancelled') return false;
           const doors = parseDoors(b);
@@ -417,9 +417,20 @@
           if (!ds) return false;
           const d = new Date(ds);
           return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}` === mk;
-        }).reduce((s, a) => s + (a.amount / 100), 0);
+        }).map(a => {
+          const b = bookings.find(x => x.id === a.booking_id);
+          const doors = parseDoors(b);
+          const door  = doors[a.product_index];
+          const ds = (door && door.completed_at) || b.updated_at || b.created_at;
+          return {
+            amount: a.amount / 100,
+            date: ds
+          };
+        });
 
-        return { adjs, reimbs, empComms };
+        const empComms = parsedCommAssignments.reduce((s, a) => s + a.amount, 0);
+
+        return { adjs, reimbs, empComms, parsedCommAssignments };
       },
 
       async generatePreview() {
@@ -436,9 +447,9 @@
         const empSpecs   = this.specialSchedules.filter(s => s.employeeId === emp.id);
 
         // Lazy fetch per-employee data for this month
-        let adjs = [], reimbs = [], empComms = 0;
+        let adjs = [], reimbs = [], empComms = 0, parsedCommAssignments = [];
         try {
-          ({ adjs, reimbs, empComms } = await this.fetchEmployeeMonthData(empId));
+          ({ adjs, reimbs, empComms, parsedCommAssignments } = await this.fetchEmployeeMonthData(empId));
         } catch (e) { console.error(e); }
 
         const totalReimbs = reimbs.reduce((s, r) => s + (Number(r.amount) || 0), 0);
@@ -481,17 +492,16 @@
 
         // Cutoff schedule rows
         let cutoffHtml = '';
-        let verifiedTotal = 0;
         sortedScheds.forEach(day => {
           const sp = baseSalary / sortedScheds.length;
-          const av = adjs.filter(a => { const d = new Date(a.date); return getSchedDay(d.getDate(), sortedScheds) === day; }).reduce((s, a) => s + (Number(a.amount) || 0), 0);
-          const rv = reimbs.filter(r => { const d = new Date(r.date); return getSchedDay(d.getDate(), sortedScheds) === day; }).reduce((s, r) => s + (Number(r.amount) || 0), 0);
+          const av = adjs.filter(a => { const d = new Date(a.date); return getSchedDay(d.getUTCDate(), sortedScheds) === day; }).reduce((s, a) => s + (Number(a.amount) || 0), 0);
+          const rv = reimbs.filter(r => { const d = new Date(r.date); return getSchedDay(d.getUTCDate(), sortedScheds) === day; }).reduce((s, r) => s + (Number(r.amount) || 0), 0);
+          const cv = parsedCommAssignments.filter(c => { const d = new Date(c.date); return getSchedDay(d.getUTCDate(), sortedScheds) === day; }).reduce((s, c) => s + c.amount, 0);
           const xv = empSpecs.filter(s => getSchedDay(Number(s.day), sortedScheds) === day).reduce((s, x) => s + (Number(x.value) || 0), 0);
-          const total = sp + av + rv + xv;
-          verifiedTotal += total;
+          const total = sp + av + rv + cv + xv;
           cutoffHtml += `<div style="display:flex;justify-content:space-between;padding:0.5rem 0;font-size:0.85rem;border-bottom:1px dashed #e5e7eb;"><span style="font-weight:500;color:#4b5563;">Cutoff Payout (Day ${day})</span><span style="font-weight:700;color:#111827;font-variant-numeric:tabular-nums;margin-right:12px;">${php(total)}</span></div>`;
         });
-        verifiedTotal += empComms + totalSpecs;
+        const verifiedTotal = baseSalary + empComms + totalAdjs + totalReimbs + totalSpecs;
 
         // Company assets
         const logoUrl     = this.payslipConfig.logoStyle === 'dark' ? this.companyProfileConfig.logoDark : this.companyProfileConfig.logoLight;
