@@ -595,6 +595,7 @@
       const isSingleDoorGrouping = (doorsArr.length === 1 && productsArr.length > 0);
       
       const renderedProductSkus = new Set();
+      const skuOccurrenceCount = new Map();
       const rowCount = Math.max(productsArr.length, doorsArr.length, skus.length);
 
       if (rowCount === 0) {
@@ -608,7 +609,18 @@
           let doorProducts = [];
           if (anyDoorHasAttachedProducts) {
             const attachedSkus = door.products || [];
-            doorProducts = productsArr.filter(p => attachedSkus.includes(p.sku));
+            doorProducts = [];
+            attachedSkus.forEach(sku => {
+              const matchingProds = productsArr.filter(p => p.sku === sku);
+              const occurrenceIndex = skuOccurrenceCount.get(sku) || 0;
+              const matchedProd = matchingProds[occurrenceIndex];
+              if (matchedProd) {
+                doorProducts.push(matchedProd);
+              } else {
+                doorProducts.push({ sku: sku, name: sku, title: sku });
+              }
+              skuOccurrenceCount.set(sku, occurrenceIndex + 1);
+            });
             attachedSkus.forEach(s => renderedProductSkus.add(s));
           } else if (isSingleDoorGrouping) {
             doorProducts = productsArr.filter(p => p.sku !== 'ADD-ON LABOR');
