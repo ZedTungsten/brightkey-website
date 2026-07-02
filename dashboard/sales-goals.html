@@ -1696,10 +1696,19 @@
           return;
         }
 
+        // Fetch employee details for the top leaders directly (avoids Active-only filter issue)
+        const leaderEmpIds = top5.map(l => l.employee_id);
+        const { data: leaderEmps } = await sb
+          .from('employees')
+          .select('id, first_name, last_name, profile_picture_url')
+          .in('id', leaderEmpIds);
+        const leaderEmpMap = {};
+        (leaderEmps || []).forEach(e => { leaderEmpMap[e.id] = e; });
+
         // Render leaderboard list
         container.innerHTML = '';
         top5.forEach((leader, idx) => {
-          const emp = allEmployees.find(e => e.id === leader.employee_id) || { first_name: 'Unknown', last_name: 'Employee' };
+          const emp = leaderEmpMap[leader.employee_id] || { first_name: 'Unknown', last_name: 'Employee' };
           const fullName = `${emp.first_name} ${emp.last_name}`;
           const initials = `${emp.first_name[0] || ''}${emp.last_name[0] || ''}`.toUpperCase();
           const avatarUrl = emp.profile_picture_url || '';
