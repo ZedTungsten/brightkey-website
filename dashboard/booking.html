@@ -914,10 +914,9 @@
       }
 
       function updateWidgetMap() {
-        const addr = (addrInput?.value || '').trim();
         const city = (cityInput?.value || '').trim();
         const prov = (provInput?.value || '').trim();
-        const destQuery = [addr, city, prov].filter(Boolean).join(', ');
+        const destQuery = [city, prov].filter(Boolean).join(', ');
 
         const placeholder = document.getElementById('map-placeholder-text');
         const iframe = document.getElementById('live-map-iframe');
@@ -946,12 +945,12 @@
               const emp = dbEmployees.find(e => e.id === id);
               if (emp) {
                 const fullName = `${emp.first_name} ${emp.last_name || ''}`.trim();
-                const addressStr = emp.address || '';
+                const locationStr = [emp.city, emp.province].filter(Boolean).join(', ');
                 shellHtml += `
                   <div style="background: var(--bg-elevated); padding: 0.6rem; border-radius: var(--radius-xs); border: 1px solid var(--border);" id="sidebar-inst-card-${id}">
                     <div style="font-weight: 600; color: var(--text-primary); margin-bottom: 0.2rem;">${escapeHtml(fullName)}</div>
                     <div style="font-size: 0.72rem; color: var(--text-secondary); line-height: 1.3;">
-                      <strong>Home Address:</strong> ${addressStr ? escapeHtml(addressStr) : 'No address loaded in record'}
+                      <strong>Home Location:</strong> ${locationStr ? escapeHtml(locationStr) : 'No address loaded in record'}
                     </div>
                     <div class="distance-value" style="margin-top: 0.35rem; font-weight: 700; color: var(--cyan-light); font-size: 0.75rem;">Calculating distance...</div>
                   </div>
@@ -963,8 +962,9 @@
             // Resolve distances asynchronously
             selectedInstallerIds.forEach(async (id) => {
               const emp = dbEmployees.find(e => e.id === id);
-              if (emp && emp.address && destQuery) {
-                const km = await estimateDistance(emp.address, destQuery);
+              const empLoc = emp ? [emp.city, emp.province].filter(Boolean).join(', ') : '';
+              if (empLoc && destQuery) {
+                const km = await estimateDistance(empLoc, destQuery);
                 const card = document.getElementById(`sidebar-inst-card-${id}`);
                 if (card) {
                   const valDiv = card.querySelector('.distance-value');
@@ -983,13 +983,13 @@
           }
         }
 
-        // 3. Resolve Route: Use the first assigned installer's address as starting point
+        // 3. Resolve Route: Use the first assigned installer's city & province as starting point
         let startQuery = '';
         if (selectedInstallerIds.size > 0) {
           const firstId = Array.from(selectedInstallerIds)[0];
           const emp = dbEmployees.find(e => e.id === firstId);
-          if (emp && emp.address) {
-            startQuery = emp.address.trim();
+          if (emp) {
+            startQuery = [emp.city, emp.province].filter(Boolean).join(', ').trim();
           }
         }
 

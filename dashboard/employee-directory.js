@@ -908,6 +908,8 @@
           ${cell(emp.last_name, 'last_name', 'text', 'col-last-name')}
           ${cellDate(emp.date_of_birth, 'date_of_birth', 'grp-personal')}
           ${cell(emp.address, 'address', 'text', 'grp-personal col-address')}
+          ${cell(emp.city, 'city', 'text', 'grp-personal')}
+          ${cell(emp.province, 'province', 'text', 'grp-personal')}
           ${cell(emp.contact_number, 'contact_number', 'text', 'grp-personal col-contact')}
           ${cell(emp.emergency_contact_number, 'emergency_contact_number', 'text', 'grp-personal')}
           ${cell(emp.email, 'email', 'text', 'grp-personal col-email')}
@@ -1368,7 +1370,7 @@
             ['reporting_to', 'Reporting To'], ['level', 'Level'], ['job_description', 'Job Description'],
             ['date_hired', 'Date Hired'], ['employment_status', 'Status'], ['salary', 'Salary'],
             ['first_name', 'First Name'], ['middle_name', 'Middle Name'], ['last_name', 'Last Name'],
-            ['date_of_birth', 'Date of Birth'], ['address', 'Address'],
+            ['date_of_birth', 'Date of Birth'], ['address', 'Street Address'], ['city', 'City'], ['province', 'Province'],
             ['contact_number', 'Contact #'], ['emergency_contact_number', 'Emergency Contact'],
             ['email', 'Email'], ['tin', 'TIN'], ['sss', 'SSS'],
             ['pagibig', 'PAG-IBIG'], ['philhealth', 'PhilHealth'],
@@ -1740,6 +1742,8 @@
           middle_name: document.getElementById('new-emp-middle-name').value.trim(),
           date_of_birth: document.getElementById('new-emp-dob').value || null,
           address: document.getElementById('new-emp-address').value.trim(),
+          city: document.getElementById('new-emp-city').value.trim(),
+          province: document.getElementById('new-emp-province').value.trim(),
           contact_number: document.getElementById('new-emp-contact').value.trim(),
           emergency_contact_number: emergencyCombined,
           email: document.getElementById('new-emp-email').value.trim(),
