@@ -352,6 +352,16 @@
     .booking-card.afternoon .booking-time {
       color: #2563eb;
     }
+    .booking-card.day-off {
+      background-color: #fef2f2 !important;
+      border-color: #fecaca !important;
+    }
+    .booking-card.day-off:hover {
+      border-color: #ef4444 !important;
+    }
+    .booking-card.day-off .booking-time {
+      color: #dc2626 !important;
+    }
     .booking-card.completed-booking {
       background-color: #F4F4F5 !important;
       border-color: #D4D4D8 !important;
@@ -2708,7 +2718,7 @@
         const isDone = doorsArr.length > 0 && doorsArr.every(d => d.completed);
         const hasMedia = doorsArr.some(d => d.media_urls && d.media_urls.length > 0);
 
-        const isEvent = b.product_skus === 'Backjob' || b.product_skus === 'Ocular';
+        const isEvent = b.product_skus === 'Backjob' || b.product_skus === 'Ocular' || b.product_skus === 'Day off';
         const hasCompleteMedia = doorsArr.length > 0 && doorsArr.every(d => {
           if (isEvent || !bookingMediaRequirements || bookingMediaRequirements.length === 0) {
             return d.media_urls && d.media_urls.length > 0;
@@ -2716,7 +2726,8 @@
           return bookingMediaRequirements.every(req => d.required_media && d.required_media[req.label]);
         });
 
-        let cardClass = isAfternoon(timeVal) ? 'booking-card afternoon' : 'booking-card morning';
+        const isDayOff = b.product_skus === 'Day off';
+        let cardClass = isDayOff ? 'booking-card day-off' : (isAfternoon(timeVal) ? 'booking-card afternoon' : 'booking-card morning');
         if (isDone) {
           cardClass += ' completed-booking';
         }
@@ -3005,7 +3016,7 @@
               </div>
             `;
           } else if (isAssignedToThisDoor) {
-            const isEvent = selectedBooking.product_skus === 'Backjob' || selectedBooking.product_skus === 'Ocular';
+            const isEvent = selectedBooking.product_skus === 'Backjob' || selectedBooking.product_skus === 'Ocular' || selectedBooking.product_skus === 'Day off';
             if (door?.completed) {
               doneButtonHtml = `
                 <div style="position: absolute; top: 0.85rem; right: 1rem; display: flex; flex-direction: column; gap: 0.4rem; align-items: flex-end;">
@@ -3311,33 +3322,44 @@
         buttonEl.innerText = 'Completing...';
       }
 
-      let doorsArr = [];
-      if (typeof selectedBooking.doors === 'string') {
-        try { doorsArr = JSON.parse(selectedBooking.doors); } catch(_) {}
-      } else if (Array.isArray(selectedBooking.doors)) {
-        doorsArr = selectedBooking.doors;
-      }
-
-      while (doorsArr.length <= doorIndex) {
-        doorsArr.push({
-          doorMaterial: 'N/A',
-          jambMaterial: 'N/A',
-          swing: 'N/A',
-          completed: false,
-          signature: null,
-          media_urls: []
-        });
-      }
-
-      const door = doorsArr[doorIndex];
-      if (!door) return;
-
-      door.completed = true;
-      door.completed_at = new Date().toISOString();
-      door.signature = null;
-      door.checklist = [];
-
       try {
+        // Fetch fresh doors array from DB first to prevent concurrent overwrite
+        const { data: freshBooking, error: fetchErr } = await sb
+          .from('installation_bookings')
+          .select('doors')
+          .eq('id', selectedBooking.id)
+          .single();
+
+        if (fetchErr) throw fetchErr;
+
+        let doorsArr = [];
+        if (freshBooking && freshBooking.doors) {
+          if (typeof freshBooking.doors === 'string') {
+            try { doorsArr = JSON.parse(freshBooking.doors); } catch(_) {}
+          } else if (Array.isArray(freshBooking.doors)) {
+            doorsArr = freshBooking.doors;
+          }
+        }
+
+        while (doorsArr.length <= doorIndex) {
+          doorsArr.push({
+            doorMaterial: 'N/A',
+            jambMaterial: 'N/A',
+            swing: 'N/A',
+            completed: false,
+            signature: null,
+            media_urls: []
+          });
+        }
+
+        const door = doorsArr[doorIndex];
+        if (!door) return;
+
+        door.completed = true;
+        door.completed_at = new Date().toISOString();
+        door.signature = null;
+        door.checklist = [];
+
         const { error } = await sb
           .from('installation_bookings')
           .update({ doors: doorsArr })
@@ -3616,7 +3638,7 @@
       if (!door) return;
 
       // Populate existing required media from DB
-      const isEvent = selectedBooking && (selectedBooking.product_skus === 'Backjob' || selectedBooking.product_skus === 'Ocular');
+      const isEvent = selectedBooking && (selectedBooking.product_skus === 'Backjob' || selectedBooking.product_skus === 'Ocular' || selectedBooking.product_skus === 'Day off');
       const activeReqs = isEvent ? [] : bookingMediaRequirements;
       if (door.required_media) {
         if (activeReqs && activeReqs.length > 0) {
@@ -3664,7 +3686,7 @@
       const section = document.getElementById('required-media-section');
       if (!container) return;
 
-      const isEvent = selectedBooking && (selectedBooking.product_skus === 'Backjob' || selectedBooking.product_skus === 'Ocular');
+      const isEvent = selectedBooking && (selectedBooking.product_skus === 'Backjob' || selectedBooking.product_skus === 'Ocular' || selectedBooking.product_skus === 'Day off');
       const activeReqs = isEvent ? [] : bookingMediaRequirements;
       if (!activeReqs || activeReqs.length === 0) {
         section.style.display = 'none';
@@ -4017,7 +4039,7 @@
       const submitBtn = document.getElementById('btn-submit-upload');
       if (!submitBtn) return;
 
-      const isEvent = selectedBooking && (selectedBooking.product_skus === 'Backjob' || selectedBooking.product_skus === 'Ocular');
+      const isEvent = selectedBooking && (selectedBooking.product_skus === 'Backjob' || selectedBooking.product_skus === 'Ocular' || selectedBooking.product_skus === 'Day off');
       const activeReqs = isEvent ? [] : bookingMediaRequirements;
 
       let allRequirementsFilled = true;
@@ -4070,7 +4092,7 @@
         if (!door) return;
 
         // 1. Build door.required_media
-        const isEvent = selectedBooking && (selectedBooking.product_skus === 'Backjob' || selectedBooking.product_skus === 'Ocular');
+        const isEvent = selectedBooking && (selectedBooking.product_skus === 'Backjob' || selectedBooking.product_skus === 'Ocular' || selectedBooking.product_skus === 'Day off');
         const activeReqs = isEvent ? [] : bookingMediaRequirements;
         door.required_media = {};
         activeReqs.forEach((item, idx) => {

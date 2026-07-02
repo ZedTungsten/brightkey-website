@@ -439,8 +439,10 @@
                    </div>`
                 : (b.installer_name ? `<span class="calendar-inst-badge">${escapeHtml(formatInstallerName(b.installer_name))}</span>` : ''));
 
+          const isDayOff = b.product_skus === 'Day off';
+          const slotColorClass = isDayOff ? 'day-off' : (isAfternoon(b.scheduled_time) ? 'pm' : 'am');
           const slotHtml = `
-            <div class="calendar-slot ${isAfternoon(b.scheduled_time) ? 'pm' : 'am'}${isAborted ? ' aborted' : ''}${isFullyDone ? ' completed-media' : ''}" title="${escapeHtml(b.customer_name)} (${escapeHtml(cityStr)})" onclick="event.stopPropagation(); showBookingDetails('${b.id}')">
+            <div class="calendar-slot ${slotColorClass}${isAborted ? ' aborted' : ''}${isFullyDone ? ' completed-media' : ''}" title="${escapeHtml(b.customer_name)} (${escapeHtml(cityStr)})" onclick="event.stopPropagation(); showBookingDetails('${b.id}')">
               <div style="font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; width:100%;">${displayText}</div>
               ${badgeHtml}
             </div>
@@ -1902,8 +1904,15 @@
       const installerNameStr = installersList.length > 0 ? installersList.map(i => i.name).join(' | ') : null;
 
       const eventType = document.getElementById('event-type').value;
-      const eventTypeName = eventType === 'ocular' ? 'Ocular' : 'Backjob';
-      const typePrefix = eventType === 'ocular' ? 'OC' : 'BJ';
+      let eventTypeName = 'Backjob';
+      let typePrefix = 'BJ';
+      if (eventType === 'ocular') {
+        eventTypeName = 'Ocular';
+        typePrefix = 'OC';
+      } else if (eventType === 'day_off') {
+        eventTypeName = 'Day off';
+        typePrefix = 'DO';
+      }
 
       // Find matched previous customer to copy details from
       const sorted = [...dbBookings].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
