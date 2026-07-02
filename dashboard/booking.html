@@ -593,34 +593,13 @@
             </button>
           </div>
           
-          <!-- Separated Route Map & Installer Locations Container -->
+          <!-- Route & Installer Details Container -->
           <div class="panel" style="padding: 1.25rem;">
             <h4 style="font-size: 0.85rem; font-weight: 700; margin-bottom: 0.75rem; color: var(--text-primary); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid var(--border); padding-bottom: 0.35rem;">Route & Installer Details</h4>
             
-            <div style="margin-bottom: 1rem;">
-              <h5 style="font-size: 0.75rem; font-weight: 700; margin-bottom: 0.5rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.04em;">Route Map</h5>
-              <div id="map-widget-container" style="width: 100%; height: 350px; border-radius: var(--radius-sm); overflow: hidden; border: 1px solid var(--border); background: var(--bg-elevated); display: flex; align-items: center; justify-content: center; position: relative;">
-                <div id="map-placeholder-text" style="font-size: 0.78rem; color: var(--text-muted); text-align: center; padding: 1rem;">
-                  Enter customer address to load live map view.
-                </div>
-                <iframe id="live-map-iframe" src="" style="width: 100%; height: 100%; border: none; display: none;" allowfullscreen="" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
-              </div>
-              
-              <div id="route-details-panel" style="margin-top: 0.5rem; font-size: 0.75rem; display: none; flex-direction: column; gap: 0.35rem;">
-                <div style="color: var(--text-secondary); line-height: 1.3;">
-                  <strong>From:</strong> <span id="route-from-text">N/A</span>
-                </div>
-                <div style="color: var(--text-secondary); line-height: 1.3;">
-                  <strong>To:</strong> <span id="route-to-text">N/A</span>
-                </div>
-              </div>
-            </div>
-
-            <div style="border-top: 1px dashed var(--border); padding-top: 0.75rem;">
-              <h5 style="font-size: 0.75rem; font-weight: 700; margin-bottom: 0.5rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.04em;">Installer Locations</h5>
-              <div id="sidebar-installers-list" style="display: flex; flex-direction: column; gap: 0.65rem; max-height: 250px; overflow-y: auto;">
-                <!-- Dynamic list of installers loaded here -->
-                <span style="font-size:0.75rem; color:var(--text-muted); font-style:italic;">No installers assigned to doors yet</span>
+            <div id="sidebar-installers-list" style="display: flex; flex-direction: column; gap: 0.85rem;">
+              <div style="background: var(--bg-elevated); padding: 1rem; border-radius: var(--radius-xs); border: 1px solid var(--border); text-align: center;">
+                <span style="font-size:0.75rem; color:var(--text-muted); font-style:italic;">Enter customer address to load live map view</span>
               </div>
             </div>
           </div>
@@ -764,13 +743,17 @@
         const prov = (provInput?.value || '').trim();
         const destQuery = [addr, city, prov].filter(Boolean).join(', ');
 
-        const placeholder = document.getElementById('map-placeholder-text');
-        const iframe = document.getElementById('live-map-iframe');
-        const routePanel = document.getElementById('route-details-panel');
-        const fromText = document.getElementById('route-from-text');
-        const toText = document.getElementById('route-to-text');
-        const distText = document.getElementById('route-distance-text');
         const sidebarList = document.getElementById('sidebar-installers-list');
+        if (!sidebarList) return;
+
+        if (!destQuery) {
+          sidebarList.innerHTML = `
+            <div style="background: var(--bg-elevated); padding: 1rem; border-radius: var(--radius-xs); border: 1px solid var(--border); text-align: center;">
+              <span style="font-size:0.75rem; color:var(--text-muted); font-style:italic;">Enter customer address to load live map view</span>
+            </div>
+          `;
+          return;
+        }
 
         // 1. Gather all unique selected installer IDs from all door card dropdowns
         const selectedInstallerIds = new Set();
@@ -780,72 +763,51 @@
           }
         });
 
-        // 2. Render Installers sidebar status
-        if (sidebarList) {
-          if (selectedInstallerIds.size === 0) {
-            sidebarList.innerHTML = '<span style="font-size:0.75rem; color:var(--text-muted); font-style:italic;">No installers assigned to doors yet</span>';
-          } else {
-            // Render basic shell structure instantly
-            let shellHtml = '';
-            selectedInstallerIds.forEach(id => {
-              const emp = dbEmployees.find(e => e.id === id);
-              if (emp) {
-                const fullName = `${emp.first_name} ${emp.last_name || ''}`.trim();
-                const locationStr = getCityProvinceFromAddress(emp.address);
-                shellHtml += `
-                  <div style="background: var(--bg-elevated); padding: 0.6rem; border-radius: var(--radius-xs); border: 1px solid var(--border);" id="sidebar-inst-card-${id}">
-                    <div style="font-weight: 600; color: var(--text-primary); margin-bottom: 0.2rem;">${escapeHtml(fullName)}</div>
+        // 2. Render Maps per assigned installer or fallback to single customer map
+        if (selectedInstallerIds.size === 0) {
+          sidebarList.innerHTML = `
+            <div style="background: var(--bg-elevated); padding: 0.75rem; border-radius: var(--radius-xs); border: 1px solid var(--border); display: flex; flex-direction: column; gap: 0.5rem;">
+              <div>
+                <div style="font-weight: 700; color: var(--text-primary); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em;">Customer Location</div>
+                <div style="font-size: 0.72rem; color: var(--text-secondary); line-height: 1.3;">${escapeHtml(destQuery)}</div>
+              </div>
+              <div style="width: 100%; height: 175px; border-radius: var(--radius-xs); overflow: hidden; border: 1px solid var(--border);">
+                <iframe src="https://maps.google.com/maps?q=${encodeURIComponent(destQuery)}&t=&z=14&ie=UTF8&iwloc=&output=embed" style="width: 100%; height: 100%; border: none;" allowfullscreen="" loading="lazy"></iframe>
+              </div>
+            </div>
+          `;
+        } else {
+          let shellHtml = '';
+          selectedInstallerIds.forEach(id => {
+            const emp = dbEmployees.find(e => e.id === id);
+            if (emp) {
+              const fullName = `${emp.first_name} ${emp.last_name || ''}`.trim();
+              const locationStr = getCityProvinceFromAddress(emp.address);
+              const startQuery = emp.address ? emp.address.trim() : '';
+              
+              let iframeSrc = '';
+              if (startQuery) {
+                iframeSrc = `https://maps.google.com/maps?saddr=${encodeURIComponent(startQuery)}&daddr=${encodeURIComponent(destQuery)}&dirflg=tw&t=&z=12&ie=UTF8&iwloc=&output=embed`;
+              } else {
+                iframeSrc = `https://maps.google.com/maps?q=${encodeURIComponent(destQuery)}&t=&z=14&ie=UTF8&iwloc=&output=embed`;
+              }
+
+              shellHtml += `
+                <div style="background: var(--bg-elevated); padding: 0.75rem; border-radius: var(--radius-xs); border: 1px solid var(--border); display: flex; flex-direction: column; gap: 0.5rem;" id="sidebar-inst-card-${id}">
+                  <div>
+                    <div style="font-weight: 600; color: var(--text-primary);">${escapeHtml(fullName)}</div>
                     <div style="font-size: 0.72rem; color: var(--text-secondary); line-height: 1.3;">
-                      <strong>Home Location:</strong> ${locationStr ? escapeHtml(locationStr) : 'No address loaded in record'}
+                      ${escapeHtml(locationStr)}
                     </div>
                   </div>
-                `;
-              }
-            });
-            sidebarList.innerHTML = shellHtml;
-          }
-        }
-
-        // 3. Resolve Route: Use the first assigned installer's address as starting point
-        let startQuery = '';
-        if (selectedInstallerIds.size > 0) {
-          const firstId = Array.from(selectedInstallerIds)[0];
-          const emp = dbEmployees.find(e => e.id === firstId);
-          if (emp && emp.address) {
-            startQuery = emp.address.trim();
-          }
-        }
-
-        // 4. Update Map Iframe src (show directions route if we have a start address AND destination)
-        if (destQuery) {
-          if (iframe && placeholder) {
-            if (startQuery) {
-              // Google Maps directions embed - adjusted to motorcycle mode (dirflg=tw)
-              iframe.src = `https://maps.google.com/maps?saddr=${encodeURIComponent(startQuery)}&daddr=${encodeURIComponent(destQuery)}&dirflg=tw&t=&z=12&ie=UTF8&iwloc=&output=embed`;
-            } else {
-              // Fallback to destination single marker
-              iframe.src = `https://maps.google.com/maps?q=${encodeURIComponent(destQuery)}&t=&z=14&ie=UTF8&iwloc=&output=embed`;
+                  <div style="width: 100%; height: 175px; border-radius: var(--radius-xs); overflow: hidden; border: 1px solid var(--border);">
+                    <iframe src="${iframeSrc}" style="width: 100%; height: 100%; border: none;" allowfullscreen="" loading="lazy"></iframe>
+                  </div>
+                </div>
+              `;
             }
-            iframe.style.display = 'block';
-            placeholder.style.display = 'none';
-          }
-
-          // Show route details under the map
-          if (routePanel) {
-            routePanel.style.display = 'flex';
-            if (toText) toText.textContent = destQuery;
-            if (fromText) fromText.textContent = startQuery || 'No installer selected / address missing';
-          }
-        } else {
-          // Clear map and route details
-          if (iframe && placeholder) {
-            iframe.src = '';
-            iframe.style.display = 'none';
-            placeholder.style.display = 'block';
-          }
-          if (routePanel) {
-            routePanel.style.display = 'none';
-          }
+          });
+          sidebarList.innerHTML = shellHtml;
         }
       }
 
