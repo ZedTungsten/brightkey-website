@@ -16,8 +16,8 @@
     body { background-color: var(--bg-elevated); color: var(--text-primary); }
     .booking-grid {
       display: grid;
-      grid-template-columns: 1.8fr 1.2fr;
-      gap: 2rem;
+      grid-template-columns: 1.8fr 1.2fr 1.5fr;
+      gap: 1.5rem;
       margin-top: 2rem;
       align-items: start;
     }
@@ -591,11 +591,14 @@
               Schedule & Print Receipt
             </button>
           </div>
+        </div>
 
+        <!-- Column 3: Route Map & Installer Locations -->
+        <div>
           <!-- Live Route Map Panel -->
-          <div class="panel" style="margin-top: 1rem; padding: 1.25rem;">
-            <h4 style="font-size: 0.85rem; font-weight: 700; margin-bottom: 0.75rem; color: var(--text-primary); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid var(--border); padding-bottom: 0.35rem;">Route & Distance Map</h4>
-            <div id="map-widget-container" style="width: 100%; height: 240px; border-radius: var(--radius-sm); overflow: hidden; border: 1px solid var(--border); background: var(--bg-elevated); display: flex; align-items: center; justify-content: center; position: relative;">
+          <div class="panel" style="padding: 1.25rem; margin-bottom: 1.5rem;">
+            <h4 style="font-size: 0.85rem; font-weight: 700; margin-bottom: 0.75rem; color: var(--text-primary); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid var(--border); padding-bottom: 0.35rem;">Route Map</h4>
+            <div id="map-widget-container" style="width: 100%; height: 350px; border-radius: var(--radius-sm); overflow: hidden; border: 1px solid var(--border); background: var(--bg-elevated); display: flex; align-items: center; justify-content: center; position: relative;">
               <div id="map-placeholder-text" style="font-size: 0.78rem; color: var(--text-muted); text-align: center; padding: 1rem;">
                 Enter customer address to load live map view.
               </div>
@@ -603,10 +606,6 @@
             </div>
             
             <div id="route-details-panel" style="margin-top: 0.75rem; font-size: 0.78rem; border-top: 1px dashed var(--border); padding-top: 0.75rem; display: none; flex-direction: column; gap: 0.4rem;">
-              <div style="display: flex; justify-content: space-between; font-weight: 600; color: var(--text-primary);">
-                <span>Routing Distance:</span>
-                <span id="route-distance-text" style="color: var(--cyan-light);">— km away</span>
-              </div>
               <div style="color: var(--text-secondary); line-height: 1.35;">
                 <strong>From (Installer):</strong> <span id="route-from-text">N/A</span>
               </div>
@@ -617,9 +616,9 @@
           </div>
 
           <!-- Installers List & Address Status -->
-          <div class="panel" style="margin-top: 1rem; padding: 1.25rem;">
-            <h4 style="font-size: 0.85rem; font-weight: 700; margin-bottom: 0.75rem; color: var(--text-primary); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid var(--border); padding-bottom: 0.35rem;">Installers Status</h4>
-            <div id="sidebar-installers-list" style="display: flex; flex-direction: column; gap: 0.65rem; max-height: 250px; overflow-y: auto;">
+          <div class="panel" style="padding: 1.25rem;">
+            <h4 style="font-size: 0.85rem; font-weight: 700; margin-bottom: 0.75rem; color: var(--text-primary); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid var(--border); padding-bottom: 0.35rem;">Installer Locations</h4>
+            <div id="sidebar-installers-list" style="display: flex; flex-direction: column; gap: 0.65rem; max-height: 300px; overflow-y: auto;">
               <!-- Dynamic list of installers loaded here -->
               <span style="font-size:0.75rem; color:var(--text-muted); font-style:italic;">No installers assigned to doors yet</span>
             </div>
@@ -790,13 +789,21 @@
               const emp = dbEmployees.find(e => e.id === id);
               if (emp) {
                 const fullName = `${emp.first_name} ${emp.last_name || ''}`.trim();
-                const addressStr = emp.address || 'No address loaded in record';
+                const addressStr = emp.address || '';
+                
+                let distanceHtml = '';
+                if (destQuery && addressStr) {
+                  const km = estimateDistance(addressStr, destQuery);
+                  distanceHtml = `<div style="margin-top: 0.35rem; font-weight: 700; color: var(--cyan-light); font-size: 0.75rem;">${km} km away</div>`;
+                }
+
                 html += `
                   <div style="background: var(--bg-elevated); padding: 0.6rem; border-radius: var(--radius-xs); border: 1px solid var(--border);">
                     <div style="font-weight: 600; color: var(--text-primary); margin-bottom: 0.2rem;">${escapeHtml(fullName)}</div>
                     <div style="font-size: 0.72rem; color: var(--text-secondary); line-height: 1.3;">
-                      <strong>Home Address:</strong> ${escapeHtml(addressStr)}
+                      <strong>Home Address:</strong> ${addressStr ? escapeHtml(addressStr) : 'No address loaded in record'}
                     </div>
+                    ${distanceHtml}
                   </div>
                 `;
               }
@@ -834,13 +841,6 @@
             routePanel.style.display = 'flex';
             if (toText) toText.textContent = destQuery;
             if (fromText) fromText.textContent = startQuery || 'No installer selected / address missing';
-            
-            if (startQuery) {
-              const km = estimateDistance(startQuery, destQuery);
-              if (distText) distText.textContent = `${km} km away`;
-            } else {
-              if (distText) distText.textContent = '— km away (Assign installer with address)';
-            }
           }
         } else {
           // Clear map and route details
