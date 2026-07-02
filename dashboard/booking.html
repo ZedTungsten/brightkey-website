@@ -913,6 +913,20 @@
         return ((sum % 150) / 10 + 3).toFixed(1);
       }
 
+      function getCityProvinceFromAddress(address) {
+        if (!address) return '';
+        const parts = address.split(',').map(s => s.trim()).filter(Boolean);
+        if (parts.length >= 2) {
+          if (parts[parts.length - 1].toLowerCase() === 'philippines') {
+            if (parts.length >= 3) {
+              return `${parts[parts.length - 3]}, ${parts[parts.length - 2]}`;
+            }
+          }
+          return `${parts[parts.length - 2]}, ${parts[parts.length - 1]}`;
+        }
+        return address;
+      }
+
       function updateWidgetMap() {
         const city = (cityInput?.value || '').trim();
         const prov = (provInput?.value || '').trim();
@@ -945,7 +959,7 @@
               const emp = dbEmployees.find(e => e.id === id);
               if (emp) {
                 const fullName = `${emp.first_name} ${emp.last_name || ''}`.trim();
-                const locationStr = [emp.city, emp.province].filter(Boolean).join(', ');
+                const locationStr = getCityProvinceFromAddress(emp.address);
                 shellHtml += `
                   <div style="background: var(--bg-elevated); padding: 0.6rem; border-radius: var(--radius-xs); border: 1px solid var(--border);" id="sidebar-inst-card-${id}">
                     <div style="font-weight: 600; color: var(--text-primary); margin-bottom: 0.2rem;">${escapeHtml(fullName)}</div>
@@ -962,7 +976,7 @@
             // Resolve distances asynchronously
             selectedInstallerIds.forEach(async (id) => {
               const emp = dbEmployees.find(e => e.id === id);
-              const empLoc = emp ? [emp.city, emp.province].filter(Boolean).join(', ') : '';
+              const empLoc = emp ? getCityProvinceFromAddress(emp.address) : '';
               if (empLoc && destQuery) {
                 const km = await estimateDistance(empLoc, destQuery);
                 const card = document.getElementById(`sidebar-inst-card-${id}`);
@@ -989,7 +1003,7 @@
           const firstId = Array.from(selectedInstallerIds)[0];
           const emp = dbEmployees.find(e => e.id === firstId);
           if (emp) {
-            startQuery = [emp.city, emp.province].filter(Boolean).join(', ').trim();
+            startQuery = getCityProvinceFromAddress(emp.address).trim();
           }
         }
 
