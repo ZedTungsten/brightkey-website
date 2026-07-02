@@ -1663,34 +1663,117 @@
       container.innerHTML = `<div style="text-align: center; color: var(--text-muted); font-size: 0.85rem; padding: 2.2rem 1rem;">Loading leaderboard...</div>`;
 
       try {
-        // Fetch commission_assignments with employee names via FK join, filtered to this month's bookings
-        const { data: rows, error } = await sb
+        // 1. Fetch commission_assignments for this company
+        const { data: assignments, error: aErr } = await sb
           .from('commission_assignments')
-          .select('employee_id, amount, booking_id, employees(first_name, last_name)')
+          .select('employee_id, booking_id, sku, product_index, rate_label, employees(first_name, last_name)')
           .eq('company_id', currentCompanyId);
-        console.log('leaderboard config:', { currentCompanyId, startDate, endDate, rowsLength: rows?.length });
 
-        // Filter to bookings in the selected month client-side
-        const { data: monthBookings } = await sb
+        if (aErr) throw aErr;
+
+        if (!assignments || assignments.length === 0) {
+          container.innerHTML = `<div style="text-align: center; color: var(--text-muted); font-size: 0.85rem; padding: 2.2rem 1rem;">No commissions recorded this month.</div>`;
+          return;
+        }
+
+        // 2. Fetch bookings for this month with details needed to calculate eligible commissions
+        const { data: monthBookings, error: bErr } = await sb
           .from('installation_bookings')
-          .select('id')
+          .select('*')
           .eq('company_id', currentCompanyId)
           .neq('status', 'cancelled')
           .gte('scheduled_date', startDate)
           .lte('scheduled_date', endDate);
 
-        const monthBookingIds = new Set((monthBookings || []).map(b => b.id));
-        console.log('monthBookingIds:', Array.from(monthBookingIds));
+        if (bErr) throw bErr;
 
-        // Sum amounts per employee for this month
-        const empSums = {}; // employee_id -> { amount, empData }
-        (rows || []).forEach(c => {
-          console.log('row item:', { empId: c.employee_id, amount: c.amount, bookingId: c.booking_id, isMatch: monthBookingIds.has(c.booking_id) });
-          if (!c.employee_id || !monthBookingIds.has(c.booking_id)) return;
-          if (!empSums[c.employee_id]) {
-            empSums[c.employee_id] = { amount: 0, emp: c.employees };
+        if (!monthBookings || monthBookings.length === 0) {
+          container.innerHTML = `<div style="text-align: center; color: var(--text-muted); font-size: 0.85rem; padding: 2.2rem 1rem;">No commissions recorded this month.</div>`;
+          return;
+        }
+
+        // 3. Fetch products and commissions configuration to run calculations
+        const [productsRes, configRes] = await Promise.all([
+          sb.from('products').select('sku, business, category, tags'),
+          sb.from('global_settings').select('value').eq('key', 'commissions_config').eq('company_id', currentCompanyId).maybeSingle()
+        ]);
+
+        const products = productsRes.data || [];
+        const config = configRes.data?.value || { rates: [], eligibility_rules: [] };
+        const rates = config.rates || [];
+
+        const productMap = {};
+        products.forEach(p => {
+          if (p.sku) productMap[p.sku.toLowerCase()] = p;
+        });
+
+        // Map assignments: booking_id -> list of assignments
+        const assignMap = {};
+        assignments.forEach(row => {
+          if (!row.employee_id) return;
+          if (!assignMap[row.booking_id]) {
+            assignMap[row.booking_id] = [];
           }
-          empSums[c.employee_id].amount += c.amount;
+          assignMap[row.booking_id].push(row);
+        });
+
+        const empSums = {}; // employee_id -> { amount: centavos, emp }
+
+        // 4. Run the exact same calculations as sales-commissions.html client-side
+        monthBookings.forEach(b => {
+          const bookingAssigns = assignMap[b.id];
+          if (!bookingAssigns || bookingAssigns.length === 0) return;
+
+          const calc = getBookingEligibleCentavos(b, productMap, config.eligibility_rules);
+          const finalEligibleCentavos = calc.finalEligibleCentavos;
+
+          // Group assignments by cell: key = sku_productIndex_rateLabel -> array of employees
+          const cellAssigns = {};
+          bookingAssigns.forEach(row => {
+            const key = `${row.sku}_${row.product_index}_${row.rate_label}`;
+            if (!cellAssigns[key]) cellAssigns[key] = [];
+            cellAssigns[key].push(row);
+          });
+
+          // Calculate for each assignment cell
+          Object.entries(cellAssigns).forEach(([key, cellRows]) => {
+            const parts = key.split('_');
+            const rateLabel = parts[parts.length - 1];
+            const productIndex = parseInt(parts[parts.length - 2], 10);
+            const sku = parts.slice(0, parts.length - 2).join('_');
+
+            let eligibleCentavos = 0;
+            if (sku === 'ORDER_TOTAL') {
+              eligibleCentavos = finalEligibleCentavos;
+            } else {
+              const skus = (b.product_skus || '').split(' | ').map(s => s.trim());
+              const qtys = (b.product_qtys || '').split(' | ').map(s => s.trim());
+              const unitPrices = (b.product_unit_prices || '').split(' | ').map(s => s.trim());
+
+              const qty = parseInt(qtys[productIndex]) || 1;
+              const unitPriceDec = parseFloat(unitPrices[productIndex]) || 0;
+              const totalCentavos = Math.round(unitPriceDec * qty * 100);
+
+              const product = productMap[sku.toLowerCase()] || { sku, business: '', category: '', tags: [] };
+              const isEligible = checkSkuEligibility(product, config.eligibility_rules);
+              eligibleCentavos = isEligible ? totalCentavos : 0;
+            }
+
+            const rateConfig = rates.find(r => r.label === rateLabel);
+            const percent = rateConfig ? parseFloat(rateConfig.value) || 0 : 0;
+
+            const activeRows = cellRows.filter(r => r.employee_id);
+            const divisor = activeRows.length || 1;
+            const splitPercent = percent / divisor;
+            const splitCommAmountCentavos = Math.round(eligibleCentavos * (splitPercent / 100));
+
+            activeRows.forEach(row => {
+              if (!empSums[row.employee_id]) {
+                empSums[row.employee_id] = { amount: 0, emp: row.employees };
+              }
+              empSums[row.employee_id].amount += splitCommAmountCentavos;
+            });
+          });
         });
 
         if (Object.keys(empSums).length === 0) {
