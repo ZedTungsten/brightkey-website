@@ -74,7 +74,7 @@
                 <div id="media-autosave-status" style="font-size: 0.78rem; font-weight: 600; color: var(--text-muted); transition: color 0.2s;">Saved</div>
               </div>
 
-              <div class="table-scroll" style="flex: none; padding-bottom: 3rem;">
+              <div class="table-scroll" style="flex: none; padding-bottom: 0;">
                 <div class="wh-card" style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1.25rem; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px;">
                   <div style="font-size: 0.82rem; color: var(--text-secondary);">
                     Configure specific photo/video requirements that technicians must upload upon completing an installation. Optionally upload a reference guide/sample photo for the installers to see. Changes are saved automatically.
@@ -87,6 +87,26 @@
                   <div>
                     <button type="button" class="btn btn-primary" onclick="addMediaRequirementItem()">+ Add Media Requirement</button>
                   </div>
+                </div>
+              </div>
+
+              <!-- Section 3: Booking Notes -->
+              <div class="panel-header" style="margin-top: 1.5rem; border-top: 1px solid var(--border);">
+                <div class="panel-title">Booking Notes</div>
+                <div id="notes-autosave-status" style="font-size: 0.78rem; font-weight: 600; color: var(--text-muted); transition: color 0.2s;">Saved</div>
+              </div>
+
+              <div class="table-scroll" style="flex: none; padding-bottom: 6rem;">
+                <div class="wh-card" style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px;">
+                  <div style="font-size: 0.82rem; color: var(--text-secondary);">
+                    Enter booking guidelines or important notes that agents will see when creating manual bookings. Select text and click <strong>Bold</strong> to highlight important points. Changes are saved automatically.
+                  </div>
+
+                  <div style="display: flex; gap: 0.5rem; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">
+                    <button type="button" class="btn btn-sm btn-ghost" onclick="formatBold()" style="font-weight: 800; font-size: 0.85rem; padding: 0.25rem 0.6rem; border: 1px solid var(--border); border-radius: 4px;">B</button>
+                  </div>
+
+                  <textarea id="booking-notes-input" class="form-textarea" placeholder="Enter notes here..." style="min-height: 140px; font-size: 0.85rem; line-height: 1.5; background: var(--bg-surface); padding: 0.75rem; border: 1px solid var(--border); border-radius: 6px; resize: vertical;" oninput="triggerNotesAutosave(false)"></textarea>
                 </div>
               </div>
 
@@ -125,6 +145,7 @@
     window.initSettingsPage = async function() {
       await loadBookingSettings();
       await loadBookingMediaRequirements();
+      await loadBookingNotes();
     };
 
     async function loadBookingSettings() {
@@ -460,6 +481,82 @@
         container.appendChild(itemRow);
       });
     }
+
+    async function loadBookingNotes() {
+      try {
+        const { data, error } = await sb
+          .from('global_settings')
+          .select('value')
+          .eq('key', 'booking_notes')
+          .eq('company_id', currentCompanyId)
+          .maybeSingle();
+
+        if (error) throw error;
+        const notesInput = document.getElementById('booking-notes-input');
+        if (notesInput && data && data.value && data.value.text) {
+          notesInput.value = data.value.text;
+        }
+      } catch (err) {
+        console.error('Error loading Booking notes:', err);
+      }
+    }
+
+    let notesAutosaveTimeout = null;
+    window.triggerNotesAutosave = function(immediate = false) {
+      updateNotesAutosaveStatus('Saving...');
+      if (notesAutosaveTimeout) clearTimeout(notesAutosaveTimeout);
+
+      const saveFn = async () => {
+        const notesInput = document.getElementById('booking-notes-input');
+        const textValue = notesInput ? notesInput.value : '';
+        try {
+          const { error } = await sb.from('global_settings').upsert({
+            key: 'booking_notes',
+            company_id: currentCompanyId,
+            value: { text: textValue }
+          }, { onConflict: 'key, company_id' });
+
+          if (error) throw error;
+          updateNotesAutosaveStatus('Saved');
+        } catch (err) {
+          console.error('Notes autosave failed:', err);
+          updateNotesAutosaveStatus('Failed to save changes', true);
+        }
+      };
+
+      if (immediate) {
+        saveFn();
+      } else {
+        notesAutosaveTimeout = setTimeout(saveFn, 1000);
+      }
+    };
+
+    function updateNotesAutosaveStatus(text, isError = false) {
+      const statusEl = document.getElementById('notes-autosave-status');
+      if (!statusEl) return;
+      statusEl.textContent = text;
+      if (isError) {
+        statusEl.style.color = 'var(--danger)';
+      } else if (text === 'Saving...') {
+        statusEl.style.color = 'var(--cyan-light)';
+      } else {
+        statusEl.style.color = 'var(--text-muted)';
+      }
+    }
+
+    window.formatBold = function() {
+      const txt = document.getElementById('booking-notes-input');
+      if (!txt) return;
+      const start = txt.selectionStart;
+      const end = txt.selectionEnd;
+      const text = txt.value;
+      const selected = text.substring(start, end);
+      const replacement = `**${selected}**`;
+      txt.value = text.substring(0, start) + replacement + text.substring(end);
+      txt.focus();
+      txt.setSelectionRange(start + 2, start + 2 + selected.length);
+      triggerNotesAutosave(true);
+    };
 
     function escapeHtml(str) {
       if (!str) return '';
