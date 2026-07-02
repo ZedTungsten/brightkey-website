@@ -743,7 +743,7 @@
       const cityInput = document.getElementById('cust-city');
       const provInput = document.getElementById('cust-province');
 
-      // Coordinates mapping for common cities to calculate real-world physical distance (Haversine formula)
+      // Keep coordinates database as an instant fallback
       const CITY_COORDS = {
         'bacoor': { lat: 14.4613, lng: 120.9634 },
         'las pinas': { lat: 14.4497, lng: 120.9822 },
@@ -795,49 +795,81 @@
       function findCityCoords(address) {
         if (!address) return null;
         const norm = address.toLowerCase().replace(/[^a-z0-9\sñ]/g, ' ');
-        
-        // Split address into words to do clean matching
         const words = norm.split(/\s+/);
-        
-        // Exact city key matching
         for (const [cityName, coords] of Object.entries(CITY_COORDS)) {
-          // If city name is multiple words, check if full substring matches
           if (cityName.includes(' ')) {
-            if (norm.includes(cityName)) {
-              return coords;
-            }
+            if (norm.includes(cityName)) return coords;
           } else {
-            // Single word matching with word boundary
-            if (words.includes(cityName)) {
-              return coords;
-            }
+            if (words.includes(cityName)) return coords;
           }
         }
         return null;
       }
 
-      function estimateDistance(addr1, addr2) {
+      // Live Geocoding cache to prevent rate-limiting Nominatim
+      const geocodeCache = {};
+
+      async function fetchCoordsAsync(address) {
+        if (!address) return null;
+        const cleanAddr = address.trim();
+        if (geocodeCache[cleanAddr]) return geocodeCache[cleanAddr];
+
+        try {
+          // Append Philippines to query to lock context
+          const query = cleanAddr.toLowerCase().includes('philippines') ? cleanAddr : `${cleanAddr}, Philippines`;
+          const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`;
+          const res = await fetch(url, { headers: { 'User-Agent': 'BrightKeyBookingApp/1.0' } });
+          const data = await res.json();
+          if (data && data.length > 0) {
+            const loc = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+            geocodeCache[cleanAddr] = loc;
+            return loc;
+          }
+        } catch (e) {
+          console.warn('Geocoding fetch failed:', e);
+        }
+        
+        // Fallback to static city coords
+        return findCityCoords(cleanAddr);
+      }
+
+      function computeHaversineDistance(c1, c2) {
+        if (!c1 || !c2) return null;
+        const R = 6371; // Earth radius in km
+        const dLat = (c2.lat - c1.lat) * Math.PI / 180;
+        const dLng = (c2.lng - c1.lng) * Math.PI / 180;
+        const a = 
+          Math.sin(dLat/2) * Math.sin(dLat/2) +
+          Math.cos(c1.lat * Math.PI / 180) * Math.cos(c2.lat * Math.PI / 180) * 
+          Math.sin(dLng/2) * Math.sin(dLng/2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        const directDistance = R * c;
+        
+        // Routing factor for curves (~1.3x routing multiplier)
+        const adjustedDist = directDistance * 1.3;
+        
+        // If cities are the exact same neighborhood, make sure we return a non-zero realistic travel radius if they are distinct text
+        if (adjustedDist < 0.1) {
+          return 0.5; // minimum block distance fallback
+        }
+        return adjustedDist;
+      }
+
+      async function estimateDistance(addr1, addr2) {
         if (!addr1 || !addr2) return null;
         
-        const c1 = findCityCoords(addr1);
-        const c2 = findCityCoords(addr2);
+        // Fetch exact geocodes asynchronously
+        const c1 = await fetchCoordsAsync(addr1);
+        const c2 = await fetchCoordsAsync(addr2);
 
-        // If we can locate both cities, compute real Haversine spherical distance
         if (c1 && c2) {
-          const R = 6371; // Earth's radius in km
-          const dLat = (c2.lat - c1.lat) * Math.PI / 180;
-          const dLng = (c2.lng - c1.lng) * Math.PI / 180;
-          const a = 
-            Math.sin(dLat/2) * Math.sin(dLat/2) +
-            Math.cos(c1.lat * Math.PI / 180) * Math.cos(c2.lat * Math.PI / 180) * 
-            Math.sin(dLng/2) * Math.sin(dLng/2);
-          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-          const directDistance = R * c;
-          // Apply a road-routing adjustment factor (~1.25x for driving navigation path correction)
-          return (directDistance * 1.25).toFixed(1);
+          const dist = computeHaversineDistance(c1, c2);
+          if (dist !== null) {
+            return dist.toFixed(1);
+          }
         }
 
-        // Fallback: stable string distance seed
+        // Fallback string hash distance seed
         let sum = 0;
         const comb = addr1 + addr2;
         for (let i = 0; i < comb.length; i++) sum += comb.charCodeAt(i);
@@ -871,31 +903,46 @@
           if (selectedInstallerIds.size === 0) {
             sidebarList.innerHTML = '<span style="font-size:0.75rem; color:var(--text-muted); font-style:italic;">No installers assigned to doors yet</span>';
           } else {
-            let html = '';
+            // Render basic shell structure instantly
+            let shellHtml = '';
             selectedInstallerIds.forEach(id => {
               const emp = dbEmployees.find(e => e.id === id);
               if (emp) {
                 const fullName = `${emp.first_name} ${emp.last_name || ''}`.trim();
                 const addressStr = emp.address || '';
-                
-                let distanceHtml = '';
-                if (destQuery && addressStr) {
-                  const km = estimateDistance(addressStr, destQuery);
-                  distanceHtml = `<div style="margin-top: 0.35rem; font-weight: 700; color: var(--cyan-light); font-size: 0.75rem;">${km} km away</div>`;
-                }
-
-                html += `
-                  <div style="background: var(--bg-elevated); padding: 0.6rem; border-radius: var(--radius-xs); border: 1px solid var(--border);">
+                shellHtml += `
+                  <div style="background: var(--bg-elevated); padding: 0.6rem; border-radius: var(--radius-xs); border: 1px solid var(--border);" id="sidebar-inst-card-${id}">
                     <div style="font-weight: 600; color: var(--text-primary); margin-bottom: 0.2rem;">${escapeHtml(fullName)}</div>
                     <div style="font-size: 0.72rem; color: var(--text-secondary); line-height: 1.3;">
                       <strong>Home Address:</strong> ${addressStr ? escapeHtml(addressStr) : 'No address loaded in record'}
                     </div>
-                    ${distanceHtml}
+                    <div class="distance-value" style="margin-top: 0.35rem; font-weight: 700; color: var(--cyan-light); font-size: 0.75rem;">Calculating distance...</div>
                   </div>
                 `;
               }
             });
-            sidebarList.innerHTML = html;
+            sidebarList.innerHTML = shellHtml;
+
+            // Resolve distances asynchronously
+            selectedInstallerIds.forEach(async (id) => {
+              const emp = dbEmployees.find(e => e.id === id);
+              if (emp && emp.address && destQuery) {
+                const km = await estimateDistance(emp.address, destQuery);
+                const card = document.getElementById(`sidebar-inst-card-${id}`);
+                if (card) {
+                  const valDiv = card.querySelector('.distance-value');
+                  if (valDiv) {
+                    valDiv.textContent = `${km} km away`;
+                  }
+                }
+              } else {
+                const card = document.getElementById(`sidebar-inst-card-${id}`);
+                if (card) {
+                  const valDiv = card.querySelector('.distance-value');
+                  if (valDiv) valDiv.remove();
+                }
+              }
+            });
           }
         }
 
