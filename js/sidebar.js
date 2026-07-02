@@ -238,7 +238,7 @@
             <span>Commissions</span>
             <span id="commissions-badge-dot" style="display: none; width: 6px; height: 6px; border-radius: 50%; background-color: #ef4444;"></span>
           </a>
-          <a href="/dashboard/sales-inventory" class="dash-nav-child" data-role="sales">Inventory</a>
+          <a href="/dashboard/sales-stocks" class="dash-nav-child" data-role="sales">Stocks</a>
         </div>
       </div>
 
