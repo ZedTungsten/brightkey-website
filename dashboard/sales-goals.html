@@ -1658,42 +1658,38 @@
     }
 
     // Leaderboard Loader (Commissions MTD)
-    // Mirrors sales-commissions.html: fetch ALL commission_assignments for the company,
-    // then filter client-side to bookings scheduled in the selected month.
     async function loadLeaderboard(startDate, endDate) {
       const container = document.getElementById('leaderboard-container');
       container.innerHTML = `<div style="text-align: center; color: var(--text-muted); font-size: 0.85rem; padding: 2.2rem 1rem;">Loading leaderboard...</div>`;
 
       try {
-        // Fetch all assignments + all bookings for this company (no date filter — same as sales-commissions)
-        const [assignmentsRes, bookingsRes] = await Promise.all([
-          sb.from('commission_assignments')
-            .select('employee_id, amount, booking_id')
-            .eq('company_id', currentCompanyId),
-          sb.from('installation_bookings')
-            .select('id, scheduled_date, status')
-            .eq('company_id', currentCompanyId)
-        ]);
+        // Fetch commission_assignments with employee names via FK join, filtered to this month's bookings
+        const { data: rows, error } = await sb
+          .from('commission_assignments')
+          .select('employee_id, amount, booking_id, employees(first_name, last_name, profile_picture_url)')
+          .eq('company_id', currentCompanyId);
 
-        const allAssignments = assignmentsRes.data || [];
-        const allBookings = bookingsRes.data || [];
+        if (error) throw error;
 
-        // Build set of booking IDs that fall in the selected month (non-cancelled)
-        const monthBookingIdSet = new Set();
-        allBookings.forEach(b => {
-          if (!b.scheduled_date || b.status === 'cancelled') return;
-          const bMonth = b.scheduled_date.substring(0, 7); // 'YYYY-MM'
-          if (bMonth === currentSelectedMonth) {
-            monthBookingIdSet.add(b.id);
+        // Filter to bookings in the selected month client-side
+        const { data: monthBookings } = await sb
+          .from('installation_bookings')
+          .select('id')
+          .eq('company_id', currentCompanyId)
+          .neq('status', 'cancelled')
+          .gte('scheduled_date', startDate)
+          .lte('scheduled_date', endDate);
+
+        const monthBookingIds = new Set((monthBookings || []).map(b => b.id));
+
+        // Sum amounts per employee for this month
+        const empSums = {}; // employee_id -> { amount, empData }
+        (rows || []).forEach(c => {
+          if (!c.employee_id || !monthBookingIds.has(c.booking_id)) return;
+          if (!empSums[c.employee_id]) {
+            empSums[c.employee_id] = { amount: 0, emp: c.employees };
           }
-        });
-
-        // Sum commission amounts per employee — only for bookings in this month
-        const empSums = {};
-        allAssignments.forEach(c => {
-          if (!c.employee_id) return;
-          if (!monthBookingIdSet.has(c.booking_id)) return;
-          empSums[c.employee_id] = (empSums[c.employee_id] || 0) + c.amount;
+          empSums[c.employee_id].amount += c.amount;
         });
 
         if (Object.keys(empSums).length === 0) {
@@ -1701,20 +1697,18 @@
           return;
         }
 
-        const sortedLeaders = Object.keys(empSums).map(empId => ({
-          employee_id: empId,
-          amount: empSums[empId] / 100
-        })).sort((a, b) => b.amount - a.amount);
+        const top5 = Object.entries(empSums)
+          .map(([empId, v]) => ({ employee_id: empId, amount: v.amount / 100, emp: v.emp }))
+          .sort((a, b) => b.amount - a.amount)
+          .slice(0, 5);
 
-        const top5 = sortedLeaders.slice(0, 5);
-
-        // Resolve names from allEmployees (already fetched, includes all statuses)
         container.innerHTML = '';
         top5.forEach((leader, idx) => {
-          const emp = allEmployees.find(e => e.id === leader.employee_id)
-                   || { first_name: 'Unknown', last_name: 'Employee', profile_picture_url: '' };
-          const fullName = `${emp.first_name} ${emp.last_name}`;
-          const initials = `${(emp.first_name || '')[0] || ''}${(emp.last_name || '')[0] || ''}`.toUpperCase();
+          const emp = leader.emp || {};
+          const firstName = emp.first_name || 'Unknown';
+          const lastName = emp.last_name || 'Employee';
+          const fullName = `${firstName} ${lastName}`.trim();
+          const initials = `${firstName[0] || ''}${lastName[0] || ''}`.toUpperCase();
           const avatarUrl = emp.profile_picture_url || '';
 
           let avatarHtml = `<span>${escapeHtml(initials)}</span>`;
@@ -1739,6 +1733,7 @@
         container.innerHTML = `<div style="text-align: center; color: var(--danger); font-size: 0.85rem; padding: 2rem;">Error loading leaderboard.</div>`;
       }
     }
+
 
     // Load Commission Adjustments rules (from settings `'commissions_config'`)
     async function loadAdjustmentsDashboard(startDate, endDate) {
