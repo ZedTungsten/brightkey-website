@@ -1667,9 +1667,7 @@
         const { data: rows, error } = await sb
           .from('commission_assignments')
           .select('employee_id, amount, booking_id, employees(first_name, last_name)')
-          .eq('company_id', currentCompanyId);
-
-        if (error) throw error;
+        console.log('leaderboard config:', { currentCompanyId, startDate, endDate, rowsLength: rows?.length });
 
         // Filter to bookings in the selected month client-side
         const { data: monthBookings } = await sb
@@ -1681,10 +1679,12 @@
           .lte('scheduled_date', endDate);
 
         const monthBookingIds = new Set((monthBookings || []).map(b => b.id));
+        console.log('monthBookingIds:', Array.from(monthBookingIds));
 
         // Sum amounts per employee for this month
         const empSums = {}; // employee_id -> { amount, empData }
         (rows || []).forEach(c => {
+          console.log('row item:', { empId: c.employee_id, amount: c.amount, bookingId: c.booking_id, isMatch: monthBookingIds.has(c.booking_id) });
           if (!c.employee_id || !monthBookingIds.has(c.booking_id)) return;
           if (!empSums[c.employee_id]) {
             empSums[c.employee_id] = { amount: 0, emp: c.employees };
