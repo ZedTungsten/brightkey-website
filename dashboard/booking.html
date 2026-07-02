@@ -819,46 +819,6 @@
         const cleanAddr = address.trim();
         if (geocodeCache[cleanAddr]) return geocodeCache[cleanAddr];
 
-        // If the address is a Google Maps link, attempt to extract coordinates directly
-        if (cleanAddr.startsWith('http://') || cleanAddr.startsWith('https://')) {
-          // Check if coordinates are embedded in the link (e.g. /@14.4533,120.9576 or q=14.4533,120.9576)
-          const coordRegex = /@(-?\d+\.\d+),(-?\d+\.\d+)/;
-          const queryCoordsRegex = /q=(-?\d+\.\d+),(-?\d+\.\d+)/;
-          
-          let match = cleanAddr.match(coordRegex) || cleanAddr.match(queryCoordsRegex);
-          if (match) {
-            const loc = { lat: parseFloat(match[1]), lng: parseFloat(match[2]) };
-            geocodeCache[cleanAddr] = loc;
-            return loc;
-          }
-
-          // If it's a shortened maps.app.goo.gl link, we must resolve the redirect.
-          // Because of CORS, a direct fetch of google maps might be blocked, so we use a fallback geocoder search on the destination text input first
-          if (cleanAddr.includes('maps.app.goo.gl')) {
-            try {
-              // We try to request the redirect resolution via a free CORS proxy
-              const res = await fetch(`https://corsproxy.io/?${encodeURIComponent(cleanAddr)}`, { method: 'GET' });
-              if (res.ok) {
-                const finalUrl = res.url;
-                const matchFinal = finalUrl.match(coordRegex) || finalUrl.match(queryCoordsRegex) || finalUrl.match(/search\/(-?\d+\.\d+),\+?(-?\d+\.\d+)/);
-                if (matchFinal) {
-                  const loc = { lat: parseFloat(matchFinal[1]), lng: parseFloat(matchFinal[2]) };
-                  geocodeCache[cleanAddr] = loc;
-                  return loc;
-                }
-              }
-            } catch (e) {
-              console.warn('CORS proxy redirect resolution failed, trying fallback:', e);
-            }
-          }
-          
-          // If we can't extract coordinates from the link, fall back immediately to city + province fields
-          const cityVal = (document.getElementById('cust-city')?.value || '').trim();
-          const provVal = (document.getElementById('cust-province')?.value || '').trim();
-          const fallbackQuery = [cityVal, provVal, 'Philippines'].filter(Boolean).join(', ');
-          return fetchCoordsAsync(fallbackQuery);
-        }
-
         // 1. Try geocoding full query first
         try {
           const query = cleanAddr.toLowerCase().includes('philippines') ? cleanAddr : `${cleanAddr}, Philippines`;
@@ -954,18 +914,10 @@
       }
 
       function updateWidgetMap() {
-        const mapPinInput = document.getElementById('cust-map-pin');
-        const pinLink = (mapPinInput?.value || '').trim();
-        
-        let destQuery = '';
-        if (pinLink) {
-          destQuery = pinLink;
-        } else {
-          const addr = (addrInput?.value || '').trim();
-          const city = (cityInput?.value || '').trim();
-          const prov = (provInput?.value || '').trim();
-          destQuery = [addr, city, prov].filter(Boolean).join(', ');
-        }
+        const addr = (addrInput?.value || '').trim();
+        const city = (cityInput?.value || '').trim();
+        const prov = (provInput?.value || '').trim();
+        const destQuery = [addr, city, prov].filter(Boolean).join(', ');
 
         const placeholder = document.getElementById('map-placeholder-text');
         const iframe = document.getElementById('live-map-iframe');
