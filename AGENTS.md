@@ -213,3 +213,13 @@ We use two distinct patterns for modal overlays. Do NOT mix them:
 >   * `installation_bookings` uses `order_no` (NOT `booking_number`).
 >   * Currency fields are stored in centavos (integers) rather than decimals.
 > Doing this check proactively prevents back-and-forth debugging from column mismatches and ensures immediate functionality.
+
+---
+
+## 14. Dynamic Settings Layouts & Scrolling Safety
+> [!IMPORTANT]
+> When building or modifying tabbed setting views or control panels containing list builders (e.g., checklist builders, media requirements) that can dynamically grow or shrink:
+> - **Avoid Multi-Flex Stretching**: Do not assign `flex: 1` or `height` constraints on multiple sibling list containers (like `.table-scroll`) inside a single tab/panel page. Doing so locks them into equal proportional heights, creating ugly blank padding for short lists and clipping/hiding controls for long lists.
+> - **Enable Natural Document Flow**: Override the flexbox constraints using `style="flex: none;"` on the containers so that they expand dynamically based on their actual database content.
+> - **Unified Scrolling**: Ensure that the outer `.scroll-area` container handles scrolling for the entire layout as a single document rather than having nested, competing scroll regions.
+> - **Floating Button Spacing**: Always ensure the bottom-most list container has enough bottom padding (e.g., `padding-bottom: 3rem;`) to comfortably clear any floating UI components (like the support/chat widget).
