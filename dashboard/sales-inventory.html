@@ -360,22 +360,10 @@
       `;
 
       try {
-        // Fetch warehouses for this tenant to support RLS scoped stock calculations
-        const { data: warehouses, error: whErr } = await sb
-          .from('warehouses')
-          .select('id')
-          .eq('tenant_id', currentTenantId);
-
-        if (whErr) throw whErr;
-
-        const warehouseIds = (warehouses || []).map(w => w.id);
-
-        // Fetch products, inventory and commissions config in parallel
+        // Fetch products, inventory and commissions config in parallel (inventory compiled across all warehouses under tenant RLS)
         const [prodRes, invRes, commsRes] = await Promise.all([
           sb.from('products').select('sku, title, category, business, image_main, description, tags').eq('company_id', currentCompanyId).order('sku'),
-          warehouseIds.length > 0
-            ? sb.from('inventory').select('sku, available').in('warehouse_id', warehouseIds)
-            : Promise.resolve({ data: [] }),
+          sb.from('inventory').select('sku, available'),
           sb.from('global_settings').select('value').eq('key', 'commissions_config').eq('company_id', currentCompanyId).maybeSingle()
         ]);
 
