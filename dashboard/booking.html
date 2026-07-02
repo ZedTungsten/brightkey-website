@@ -591,6 +591,17 @@
               Schedule & Print Receipt
             </button>
           </div>
+
+          <!-- Google Map Widget Panel -->
+          <div class="panel" style="margin-top: 1rem; padding: 1.25rem;">
+            <h4 style="font-size: 0.85rem; font-weight: 700; margin-bottom: 0.75rem; color: var(--text-primary); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid var(--border); padding-bottom: 0.35rem;">Customer Location Map</h4>
+            <div id="map-widget-container" style="width: 100%; height: 220px; border-radius: var(--radius-sm); overflow: hidden; border: 1px solid var(--border); background: var(--bg-elevated); display: flex; align-items: center; justify-content: center; position: relative;">
+              <div id="map-placeholder-text" style="font-size: 0.78rem; color: var(--text-muted); text-align: center; padding: 1rem;">
+                Enter customer address to load live map view.
+              </div>
+              <iframe id="live-map-iframe" src="" style="width: 100%; height: 100%; border: none; display: none;" allowfullscreen="" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
+            </div>
+          </div>
         </div>
 
       </div> <!-- /booking-grid -->
@@ -704,6 +715,41 @@
 
       addProductRow();
       adjustDoors(1); // Start with 1 door card
+
+      // Setup dynamic Google Map widget updater
+      const addrInput = document.getElementById('cust-address');
+      const cityInput = document.getElementById('cust-city');
+      const provInput = document.getElementById('cust-province');
+
+      function updateWidgetMap() {
+        const addr = (addrInput?.value || '').trim();
+        const city = (cityInput?.value || '').trim();
+        const prov = (provInput?.value || '').trim();
+
+        const placeholder = document.getElementById('map-placeholder-text');
+        const iframe = document.getElementById('live-map-iframe');
+
+        if (addr || city || prov) {
+          const fullQuery = [addr, city, prov].filter(Boolean).join(', ');
+          if (iframe && placeholder) {
+            iframe.src = `https://maps.google.com/maps?q=${encodeURIComponent(fullQuery)}&t=&z=14&ie=UTF8&iwloc=&output=embed`;
+            iframe.style.display = 'block';
+            placeholder.style.display = 'none';
+          }
+        } else {
+          if (iframe && placeholder) {
+            iframe.src = '';
+            iframe.style.display = 'none';
+            placeholder.style.display = 'block';
+          }
+        }
+      }
+
+      if (addrInput) addrInput.addEventListener('input', updateWidgetMap);
+      if (cityInput) cityInput.addEventListener('input', updateWidgetMap);
+      if (provInput) provInput.addEventListener('input', updateWidgetMap);
+
+      window._updateWidgetMap = updateWidgetMap;
     });
 
     // Build <option> HTML for door installer dropdowns
@@ -2211,6 +2257,10 @@
       const deductionsContainer = document.getElementById('deductions-container');
       if (deductionsContainer) {
         deductionsContainer.innerHTML = '';
+      }
+
+      if (typeof window._updateWidgetMap === 'function') {
+        window._updateWidgetMap();
       }
 
       calculateTotals();
