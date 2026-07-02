@@ -75,7 +75,7 @@ export default async function handler(req, res) {
     const { data: existingEmp, error: empFetchErr } = await supabase
       .from('employees')
       .select('*')
-      .eq('email', email.toLowerCase().trim())
+      .eq('email_address', email.toLowerCase().trim())
       .maybeSingle();
 
     let firstName = 'N/A';
