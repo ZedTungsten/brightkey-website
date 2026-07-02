@@ -1664,13 +1664,28 @@
       container.innerHTML = `<div style="text-align: center; color: var(--text-muted); font-size: 0.85rem; padding: 2.2rem 1rem;">Loading leaderboard...</div>`;
 
       try {
-        // Query commission assignments for the month
+        // Get booking IDs for this month (by scheduled_date, matching the rest of the dashboard)
+        const { data: monthBookings } = await sb
+          .from('installation_bookings')
+          .select('id')
+          .eq('company_id', currentCompanyId)
+          .neq('status', 'cancelled')
+          .gte('scheduled_date', startDate)
+          .lte('scheduled_date', endDate);
+
+        if (!monthBookings || monthBookings.length === 0) {
+          container.innerHTML = `<div style="text-align: center; color: var(--text-muted); font-size: 0.85rem; padding: 2.2rem 1rem;">No commissions recorded this month.</div>`;
+          return;
+        }
+
+        const monthBookingIds = monthBookings.map(b => b.id);
+
+        // Query commission assignments for those bookings
         const { data: commissions } = await sb
           .from('commission_assignments')
-          .select('employee_id, amount, created_at')
+          .select('employee_id, amount')
           .eq('company_id', currentCompanyId)
-          .gte('created_at', startDate + 'T00:00:00')
-          .lte('created_at', endDate + 'T23:59:59');
+          .in('booking_id', monthBookingIds);
 
         if (!commissions || commissions.length === 0) {
           container.innerHTML = `<div style="text-align: center; color: var(--text-muted); font-size: 0.85rem; padding: 2.2rem 1rem;">No commissions recorded this month.</div>`;
@@ -1696,7 +1711,7 @@
           return;
         }
 
-        // Fetch employee details for the top leaders directly (avoids Active-only filter issue)
+        // Fetch employee details directly for the top leaders
         const leaderEmpIds = top5.map(l => l.employee_id);
         const { data: leaderEmps } = await sb
           .from('employees')
