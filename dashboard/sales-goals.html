@@ -1666,7 +1666,7 @@
         // 1. Fetch commission_assignments for this company
         const { data: assignments, error: aErr } = await sb
           .from('commission_assignments')
-          .select('employee_id, booking_id, sku, product_index, rate_label, employees(first_name, last_name)')
+          .select('employee_id, booking_id, sku, product_index, rate_label, employees(first_name, last_name, profile_picture_url)')
           .eq('company_id', currentCompanyId);
 
         if (aErr) throw aErr;
@@ -1791,16 +1791,22 @@
           const emp = leader.emp || {};
           const firstName = emp.first_name || 'Unknown';
           const lastName = emp.last_name || 'Employee';
-          const fullName = `${firstName} ${lastName}`.trim();
+          const lastNameInitial = lastName ? ` ${lastName[0]}.` : '';
+          const displayName = `${firstName}${lastNameInitial}`;
           const initials = `${firstName[0] || ''}${lastName[0] || ''}`.toUpperCase();
-          const avatarHtml = `<span>${escapeHtml(initials)}</span>`;
+          const avatarUrl = emp.profile_picture_url || '';
+
+          let avatarHtml = `<span>${escapeHtml(initials)}</span>`;
+          if (avatarUrl) {
+            avatarHtml = `<img src="${escapeHtml(avatarUrl)}" alt="${escapeHtml(displayName)}" onerror="this.outerHTML='<span>${escapeHtml(initials)}</span>'">`;
+          }
 
           container.insertAdjacentHTML('beforeend', `
             <div class="leader-row">
               <div class="leader-left">
                 <span class="leader-rank leader-rank-${idx + 1}">${idx + 1}</span>
                 <div class="leader-avatar">${avatarHtml}</div>
-                <span class="leader-name">${escapeHtml(fullName)}</span>
+                <span class="leader-name">${escapeHtml(displayName)}</span>
               </div>
               <span class="leader-amount">${formatCurrency(leader.amount)}</span>
             </div>
