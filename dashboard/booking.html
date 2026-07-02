@@ -814,8 +814,8 @@
         const cleanAddr = address.trim();
         if (geocodeCache[cleanAddr]) return geocodeCache[cleanAddr];
 
+        // 1. Try geocoding full query first
         try {
-          // Append Philippines to query to lock context
           const query = cleanAddr.toLowerCase().includes('philippines') ? cleanAddr : `${cleanAddr}, Philippines`;
           const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`;
           const res = await fetch(url, { headers: { 'User-Agent': 'BrightKeyBookingApp/1.0' } });
@@ -828,8 +828,30 @@
         } catch (e) {
           console.warn('Geocoding fetch failed:', e);
         }
+
+        // 2. Progressive Fallback: If full address geocoding fails, try geocoding by pulling just the City and Province inputs
+        const cityVal = (document.getElementById('cust-city')?.value || '').trim();
+        const provVal = (document.getElementById('cust-province')?.value || '').trim();
+        if (cleanAddr.includes(cityVal) || cleanAddr.includes(provVal)) {
+          const cityQuery = [cityVal, provVal, 'Philippines'].filter(Boolean).join(', ');
+          if (geocodeCache[cityQuery]) return geocodeCache[cityQuery];
+          
+          try {
+            const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(cityQuery)}&limit=1`;
+            const res = await fetch(url, { headers: { 'User-Agent': 'BrightKeyBookingApp/1.0' } });
+            const data = await res.json();
+            if (data && data.length > 0) {
+              const loc = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+              geocodeCache[cityQuery] = loc;
+              geocodeCache[cleanAddr] = loc; // cache for full addr too
+              return loc;
+            }
+          } catch (e) {
+            console.warn('Fallback geocoding failed:', e);
+          }
+        }
         
-        // Fallback to static city coords
+        // 3. Static city DB fallback
         return findCityCoords(cleanAddr);
       }
 
