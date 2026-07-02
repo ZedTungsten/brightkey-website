@@ -1191,7 +1191,7 @@
 
         const { data: bookings, error: bErr } = await sb
           .from('installation_bookings')
-          .select('created_at, grand_total, deposit_amount, balance_due, deduction_labels, deduction_values, status, product_skus')
+          .select('created_at, grand_total, deposit_amount, balance_due, deduction_labels, deduction_values, status, product_skus, order_no')
           .eq('company_id', currentCompanyId)
           .neq('status', 'cancelled')
           .gte('scheduled_date', startDate)
@@ -1203,9 +1203,7 @@
         let totalRevenueCentavos = 0;
         if (bookings) {
           bookings.forEach(b => {
-            const skus = (b.product_skus || '').split(' | ').map(s => s.trim());
-            const isEvent = skus.some(s => s === 'Ocular' || s === 'Backjob' || s === 'Day off');
-            if (isEvent) return;
+            if (!b.order_no || !b.order_no.startsWith('ORD-')) return;
 
             const grandTotal = parseInt(b.grand_total) || 0;
             const balanceDue = parseInt(b.balance_due) || 0;
@@ -1325,7 +1323,7 @@
 
         const { data: bookings, error } = await sb
           .from('installation_bookings')
-          .select('created_at, customer_name, customer_address, product_skus, product_qtys, charge_labels, charge_values, deduction_labels, deduction_values, grand_total, balance_due, deposit_amount, status')
+          .select('created_at, customer_name, customer_address, product_skus, product_qtys, charge_labels, charge_values, deduction_labels, deduction_values, grand_total, balance_due, deposit_amount, status, order_no')
           .eq('company_id', currentCompanyId)
           .neq('status', 'cancelled')
           .gte('scheduled_date', startDate)
@@ -1333,11 +1331,9 @@
 
         if (error) throw error;
 
-        // Filter out event-only bookings (Ocular, Backjob, Day off)
+        // Filter out event-only bookings (Ocular, Backjob, Day off, etc.)
         const realOrders = (bookings || []).filter(b => {
-          const skus = (b.product_skus || '').split(' | ').map(s => s.trim());
-          const isEvent = skus.some(s => s === 'Ocular' || s === 'Backjob' || s === 'Day off');
-          return !isEvent;
+          return b.order_no && b.order_no.startsWith('ORD-');
         });
 
         if (realOrders.length === 0) {
@@ -1583,7 +1579,7 @@
         // Fetch bookings in last 30 days
         const { data: bookings } = await sb
           .from('installation_bookings')
-          .select('product_skus, product_qtys, product_names')
+          .select('product_skus, product_qtys, product_names, order_no')
           .eq('company_id', currentCompanyId)
           .neq('status', 'cancelled')
           .gte('scheduled_date', startDateStr);
@@ -1596,6 +1592,7 @@
         // Aggregate counts by SKU
         const skuAgg = {}; // SKU -> { qty: 0, name: '' }
         bookings.forEach(b => {
+          if (!b.order_no || !b.order_no.startsWith('ORD-')) return;
           if (!b.product_skus) return;
           const skus = b.product_skus.split(' | ');
           const qtys = (b.product_qtys || '').split(' | ');
@@ -1738,6 +1735,7 @@
 
         // 4. Run the exact same calculations as sales-commissions.html client-side
         monthBookings.forEach(b => {
+          if (!b.order_no || !b.order_no.startsWith('ORD-')) return;
           const bookingAssigns = assignMap[b.id];
           if (!bookingAssigns || bookingAssigns.length === 0) return;
 
