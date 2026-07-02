@@ -1026,12 +1026,11 @@
           }
         }
 
-        // 3. Fetch active employees
+        // 3. Fetch all employees (not just active — inactive can still appear in commissions)
         const { data: empData } = await sb
           .from('employees')
           .select('id, first_name, last_name, profile_picture_url')
-          .eq('company_id', currentCompanyId)
-          .eq('employment_status', 'Active');
+          .eq('company_id', currentCompanyId);
         
         allEmployees = empData || [];
 
@@ -1659,45 +1658,48 @@
     }
 
     // Leaderboard Loader (Commissions MTD)
+    // Mirrors sales-commissions.html: fetch ALL commission_assignments for the company,
+    // then filter client-side to bookings scheduled in the selected month.
     async function loadLeaderboard(startDate, endDate) {
       const container = document.getElementById('leaderboard-container');
       container.innerHTML = `<div style="text-align: center; color: var(--text-muted); font-size: 0.85rem; padding: 2.2rem 1rem;">Loading leaderboard...</div>`;
 
       try {
-        // Get booking IDs for this month (by scheduled_date, matching the rest of the dashboard)
-        const { data: monthBookings } = await sb
-          .from('installation_bookings')
-          .select('id')
-          .eq('company_id', currentCompanyId)
-          .neq('status', 'cancelled')
-          .gte('scheduled_date', startDate)
-          .lte('scheduled_date', endDate);
+        // Fetch all assignments + all bookings for this company (no date filter — same as sales-commissions)
+        const [assignmentsRes, bookingsRes] = await Promise.all([
+          sb.from('commission_assignments')
+            .select('employee_id, amount, booking_id')
+            .eq('company_id', currentCompanyId),
+          sb.from('installation_bookings')
+            .select('id, scheduled_date, status')
+            .eq('company_id', currentCompanyId)
+        ]);
 
-        if (!monthBookings || monthBookings.length === 0) {
-          container.innerHTML = `<div style="text-align: center; color: var(--text-muted); font-size: 0.85rem; padding: 2.2rem 1rem;">No commissions recorded this month.</div>`;
-          return;
-        }
+        const allAssignments = assignmentsRes.data || [];
+        const allBookings = bookingsRes.data || [];
 
-        const monthBookingIds = monthBookings.map(b => b.id);
+        // Build set of booking IDs that fall in the selected month (non-cancelled)
+        const monthBookingIdSet = new Set();
+        allBookings.forEach(b => {
+          if (!b.scheduled_date || b.status === 'cancelled') return;
+          const bMonth = b.scheduled_date.substring(0, 7); // 'YYYY-MM'
+          if (bMonth === currentSelectedMonth) {
+            monthBookingIdSet.add(b.id);
+          }
+        });
 
-        // Query commission assignments for those bookings
-        const { data: commissions } = await sb
-          .from('commission_assignments')
-          .select('employee_id, amount')
-          .eq('company_id', currentCompanyId)
-          .in('booking_id', monthBookingIds);
-
-        if (!commissions || commissions.length === 0) {
-          container.innerHTML = `<div style="text-align: center; color: var(--text-muted); font-size: 0.85rem; padding: 2.2rem 1rem;">No commissions recorded this month.</div>`;
-          return;
-        }
-
-        // Sum commissions per employee
-        const empSums = {}; // employee_id -> sum in centavos
-        commissions.forEach(c => {
+        // Sum commission amounts per employee — only for bookings in this month
+        const empSums = {};
+        allAssignments.forEach(c => {
           if (!c.employee_id) return;
+          if (!monthBookingIdSet.has(c.booking_id)) return;
           empSums[c.employee_id] = (empSums[c.employee_id] || 0) + c.amount;
         });
+
+        if (Object.keys(empSums).length === 0) {
+          container.innerHTML = `<div style="text-align: center; color: var(--text-muted); font-size: 0.85rem; padding: 2.2rem 1rem;">No commissions recorded this month.</div>`;
+          return;
+        }
 
         const sortedLeaders = Object.keys(empSums).map(empId => ({
           employee_id: empId,
@@ -1706,26 +1708,13 @@
 
         const top5 = sortedLeaders.slice(0, 5);
 
-        if (top5.length === 0) {
-          container.innerHTML = `<div style="text-align: center; color: var(--text-muted); font-size: 0.85rem; padding: 2.2rem 1rem;">No commissions recorded this month.</div>`;
-          return;
-        }
-
-        // Fetch employee details directly for the top leaders
-        const leaderEmpIds = top5.map(l => l.employee_id);
-        const { data: leaderEmps } = await sb
-          .from('employees')
-          .select('id, first_name, last_name, profile_picture_url')
-          .in('id', leaderEmpIds);
-        const leaderEmpMap = {};
-        (leaderEmps || []).forEach(e => { leaderEmpMap[e.id] = e; });
-
-        // Render leaderboard list
+        // Resolve names from allEmployees (already fetched, includes all statuses)
         container.innerHTML = '';
         top5.forEach((leader, idx) => {
-          const emp = leaderEmpMap[leader.employee_id] || { first_name: 'Unknown', last_name: 'Employee' };
+          const emp = allEmployees.find(e => e.id === leader.employee_id)
+                   || { first_name: 'Unknown', last_name: 'Employee', profile_picture_url: '' };
           const fullName = `${emp.first_name} ${emp.last_name}`;
-          const initials = `${emp.first_name[0] || ''}${emp.last_name[0] || ''}`.toUpperCase();
+          const initials = `${(emp.first_name || '')[0] || ''}${(emp.last_name || '')[0] || ''}`.toUpperCase();
           const avatarUrl = emp.profile_picture_url || '';
 
           let avatarHtml = `<span>${escapeHtml(initials)}</span>`;
