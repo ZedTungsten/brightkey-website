@@ -743,176 +743,6 @@
       const cityInput = document.getElementById('cust-city');
       const provInput = document.getElementById('cust-province');
 
-      // Coordinates mapping for common cities/municipalities & specific villages or subdivisions
-      // Ordered by granularity (most specific villages/subdivisions first, cities next, provinces last)
-      const CITY_COORDS = {
-        // Specific Villages / Subdivisions / Landmark areas
-        'sunnyvale': { lat: 14.4041, lng: 120.9791 },
-        'sunnyvale molino': { lat: 14.4041, lng: 120.9791 },
-        'perpetual 7': { lat: 14.4533, lng: 120.9576 },
-        'perpetual vii': { lat: 14.4533, lng: 120.9576 },
-        'manuyo': { lat: 14.4697, lng: 120.9822 },
-        'manuyo uno': { lat: 14.4697, lng: 120.9822 },
-        'manuyo dos': { lat: 14.4589, lng: 120.9991 },
-        'cleanville': { lat: 14.4715, lng: 120.9899 },
-        'alabang hills': { lat: 14.4373, lng: 121.0256 },
-        'bf homes': { lat: 14.4449, lng: 121.0116 },
-
-        // Cities & Municipalities
-        'bacoor': { lat: 14.4613, lng: 120.9634 },
-        'las pinas': { lat: 14.4497, lng: 120.9822 },
-        'las piñas': { lat: 14.4497, lng: 120.9822 },
-        'imus': { lat: 14.4239, lng: 120.9416 },
-        'dasmarinas': { lat: 14.3294, lng: 120.9368 },
-        'dasmariñas': { lat: 14.3294, lng: 120.9368 },
-        'general trias': { lat: 14.3831, lng: 120.8804 },
-        'gentri': { lat: 14.3831, lng: 120.8804 },
-        'kawit': { lat: 14.4456, lng: 120.9036 },
-        'noveleta': { lat: 14.4283, lng: 120.8797 },
-        'rosario': { lat: 14.4150, lng: 120.8596 },
-        'tanza': { lat: 14.3644, lng: 120.8524 },
-        'naic': { lat: 14.3204, lng: 120.7681 },
-        'tagaytay': { lat: 14.1153, lng: 120.9621 },
-        'silang': { lat: 14.2238, lng: 120.9749 },
-        'carmona': { lat: 14.3168, lng: 121.0558 },
-        'trece martires': { lat: 14.2811, lng: 120.8656 },
-        'muntinglupa': { lat: 14.3917, lng: 121.0450 },
-        'alabang': { lat: 14.4258, lng: 121.0315 },
-        'paranaque': { lat: 14.4793, lng: 121.0198 },
-        'parañaque': { lat: 14.4793, lng: 121.0198 },
-        'pasay': { lat: 14.5378, lng: 120.9918 },
-        'makati': { lat: 14.5547, lng: 121.0244 },
-        'taguig': { lat: 14.5176, lng: 121.0509 },
-        'pasig': { lat: 14.5764, lng: 121.0851 },
-        'mandaluyong': { lat: 14.5794, lng: 121.0359 },
-        'san juan': { lat: 14.6041, lng: 121.0313 },
-        'binan': { lat: 14.3276, lng: 121.0807 },
-        'biñan': { lat: 14.3276, lng: 121.0807 },
-        'san pedro': { lat: 14.3512, lng: 121.0526 },
-        'santa rosa': { lat: 14.3129, lng: 121.0944 },
-        'cabuyao': { lat: 14.2764, lng: 121.1242 },
-        'calamba': { lat: 14.2128, lng: 121.1649 },
-        'manila': { lat: 14.5995, lng: 120.9842 },
-        'cavite': { lat: 14.4791, lng: 120.8972 } // Generic province last to prevent premature matching
-      };
-
-      function findCityCoords(address) {
-        if (!address) return null;
-        const norm = address.toLowerCase().replace(/[^a-z0-9\sñ]/g, ' ');
-        const words = norm.split(/\s+/);
-        // Loop keys sequentially (so bacoor/las pinas match first before cavite province)
-        for (const [cityName, coords] of Object.entries(CITY_COORDS)) {
-          if (cityName.includes(' ')) {
-            if (norm.includes(cityName)) return coords;
-          } else {
-            if (words.includes(cityName)) return coords;
-          }
-        }
-        return null;
-      }
-
-      // Live Geocoding cache to prevent rate-limiting Nominatim
-      const geocodeCache = {};
-
-      async function fetchCoordsAsync(address) {
-        if (!address) return null;
-        const cleanAddr = address.trim();
-        if (geocodeCache[cleanAddr]) return geocodeCache[cleanAddr];
-
-        // 1. Try geocoding full query first
-        try {
-          const query = cleanAddr.toLowerCase().includes('philippines') ? cleanAddr : `${cleanAddr}, Philippines`;
-          const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`;
-          const res = await fetch(url, { headers: { 'User-Agent': 'BrightKeyBookingApp/1.0' } });
-          if (res.ok) {
-            const text = await res.text();
-            if (text.trim().startsWith('[')) {
-              const data = JSON.parse(text);
-              if (data && data.length > 0) {
-                const loc = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
-                geocodeCache[cleanAddr] = loc;
-                return loc;
-              }
-            }
-          }
-        } catch (e) {
-          console.warn('Geocoding fetch failed:', e);
-        }
-
-        // 2. Progressive Fallback: If full address geocoding fails, try geocoding by pulling just the City and Province inputs
-        const cityVal = (document.getElementById('cust-city')?.value || '').trim();
-        const provVal = (document.getElementById('cust-province')?.value || '').trim();
-        if (cleanAddr.includes(cityVal) || cleanAddr.includes(provVal)) {
-          const cityQuery = [cityVal, provVal, 'Philippines'].filter(Boolean).join(', ');
-          if (geocodeCache[cityQuery]) return geocodeCache[cityQuery];
-          
-          try {
-            const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(cityQuery)}&limit=1`;
-            const res = await fetch(url, { headers: { 'User-Agent': 'BrightKeyBookingApp/1.0' } });
-            if (res.ok) {
-              const text = await res.text();
-              if (text.trim().startsWith('[')) {
-                const data = JSON.parse(text);
-                if (data && data.length > 0) {
-                  const loc = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
-                  geocodeCache[cityQuery] = loc;
-                  geocodeCache[cleanAddr] = loc; // cache for full addr too
-                  return loc;
-                }
-              }
-            }
-          } catch (e) {
-            console.warn('Fallback geocoding failed:', e);
-          }
-        }
-        
-        // 3. Static city DB fallback
-        return findCityCoords(cleanAddr);
-      }
-
-      function computeHaversineDistance(c1, c2) {
-        if (!c1 || !c2) return null;
-        const R = 6371; // Earth radius in km
-        const dLat = (c2.lat - c1.lat) * Math.PI / 180;
-        const dLng = (c2.lng - c1.lng) * Math.PI / 180;
-        const a = 
-          Math.sin(dLat/2) * Math.sin(dLat/2) +
-          Math.cos(c1.lat * Math.PI / 180) * Math.cos(c2.lat * Math.PI / 180) * 
-          Math.sin(dLng/2) * Math.sin(dLng/2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-        const directDistance = R * c;
-        
-        // Routing factor for curves (~1.3x routing multiplier)
-        const adjustedDist = directDistance * 1.3;
-        
-        // If cities are the exact same neighborhood, make sure we return a non-zero realistic travel radius if they are distinct text
-        if (adjustedDist < 0.1) {
-          return 0.5; // minimum block distance fallback
-        }
-        return adjustedDist;
-      }
-
-      async function estimateDistance(addr1, addr2) {
-        if (!addr1 || !addr2) return null;
-        
-        // Fetch exact geocodes asynchronously
-        const c1 = await fetchCoordsAsync(addr1);
-        const c2 = await fetchCoordsAsync(addr2);
-
-        if (c1 && c2) {
-          const dist = computeHaversineDistance(c1, c2);
-          if (dist !== null) {
-            return dist.toFixed(1);
-          }
-        }
-
-        // Fallback string hash distance seed
-        let sum = 0;
-        const comb = addr1 + addr2;
-        for (let i = 0; i < comb.length; i++) sum += comb.charCodeAt(i);
-        return ((sum % 150) / 10 + 3).toFixed(1);
-      }
-
       function getCityProvinceFromAddress(address) {
         if (!address) return '';
         const parts = address.split(',').map(s => s.trim()).filter(Boolean);
@@ -926,6 +756,7 @@
         }
         return address;
       }
+
 
       function updateWidgetMap() {
         const city = (cityInput?.value || '').trim();
@@ -966,34 +797,11 @@
                     <div style="font-size: 0.72rem; color: var(--text-secondary); line-height: 1.3;">
                       <strong>Home Location:</strong> ${locationStr ? escapeHtml(locationStr) : 'No address loaded in record'}
                     </div>
-                    <div class="distance-value" style="margin-top: 0.35rem; font-weight: 700; color: var(--cyan-light); font-size: 0.75rem;">Calculating distance...</div>
                   </div>
                 `;
               }
             });
             sidebarList.innerHTML = shellHtml;
-
-            // Resolve distances asynchronously
-            selectedInstallerIds.forEach(async (id) => {
-              const emp = dbEmployees.find(e => e.id === id);
-              const empLoc = emp ? getCityProvinceFromAddress(emp.address) : '';
-              if (empLoc && destQuery) {
-                const km = await estimateDistance(empLoc, destQuery);
-                const card = document.getElementById(`sidebar-inst-card-${id}`);
-                if (card) {
-                  const valDiv = card.querySelector('.distance-value');
-                  if (valDiv) {
-                    valDiv.textContent = `${km} km away`;
-                  }
-                }
-              } else {
-                const card = document.getElementById(`sidebar-inst-card-${id}`);
-                if (card) {
-                  const valDiv = card.querySelector('.distance-value');
-                  if (valDiv) valDiv.remove();
-                }
-              }
-            });
           }
         }
 
