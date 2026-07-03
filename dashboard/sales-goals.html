@@ -1189,7 +1189,7 @@
         const lastDay = new Date(parseInt(year), parseInt(month), 0).getDate();
         const endDate = `${year}-${month}-${String(lastDay).padStart(2, '0')}`;
 
-        const { data: bookings, error: bErr } = await sb
+        const { data: rawBookings, error: bErr } = await sb
           .from('installation_bookings')
           .select('created_at, grand_total, deposit_amount, balance_due, deduction_labels, deduction_values, status, product_skus, order_no')
           .eq('company_id', currentCompanyId)
@@ -1199,11 +1199,13 @@
 
         if (bErr) throw bErr;
 
+        // Filter out calendar events (non-ORD)
+        const bookings = (rawBookings || []).filter(b => b.order_no && b.order_no.startsWith('ORD-'));
+
         // Sum up revenues: Grand Total + Deposit (ignoring calendar events)
         let totalRevenueCentavos = 0;
         if (bookings) {
           bookings.forEach(b => {
-            if (!b.order_no || !b.order_no.startsWith('ORD-')) return;
 
             const grandTotal = parseInt(b.grand_total) || 0;
             const balanceDue = parseInt(b.balance_due) || 0;
