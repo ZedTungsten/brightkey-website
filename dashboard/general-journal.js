@@ -871,16 +871,17 @@
           const numericClause = (!isNaN(searchNum) && isFinite(searchNum)) ? `,debit.eq.${searchNum},credit.eq.${searchNum}` : '';
 
           const entryNum = parseEntry(f.search);
+          const escapedSearch = f.search.replace(/"/g, '\\"');
           if (entryNum !== null) {
-            p.set('or', `(account.ilike.*${f.search}*,description_1.ilike.*${f.search}*,description_2.ilike.*${f.search}*,entry_number.eq.${entryNum}${numericClause})`);
+            p.set('or', `(account.ilike."*${escapedSearch}*",description_1.ilike."*${escapedSearch}*",description_2.ilike."*${escapedSearch}*",entry_number.eq.${entryNum}${numericClause})`);
           } else {
             let cleanSearch = f.search.toUpperCase();
             if (cleanSearch.startsWith('BK-')) cleanSearch = cleanSearch.replace('BK-', '');
             const entryNumWithPrefix = parseEntry('BK-' + cleanSearch);
             if (entryNumWithPrefix !== null) {
-              p.set('or', `(account.ilike.*${f.search}*,description_1.ilike.*${f.search}*,description_2.ilike.*${f.search}*,entry_number.eq.${entryNumWithPrefix}${numericClause})`);
+              p.set('or', `(account.ilike."*${escapedSearch}*",description_1.ilike."*${escapedSearch}*",description_2.ilike."*${escapedSearch}*",entry_number.eq.${entryNumWithPrefix}${numericClause})`);
             } else {
-              p.set('or', `(account.ilike.*${f.search}*,description_1.ilike.*${f.search}*,description_2.ilike.*${f.search}*${numericClause})`);
+              p.set('or', `(account.ilike."*${escapedSearch}*",description_1.ilike."*${escapedSearch}*",description_2.ilike."*${escapedSearch}*"${numericClause})`);
             }
           }
         }
@@ -916,16 +917,17 @@
           const numericClause = (!isNaN(searchNum) && isFinite(searchNum)) ? `,debit.eq.${searchNum},credit.eq.${searchNum}` : '';
 
           const entryNum = parseEntry(f.search);
+          const escapedSearch = f.search.replace(/"/g, '\\"');
           if (entryNum !== null) {
-            p.set('or', `(account.ilike.*${f.search}*,description_1.ilike.*${f.search}*,description_2.ilike.*${f.search}*,entry_number.eq.${entryNum}${numericClause})`);
+            p.set('or', `(account.ilike."*${escapedSearch}*",description_1.ilike."*${escapedSearch}*",description_2.ilike."*${escapedSearch}*",entry_number.eq.${entryNum}${numericClause})`);
           } else {
             let cleanSearch = f.search.toUpperCase();
             if (cleanSearch.startsWith('BK-')) cleanSearch = cleanSearch.replace('BK-', '');
             const entryNumWithPrefix = parseEntry('BK-' + cleanSearch);
             if (entryNumWithPrefix !== null) {
-              p.set('or', `(account.ilike.*${f.search}*,description_1.ilike.*${f.search}*,description_2.ilike.*${f.search}*,entry_number.eq.${entryNumWithPrefix}${numericClause})`);
+              p.set('or', `(account.ilike."*${escapedSearch}*",description_1.ilike."*${escapedSearch}*",description_2.ilike."*${escapedSearch}*",entry_number.eq.${entryNumWithPrefix}${numericClause})`);
             } else {
-              p.set('or', `(account.ilike.*${f.search}*,description_1.ilike.*${f.search}*,description_2.ilike.*${f.search}*${numericClause})`);
+              p.set('or', `(account.ilike."*${escapedSearch}*",description_1.ilike."*${escapedSearch}*",description_2.ilike."*${escapedSearch}*"${numericClause})`);
             }
           }
         }
