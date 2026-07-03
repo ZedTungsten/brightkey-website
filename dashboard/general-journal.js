@@ -866,17 +866,21 @@
           p.set('account', `in.(${escapedAccounts})`);
         }
         if (f.search) {
+          const cleanedSearch = f.search.replace(/,/g, '');
+          const searchNum = parseFloat(cleanedSearch);
+          const numericClause = (!isNaN(searchNum) && isFinite(searchNum)) ? `,debit.eq.${searchNum},credit.eq.${searchNum}` : '';
+
           const entryNum = parseEntry(f.search);
           if (entryNum !== null) {
-            p.set('or', `(account.ilike.*${f.search}*,description_1.ilike.*${f.search}*,description_2.ilike.*${f.search}*,entry_number.eq.${entryNum})`);
+            p.set('or', `(account.ilike.*${f.search}*,description_1.ilike.*${f.search}*,description_2.ilike.*${f.search}*,entry_number.eq.${entryNum}${numericClause})`);
           } else {
             let cleanSearch = f.search.toUpperCase();
             if (cleanSearch.startsWith('BK-')) cleanSearch = cleanSearch.replace('BK-', '');
             const entryNumWithPrefix = parseEntry('BK-' + cleanSearch);
             if (entryNumWithPrefix !== null) {
-              p.set('or', `(account.ilike.*${f.search}*,description_1.ilike.*${f.search}*,description_2.ilike.*${f.search}*,entry_number.eq.${entryNumWithPrefix})`);
+              p.set('or', `(account.ilike.*${f.search}*,description_1.ilike.*${f.search}*,description_2.ilike.*${f.search}*,entry_number.eq.${entryNumWithPrefix}${numericClause})`);
             } else {
-              p.set('or', `(account.ilike.*${f.search}*,description_1.ilike.*${f.search}*,description_2.ilike.*${f.search}*)`);
+              p.set('or', `(account.ilike.*${f.search}*,description_1.ilike.*${f.search}*,description_2.ilike.*${f.search}*${numericClause})`);
             }
           }
         }
@@ -907,17 +911,21 @@
           p.set('account', `in.(${escapedAccounts})`);
         }
         if (f.search) {
+          const cleanedSearch = f.search.replace(/,/g, '');
+          const searchNum = parseFloat(cleanedSearch);
+          const numericClause = (!isNaN(searchNum) && isFinite(searchNum)) ? `,debit.eq.${searchNum},credit.eq.${searchNum}` : '';
+
           const entryNum = parseEntry(f.search);
           if (entryNum !== null) {
-            p.set('or', `(account.ilike.*${f.search}*,description_1.ilike.*${f.search}*,description_2.ilike.*${f.search}*,entry_number.eq.${entryNum})`);
+            p.set('or', `(account.ilike.*${f.search}*,description_1.ilike.*${f.search}*,description_2.ilike.*${f.search}*,entry_number.eq.${entryNum}${numericClause})`);
           } else {
             let cleanSearch = f.search.toUpperCase();
             if (cleanSearch.startsWith('BK-')) cleanSearch = cleanSearch.replace('BK-', '');
             const entryNumWithPrefix = parseEntry('BK-' + cleanSearch);
             if (entryNumWithPrefix !== null) {
-              p.set('or', `(account.ilike.*${f.search}*,description_1.ilike.*${f.search}*,description_2.ilike.*${f.search}*,entry_number.eq.${entryNumWithPrefix})`);
+              p.set('or', `(account.ilike.*${f.search}*,description_1.ilike.*${f.search}*,description_2.ilike.*${f.search}*,entry_number.eq.${entryNumWithPrefix}${numericClause})`);
             } else {
-              p.set('or', `(account.ilike.*${f.search}*,description_1.ilike.*${f.search}*,description_2.ilike.*${f.search}*)`);
+              p.set('or', `(account.ilike.*${f.search}*,description_1.ilike.*${f.search}*,description_2.ilike.*${f.search}*${numericClause})`);
             }
           }
         }
