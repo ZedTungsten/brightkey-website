@@ -326,7 +326,20 @@
           if (this.companyId && this.companyId !== 'undefined' && this.companyId !== 'null') {
             url = `journal_accounts?select=id,name,category,is_visible&company_id=eq.${this.companyId}&order=category.asc,name.asc`;
           }
-          this.accounts = await sbGet(url);
+          try {
+            this.accounts = await sbGet(url);
+          } catch (err) {
+            if (err.message && (err.message.includes('is_visible') || err.message.includes('does not exist'))) {
+              let fallbackUrl = 'journal_accounts?select=id,name,category&order=category.asc,name.asc';
+              if (this.companyId && this.companyId !== 'undefined' && this.companyId !== 'null') {
+                fallbackUrl = `journal_accounts?select=id,name,category&company_id=eq.${this.companyId}&order=category.asc,name.asc`;
+              }
+              const data = await sbGet(fallbackUrl);
+              this.accounts = (data || []).map(a => ({ ...a, is_visible: true }));
+            } else {
+              throw err;
+            }
+          }
           this.populateDropdowns();
           this.renderAcctsList();
         } catch(e) {
