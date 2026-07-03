@@ -7,8 +7,26 @@ window.WarehousePage = {
   fulfillmentWarehouses: [],
   allProducts: [],
   allEmployees: [],
-  bookings: [],
-  activeTransactions: [],
+  _bookings: [],
+  get bookings() {
+    return this._bookings;
+  },
+  set bookings(val) {
+    this._bookings = (val || []).filter(b => b.order_no && b.order_no.startsWith('ORD-'));
+  },
+
+  _activeTransactions: [],
+  get activeTransactions() {
+    return this._activeTransactions;
+  },
+  set activeTransactions(val) {
+    this._activeTransactions = (val || []).filter(tx => {
+      if (tx.type === 'customer_order') {
+        return tx.reference_id && tx.reference_id.startsWith('ORD-');
+      }
+      return true;
+    });
+  },
   lastAction: null,
 
   // Callbacks
