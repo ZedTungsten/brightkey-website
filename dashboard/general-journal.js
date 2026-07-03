@@ -868,7 +868,14 @@
         if (f.search) {
           const cleanedSearch = f.search.replace(/,/g, '');
           const searchNum = parseFloat(cleanedSearch);
-          const numericClause = (!isNaN(searchNum) && isFinite(searchNum)) ? `,debit.eq.${searchNum},credit.eq.${searchNum}` : '';
+          let numericClause = '';
+          if (!isNaN(searchNum) && isFinite(searchNum)) {
+            if (cleanedSearch.includes('.')) {
+              numericClause = `,debit.eq.${searchNum},credit.eq.${searchNum}`;
+            } else {
+              numericClause = `,debit.eq.${searchNum},credit.eq.${searchNum},and(debit.gte.${searchNum},debit.lt.${searchNum + 1}),and(credit.gte.${searchNum},credit.lt.${searchNum + 1})`;
+            }
+          }
 
           const entryNum = parseEntry(f.search);
           const escapedSearch = f.search.replace(/"/g, '\\"');
@@ -914,7 +921,14 @@
         if (f.search) {
           const cleanedSearch = f.search.replace(/,/g, '');
           const searchNum = parseFloat(cleanedSearch);
-          const numericClause = (!isNaN(searchNum) && isFinite(searchNum)) ? `,debit.eq.${searchNum},credit.eq.${searchNum}` : '';
+          let numericClause = '';
+          if (!isNaN(searchNum) && isFinite(searchNum)) {
+            if (cleanedSearch.includes('.')) {
+              numericClause = `,debit.eq.${searchNum},credit.eq.${searchNum}`;
+            } else {
+              numericClause = `,debit.eq.${searchNum},credit.eq.${searchNum},and(debit.gte.${searchNum},debit.lt.${searchNum + 1}),and(credit.gte.${searchNum},credit.lt.${searchNum + 1})`;
+            }
+          }
 
           const entryNum = parseEntry(f.search);
           const escapedSearch = f.search.replace(/"/g, '\\"');
