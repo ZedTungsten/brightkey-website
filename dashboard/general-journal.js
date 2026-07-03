@@ -322,9 +322,9 @@
       /* ── Load accounts ── */
       async loadAccounts() {
         try {
-          let url = 'journal_accounts?select=id,name,category&order=category.asc,name.asc';
+          let url = 'journal_accounts?select=id,name,category,is_visible&order=category.asc,name.asc';
           if (this.companyId && this.companyId !== 'undefined' && this.companyId !== 'null') {
-            url = `journal_accounts?select=id,name,category&company_id=eq.${this.companyId}&order=category.asc,name.asc`;
+            url = `journal_accounts?select=id,name,category,is_visible&company_id=eq.${this.companyId}&order=category.asc,name.asc`;
           }
           this.accounts = await sbGet(url);
           this.populateDropdowns();
@@ -334,14 +334,17 @@
         }
       },
 
-      grouped() {
+      grouped(onlyVisible = false) {
         const g = {};
-        this.accounts.forEach(a => { (g[a.category] = g[a.category] || []).push(a); });
+        this.accounts.forEach(a => {
+          if (onlyVisible && a.is_visible === false) return;
+          (g[a.category] = g[a.category] || []).push(a);
+        });
         return g;
       },
 
       populateDropdowns() {
-        const g = this.grouped();
+        const g = this.grouped(true);
         const catKeys = Object.keys(g).sort();
 
         const fillGrouped = (selId, placeholder) => {
@@ -367,10 +370,11 @@
         /* flat filter checkbox list */
         this.renderAccountFilter();
 
-        /* orphan reassign dropdown */
+        /* orphan reassign dropdown - show only visible accounts to reassign to */
         const oSel = document.getElementById('orphan-reassign-sel');
         oSel.innerHTML = '';
         this.accounts.forEach(a => {
+          if (a.is_visible === false) return;
           const o = document.createElement('option');
           o.value = o.textContent = a.name;
           oSel.appendChild(o);
@@ -380,16 +384,23 @@
       renderAcctsList() {
         const c = document.getElementById('accts-list');
         if (!this.accounts.length) { c.innerHTML = '<div class="tbl-state">No accounts yet.</div>'; return; }
-        const g = this.grouped();
+        const g = this.grouped(false);
         let html = '';
         Object.keys(g).sort().forEach(cat => {
           html += `<div class="acct-group-label">${esc(cat)}</div>`;
           g[cat].forEach(a => {
+            const isVisible = a.is_visible !== false;
             html += `
               <div class="acct-row" id="acr-${a.id}">
                 <span class="acct-row__name">${esc(a.name)}</span>
                 <span class="acct-row__cat">${esc(a.category)}</span>
-                <div class="acct-row__actions">
+                <div class="acct-row__actions" style="display:flex; align-items:center; gap:4px;">
+                  <button class="btn btn-ghost btn-sm" type="button" onclick="JournalApp.toggleAcctVisibility(${a.id})" title="${isVisible ? 'Hide from selection' : 'Show in selection'}">
+                    ${isVisible
+                      ? `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`
+                      : `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text-muted);"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`
+                    }
+                  </button>
                   <button class="btn btn-ghost btn-sm" type="button" onclick="JournalApp.editAcct(${a.id})" title="Edit">
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                   </button>
@@ -445,6 +456,18 @@
           await this.loadAccounts();
           this.renderTable();
         } catch(e) { Toast.error('Delete failed: ' + e.message); }
+      },
+
+      async toggleAcctVisibility(id) {
+        const a = this.accounts.find(x => x.id === id);
+        if (!a) return;
+        const newVisible = a.is_visible === false ? true : false;
+        try {
+          await sbPatch('journal_accounts', `id=eq.${id}`, { is_visible: newVisible });
+          Toast.success(`Account visibility updated.`);
+          await this.loadAccounts();
+          this.renderTable();
+        } catch(e) { Toast.error('Failed to toggle visibility: ' + e.message); }
       },
 
       /* ── Accounts panel ── */
@@ -713,9 +736,10 @@
         if (!list) return;
         if (!this.selectedAccounts) this.selectedAccounts = new Set(); // safety guard
         const apply = () => { this.page = 1; this.loadEntries(); };
-        // Group by category
+        // Group by category (only include visible accounts in checkbox filter)
         const groups = {};
         this.accounts.forEach(a => {
+          if (a.is_visible === false) return;
           if (!groups[a.category]) groups[a.category] = [];
           groups[a.category].push(a);
         });
