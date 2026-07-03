@@ -754,10 +754,27 @@
             const totalSchedVal = salaryPortion + adjsVal + reimbsVal + commsVal + instPortion;
             const isPaid = this.regularPayoutState[mk]?.[`${emp.id}_${day}`] || false;
             const isPast = this.isPastDay(day);
-            payoutCellsHtml += `<td><div class="payout-cell-container" style="display:inline-flex;align-items:center;gap:0.4rem;">
-              <input type="checkbox" class="payout-checkbox" ${isPaid ? 'checked' : ''} onchange="App.togglePayoutCheck('${emp.id}',${day},this.checked)">
-              <span class="payout-val ${isPast && !isPaid ? 'overdue' : ''}" id="val-${emp.id}-${day}" style="${isPaid ? 'text-decoration:line-through;opacity:0.5;' : ''}">${esc(php(totalSchedVal))}</span>
-            </div></td>`;
+
+            const breakdownItems = [];
+            if (salaryPortion > 0) breakdownItems.push(`Sal: ${php(salaryPortion)}`);
+            if (commsVal > 0) breakdownItems.push(`Com: ${php(commsVal)}`);
+            if (instPortion > 0) breakdownItems.push(`Inst: ${php(instPortion)}`);
+            if (reimbsVal > 0) breakdownItems.push(`Reimb: ${php(reimbsVal)}`);
+            if (adjsVal !== 0) breakdownItems.push(`Adj: ${php(adjsVal)}`);
+            
+            const breakdownHtml = breakdownItems.length > 0 
+              ? `<div class="payout-breakdown" style="font-size:0.68rem; color:var(--text-muted); line-height:1.2; margin-left:1.4rem; text-align:left; font-family:var(--font);">${breakdownItems.join('<br>')}</div>` 
+              : '';
+
+            payoutCellsHtml += `<td>
+              <div class="payout-cell-container" style="display:flex; flex-direction:column; align-items:flex-start; gap:0.15rem; min-width:90px; padding:0.25rem 0;">
+                <div style="display:inline-flex; align-items:center; gap:0.4rem;">
+                  <input type="checkbox" class="payout-checkbox" ${isPaid ? 'checked' : ''} onchange="App.togglePayoutCheck('${emp.id}',${day},this.checked)">
+                  <span class="payout-val ${isPast && !isPaid ? 'overdue' : ''}" id="val-${emp.id}-${day}" style="${isPaid ? 'text-decoration:line-through;opacity:0.5;' : ''}" title="${esc(breakdownItems.join('\n'))}">${esc(php(totalSchedVal))}</span>
+                </div>
+                ${breakdownHtml}
+              </div>
+            </td>`;
           });
 
           const grandTotal = baseSalary + empComms + empReimbs + empAdjs + totalSpecials + instPayouts.totalInstallationPayout;
