@@ -875,79 +875,96 @@
         document.getElementById('proof-packed-container').onclick = null;
       }
 
-      // Find delivery booking row
-      const d = dbDeliveryBookings.find(x => x.reference_id === t.reference_id);
+      // Find all delivery booking rows for this order
+      const matchingBookings = dbDeliveryBookings.filter(x => x.reference_id === t.reference_id);
 
-      // 2. Booking Screenshot
+      // Aggregate delivery booking info
+      let deliveryPhoto = null;
+      let bookedDateStr = '—';
+      let pickupPhoto = null;
+      let pickedUpDateStr = '—';
+      let deliveredPhoto = null;
+      let deliveredDateStr = '—';
+
+      // 1. Booking screenshot (look for first matching booking with delivery_photo_url)
+      const bookingRow = matchingBookings.find(x => x.delivery_photo_url);
+      if (bookingRow) {
+        deliveryPhoto = bookingRow.delivery_photo_url;
+        bookedDateStr = bookingRow.created_at ? new Date(bookingRow.created_at).toLocaleString() : '—';
+      } else if (matchingBookings.length > 0) {
+        const earliest = matchingBookings.reduce((min, cur) => new Date(cur.created_at) < new Date(min.created_at) ? cur : min, matchingBookings[0]);
+        bookedDateStr = earliest.created_at ? new Date(earliest.created_at).toLocaleString() : '—';
+      }
+
+      // 2. Pickup screenshot
+      const pickupRow = matchingBookings.find(x => x.pickup_photos && x.pickup_photos.length > 0);
+      if (pickupRow) {
+        pickupPhoto = pickupRow.pickup_photos[0];
+        pickedUpDateStr = pickupRow.picked_up_at ? new Date(pickupRow.picked_up_at).toLocaleString() : '—';
+      } else if (matchingBookings.length > 0) {
+        const earliestPicked = matchingBookings.find(x => x.picked_up_at);
+        if (earliestPicked) {
+          pickedUpDateStr = new Date(earliestPicked.picked_up_at).toLocaleString();
+        }
+      }
+
+      // 3. Delivery proof
+      const deliveryRow = matchingBookings.find(x => x.received_photo_url);
+      if (deliveryRow) {
+        deliveredPhoto = deliveryRow.received_photo_url;
+        deliveredDateStr = deliveryRow.delivered_at ? new Date(deliveryRow.delivered_at).toLocaleString() : '—';
+      } else if (matchingBookings.length > 0) {
+        const earliestDelivered = matchingBookings.find(x => x.delivered_at);
+        if (earliestDelivered) {
+          deliveredDateStr = new Date(earliestDelivered.delivered_at).toLocaleString();
+        }
+      }
+
+      // 2. Booking Screenshot Rendering
       const bImg = document.getElementById('proof-booking-img');
       const bPlaceholder = document.getElementById('proof-booking-placeholder');
       const bDate = document.getElementById('proof-booking-date');
-      if (d) {
-        bDate.textContent = d.created_at ? new Date(d.created_at).toLocaleString() : '—';
-        if (d.delivery_photo_url) {
-          bImg.src = d.delivery_photo_url;
-          bImg.style.display = 'block';
-          bPlaceholder.style.display = 'none';
-          document.getElementById('proof-booking-container').onclick = () => maximizePhoto(d.delivery_photo_url);
-        } else {
-          bImg.src = '';
-          bImg.style.display = 'none';
-          bPlaceholder.style.display = 'flex';
-          document.getElementById('proof-booking-container').onclick = null;
-        }
+      bDate.textContent = bookedDateStr;
+      if (deliveryPhoto) {
+        bImg.src = deliveryPhoto;
+        bImg.style.display = 'block';
+        bPlaceholder.style.display = 'none';
+        document.getElementById('proof-booking-container').onclick = () => maximizePhoto(deliveryPhoto);
       } else {
-        bDate.textContent = '—';
         bImg.src = '';
         bImg.style.display = 'none';
         bPlaceholder.style.display = 'flex';
         document.getElementById('proof-booking-container').onclick = null;
       }
 
-      // 3. Pickup Handover Screenshot
+      // 3. Pickup Handover Screenshot Rendering
       const pickImg = document.getElementById('proof-pickup-img');
       const pickPlaceholder = document.getElementById('proof-pickup-placeholder');
       const pickDate = document.getElementById('proof-pickup-date');
-      if (d) {
-        pickDate.textContent = d.picked_up_at ? new Date(d.picked_up_at).toLocaleString() : '—';
-        const pickupUrl = d.pickup_photos && d.pickup_photos.length > 0 ? d.pickup_photos[0] : null;
-        if (pickupUrl) {
-          pickImg.src = pickupUrl;
-          pickImg.style.display = 'block';
-          pickPlaceholder.style.display = 'none';
-          document.getElementById('proof-pickup-container').onclick = () => maximizePhoto(pickupUrl);
-        } else {
-          pickImg.src = '';
-          pickImg.style.display = 'none';
-          pickPlaceholder.style.display = 'flex';
-          document.getElementById('proof-pickup-container').onclick = null;
-        }
+      pickDate.textContent = pickedUpDateStr;
+      if (pickupPhoto) {
+        pickImg.src = pickupPhoto;
+        pickImg.style.display = 'block';
+        pickPlaceholder.style.display = 'none';
+        document.getElementById('proof-pickup-container').onclick = () => maximizePhoto(pickupPhoto);
       } else {
-        pickDate.textContent = '—';
         pickImg.src = '';
         pickImg.style.display = 'none';
         pickPlaceholder.style.display = 'flex';
         document.getElementById('proof-pickup-container').onclick = null;
       }
 
-      // 4. Delivery Proof Screenshot
+      // 4. Delivery Proof Screenshot Rendering
       const delImg = document.getElementById('proof-delivery-img');
       const delPlaceholder = document.getElementById('proof-delivery-placeholder');
       const delDate = document.getElementById('proof-delivery-date');
-      if (d) {
-        delDate.textContent = d.delivered_at ? new Date(d.delivered_at).toLocaleString() : '—';
-        if (d.received_photo_url) {
-          delImg.src = d.received_photo_url;
-          delImg.style.display = 'block';
-          delPlaceholder.style.display = 'none';
-          document.getElementById('proof-delivery-container').onclick = () => maximizePhoto(d.received_photo_url);
-        } else {
-          delImg.src = '';
-          delImg.style.display = 'none';
-          delPlaceholder.style.display = 'flex';
-          document.getElementById('proof-delivery-container').onclick = null;
-        }
+      delDate.textContent = deliveredDateStr;
+      if (deliveredPhoto) {
+        delImg.src = deliveredPhoto;
+        delImg.style.display = 'block';
+        delPlaceholder.style.display = 'none';
+        document.getElementById('proof-delivery-container').onclick = () => maximizePhoto(deliveredPhoto);
       } else {
-        delDate.textContent = '—';
         delImg.src = '';
         delImg.style.display = 'none';
         delPlaceholder.style.display = 'flex';
