@@ -840,7 +840,7 @@
         const separator = document.createElement('div');
         separator.className = 'chat-time-separator';
         separator.setAttribute('data-time-for', messageId);
-        separator.style.cssText = 'align-self: center; font-size: 0.62rem; font-weight: 600; color: var(--text-muted, #71717a); margin: 0.35rem 0 0.1rem; padding: 0 0.35rem;';
+        separator.style.cssText = 'align-self: center; font-size: 0.62rem; font-weight: 400; color: var(--text-muted, #71717a); margin: 0.35rem 0 0.1rem; padding: 0 0.35rem;';
         separator.textContent = this.formatMessageTime(timestamp);
         container.appendChild(separator);
       },
@@ -849,7 +849,7 @@
         const separator = document.createElement('div');
         separator.className = 'chat-time-separator';
         separator.setAttribute('data-time-for', messageId);
-        separator.style.cssText = 'align-self: center; font-size: 0.62rem; font-weight: 600; color: var(--text-muted, #71717a); margin: 0.35rem 0 0.1rem; padding: 0 0.35rem;';
+        separator.style.cssText = 'align-self: center; font-size: 0.62rem; font-weight: 400; color: var(--text-muted, #71717a); margin: 0.35rem 0 0.1rem; padding: 0 0.35rem;';
         separator.textContent = this.formatMessageTime(timestamp);
         fragment.appendChild(separator);
       },
