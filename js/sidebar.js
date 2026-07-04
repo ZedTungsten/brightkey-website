@@ -1258,6 +1258,9 @@
         if (loadMore) {
           this.isLoadingMore = true;
           this.showScrollLoadingIndicator();
+        } else {
+          this.messagesOffset = 0;
+          this.hasMoreMessages = true;
         }
 
         try {
