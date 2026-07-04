@@ -381,7 +381,7 @@
         const paginatedDone = doneQueue.slice(startIdx, endIdx);
 
         paginatedDone.forEach(db => {
-          const items = this.activeTransactions.filter(t => t.reference_id === db.reference_id && t.status === 'dispatched');
+          const items = this.activeTransactions.filter(t => t.reference_id === db.reference_id && ['dispatched', 'received'].includes(t.status));
           const skusHtml = items.map(t => `<code>${t.sku}</code>`).join('<br/>') || '—';
           const qtysHtml = items.map(t => `<strong>${t.quantity}</strong>`).join('<br/>') || '—';
 
@@ -525,15 +525,50 @@
 
         const sb = window.BKAuth.sb;
 
+        const now = new Date().toISOString();
         const { error: updErr } = await sb.from('delivery_bookings')
           .update({
             status: 'delivered',
             received_photo_url: uploadResult.url,
-            delivered_at: new Date().toISOString()
+            delivered_at: now
           })
           .eq('id', DeliveryApp.selectedBooking.id);
 
         if (updErr) throw updErr;
+
+        // Fetch transactions for this reference_id that are currently 'dispatched'
+        const { data: txsToUpdate, error: txsErr } = await sb.from('inventory_transactions')
+          .select('id, sku, quantity, warehouse_id')
+          .eq('reference_id', DeliveryApp.selectedBooking.reference_id)
+          .eq('status', 'dispatched')
+          .eq('type', 'customer_order');
+        if (txsErr) throw txsErr;
+
+        if (txsToUpdate && txsToUpdate.length > 0) {
+          // Update transactions status to 'received'
+          const txIds = txsToUpdate.map(t => t.id);
+          const { error: txErr } = await sb.from('inventory_transactions').update({
+            status: 'received',
+            timestamp_received: now
+          }).in('id', txIds);
+          if (txErr) throw txErr;
+
+          // Adjust inventory levels (subtract from dispatched)
+          for (const tx of txsToUpdate) {
+            let invQDisp = sb.from('inventory').select('*').eq('sku', tx.sku);
+            if (tx.warehouse_id) invQDisp = invQDisp.eq('warehouse_id', tx.warehouse_id);
+            else invQDisp = invQDisp.is('warehouse_id', null);
+            const { data: invRow, error: invErr } = await invQDisp;
+            if (invErr) throw invErr;
+            if (invRow && invRow.length > 0) {
+              const inv = invRow[0];
+              const { error: updInvErr } = await sb.from('inventory').update({
+                dispatched: Math.max(0, (inv.dispatched || 0) - tx.quantity)
+              }).eq('id', inv.id);
+              if (updInvErr) throw updInvErr;
+            }
+          }
+        }
 
         Toast.success('Delivery marked as completed.');
         closeDoneModal();
