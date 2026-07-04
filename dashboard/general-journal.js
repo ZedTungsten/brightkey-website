@@ -165,13 +165,17 @@
         this.bindLogs();
         document.getElementById('clear-form-btn').addEventListener('click', () => this.clearForm());
         document.getElementById('ss-create-btn').addEventListener('click', () => this.createSnapshot());
+        document.getElementById('ss-delete-btn').addEventListener('click', () => this.deleteSnapshot());
         document.getElementById('export-csv-btn').addEventListener('click', () => this.exportToCSV());
+        document.getElementById('ss-month').addEventListener('change', () => this.checkSnapshotStatus());
+        document.getElementById('ss-year').addEventListener('change', () => this.checkSnapshotStatus());
         // Detect IP + browser silently
         this.detectUser();
         await this.loadAccounts();
         await this.loadEntries();
         await this.refreshNextBadge();
         await this.loadYears();
+        await this.checkSnapshotStatus();
       },
 
       setTodayDate() {
@@ -1177,6 +1181,76 @@
         }
       },
 
+      async checkSnapshotStatus() {
+        const monthSelect = document.getElementById('ss-month');
+        const yearSelect  = document.getElementById('ss-year');
+        const deleteBtn   = document.getElementById('ss-delete-btn');
+        if (!monthSelect || !yearSelect || !deleteBtn) return;
+
+        const M = parseInt(monthSelect.value, 10);
+        const Y = parseInt(yearSelect.value, 10);
+        if (!M || !Y) {
+          deleteBtn.style.display = 'none';
+          return;
+        }
+
+        const snapEntryNum = -((Y % 100) * 100 + M);
+        let url = `general_journal?select=id&entry_number=eq.${snapEntryNum}&limit=1`;
+        if (this.companyId && this.companyId !== 'undefined' && this.companyId !== 'null') {
+          url += `&company_id=eq.${this.companyId}`;
+        }
+        try {
+          const res = await sbGet(url);
+          if (res && res.length > 0) {
+            deleteBtn.style.display = '';
+          } else {
+            deleteBtn.style.display = 'none';
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      },
+
+      async deleteSnapshot() {
+        const monthSelect = document.getElementById('ss-month');
+        const yearSelect  = document.getElementById('ss-year');
+        const btn         = document.getElementById('ss-delete-btn');
+        if (!monthSelect || !yearSelect || !btn) return;
+
+        const M = parseInt(monthSelect.value, 10);
+        const Y = parseInt(yearSelect.value, 10);
+        if (!M || !Y) return;
+
+        const monthName = monthSelect.options[monthSelect.selectedIndex].text;
+        const ok = await BKDialog.ask({
+          title: 'Delete Snapshot',
+          message: `Are you sure you want to delete the monthly consolidated snapshot for ${monthName} ${Y}?\n\nThis action cannot be undone.`,
+          okText: 'Delete',
+          danger: true
+        });
+        if (!ok) return;
+
+        btn.disabled = true;
+        btn.textContent = 'Deleting...';
+
+        const snapEntryNum = -((Y % 100) * 100 + M);
+        let snapFilter = `entry_number=eq.${snapEntryNum}`;
+        if (this.companyId && this.companyId !== 'undefined' && this.companyId !== 'null') {
+          snapFilter += `&company_id=eq.${this.companyId}`;
+        }
+        try {
+          await sbDelete('general_journal', snapFilter);
+          Toast.success(`Snapshot for ${monthName} ${Y} deleted successfully.`);
+          await this.loadEntries();
+          await this.checkSnapshotStatus();
+        } catch (err) {
+          Toast.error('Failed to delete snapshot: ' + err.message);
+        } finally {
+          btn.disabled = false;
+          btn.textContent = 'Delete Snapshot';
+        }
+      },
+
       /* ── Helper: createSnapshot ── */
       async createSnapshot() {
         const monthSelect = document.getElementById('ss-month');
@@ -1192,9 +1266,32 @@
         btn.textContent = 'Creating...';
 
         try {
+          const snapEntryNum = -((Y % 100) * 100 + M);
+          const monthName = monthSelect.options[monthSelect.selectedIndex].text;
+
+          // Check if snapshot already exists and ask to overwrite
+          let checkUrl = `general_journal?select=id&entry_number=eq.${snapEntryNum}&limit=1`;
+          if (this.companyId && this.companyId !== 'undefined' && this.companyId !== 'null') {
+            checkUrl += `&company_id=eq.${this.companyId}`;
+          }
+          const existing = await sbGet(checkUrl);
+          if (existing && existing.length > 0) {
+            const overwrite = await BKDialog.ask({
+              title: 'Overwrite Snapshot',
+              message: `A consolidated snapshot already exists for ${monthName} ${Y}.\n\nDo you want to overwrite it with the new consolidated balances?`,
+              okText: 'Overwrite',
+              danger: true
+            });
+            if (!overwrite) {
+              btn.disabled = false;
+              btn.textContent = 'Create Snapshot';
+              return;
+            }
+          }
+
           // 1. Fetch all regular/individual entries for this month and year (where entry_number > 0)
           let url = `general_journal?select=account,debit,credit&year=eq.${Y}&month=eq.${M}&entry_number=gt.0`;
-          if (this.companyId) {
+          if (this.companyId && this.companyId !== 'undefined' && this.companyId !== 'null') {
             url += `&company_id=eq.${this.companyId}`;
           }
           const entries = await sbGet(url);
@@ -1220,7 +1317,6 @@
           });
 
           const snapshotRows = [];
-          const snapEntryNum = -((Y % 100) * 100 + M);
           // Last day of month
           const lastDayStr = new Date(Y, M, 0).toISOString().slice(0, 10);
 
@@ -1279,6 +1375,7 @@
 
           Toast.success(`Snapshot created successfully as ${fmtEntry(snapEntryNum)}.`);
           await this.loadEntries();
+          await this.checkSnapshotStatus();
         } catch (err) {
           console.error(err);
           Toast.error('Failed to create snapshot: ' + err.message);
