@@ -375,16 +375,19 @@
           </div>
 
           <!-- Info card -->
-          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:0.4rem 1rem; font-size:0.8rem; color:var(--text-secondary); background:var(--bg-elevated); padding:0.75rem 1rem; border-radius:8px; border:1px solid var(--border); line-height:1.3;">
-            <div><strong>Order No:</strong> <span id="odetail-order-no" style="color:var(--text-primary); font-weight:600;"></span></div>
-            <div><strong>Customer:</strong> <span id="odetail-customer-name" style="color:var(--text-primary);"></span></div>
-            <div><strong>SKU:</strong> <span id="odetail-sku" style="color:var(--text-primary); font-weight:600;"></span></div>
-            <div><strong>Quantity:</strong> <span id="odetail-qty" style="color:var(--text-primary); font-weight:600;"></span></div>
-            <div><strong>Status:</strong> <span id="odetail-status" style="color:var(--cyan-light); font-weight:600; text-transform:capitalize;"></span></div>
-            <div><strong>Booking Date:</strong> <span id="odetail-booking-date" style="color:var(--text-primary);"></span></div>
-            <div><strong>Install Date:</strong> <span id="odetail-install-date" style="color:var(--text-primary);"></span></div>
-            <div style="grid-column: span 2; border-top: 1px dashed var(--border); margin-top: 0.25rem; padding-top: 0.4rem;">
-              <strong>Address:</strong> <span id="odetail-address" style="color:var(--text-primary);"></span>
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:0.4rem 1.5rem; font-size:0.8rem; color:var(--text-secondary); background:var(--bg-elevated); padding:0.75rem 1rem; border-radius:8px; border:1px solid var(--border); line-height:1.4;">
+            <!-- Left Column -->
+            <div style="display:flex; flex-direction:column; gap:0.4rem;">
+              <div><strong>Order No:</strong> <span id="odetail-order-no" style="color:var(--text-primary); font-weight:600;"></span></div>
+              <div><strong>SKU + Quantity:</strong> <span id="odetail-sku-qty" style="color:var(--text-primary); font-weight:600;"></span></div>
+              <div><strong>Booking Date:</strong> <span id="odetail-booking-date" style="color:var(--text-primary);"></span></div>
+              <div><strong>Install Date:</strong> <span id="odetail-install-date" style="color:var(--text-primary);"></span></div>
+            </div>
+            <!-- Right Column -->
+            <div style="display:flex; flex-direction:column; gap:0.4rem;">
+              <div><strong>Customer:</strong> <span id="odetail-customer-name" style="color:var(--text-primary); font-weight:600;"></span></div>
+              <div style="word-break:break-word;"><strong>Address:</strong> <span id="odetail-address" style="color:var(--text-primary);"></span></div>
+              <div><strong>Status:</strong> <span id="odetail-status" style="color:var(--cyan-light); font-weight:600; text-transform:capitalize;"></span></div>
             </div>
           </div>
 
@@ -861,6 +864,27 @@
       }
     };
 
+    function formatMmmDdYyyy(dateInput, includeTime = false) {
+      if (!dateInput) return '—';
+      try {
+        const d = new Date(dateInput);
+        if (isNaN(d.getTime())) return '—';
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        let str = `${months[d.getMonth()]} ${d.getDate().toString().padStart(2, '0')}, ${d.getFullYear()}`;
+        if (includeTime) {
+          let hours = d.getHours();
+          const minutes = d.getMinutes().toString().padStart(2, '0');
+          const ampm = hours >= 12 ? 'PM' : 'AM';
+          hours = hours % 12;
+          hours = hours ? hours : 12; // the hour '0' should be '12'
+          str += `, ${hours}:${minutes} ${ampm}`;
+        }
+        return str;
+      } catch (e) {
+        return '—';
+      }
+    }
+
     window.showOrderDetailsModal = function(txId) {
       const t = activeTransactions.find(x => x.id === txId);
       if (!t) return;
@@ -868,22 +892,21 @@
       // Find install booking details
       const inst = dbInstallationBookings.find(x => x.order_no === t.reference_id);
       const address = inst ? inst.customer_address : (t.customer_city || '—');
-      const installDate = inst && inst.scheduled_date ? new Date(inst.scheduled_date).toLocaleDateString() : '—';
+      const installDate = inst && inst.scheduled_date ? formatMmmDdYyyy(inst.scheduled_date) : '—';
 
       // Find booking date
       const matchingBookings = dbDeliveryBookings.filter(x => x.reference_id === t.reference_id);
       let bookingDateStr = '—';
       if (matchingBookings.length > 0) {
         const earliest = matchingBookings.reduce((min, cur) => new Date(cur.created_at) < new Date(min.created_at) ? cur : min, matchingBookings[0]);
-        bookingDateStr = earliest.created_at ? new Date(earliest.created_at).toLocaleDateString() : '—';
+        bookingDateStr = earliest.created_at ? formatMmmDdYyyy(earliest.created_at) : '—';
       } else if (t.timestamp_reserved) {
-        bookingDateStr = new Date(t.timestamp_reserved).toLocaleDateString();
+        bookingDateStr = formatMmmDdYyyy(t.timestamp_reserved);
       }
 
       document.getElementById('odetail-order-no').textContent = t.reference_id || '—';
       document.getElementById('odetail-customer-name').textContent = t.customer_name || '—';
-      document.getElementById('odetail-sku').textContent = t.sku || '—';
-      document.getElementById('odetail-qty').textContent = t.quantity || 0;
+      document.getElementById('odetail-sku-qty').textContent = `[${t.sku || '—'}] x${t.quantity || 0}`;
       document.getElementById('odetail-status').textContent = t.status || '—';
       document.getElementById('odetail-booking-date').textContent = bookingDateStr;
       document.getElementById('odetail-install-date').textContent = installDate;
@@ -893,7 +916,7 @@
       const pImg = document.getElementById('proof-packed-img');
       const pPlaceholder = document.getElementById('proof-packed-placeholder');
       const pDate = document.getElementById('proof-packed-date');
-      pDate.textContent = t.timestamp_packed ? new Date(t.timestamp_packed).toLocaleString() : '—';
+      pDate.textContent = t.timestamp_packed ? formatMmmDdYyyy(t.timestamp_packed, true) : '—';
       if (t.packed_photo_url) {
         pImg.src = t.packed_photo_url;
         pImg.style.display = 'block';
@@ -918,21 +941,21 @@
       const bookingRow = matchingBookings.find(x => x.delivery_photo_url);
       if (bookingRow) {
         deliveryPhoto = bookingRow.delivery_photo_url;
-        bookedDateStr = bookingRow.created_at ? new Date(bookingRow.created_at).toLocaleString() : '—';
+        bookedDateStr = bookingRow.created_at ? formatMmmDdYyyy(bookingRow.created_at, true) : '—';
       } else if (matchingBookings.length > 0) {
         const earliest = matchingBookings.reduce((min, cur) => new Date(cur.created_at) < new Date(min.created_at) ? cur : min, matchingBookings[0]);
-        bookedDateStr = earliest.created_at ? new Date(earliest.created_at).toLocaleString() : '—';
+        bookedDateStr = earliest.created_at ? formatMmmDdYyyy(earliest.created_at, true) : '—';
       }
 
       // 2. Pickup screenshot
       const pickupRow = matchingBookings.find(x => x.pickup_photos && x.pickup_photos.length > 0);
       if (pickupRow) {
         pickupPhoto = pickupRow.pickup_photos[0];
-        pickedUpDateStr = pickupRow.picked_up_at ? new Date(pickupRow.picked_up_at).toLocaleString() : '—';
+        pickedUpDateStr = pickupRow.picked_up_at ? formatMmmDdYyyy(pickupRow.picked_up_at, true) : '—';
       } else if (matchingBookings.length > 0) {
         const earliestPicked = matchingBookings.find(x => x.picked_up_at);
         if (earliestPicked) {
-          pickedUpDateStr = new Date(earliestPicked.picked_up_at).toLocaleString();
+          pickedUpDateStr = formatMmmDdYyyy(earliestPicked.picked_up_at, true);
         }
       }
 
@@ -940,11 +963,11 @@
       const deliveryRow = matchingBookings.find(x => x.received_photo_url);
       if (deliveryRow) {
         deliveredPhoto = deliveryRow.received_photo_url;
-        deliveredDateStr = deliveryRow.delivered_at ? new Date(deliveryRow.delivered_at).toLocaleString() : '—';
+        deliveredDateStr = deliveryRow.delivered_at ? formatMmmDdYyyy(deliveryRow.delivered_at, true) : '—';
       } else if (matchingBookings.length > 0) {
         const earliestDelivered = matchingBookings.find(x => x.delivered_at);
         if (earliestDelivered) {
-          deliveredDateStr = new Date(earliestDelivered.delivered_at).toLocaleString();
+          deliveredDateStr = formatMmmDdYyyy(earliestDelivered.delivered_at, true);
         }
       }
 
