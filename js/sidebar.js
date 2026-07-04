@@ -764,6 +764,7 @@
       isLoadingMore: false,
 
       async init() {
+        this.initChatTone();
         try {
           // Reuse cached user session
           this.currentUser = await window.BKAuth.getUser();
