@@ -270,6 +270,11 @@
         <img id="modal-packed-photo" src="" style="width: 100%; height: 100%; object-fit: cover;" />
       </div>
 
+      <div style="font-size:0.78rem; line-height:1.4; color:var(--text-muted); background:rgba(6,182,212,0.06); border:1px solid rgba(6,182,212,0.15); border-radius:6px; padding:0.65rem 0.75rem; margin-top:-0.25rem; display:flex; align-items:flex-start; gap:0.45rem;">
+        <svg viewBox="0 0 24 24" width="14" height="14" stroke="var(--cyan)" stroke-width="2" fill="none" style="flex-shrink:0; margin-top:1px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        <span><strong>Dispatch Notice:</strong> Booking a delivery creates the schedule, but does NOT mark the items as dispatched. The order remains under the <strong>Warehouse Dispatch</strong> queue until the rider physically picks up the package and handover is confirmed.</span>
+      </div>
+
       <!-- Upload Delivery Details Photo -->
       <div class="form-group">
         <label class="form-label">Delivery Information Screenshot</label>
@@ -649,31 +654,6 @@
           toll: Math.round(tollVal * 100)
         }]);
         if (dbErr) throw dbErr;
-
-        const now = new Date().toISOString();
-        const txIds = DeliveryApp.selectedOrder.items.map(t => t.id);
-
-        const { error: txErr } = await sb.from('inventory_transactions').update({
-          status: 'dispatched',
-          timestamp_dispatched: now
-        }).in('id', txIds);
-        if (txErr) throw txErr;
-
-        for (const item of DeliveryApp.selectedOrder.items) {
-          let invQDisp = sb.from('inventory').select('*').eq('sku', item.sku);
-          if (item.warehouse_id) invQDisp = invQDisp.eq('warehouse_id', item.warehouse_id);
-          else invQDisp = invQDisp.is('warehouse_id', null);
-          const { data: invRow, error: invErr } = await invQDisp;
-          if (invErr) throw invErr;
-          if (invRow && invRow.length > 0) {
-            const inv = invRow[0];
-            const { error: updErr } = await sb.from('inventory').update({
-              packed: Math.max(0, inv.packed - item.quantity),
-              dispatched: inv.dispatched + item.quantity
-            }).eq('id', inv.id);
-            if (updErr) throw updErr;
-          }
-        }
 
         Toast.success('Delivery booked successfully.');
         closeBookingModal();
