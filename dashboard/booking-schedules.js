@@ -640,7 +640,7 @@
           }
 
           // Build product cell content
-          let productCellHtml = `<div style="font-weight: 800; color: var(--text-primary); margin-bottom: 0.4rem; font-size: 0.85rem;">Door ${i + 1}</div>`;
+          let productCellHtml = `<div style="font-weight: 800; color: var(--cyan); margin-bottom: 0.4rem; font-size: 0.85rem;">Door ${i + 1}</div>`;
           
           if (doorProducts.length === 0) {
             productCellHtml += `<span style="color:var(--text-muted); font-size:0.75rem;">No products attached</span>`;
