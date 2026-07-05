@@ -828,6 +828,18 @@
             generalInstallersHtml = formatInstallerName(selectedBooking.installer_name);
           }
 
+          const isBraceletOrAccessory = !isCancelled;
+          const instCellHtml = isBraceletOrAccessory ? `
+            <div id="door-inst-container-general-${i}">
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;">
+                <span id="door-inst-text-general-${i}">${escapeHtml(generalInstallersHtml)}</span>
+                <button type="button" class="btn-minimal" onclick="editBookingInstallers(${i})" title="Edit Installers">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                </button>
+              </div>
+            </div>
+          ` : escapeHtml(generalInstallersHtml);
+
           tbody.insertAdjacentHTML('beforeend', `
             <tr ${trStyle}>
               <td>
@@ -836,7 +848,7 @@
               </td>
               <td>N/A</td>
               <td>N/A</td>
-              <td>${escapeHtml(generalInstallersHtml)}</td>
+              <td>${instCellHtml}</td>
             </tr>
           `);
         }
@@ -2434,6 +2446,149 @@
 
     window.cancelDoorInstallersEdit = function(doorIndex) {
       showBookingDetails(selectedBooking.id);
+    };
+
+    window.editBookingInstallers = function(index) {
+      if (!selectedBooking) return;
+      
+      let list = [];
+      if (typeof selectedBooking.installers === 'string') {
+        try { list = JSON.parse(selectedBooking.installers); } catch(_) {}
+      } else if (Array.isArray(selectedBooking.installers)) {
+        list = selectedBooking.installers;
+      }
+
+      const currentInstallers = list;
+      const hasAnyRole = currentInstallers.some(i => i.role);
+
+      const leadInst  = hasAnyRole
+        ? (currentInstallers.find(i => i.role === 'lead') || null)
+        : currentInstallers[0];
+
+      const assistInsts = hasAnyRole
+        ? currentInstallers.filter(i => i.role === 'assist')
+        : currentInstallers.slice(1);
+
+      const inst1Id  = leadInst?.id || '';
+      const inst2Id  = assistInsts[0]?.id || '';
+      const inst3Id  = assistInsts[1]?.id || '';
+      const hasAssist2 = !!inst2Id;
+      const hasAssist3 = !!inst3Id;
+
+      const container = document.getElementById(`door-inst-container-general-${index}`);
+      if (!container) return;
+
+      const roleLabel = (text) => `<span style="font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text-muted);letter-spacing:0.04em;min-width:36px;flex-shrink:0;">${text}</span>`;
+
+      container.innerHTML = `
+        <div style="display: flex; flex-direction: column; gap: 0.4rem;">
+          <div style="display: flex; gap: 0.35rem; align-items: center;">
+            ${roleLabel('Lead')}
+            <select class="form-input" style="height:auto; padding:0.35rem; font-size:0.8rem; flex:1;" id="edit-inst-general-${index}-1" data-role="lead">
+              ${buildDoorInstallerOptions(inst1Id)}
+            </select>
+            <button type="button" class="btn-minimal btn-success" onclick="saveBookingInstallersEdit(${index})" title="Save">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            </button>
+            <button type="button" class="btn-minimal btn-danger" onclick="cancelBookingInstallersEdit(${index})" title="Cancel">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+          </div>
+          <div id="edit-inst-2-wrapper-general-${index}" style="display: ${hasAssist2 ? 'flex' : 'none'}; gap: 0.35rem; align-items: center;">
+            ${roleLabel('Assist')}
+            <select class="form-input" style="height:auto; padding:0.35rem; font-size:0.8rem; flex:1;" id="edit-inst-general-${index}-2" data-role="assist">
+              ${buildDoorInstallerOptions(inst2Id)}
+            </select>
+            <button type="button" class="btn-minimal btn-danger" onclick="removeBookingAssistInstallerEdit(${index}, 2)" title="Remove"><svg viewBox="0 0 24 24" style="width:14px;height:14px;display:block;fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+          </div>
+          <div id="edit-inst-3-wrapper-general-${index}" style="display: ${hasAssist3 ? 'flex' : 'none'}; gap: 0.35rem; align-items: center;">
+            ${roleLabel('Assist')}
+            <select class="form-input" style="height:auto; padding:0.35rem; font-size:0.8rem; flex:1;" id="edit-inst-general-${index}-3" data-role="assist">
+              ${buildDoorInstallerOptions(inst3Id)}
+            </select>
+            <button type="button" class="btn-minimal btn-danger" onclick="removeBookingAssistInstallerEdit(${index}, 3)" title="Remove"><svg viewBox="0 0 24 24" style="width:14px;height:14px;display:block;fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+          </div>
+          <button type="button" class="btn btn-outline btn-sm" id="btn-add-inst-edit-general-${index}"
+            style="display: ${(hasAssist2 && hasAssist3) ? 'none' : 'inline-flex'}; font-size: 0.72rem; padding: 0.2rem 0.5rem;"
+            onclick="addBookingAssistInstallerEdit(${index})">+ Add Assist</button>
+        </div>
+      `;
+    };
+
+    window.addBookingAssistInstallerEdit = function(index) {
+      const wrap2 = document.getElementById(`edit-inst-2-wrapper-general-${index}`);
+      const wrap3 = document.getElementById(`edit-inst-3-wrapper-general-${index}`);
+      const addBtn = document.getElementById(`btn-add-inst-edit-general-${index}`);
+      if (wrap2 && wrap2.style.display === 'none') {
+        wrap2.style.display = 'flex';
+      } else if (wrap3 && wrap3.style.display === 'none') {
+        wrap3.style.display = 'flex';
+        if (addBtn) addBtn.style.display = 'none';
+      }
+    };
+
+    window.removeBookingAssistInstallerEdit = function(index, slot) {
+      const wrap = document.getElementById(`edit-inst-${slot}-wrapper-general-${index}`);
+      const sel = document.getElementById(`edit-inst-general-${index}-${slot}`);
+      if (wrap) wrap.style.display = 'none';
+      if (sel) sel.value = '';
+      const addBtn = document.getElementById(`btn-add-inst-edit-general-${index}`);
+      if (addBtn) addBtn.style.display = 'inline-flex';
+    };
+
+    window.cancelBookingInstallersEdit = function(index) {
+      showBookingDetails(selectedBooking.id);
+    };
+
+    window.saveBookingInstallersEdit = async function(index) {
+      if (!selectedBooking) return;
+
+      const installersList = [];
+      [1, 2, 3].forEach(slot => {
+        const sel = document.getElementById(`edit-inst-general-${index}-${slot}`);
+        const wrapper = slot > 1 ? document.getElementById(`edit-inst-${slot}-wrapper-general-${index}`) : null;
+        const isVisible = slot === 1 || (wrapper && wrapper.style.display !== 'none');
+        if (!isVisible || !sel || !sel.value) return;
+        const emp = dbEmployees.find(e => e.id === sel.value);
+        if (emp) {
+          const lastName = emp.last_name ? ` ${emp.last_name.trim()}` : '';
+          const role = sel.dataset.role || (slot === 1 ? 'lead' : 'assist');
+          installersList.push({ id: emp.id, name: `${emp.first_name}${lastName}`, role });
+        }
+      });
+
+      const installerIdStr   = installersList.length > 0 ? installersList.map(i => i.id).join(' | ')   : null;
+      const installerNameStr = installersList.length > 0 ? installersList.map(i => i.name).join(' | ') : null;
+
+      try {
+        const { error } = await sb
+          .from('installation_bookings')
+          .update({
+            installer_id: installerIdStr,
+            installer_name: installerNameStr,
+            installers: installersList
+          })
+          .eq('id', selectedBooking.id);
+
+        if (error) throw error;
+
+        const bookingIndex = dbBookings.findIndex(b => b.id === selectedBooking.id);
+        if (bookingIndex !== -1) {
+          dbBookings[bookingIndex].installer_id = installerIdStr;
+          dbBookings[bookingIndex].installer_name = installerNameStr;
+          dbBookings[bookingIndex].installers = installersList;
+
+          selectedBooking.installer_id = installerIdStr;
+          selectedBooking.installer_name = installerNameStr;
+          selectedBooking.installers = installersList;
+        }
+
+        showToast('Installers updated successfully.');
+        showBookingDetails(selectedBooking.id);
+      } catch (err) {
+        console.error('Failed to update booking installers:', err);
+        showToast('Failed to update installers: ' + err.message);
+      }
     };
 
     window.saveDoorInstallersEdit = async function(doorIndex) {
