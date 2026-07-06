@@ -688,9 +688,9 @@
                     statusText.textContent = 'Break';
                     statusText.style.color = '#f97316';
                   } else {
-                    statusDot.style.backgroundColor = '#ef4444'; // Red
+                    statusDot.style.backgroundColor = '#9ca3af'; // Gray
                     statusText.textContent = 'Time out';
-                    statusText.style.color = '#ef4444';
+                    statusText.style.color = '#9ca3af';
                   }
                 }
               });
@@ -911,7 +911,7 @@
                 </button>
                 <div style="position: relative; flex-shrink: 0;">
                   <div id="chat-header-avatar" style="width: 32px; height: 32px; border-radius: 50%; background: var(--cyan-dim, #ecfeff); color: var(--cyan, #06b6d4); font-size: 0.8rem; font-weight: 700; display: flex; align-items: center; justify-content: center; background-size: cover; background-position: center;"></div>
-                  <div id="chat-header-status-dot" style="position: absolute; bottom: 0; right: 0; width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--bg-surface, #ffffff); background: #ef4444;"></div>
+                  <div id="chat-header-status-dot" style="position: absolute; bottom: 0; right: 0; width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--bg-surface, #ffffff); background: #9ca3af;"></div>
                 </div>
                 <div style="min-width: 0; flex: 1;">
                   <div id="chat-header-name" style="font-size: 0.78rem; font-weight: 700; color: var(--text-primary, #09090b); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"></div>
@@ -1113,7 +1113,7 @@
       },
 
       createTeammateItemElement(emp, status) {
-        const statusColor = status === 'available' ? '#22c55e' : status === 'break' ? '#f97316' : '#ef4444';
+        const statusColor = status === 'available' ? '#22c55e' : status === 'break' ? '#f97316' : '#9ca3af';
         const fullName = `${emp.first_name} ${emp.last_name}`;
 
         const div = document.createElement('div');
@@ -1212,7 +1212,7 @@
         }
 
         const dotEl = document.getElementById('chat-header-status-dot');
-        dotEl.style.backgroundColor = status === 'available' ? '#22c55e' : status === 'break' ? '#f97316' : '#ef4444';
+        dotEl.style.backgroundColor = status === 'available' ? '#22c55e' : status === 'break' ? '#f97316' : '#9ca3af';
 
         const container = document.getElementById('chat-messages-container');
         container.innerHTML = '';
@@ -1503,13 +1503,13 @@
                 const memberItem = document.querySelector(`.chat-member-item[data-id="${newLog.employee_id}"]`);
                 if (memberItem) {
                   const dot = memberItem.querySelector('.status-dot');
-                  const statusColor = newLog.status === 'available' ? '#22c55e' : newLog.status === 'break' ? '#f97316' : '#ef4444';
+                  const statusColor = newLog.status === 'available' ? '#22c55e' : newLog.status === 'break' ? '#f97316' : '#9ca3af';
                   if (dot) dot.style.backgroundColor = statusColor;
                 }
                 if (this.activeReceiver && newLog.employee_id === this.activeReceiver.id) {
                   const dotEl = document.getElementById('chat-header-status-dot');
                   if (dotEl) {
-                    dotEl.style.backgroundColor = newLog.status === 'available' ? '#22c55e' : newLog.status === 'break' ? '#f97316' : '#ef4444';
+                    dotEl.style.backgroundColor = newLog.status === 'available' ? '#22c55e' : newLog.status === 'break' ? '#f97316' : '#9ca3af';
                   }
                 }
               }
