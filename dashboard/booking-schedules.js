@@ -613,15 +613,12 @@
             const attachedSkus = door.products || [];
             doorProducts = [];
             attachedSkus.forEach(sku => {
-              const matchingProds = productsArr.filter(p => p.sku === sku);
-              const occurrenceIndex = skuOccurrenceCount.get(sku) || 0;
-              const matchedProd = matchingProds[occurrenceIndex];
+              const matchedProd = productsArr.find(p => p.sku === sku);
               if (matchedProd) {
                 doorProducts.push(matchedProd);
               } else {
                 doorProducts.push({ sku: sku, name: sku, title: sku });
               }
-              skuOccurrenceCount.set(sku, occurrenceIndex + 1);
             });
             attachedSkus.forEach(s => renderedProductSkus.add(s));
           } else if (isSingleDoorGrouping) {
