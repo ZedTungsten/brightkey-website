@@ -487,6 +487,8 @@
 
     let sb;
     let dbProducts = [];
+    let dbWarehouses = [];
+    let dbInventory = [];
     let bookingsList = [];
     let selectedBookingId = null;
 
@@ -697,8 +699,19 @@
     async function loadDatabaseParameters() {
       try {
         // Fetch products
-        const { data: pData } = await sb.from('products').select('sku, title, image_main, installation_price');
+        const { data: pData } = await sb.from('products').select('sku, title, image_main, installation_price, count_inventory');
         dbProducts = pData || [];
+
+        // Fetch warehouses
+        const { data: wData } = await sb.from('warehouses')
+          .select('id, name')
+          .eq('tenant_id', currentTenantId)
+          .eq('is_active', true);
+        dbWarehouses = wData || [];
+
+        // Fetch inventory snapshot
+        const { data: invData } = await sb.from('inventory').select('sku, available, warehouse_id');
+        dbInventory = invData || [];
 
         // Fetch company profile settings
         const { data: profileData } = await sb.from('global_settings')
@@ -854,7 +867,7 @@
       if (data.products && Array.isArray(data.products)) {
         data.products.forEach((p, idx) => {
           const savedPrice = savedUnitPrices[idx] !== undefined && !isNaN(savedUnitPrices[idx]) ? savedUnitPrices[idx] : null;
-          addInvoiceProductRow(p.sku, p.qty, savedPrice);
+          addInvoiceProductRow(p.sku, p.qty, savedPrice, p.warehouse_id);
           initialProducts.push({ sku: p.sku, qty: p.qty });
         });
       }
@@ -958,7 +971,7 @@
     }
 
     // --- Dynamic Invoice Row Generators ---
-    window.addInvoiceProductRow = function(selectedSku = '', selectedQty = 1, customPrice = null) {
+    window.addInvoiceProductRow = function(selectedSku = '', selectedQty = 1, customPrice = null, selectedWarehouseId = '') {
       const container = document.getElementById('inv-products-container');
       const rowId = 'inv-prod-row-' + Date.now() + Math.random().toString(36).substr(2, 5);
 
@@ -972,18 +985,22 @@
         }
       }
 
-      const options = dbProducts.map(p => {
-        const activePrice = p.installation_price || 0;
-        const selected = p.sku === selectedSku ? 'selected' : '';
-        return `<option value="${p.sku}" data-price="${activePrice}" ${selected}>${p.sku} - ${p.title}</option>`;
-      }).join('');
+      let whOptions = '<option value="">-- Main/Default --</option>';
+      dbWarehouses.forEach(w => {
+        const selected = w.id === selectedWarehouseId ? 'selected' : '';
+        whOptions += `<option value="${w.id}" ${selected}>${w.name}</option>`;
+      });
 
       const html = `
         <div class="product-row" id="${rowId}">
+          <div style="flex:1.2;">
+            <select class="form-input" style="padding:0.4rem; font-size:0.85rem; height:auto;" onchange="updateProductRowInventoryOptions('${rowId}'); compileReceipt();" id="${rowId}-warehouse">
+              ${whOptions}
+            </select>
+          </div>
           <div style="flex:2;">
             <select class="form-input" style="padding:0.4rem; font-size:0.85rem; height:auto;" onchange="updateProductRowPrice('${rowId}'); compileReceipt();" id="${rowId}-select">
               <option value="" data-price="0">-- Select product --</option>
-              ${options}
             </select>
           </div>
           <div style="flex:0.75; display:flex; align-items:center; gap:0.25rem;">
@@ -997,7 +1014,34 @@
         </div>
       `;
       container.insertAdjacentHTML('beforeend', html);
+      updateProductRowInventoryOptions(rowId, selectedSku);
       compileReceipt();
+    };
+
+    window.updateProductRowInventoryOptions = function(rowId, selectedSku = '') {
+      const whSelect = document.getElementById(rowId + '-warehouse');
+      const select = document.getElementById(rowId + '-select');
+      if (!whSelect || !select) return;
+
+      const selectedWhId = whSelect.value;
+      const currentSelection = selectedSku || select.value;
+
+      let optionsHtml = '<option value="" data-price="0">-- Select product --</option>';
+      dbProducts.forEach(p => {
+        const activePrice = p.installation_price || 0;
+        const isSelected = p.sku === currentSelection ? 'selected' : '';
+
+        let stockLabel = '';
+        if (p.count_inventory !== false) {
+          const inv = dbInventory.find(item => item.sku === p.sku && item.warehouse_id === (selectedWhId || null));
+          const available = inv ? inv.available : 0;
+          const stockStatus = available > 0 ? `${available} available` : 'No Stock';
+          stockLabel = ` [${stockStatus}]`;
+        }
+
+        optionsHtml += `<option value="${p.sku}" data-price="${activePrice}" ${isSelected}>${p.sku} - ${p.title}${stockLabel}</option>`;
+      });
+      select.innerHTML = optionsHtml;
     };
 
     window.updateProductRowPrice = function(rowId) {
@@ -1135,9 +1179,10 @@
         });
       } else {
         document.querySelectorAll('#inv-products-container .product-row').forEach(row => {
-          const select = row.querySelector('select');
+          const select = row.querySelector('select[id$="-select"]');
           const priceInput = row.querySelector('.price-input');
           const qtyInput = row.querySelector('input[type="number"]:not(.price-input)');
+          if (!select) return;
           const selectedOption = select.options[select.selectedIndex];
 
           if (selectedOption && selectedOption.value) {
@@ -1552,41 +1597,57 @@
           const customerName = document.getElementById('inv-fullname').value;
           
           for (const item of newProductsToAdd) {
-            // Create transaction record
-            const txPayload = {
-              sku: item.sku,
-              quantity: item.qty,
-              type: 'customer_order',
-              status: 'reserved',
-              reference_id: orderNo,
-              customer_name: customerName,
-              customer_city: city,
-              timestamp_reserved: new Date().toISOString()
-            };
-            if (typeof currentCompanyId !== 'undefined' && currentCompanyId) {
-              txPayload.company_id = currentCompanyId;
-            }
-            
-            const { error: insTxErr } = await sb.from('inventory_transactions').insert([txPayload]);
-            if (insTxErr) {
-              console.error('Error inserting transaction for new product:', insTxErr);
-              continue;
-            }
-
-            // Update inventory totals
-            const { data: invRow, error: invErr } = await sb.from('inventory').select('*').eq('sku', item.sku);
-            if (invErr) {
-              console.error('Error querying inventory for SKU:', item.sku, invErr);
-              continue;
-            }
-            if (invRow && invRow.length > 0) {
-              const current = invRow[0];
-              const { error: updErr } = await sb.from('inventory').update({
-                available: Math.max(0, (current.available || 0) - item.qty),
-                reserved: (current.reserved || 0) + item.qty
-              }).eq('sku', item.sku);
-              if (updErr) console.error('Error updating inventory for added product:', updErr);
-            }
+             // Create transaction record
+             const txPayload = {
+               sku: item.sku,
+               quantity: item.qty,
+               type: 'customer_order',
+               status: 'reserved',
+               reference_id: orderNo,
+               customer_name: customerName,
+               customer_city: city,
+               timestamp_reserved: new Date().toISOString(),
+               warehouse_id: item.warehouse_id || null
+             };
+             if (typeof currentCompanyId !== 'undefined' && currentCompanyId) {
+               txPayload.company_id = currentCompanyId;
+             }
+             
+             const { error: insTxErr } = await sb.from('inventory_transactions').insert([txPayload]);
+             if (insTxErr) {
+               console.error('Error inserting transaction for new product:', insTxErr);
+               continue;
+             }
+ 
+             // Update inventory totals
+             let invQ = sb.from('inventory').select('*').eq('sku', item.sku);
+             if (item.warehouse_id) {
+               invQ = invQ.eq('warehouse_id', item.warehouse_id);
+             } else {
+               invQ = invQ.is('warehouse_id', null);
+             }
+             const { data: invRow, error: invErr } = await invQ;
+             if (invErr) {
+               console.error('Error querying inventory for SKU:', item.sku, invErr);
+               continue;
+             }
+             if (invRow && invRow.length > 0) {
+               const current = invRow[0];
+               const { error: updErr } = await sb.from('inventory').update({
+                 available: Math.max(0, (current.available || 0) - item.qty),
+                 reserved: (current.reserved || 0) + item.qty
+               }).eq('id', current.id);
+               if (updErr) console.error('Error updating inventory for added product:', updErr);
+             } else {
+               // Insert dynamic default row for inventory if it does not exist
+               const { error: insErr } = await sb.from('inventory').insert([{
+                 sku: item.sku,
+                 available: -item.qty,
+                 reserved: item.qty,
+                 warehouse_id: item.warehouse_id || null
+               }]);
+               if (insErr) console.error('Error inserting inventory row for added product:', insErr);
+             }
           }
         } catch (err) {
           console.error('Error processing new products creation:', err);
@@ -1981,9 +2042,11 @@
         let subtotalCents = 0;
 
         document.querySelectorAll('#inv-products-container .product-row').forEach(row => {
-          const select = row.querySelector('select');
+          const select = row.querySelector('select[id$="-select"]');
+          const whSelect = row.querySelector('select[id$="-warehouse"]');
           const priceInput = row.querySelector('.price-input');
           const qtyInput = row.querySelector('input[type="number"]:not(.price-input)');
+          if (!select) return;
           const selectedOption = select.options[select.selectedIndex];
           
           if (selectedOption && selectedOption.value) {
@@ -1991,13 +2054,13 @@
             const price = Math.round((parseFloat(priceInput.value) || 0) * 100);
             const qty = parseInt(qtyInput.value) || 1;
             const lineTotal = price * qty;
+            const warehouseId = whSelect ? whSelect.value : null;
             
             const p = dbProducts.find(prod => prod.sku === sku);
             const title = p ? p.title : sku;
             
             subtotalCents += lineTotal;
-            productsList.push({ sku, title, name: title, qty, price, lineTotal });
-            
+            productsList.push({ sku, title, name: title, qty, price, lineTotal, warehouse_id: warehouseId });
             prodSkus.push(sku);
             prodNames.push(title);
             prodQtys.push(String(qty));
