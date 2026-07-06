@@ -760,7 +760,7 @@
                     <th style="padding: 0.75rem 0.5rem; font-size: 0.8rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; text-align: center;">Total SKUs</th>
                     <th style="padding: 0.75rem 0.5rem; font-size: 0.8rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Additional</th>
                     <th style="padding: 0.75rem 0.5rem; font-size: 0.8rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Deductions</th>
-                    <th style="padding: 0.75rem 0.5rem; font-size: 0.8rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; text-align: right;">Grand Total</th>
+                    <th style="padding: 0.75rem 0.5rem; font-size: 0.8rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; text-align: right;">Commission Pool</th>
                     <th style="padding: 0.75rem 0.5rem; font-size: 0.8rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; text-align: right;">Revenue</th>
                   </tr>
                 </thead>
@@ -1334,6 +1334,20 @@
 
         if (error) throw error;
 
+        // Fetch products and commissions configuration to run calculations
+        const [productsRes, configRes] = await Promise.all([
+          sb.from('products').select('sku, business, category, tags'),
+          sb.from('global_settings').select('value').eq('key', 'commissions_config').eq('company_id', currentCompanyId).maybeSingle()
+        ]);
+
+        const products = productsRes.data || [];
+        const config = configRes.data?.value || { rates: [], eligibility_rules: [] };
+
+        const productMap = {};
+        products.forEach(p => {
+          if (p.sku) productMap[p.sku.toLowerCase()] = p;
+        });
+
         // Filter out event-only bookings (Ocular, Backjob, Day off, etc.)
         const realOrders = (bookings || []).filter(b => {
           return b.order_no && b.order_no.startsWith('ORD-');
@@ -1398,11 +1412,14 @@
           });
           const deductionsHtml = deductionParts.length > 0 ? deductionParts.map(p => `<div style="font-size: 0.8rem; color: var(--text-secondary);">${p}</div>`).join('') : '—';
 
-          const grandTotal = parseInt(b.grand_total) || 0;
+           const grandTotal = parseInt(b.grand_total) || 0;
           const balanceDue = parseInt(b.balance_due) || 0;
           const orderGrandTotal = grandTotal > 0 ? grandTotal : (balanceDue + depositCentavos);
-          const grandTotalPHP = orderGrandTotal / 100;
-          const grandTotalStr = `₱${grandTotalPHP.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+          // Get Eligible Commission Pool per order
+          const calc = getBookingEligibleCentavos(b, productMap, config.eligibility_rules);
+          const eligiblePHP = calc.finalEligibleCentavos / 100;
+          const eligibleStr = `₱${eligiblePHP.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
           // Revenue = Grand Total + Deposit
           const revenueCentavos = orderGrandTotal + depositCentavos;
@@ -1419,7 +1436,7 @@
               <td style="padding: 0.75rem 0.5rem; font-size: 0.85rem; text-align: center; font-weight: 600;">${totalSkus}</td>
               <td style="padding: 0.75rem 0.5rem; font-size: 0.85rem;">${additionalHtml}</td>
               <td style="padding: 0.75rem 0.5rem; font-size: 0.85rem;">${deductionsHtml}</td>
-              <td style="padding: 0.75rem 0.5rem; font-size: 0.85rem; text-align: right; font-weight: 700; color: var(--text-primary);">${grandTotalStr}</td>
+              <td style="padding: 0.75rem 0.5rem; font-size: 0.85rem; text-align: right; font-weight: 700; color: var(--text-primary);">${eligibleStr}</td>
               <td style="padding: 0.75rem 0.5rem; font-size: 0.85rem; text-align: right; font-weight: 700; color: var(--cyan-light);">${revenueStr}</td>
             </tr>
           `;
