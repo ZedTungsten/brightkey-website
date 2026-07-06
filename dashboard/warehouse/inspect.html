@@ -198,8 +198,13 @@
         invQuery = invQuery.is('warehouse_id', null);
       }
 
-      // 3. Fetch transactions (all reserved/customer_orders plus transfers, scoped to warehouse on client)
+      // 3. Fetch transactions — scoped to active warehouse
       let txQuery = sb.from('inventory_transactions').select('*').order('created_at', { ascending: false });
+      if (activeWarehouseId) {
+        txQuery = txQuery.eq('warehouse_id', activeWarehouseId);
+      } else {
+        txQuery = txQuery.is('warehouse_id', null);
+      }
 
       const transferQuery = companyId
         ? sb.from('warehouse_transfers').select('*')
@@ -588,24 +593,9 @@
       if (!tbody) return;
       tbody.innerHTML = '';
 
-      // Find all reference_ids that have at least one transaction in the active warehouse
-      const activeRefIds = new Set();
-      activeTransactions.forEach(t => {
-        if (t.status === 'reserved' && t.type === 'customer_order') {
-          const matchesWarehouse = activeWarehouseId 
-            ? t.warehouse_id === activeWarehouseId 
-            : t.warehouse_id === null;
-          if (matchesWarehouse && t.reference_id) {
-            activeRefIds.add(t.reference_id);
-          }
-        }
-      });
-
       const inspectQueue = activeTransactions.filter(t => 
         t.status === 'reserved' && 
-        t.type === 'customer_order' &&
-        t.reference_id &&
-        activeRefIds.has(t.reference_id)
+        t.type === 'customer_order'
       );
 
       if (inspectQueue.length === 0) {
@@ -1210,7 +1200,7 @@
             if (txErr) throw txErr;
 
             let invQPack = sb.from('inventory').select('*').eq('sku', tx.sku);
-            if (tx.warehouse_id) invQPack = invQPack.eq('warehouse_id', tx.warehouse_id);
+            if (activeWarehouseId) invQPack = invQPack.eq('warehouse_id', activeWarehouseId);
             else invQPack = invQPack.is('warehouse_id', null);
             const { data: invRow, error: invErr } = await invQPack;
             if (invErr) throw invErr;
