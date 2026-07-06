@@ -925,9 +925,9 @@
               </button>
             </div>
             <div id="chat-messages-container" style="flex: 1; overflow-y: auto; padding: 1rem; display: flex; flex-direction: column; gap: 2px; background: var(--bg-base, #fafafa);"></div>
-            <form id="chat-input-form" style="padding: 0.5rem 0.75rem; border-top: 1px solid var(--border, #e4e4e7); display: flex; gap: 0.4rem; background: var(--bg-surface, #ffffff); align-items: center;">
-              <input type="text" id="chat-message-input" placeholder="Type a message..." autocomplete="off" style="flex: 1; border: 1px solid var(--border, #e4e4e7); border-radius: 20px; padding: 0.4rem 0.75rem; font-size: 0.76rem; outline: none; background: var(--bg-surface, #ffffff); color: var(--text-primary, #09090b); transition: border-color 0.2s;" />
-              <button type="submit" style="background: var(--cyan, #06b6d4); border: none; color: #ffffff; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; outline: none; flex-shrink: 0; transition: background-color 0.2s;">
+            <form id="chat-input-form" style="padding: 0.5rem 0.75rem; border-top: 1px solid var(--border, #e4e4e7); display: flex; gap: 0.4rem; background: var(--bg-surface, #ffffff); align-items: flex-end;">
+              <textarea id="chat-message-input" placeholder="Type a message..." autocomplete="off" rows="1" style="flex: 1; border: 1px solid var(--border, #e4e4e7); border-radius: 16px; padding: 0.4rem 0.75rem; font-size: 0.76rem; outline: none; background: var(--bg-surface, #ffffff); color: var(--text-primary, #09090b); transition: border-color 0.2s; resize: none; max-height: 100px; height: 32px; overflow-y: auto; font-family: inherit; line-height: 1.4; box-sizing: border-box;"></textarea>
+              <button type="submit" style="background: var(--cyan, #06b6d4); border: none; color: #ffffff; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; outline: none; flex-shrink: 0; transition: background-color 0.2s; margin-bottom: 2px;">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="transform: rotate(45deg); margin-right: 2px; margin-top: -1px;">
                   <line x1="22" y1="2" x2="11" y2="13" />
                   <polygon points="22 2 15 22 11 13 2 9 22 2" />
@@ -943,6 +943,21 @@
         document.getElementById('chat-close-btn-2').onclick = () => this.toggleChat();
         document.getElementById('chat-back-btn').onclick = () => this.showChatList();
         document.getElementById('chat-input-form').onsubmit = (e) => this.sendChatMessage(e);
+
+        const chatInput = document.getElementById('chat-message-input');
+        if (chatInput) {
+          chatInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              this.sendChatMessage();
+            }
+          });
+          chatInput.addEventListener('input', function() {
+            this.style.height = '32px';
+            const newHeight = Math.min(this.scrollHeight, 100);
+            this.style.height = newHeight + 'px';
+          });
+        }
 
         this.initChatTone();
       },
@@ -1355,6 +1370,7 @@
 
         if (manualText === undefined) {
           input.value = '';
+          input.style.height = '32px';
         }
 
         // Optimistic append bubble
