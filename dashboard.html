@@ -811,7 +811,7 @@
           this.companyId = co?.id;
           if (!this.companyId) return;
 
-          const { data: emp } = await BKAuth.sb.from('employees').select('id, first_name, last_name, department, reporting_to, cover_photo_link, cover_text_color, status_text, shift_time_1, shift_time_2').eq('email', this.currentUser.email).limit(1).maybeSingle();
+          const { data: emp } = await BKAuth.sb.from('employees').select('id, first_name, last_name, department, reporting_to, cover_photo_link, cover_text_color, status_text, shift_time_1, shift_time_2, notes').eq('email', this.currentUser.email).limit(1).maybeSingle();
           this.employeeId = emp?.id;
           if (!this.employeeId) return;
 
@@ -879,10 +879,21 @@
           // Initialize sticky notes
           const notesTextarea = document.getElementById('dashboard-sticky-notes');
           if (notesTextarea) {
-            const storageKey = `bk_dashboard_notes_${this.employeeId}`;
-            notesTextarea.value = localStorage.getItem(storageKey) || '';
+            notesTextarea.value = emp?.notes || '';
+            let notesDebounceTimer = null;
             notesTextarea.addEventListener('input', () => {
-              localStorage.setItem(storageKey, notesTextarea.value);
+              clearTimeout(notesDebounceTimer);
+              notesDebounceTimer = setTimeout(async () => {
+                try {
+                  const { error } = await BKAuth.sb
+                    .from('employees')
+                    .update({ notes: notesTextarea.value })
+                    .eq('id', this.employeeId);
+                  if (error) throw error;
+                } catch (dbErr) {
+                  console.error('Failed to sync notes to database:', dbErr);
+                }
+              }, 500);
             });
           }
         } catch (err) {
