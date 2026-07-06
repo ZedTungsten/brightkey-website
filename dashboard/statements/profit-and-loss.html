@@ -263,7 +263,7 @@
             ] = await Promise.all([
               sb.from('products').select('sku, dealer_price, sale_price'),
               sb.from('installation_bookings')
-                .select('created_at, scheduled_date, order_no, grand_total, deposit_amount, status, product_skus, product_qtys, doors, installers, installer_id, products')
+                .select('created_at, scheduled_date, order_no, grand_total, deposit_amount, balance_due, deduction_labels, deduction_values, status, product_skus, product_qtys, doors, installers, installer_id, products')
                 .eq('company_id', this.companyId)
                 .neq('status', 'cancelled')
                 .gte('scheduled_date', startRange)
@@ -523,9 +523,25 @@
 
             // (A) Revenue: Bookings starting with ORD-
             if (b.order_no && b.order_no.startsWith('ORD-')) {
-              const grandTotal = b.grand_total || 0;
-              const deposit = Math.abs(b.deposit_amount || 0);
-              monthlyValues[mKey].revenueBooking += (grandTotal + deposit);
+              const grandTotal = parseInt(b.grand_total) || 0;
+              const balanceDue = parseInt(b.balance_due) || 0;
+
+              let depositCentavos = parseInt(b.deposit_amount) || 0;
+              if (b.deduction_labels && b.deduction_values) {
+                const dLabels = b.deduction_labels.split('|').map(s => s.trim().toLowerCase());
+                const dValues = b.deduction_values.split('|').map(s => s.trim());
+                dLabels.forEach((label, idx) => {
+                  if (label.includes('deposit')) {
+                    depositCentavos += Math.round((parseFloat(dValues[idx]) || 0) * 100);
+                  }
+                });
+              }
+
+              const absDepositCentavos = Math.abs(depositCentavos);
+              const orderGrandTotal = grandTotal > 0 ? grandTotal : (balanceDue + absDepositCentavos);
+              const revenueCentavos = orderGrandTotal + absDepositCentavos;
+
+              monthlyValues[mKey].revenueBooking += revenueCentavos;
             }
 
             // (B) COGS: Supplier Cost
