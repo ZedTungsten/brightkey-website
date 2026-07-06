@@ -3255,6 +3255,7 @@
     // --- Edit Doors Drag-and-Drop Editor State & Functions ---
     let tempEditDoors = [];
     let tempEditProducts = [];
+    let tempEditUnassignedProducts = [];
 
     window.openEditDoorsModal = function() {
       if (!selectedBooking) return;
@@ -3326,6 +3327,24 @@
           });
         }
       }
+
+      // Find what products are in tempEditProducts (or skus) but not in any door.products
+      const allAssignedSkus = new Set();
+      tempEditDoors.forEach(d => {
+        if (d.products) d.products.forEach(sku => allAssignedSkus.add(sku));
+      });
+
+      tempEditUnassignedProducts = [];
+      tempEditProducts.forEach(p => {
+        if (p.sku !== 'ADD-ON LABOR' && !allAssignedSkus.has(p.sku)) {
+          tempEditUnassignedProducts.push(p.sku);
+        }
+      });
+      skus.forEach(sku => {
+        if (sku !== 'ADD-ON LABOR' && !allAssignedSkus.has(sku) && !tempEditUnassignedProducts.includes(sku)) {
+          tempEditUnassignedProducts.push(sku);
+        }
+      });
 
       renderEditDoors();
       document.getElementById('edit-doors-modal').classList.add('open');
@@ -3427,6 +3446,60 @@
         `;
         container.insertAdjacentHTML('beforeend', doorHtml);
       });
+
+      // Also render the Unassigned Products box
+      let unassignedProductsHtml = '';
+      if (tempEditUnassignedProducts.length === 0) {
+        unassignedProductsHtml = `
+          <div style="color: var(--text-muted); font-size: 0.75rem; text-align: center; padding: 1rem; border: 1px dashed var(--border); border-radius: 6px;">
+            No unassigned products. Drag products here to unassign them.
+          </div>
+        `;
+      } else {
+        tempEditUnassignedProducts.forEach((sku, prodIdx) => {
+          const catalogItem = productsCatalog.find(p => p.sku === sku);
+          const title = catalogItem ? (catalogItem.name || catalogItem.title) : sku;
+          // Is it cancelled?
+          const matchingProds = tempEditProducts.filter(p => p.sku === sku);
+          const matchedProd = matchingProds[0]; // just grab the first one for unassigned
+          const isCancelled = matchedProd ? !!matchedProd.cancelled : false;
+
+          unassignedProductsHtml += `
+            <div class="drag-product-item" draggable="true" 
+              ondragstart="handleDragStart(event, -1, ${prodIdx})"
+              ondragend="handleDragEnd(event)">
+              <div class="drag-handle">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="5" r="2"></circle><circle cx="9" cy="12" r="2"></circle><circle cx="9" cy="19" r="2"></circle><circle cx="15" cy="5" r="2"></circle><circle cx="15" cy="12" r="2"></circle><circle cx="15" cy="19" r="2"></circle></svg>
+              </div>
+              <div class="drag-product-text">
+                <strong>${escapeHtml(sku)}</strong> - <span style="font-weight:normal; color:var(--text-secondary);">${escapeHtml(title)}</span>
+                ${isCancelled ? `
+                  <span style="color:var(--danger); font-size:0.7rem; font-weight:700; text-transform:uppercase; margin-left:0.35rem;">
+                    Cancelled
+                  </span>
+                ` : ''}
+              </div>
+            </div>
+          `;
+        });
+      }
+
+      const unassignedBoxHtml = `
+        <div class="edit-door-box" id="edit-door-box-unassigned"
+          style="border-color: var(--border); background: var(--bg-surface); margin-top: 1rem; border-style: dashed;"
+          ondragover="handleDragOver(event, -1)"
+          ondragleave="handleDragLeave(event, -1)"
+          ondrop="handleDrop(event, -1)">
+          <div class="edit-door-header" style="border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; margin-bottom: 0.75rem;">
+            <span class="edit-door-title" style="color: var(--text-secondary);">Unassigned Products / Accessories</span>
+          </div>
+          <div class="edit-door-products-list">
+            ${unassignedProductsHtml}
+          </div>
+        </div>
+      `;
+
+      container.insertAdjacentHTML('beforeend', unassignedBoxHtml);
     }
 
     window.addNewDoorEdit = function() {
@@ -3489,14 +3562,16 @@
 
     window.handleDragOver = function(event, doorIdx) {
       event.preventDefault();
-      const box = document.getElementById(`edit-door-box-${doorIdx}`);
+      const boxId = doorIdx === -1 ? 'edit-door-box-unassigned' : `edit-door-box-${doorIdx}`;
+      const box = document.getElementById(boxId);
       if (box && doorIdx !== dragSourceDoorIdx) {
         box.classList.add('drag-over');
       }
     };
 
     window.handleDragLeave = function(event, doorIdx) {
-      const box = document.getElementById(`edit-door-box-${doorIdx}`);
+      const boxId = doorIdx === -1 ? 'edit-door-box-unassigned' : `edit-door-box-${doorIdx}`;
+      const box = document.getElementById(boxId);
       if (box) {
         box.classList.remove('drag-over');
       }
@@ -3511,7 +3586,8 @@
 
     window.handleDrop = function(event, targetDoorIdx) {
       event.preventDefault();
-      const box = document.getElementById(`edit-door-box-${targetDoorIdx}`);
+      const boxId = targetDoorIdx === -1 ? 'edit-door-box-unassigned' : `edit-door-box-${targetDoorIdx}`;
+      const box = document.getElementById(boxId);
       if (box) {
         box.classList.remove('drag-over');
       }
@@ -3519,14 +3595,23 @@
       if (dragSourceDoorIdx === null || dragSourceProdIdx === null) return;
       if (dragSourceDoorIdx === targetDoorIdx) return;
 
-      const targetDoor = tempEditDoors[targetDoorIdx];
-      const sourceDoor = tempEditDoors[dragSourceDoorIdx];
-      const productSku = sourceDoor.products[dragSourceProdIdx];
+      let productSku = '';
+      if (dragSourceDoorIdx === -1) {
+        productSku = tempEditUnassignedProducts[dragSourceProdIdx];
+        tempEditUnassignedProducts.splice(dragSourceProdIdx, 1);
+      } else {
+        const sourceDoor = tempEditDoors[dragSourceDoorIdx];
+        productSku = sourceDoor.products[dragSourceProdIdx];
+        sourceDoor.products.splice(dragSourceProdIdx, 1);
+      }
 
-      // Move product immediately and adopt target door configurations
-      sourceDoor.products.splice(dragSourceProdIdx, 1);
-      if (!targetDoor.products) targetDoor.products = [];
-      targetDoor.products.push(productSku);
+      if (targetDoorIdx === -1) {
+        tempEditUnassignedProducts.push(productSku);
+      } else {
+        const targetDoor = tempEditDoors[targetDoorIdx];
+        if (!targetDoor.products) targetDoor.products = [];
+        targetDoor.products.push(productSku);
+      }
 
       renderEditDoors();
       showToast('Product moved successfully.');
@@ -3603,9 +3688,9 @@
         }
       });
 
-      const missingSkus = originalSkus.filter(sku => !allocatedSkus.includes(sku));
-      if (missingSkus.length > 0) {
-        showDragWarning('Incomplete Allocation', `Please allocate all purchased products to doors. Unallocated products: ${missingSkus.join(', ')}`);
+      const missingLocks = originalSkus.filter(sku => !allocatedSkus.includes(sku) && !sku.toUpperCase().includes('BRACELET') && !sku.toUpperCase().includes('BASEPLATE') && !sku.toUpperCase().includes('LABOR') && !sku.toUpperCase().includes('KEY'));
+      if (missingLocks.length > 0) {
+        showDragWarning('Incomplete Allocation', `Please allocate all purchased lock units to doors. Unallocated locks: ${missingLocks.join(', ')}`);
         return;
       }
 
