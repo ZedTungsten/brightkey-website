@@ -256,13 +256,15 @@
               productsRes,
               bookingsRes,
               employeesRes,
-              adjustmentsRes,
+              payslipRecordsRes,
               deliveriesRes,
-              payoutSettingsRes
+              payoutSettingsRes,
+              trackerConfigRes,
+              commissionsRes
             ] = await Promise.all([
               sb.from('products').select('sku, dealer_price, sale_price'),
               sb.from('installation_bookings')
-                .select('created_at, scheduled_date, order_no, grand_total, deposit_amount, status, product_skus, product_qtys, doors, installers, installer_id, product_skus, product_qtys, products')
+                .select('created_at, scheduled_date, order_no, grand_total, deposit_amount, status, product_skus, product_qtys, doors, installers, installer_id, products')
                 .eq('company_id', this.companyId)
                 .neq('status', 'cancelled')
                 .gte('scheduled_date', startRange)
@@ -270,23 +272,26 @@
               sb.from('employees')
                 .select('id, email, first_name, last_name, monthly_salary')
                 .eq('company_id', this.companyId),
-              sb.from('employee_adjustments_reimbursements')
-                .select('employee_id, amount, date, label, type')
-                .gte('date', startRange)
-                .lte('date', endRange),
+              sb.from('payslip_records')
+                .select('employee_id, payout_month, salary, basic_paid, commissions, special_payouts, total_payout')
+                .eq('company_id', this.companyId)
+                .gte('payout_month', this.months[5].key)
+                .lte('payout_month', this.months[0].key),
               sb.from('delivery_bookings')
                 .select('created_at, actual_distance_km, base_price, customer_tips')
                 .eq('company_id', this.companyId)
                 .neq('status', 'cancelled')
                 .gte('created_at', startRange + ' 00:00:00')
                 .lte('created_at', endRange + ' 23:59:59'),
-              sb.from('global_settings').select('value').eq('key', 'installer_payout_settings').eq('company_id', this.companyId).maybeSingle()
+              sb.from('global_settings').select('value').eq('key', 'installer_payout_settings').eq('company_id', this.companyId).maybeSingle(),
+              sb.from('global_settings').select('value').eq('key', 'salary_tracker_config').eq('company_id', this.companyId).maybeSingle(),
+              sb.from('commission_assignments').select('amount, booking_id').eq('company_id', this.companyId)
             ]);
 
             this.products = productsRes.data || [];
             this.bookings = bookingsRes.data || [];
             this.employees = employeesRes.data || [];
-            this.adjustments = adjustmentsRes.data || [];
+            this.payslipRecords = payslipRecordsRes.data || [];
             this.deliveries = deliveriesRes.data || [];
             this.payoutSettings = payoutSettingsRes.data?.value || {
               installations_before_crediting: 15,
@@ -295,6 +300,8 @@
               lead_rate: 1000,
               extra_services: []
             };
+            this.trackerConfig = trackerConfigRes.data?.value || {};
+            this.commissionAssignments = commissionsRes.data || [];
 
             this.renderStatement();
 
@@ -597,8 +604,7 @@
             });
           });
 
-          // (D) COGS: Sales Commissions
-          // Get all commissions for orders scheduled in that month
+          // (D) COGS: Sales Commissions & Special Payout
           this.months.forEach(m => {
             const mKey = m.key;
             const monthBookings = this.bookings.filter(b => {
@@ -608,24 +614,36 @@
               return bookingMonthKey === mKey;
             });
 
-            monthBookings.forEach(b => {
-              if (b.order_no && b.order_no.startsWith('ORD-')) {
-                // Approximate commissions based on booking total:
-              }
-            });
-          });
+            // Find if there are finalized payslip records for this month
+            const monthRecords = this.payslipRecords.filter(r => r.payout_month === mKey);
 
-          this.adjustments.forEach(adj => {
-            const aDate = new Date(adj.date);
-            const mKey = `${aDate.getFullYear()}-${String(aDate.getMonth() + 1).padStart(2, '0')}`;
-            if (!monthlyValues[mKey]) return;
-
-            const amtCentavos = Math.round((adj.amount || 0) * 100);
-            if (adj.label === 'Commission' || adj.label === 'Sales Commission' || adj.type === 'commission') {
-              monthlyValues[mKey].commissions += amtCentavos;
+            if (monthRecords.length > 0) {
+              monthRecords.forEach(r => {
+                monthlyValues[mKey].commissions += Math.round((Number(r.commissions) || 0) * 100);
+                monthlyValues[mKey].specialPayout += Math.round((Number(r.special_payouts) || 0) * 100);
+                monthlyValues[mKey].salaries += Math.round((Number(r.basic_paid) || 0) * 100);
+              });
             } else {
-              // Special Payout
-              monthlyValues[mKey].specialPayout += amtCentavos;
+              // Unfinalized month fallback calculations:
+              // Commissions from active commission_assignments
+              monthBookings.forEach(b => {
+                const bookingComms = this.commissionAssignments.filter(ca => ca.booking_id === b.id);
+                bookingComms.forEach(ca => {
+                  monthlyValues[mKey].commissions += (ca.amount || 0);
+                });
+              });
+
+              // Special schedule payouts from trackerConfig
+              const specialSchedules = this.trackerConfig.specialSchedules || [];
+              specialSchedules.forEach(spec => {
+                monthlyValues[mKey].specialPayout += Math.round((Number(spec.value) || 0) * 100);
+              });
+
+              // Salaries from active employee list
+              this.employees.forEach(emp => {
+                const salaryCentavos = Math.round((emp.monthly_salary || 0) * 100);
+                monthlyValues[mKey].salaries += salaryCentavos;
+              });
             }
           });
 
@@ -638,15 +656,6 @@
             const basePriceCentavos = Math.round((del.base_price || 0) * 100);
             const tipsCentavos = Math.round((del.customer_tips || 0) * 100);
             monthlyValues[mKey].delivery += (basePriceCentavos + tipsCentavos);
-          });
-
-          // (F) OPEX: Salaries
-          this.months.forEach(m => {
-            const mKey = m.key;
-            this.employees.forEach(emp => {
-              const salaryCentavos = Math.round((emp.monthly_salary || 0) * 100);
-              monthlyValues[mKey].salaries += salaryCentavos;
-            });
           });
 
           // 3. Render Table rows
