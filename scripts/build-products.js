@@ -1066,13 +1066,38 @@ async function buildProducts() {
           const badge  = document.querySelector('[data-template="status-badge"]');
           const btn    = document.querySelector('[data-template="btn-add-to-cart"]');
           const invEl  = document.querySelector('[data-template="inventory-text"]');
+          let leadTimeText = '2-3 days';
+          let backorderText = '3-4 weeks';
+          if (window.deliveryLeadTimeConfig) {
+            const config = window.deliveryLeadTimeConfig;
+            const business = CURRENT_PRODUCT.business || '';
+            const bizCfg = (config.businesses || []).find(b => b.name === business && b.enabled);
+            let fVal, fUnit, tVal, tUnit;
+            if (bizCfg) {
+              fVal = bizCfg.from_value; fUnit = bizCfg.from_unit; tVal = bizCfg.to_value; tUnit = bizCfg.to_unit;
+            } else if (config.storewide_enabled) {
+              fVal = config.from_value; fUnit = config.from_unit; tVal = config.to_value; tUnit = config.to_unit;
+            }
+            if (fVal !== undefined && tVal !== undefined) {
+              leadTimeText = fVal + '-' + tVal + ' ' + (fUnit || 'days');
+            }
+
+            if (config.backorder_enabled) {
+              const bfVal = config.backorder_from_value ?? 3;
+              const bfUnit = config.backorder_from_unit || 'weeks';
+              const btVal = config.backorder_to_value ?? 4;
+              const btUnit = config.backorder_to_unit || 'weeks';
+              backorderText = bfVal + '-' + btVal + ' ' + bfUnit;
+            }
+          }
+
           if (v.available > 0) {
             badge.innerText = 'In Stock'; badge.className = 'badge badge-cyan';
-            invEl.innerHTML = '<strong style="color:var(--text-primary);">' + v.available + ' available</strong> in our local warehouse. Ready to ship (delivered in 2-3 days).';
+            invEl.innerHTML = '<strong style="color:var(--text-primary);">' + v.available + ' available</strong> in our local warehouse. Ready to ship (delivered in ' + leadTimeText + ').';
             btn.innerText = 'Add to Cart'; btn.disabled = false;
           } else {
             badge.innerText = 'Backorder'; badge.className = 'badge badge-warning';
-            invEl.innerHTML = '<span style="color:#f59e0b;font-weight:600;">Backorder</span>: Temporarily out of local stock. Fulfillment takes 3-4 weeks.';
+            invEl.innerHTML = '<span style="color:#f59e0b;font-weight:600;">Backorder</span>: Temporarily out of local stock. Fulfillment takes ' + backorderText + '.';
             btn.innerText = 'Add to Cart (Backorder)'; btn.disabled = false;
           }
           CURRENT_PRODUCT.sku   = sku;
