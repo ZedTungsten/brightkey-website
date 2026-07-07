@@ -43,35 +43,6 @@
       text-align: center;
     }
 
-    /* ── Metric Callouts ── */
-    .stat-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 1rem;
-      margin-top: 1.5rem;
-      margin-bottom: 1.5rem;
-    }
-    .stat-card {
-      background: var(--bg-surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-md);
-      padding: 1.25rem;
-      box-shadow: var(--shadow-sm);
-    }
-    .stat-label {
-      font-size: 0.72rem;
-      font-weight: 700;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-    }
-    .stat-value {
-      font-size: 1.5rem;
-      font-weight: 800;
-      color: var(--text-primary);
-      margin-top: 0.35rem;
-    }
-
     /* ── Excel-style Table ── */
     .excel-container {
       width: 100%;
@@ -191,18 +162,6 @@
           </button>
         </div>
 
-        <!-- Metric Cards -->
-        <div class="stat-grid">
-          <div class="stat-card">
-            <div class="stat-label">Total Employees</div>
-            <div class="stat-value" id="stat-total-employees">0</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-label">Total Salaries (OPEX)</div>
-            <div class="stat-value" id="stat-total-salaries">₱0.00</div>
-          </div>
-        </div>
-
         <!-- Salaries Section -->
         <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.5rem; box-shadow: var(--shadow-sm);">
           <div style="border-bottom: 1px solid var(--border); padding-bottom: 0.75rem; margin-bottom: 1.25rem;">
@@ -215,13 +174,15 @@
               <thead>
                 <tr>
                   <th style="text-align: left;">Employee</th>
-                  <th style="width: 250px; text-align: right;">Salary</th>
+                  <th style="width: 200px; text-align: right;">Salary</th>
+                  <th style="width: 200px; text-align: right;">Special Payout</th>
+                  <th style="width: 200px; text-align: right;">Total Cost</th>
                 </tr>
               </thead>
               <tbody id="salaries-table-body">
                 <tr class="shimmer-row">
                   <td style="text-align: left;">Loading...</td>
-                  <td></td>
+                  <td></td><td></td><td></td>
                 </tr>
               </tbody>
             </table>
@@ -246,6 +207,7 @@
         tenantId: null,
         currentDate: new Date(),
         employees: [],
+        specialSchedules: [],
 
         async init() {
           if (!window.BKAuth) return;
@@ -286,8 +248,8 @@
           if (tbody) {
             tbody.innerHTML = `
               <tr class="shimmer-row">
-                <td style="text-align: left;">Fetching Salaries data...</td>
-                <td></td>
+                <td style="text-align: left;">Fetching OPEX data...</td>
+                <td></td><td></td><td></td>
               </tr>
             `;
           }
@@ -295,21 +257,29 @@
           const sb = window.BKAuth.sb;
 
           try {
-            // Fetch non-terminated employees matching companyId (exactly like payout-tracker/salary)
-            const { data: empData, error: empErr } = await sb.from('employees')
-              .select('id, first_name, last_name, salary, employment_status')
-              .eq('company_id', this.companyId)
-              .neq('employment_status', 'Terminated');
+            // Fetch non-terminated employees and salary tracker config in parallel
+            const [empRes, configRes] = await Promise.all([
+              sb.from('employees')
+                .select('id, first_name, last_name, salary, employment_status')
+                .eq('company_id', this.companyId)
+                .neq('employment_status', 'Terminated'),
+              sb.from('global_settings')
+                .select('value')
+                .eq('key', 'salary_tracker_config')
+                .eq('company_id', this.companyId)
+                .maybeSingle()
+            ]);
 
-            if (empErr) throw empErr;
-            this.employees = empData || [];
+            if (empRes.error) throw empRes.error;
+            this.employees = empRes.data || [];
+            this.specialSchedules = configRes.data?.value?.specialSchedules || [];
 
             this.renderStatement();
 
           } catch (err) {
-            console.error('Error loading Salaries data:', err);
+            console.error('Error loading OPEX data:', err);
             if (tbody) {
-              tbody.innerHTML = `<tr><td colspan="2" style="text-align: center; color: var(--danger);">Failed to load data: ${err.message}</td></tr>`;
+              tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--danger);">Failed to load data: ${err.message}</td></tr>`;
             }
           }
         },
@@ -324,9 +294,7 @@
           };
 
           if (this.employees.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="2" style="text-align: center; color: var(--text-muted); padding: 2rem;">No active employees found.</td></tr>`;
-            document.getElementById('stat-total-employees').textContent = '0';
-            document.getElementById('stat-total-salaries').textContent = '₱0.00';
+            tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 2rem;">No active employees found.</td></tr>`;
             return;
           }
 
@@ -338,16 +306,29 @@
           });
 
           let grandTotalSalaries = 0;
+          let grandTotalSpecials = 0;
+          let grandTotalCost = 0;
 
           const rowsHtml = sortedEmps.map(emp => {
             const baseSalary = Number(emp.salary) || 0;
+            const specialPayout = this.specialSchedules
+              .filter(s => s.employeeId === emp.id)
+              .reduce((sum, s) => sum + (Number(s.value) || 0), 0);
+            
+            const totalCost = baseSalary + specialPayout;
+
             grandTotalSalaries += baseSalary;
+            grandTotalSpecials += specialPayout;
+            grandTotalCost += totalCost;
+
             const fullName = `${emp.first_name || ''} ${emp.last_name || ''}`.trim();
 
             return `
               <tr>
                 <td>${fullName}</td>
                 <td>${formatPHP(baseSalary)}</td>
+                <td>${formatPHP(specialPayout)}</td>
+                <td>${formatPHP(totalCost)}</td>
               </tr>
             `;
           }).join('');
@@ -357,14 +338,12 @@
             <tr class="total-row">
               <td>TOTAL</td>
               <td>${formatPHP(grandTotalSalaries)}</td>
+              <td>${formatPHP(grandTotalSpecials)}</td>
+              <td>${formatPHP(grandTotalCost)}</td>
             </tr>
           `;
 
           tbody.innerHTML = rowsHtml + totalRowHtml;
-
-          // Update Stats Cards
-          document.getElementById('stat-total-employees').textContent = this.employees.length;
-          document.getElementById('stat-total-salaries').textContent = formatPHP(grandTotalSalaries);
         }
       };
 
