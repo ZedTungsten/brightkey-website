@@ -203,6 +203,10 @@
           </div>
         </div>
 
+        <!-- Category Cards Grid -->
+        <div class="stat-grid" id="category-cards-grid" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); margin-bottom: 1.5rem; margin-top: 0; display: none;">
+        </div>
+
         <!-- Supplier Cost Section -->
         <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.5rem; box-shadow: var(--shadow-sm);">
           <h2 style="font-size: 1rem; font-weight: 700; color: var(--text-primary); margin: 0 0 1rem 0;">Supplier Cost</h2>
@@ -303,7 +307,7 @@
 
           try {
             const [productsRes, bookingsRes] = await Promise.all([
-              sb.from('products').select('sku, title, dealer_price, count_inventory'),
+              sb.from('products').select('sku, title, dealer_price, count_inventory, category'),
               sb.from('installation_bookings')
                 .select('scheduled_date, order_no, status, product_skus, product_qtys')
                 .eq('company_id', this.companyId)
@@ -364,7 +368,8 @@
                   name: prodDetails.title || sku,
                   sold: 0,
                   dealerPrice: prodDetails.dealer_price || 0,
-                  countInventory: true
+                  countInventory: true,
+                  category: prodDetails.category || 'Uncategorized'
                 };
               }
               cogsAggregation[skuLower].sold += qty;
@@ -377,6 +382,7 @@
           let totalSold = 0;
           let totalCountedSold = 0;
           let grandTotalCogsCentavos = 0;
+          const categoryStats = {};
           const tbody = document.getElementById('cogs-table-body');
           tbody.innerHTML = '';
 
@@ -389,6 +395,8 @@
             tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 2rem;">No supplier costs recorded for this month.</td></tr>`;
             document.getElementById('stat-total-sold').textContent = '0';
             document.getElementById('stat-total-cogs').textContent = '₱0.00';
+            const catGrid = document.getElementById('category-cards-grid');
+            if (catGrid) catGrid.style.display = 'none';
             return;
           }
 
@@ -400,6 +408,13 @@
             if (item.countInventory) {
               totalCountedSold += item.sold;
             }
+
+            const catKey = item.category || 'Uncategorized';
+            if (!categoryStats[catKey]) {
+              categoryStats[catKey] = { sold: 0, cost: 0 };
+            }
+            categoryStats[catKey].sold += item.sold;
+            categoryStats[catKey].cost += totalCost;
 
             return `
               <tr>
@@ -427,6 +442,28 @@
           // Update Stats Cards
           document.getElementById('stat-total-sold').textContent = totalSold;
           document.getElementById('stat-total-cogs').textContent = formatPHP(grandTotalCogsCentavos);
+
+          // Render Category Cards
+          const catGrid = document.getElementById('category-cards-grid');
+          if (catGrid) {
+            const categories = Object.keys(categoryStats).sort();
+            if (categories.length > 0) {
+              catGrid.style.display = 'grid';
+              catGrid.innerHTML = categories.map(cat => {
+                const stats = categoryStats[cat];
+                const catLabel = cat.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+                return `
+                  <div class="stat-card" style="padding: 1rem 1.25rem;">
+                    <div class="stat-label" style="font-size: 0.68rem;">${catLabel}</div>
+                    <div class="stat-value" style="font-size: 1.2rem; margin-top: 0.25rem;">${stats.sold} Sold</div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem; font-weight: 600;">${formatPHP(stats.cost)}</div>
+                  </div>
+                `;
+              }).join('');
+            } else {
+              catGrid.style.display = 'none';
+            }
+          }
         }
       };
 
