@@ -61,6 +61,9 @@
       return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
     }
 
+    /* ── Warning Exclamation Icon ── */
+    const WARN_ICON = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--danger); vertical-align: middle; margin-right: 6px; display: inline-block;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`;
+
     /* ── Supabase REST helpers ── */
     async function getRestHeaders() {
       let token = SB_ANON;
@@ -417,9 +420,11 @@
           g[cat].forEach(a => {
             const isVisible = a.is_visible !== false;
             const rowStyle = isDeleted ? 'background: rgba(239, 68, 68, 0.04); border-left: 3px solid var(--danger);' : '';
+            const iconHtml = isDeleted ? WARN_ICON : '';
+            const titleAttr = isDeleted ? ' title="Account is not assigned to an active category"' : '';
             html += `
-              <div class="acct-row" id="acr-${a.id}" style="${rowStyle}">
-                <span class="acct-row__name" style="${isDeleted ? 'color: var(--danger); font-weight: 600;' : ''}">${esc(a.name)}</span>
+              <div class="acct-row" id="acr-${a.id}" style="${rowStyle}"${titleAttr}>
+                <span class="acct-row__name" style="${isDeleted ? 'color: var(--danger); font-weight: 600;' : ''}">${iconHtml}${esc(a.name)}</span>
                 <span class="acct-row__cat" style="${isDeleted ? 'border-color: rgba(239,68,68,0.3); background: rgba(239,68,68,0.06); color: var(--danger);' : ''}">${esc(a.category)}</span>
                 <div class="acct-row__actions" style="display:flex; align-items:center; gap:4px;">
                   <button class="btn btn-ghost btn-sm" type="button" onclick="JournalApp.toggleAcctVisibility(${a.id})" title="${isVisible ? 'Hide from selection' : 'Show in selection'}">
@@ -1534,7 +1539,7 @@
             <td class="num" style="color:var(--text-muted);font-size:0.72rem;">${off + i + 1}</td>
             <td class="entry-num"${ec('entry_number')}>${fmtEntry(d.entry_number)}</td>
             <td${ec('date')}>${d.date || '—'}</td>
-            <td${ec('account')} style="${orphan || isCatDeleted ? 'color:var(--danger);font-weight:600;' : ''}">${esc(d.account)}</td>
+            <td${ec('account')} style="${orphan || isCatDeleted ? 'color:var(--danger);font-weight:600;' : ''}"${isCatDeleted ? ' title="Account is not assigned to an active category"' : ''}>${isCatDeleted ? WARN_ICON : ''}${esc(d.account)}</td>
             <td class="debit"${ec('debit')}>${d.debit   ? php(d.debit)   : '—'}</td>
             <td class="credit"${ec('credit')}>${d.credit ? php(d.credit) : '—'}</td>
             <td${ec('description_1')}>${esc(d.description_1 || '')}</td>
