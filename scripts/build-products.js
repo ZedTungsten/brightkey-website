@@ -913,9 +913,15 @@ async function buildProducts() {
     let variantJsData = 'null';
     if (variants.length > 0) {
       const allOptions = [];
-      if (p.variant_value) allOptions.push(p);
+      if (!p.variant_value) {
+        p.variant_value = 'Standard';
+      }
+      if (!p.variant_name) {
+        p.variant_name = variants[0]?.variant_name || 'Option';
+      }
+      allOptions.push(p);
       allOptions.push(...variants);
-      const variantName = p.variant_name || variants[0]?.variant_name || 'Option';
+      const variantName = p.variant_name;
       let optionsHtml = '';
       const variantMap = {};
       allOptions.forEach((opt, idx) => {
