@@ -251,6 +251,7 @@
         currentDate: new Date(),
         products: [],
         bookings: [],
+        costHistory: [],
 
         async init() {
           if (!window.BKAuth) return;
@@ -318,6 +319,18 @@
 
             this.products = productsRes.data || [];
             this.bookings = bookingsRes.data || [];
+            this.costHistory = [];
+
+            try {
+              const { data: histData, error: histErr } = await sb.from('product_cost_history')
+                .select('sku, cost, start_date, end_date')
+                .eq('company_id', this.companyId);
+              if (!histErr && histData) {
+                this.costHistory = histData;
+              }
+            } catch (historyErr) {
+              console.warn('Failed to load product_cost_history, falling back to current catalog cost:', historyErr);
+            }
 
             this.renderStatement();
 
@@ -362,17 +375,34 @@
 
               if (prodDetails.count_inventory !== true) return;
 
+              // Match historical price using the booking's scheduled_date
+              let itemCost = prodDetails.dealer_price || 0;
+              if (this.costHistory && this.costHistory.length > 0) {
+                const bookingDate = b.scheduled_date ? new Date(b.scheduled_date) : null;
+                if (bookingDate) {
+                  const hist = this.costHistory.find(h => 
+                    h.sku && h.sku.toLowerCase() === skuLower &&
+                    new Date(h.start_date) <= bookingDate &&
+                    (!h.end_date || new Date(h.end_date) >= bookingDate)
+                  );
+                  if (hist) {
+                    itemCost = hist.cost || 0;
+                  }
+                }
+              }
+
               if (!cogsAggregation[skuLower]) {
                 cogsAggregation[skuLower] = {
                   sku: sku,
                   name: prodDetails.title || sku,
                   sold: 0,
-                  dealerPrice: prodDetails.dealer_price || 0,
+                  totalCost: 0,
                   countInventory: true,
                   category: prodDetails.category || 'Uncategorized'
                 };
               }
               cogsAggregation[skuLower].sold += qty;
+              cogsAggregation[skuLower].totalCost += qty * itemCost;
             });
           });
 
@@ -401,7 +431,7 @@
           }
 
           const rowsHtml = sortedSkus.map(item => {
-            const totalCost = item.sold * item.dealerPrice;
+            const totalCost = item.totalCost;
             grandTotalCogsCentavos += totalCost;
 
             totalSold += item.sold;
@@ -416,12 +446,14 @@
             categoryStats[catKey].sold += item.sold;
             categoryStats[catKey].cost += totalCost;
 
+            const avgPrice = item.sold > 0 ? (totalCost / item.sold) : 0;
+
             return `
               <tr>
                 <td>${item.sku}</td>
                 <td>${item.name}</td>
                 <td>${item.sold}</td>
-                <td>${formatPHP(item.dealerPrice)}</td>
+                <td>${formatPHP(avgPrice)}</td>
                 <td>${formatPHP(totalCost)}</td>
               </tr>
             `;
