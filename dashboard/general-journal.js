@@ -477,7 +477,13 @@
           Toast.success('Account updated.');
           await this.loadAccounts();
           this.renderTable();
-        } catch(e) { Toast.error('Update failed: ' + e.message); }
+        } catch(e) {
+          if (e.message.includes('409')) {
+            Toast.error('An account with this name already exists.');
+          } else {
+            Toast.error('Update failed: ' + e.message);
+          }
+        }
       },
 
       async removeAcct(id, name) {
@@ -547,7 +553,13 @@
             this.renderCatsList();
             Toast.success(`"${name}" added.`);
             await this.loadAccounts();
-          } catch(e) { Toast.error('Failed: ' + e.message); }
+          } catch(e) {
+            if (e.message.includes('409') || e.message.includes('23505')) {
+              Toast.error('An account with this name already exists.');
+            } else {
+              Toast.error('Failed: ' + e.message);
+            }
+          }
         });
       },
 
