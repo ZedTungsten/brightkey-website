@@ -926,12 +926,11 @@ async function buildProducts() {
       const variantMap = {};
       allOptions.forEach((opt, idx) => {
         const optInv = inventoryMap[opt.sku] || { available: 0 };
-        const disabled = optInv.available <= 0 ? 'disabled' : '';
         const checked  = idx === 0 ? 'checked' : '';
         const optPrice = displayPrice(opt);
         optionsHtml += `
-          <label style="display:flex;align-items:center;gap:0.5rem;cursor:${disabled ? 'not-allowed':'pointer'};opacity:${disabled ? '0.5':'1'};padding:0.5rem 1rem;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg-surface);">
-            <input type="radio" name="product-variant" value="${opt.sku}" ${checked} ${disabled} onchange="window.selectVariant('${opt.sku}')" />
+          <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;opacity:1;padding:0.5rem 1rem;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg-surface);">
+            <input type="radio" name="product-variant" value="${opt.sku}" ${checked} onchange="window.selectVariant('${opt.sku}')" />
             <span style="font-weight:500;color:var(--text-primary);">${opt.variant_value || opt.sku}</span>
           </label>
         `;
