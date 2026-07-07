@@ -416,7 +416,7 @@
         Object.keys(g).sort().forEach(cat => {
           const isDeleted = this.deletedCategories.includes(cat);
           const groupStyle = isDeleted ? 'color: var(--danger); font-weight: 700; background: rgba(239, 68, 68, 0.08); padding: 4px 12px;' : '';
-          html += `<div class="acct-group-label" style="${groupStyle}">${esc(cat)}${isDeleted ? ' ( - )' : ''}</div>`;
+          html += `<div class="acct-group-label" style="${groupStyle}">${esc(cat)}</div>`;
           g[cat].forEach(a => {
             const isVisible = a.is_visible !== false;
             const rowStyle = isDeleted ? 'background: rgba(239, 68, 68, 0.04); border-left: 3px solid var(--danger);' : '';
@@ -456,8 +456,7 @@
           listCats.unshift(a.category);
         }
         const opts = listCats.map(c => {
-          const isDeleted = this.deletedCategories.includes(c);
-          return `<option value="${c}"${c===a.category?' selected':''}>${esc(c)}${isDeleted ? ' ( - )' : ''}</option>`;
+          return `<option value="${c}"${c===a.category?' selected':''}>${esc(c)}</option>`;
         }).join('');
         row.innerHTML = `
           <input type="text" class="form-input" id="ean-${id}" value="${esc(a.name)}" style="flex:1;" />
