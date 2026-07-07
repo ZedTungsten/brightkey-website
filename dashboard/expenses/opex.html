@@ -564,12 +564,14 @@
                 }
               });
             } else {
-              // Fall back to live calculations
-              baseSalary = Number(emp.salary) || 0;
+              // Fall back to live calculations (only for Active employees)
+              baseSalary = emp.employment_status === 'Active' ? (Number(emp.salary) || 0) : 0;
 
-              specialPayout = this.specialSchedules
-                .filter(s => s.employeeId === emp.id)
-                .reduce((sum, s) => sum + (Number(s.value) || 0), 0);
+              specialPayout = emp.employment_status === 'Active'
+                ? this.specialSchedules
+                  .filter(s => s.employeeId === emp.id)
+                  .reduce((sum, s) => sum + (Number(s.value) || 0), 0)
+                : 0;
 
               adjustmentVal = this.adjustments
                 .filter(a => a.employee_id === emp.id)
@@ -634,7 +636,7 @@
             const totalCost = baseSalary + specialPayout + adjustmentVal + installationPayout + commissionPayout;
 
             // Visibility guard: only show if they have a finalized record, are active, or have active earnings in the month
-            const shouldShow = record || emp.employment_status !== 'Terminated' || totalCost > 0;
+            const shouldShow = record || emp.employment_status === 'Active' || totalCost > 0;
             if (!shouldShow) return null;
 
             grandTotalSalaries += baseSalary;
