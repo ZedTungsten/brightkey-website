@@ -158,8 +158,6 @@
           }
         }
         this.setTodayDate();
-        await this.loadCategories();
-        this.populateCatSelects();
         this.bindForm();
         this.bindCategoriesPanel();
         this.bindAccountsPanel();
@@ -349,8 +347,11 @@
               throw err;
             }
           }
+          await this.loadCategories();
+          this.populateCatSelects();
           this.populateDropdowns();
           this.renderAcctsList();
+          this.renderCatsList();
         } catch(e) {
           Toast.error('Failed to load accounts: ' + e.message);
         }
@@ -2074,6 +2075,15 @@
             'Due To','Installer','Loan','OPMMI','Owner Equity','Salary','Supplier','Other'
           ];
           this.deletedCategories = [];
+        }
+
+        // Merge any categories currently present in journal_accounts
+        if (Array.isArray(this.accounts)) {
+          this.accounts.forEach(a => {
+            if (a.category && !this.customCategories.includes(a.category) && !this.deletedCategories.includes(a.category)) {
+              this.customCategories.push(a.category);
+            }
+          });
         }
       },
 
