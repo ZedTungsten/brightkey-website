@@ -306,6 +306,7 @@
           <a href="/dashboard/payment-accounts" class="dash-nav-child" data-role="accounting">Payment Accounts</a>
           <a href="/dashboard/general-journal" class="dash-nav-child" data-role="accounting">General Journal</a>
           <a href="/dashboard/statements/profit-and-loss" class="dash-nav-child" data-role="accounting">Statements</a>
+          <a href="/dashboard/expenses/cogs" class="dash-nav-child" data-role="accounting">Expenses</a>
           <a href="/dashboard/ledgers" class="dash-nav-child" data-role="accounting">Ledgers</a>
           <a href="/dashboard/payout-tracker/payout/" class="dash-nav-child" data-role="accounting" style="display: flex; justify-content: space-between; align-items: center;">
             <span>Payout Tracker</span>

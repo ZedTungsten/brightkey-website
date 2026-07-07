@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Expenses (COGS) — BrightKey Finance</title>
+  <link rel="preconnect" href="https://fonts.bunny.net" />
+  <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../../css/style.css" />
+  <link rel="icon" type="image/svg+xml" href="../../assets/favicon.svg?v=2" />
+  <style>
+    /* ── Month Navigation ── */
+    .month-nav-container {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 0.5rem 1rem;
+    }
+    .month-nav-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      width: 28px;
+      height: 28px;
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .month-nav-btn:hover {
+      background: var(--bg-base);
+      border-color: var(--text-secondary);
+    }
+    .month-display-label {
+      font-size: 0.9rem;
+      font-weight: 700;
+      min-width: 120px;
+      text-align: center;
+    }
+
+    /* ── Metric Callouts ── */
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-top: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+    .stat-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 1.25rem;
+      box-shadow: var(--shadow-sm);
+    }
+    .stat-label {
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .stat-value {
+      font-size: 1.5rem;
+      font-weight: 800;
+      color: var(--text-primary);
+      margin-top: 0.35rem;
+    }
+
+    /* ── Excel-style Table ── */
+    .excel-container {
+      width: 100%;
+      overflow-x: auto;
+      border: 1px solid var(--border);
+      background: var(--bg-surface);
+      margin-top: 1.5rem;
+    }
+    .excel-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 10pt;
+      color: var(--text-primary);
+      font-family: Arial, sans-serif;
+    }
+    .excel-table th, .excel-table td {
+      border: 1px solid var(--border);
+      padding: 0.6rem 0.85rem;
+      text-align: right;
+    }
+    .excel-table th {
+      background: var(--bg-base, #fafafa);
+      font-weight: 700;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      font-size: 10pt;
+      letter-spacing: 0.05em;
+    }
+    .excel-table th:first-child, .excel-table td:first-child {
+      text-align: left;
+      font-weight: 600;
+      background: var(--bg-base, #fafafa);
+    }
+    .excel-table tr.total-row td {
+      font-weight: 700 !important;
+      background: var(--bg-base, #fafafa) !important;
+      border-top: 2px solid var(--text-primary) !important;
+      border-bottom: 2px double var(--text-primary) !important;
+    }
+
+    /* ── Tab Container Bar ── */
+    .drawer-tabs {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      overflow-x: auto;
+      background: var(--bg-surface);
+      margin-bottom: 1.5rem;
+    }
+    .tab-btn {
+      padding: 0.9rem 1.25rem;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      border: none;
+      background: none;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      white-space: nowrap;
+      transition: all 0.15s;
+      text-decoration: none;
+    }
+    .tab-btn.active {
+      color: var(--cyan-light);
+      border-bottom-color: var(--cyan);
+    }
+    .tab-btn:hover:not(.active) {
+      color: var(--text-secondary);
+    }
+
+    .shimmer-row td {
+      background: linear-gradient(90deg, var(--bg-surface) 25%, var(--bg-base) 50%, var(--bg-surface) 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+    }
+    @keyframes shimmer {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+  </style>
+</head>
+<body class="bg-base text-primary">
+  <div class="dash-layout">
+    <!-- Sidebar -->
+    <aside class="dash-sidebar" id="dash-sidebar"></aside>
+
+    <!-- Main Content Area -->
+    <main class="dash-main">
+      <header class="dash-topbar" style="border-bottom: none; height: auto; min-height: 60px; display: flex; flex-direction: column; align-items: stretch; justify-content: space-between; padding-top: 1rem;">
+        <div style="display: flex; align-items: center; gap: 0.75rem; padding-left: 2rem; margin-bottom: 0.75rem;">
+          <h1 style="font-size: 1.1rem; font-weight: 800; letter-spacing: -0.02em;">Expenses</h1>
+        </div>
+        <!-- Tabs Component connected directly to header -->
+        <div class="drawer-tabs" style="margin-bottom: 0; padding-left: 2rem; border-top: 1px solid var(--border);">
+          <a href="/dashboard/expenses/cogs" class="tab-btn active">COGS</a>
+          <a href="/dashboard/expenses/opex" class="tab-btn">OPEX</a>
+        </div>
+      </header>
+
+      <div style="padding: 2rem; max-width: 1200px; width: 100%; margin: 0 auto; box-sizing: border-box;">
+        <!-- Top controls row -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+          <!-- Month Switcher -->
+          <div class="month-nav-container">
+            <button onclick="ExpensesApp.changeMonth(-1)" class="month-nav-btn" aria-label="Previous month">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+            </button>
+            <span class="month-display-label" id="month-label">---</span>
+            <button onclick="ExpensesApp.changeMonth(1)" class="month-nav-btn" aria-label="Next month">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+          </div>
+
+          <button onclick="ExpensesApp.loadData()" class="btn btn-outline btn-sm" style="display: flex; align-items: center; gap: 0.4rem;">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+            Refresh
+          </button>
+        </div>
+
+        <!-- Metric Cards -->
+        <div class="stat-grid">
+          <div class="stat-card">
+            <div class="stat-label">Total SKU Sold (Inventory Counted)</div>
+            <div class="stat-value" id="stat-total-sold">0</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Total Cost (COGS)</div>
+            <div class="stat-value" id="stat-total-cogs">₱0.00</div>
+          </div>
+        </div>
+
+        <!-- Supplier Cost Section -->
+        <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.5rem; box-shadow: var(--shadow-sm);">
+          <h2 style="font-size: 1rem; font-weight: 700; color: var(--text-primary); margin: 0 0 1rem 0;">Supplier Cost</h2>
+          
+          <div class="excel-container">
+            <table class="excel-table">
+              <thead>
+                <tr>
+                  <th>SKU</th>
+                  <th>Product Name</th>
+                  <th>Sold</th>
+                  <th>Dealer Price</th>
+                  <th>Total Cost</th>
+                </tr>
+              </thead>
+              <tbody id="cogs-table-body">
+                <tr class="shimmer-row">
+                  <td>Loading...</td>
+                  <td></td><td></td><td></td><td></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Supabase SDK, Auth & Sidebar -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="../../js/auth.js"></script>
+  <script src="../../js/sidebar.js"></script>
+  <script src="../../js/main.js"></script>
+
+  <script>
+    (function() {
+      'use strict';
+
+      window.ExpensesApp = {
+        companyId: null,
+        tenantId: null,
+        currentDate: new Date(),
+        products: [],
+        bookings: [],
+
+        async init() {
+          if (!window.BKAuth) return;
+          const authInfo = await window.BKAuth.checkRoleGate(['Finance'], '../../admin.html');
+          if (!authInfo) return;
+
+          this.tenantId = authInfo.tenantId;
+          const sb = window.BKAuth.sb;
+
+          // Fetch company ID
+          const { data: co } = await sb.from('companies').select('id').eq('tenant_id', this.tenantId).limit(1).maybeSingle();
+          this.companyId = co?.id || null;
+
+          if (!this.companyId) {
+            console.error('Company not resolved.');
+            return;
+          }
+
+          this.updateMonthLabel();
+          await this.loadData();
+        },
+
+        changeMonth(dir) {
+          this.currentDate.setMonth(this.currentDate.getMonth() + dir);
+          this.updateMonthLabel();
+          this.loadData();
+        },
+
+        updateMonthLabel() {
+          const labelEl = document.getElementById('month-label');
+          if (labelEl) {
+            labelEl.textContent = this.currentDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+          }
+        },
+
+        async loadData() {
+          const tbody = document.getElementById('cogs-table-body');
+          if (tbody) {
+            tbody.innerHTML = `
+              <tr class="shimmer-row">
+                <td style="text-align: left;">Fetching COGS data...</td>
+                <td></td><td></td><td></td><td></td>
+              </tr>
+            `;
+          }
+
+          const sb = window.BKAuth.sb;
+          const year = this.currentDate.getFullYear();
+          const month = this.currentDate.getMonth() + 1;
+          const lastDay = new Date(year, month, 0).getDate();
+
+          const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+          const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+
+          try {
+            const [productsRes, bookingsRes] = await Promise.all([
+              sb.from('products').select('sku, name, dealer_price, count_inventory'),
+              sb.from('installation_bookings')
+                .select('scheduled_date, order_no, status, product_skus, product_qtys')
+                .eq('company_id', this.companyId)
+                .neq('status', 'cancelled')
+                .gte('scheduled_date', startDate)
+                .lte('scheduled_date', endDate)
+            ]);
+
+            this.products = productsRes.data || [];
+            this.bookings = bookingsRes.data || [];
+
+            this.renderStatement();
+
+          } catch (err) {
+            console.error('Error loading COGS data:', err);
+            if (tbody) {
+              tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--danger);">Failed to load data: ${err.message}</td></tr>`;
+            }
+          }
+        },
+
+        renderStatement() {
+          const productMap = {};
+          this.products.forEach(p => {
+            if (p.sku) productMap[p.sku.toLowerCase()] = p;
+          });
+
+          const cogsAggregation = {};
+
+          this.bookings.forEach(b => {
+            // Only count bookings where order_no starts with ORD-
+            if (!b.order_no || !b.order_no.startsWith('ORD-')) return;
+
+            let skusArr = [];
+            let qtysArr = [];
+            if (b.product_skus) {
+              skusArr = b.product_skus.split(' | ').filter(Boolean);
+            }
+            if (b.product_qtys) {
+              qtysArr = b.product_qtys.split(' | ').map(Number);
+            }
+
+            skusArr.forEach((sku, idx) => {
+              const qty = qtysArr[idx] || 0;
+              const skuLower = sku.toLowerCase();
+              
+              if (!cogsAggregation[skuLower]) {
+                const prodDetails = productMap[skuLower] || {
+                  name: sku,
+                  dealer_price: 0,
+                  count_inventory: false
+                };
+                cogsAggregation[skuLower] = {
+                  sku: sku,
+                  name: prodDetails.name || sku,
+                  sold: 0,
+                  dealerPrice: prodDetails.dealer_price || 0,
+                  countInventory: prodDetails.count_inventory !== false
+                };
+              }
+              cogsAggregation[skuLower].sold += qty;
+            });
+          });
+
+          // Sort aggregated SKUs alphabetically
+          const sortedSkus = Object.keys(cogsAggregation).sort().map(k => cogsAggregation[k]);
+
+          let totalCountedSold = 0;
+          let grandTotalCogsCentavos = 0;
+          const tbody = document.getElementById('cogs-table-body');
+          tbody.innerHTML = '';
+
+          const formatPHP = (cents) => {
+            const val = cents / 100;
+            return `₱${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+          };
+
+          if (sortedSkus.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 2rem;">No supplier costs recorded for this month.</td></tr>`;
+            document.getElementById('stat-total-sold').textContent = '0';
+            document.getElementById('stat-total-cogs').textContent = '₱0.00';
+            return;
+          }
+
+          const rowsHtml = sortedSkus.map(item => {
+            const totalCost = item.sold * item.dealerPrice;
+            grandTotalCogsCentavos += totalCost;
+
+            if (item.countInventory) {
+              totalCountedSold += item.sold;
+            }
+
+            return `
+              <tr>
+                <td>${item.sku}</td>
+                <td>${item.name}</td>
+                <td>${item.sold}</td>
+                <td>${formatPHP(item.dealerPrice)}</td>
+                <td>${formatPHP(totalCost)}</td>
+              </tr>
+            `;
+          }).join('');
+
+          // Append Total Row
+          const totalRowHtml = `
+            <tr class="total-row">
+              <td colspan="2">TOTAL</td>
+              <td>${totalCountedSold} (counted)</td>
+              <td></td>
+              <td>${formatPHP(grandTotalCogsCentavos)}</td>
+            </tr>
+          `;
+
+          tbody.innerHTML = rowsHtml + totalRowHtml;
+
+          // Update Stats Cards
+          document.getElementById('stat-total-sold').textContent = totalCountedSold;
+          document.getElementById('stat-total-cogs').textContent = formatPHP(grandTotalCogsCentavos);
+        }
+      };
+
+      document.addEventListener('DOMContentLoaded', () => {
+        ExpensesApp.init();
+      });
+    })();
+  </script>
+</body>
+</html>
