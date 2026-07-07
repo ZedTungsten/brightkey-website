@@ -174,15 +174,16 @@
               <thead>
                 <tr>
                   <th style="text-align: left;">Employee</th>
-                  <th style="width: 200px; text-align: right;">Salary</th>
-                  <th style="width: 200px; text-align: right;">Special Payout</th>
-                  <th style="width: 200px; text-align: right;">Total Cost</th>
+                  <th style="width: 180px; text-align: right;">Salary</th>
+                  <th style="width: 180px; text-align: right;">Special Payout</th>
+                  <th style="width: 180px; text-align: right;">Adjustment</th>
+                  <th style="width: 180px; text-align: right;">Total Cost</th>
                 </tr>
               </thead>
               <tbody id="salaries-table-body">
                 <tr class="shimmer-row">
                   <td style="text-align: left;">Loading...</td>
-                  <td></td><td></td><td></td>
+                  <td></td><td></td><td></td><td></td>
                 </tr>
               </tbody>
             </table>
@@ -208,6 +209,7 @@
         currentDate: new Date(),
         employees: [],
         specialSchedules: [],
+        adjustments: [],
 
         async init() {
           if (!window.BKAuth) return;
@@ -249,16 +251,22 @@
             tbody.innerHTML = `
               <tr class="shimmer-row">
                 <td style="text-align: left;">Fetching OPEX data...</td>
-                <td></td><td></td><td></td>
+                <td></td><td></td><td></td><td></td>
               </tr>
             `;
           }
 
           const sb = window.BKAuth.sb;
+          const year = this.currentDate.getFullYear();
+          const month = this.currentDate.getMonth() + 1;
+          const lastDay = new Date(year, month, 0).getDate();
+
+          const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+          const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
 
           try {
-            // Fetch non-terminated employees and salary tracker config in parallel
-            const [empRes, configRes] = await Promise.all([
+            // Fetch non-terminated employees, special config, and adjustments for selected month in parallel
+            const [empRes, configRes, adjRes] = await Promise.all([
               sb.from('employees')
                 .select('id, first_name, last_name, salary, employment_status')
                 .eq('company_id', this.companyId)
@@ -267,19 +275,25 @@
                 .select('value')
                 .eq('key', 'salary_tracker_config')
                 .eq('company_id', this.companyId)
-                .maybeSingle()
+                .maybeSingle(),
+              sb.from('employee_adjustments')
+                .select('employee_id, amount, date')
+                .eq('company_id', this.companyId)
+                .gte('date', startDate)
+                .lte('date', endDate)
             ]);
 
             if (empRes.error) throw empRes.error;
             this.employees = empRes.data || [];
             this.specialSchedules = configRes.data?.value?.specialSchedules || [];
+            this.adjustments = adjRes.data || [];
 
             this.renderStatement();
 
           } catch (err) {
             console.error('Error loading OPEX data:', err);
             if (tbody) {
-              tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--danger);">Failed to load data: ${err.message}</td></tr>`;
+              tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--danger);">Failed to load data: ${err.message}</td></tr>`;
             }
           }
         },
@@ -290,11 +304,12 @@
 
           const formatPHP = (val) => {
             if (val === null || val === undefined || val === '' || Number(val) === 0) return '—';
-            return `₱${Number(val).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+            const prefix = Number(val) < 0 ? '-' : '';
+            return `${prefix}₱${Math.abs(Number(val)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
           };
 
           if (this.employees.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 2rem;">No active employees found.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 2rem;">No active employees found.</td></tr>`;
             return;
           }
 
@@ -307,18 +322,25 @@
 
           let grandTotalSalaries = 0;
           let grandTotalSpecials = 0;
+          let grandTotalAdjustments = 0;
           let grandTotalCost = 0;
 
           const rowsHtml = sortedEmps.map(emp => {
             const baseSalary = Number(emp.salary) || 0;
+            
             const specialPayout = this.specialSchedules
               .filter(s => s.employeeId === emp.id)
               .reduce((sum, s) => sum + (Number(s.value) || 0), 0);
+
+            const adjustmentVal = this.adjustments
+              .filter(a => a.employee_id === emp.id)
+              .reduce((sum, a) => sum + (Number(a.amount) || 0), 0);
             
-            const totalCost = baseSalary + specialPayout;
+            const totalCost = baseSalary + specialPayout + adjustmentVal;
 
             grandTotalSalaries += baseSalary;
             grandTotalSpecials += specialPayout;
+            grandTotalAdjustments += adjustmentVal;
             grandTotalCost += totalCost;
 
             const fullName = `${emp.first_name || ''} ${emp.last_name || ''}`.trim();
@@ -328,6 +350,7 @@
                 <td>${fullName}</td>
                 <td>${formatPHP(baseSalary)}</td>
                 <td>${formatPHP(specialPayout)}</td>
+                <td style="color:${adjustmentVal < 0 ? 'var(--danger)' : 'var(--text-primary)'};">${formatPHP(adjustmentVal)}</td>
                 <td>${formatPHP(totalCost)}</td>
               </tr>
             `;
@@ -339,6 +362,7 @@
               <td>TOTAL</td>
               <td>${formatPHP(grandTotalSalaries)}</td>
               <td>${formatPHP(grandTotalSpecials)}</td>
+              <td style="color:${grandTotalAdjustments < 0 ? 'var(--danger)' : 'var(--text-primary)'};">${formatPHP(grandTotalAdjustments)}</td>
               <td>${formatPHP(grandTotalCost)}</td>
             </tr>
           `;
