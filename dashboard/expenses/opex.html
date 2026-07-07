@@ -9,6 +9,109 @@
   <link rel="stylesheet" href="../../css/style.css" />
   <link rel="icon" type="image/svg+xml" href="../../assets/favicon.svg?v=2" />
   <style>
+    /* ── Month Navigation ── */
+    .month-nav-container {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 0.5rem 1rem;
+    }
+    .month-nav-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      width: 28px;
+      height: 28px;
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .month-nav-btn:hover {
+      background: var(--bg-base);
+      border-color: var(--text-secondary);
+    }
+    .month-display-label {
+      font-size: 0.9rem;
+      font-weight: 700;
+      min-width: 120px;
+      text-align: center;
+    }
+
+    /* ── Metric Callouts ── */
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-top: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+    .stat-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 1.25rem;
+      box-shadow: var(--shadow-sm);
+    }
+    .stat-label {
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .stat-value {
+      font-size: 1.5rem;
+      font-weight: 800;
+      color: var(--text-primary);
+      margin-top: 0.35rem;
+    }
+
+    /* ── Excel-style Table ── */
+    .excel-container {
+      width: 100%;
+      overflow-x: auto;
+      border: 1px solid var(--border);
+      background: var(--bg-surface);
+      margin-top: 1.5rem;
+    }
+    .excel-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 10pt;
+      color: var(--text-primary);
+      font-family: Arial, sans-serif;
+    }
+    .excel-table th, .excel-table td {
+      border: 1px solid var(--border);
+      padding: 0.6rem 0.85rem;
+      text-align: right;
+    }
+    .excel-table th {
+      background: var(--bg-base, #fafafa);
+      font-weight: 700;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      font-size: 10pt;
+      letter-spacing: 0.05em;
+    }
+    .excel-table th:first-child, .excel-table td:first-child {
+      text-align: left;
+      font-weight: 600;
+      background: var(--bg-base, #fafafa);
+    }
+    .excel-table tr.total-row td {
+      font-weight: 700 !important;
+      background: var(--bg-base, #fafafa) !important;
+      border-top: 2px solid var(--text-primary) !important;
+      border-bottom: 2px double var(--text-primary) !important;
+    }
+
     /* ── Tab Container Bar ── */
     .drawer-tabs {
       display: flex;
@@ -38,6 +141,16 @@
     .tab-btn:hover:not(.active) {
       color: var(--text-secondary);
     }
+
+    .shimmer-row td {
+      background: linear-gradient(90deg, var(--bg-surface) 25%, var(--bg-base) 50%, var(--bg-surface) 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+    }
+    @keyframes shimmer {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
   </style>
 </head>
 <body class="bg-base text-primary">
@@ -59,8 +172,60 @@
       </header>
 
       <div style="padding: 2rem; max-width: 1200px; width: 100%; margin: 0 auto; box-sizing: border-box;">
-        <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 3rem; text-align: center; box-shadow: var(--shadow-sm); color: var(--text-muted); font-style: italic;">
-          OPEX Expenses tracking is coming soon.
+        <!-- Top controls row -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+          <!-- Month Switcher -->
+          <div class="month-nav-container">
+            <button onclick="OpexApp.changeMonth(-1)" class="month-nav-btn" aria-label="Previous month">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+            </button>
+            <span class="month-display-label" id="month-label">---</span>
+            <button onclick="OpexApp.changeMonth(1)" class="month-nav-btn" aria-label="Next month">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+          </div>
+
+          <button onclick="OpexApp.loadData()" class="btn btn-outline btn-sm" style="display: flex; align-items: center; gap: 0.4rem;">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+            Refresh
+          </button>
+        </div>
+
+        <!-- Metric Cards -->
+        <div class="stat-grid">
+          <div class="stat-card">
+            <div class="stat-label">Total Employees</div>
+            <div class="stat-value" id="stat-total-employees">0</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Total Salaries (OPEX)</div>
+            <div class="stat-value" id="stat-total-salaries">₱0.00</div>
+          </div>
+        </div>
+
+        <!-- Salaries Section -->
+        <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.5rem; box-shadow: var(--shadow-sm);">
+          <div style="border-bottom: 1px solid var(--border); padding-bottom: 0.75rem; margin-bottom: 1.25rem;">
+            <h2 style="font-size: 1.1rem; font-weight: 800; color: var(--text-primary); margin: 0;">Operations</h2>
+            <span style="font-size: 0.78rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 0.25rem; display: block;">Salaries</span>
+          </div>
+          
+          <div class="excel-container">
+            <table class="excel-table">
+              <thead>
+                <tr>
+                  <th style="text-align: left;">Employee</th>
+                  <th style="width: 250px; text-align: right;">Salary</th>
+                </tr>
+              </thead>
+              <tbody id="salaries-table-body">
+                <tr class="shimmer-row">
+                  <td style="text-align: left;">Loading...</td>
+                  <td></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </main>
@@ -75,12 +240,136 @@
   <script>
     (function() {
       'use strict';
-      
-      // Simple gate check to enforce security role access
-      document.addEventListener('DOMContentLoaded', async () => {
-        if (window.BKAuth) {
-          await window.BKAuth.checkRoleGate(['Finance'], '../../admin.html');
+
+      window.OpexApp = {
+        companyId: null,
+        tenantId: null,
+        currentDate: new Date(),
+        employees: [],
+
+        async init() {
+          if (!window.BKAuth) return;
+          const authInfo = await window.BKAuth.checkRoleGate(['Finance'], '../../admin.html');
+          if (!authInfo) return;
+
+          this.tenantId = authInfo.tenantId;
+          const sb = window.BKAuth.sb;
+
+          // Fetch company ID
+          const { data: co } = await sb.from('companies').select('id').eq('tenant_id', this.tenantId).limit(1).maybeSingle();
+          this.companyId = co?.id || null;
+
+          if (!this.companyId) {
+            console.error('Company not resolved.');
+            return;
+          }
+
+          this.updateMonthLabel();
+          await this.loadData();
+        },
+
+        changeMonth(dir) {
+          this.currentDate.setMonth(this.currentDate.getMonth() + dir);
+          this.updateMonthLabel();
+          this.loadData();
+        },
+
+        updateMonthLabel() {
+          const labelEl = document.getElementById('month-label');
+          if (labelEl) {
+            labelEl.textContent = this.currentDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+          }
+        },
+
+        async loadData() {
+          const tbody = document.getElementById('salaries-table-body');
+          if (tbody) {
+            tbody.innerHTML = `
+              <tr class="shimmer-row">
+                <td style="text-align: left;">Fetching Salaries data...</td>
+                <td></td>
+              </tr>
+            `;
+          }
+
+          const sb = window.BKAuth.sb;
+
+          try {
+            // Fetch non-terminated employees matching companyId (exactly like payout-tracker/salary)
+            const { data: empData, error: empErr } = await sb.from('employees')
+              .select('id, first_name, last_name, salary, employment_status')
+              .eq('company_id', this.companyId)
+              .neq('employment_status', 'Terminated');
+
+            if (empErr) throw empErr;
+            this.employees = empData || [];
+
+            this.renderStatement();
+
+          } catch (err) {
+            console.error('Error loading Salaries data:', err);
+            if (tbody) {
+              tbody.innerHTML = `<tr><td colspan="2" style="text-align: center; color: var(--danger);">Failed to load data: ${err.message}</td></tr>`;
+            }
+          }
+        },
+
+        renderStatement() {
+          const tbody = document.getElementById('salaries-table-body');
+          tbody.innerHTML = '';
+
+          const formatPHP = (val) => {
+            if (val === null || val === undefined || val === '' || Number(val) === 0) return '—';
+            return `₱${Number(val).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+          };
+
+          if (this.employees.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="2" style="text-align: center; color: var(--text-muted); padding: 2rem;">No active employees found.</td></tr>`;
+            document.getElementById('stat-total-employees').textContent = '0';
+            document.getElementById('stat-total-salaries').textContent = '₱0.00';
+            return;
+          }
+
+          // Sort employees alphabetically by name
+          const sortedEmps = [...this.employees].sort((a, b) => {
+            const nameA = `${a.first_name || ''} ${a.last_name || ''}`.trim().toLowerCase();
+            const nameB = `${b.first_name || ''} ${b.last_name || ''}`.trim().toLowerCase();
+            return nameA.localeCompare(nameB);
+          });
+
+          let grandTotalSalaries = 0;
+
+          const rowsHtml = sortedEmps.map(emp => {
+            const baseSalary = Number(emp.salary) || 0;
+            grandTotalSalaries += baseSalary;
+            const fullName = `${emp.first_name || ''} ${emp.last_name || ''}`.trim();
+
+            return `
+              <tr>
+                <td>${fullName}</td>
+                <td>${formatPHP(baseSalary)}</td>
+              </tr>
+            `;
+          }).join('');
+
+          // Append Total Row
+          const totalRowHtml = `
+            <tr class="total-row">
+              <td>TOTAL</td>
+              <td>${formatPHP(grandTotalSalaries)}</td>
+            </tr>
+          `;
+
+          tbody.innerHTML = rowsHtml + totalRowHtml;
+
+          // Update Stats Cards
+          document.getElementById('stat-total-employees').textContent = this.employees.length;
+          document.getElementById('stat-total-salaries').textContent = formatPHP(grandTotalSalaries);
         }
+      };
+
+      document.addEventListener('DOMContentLoaded', () => {
+        OpexApp.init();
       });
     })();
   </script>
