@@ -118,6 +118,8 @@
       companyId: null,
       tenantId: null,
       stagedAttachments:   [],
+      customCategories:    [],
+      deletedCategories:   [],
       /* ── Edit mode state ── */
       editMode:       false,
       pendingChanges: {},
@@ -156,8 +158,10 @@
           }
         }
         this.setTodayDate();
+        await this.loadCategories();
         this.populateCatSelects();
         this.bindForm();
+        this.bindCategoriesPanel();
         this.bindAccountsPanel();
         this.bindFilters();
         this.bindOrphanPop();
@@ -184,8 +188,9 @@
 
       populateCatSelects() {
         const sel = document.getElementById('new-acct-cat');
+        if (!sel) return;
         sel.innerHTML = '';
-        CATEGORIES.forEach(c => {
+        this.customCategories.forEach(c => {
           const o = document.createElement('option');
           o.value = o.textContent = c;
           sel.appendChild(o);
@@ -400,17 +405,21 @@
 
       renderAcctsList() {
         const c = document.getElementById('accts-list');
+        if (!c) return;
         if (!this.accounts.length) { c.innerHTML = '<div class="tbl-state">No accounts yet.</div>'; return; }
         const g = this.grouped(false);
         let html = '';
         Object.keys(g).sort().forEach(cat => {
-          html += `<div class="acct-group-label">${esc(cat)}</div>`;
+          const isDeleted = this.deletedCategories.includes(cat);
+          const groupStyle = isDeleted ? 'color: var(--danger); font-weight: 700; background: rgba(239, 68, 68, 0.08); padding: 4px 12px;' : '';
+          html += `<div class="acct-group-label" style="${groupStyle}">${esc(cat)}${isDeleted ? ' ( - )' : ''}</div>`;
           g[cat].forEach(a => {
             const isVisible = a.is_visible !== false;
+            const rowStyle = isDeleted ? 'background: rgba(239, 68, 68, 0.04); border-left: 3px solid var(--danger);' : '';
             html += `
-              <div class="acct-row" id="acr-${a.id}">
-                <span class="acct-row__name">${esc(a.name)}</span>
-                <span class="acct-row__cat">${esc(a.category)}</span>
+              <div class="acct-row" id="acr-${a.id}" style="${rowStyle}">
+                <span class="acct-row__name" style="${isDeleted ? 'color: var(--danger); font-weight: 600;' : ''}">${esc(a.name)}</span>
+                <span class="acct-row__cat" style="${isDeleted ? 'border-color: rgba(239,68,68,0.3); background: rgba(239,68,68,0.06); color: var(--danger);' : ''}">${esc(a.category)}</span>
                 <div class="acct-row__actions" style="display:flex; align-items:center; gap:4px;">
                   <button class="btn btn-ghost btn-sm" type="button" onclick="JournalApp.toggleAcctVisibility(${a.id})" title="${isVisible ? 'Hide from selection' : 'Show in selection'}">
                     ${isVisible
@@ -436,7 +445,14 @@
         if (!a) return;
         const row = document.getElementById(`acr-${id}`);
         if (!row) return;
-        const opts = CATEGORIES.map(c => `<option value="${c}"${c===a.category?' selected':''}>${c}</option>`).join('');
+        const listCats = [...this.customCategories];
+        if (a.category && this.deletedCategories.includes(a.category) && !listCats.includes(a.category)) {
+          listCats.unshift(a.category);
+        }
+        const opts = listCats.map(c => {
+          const isDeleted = this.deletedCategories.includes(c);
+          return `<option value="${c}"${c===a.category?' selected':''}>${esc(c)}${isDeleted ? ' ( - )' : ''}</option>`;
+        }).join('');
         row.innerHTML = `
           <input type="text" class="form-input" id="ean-${id}" value="${esc(a.name)}" style="flex:1;" />
           <select class="form-select" id="eac-${id}" style="width:150px;">${opts}</select>
@@ -511,8 +527,9 @@
             const newCat = document.getElementById('new-cat-name').value.trim();
             if (!newCat) { Toast.error('Category name is required.'); return; }
             cat = newCat;
-            if (!CATEGORIES.includes(cat)) {
-              CATEGORIES.splice(CATEGORIES.indexOf('Other'), 0, cat);
+            if (!this.customCategories.includes(cat)) {
+              this.customCategories.push(cat);
+              await this.saveCategories();
             }
           }
           if (!name) { Toast.error('Account name is required.'); return; }
@@ -1480,11 +1497,14 @@
           Object.entries(chgs).forEach(([k, v]) => { d[k] = v.new; });
 
           const orphan = !known.has(d.account) && !isDel;
+          const acctObj = this.accounts.find(a => a.name === d.account);
+          const isCatDeleted = acctObj && this.deletedCategories.includes(acctObj.category);
 
           let rowCls = '';
-          if (isDel)        rowCls = 'row-pending-delete';
-          else if (hasDiff) rowCls = 'row-pending-edit';
-          else if (orphan)  rowCls = 'row-orphan';
+          if (isDel)             rowCls = 'row-pending-delete';
+          else if (hasDiff)      rowCls = 'row-pending-edit';
+          else if (orphan)       rowCls = 'row-orphan';
+          else if (isCatDeleted) rowCls = 'row-deleted-cat';
 
           const oa = orphan && !this.editMode
             ? ` onclick="JournalApp.openOrphanPop(event,${r.id},'${esc(d.account)}')" title="Unknown account — click to fix"` : '';
@@ -1512,7 +1532,7 @@
             <td class="num" style="color:var(--text-muted);font-size:0.72rem;">${off + i + 1}</td>
             <td class="entry-num"${ec('entry_number')}>${fmtEntry(d.entry_number)}</td>
             <td${ec('date')}>${d.date || '—'}</td>
-            <td${ec('account')} style="${orphan ? 'color:var(--danger);font-weight:600;' : ''}">${esc(d.account)}</td>
+            <td${ec('account')} style="${orphan || isCatDeleted ? 'color:var(--danger);font-weight:600;' : ''}">${esc(d.account)}</td>
             <td class="debit"${ec('debit')}>${d.debit   ? php(d.debit)   : '—'}</td>
             <td class="credit"${ec('credit')}>${d.credit ? php(d.credit) : '—'}</td>
             <td${ec('description_1')}>${esc(d.description_1 || '')}</td>
@@ -2028,6 +2048,191 @@
           sel.appendChild(o);
         });
         if (prev) sel.value = prev;
+      },
+
+      async loadCategories() {
+        try {
+          const { data } = await window.BKAuth.sb.from('global_settings')
+            .select('value')
+            .eq('key', 'journal_categories')
+            .eq('company_id', this.companyId)
+            .maybeSingle();
+          if (data && data.value && Array.isArray(data.value.categories)) {
+            this.customCategories = data.value.categories;
+            this.deletedCategories = data.value.deleted || [];
+          } else {
+            this.customCategories = [
+              'Commission','Customer','Distribution','Due From Owner','Due From Staff',
+              'Due To','Installer','Loan','OPMMI','Owner Equity','Salary','Supplier','Other'
+            ];
+            this.deletedCategories = [];
+          }
+        } catch (e) {
+          this.customCategories = [
+            'Commission','Customer','Distribution','Due From Owner','Due From Staff',
+            'Due To','Installer','Loan','OPMMI','Owner Equity','Salary','Supplier','Other'
+          ];
+          this.deletedCategories = [];
+        }
+      },
+
+      async saveCategories() {
+        try {
+          await window.BKAuth.sb.from('global_settings').upsert({
+            key: 'journal_categories',
+            company_id: this.companyId,
+            value: { categories: this.customCategories, deleted: this.deletedCategories }
+          }, { onConflict: 'company_id,key' });
+        } catch (err) {
+          Toast.error('Failed to save categories: ' + err.message);
+        }
+      },
+
+      bindCategoriesPanel() {
+        const toggle = document.getElementById('categories-toggle');
+        const panel  = document.getElementById('categories-panel');
+        if (toggle && panel) {
+          toggle.addEventListener('click', () => {
+            const open = panel.style.display !== 'none';
+            panel.style.display = open ? 'none' : 'block';
+            toggle.classList.toggle('open', !open);
+            if (!open) {
+              this.renderCatsList();
+            }
+          });
+        }
+
+        const addBtn = document.getElementById('add-cat-btn');
+        if (addBtn) {
+          addBtn.addEventListener('click', async () => {
+            const input = document.getElementById('new-cat-input-name');
+            const name = input ? input.value.trim() : '';
+            if (!name) { Toast.error('Category name cannot be empty.'); return; }
+            if (this.customCategories.includes(name)) { Toast.error('Category already exists.'); return; }
+            
+            const delIdx = this.deletedCategories.indexOf(name);
+            if (delIdx !== -1) {
+              this.deletedCategories.splice(delIdx, 1);
+            }
+            
+            this.customCategories.push(name);
+            await this.saveCategories();
+            if (input) input.value = '';
+            this.populateCatSelects();
+            this.renderCatsList();
+            this.renderAcctsList();
+            this.renderTable();
+            Toast.success(`Category "${name}" added.`);
+          });
+        }
+      },
+
+      renderCatsList() {
+        const list = document.getElementById('cats-list');
+        if (!list) return;
+        if (this.customCategories.length === 0) {
+          list.innerHTML = '<div class="tbl-state">No categories.</div>';
+          return;
+        }
+        list.innerHTML = this.customCategories.map(cat => {
+          return `
+            <div class="acct-row" id="cat-item-${esc(cat)}" style="display:flex; justify-content:space-between; align-items:center; padding: 0.55rem 1rem;">
+              <span class="cat-name-text">${esc(cat)}</span>
+              <div style="display:flex; gap:0.2rem; align-items:center;">
+                <button class="btn btn-ghost btn-sm" type="button" onclick="JournalApp.startRenameCat('${esc(cat)}')" title="Rename Category" style="color:var(--text-secondary); padding:0 6px;">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4z"/></svg>
+                </button>
+                <button class="btn btn-ghost btn-sm" type="button" onclick="JournalApp.deleteCat('${esc(cat)}')" title="Delete Category" style="color:var(--danger); padding:0 6px;">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+                </button>
+              </div>
+            </div>
+          `;
+        }).join('');
+      },
+
+      startRenameCat(cat) {
+        const item = document.getElementById(`cat-item-${cat}`);
+        if (!item) return;
+        const textSpan = item.querySelector('.cat-name-text');
+        const actionsDiv = item.querySelector('div');
+        
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'form-input';
+        input.value = cat;
+        input.style.flex = '1';
+        input.style.marginRight = '0.5rem';
+
+        const saveBtn = document.createElement('button');
+        saveBtn.className = 'btn btn-cyan btn-sm';
+        saveBtn.textContent = 'Save';
+        saveBtn.type = 'button';
+        saveBtn.onclick = () => this.saveRenameCat(cat, input.value.trim());
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.className = 'btn btn-ghost btn-sm';
+        cancelBtn.textContent = 'Cancel';
+        cancelBtn.type = 'button';
+        cancelBtn.onclick = () => this.renderCatsList();
+
+        const btnWrap = document.createElement('div');
+        btnWrap.style.display = 'flex';
+        btnWrap.style.gap = '0.25rem';
+        btnWrap.appendChild(saveBtn);
+        btnWrap.appendChild(cancelBtn);
+
+        textSpan.replaceWith(input);
+        actionsDiv.replaceWith(btnWrap);
+        input.focus();
+      },
+
+      async saveRenameCat(oldName, newName) {
+        if (!newName) { Toast.error('Name cannot be empty.'); return; }
+        if (this.customCategories.includes(newName)) { Toast.error('Category already exists.'); return; }
+        
+        const idx = this.customCategories.indexOf(oldName);
+        if (idx !== -1) {
+          this.customCategories[idx] = newName;
+          await this.saveCategories();
+
+          try {
+            await sbPatch('journal_accounts', `company_id=eq.${this.companyId}&category=eq.${oldName}`, { category: newName });
+          } catch (err) {
+            console.error(err);
+          }
+
+          this.populateCatSelects();
+          await this.loadAccounts();
+          this.renderCatsList();
+          this.renderAcctsList();
+          this.renderTable();
+          Toast.success(`Category renamed to "${newName}".`);
+        }
+      },
+
+      async deleteCat(cat) {
+        const ok = await BKDialog.ask({
+          title: 'Delete Category',
+          message: `Are you sure you want to delete the category "${cat}"?\n\nAccounts belonging to this category will have their category deleted and shown as ( - ) dash, and affected journal rows will be highlighted.`,
+          okText: 'Delete',
+          danger: true
+        });
+        if (!ok) return;
+
+        const idx = this.customCategories.indexOf(cat);
+        if (idx !== -1) {
+          this.customCategories.splice(idx, 1);
+          if (!this.deletedCategories.includes(cat)) {
+            this.deletedCategories.push(cat);
+          }
+          await this.saveCategories();
+          this.populateCatSelects();
+          this.renderCatsList();
+          this.renderAcctsList();
+          this.renderTable();
+          Toast.success(`Category "${cat}" deleted.`);
+        }
       },
 
       filterLogs() {
