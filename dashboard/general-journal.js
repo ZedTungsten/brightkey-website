@@ -144,14 +144,14 @@
           this.tenantId = authInfo.tenantId;
 
           try {
-            // Fetch company ID for BrightKey subdomain
-            const { data: companyData } = await sb
+            const { data: co } = await sb
               .from('companies')
               .select('id')
-              .eq('subdomain', 'brightkey')
-              .limit(1);
-            if (companyData && companyData.length > 0) {
-              this.companyId = companyData[0].id;
+              .eq('tenant_id', this.tenantId)
+              .limit(1)
+              .maybeSingle();
+            if (co) {
+              this.companyId = co.id;
             }
           } catch (err) {
             console.error('Error loading company:', err);
@@ -539,6 +539,7 @@
             document.getElementById('new-cat-name').value = '';
             document.getElementById('new-cat-name').style.display = 'none';
             this.populateCatSelects();
+            this.renderCatsList();
             Toast.success(`"${name}" added.`);
             await this.loadAccounts();
           } catch(e) { Toast.error('Failed: ' + e.message); }
