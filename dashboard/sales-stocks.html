@@ -273,12 +273,13 @@
                         <th style="width: 150px; cursor: pointer; user-select: none;" id="header-sku" onclick="setSort('sku')">SKU</th>
                         <th style="cursor: pointer; user-select: none;" id="header-title" onclick="setSort('title')">Product Name</th>
                         <th style="width: 180px; cursor: pointer; user-select: none;" id="header-category" onclick="setSort('category')">Category</th>
+                        <th style="width: 140px; text-align: right; cursor: pointer; user-select: none;" id="header-installation_price" onclick="setSort('installation_price')">Install Price</th>
                         <th style="width: 120px; text-align: center; cursor: pointer; user-select: none;" id="header-available" onclick="setSort('available')">Available</th>
                       </tr>
                     </thead>
                     <tbody id="inventory-tbody">
                       <tr>
-                        <td colspan="5">
+                        <td colspan="6">
                           <div class="loading-wrapper">
                             <div class="spinner"></div>
                             <span>Loading inventory details...</span>
@@ -350,7 +351,7 @@
       const tbody = document.getElementById('inventory-tbody');
       tbody.innerHTML = `
         <tr>
-          <td colspan="5">
+          <td colspan="6">
             <div class="loading-wrapper">
               <div class="spinner"></div>
               <span>Fetching products & inventory data...</span>
@@ -362,7 +363,7 @@
       try {
         // Fetch products, inventory and commissions config in parallel (inventory compiled across all warehouses under tenant RLS)
         const [prodRes, invRes, commsRes] = await Promise.all([
-          sb.from('products').select('sku, title, category, business, image_main, description, tags').eq('company_id', currentCompanyId).order('sku'),
+          sb.from('products').select('sku, title, category, business, image_main, description, tags, installation_price').eq('company_id', currentCompanyId).order('sku'),
           sb.from('inventory').select('sku, available'),
           sb.from('global_settings').select('value').eq('key', 'commissions_config').eq('company_id', currentCompanyId).maybeSingle()
         ]);
@@ -391,7 +392,7 @@
         showToast('Failed to load inventory: ' + err.message, true);
         tbody.innerHTML = `
           <tr>
-            <td colspan="5" style="padding: 2rem; text-align: center; color: var(--danger);">
+            <td colspan="6" style="padding: 2rem; text-align: center; color: var(--danger);">
               Failed to load inventory data.
             </td>
           </tr>
@@ -444,6 +445,9 @@
           } else if (sortColumn === 'title') {
             valA = (a.title || '').toLowerCase();
             valB = (b.title || '').toLowerCase();
+          } else if (sortColumn === 'installation_price') {
+            valA = a.installation_price || 0;
+            valB = b.installation_price || 0;
           }
 
           if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
@@ -457,13 +461,19 @@
       if (filtered.length === 0) {
         tbody.innerHTML = `
           <tr>
-            <td colspan="5" style="padding: 3rem; text-align: center; color: var(--text-muted);">
+            <td colspan="6" style="padding: 3rem; text-align: center; color: var(--text-muted);">
               No products found matching filters.
             </td>
           </tr>
         `;
         return;
       }
+
+      const formatPHP = (cents) => {
+        if (cents == null) return '—';
+        const val = cents / 100;
+        return `₱${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      };
 
       tbody.innerHTML = filtered.map(p => {
         const availableCount = dbInventory[p.sku] || 0;
@@ -485,6 +495,9 @@
             </td>
             <td style="text-transform: capitalize;">
               ${esc((p.category || '—').replace(/_/g, ' '))}
+            </td>
+            <td style="text-align: right; font-variant-numeric: tabular-nums;">
+              ${formatPHP(p.installation_price)}
             </td>
             <td style="text-align: center;">
               <span style="${stockStyle}">${availableCount}</span>
@@ -557,11 +570,13 @@
 
       const skuEl = document.getElementById('header-sku');
       const catEl = document.getElementById('header-category');
+      const instEl = document.getElementById('header-installation_price');
       const titleEl = document.getElementById('header-title');
       const availEl = document.getElementById('header-available');
 
       if (skuEl) skuEl.innerHTML = `SKU${getIndicator('sku')}`;
       if (catEl) catEl.innerHTML = `Category${getIndicator('category')}`;
+      if (instEl) instEl.innerHTML = `Install Price${getIndicator('installation_price')}`;
       if (titleEl) titleEl.innerHTML = `Product Name${getIndicator('title')}`;
       if (availEl) availEl.innerHTML = `Available${getIndicator('available')}`;
     }
