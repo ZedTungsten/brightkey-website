@@ -194,7 +194,7 @@
         <!-- Metric Cards -->
         <div class="stat-grid">
           <div class="stat-card">
-            <div class="stat-label">Total SKU Sold (Inventory Counted)</div>
+            <div class="stat-label">Total SKU Sold</div>
             <div class="stat-value" id="stat-total-sold">0</div>
           </div>
           <div class="stat-card">
@@ -303,7 +303,7 @@
 
           try {
             const [productsRes, bookingsRes] = await Promise.all([
-              sb.from('products').select('sku, name, dealer_price, count_inventory'),
+              sb.from('products').select('sku, title, dealer_price, count_inventory'),
               sb.from('installation_bookings')
                 .select('scheduled_date, order_no, status, product_skus, product_qtys')
                 .eq('company_id', this.companyId)
@@ -352,16 +352,16 @@
               
               if (!cogsAggregation[skuLower]) {
                 const prodDetails = productMap[skuLower] || {
-                  name: sku,
+                  title: sku,
                   dealer_price: 0,
                   count_inventory: false
                 };
                 cogsAggregation[skuLower] = {
                   sku: sku,
-                  name: prodDetails.name || sku,
+                  name: prodDetails.title || sku,
                   sold: 0,
                   dealerPrice: prodDetails.dealer_price || 0,
-                  countInventory: prodDetails.count_inventory !== false
+                  countInventory: prodDetails.count_inventory === true
                 };
               }
               cogsAggregation[skuLower].sold += qty;
@@ -371,6 +371,7 @@
           // Sort aggregated SKUs alphabetically
           const sortedSkus = Object.keys(cogsAggregation).sort().map(k => cogsAggregation[k]);
 
+          let totalSold = 0;
           let totalCountedSold = 0;
           let grandTotalCogsCentavos = 0;
           const tbody = document.getElementById('cogs-table-body');
@@ -392,6 +393,7 @@
             const totalCost = item.sold * item.dealerPrice;
             grandTotalCogsCentavos += totalCost;
 
+            totalSold += item.sold;
             if (item.countInventory) {
               totalCountedSold += item.sold;
             }
@@ -411,7 +413,7 @@
           const totalRowHtml = `
             <tr class="total-row">
               <td colspan="2">TOTAL</td>
-              <td>${totalCountedSold} (counted)</td>
+              <td>${totalSold} (${totalCountedSold} counted)</td>
               <td></td>
               <td>${formatPHP(grandTotalCogsCentavos)}</td>
             </tr>
@@ -420,7 +422,7 @@
           tbody.innerHTML = rowsHtml + totalRowHtml;
 
           // Update Stats Cards
-          document.getElementById('stat-total-sold').textContent = totalCountedSold;
+          document.getElementById('stat-total-sold').textContent = totalSold;
           document.getElementById('stat-total-cogs').textContent = formatPHP(grandTotalCogsCentavos);
         }
       };
