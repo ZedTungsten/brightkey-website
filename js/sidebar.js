@@ -1471,9 +1471,7 @@
         container.appendChild(msgRow);
         container.scrollTop = container.scrollHeight;
         this.messagesOffset += 1;
-      },
-
-      setupLightweightRealtime() {
+      },      setupLightweightRealtime() {
         if (this.lightweightChannel) return;
         try {
           this.lightweightChannel = window.BKAuth.sb
@@ -1513,6 +1511,27 @@
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'attendance_logs' }, payload => {
               const newLog = payload.new;
               if (!newLog) return;
+
+              // Update user's sidebar status immediately if it is the current employee
+              if (this.employeeId && newLog.employee_id === this.employeeId) {
+                const statusDot = document.getElementById('user-status-dot');
+                const statusText = document.getElementById('user-status-text');
+                if (statusDot && statusText) {
+                  if (newLog.status === 'available') {
+                    statusDot.style.backgroundColor = '#22c55e'; // Green
+                    statusText.textContent = 'Time in';
+                    statusText.style.color = '#22c55e';
+                  } else if (newLog.status === 'break') {
+                    statusDot.style.backgroundColor = '#f97316'; // Orange
+                    statusText.textContent = 'Break';
+                    statusText.style.color = '#f97316';
+                  } else {
+                    statusDot.style.backgroundColor = '#9ca3af'; // Gray
+                    statusText.textContent = 'Time out';
+                    statusText.style.color = '#9ca3af';
+                  }
+                }
+              }
 
               const chatWin = document.getElementById('chat-window');
               const isOpen = chatWin && chatWin.classList.contains('open');
