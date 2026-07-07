@@ -223,3 +223,12 @@ We use two distinct patterns for modal overlays. Do NOT mix them:
 > - **Enable Natural Document Flow**: Override the flexbox constraints using `style="flex: none;"` on the containers so that they expand dynamically based on their actual database content.
 > - **Unified Scrolling**: Ensure that the outer `.scroll-area` container handles scrolling for the entire layout as a single document rather than having nested, competing scroll regions.
 > - **Floating Button Spacing**: Always ensure the bottom-most list container has enough bottom padding (e.g., `padding-bottom: 3rem;`) to comfortably clear any floating UI components (like the support/chat widget).
+
+---
+
+## 15. User-Friendly Error Messaging Policy
+> [!IMPORTANT]
+> **NO CRYPTIC OR RAW ERRORS IN THE UI**:
+> Standard HTTP status codes, database constraint errors (e.g. `Update 409`, `duplicate key`, `code 23505`), or system stack traces must never be shown directly to the user in notifications, alerts, or toast messages.
+> - **Always Translate Raw Errors**: Intercept raw database and fetch error codes and translate them to clear, friendly, and actionable instructions for the user (e.g., convert a 409 Conflict/23505 Unique Violation into `"An account with this name already exists"`).
+> - **Actionable Design**: Ensure the error message explains *what* went wrong and *how* the user can fix it.
