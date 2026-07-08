@@ -186,9 +186,22 @@
       const matched = sorted.find(b => b.customer_name && b.customer_name.trim().toLowerCase() === name.toLowerCase());
 
       if (matched) {
+        let city = matched.customer_city || '';
+        let province = matched.customer_province || '';
+        
+        if ((!city || !province) && matched.customer_address) {
+          const parts = matched.customer_address.split(',').map(s => s.trim()).filter(Boolean);
+          if (parts.length >= 2) {
+            if (!province) province = parts[parts.length - 1];
+            if (!city) city = parts[parts.length - 2];
+          } else if (parts.length === 1) {
+            if (!city) city = parts[0];
+          }
+        }
+
         document.getElementById('event-cust-address').value = matched.customer_address || '';
-        document.getElementById('event-cust-city').value = matched.customer_city || '';
-        document.getElementById('event-cust-province').value = matched.customer_province || '';
+        document.getElementById('event-cust-city').value = city;
+        document.getElementById('event-cust-province').value = province;
         document.getElementById('event-cust-phone').value = matched.customer_phone || '';
         document.getElementById('event-cust-email').value = matched.customer_email || '';
         document.getElementById('event-cust-map').value = matched.google_map_pin_url || '';
