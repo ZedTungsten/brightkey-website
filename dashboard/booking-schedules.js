@@ -130,8 +130,43 @@
         custNameInput.addEventListener('input', handleCustomerNameChange);
       }
 
+      const eventTypeSelect = document.getElementById('event-type');
+      if (eventTypeSelect) {
+        eventTypeSelect.addEventListener('change', toggleEventCustDetailsSection);
+      }
+
       await loadData();
     });
+
+    function toggleEventCustDetailsSection() {
+      const type = document.getElementById('event-type').value;
+      const section = document.getElementById('event-cust-details-section');
+      const requiredInputs = [
+        document.getElementById('event-cust-address'),
+        document.getElementById('event-cust-city'),
+        document.getElementById('event-cust-province'),
+        document.getElementById('event-cust-phone'),
+        document.getElementById('event-cust-email')
+      ];
+
+      if (type === 'day_off') {
+        if (section) section.style.display = 'none';
+        requiredInputs.forEach(input => {
+          if (input) {
+            input.required = false;
+            input.disabled = true;
+          }
+        });
+      } else {
+        if (section) section.style.display = 'flex';
+        requiredInputs.forEach(input => {
+          if (input) {
+            input.required = true;
+            input.disabled = false;
+          }
+        });
+      }
+    }
 
     function handleCustomerNameChange(e) {
       const name = e.target.value.trim();
@@ -1925,6 +1960,8 @@
       document.getElementById('event-time-slot').value = 'Morning';
       document.getElementById('event-type').value = 'backjob';
       
+      toggleEventCustDetailsSection();
+
       // Uncheck all checkboxes
       const checkboxes = document.querySelectorAll('input[name="event-installers"]');
       checkboxes.forEach(cb => cb.checked = false);
@@ -1983,13 +2020,14 @@
       const installerNamesJoined = installerNamesList.join(', ');
       const productName = installerNamesJoined ? `${eventTypeName} - ${installerNamesJoined}` : eventTypeName;
 
-      const customerAddress = document.getElementById('event-cust-address').value.trim();
-      const customerCity = document.getElementById('event-cust-city').value.trim();
-      const customerProvince = document.getElementById('event-cust-province').value.trim();
-      const customerPhone = document.getElementById('event-cust-phone').value.trim();
-      const customerEmail = document.getElementById('event-cust-email').value.trim();
-      const googleMapPinUrl = document.getElementById('event-cust-map').value.trim() || null;
-      const notes = document.getElementById('event-cust-notes').value.trim() || null;
+      const isDayOff = eventType === 'day_off';
+      const customerAddress = isDayOff ? 'Day off' : document.getElementById('event-cust-address').value.trim();
+      const customerCity = isDayOff ? '' : document.getElementById('event-cust-city').value.trim();
+      const customerProvince = isDayOff ? '' : document.getElementById('event-cust-province').value.trim();
+      const customerPhone = isDayOff ? '' : document.getElementById('event-cust-phone').value.trim();
+      const customerEmail = isDayOff ? '' : document.getElementById('event-cust-email').value.trim();
+      const googleMapPinUrl = isDayOff ? null : (document.getElementById('event-cust-map').value.trim() || null);
+      const notes = isDayOff ? null : (document.getElementById('event-cust-notes').value.trim() || null);
 
       const payload = {
         company_id: currentCompanyId,
