@@ -125,8 +125,48 @@
         });
       }
 
+      const custNameInput = document.getElementById('event-cust-name');
+      if (custNameInput) {
+        custNameInput.addEventListener('input', handleCustomerNameChange);
+      }
+
       await loadData();
     });
+
+    function handleCustomerNameChange(e) {
+      const name = e.target.value.trim();
+      if (!name) {
+        document.getElementById('event-cust-address').value = '';
+        document.getElementById('event-cust-city').value = '';
+        document.getElementById('event-cust-province').value = '';
+        document.getElementById('event-cust-phone').value = '';
+        document.getElementById('event-cust-email').value = '';
+        document.getElementById('event-cust-map').value = '';
+        document.getElementById('event-cust-notes').value = '';
+        return;
+      }
+
+      const sorted = [...dbBookings].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+      const matched = sorted.find(b => b.customer_name && b.customer_name.trim().toLowerCase() === name.toLowerCase());
+
+      if (matched) {
+        document.getElementById('event-cust-address').value = matched.customer_address || '';
+        document.getElementById('event-cust-city').value = matched.customer_city || '';
+        document.getElementById('event-cust-province').value = matched.customer_province || '';
+        document.getElementById('event-cust-phone').value = matched.customer_phone || '';
+        document.getElementById('event-cust-email').value = matched.customer_email || '';
+        document.getElementById('event-cust-map').value = matched.google_map_pin_url || '';
+        document.getElementById('event-cust-notes').value = matched.notes || '';
+      } else {
+        document.getElementById('event-cust-address').value = '';
+        document.getElementById('event-cust-city').value = '';
+        document.getElementById('event-cust-province').value = '';
+        document.getElementById('event-cust-phone').value = '';
+        document.getElementById('event-cust-email').value = '';
+        document.getElementById('event-cust-map').value = '';
+        document.getElementById('event-cust-notes').value = '';
+      }
+    }
 
     async function loadData() {
       renderSkeletons();
@@ -1875,6 +1915,13 @@
       
       // Clear inputs
       document.getElementById('event-cust-name').value = '';
+      document.getElementById('event-cust-address').value = '';
+      document.getElementById('event-cust-city').value = '';
+      document.getElementById('event-cust-province').value = '';
+      document.getElementById('event-cust-phone').value = '';
+      document.getElementById('event-cust-email').value = '';
+      document.getElementById('event-cust-map').value = '';
+      document.getElementById('event-cust-notes').value = '';
       document.getElementById('event-time-slot').value = 'Morning';
       document.getElementById('event-type').value = 'backjob';
       
@@ -1936,16 +1983,27 @@
       const installerNamesJoined = installerNamesList.join(', ');
       const productName = installerNamesJoined ? `${eventTypeName} - ${installerNamesJoined}` : eventTypeName;
 
+      const customerAddress = document.getElementById('event-cust-address').value.trim();
+      const customerCity = document.getElementById('event-cust-city').value.trim();
+      const customerProvince = document.getElementById('event-cust-province').value.trim();
+      const customerPhone = document.getElementById('event-cust-phone').value.trim();
+      const customerEmail = document.getElementById('event-cust-email').value.trim();
+      const googleMapPinUrl = document.getElementById('event-cust-map').value.trim() || null;
+      const notes = document.getElementById('event-cust-notes').value.trim() || null;
+
       const payload = {
         company_id: currentCompanyId,
         folder_ref_id: folderRefId,
         order_no: orderNo,
         customer_name: customerName,
-        customer_address: matched ? (matched.customer_address || eventTypeName) : eventTypeName,
+        customer_address: customerAddress,
+        customer_city: customerCity,
+        customer_province: customerProvince,
         customer_social: matched ? matched.customer_social : null,
-        customer_email: matched ? matched.customer_email : null,
-        customer_phone: matched ? matched.customer_phone : null,
-        google_map_pin_url: matched ? matched.google_map_pin_url : null,
+        customer_email: customerEmail,
+        customer_phone: customerPhone,
+        google_map_pin_url: googleMapPinUrl,
+        notes: notes,
         scheduled_date: selectedDayDate,
         scheduled_time: timeSlot,
         installer_id: installerIdStr,
