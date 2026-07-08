@@ -142,6 +142,7 @@
       const type = document.getElementById('event-type').value;
       const section = document.getElementById('event-cust-details-section');
       const requiredInputs = [
+        document.getElementById('event-cust-name'),
         document.getElementById('event-cust-address'),
         document.getElementById('event-cust-city'),
         document.getElementById('event-cust-province'),
@@ -1973,9 +1974,12 @@
     }
 
     async function createDayEvent() {
+      const eventType = document.getElementById('event-type').value;
+      const isDayOff = eventType === 'day_off';
+
       const nameInput = document.getElementById('event-cust-name');
-      const customerName = nameInput.value.trim();
-      if (!customerName) {
+      const customerName = isDayOff ? 'Day off' : nameInput.value.trim();
+      if (!isDayOff && !customerName) {
         showToast('Please enter a Customer Name.', true);
         nameInput.focus();
         return;
@@ -1996,13 +2000,12 @@
       const installerIdStr = installersList.length > 0 ? installersList.map(i => i.id).join(' | ') : null;
       const installerNameStr = installersList.length > 0 ? installersList.map(i => i.name).join(' | ') : null;
 
-      const eventType = document.getElementById('event-type').value;
       let eventTypeName = 'Backjob';
       let typePrefix = 'BJ';
       if (eventType === 'ocular') {
         eventTypeName = 'Ocular';
         typePrefix = 'OC';
-      } else if (eventType === 'day_off') {
+      } else if (isDayOff) {
         eventTypeName = 'Day off';
         typePrefix = 'DO';
       }
@@ -2019,8 +2022,6 @@
       const installerNamesList = installersList.map(i => formatInstallerName(i.name));
       const installerNamesJoined = installerNamesList.join(', ');
       const productName = installerNamesJoined ? `${eventTypeName} - ${installerNamesJoined}` : eventTypeName;
-
-      const isDayOff = eventType === 'day_off';
       const customerAddress = isDayOff ? 'Day off' : document.getElementById('event-cust-address').value.trim();
       const customerCity = isDayOff ? '' : document.getElementById('event-cust-city').value.trim();
       const customerProvince = isDayOff ? '' : document.getElementById('event-cust-province').value.trim();
