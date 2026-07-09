@@ -1,9 +1,5 @@
--- Drop tables if they exist to allow clean rerun
-DROP TABLE IF EXISTS public.software_subscription_billing CASCADE;
-DROP TABLE IF EXISTS public.software_subscriptions CASCADE;
-
--- Create software_subscriptions table
-CREATE TABLE public.software_subscriptions (
+-- 1. Create software_subscriptions table if not exists
+CREATE TABLE IF NOT EXISTS public.software_subscriptions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     company_id UUID NOT NULL REFERENCES public.companies(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
@@ -13,35 +9,51 @@ CREATE TABLE public.software_subscriptions (
     status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'unsubscribed')),
     subscribed_date DATE NOT NULL DEFAULT CURRENT_DATE,
     unsubscribed_date DATE,
-    billing_url TEXT,
-    account_email TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Enable RLS
+-- 2. Add columns if they do not exist
+ALTER TABLE public.software_subscriptions ADD COLUMN IF NOT EXISTS billing_url TEXT;
+ALTER TABLE public.software_subscriptions ADD COLUMN IF NOT EXISTS account_email TEXT;
+
+-- 3. Enable RLS
 ALTER TABLE public.software_subscriptions ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Allow company members read software_subscriptions" ON public.software_subscriptions
-    FOR SELECT USING (
-        company_id IN (
-            SELECT c.id FROM public.companies c
-            JOIN public.tenant_members tm ON c.tenant_id = tm.tenant_id
-            WHERE tm.user_id = auth.uid()
-        )
-    );
+-- 4. Create policies conditionally
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies 
+        WHERE tablename = 'software_subscriptions' AND policyname = 'Allow company members read software_subscriptions'
+    ) THEN
+        CREATE POLICY "Allow company members read software_subscriptions" ON public.software_subscriptions
+            FOR SELECT USING (
+                company_id IN (
+                    SELECT c.id FROM public.companies c
+                    JOIN public.tenant_members tm ON c.tenant_id = tm.tenant_id
+                    WHERE tm.user_id = auth.uid()
+                )
+            );
+    END IF;
 
-CREATE POLICY "Allow company members write software_subscriptions" ON public.software_subscriptions
-    FOR ALL USING (
-        company_id IN (
-            SELECT c.id FROM public.companies c
-            JOIN public.tenant_members tm ON c.tenant_id = tm.tenant_id
-            WHERE tm.user_id = auth.uid()
-        )
-    );
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies 
+        WHERE tablename = 'software_subscriptions' AND policyname = 'Allow company members write software_subscriptions'
+    ) THEN
+        CREATE POLICY "Allow company members write software_subscriptions" ON public.software_subscriptions
+            FOR ALL USING (
+                company_id IN (
+                    SELECT c.id FROM public.companies c
+                    JOIN public.tenant_members tm ON c.tenant_id = tm.tenant_id
+                    WHERE tm.user_id = auth.uid()
+                )
+            );
+    END IF;
+END $$;
 
--- Create software_subscription_billing table (for monthly snapshots / overrides)
-CREATE TABLE public.software_subscription_billing (
+-- 5. Create software_subscription_billing table if not exists
+CREATE TABLE IF NOT EXISTS public.software_subscription_billing (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     subscription_id UUID NOT NULL REFERENCES public.software_subscriptions(id) ON DELETE CASCADE,
     company_id UUID NOT NULL REFERENCES public.companies(id) ON DELETE CASCADE,
@@ -53,23 +65,37 @@ CREATE TABLE public.software_subscription_billing (
     UNIQUE (subscription_id, billing_month)
 );
 
--- Enable RLS
+-- 6. Enable RLS
 ALTER TABLE public.software_subscription_billing ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Allow company members read software_subscription_billing" ON public.software_subscription_billing
-    FOR SELECT USING (
-        company_id IN (
-            SELECT c.id FROM public.companies c
-            JOIN public.tenant_members tm ON c.tenant_id = tm.tenant_id
-            WHERE tm.user_id = auth.uid()
-        )
-    );
+-- 7. Create policies conditionally for billing table
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies 
+        WHERE tablename = 'software_subscription_billing' AND policyname = 'Allow company members read software_subscription_billing'
+    ) THEN
+        CREATE POLICY "Allow company members read software_subscription_billing" ON public.software_subscription_billing
+            FOR SELECT USING (
+                company_id IN (
+                    SELECT c.id FROM public.companies c
+                    JOIN public.tenant_members tm ON c.tenant_id = tm.tenant_id
+                    WHERE tm.user_id = auth.uid()
+                )
+            );
+    END IF;
 
-CREATE POLICY "Allow company members write software_subscription_billing" ON public.software_subscription_billing
-    FOR ALL USING (
-        company_id IN (
-            SELECT c.id FROM public.companies c
-            JOIN public.tenant_members tm ON c.tenant_id = tm.tenant_id
-            WHERE tm.user_id = auth.uid()
-        )
-    );
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies 
+        WHERE tablename = 'software_subscription_billing' AND policyname = 'Allow company members write software_subscription_billing'
+    ) THEN
+        CREATE POLICY "Allow company members write software_subscription_billing" ON public.software_subscription_billing
+            FOR ALL USING (
+                company_id IN (
+                    SELECT c.id FROM public.companies c
+                    JOIN public.tenant_members tm ON c.tenant_id = tm.tenant_id
+                    WHERE tm.user_id = auth.uid()
+                )
+            );
+    END IF;
+END $$;
