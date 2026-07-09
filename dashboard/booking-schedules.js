@@ -588,12 +588,25 @@
         doorsArr = selectedBooking.doors;
       }
 
+      // Pipe arrays fallbacks if JSON arrays are empty
+      const skus = (selectedBooking.product_skus || '').split(' | ');
+      const names = (selectedBooking.product_names || '').split(' | ');
+
       // Calculate excess products relative to receipt
       const receiptSkuCounts = {};
-      productsArr.forEach(p => {
-        if (p.cancelled) return;
-        receiptSkuCounts[p.sku] = (receiptSkuCounts[p.sku] || 0) + 1;
-      });
+      if (productsArr && productsArr.length > 0) {
+        productsArr.forEach(p => {
+          if (!p.cancelled) {
+            receiptSkuCounts[p.sku] = (receiptSkuCounts[p.sku] || 0) + 1;
+          }
+        });
+      } else {
+        skus.forEach(sku => {
+          if (sku && sku !== 'ADD-ON LABOR') {
+            receiptSkuCounts[sku] = (receiptSkuCounts[sku] || 0) + 1;
+          }
+        });
+      }
 
       const doorSkuCounts = {};
       doorsArr.forEach(door => {
@@ -624,10 +637,6 @@
           }
         }
       }
-
-      // Pipe arrays fallbacks if JSON arrays are empty
-      const skus = (selectedBooking.product_skus || '').split(' | ');
-      const names = (selectedBooking.product_names || '').split(' | ');
       
       // Check if any door has attached products (new style)
       const anyDoorHasAttachedProducts = doorsArr.some(d => Array.isArray(d.products) && d.products.length > 0);
@@ -3412,10 +3421,20 @@
 
       // Calculate excess products inside renderEditDoors()
       const receiptSkuCounts = {};
-      tempEditProducts.forEach(p => {
-        if (p.cancelled) return;
-        receiptSkuCounts[p.sku] = (receiptSkuCounts[p.sku] || 0) + 1;
-      });
+      if (tempEditProducts && tempEditProducts.length > 0) {
+        tempEditProducts.forEach(p => {
+          if (!p.cancelled) {
+            receiptSkuCounts[p.sku] = (receiptSkuCounts[p.sku] || 0) + 1;
+          }
+        });
+      } else {
+        const fallbackSkus = (selectedBooking.product_skus || selectedBooking.sku || '').split(' | ').filter(Boolean);
+        fallbackSkus.forEach(sku => {
+          if (sku && sku !== 'ADD-ON LABOR') {
+            receiptSkuCounts[sku] = (receiptSkuCounts[sku] || 0) + 1;
+          }
+        });
+      }
 
       const doorSkuCounts = {};
       tempEditDoors.forEach(door => {
