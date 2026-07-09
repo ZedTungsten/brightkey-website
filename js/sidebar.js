@@ -11,7 +11,7 @@
     try {
       // 1. Fetch bookings, assignments, commissions config, and products with narrow fields
       const [bookingsRes, configRes, productsRes, assignmentsRes] = await Promise.all([
-        sb.from('installation_bookings').select('id, product_skus, product_qtys').eq('company_id', companyId).neq('status', 'cancelled'),
+        sb.from('installation_bookings').select('id, status, doors, product_skus, product_qtys').eq('company_id', companyId).neq('status', 'cancelled'),
         sb.from('global_settings').select('value').eq('key', 'commissions_config').eq('company_id', companyId).maybeSingle(),
         sb.from('products').select('sku, business, category, tags'),
         sb.from('commission_assignments').select('booking_id, sku, product_index, rate_label, employee_id').eq('company_id', companyId)
@@ -73,6 +73,15 @@
 
       // Loop through bookings
       for (const b of bookings) {
+        let doorsArr = [];
+        if (typeof b.doors === 'string') {
+          try { doorsArr = JSON.parse(b.doors); } catch(_) {}
+        } else if (Array.isArray(b.doors)) {
+          doorsArr = b.doors;
+        }
+        const isBookingDone = ['done', 'completed', 'finished'].includes(b.status) || (doorsArr.length > 0 && doorsArr.every(d => d.completed));
+        if (!isBookingDone) continue;
+
         const skus = (b.product_skus || '').split(' | ');
         const qtys = (b.product_qtys || '').split(' | ');
         const numItems = Math.max(skus.length, qtys.length);
