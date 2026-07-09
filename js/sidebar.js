@@ -86,6 +86,7 @@
         const qtys = (b.product_qtys || '').split(' | ');
         const numItems = Math.max(skus.length, qtys.length);
 
+        let hasEligibleSku = false;
         for (let i = 0; i < numItems; i++) {
           const sku = skus[i]?.trim() || '';
           if (!sku) continue;
@@ -93,13 +94,16 @@
           // Find product details to verify eligibility
           const product = productMap[sku.toLowerCase()] || { sku, business: '', category: '', tags: [] };
           const isEligible = checkSkuEligibility(product, eligibilityRules);
-          if (!isEligible) continue;
+          if (isEligible) {
+            hasEligibleSku = true;
+            break;
+          }
+        }
 
-          const rowKey = `${b.id}_${sku}_${i}`;
-
-          // Check if any dynamic rate column has no assignments
+        // Only check completeness of rate assignments if booking has eligible products
+        if (hasEligibleSku) {
           for (const r of rates) {
-            const cellKey = `${rowKey}_${r.label}`;
+            const cellKey = `${b.id}_ORDER_TOTAL_0_${r.label}`;
             const assignedIds = cellAssignments[cellKey] || [];
             const activeAssignees = assignedIds.filter(id => id !== '' && id !== 'none');
             if (activeAssignees.length === 0 && !assignedIds.includes('none')) {
@@ -107,9 +111,8 @@
               break;
             }
           }
-
-          if (hasIncomplete) break;
         }
+
         if (hasIncomplete) break;
       }
 
