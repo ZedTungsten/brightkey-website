@@ -555,6 +555,11 @@
       const grandTotalCents = selectedBooking.grand_total || 0;
       document.getElementById('det-total').innerText = (grandTotalCents / 100).toLocaleString('en-PH', { style: 'currency', currency: 'PHP' });
 
+      const showTotalChk = document.getElementById('det-show-total-installers');
+      if (showTotalChk) {
+        showTotalChk.checked = selectedBooking.show_total_to_installers !== false;
+      }
+
       // View PDF — always available, regenerated from stored booking data
       const receiptEl = document.getElementById('det-receipt');
       receiptEl.innerHTML = `<a href="#" onclick="openViewReceipt().catch(console.error); return false;" style="color:var(--blue); font-weight:600;">Open Receipt</a>`;
@@ -908,6 +913,22 @@
 
       toggleDetailsModal(true);
     }
+
+    window.toggleBookingShowTotal = async function(isChecked) {
+      if (!selectedBooking) return;
+      try {
+        const { error } = await sb
+          .from('installation_bookings')
+          .update({ show_total_to_installers: isChecked })
+          .eq('id', selectedBooking.id);
+        if (error) throw error;
+        selectedBooking.show_total_to_installers = isChecked;
+        showToast("Installer total visibility updated successfully.");
+      } catch (err) {
+        console.error("Error updating visibility:", err);
+        showToast("Failed to update visibility: " + err.message, true);
+      }
+    };
 
     function updateWorkPermitUI() {
       if (!selectedBooking) return;
