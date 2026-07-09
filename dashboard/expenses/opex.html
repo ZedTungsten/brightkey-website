@@ -122,6 +122,57 @@
       0% { background-position: 200% 0; }
       100% { background-position: -200% 0; }
     }
+
+    /* ── Modal Overlay ── */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.45);
+      backdrop-filter: blur(4px);
+      z-index: 10000;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s ease;
+    }
+    .modal-overlay.open {
+      display: flex;
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .modal-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      width: 100%;
+      max-width: 480px;
+      box-shadow: var(--shadow-lg);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .modal-header {
+      padding: 1.25rem 1.5rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .modal-body {
+      padding: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+    .modal-footer {
+      padding: 1.25rem 1.5rem;
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: flex-end;
+      gap: 0.75rem;
+    }
   </style>
 </head>
 <body class="bg-base text-primary">
@@ -139,6 +190,11 @@
         <div class="drawer-tabs" style="margin-bottom: 0; padding-left: 2rem; border-top: 1px solid var(--border);">
           <a href="/dashboard/expenses/cogs" class="tab-btn">COGS</a>
           <a href="/dashboard/expenses/opex" class="tab-btn active">OPEX</a>
+        </div>
+        <!-- Subtabs Component -->
+        <div class="drawer-tabs" style="margin-bottom: 0; padding-left: 2.5rem; border-top: 1px solid var(--border); background: var(--bg-surface); font-size: 0.78rem;">
+          <button type="button" class="tab-btn active" id="subtab-summary" onclick="OpexApp.switchSubTab('summary')" style="padding: 0.6rem 1rem;">Summary</button>
+          <button type="button" class="tab-btn" id="subtab-software" onclick="OpexApp.switchSubTab('software')" style="padding: 0.6rem 1rem;">Software & Apps</button>
         </div>
       </header>
 
@@ -162,8 +218,9 @@
           </button>
         </div>
 
-        <!-- Salaries Section -->
-        <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.5rem; box-shadow: var(--shadow-sm);">
+        <div id="view-summary" style="display: flex; flex-direction: column; gap: 2rem;">
+          <!-- Salaries Section -->
+          <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.5rem; box-shadow: var(--shadow-sm);">
           <div style="border-bottom: 1px solid var(--border); padding-bottom: 0.75rem; margin-bottom: 1.25rem;">
             <h2 style="font-size: 1.1rem; font-weight: 800; color: var(--text-primary); margin: 0;">Operations</h2>
             <span style="font-size: 0.78rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 0.25rem; display: block;">Salaries, Payouts, and Adjustments</span>
@@ -190,6 +247,31 @@
               </tbody>
             </table>
           </div>
+          </div>
+
+        <!-- Software & Apps Summary -->
+        <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.5rem; box-shadow: var(--shadow-sm); margin-top: 2rem;">
+          <div style="border-bottom: 1px solid var(--border); padding-bottom: 0.75rem; margin-bottom: 1.25rem;">
+            <h2 style="font-size: 1.1rem; font-weight: 800; color: var(--text-primary); margin: 0;">Software & Apps Summary</h2>
+            <span style="font-size: 0.78rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 0.25rem; display: block;">Active subscriptions for this month</span>
+          </div>
+          
+          <div class="excel-container" style="margin-top: 0;">
+            <table class="excel-table">
+              <thead>
+                <tr>
+                  <th style="text-align: left;">Subscription Name</th>
+                  <th style="text-align: left;">Mode</th>
+                  <th style="width: 200px; text-align: right;">Cost</th>
+                </tr>
+              </thead>
+              <tbody id="software-summary-table-body">
+                <tr>
+                  <td colspan="3" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">Loading subscriptions...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
 
         <!-- OPEX Report Sections (Additional) -->
@@ -197,6 +279,83 @@
           <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.5rem; box-shadow: var(--shadow-sm); text-align: center; color: var(--text-muted);">
             Loading OPEX categories...
           </div>
+        </div>
+      </div>
+
+      <!-- View 2: Software & Apps -->
+      <div id="view-software" style="display: none; padding: 2rem; max-width: 1200px; width: 100%; margin: 0 auto; box-sizing: border-box;">
+        <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.5rem; box-shadow: var(--shadow-sm);">
+          <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 0.75rem; margin-bottom: 1.25rem;">
+            <div>
+              <h2 style="font-size: 1.1rem; font-weight: 800; color: var(--text-primary); margin: 0;">Software & Apps Subscriptions</h2>
+              <span style="font-size: 0.78rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 0.25rem; display: block;">Manage recurring app expenses and variable pay-as-you-go licenses</span>
+            </div>
+            <button onclick="OpexApp.openCreateSubModal()" class="btn btn-primary btn-sm" style="display: flex; align-items: center; gap: 0.4rem; font-weight: 600; padding: 0.35rem 0.75rem;">
+              Create Subscription
+            </button>
+          </div>
+          
+          <div class="excel-container" style="margin-top: 0;">
+            <table class="excel-table">
+              <thead>
+                <tr>
+                  <th style="text-align: left;">Name</th>
+                  <th style="text-align: left;">Description</th>
+                  <th style="text-align: left;">Mode</th>
+                  <th style="width: 160px; text-align: right;">Cost in Month</th>
+                  <th style="width: 100px; text-align: center;">Action</th>
+                </tr>
+              </thead>
+              <tbody id="software-subscriptions-table-body">
+                <tr>
+                  <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">Loading subscriptions...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Subscription Modal -->
+      <div id="subscription-modal" class="modal-overlay">
+        <div class="modal-card">
+          <div class="modal-header">
+            <h3 id="modal-title" style="font-size: 1rem; font-weight: 700; color: var(--text-primary); margin: 0;">Create Subscription</h3>
+            <button type="button" onclick="OpexApp.closeSubModal()" style="background: none; border: none; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; justify-content: center;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+          </div>
+          <form id="subscription-form" onsubmit="OpexApp.handleSaveSubscription(event)">
+            <input type="hidden" id="sub-id" />
+            <div class="modal-body">
+              <div class="form-group" style="display: flex; flex-direction: column; gap: 0.35rem;">
+                <label for="sub-name" style="font-size: 0.78rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Name of Subscription</label>
+                <input type="text" id="sub-name" class="form-select" style="width: 100%; text-align: left; height: 38px; padding: 0.35rem 0.5rem; background: var(--bg-elevated); border: 1px solid var(--border); color: var(--text-primary); border-radius: 4px;" required placeholder="e.g. Supabase, Slack, Google Workspace" />
+              </div>
+              <div class="form-group" style="display: flex; flex-direction: column; gap: 0.35rem;">
+                <label for="sub-description" style="font-size: 0.78rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Short Description</label>
+                <textarea id="sub-description" class="form-select" style="width: 100%; text-align: left; min-height: 60px; font-family: inherit; padding: 0.5rem; background: var(--bg-elevated); border: 1px solid var(--border); color: var(--text-primary); border-radius: 4px;" placeholder="Brief description of usage"></textarea>
+              </div>
+              <div class="form-group" style="display: flex; flex-direction: column; gap: 0.35rem;">
+                <label for="sub-mode" style="font-size: 0.78rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Subscription Mode</label>
+                <select id="sub-mode" class="form-select" style="width: 100%; text-align: left; height: 38px; padding: 0.35rem 0.5rem; background: var(--bg-elevated); border: 1px solid var(--border); color: var(--text-primary); border-radius: 4px;" required onchange="OpexApp.handleModeChange(this.value)">
+                  <option value="pay_as_you_go">Pay as you go</option>
+                  <option value="monthly">Monthly</option>
+                  <option value="annual">Annual</option>
+                  <option value="unsubscribed" id="opt-unsubscribed" style="display: none;">Unsubscribed</option>
+                </select>
+              </div>
+              <div class="form-group" style="display: flex; flex-direction: column; gap: 0.35rem;">
+                <label for="sub-cost" style="font-size: 0.78rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;" id="lbl-sub-cost">Cost (PHP)</label>
+                <input type="number" step="0.01" min="0" id="sub-cost" class="form-select" style="width: 100%; text-align: right; height: 38px; padding: 0.35rem 0.5rem; background: var(--bg-elevated); border: 1px solid var(--border); color: var(--text-primary); border-radius: 4px;" required placeholder="0.00" />
+                <span id="cost-hint" style="font-size: 0.72rem; color: var(--text-muted); display: block; margin-top: 0.15rem;"></span>
+              </div>
+            </div>
+            <div class="modal-footer" style="background: var(--bg-base);">
+              <button type="button" class="btn btn-outline" onclick="OpexApp.closeSubModal()" style="font-weight: 600; padding: 0.35rem 0.75rem;">Cancel</button>
+              <button type="submit" class="btn btn-primary" style="font-weight: 600; padding: 0.35rem 0.75rem;">Save</button>
+            </div>
+          </form>
         </div>
       </div>
     </main>
@@ -222,6 +381,8 @@
         commissionAssignments: [],
         bookings: [],
         payslipRecords: [],
+        subscriptions: [],
+        billingRecords: [],
         payoutSettings: {
           installations_before_crediting: 15,
           lead_credit: 1.0,
@@ -290,7 +451,7 @@
 
           try {
             // Fetch everything needed in parallel
-            const [empRes, configRes, payoutSetRes, adjRes, commRes, bookingsRes, payslipRes, accountsRes, journalRes] = await Promise.all([
+            const [empRes, configRes, payoutSetRes, adjRes, commRes, bookingsRes, payslipRes, accountsRes, journalRes, subRes, billRes] = await Promise.all([
               sb.from('employees')
                 .select('id, first_name, last_name, salary, employment_status')
                 .eq('company_id', this.companyId), // Query all employees so we can show terminated ones historically
@@ -328,12 +489,21 @@
                 .select('account, debit, date')
                 .eq('company_id', this.companyId)
                 .gte('date', startDate)
-                .lte('date', endDate)
+                .lte('date', endDate),
+              sb.from('software_subscriptions')
+                .select('id, name, description, mode, cost_centavos, status, unsubscribed_month')
+                .eq('company_id', this.companyId),
+              sb.from('software_subscription_billing')
+                .select('subscription_id, cost_centavos, mode')
+                .eq('company_id', this.companyId)
+                .eq('billing_month', startDate)
             ]);
 
             if (empRes.error) throw empRes.error;
             if (accountsRes.error) throw accountsRes.error;
             if (journalRes.error) throw journalRes.error;
+            if (subRes.error) throw subRes.error;
+            if (billRes.error) throw billRes.error;
 
             this.employees = empRes.data || [];
             this.specialSchedules = configRes.data?.value?.specialSchedules || [];
@@ -344,9 +514,12 @@
             this.commissionAssignments = commRes.data || [];
             this.bookings = bookingsRes.data || [];
             this.payslipRecords = payslipRes.data || [];
+            this.subscriptions = subRes.data || [];
+            this.billingRecords = billRes.data || [];
 
             this.renderStatement();
             this.renderOpexReports(accountsRes.data || [], journalRes.data || []);
+            this.renderSoftwareSubscriptions();
 
           } catch (err) {
             console.error('Error loading OPEX data:', err);
@@ -804,6 +977,324 @@
           }
 
           container.innerHTML = html;
+        },
+
+        switchSubTab(tab) {
+          const summaryView = document.getElementById('view-summary');
+          const softwareView = document.getElementById('view-software');
+          const summaryBtn = document.getElementById('subtab-summary');
+          const softwareBtn = document.getElementById('subtab-software');
+
+          if (tab === 'summary') {
+            if (summaryView) summaryView.style.display = 'flex';
+            if (softwareView) softwareView.style.display = 'none';
+            if (summaryBtn) summaryBtn.classList.add('active');
+            if (softwareBtn) softwareBtn.classList.remove('active');
+          } else {
+            if (summaryView) summaryView.style.display = 'none';
+            if (softwareView) softwareView.style.display = 'block';
+            if (summaryBtn) summaryBtn.classList.remove('active');
+            if (softwareBtn) softwareBtn.classList.add('active');
+          }
+        },
+
+        renderSoftwareSubscriptions() {
+          const summaryTbody = document.getElementById('software-summary-table-body');
+          const subTbody = document.getElementById('software-subscriptions-table-body');
+          
+          if (!summaryTbody || !subTbody) return;
+
+          const year = this.currentDate.getFullYear();
+          const month = this.currentDate.getMonth() + 1;
+          const currentMonthDateStr = `${year}-${String(month).padStart(2, '0')}-01`;
+
+          const formatCurrency = (val) => {
+            return '₱' + val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+          };
+          const escapeHtml = (str) => {
+            if (!str) return '';
+            return str
+              .replace(/&/g, '&amp;')
+              .replace(/</g, '&lt;')
+              .replace(/>/g, '&gt;')
+              .replace(/"/g, '&quot;')
+              .replace(/'/g, '&#039;');
+          };
+
+          let summaryHtml = '';
+          let fullHtml = '';
+          let totalCostCentavos = 0;
+
+          // Filter out unsubscribed subscriptions historically
+          const visibleSubs = this.subscriptions.filter(s => {
+            if (s.status === 'unsubscribed' && s.unsubscribed_month) {
+              const unsubDate = new Date(s.unsubscribed_month);
+              const currentDate = new Date(currentMonthDateStr);
+              return currentDate < unsubDate; // If current month is before unsubscribe date, it's still visible
+            }
+            return true;
+          });
+
+          visibleSubs.forEach(s => {
+            // Find billing override if any
+            const override = this.billingRecords.find(b => b.subscription_id === s.id);
+            
+            let mode = s.mode;
+            let costCentavos = s.cost_centavos;
+            
+            if (override) {
+              mode = override.mode;
+              costCentavos = override.cost_centavos;
+            }
+
+            // Skip if override says unsubscribed for this month
+            if (mode === 'unsubscribed') return;
+
+            let resolvedCostCentavos = 0;
+            if (mode === 'pay_as_you_go') {
+              resolvedCostCentavos = costCentavos;
+            } else if (mode === 'monthly') {
+              resolvedCostCentavos = costCentavos;
+            } else if (mode === 'annual') {
+              resolvedCostCentavos = Math.round(costCentavos / 12);
+            }
+
+            totalCostCentavos += resolvedCostCentavos;
+
+            const displayCost = resolvedCostCentavos / 100;
+            const modeLabels = {
+              pay_as_you_go: 'Pay as you go',
+              monthly: 'Monthly',
+              annual: 'Annual'
+            };
+
+            // Summary table row
+            summaryHtml += `
+              <tr>
+                <td style="text-align: left; font-weight: 500;">${escapeHtml(s.name)}</td>
+                <td style="text-align: left;">${modeLabels[mode] || mode}</td>
+                <td style="text-align: right; font-weight: 500;">${formatCurrency(displayCost)}</td>
+              </tr>
+            `;
+
+            // Full table row
+            fullHtml += `
+              <tr>
+                <td style="text-align: left; font-weight: 600;">${escapeHtml(s.name)}</td>
+                <td style="text-align: left; color: var(--text-secondary);">${escapeHtml(s.description || '—')}</td>
+                <td style="text-align: left;">${modeLabels[mode] || mode}</td>
+                <td style="text-align: right; font-weight: 600;">${formatCurrency(displayCost)}</td>
+                <td style="text-align: center;">
+                  <button type="button" class="btn btn-outline" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; cursor: pointer; display: inline-flex; align-items: center; gap: 0.25rem;" onclick="OpexApp.openEditSubModal('${s.id}')">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                    Edit
+                  </button>
+                </td>
+              </tr>
+            `;
+          });
+
+          if (visibleSubs.length === 0 || summaryHtml === '') {
+            summaryHtml = `
+              <tr>
+                <td colspan="3" style="text-align: center; color: var(--text-muted); font-style: italic; padding: 1.5rem;">No active software subscriptions for this month.</td>
+              </tr>
+            `;
+            fullHtml = `
+              <tr>
+                <td colspan="5" style="text-align: center; color: var(--text-muted); font-style: italic; padding: 1.5rem;">No subscriptions found. Click "Create Subscription" to add one.</td>
+              </tr>
+            `;
+          } else {
+            summaryHtml += `
+              <tr class="total-row">
+                <td colspan="2" style="text-align: left;">Total Software Costs</td>
+                <td style="text-align: right;">${formatCurrency(totalCostCentavos / 100)}</td>
+              </tr>
+            `;
+          }
+
+          summaryTbody.innerHTML = summaryHtml;
+          subTbody.innerHTML = fullHtml;
+        },
+
+        openCreateSubModal() {
+          const modal = document.getElementById('subscription-modal');
+          const title = document.getElementById('modal-title');
+          const form = document.getElementById('subscription-form');
+          
+          if (!modal || !title || !form) return;
+
+          title.textContent = 'Create Subscription';
+          form.reset();
+          document.getElementById('sub-id').value = '';
+          document.getElementById('opt-unsubscribed').style.display = 'none';
+          
+          this.handleModeChange('pay_as_you_go');
+
+          modal.style.display = 'flex';
+          modal.offsetHeight; // reflow
+          modal.classList.add('open');
+        },
+
+        openEditSubModal(id) {
+          const modal = document.getElementById('subscription-modal');
+          const title = document.getElementById('modal-title');
+          const form = document.getElementById('subscription-form');
+          
+          if (!modal || !title || !form) return;
+
+          const sub = this.subscriptions.find(s => s.id === id);
+          if (!sub) return;
+
+          title.textContent = 'Edit Subscription';
+          document.getElementById('sub-id').value = sub.id;
+          document.getElementById('sub-name').value = sub.name;
+          document.getElementById('sub-description').value = sub.description || '';
+
+          // Look at current month override
+          const override = this.billingRecords.find(b => b.subscription_id === sub.id);
+          const currentMode = override ? override.mode : sub.mode;
+          const currentCost = override ? override.cost_centavos : sub.cost_centavos;
+
+          document.getElementById('sub-mode').value = currentMode;
+          document.getElementById('sub-cost').value = (currentCost / 100).toFixed(2);
+          document.getElementById('opt-unsubscribed').style.display = 'block';
+
+          this.handleModeChange(currentMode);
+
+          modal.style.display = 'flex';
+          modal.offsetHeight; // reflow
+          modal.classList.add('open');
+        },
+
+        closeSubModal() {
+          const modal = document.getElementById('subscription-modal');
+          if (!modal) return;
+          modal.classList.remove('open');
+          setTimeout(() => {
+            modal.style.display = 'none';
+          }, 250);
+        },
+
+        handleModeChange(mode) {
+          const lblCost = document.getElementById('lbl-sub-cost');
+          const hint = document.getElementById('cost-hint');
+          const costInput = document.getElementById('sub-cost');
+          
+          if (!lblCost || !hint || !costInput) return;
+
+          costInput.disabled = false;
+          costInput.required = true;
+
+          if (mode === 'pay_as_you_go') {
+            lblCost.textContent = 'Cost for this month (PHP)';
+            hint.textContent = 'Variable pay-as-you-go cost applied to the current month only.';
+          } else if (mode === 'monthly') {
+            lblCost.textContent = 'Monthly Cost (PHP)';
+            hint.textContent = 'Consistent recurring monthly cost applied to future months.';
+          } else if (mode === 'annual') {
+            lblCost.textContent = 'Annual Cost (PHP)';
+            hint.textContent = 'One-time payment cost. Will be automatically divided by 12 and spread across the year.';
+          } else if (mode === 'unsubscribed') {
+            lblCost.textContent = 'Cost (PHP)';
+            hint.textContent = 'Hides the subscription from the current month and future months.';
+            costInput.value = '0.00';
+            costInput.disabled = true;
+            costInput.required = false;
+          }
+        },
+
+        async handleSaveSubscription(event) {
+          event.preventDefault();
+          
+          const sb = window.BKAuth.sb;
+          const id = document.getElementById('sub-id').value;
+          const name = document.getElementById('sub-name').value.trim();
+          const description = document.getElementById('sub-description').value.trim();
+          const mode = document.getElementById('sub-mode').value;
+          const costVal = parseFloat(document.getElementById('sub-cost').value) || 0;
+          const costCentavos = Math.round(costVal * 100);
+
+          const year = this.currentDate.getFullYear();
+          const month = this.currentDate.getMonth() + 1;
+          const currentMonthDateStr = `${year}-${String(month).padStart(2, '0')}-01`;
+
+          try {
+            if (!id) {
+              const { error } = await sb
+                .from('software_subscriptions')
+                .insert([{
+                  company_id: this.companyId,
+                  name,
+                  description,
+                  mode,
+                  cost_centavos: costCentavos,
+                  status: 'active'
+                }]);
+              if (error) throw error;
+              this.showToast('Subscription created successfully.');
+            } else {
+              if (mode === 'unsubscribed') {
+                const { error: mainError } = await sb
+                  .from('software_subscriptions')
+                  .update({
+                    status: 'unsubscribed',
+                    unsubscribed_month: currentMonthDateStr
+                  })
+                  .eq('id', id);
+                if (mainError) throw mainError;
+
+                const { error: billError } = await sb
+                  .from('software_subscription_billing')
+                  .upsert({
+                    subscription_id: id,
+                    company_id: this.companyId,
+                    billing_month: currentMonthDateStr,
+                    cost_centavos: 0,
+                    mode: 'unsubscribed'
+                  }, { onConflict: 'subscription_id,billing_month' });
+                if (billError) throw billError;
+                this.showToast('Subscription marked as unsubscribed.');
+              } else {
+                const { error: billError } = await sb
+                  .from('software_subscription_billing')
+                  .upsert({
+                    subscription_id: id,
+                    company_id: this.companyId,
+                    billing_month: currentMonthDateStr,
+                    cost_centavos: costCentavos,
+                    mode: mode
+                  }, { onConflict: 'subscription_id,billing_month' });
+                if (billError) throw billError;
+                this.showToast('Subscription updated for this month.');
+              }
+            }
+
+            this.closeSubModal();
+            await this.loadData();
+          } catch (err) {
+            console.error('Error saving subscription:', err);
+            this.showToast('Failed to save subscription: ' + err.message, true);
+          }
+        },
+
+        showToast(msg, isError = false) {
+          let container = document.getElementById('toast-container');
+          if (!container) {
+            container = document.createElement('div');
+            container.id = 'toast-container';
+            document.body.appendChild(container);
+          }
+          const toast = document.createElement('div');
+          toast.className = `toast ${isError ? 'toast-error' : 'toast-success'}`;
+          toast.textContent = msg;
+          container.appendChild(toast);
+          setTimeout(() => {
+            toast.style.opacity = '0';
+            toast.style.transition = 'opacity 0.3s ease';
+            setTimeout(() => toast.remove(), 300);
+          }, 3000);
         }
       };
 
