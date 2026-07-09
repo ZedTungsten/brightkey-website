@@ -807,7 +807,6 @@
             if (sku === 'Welding Baseplate Stainless') sku = 'BASEPLATE-S';
             return { sku, rate: es.rate };
           });
-
           let grandTotalSalaries = 0;
           let grandTotalSpecials = 0;
           let grandTotalAdjustments = 0;
@@ -825,40 +824,93 @@
             let installationPayout = 0;
             let commissionPayout = 0;
 
+            // 1. Calculate installationPayout live from bookings
+            const doorJobs = [];
+            this.bookings.forEach(b => {
+              if (b.status === 'cancelled') return;
+              const assignedDoors = this.getAssignedDoorsForBookingAndEmployee(b, emp.id);
+              assignedDoors.forEach(d => {
+                if (d.completed) {
+                  doorJobs.push({
+                    ...d,
+                    scheduled_date: b.scheduled_date || '1970-01-01'
+                  });
+                }
+              });
+            });
+
+            // Sort doors chronologically by scheduled_date
+            doorJobs.sort((a, b) => new Date(a.scheduled_date) - new Date(b.scheduled_date));
+
+            let runningCredit = 0;
+            let totalThresholdEarnings = 0;
+            let totalServiceEarnings = 0;
+
+            doorJobs.forEach(job => {
+              let weight = 0;
+              if (job.roles.includes('lead')) weight = leadWeight;
+              else if (job.roles.includes('assist')) weight = assistWeight;
+
+              // Service pay
+              let servicePayForJob = 0;
+              if (job.roles.includes('service')) {
+                job.skus.forEach(sku => {
+                  const matchedService = extraServicesList.find(es => es.sku === sku);
+                  if (matchedService) {
+                    servicePayForJob += matchedService.rate;
+                  }
+                });
+              }
+              totalServiceEarnings += servicePayForJob;
+
+              // Extra threshold pay
+              let thresholdPayForJob = 0;
+              const previousCredit = runningCredit;
+              const newCredit = previousCredit + weight;
+              if (newCredit > thresholdVal) {
+                thresholdPayForJob = weight * leadRateVal;
+              }
+              totalThresholdEarnings += thresholdPayForJob;
+              runningCredit = newCredit;
+            });
+
+            installationPayout = totalThresholdEarnings + totalServiceEarnings;
+
+            // 2. Calculate commissions live from assignments to prevent stale snapshotted values
+            const employeeCommAssignments = this.commissionAssignments.filter(a => a.employee_id === emp.id);
+            employeeCommAssignments.forEach(a => {
+              const b = this.bookings.find(x => x.id === a.booking_id);
+              if (!b || b.status === 'cancelled') return;
+              if (!b.scheduled_date || b.scheduled_date.slice(0, 7) !== targetMonthKey) return;
+
+              let doors = [];
+              if (b.doors) {
+                if (typeof b.doors === 'string') {
+                  try { doors = JSON.parse(b.doors); } catch(_) {}
+                } else if (Array.isArray(b.doors)) {
+                  doors = b.doors;
+                }
+              }
+
+              const door = doors[a.product_index];
+              const isDone = (door && door.completed) || ['done', 'completed', 'finished'].includes(b.status);
+              if (!isDone) return;
+
+              commissionPayout += (Number(a.amount) || 0) / 100;
+            });
+
+            // 3. Resolve core fields (Salary, Special, Adjustments) from snapshot or live
             if (record) {
               baseSalary = Number(record.salary || record.basic_paid) || 0;
               specialPayout = Number(record.special_payouts) || 0;
-              
-              // Calculate commissions live from assignments to prevent stale snapshotted values
-              const employeeCommAssignments = this.commissionAssignments.filter(a => a.employee_id === emp.id);
-              employeeCommAssignments.forEach(a => {
-                const b = this.bookings.find(x => x.id === a.booking_id);
-                if (!b || b.status === 'cancelled') return;
-                if (!b.scheduled_date || b.scheduled_date.slice(0, 7) !== targetMonthKey) return;
 
-                let doors = [];
-                if (b.doors) {
-                  if (typeof b.doors === 'string') {
-                    try { doors = JSON.parse(b.doors); } catch(_) {}
-                  } else if (Array.isArray(b.doors)) {
-                    doors = b.doors;
-                  }
-                }
-
-                const door = doors[a.product_index];
-                const isDone = (door && door.completed) || ['done', 'completed', 'finished'].includes(b.status);
-                if (!isDone) return;
-
-                commissionPayout += (Number(a.amount) || 0) / 100;
-              });
-
-              // Break adjustments_list into Installation and non-Installation adjustments
+              // Extract only non-installation adjustments from saved payslip adjustments_list
               const adjsList = Array.isArray(record.adjustments_list) ? record.adjustments_list : [];
               adjsList.forEach(a => {
                 const val = Number(a.value || a.amount) || 0;
                 const label = (a.label || '').toLowerCase();
                 if (label.includes('installation') || label.includes('threshold') || label.includes('service job')) {
-                  installationPayout += val;
+                  // Skip installation-related adjustments since they are already calculated live
                 } else {
                   adjustmentVal += val;
                 }
@@ -876,82 +928,6 @@
               adjustmentVal = this.adjustments
                 .filter(a => a.employee_id === emp.id)
                 .reduce((sum, a) => sum + (Number(a.amount) || 0), 0);
-
-              // Gather all completed door jobs for this employee in the month
-              const doorJobs = [];
-              this.bookings.forEach(b => {
-                if (b.status === 'cancelled') return;
-                const assignedDoors = this.getAssignedDoorsForBookingAndEmployee(b, emp.id);
-                assignedDoors.forEach(d => {
-                  if (d.completed) {
-                    doorJobs.push({
-                      ...d,
-                      scheduled_date: b.scheduled_date || '1970-01-01'
-                    });
-                  }
-                });
-              });
-
-              // Sort doors chronologically by scheduled_date
-              doorJobs.sort((a, b) => new Date(a.scheduled_date) - new Date(b.scheduled_date));
-
-              let runningCredit = 0;
-              let totalThresholdEarnings = 0;
-              let totalServiceEarnings = 0;
-
-              doorJobs.forEach(job => {
-                let weight = 0;
-                if (job.roles.includes('lead')) weight = leadWeight;
-                else if (job.roles.includes('assist')) weight = assistWeight;
-
-                // Service pay
-                let servicePayForJob = 0;
-                if (job.roles.includes('service')) {
-                  job.skus.forEach(sku => {
-                    const matchedService = extraServicesList.find(es => es.sku === sku);
-                    if (matchedService) {
-                      servicePayForJob += matchedService.rate;
-                    }
-                  });
-                }
-                totalServiceEarnings += servicePayForJob;
-
-                // Extra threshold pay
-                let thresholdPayForJob = 0;
-                const previousCredit = runningCredit;
-                const newCredit = previousCredit + weight;
-                if (newCredit > thresholdVal) {
-                  thresholdPayForJob = weight * leadRateVal;
-                }
-                totalThresholdEarnings += thresholdPayForJob;
-                runningCredit = newCredit;
-              });
-
-              installationPayout = totalThresholdEarnings + totalServiceEarnings;
-
-              const employeeCommAssignments = this.commissionAssignments.filter(a => a.employee_id === emp.id);
-              employeeCommAssignments.forEach(a => {
-                const b = this.bookings.find(x => x.id === a.booking_id);
-                if (!b || b.status === 'cancelled') return;
-
-                // Only count commissions scheduled in the selected month
-                if (!b.scheduled_date || b.scheduled_date.slice(0, 7) !== targetMonthKey) return;
-
-                let doors = [];
-                if (b.doors) {
-                  if (typeof b.doors === 'string') {
-                    try { doors = JSON.parse(b.doors); } catch(_) {}
-                  } else if (Array.isArray(b.doors)) {
-                    doors = b.doors;
-                  }
-                }
-
-                const door = doors[a.product_index];
-                const isDone = (door && door.completed) || ['done', 'completed', 'finished'].includes(b.status);
-                if (!isDone) return;
-
-                commissionPayout += (Number(a.amount) || 0) / 100;
-              });
             }
 
             const totalCost = baseSalary + specialPayout + adjustmentVal + installationPayout + commissionPayout;
