@@ -591,19 +591,21 @@
       // Pipe arrays fallbacks if JSON arrays are empty
       const skus = (selectedBooking.product_skus || '').split(' | ');
       const names = (selectedBooking.product_names || '').split(' | ');
+      const qtys = (selectedBooking.product_qtys || '').split(' | ');
 
       // Calculate excess products relative to receipt
       const receiptSkuCounts = {};
       if (productsArr && productsArr.length > 0) {
         productsArr.forEach(p => {
           if (!p.cancelled) {
-            receiptSkuCounts[p.sku] = (receiptSkuCounts[p.sku] || 0) + 1;
+            receiptSkuCounts[p.sku] = (receiptSkuCounts[p.sku] || 0) + (p.qty || 1);
           }
         });
       } else {
-        skus.forEach(sku => {
+        skus.forEach((sku, idx) => {
           if (sku && sku !== 'ADD-ON LABOR') {
-            receiptSkuCounts[sku] = (receiptSkuCounts[sku] || 0) + 1;
+            const qty = parseInt(qtys[idx] || '1', 10) || 1;
+            receiptSkuCounts[sku] = (receiptSkuCounts[sku] || 0) + qty;
           }
         });
       }
@@ -3424,14 +3426,16 @@
       if (tempEditProducts && tempEditProducts.length > 0) {
         tempEditProducts.forEach(p => {
           if (!p.cancelled) {
-            receiptSkuCounts[p.sku] = (receiptSkuCounts[p.sku] || 0) + 1;
+            receiptSkuCounts[p.sku] = (receiptSkuCounts[p.sku] || 0) + (p.qty || 1);
           }
         });
       } else {
         const fallbackSkus = (selectedBooking.product_skus || selectedBooking.sku || '').split(' | ').filter(Boolean);
-        fallbackSkus.forEach(sku => {
+        const fallbackQtys = (selectedBooking.product_qtys || '').split(' | ').filter(Boolean);
+        fallbackSkus.forEach((sku, idx) => {
           if (sku && sku !== 'ADD-ON LABOR') {
-            receiptSkuCounts[sku] = (receiptSkuCounts[sku] || 0) + 1;
+            const qty = parseInt(fallbackQtys[idx] || '1', 10) || 1;
+            receiptSkuCounts[sku] = (receiptSkuCounts[sku] || 0) + qty;
           }
         });
       }
