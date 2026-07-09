@@ -1972,9 +1972,10 @@
       const installerIdStr = installersList.length > 0 ? installersList.map(i => i.id).join(' | ') : null;
       const installerNameStr = installersList.length > 0 ? installersList.map(i => i.name).join(' | ') : null;
 
-      const eventTypeName = 'Day off';
-      const typePrefix = 'DO';
-      const customerName = 'Day off';
+      const selectVal = document.getElementById('event-type')?.value || 'Day-off';
+      const eventTypeName = selectVal === 'Day-off' ? 'Day off' : selectVal;
+      const typePrefix = selectVal === 'Day-off' ? 'DO' : 'EV';
+      const customerName = selectVal === 'Day-off' ? 'Day off' : selectVal;
 
       const randomSuffix = Date.now();
       const folderRefId = `${typePrefix}-${randomSuffix}`;
