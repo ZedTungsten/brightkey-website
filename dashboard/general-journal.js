@@ -367,6 +367,10 @@
           if (onlyVisible && a.is_visible === false) return;
           (g[a.category] = g[a.category] || []).push(a);
         });
+        // Sort accounts alphabetically by name
+        for (const cat in g) {
+          g[cat].sort((a, b) => a.name.localeCompare(b.name));
+        }
         return g;
       },
 
@@ -1597,8 +1601,16 @@
 
         let html;
         if (col === 'account') {
-          const opts = this.accounts.map(a =>
-            `<option value="${esc(a.name)}"${a.name === currentVal ? ' selected' : ''}>${esc(a.name)}</option>`).join('');
+          const g = this.grouped(true);
+          const catKeys = Object.keys(g).sort();
+          let opts = '';
+          catKeys.forEach(cat => {
+            opts += `<optgroup label="${esc(cat)}">`;
+            g[cat].forEach(a => {
+              opts += `<option value="${esc(a.name)}"${a.name === currentVal ? ' selected' : ''}>${esc(a.name)}</option>`;
+            });
+            opts += `</optgroup>`;
+          });
           html = `<select class="cell-edit-input">${opts}</select>`;
         } else if (col === 'date') {
           html = `<input type="date" class="cell-edit-input" value="${currentVal || ''}" />`;
