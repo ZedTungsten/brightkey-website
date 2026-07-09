@@ -828,7 +828,29 @@
             if (record) {
               baseSalary = Number(record.salary || record.basic_paid) || 0;
               specialPayout = Number(record.special_payouts) || 0;
-              commissionPayout = Number(record.commissions) || 0;
+              
+              // Calculate commissions live from assignments to prevent stale snapshotted values
+              const employeeCommAssignments = this.commissionAssignments.filter(a => a.employee_id === emp.id);
+              employeeCommAssignments.forEach(a => {
+                const b = this.bookings.find(x => x.id === a.booking_id);
+                if (!b || b.status === 'cancelled') return;
+                if (!b.scheduled_date || b.scheduled_date.slice(0, 7) !== targetMonthKey) return;
+
+                let doors = [];
+                if (b.doors) {
+                  if (typeof b.doors === 'string') {
+                    try { doors = JSON.parse(b.doors); } catch(_) {}
+                  } else if (Array.isArray(b.doors)) {
+                    doors = b.doors;
+                  }
+                }
+
+                const door = doors[a.product_index];
+                const isDone = (door && door.completed) || ['done', 'completed', 'finished'].includes(b.status);
+                if (!isDone) return;
+
+                commissionPayout += (Number(a.amount) || 0) / 100;
+              });
 
               // Break adjustments_list into Installation and non-Installation adjustments
               const adjsList = Array.isArray(record.adjustments_list) ? record.adjustments_list : [];
