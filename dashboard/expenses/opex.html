@@ -312,14 +312,14 @@
             <table class="excel-table" id="software-subs-table">
               <thead>
                 <tr>
-                  <th style="text-align: left;">Name</th>
-                  <th style="text-align: left;">Description</th>
-                  <th style="text-align: left; width: 140px;">Subscribed</th>
-                  <th style="text-align: left; width: 140px;">Unsubscribed</th>
-                  <th style="text-align: left;">Mode</th>
-                  <th style="width: 160px; text-align: right;">Cost in Month</th>
-                  <th style="width: 100px; text-align: center;">CC</th>
-                  <th style="width: 100px; text-align: center;">Action</th>
+                  <th style="text-align: left; cursor: pointer; user-select: none;" onclick="OpexApp.toggleSubSort('name')">Name <span id="sort-name"></span></th>
+                  <th style="text-align: left; cursor: pointer; user-select: none;" onclick="OpexApp.toggleSubSort('description')">Description <span id="sort-description"></span></th>
+                  <th style="text-align: left; width: 140px; cursor: pointer; user-select: none;" onclick="OpexApp.toggleSubSort('subscribed_date')">Subscribed <span id="sort-subscribed_date"></span></th>
+                  <th style="text-align: left; width: 140px; cursor: pointer; user-select: none;" onclick="OpexApp.toggleSubSort('unsubscribed_date')">Unsubscribed <span id="sort-unsubscribed_date"></span></th>
+                  <th style="text-align: left; cursor: pointer; user-select: none;" onclick="OpexApp.toggleSubSort('mode')">Mode <span id="sort-mode"></span></th>
+                  <th style="width: 160px; text-align: right; cursor: pointer; user-select: none;" onclick="OpexApp.toggleSubSort('cost')">Cost in Month <span id="sort-cost"></span></th>
+                  <th style="width: 100px; text-align: center; cursor: pointer; user-select: none;" onclick="OpexApp.toggleSubSort('card_last_four')">CC <span id="sort-card_last_four"></span></th>
+                  <th style="width: 100px; text-align: center; user-select: none;">Action</th>
                 </tr>
               </thead>
               <tbody id="software-subscriptions-table-body">
@@ -419,6 +419,8 @@
         payslipRecords: [],
         subscriptions: [],
         billingRecords: [],
+        subSortColumn: null,
+        subSortAsc: true,
         payoutSettings: {
           installations_before_crediting: 15,
           lead_credit: 1.0,
@@ -1070,6 +1072,21 @@
           return { mode: s.mode, cost_centavos: s.cost_centavos };
         },
 
+        toggleSubSort(col) {
+          if (this.subSortColumn === col) {
+            if (this.subSortAsc) {
+              this.subSortAsc = false;
+            } else {
+              this.subSortColumn = null;
+              this.subSortAsc = true;
+            }
+          } else {
+            this.subSortColumn = col;
+            this.subSortAsc = true;
+          }
+          this.renderSoftwareSubscriptions();
+        },
+
         switchSubTab(tab) {
           const summaryView = document.getElementById('view-summary');
           const softwareView = document.getElementById('view-software');
@@ -1153,8 +1170,79 @@
             return true; // 'all'
           });
 
-          // Sort manager list by name
-          managerFilteredSubs.sort((a, b) => a.name.localeCompare(b.name));
+          // Sort manager list
+          const defaultModeOrder = {
+            annual: 1,
+            monthly: 2,
+            pay_as_you_go: 3,
+            unsubscribed: 4
+          };
+
+          managerFilteredSubs.sort((a, b) => {
+            let res = 0;
+            if (this.subSortColumn) {
+              const col = this.subSortColumn;
+              if (col === 'name') {
+                res = a.name.localeCompare(b.name);
+              } else if (col === 'description') {
+                res = (a.description || '').localeCompare(b.description || '');
+              } else if (col === 'subscribed_date') {
+                res = (a.subscribed_date || '').localeCompare(b.subscribed_date || '');
+              } else if (col === 'unsubscribed_date') {
+                res = (a.unsubscribed_date || '').localeCompare(b.unsubscribed_date || '');
+              } else if (col === 'mode') {
+                const planA = this.resolvePlanForMonth(a, currentMonthDateStr);
+                const planB = this.resolvePlanForMonth(b, currentMonthDateStr);
+                res = planA.mode.localeCompare(planB.mode);
+              } else if (col === 'cost') {
+                const planA = this.resolvePlanForMonth(a, currentMonthDateStr);
+                const planB = this.resolvePlanForMonth(b, currentMonthDateStr);
+                
+                let costA = planA.cost_centavos;
+                if (planA.mode === 'annual') costA = Math.round(costA / 12);
+                let costB = planB.cost_centavos;
+                if (planB.mode === 'annual') costB = Math.round(costB / 12);
+                
+                res = costA - costB;
+              } else if (col === 'card_last_four') {
+                res = (a.card_last_four || '').localeCompare(b.card_last_four || '');
+              }
+              
+              if (!this.subSortAsc) {
+                res = -res;
+              }
+            }
+
+            // Fallback to default grouping (Annual -> Monthly -> Pay-as-you-go -> Unsubscribed, then Name alphabetically)
+            if (res === 0) {
+              const planA = this.resolvePlanForMonth(a, currentMonthDateStr);
+              const planB = this.resolvePlanForMonth(b, currentMonthDateStr);
+              const orderA = defaultModeOrder[planA.mode] || 99;
+              const orderB = defaultModeOrder[planB.mode] || 99;
+              
+              if (orderA !== orderB) {
+                return orderA - orderB;
+              }
+              return a.name.localeCompare(b.name);
+            }
+
+            return res;
+          });
+
+          // Update Sort UI indicators
+          const sortColumns = ['name', 'description', 'subscribed_date', 'unsubscribed_date', 'mode', 'cost', 'card_last_four'];
+          sortColumns.forEach(col => {
+            const el = document.getElementById('sort-' + col);
+            if (el) {
+              if (this.subSortColumn === col) {
+                el.innerHTML = this.subSortAsc ? ' &uarr;' : ' &darr;';
+                el.style.opacity = '1';
+              } else {
+                el.innerHTML = '';
+                el.style.opacity = '0.3';
+              }
+            }
+          });
 
           // 1. Render Summary View
           activeInMonthSubs.forEach(s => {
