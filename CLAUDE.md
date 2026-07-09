@@ -187,3 +187,12 @@ When generating and saving high-fidelity A4/Letter PDF files from dynamic HTML p
    * Copy the compiled HTML string containing the custom styles and Base64 assets into the hidden parent DOM element.
    * Run `html2pdf.js` directly on the off-screen parent target.
    * Instantly clear the container's contents in the `finally` block to keep the DOM clean.
+
+---
+
+## 12. Non-Destructive Database Migrations
+> [!CRITICAL]
+> **PRESERVE USER DATA IN MIGRATIONS**:
+> Never use destructive `DROP TABLE IF EXISTS ... CASCADE;` statement patterns in migration files, especially for established dashboard tables (like `software_subscriptions`). 
+> - **Always Use Safe Alterations**: Use `CREATE TABLE IF NOT EXISTS`, and add new columns or attributes using `ALTER TABLE public.<table_name> ADD COLUMN IF NOT EXISTS <column_name> <type>;` statements to preserve existing records and test data.
+> - **Conditional Policy Updates**: Use `DO $$` PL/pgSQL blocks to conditionally check and create policies `IF NOT EXISTS` to prevent execution crashes when rerun.
