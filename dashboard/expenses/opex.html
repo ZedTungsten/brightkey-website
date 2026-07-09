@@ -1425,7 +1425,7 @@
 
           try {
             if (!id) {
-              const { error } = await sb
+              const { data: newSub, error } = await sb
                 .from('software_subscriptions')
                 .insert([{
                   company_id: this.companyId,
@@ -1438,8 +1438,23 @@
                   billing_url: billingUrl,
                   account_email: accountEmail,
                   card_last_four: cardLastFour
-                }]);
+                }])
+                .select('id')
+                .single();
               if (error) throw error;
+
+              // Write initial billing snapshot for the selected month
+              const { error: billError } = await sb
+                .from('software_subscription_billing')
+                .insert([{
+                  subscription_id: newSub.id,
+                  company_id: this.companyId,
+                  billing_month: currentMonthDateStr,
+                  cost_centavos: costCentavos,
+                  mode: mode
+                }]);
+              if (billError) throw billError;
+
               this.showToast('Subscription created successfully.');
             } else {
               // Update core details on main table
