@@ -367,6 +367,14 @@
                 <input type="number" step="0.01" min="0" id="sub-cost" class="form-select" style="width: 100%; text-align: right; height: 38px; padding: 0.35rem 0.5rem; background: var(--bg-elevated); border: 1px solid var(--border); color: var(--text-primary); border-radius: 4px;" required placeholder="0.00" />
                 <span id="cost-hint" style="font-size: 0.72rem; color: var(--text-muted); display: block; margin-top: 0.15rem;"></span>
               </div>
+              <div class="form-group" style="display: flex; flex-direction: column; gap: 0.35rem;">
+                <label for="sub-billing-url" style="font-size: 0.78rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Billing & Invoices Link (URL)</label>
+                <input type="url" id="sub-billing-url" class="form-select" style="width: 100%; text-align: left; height: 38px; padding: 0.35rem 0.5rem; background: var(--bg-elevated); border: 1px solid var(--border); color: var(--text-primary); border-radius: 4px;" placeholder="https://example.com/billing" />
+              </div>
+              <div class="form-group" style="display: flex; flex-direction: column; gap: 0.35rem;">
+                <label for="sub-account-email" style="font-size: 0.78rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Account Email</label>
+                <input type="email" id="sub-account-email" class="form-select" style="width: 100%; text-align: left; height: 38px; padding: 0.35rem 0.5rem; background: var(--bg-elevated); border: 1px solid var(--border); color: var(--text-primary); border-radius: 4px;" placeholder="email@example.com" />
+              </div>
             </div>
             <div class="modal-footer" style="background: var(--bg-base);">
               <button type="button" class="btn btn-outline" onclick="OpexApp.closeSubModal()" style="font-weight: 600; padding: 0.35rem 0.75rem;">Cancel</button>
@@ -528,7 +536,7 @@
                 .gte('date', startDate)
                 .lte('date', endDate),
               sb.from('software_subscriptions')
-                .select('id, name, description, mode, cost_centavos, status, subscribed_date, unsubscribed_date')
+                .select('id, name, description, mode, cost_centavos, status, subscribed_date, unsubscribed_date, billing_url, account_email')
                 .eq('company_id', this.companyId),
               sb.from('software_subscription_billing')
                 .select('subscription_id, billing_month, cost_centavos, mode')
@@ -1163,9 +1171,13 @@
               annual: 'Annual'
             };
 
+            const nameDisplay = s.billing_url
+              ? `<a href="${escapeHtml(s.billing_url)}" target="_blank" rel="noopener noreferrer" style="color: var(--cyan-light); font-weight: 600; text-decoration: none;">${escapeHtml(s.name)}</a>`
+              : escapeHtml(s.name);
+
             summaryHtml += `
               <tr>
-                <td style="text-align: left; font-weight: 500;">${escapeHtml(s.name)}</td>
+                <td style="text-align: left; font-weight: 500;">${nameDisplay}</td>
                 <td style="text-align: left;">${modeLabels[mode] || mode}</td>
                 <td style="text-align: right; font-weight: 500;">${formatCurrency(displayCost)}</td>
               </tr>
@@ -1197,9 +1209,13 @@
               unsubscribed: 'Unsubscribed'
             };
 
+            const nameDisplay = s.billing_url
+              ? `<a href="${escapeHtml(s.billing_url)}" target="_blank" rel="noopener noreferrer" style="color: var(--cyan-light); font-weight: 600; text-decoration: none;">${escapeHtml(s.name)}</a>`
+              : escapeHtml(s.name);
+
             fullHtml += `
               <tr>
-                <td style="text-align: left; font-weight: 600;">${escapeHtml(s.name)}</td>
+                <td style="text-align: left; font-weight: 600;">${nameDisplay}</td>
                 <td style="text-align: left; color: var(--text-secondary);">${escapeHtml(s.description || '—')}</td>
                 <td style="text-align: left;">${formatDate(s.subscribed_date)}</td>
                 <td style="text-align: left;">${formatDate(s.unsubscribed_date)}</td>
@@ -1253,6 +1269,8 @@
           form.reset();
           document.getElementById('sub-id').value = '';
           document.getElementById('opt-unsubscribed').style.display = 'none';
+          document.getElementById('sub-billing-url').value = '';
+          document.getElementById('sub-account-email').value = '';
           
           // Set subscribed date default to today's date in YYYY-MM-DD
           const todayStr = new Date().toISOString().slice(0, 10);
@@ -1283,6 +1301,8 @@
           document.getElementById('sub-description').value = sub.description || '';
           document.getElementById('sub-subscribed-date').value = sub.subscribed_date || '';
           document.getElementById('sub-unsubscribed-date').value = sub.unsubscribed_date || '';
+          document.getElementById('sub-billing-url').value = sub.billing_url || '';
+          document.getElementById('sub-account-email').value = sub.account_email || '';
 
           // Resolve active plan for the current selected month
           const year = this.currentDate.getFullYear();
@@ -1369,6 +1389,8 @@
           const costCentavos = Math.round(costVal * 100);
           const subscribedDate = document.getElementById('sub-subscribed-date').value;
           const unsubscribedDate = document.getElementById('sub-unsubscribed-date').value || null;
+          const billingUrl = document.getElementById('sub-billing-url').value.trim() || null;
+          const accountEmail = document.getElementById('sub-account-email').value.trim() || null;
 
           const year = this.currentDate.getFullYear();
           const month = this.currentDate.getMonth() + 1;
@@ -1385,7 +1407,9 @@
                   mode,
                   cost_centavos: costCentavos,
                   status: 'active',
-                  subscribed_date: subscribedDate
+                  subscribed_date: subscribedDate,
+                  billing_url: billingUrl,
+                  account_email: accountEmail
                 }]);
               if (error) throw error;
               this.showToast('Subscription created successfully.');
@@ -1395,7 +1419,9 @@
                 name,
                 description,
                 subscribed_date: subscribedDate,
-                unsubscribed_date: unsubscribedDate
+                unsubscribed_date: unsubscribedDate,
+                billing_url: billingUrl,
+                account_email: accountEmail
               };
               if (mode === 'unsubscribed') {
                 mainUpdate.status = 'unsubscribed';
