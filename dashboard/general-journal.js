@@ -164,6 +164,7 @@
         this.bindForm();
         this.bindCategoriesPanel();
         this.bindAccountsPanel();
+        this.bindSnapshotPanel();
         this.bindFilters();
         this.bindOrphanPop();
         this.bindEditMode();
@@ -561,6 +562,19 @@
             }
           }
         });
+      },
+
+      /* ── Snapshot panel ── */
+      bindSnapshotPanel() {
+        const toggle = document.getElementById('snapshot-toggle');
+        const panel  = document.getElementById('snapshot-panel');
+        if (toggle && panel) {
+          toggle.addEventListener('click', () => {
+            const open = panel.style.display === 'none';
+            panel.style.display = open ? 'block' : 'none';
+            toggle.classList.toggle('open', open);
+          });
+        }
       },
 
       /* ── Form submit ── */
