@@ -1006,6 +1006,11 @@
 
           // Pay-as-you-go is strictly month-to-month and does NOT propagate forward if no override exists
           if (s.mode === 'pay_as_you_go') {
+            const subStartMonth = (s.subscribed_date || '').slice(0, 7);
+            const targetMonth = targetMonthStr.slice(0, 7);
+            if (subStartMonth === targetMonth) {
+              return { mode: 'pay_as_you_go', cost_centavos: s.cost_centavos };
+            }
             return { mode: 'pay_as_you_go', cost_centavos: 0 };
           }
 
@@ -1312,9 +1317,11 @@
             }
           }
 
+          const monthYearLabel = this.currentDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+
           if (mode === 'pay_as_you_go') {
-            lblCost.textContent = 'Cost for this month (PHP)';
-            hint.textContent = 'Variable pay-as-you-go cost applied to the current month only.';
+            lblCost.textContent = `Cost for this month (${monthYearLabel}) (PHP)`;
+            hint.textContent = `Variable pay-as-you-go cost applied to ${monthYearLabel} only.`;
           } else if (mode === 'monthly') {
             lblCost.textContent = 'Monthly Cost (PHP)';
             hint.textContent = 'Consistent recurring monthly cost applied to future months.';
@@ -1323,7 +1330,7 @@
             hint.textContent = 'One-time payment cost. Will be automatically divided by 12 and spread across the year.';
           } else if (mode === 'unsubscribed') {
             lblCost.textContent = 'Cost (PHP)';
-            hint.textContent = 'Hides the subscription from the current month and future months.';
+            hint.textContent = `Hides the subscription starting from ${monthYearLabel} onwards.`;
             costInput.value = '0.00';
             costInput.disabled = true;
             costInput.required = false;
