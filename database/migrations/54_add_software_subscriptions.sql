@@ -1,3 +1,7 @@
+-- Drop tables if they exist to allow clean rerun
+DROP TABLE IF EXISTS public.software_subscription_billing CASCADE;
+DROP TABLE IF EXISTS public.software_subscriptions CASCADE;
+
 -- Create software_subscriptions table
 CREATE TABLE public.software_subscriptions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
