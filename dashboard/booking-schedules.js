@@ -588,6 +588,43 @@
         doorsArr = selectedBooking.doors;
       }
 
+      // Calculate excess products relative to receipt
+      const receiptSkuCounts = {};
+      productsArr.forEach(p => {
+        if (p.cancelled) return;
+        receiptSkuCounts[p.sku] = (receiptSkuCounts[p.sku] || 0) + 1;
+      });
+
+      const doorSkuCounts = {};
+      doorsArr.forEach(door => {
+        const attachedSkus = door.products || [];
+        attachedSkus.forEach(sku => {
+          doorSkuCounts[sku] = (doorSkuCounts[sku] || 0) + 1;
+        });
+      });
+
+      const excessRemaining = {};
+      Object.keys(doorSkuCounts).forEach(sku => {
+        const receiptCount = receiptSkuCounts[sku] || 0;
+        const doorCount = doorSkuCounts[sku] || 0;
+        if (doorCount > receiptCount) {
+          excessRemaining[sku] = doorCount - receiptCount;
+        }
+      });
+
+      const excessProductInstances = {};
+      for (let d = doorsArr.length - 1; d >= 0; d--) {
+        const door = doorsArr[d];
+        const attachedSkus = door.products || [];
+        for (let p = attachedSkus.length - 1; p >= 0; p--) {
+          const sku = attachedSkus[p];
+          if (excessRemaining[sku] > 0) {
+            excessProductInstances[`${d}-${p}`] = true;
+            excessRemaining[sku]--;
+          }
+        }
+      }
+
       // Pipe arrays fallbacks if JSON arrays are empty
       const skus = (selectedBooking.product_skus || '').split(' | ');
       const names = (selectedBooking.product_names || '').split(' | ');
@@ -642,7 +679,7 @@
           if (doorProducts.length === 0) {
             productCellHtml += `<span style="color:var(--text-muted); font-size:0.75rem;">No products attached</span>`;
           } else {
-            productCellHtml += doorProducts.map(p => {
+            productCellHtml += doorProducts.map((p, pIdx) => {
               const isCancelled = p.cancelled || false;
               let title = p.name || p.title || p.sku || 'N/A';
               if (title.startsWith(p.sku + ' - ')) {
@@ -650,9 +687,10 @@
               } else if (title.startsWith(p.sku + '-')) {
                 title = title.substring(p.sku.length + 1);
               }
+              const isExcess = excessProductInstances[`${i}-${pIdx}`];
               return `
-                <div style="margin-bottom: 0.25rem; ${isCancelled ? 'opacity: 0.55; text-decoration: line-through;' : ''}">
-                  <strong>${escapeHtml(p.sku)}</strong> - <span style="color: var(--text-secondary);">${escapeHtml(title)}</span>
+                <div style="margin-bottom: 0.25rem; ${isCancelled ? 'opacity: 0.55; text-decoration: line-through;' : ''} ${isExcess ? 'color: var(--danger);' : ''}">
+                  <strong>${escapeHtml(p.sku)}</strong> - <span style="${isExcess ? 'color: var(--danger);' : 'color: var(--text-secondary);'}">${escapeHtml(title)}</span>
                   ${isCancelled ? '<span style="color:var(--danger);font-size:0.7rem;font-weight:700;text-transform:uppercase;margin-left:0.3rem;text-decoration:none;display:inline-block;">Cancelled</span>' : ''}
                 </div>
               `;
@@ -3351,6 +3389,14 @@
       document.getElementById('drag-warning-modal').classList.add('open');
     }
 
+    window.deleteProductFromDoor = function(doorIdx, prodIdx) {
+      const door = tempEditDoors[doorIdx];
+      if (door && door.products) {
+        door.products.splice(prodIdx, 1);
+        renderEditDoors();
+      }
+    };
+
     function renderEditDoors() {
       const container = document.getElementById('edit-doors-container');
       if (!container) return;
@@ -3362,6 +3408,43 @@
         try { productsCatalog = JSON.parse(selectedBooking.products); } catch(_) {}
       } else if (Array.isArray(selectedBooking.products)) {
         productsCatalog = selectedBooking.products;
+      }
+
+      // Calculate excess products inside renderEditDoors()
+      const receiptSkuCounts = {};
+      tempEditProducts.forEach(p => {
+        if (p.cancelled) return;
+        receiptSkuCounts[p.sku] = (receiptSkuCounts[p.sku] || 0) + 1;
+      });
+
+      const doorSkuCounts = {};
+      tempEditDoors.forEach(door => {
+        const attachedSkus = door.products || [];
+        attachedSkus.forEach(sku => {
+          doorSkuCounts[sku] = (doorSkuCounts[sku] || 0) + 1;
+        });
+      });
+
+      const excessRemaining = {};
+      Object.keys(doorSkuCounts).forEach(sku => {
+        const receiptCount = receiptSkuCounts[sku] || 0;
+        const doorCount = doorSkuCounts[sku] || 0;
+        if (doorCount > receiptCount) {
+          excessRemaining[sku] = doorCount - receiptCount;
+        }
+      });
+
+      const excessProductInstances = {};
+      for (let d = tempEditDoors.length - 1; d >= 0; d--) {
+        const door = tempEditDoors[d];
+        const attachedSkus = door.products || [];
+        for (let p = attachedSkus.length - 1; p >= 0; p--) {
+          const sku = attachedSkus[p];
+          if (excessRemaining[sku] > 0) {
+            excessProductInstances[`${d}-${p}`] = true;
+            excessRemaining[sku]--;
+          }
+        }
       }
 
       tempEditDoors.forEach((door, doorIdx) => {
@@ -3380,21 +3463,31 @@
             const catalogItem = productsCatalog.find(p => p.sku === sku);
             const title = catalogItem ? (catalogItem.name || catalogItem.title) : sku;
             const isCancelled = isSkuCancelled(sku, doorIdx, prodIdx);
+            const isExcess = excessProductInstances[`${doorIdx}-${prodIdx}`];
             productsHtml += `
               <div class="drag-product-item" draggable="${hasInst ? 'false' : 'true'}" 
                 ondragstart="handleDragStart(event, ${doorIdx}, ${prodIdx})"
-                ondragend="handleDragEnd(event)">
+                ondragend="handleDragEnd(event)"
+                style="${isExcess ? 'border-color: var(--danger);' : ''}">
                 <div class="drag-handle">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="5" r="2"></circle><circle cx="9" cy="12" r="2"></circle><circle cx="9" cy="19" r="2"></circle><circle cx="15" cy="5" r="2"></circle><circle cx="15" cy="12" r="2"></circle><circle cx="15" cy="19" r="2"></circle></svg>
                 </div>
                 <div class="drag-product-text">
-                  <strong>${escapeHtml(sku)}</strong> - <span style="font-weight:normal; color:var(--text-secondary);">${escapeHtml(title)}</span>
+                  <strong style="${isExcess ? 'color: var(--danger);' : ''}">${escapeHtml(sku)}</strong> - <span style="${isExcess ? 'color: var(--danger);' : 'color:var(--text-secondary);'}">${escapeHtml(title)}</span>
                   ${isCancelled ? `
                     <span style="color:var(--danger); font-size:0.7rem; font-weight:700; text-transform:uppercase; margin-left:0.35rem;">
                       Cancelled
                     </span>
                   ` : ''}
                 </div>
+                ${isExcess ? `
+                  <button type="button" class="btn-minimal btn-danger" 
+                    onclick="event.stopPropagation(); deleteProductFromDoor(${doorIdx}, ${prodIdx})" 
+                    title="Remove Excess Product" 
+                    style="display:inline-flex; padding: 4px; margin-left: 0.5rem; z-index: 10;">
+                    <svg viewBox="0 0 24 24" style="width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                  </button>
+                ` : ''}
               </div>
             `;
           });
