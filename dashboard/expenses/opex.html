@@ -56,7 +56,7 @@
       border-collapse: collapse;
       font-size: 10pt;
       color: var(--text-primary);
-      font-family: Arial, sans-serif;
+      font-family: 'commissioner', sans-serif;
     }
     .excel-table th, .excel-table td {
       border: 1px solid var(--border);
@@ -285,14 +285,21 @@
       <!-- View 2: Software & Apps -->
       <div id="view-software" style="display: none; padding: 2rem; max-width: 1200px; width: 100%; margin: 0 auto; box-sizing: border-box;">
         <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.5rem; box-shadow: var(--shadow-sm);">
-          <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 0.75rem; margin-bottom: 1.25rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 0.75rem; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 1rem;">
             <div>
               <h2 style="font-size: 1.1rem; font-weight: 800; color: var(--text-primary); margin: 0;">Software & Apps Subscriptions</h2>
               <span style="font-size: 0.78rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 0.25rem; display: block;">Manage recurring app expenses and variable pay-as-you-go licenses</span>
             </div>
-            <button onclick="OpexApp.openCreateSubModal()" class="btn btn-primary btn-sm" style="display: flex; align-items: center; gap: 0.4rem; font-weight: 600; padding: 0.35rem 0.75rem;">
-              Create Subscription
-            </button>
+            <div style="display: flex; align-items: center; gap: 1rem;">
+              <select id="sub-status-filter" class="form-select" style="font-size: 0.8rem; padding: 0.25rem 0.5rem; height: 32px; width: 120px;" onchange="OpexApp.renderSoftwareSubscriptions()">
+                <option value="all">All</option>
+                <option value="active" selected>Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
+              <button onclick="OpexApp.openCreateSubModal()" class="btn btn-primary btn-sm" style="display: flex; align-items: center; gap: 0.4rem; font-weight: 600; padding: 0.35rem 0.75rem; height: 32px;">
+                Create Subscription
+              </button>
+            </div>
           </div>
           
           <div class="excel-container" style="margin-top: 0;">
@@ -301,6 +308,8 @@
                 <tr>
                   <th style="text-align: left;">Name</th>
                   <th style="text-align: left;">Description</th>
+                  <th style="text-align: left; width: 140px;">Subscribed</th>
+                  <th style="text-align: left; width: 140px;">Unsubscribed</th>
                   <th style="text-align: left;">Mode</th>
                   <th style="width: 160px; text-align: right;">Cost in Month</th>
                   <th style="width: 100px; text-align: center;">Action</th>
@@ -308,7 +317,7 @@
               </thead>
               <tbody id="software-subscriptions-table-body">
                 <tr>
-                  <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">Loading subscriptions...</td>
+                  <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">Loading subscriptions...</td>
                 </tr>
               </tbody>
             </table>
@@ -344,6 +353,14 @@
                   <option value="annual">Annual</option>
                   <option value="unsubscribed" id="opt-unsubscribed" style="display: none;">Unsubscribed</option>
                 </select>
+              </div>
+              <div class="form-group" style="display: flex; flex-direction: column; gap: 0.35rem;">
+                <label for="sub-subscribed-date" style="font-size: 0.78rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Date Subscribed</label>
+                <input type="date" id="sub-subscribed-date" class="form-select" style="width: 100%; text-align: left; height: 38px; padding: 0.35rem 0.5rem; background: var(--bg-elevated); border: 1px solid var(--border); color: var(--text-primary); border-radius: 4px;" required />
+              </div>
+              <div class="form-group" id="grp-unsubscribed-date" style="display: none; flex-direction: column; gap: 0.35rem;">
+                <label for="sub-unsubscribed-date" style="font-size: 0.78rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Date Unsubscribed</label>
+                <input type="date" id="sub-unsubscribed-date" class="form-select" style="width: 100%; text-align: left; height: 38px; padding: 0.35rem 0.5rem; background: var(--bg-elevated); border: 1px solid var(--border); color: var(--text-primary); border-radius: 4px;" />
               </div>
               <div class="form-group" style="display: flex; flex-direction: column; gap: 0.35rem;">
                 <label for="sub-cost" style="font-size: 0.78rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;" id="lbl-sub-cost">Cost (PHP)</label>
@@ -1006,7 +1023,11 @@
 
           const year = this.currentDate.getFullYear();
           const month = this.currentDate.getMonth() + 1;
+          const lastDay = new Date(year, month, 0).getDate();
           const currentMonthDateStr = `${year}-${String(month).padStart(2, '0')}-01`;
+          const currentMonthLastDayStr = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+
+          const filterVal = document.getElementById('sub-status-filter')?.value || 'active';
 
           const formatCurrency = (val) => {
             return '₱' + val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -1021,24 +1042,49 @@
               .replace(/'/g, '&#039;');
           };
 
+          const formatDate = (dateStr) => {
+            if (!dateStr) return '—';
+            const parts = dateStr.split('-');
+            if (parts.length !== 3) return dateStr;
+            const y = parseInt(parts[0], 10);
+            const m = parseInt(parts[1], 10) - 1;
+            const d = parseInt(parts[2], 10);
+            const date = new Date(y, m, d);
+            return date.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
+          };
+
           let summaryHtml = '';
           let fullHtml = '';
           let totalCostCentavos = 0;
 
-          // Filter out unsubscribed subscriptions historically
-          const visibleSubs = this.subscriptions.filter(s => {
-            if (s.status === 'unsubscribed' && s.unsubscribed_month) {
-              const unsubDate = new Date(s.unsubscribed_month);
-              const currentDate = new Date(currentMonthDateStr);
-              return currentDate < unsubDate; // If current month is before unsubscribe date, it's still visible
-            }
-            return true;
+          // Filter out unsubscribed subscriptions for the summary view historically
+          const activeInMonthSubs = this.subscriptions.filter(s => {
+            const subDate = s.subscribed_date || '1970-01-01';
+            const unsubDate = s.unsubscribed_date;
+            
+            // Check if subscribed on or before this month's end AND (not unsubscribed yet OR unsubscribed in this month or later)
+            const isSubscribed = subDate <= currentMonthLastDayStr;
+            const isNotUnsubscribed = !unsubDate || unsubDate >= currentMonthDateStr;
+            
+            return isSubscribed && isNotUnsubscribed;
           });
 
-          visibleSubs.forEach(s => {
-            // Find billing override if any
+          // Manager list filtering
+          const managerFilteredSubs = this.subscriptions.filter(s => {
+            if (filterVal === 'active') {
+              return s.status === 'active';
+            } else if (filterVal === 'inactive') {
+              return s.status === 'unsubscribed';
+            }
+            return true; // 'all'
+          });
+
+          // Sort manager list by name
+          managerFilteredSubs.sort((a, b) => a.name.localeCompare(b.name));
+
+          // 1. Render Summary View
+          activeInMonthSubs.forEach(s => {
             const override = this.billingRecords.find(b => b.subscription_id === s.id);
-            
             let mode = s.mode;
             let costCentavos = s.cost_centavos;
             
@@ -1047,7 +1093,6 @@
               costCentavos = override.cost_centavos;
             }
 
-            // Skip if override says unsubscribed for this month
             if (mode === 'unsubscribed') return;
 
             let resolvedCostCentavos = 0;
@@ -1068,7 +1113,6 @@
               annual: 'Annual'
             };
 
-            // Summary table row
             summaryHtml += `
               <tr>
                 <td style="text-align: left; font-weight: 500;">${escapeHtml(s.name)}</td>
@@ -1076,12 +1120,44 @@
                 <td style="text-align: right; font-weight: 500;">${formatCurrency(displayCost)}</td>
               </tr>
             `;
+          });
 
-            // Full table row
+          // 2. Render Full Manager List
+          managerFilteredSubs.forEach(s => {
+            const override = this.billingRecords.find(b => b.subscription_id === s.id);
+            let mode = s.mode;
+            let costCentavos = s.cost_centavos;
+            
+            if (override) {
+              mode = override.mode;
+              costCentavos = override.cost_centavos;
+            }
+
+            let resolvedCostCentavos = 0;
+            if (mode === 'unsubscribed') {
+              resolvedCostCentavos = 0;
+            } else if (mode === 'pay_as_you_go') {
+              resolvedCostCentavos = costCentavos;
+            } else if (mode === 'monthly') {
+              resolvedCostCentavos = costCentavos;
+            } else if (mode === 'annual') {
+              resolvedCostCentavos = Math.round(costCentavos / 12);
+            }
+
+            const displayCost = resolvedCostCentavos / 100;
+            const modeLabels = {
+              pay_as_you_go: 'Pay as you go',
+              monthly: 'Monthly',
+              annual: 'Annual',
+              unsubscribed: 'Unsubscribed'
+            };
+
             fullHtml += `
               <tr>
                 <td style="text-align: left; font-weight: 600;">${escapeHtml(s.name)}</td>
                 <td style="text-align: left; color: var(--text-secondary);">${escapeHtml(s.description || '—')}</td>
+                <td style="text-align: left;">${formatDate(s.subscribed_date)}</td>
+                <td style="text-align: left;">${formatDate(s.unsubscribed_date)}</td>
                 <td style="text-align: left;">${modeLabels[mode] || mode}</td>
                 <td style="text-align: right; font-weight: 600;">${formatCurrency(displayCost)}</td>
                 <td style="text-align: center;">
@@ -1094,15 +1170,10 @@
             `;
           });
 
-          if (visibleSubs.length === 0 || summaryHtml === '') {
+          if (summaryHtml === '') {
             summaryHtml = `
               <tr>
                 <td colspan="3" style="text-align: center; color: var(--text-muted); font-style: italic; padding: 1.5rem;">No active software subscriptions for this month.</td>
-              </tr>
-            `;
-            fullHtml = `
-              <tr>
-                <td colspan="5" style="text-align: center; color: var(--text-muted); font-style: italic; padding: 1.5rem;">No subscriptions found. Click "Create Subscription" to add one.</td>
               </tr>
             `;
           } else {
@@ -1110,6 +1181,14 @@
               <tr class="total-row">
                 <td colspan="2" style="text-align: left;">Total Software Costs</td>
                 <td style="text-align: right;">${formatCurrency(totalCostCentavos / 100)}</td>
+              </tr>
+            `;
+          }
+
+          if (fullHtml === '') {
+            fullHtml = `
+              <tr>
+                <td colspan="7" style="text-align: center; color: var(--text-muted); font-style: italic; padding: 1.5rem;">No subscriptions found matching the filter.</td>
               </tr>
             `;
           }
@@ -1129,6 +1208,12 @@
           form.reset();
           document.getElementById('sub-id').value = '';
           document.getElementById('opt-unsubscribed').style.display = 'none';
+          
+          // Set subscribed date default to today's date in YYYY-MM-DD
+          const todayStr = new Date().toISOString().slice(0, 10);
+          document.getElementById('sub-subscribed-date').value = todayStr;
+          document.getElementById('sub-unsubscribed-date').value = '';
+          document.getElementById('grp-unsubscribed-date').style.display = 'none';
           
           this.handleModeChange('pay_as_you_go');
 
@@ -1151,6 +1236,8 @@
           document.getElementById('sub-id').value = sub.id;
           document.getElementById('sub-name').value = sub.name;
           document.getElementById('sub-description').value = sub.description || '';
+          document.getElementById('sub-subscribed-date').value = sub.subscribed_date || '';
+          document.getElementById('sub-unsubscribed-date').value = sub.unsubscribed_date || '';
 
           // Look at current month override
           const override = this.billingRecords.find(b => b.subscription_id === sub.id);
@@ -1181,11 +1268,28 @@
           const lblCost = document.getElementById('lbl-sub-cost');
           const hint = document.getElementById('cost-hint');
           const costInput = document.getElementById('sub-cost');
+          const grpUnsub = document.getElementById('grp-unsubscribed-date');
+          const unsubInput = document.getElementById('sub-unsubscribed-date');
           
           if (!lblCost || !hint || !costInput) return;
 
           costInput.disabled = false;
           costInput.required = true;
+
+          if (grpUnsub) {
+            if (mode === 'unsubscribed') {
+              grpUnsub.style.display = 'flex';
+              if (unsubInput) {
+                unsubInput.required = true;
+                if (!unsubInput.value) {
+                  unsubInput.value = new Date().toISOString().slice(0, 10);
+                }
+              }
+            } else {
+              grpUnsub.style.display = 'none';
+              if (unsubInput) unsubInput.required = false;
+            }
+          }
 
           if (mode === 'pay_as_you_go') {
             lblCost.textContent = 'Cost for this month (PHP)';
@@ -1215,6 +1319,8 @@
           const mode = document.getElementById('sub-mode').value;
           const costVal = parseFloat(document.getElementById('sub-cost').value) || 0;
           const costCentavos = Math.round(costVal * 100);
+          const subscribedDate = document.getElementById('sub-subscribed-date').value;
+          const unsubscribedDate = document.getElementById('sub-unsubscribed-date').value || null;
 
           const year = this.currentDate.getFullYear();
           const month = this.currentDate.getMonth() + 1;
@@ -1230,21 +1336,33 @@
                   description,
                   mode,
                   cost_centavos: costCentavos,
-                  status: 'active'
+                  status: 'active',
+                  subscribed_date: subscribedDate
                 }]);
               if (error) throw error;
               this.showToast('Subscription created successfully.');
             } else {
+              // Update core details on main table
+              const mainUpdate = {
+                name,
+                description,
+                subscribed_date: subscribedDate,
+                unsubscribed_date: unsubscribedDate
+              };
               if (mode === 'unsubscribed') {
-                const { error: mainError } = await sb
-                  .from('software_subscriptions')
-                  .update({
-                    status: 'unsubscribed',
-                    unsubscribed_month: currentMonthDateStr
-                  })
-                  .eq('id', id);
-                if (mainError) throw mainError;
+                mainUpdate.status = 'unsubscribed';
+              } else {
+                mainUpdate.status = 'active';
+                mainUpdate.unsubscribed_date = null; // Reset if reactivated
+              }
 
+              const { error: mainError } = await sb
+                .from('software_subscriptions')
+                .update(mainUpdate)
+                .eq('id', id);
+              if (mainError) throw mainError;
+
+              if (mode === 'unsubscribed') {
                 const { error: billError } = await sb
                   .from('software_subscription_billing')
                   .upsert({
@@ -1267,7 +1385,7 @@
                     mode: mode
                   }, { onConflict: 'subscription_id,billing_month' });
                 if (billError) throw billError;
-                this.showToast('Subscription updated for this month.');
+                this.showToast('Subscription updated.');
               }
             }
 

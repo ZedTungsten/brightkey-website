@@ -7,7 +7,8 @@ CREATE TABLE public.software_subscriptions (
     mode TEXT NOT NULL CHECK (mode IN ('pay_as_you_go', 'monthly', 'annual')),
     cost_centavos INTEGER NOT NULL DEFAULT 0,
     status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'unsubscribed')),
-    unsubscribed_month DATE, -- e.g. '2026-08-01' representing the month they unsubscribed (starts hiding from this month onwards)
+    subscribed_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    unsubscribed_date DATE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
