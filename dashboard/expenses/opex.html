@@ -224,6 +224,14 @@
           </button>
         </div>
 
+        <!-- OPEX Total Card -->
+        <div id="opex-total-card" style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1rem 1.5rem; box-shadow: var(--shadow-sm); margin-bottom: 1.5rem; display: flex; align-items: center; justify-content: space-between;">
+          <div>
+            <span style="font-size: 0.78rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; display: block;">Total OPEX for this month</span>
+            <span style="font-size: 1.5rem; font-weight: 800; color: var(--cyan-light); margin-top: 0.15rem; display: block;" id="opex-grand-total">₱0.00</span>
+          </div>
+        </div>
+
         <div id="view-summary" style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.5rem; box-shadow: var(--shadow-sm); display: flex; flex-direction: column; gap: 2rem;">
           <!-- Salaries Section -->
           <div>
@@ -577,9 +585,15 @@
             this.subscriptions = subRes.data || [];
             this.billingRecords = billRes.data || [];
 
-            this.renderStatement();
-            this.renderOpexReports(accountsRes.data || [], journalRes.data || []);
-            this.renderSoftwareSubscriptions();
+            const salariesTotal = this.renderStatement() || 0;
+            const opexTotal = this.renderOpexReports(accountsRes.data || [], journalRes.data || []) || 0;
+            const softwareTotal = this.renderSoftwareSubscriptions() || 0;
+
+            const opexGrandTotal = salariesTotal + opexTotal + softwareTotal;
+            const totalEl = document.getElementById('opex-grand-total');
+            if (totalEl) {
+              totalEl.textContent = '₱' + opexGrandTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            }
 
           } catch (err) {
             console.error('Error loading OPEX data:', err);
@@ -940,6 +954,7 @@
           `;
 
           tbody.innerHTML = rowsHtml + totalRowHtml;
+          return grandTotalCost;
         },
 
         renderOpexReports(accounts, journalEntries) {
@@ -970,6 +985,7 @@
           });
 
           let html = '';
+          let grandTotalOpex = 0;
           const formatCurrency = (val) => {
             return '₱' + val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
           };
@@ -1034,9 +1050,11 @@
                 </div>
               </div>
             `;
+            grandTotalOpex += totalDebit;
           }
 
           container.innerHTML = html;
+          return grandTotalOpex;
         },
 
         resolvePlanForMonth(s, targetMonthStr) {
@@ -1096,14 +1114,18 @@
           const summaryBtn = document.getElementById('subtab-summary');
           const softwareBtn = document.getElementById('subtab-software');
 
+          const totalCard = document.getElementById('opex-total-card');
+
           if (tab === 'summary') {
             if (summaryView) summaryView.style.display = 'flex';
             if (softwareView) softwareView.style.display = 'none';
+            if (totalCard) totalCard.style.display = 'flex';
             if (summaryBtn) summaryBtn.classList.add('active');
             if (softwareBtn) softwareBtn.classList.remove('active');
           } else {
             if (summaryView) summaryView.style.display = 'none';
             if (softwareView) softwareView.style.display = 'block';
+            if (totalCard) totalCard.style.display = 'none';
             if (summaryBtn) summaryBtn.classList.remove('active');
             if (softwareBtn) softwareBtn.classList.add('active');
           }
@@ -1371,6 +1393,7 @@
 
           summaryTbody.innerHTML = summaryHtml;
           subTbody.innerHTML = fullHtml;
+          return totalCostCentavos / 100;
         },
 
         openCreateSubModal() {
