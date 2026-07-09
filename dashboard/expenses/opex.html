@@ -889,21 +889,13 @@ const record = this.payslipRecords.find(r => r.employee_id === emp.id);
             });
 
             // 3. Resolve core fields (Salary, Special, Adjustments) from snapshot or live
+            adjustmentVal = this.adjustments
+              .filter(a => a.employee_id === emp.id)
+              .reduce((sum, a) => sum + (Number(a.amount) || 0), 0);
+
             if (record) {
               baseSalary = Number(record.salary || record.basic_paid) || 0;
               specialPayout = Number(record.special_payouts) || 0;
-
-              // Extract only non-installation adjustments from saved payslip adjustments_list
-              const adjsList = Array.isArray(record.adjustments_list) ? record.adjustments_list : [];
-              adjsList.forEach(a => {
-                const val = Number(a.value || a.amount) || 0;
-                const label = (a.label || '').toLowerCase();
-                if (label.includes('installation') || label.includes('threshold') || label.includes('service job')) {
-                  // Skip installation-related adjustments since they are already calculated live
-                } else {
-                  adjustmentVal += val;
-                }
-              });
             } else {
               // Fall back to live calculations (only for Active employees)
               baseSalary = emp.employment_status === 'Active' ? (Number(emp.salary) || 0) : 0;
@@ -913,10 +905,6 @@ const record = this.payslipRecords.find(r => r.employee_id === emp.id);
                   .filter(s => s.employeeId === emp.id)
                   .reduce((sum, s) => sum + (Number(s.value) || 0), 0)
                 : 0;
-
-              adjustmentVal = this.adjustments
-                .filter(a => a.employee_id === emp.id)
-                .reduce((sum, a) => sum + (Number(a.amount) || 0), 0);
             }
 
             const totalCost = baseSalary + specialPayout + adjustmentVal + installationPayout + commissionPayout;
