@@ -1187,7 +1187,30 @@
           const hasNone = assignedIds.includes('none');
           const isEditing = editingCells[cellKey];
 
-          if (!isEditing) {
+          if (window.isBulkEditing) {
+            let cellContentHtml = '';
+            if (assignedIds.length === 0) {
+              cellContentHtml = '<span style="color: var(--text-muted); font-style: italic; font-size: 0.78rem;">Unassigned</span>';
+            } else if (hasNone) {
+              cellContentHtml = '<span style="font-weight: 500; color: var(--text-secondary); font-size: 0.78rem;">None</span>';
+            } else {
+              const names = [];
+              assignedIds.forEach(currentId => {
+                const emp = eligibleEmployees.find(e => e.id === currentId);
+                if (emp) names.push(`${emp.first_name || ''} ${emp.last_name || ''}`.trim());
+              });
+              cellContentHtml = `<span style="font-weight:600; font-size:0.78rem;">${escapeHtml(names.join(', '))}</span>`;
+            }
+
+            ratesCellsHtml += `
+              <td>
+                <div style="display: flex; align-items: center; gap: 0.5rem; min-width: 150px;">
+                  <input type="checkbox" class="bulk-cell-checkbox" data-cell-key="${cellKey}" style="accent-color:var(--cyan); width:14px; height:14px; cursor:pointer;" />
+                  <div>${cellContentHtml}</div>
+                </div>
+              </td>
+            `;
+          } else if (!isEditing) {
             // Read-only mode
             let readOnlyHtml = '';
             if (assignedIds.length === 0) {
@@ -1211,43 +1234,19 @@
               readOnlyHtml = `<div style="display: flex; flex-direction: column;">${namesHtml.join('')}</div>`;
             }
 
-            if (window.isBulkEditing) {
-              let cellContentHtml = '';
-              if (assignedIds.length === 0) {
-                cellContentHtml = '<span style="color: var(--text-muted); font-style: italic; font-size: 0.78rem;">Unassigned</span>';
-              } else if (hasNone) {
-                cellContentHtml = '<span style="font-weight: 500; color: var(--text-secondary); font-size: 0.78rem;">None</span>';
-              } else {
-                const names = [];
-                assignedIds.forEach(currentId => {
-                  const emp = eligibleEmployees.find(e => e.id === currentId);
-                  if (emp) names.push(`${emp.first_name || ''} ${emp.last_name || ''}`.trim());
-                });
-                cellContentHtml = `<span style="font-weight:600; font-size:0.78rem;">${escapeHtml(names.join(', '))}</span>`;
-              }
-
-              ratesCellsHtml += `
-                <td>
-                  <div style="display: flex; align-items: center; gap: 0.5rem; min-width: 150px;">
-                    <input type="checkbox" class="bulk-cell-checkbox" data-cell-key="${cellKey}" style="accent-color:var(--cyan); width:14px; height:14px; cursor:pointer;" />
-                    <div>${cellContentHtml}</div>
-                  </div>
-                </td>
-              `;
-            } else if (!isEditing) {
-              ratesCellsHtml += `
-                <td>
-                  <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; min-width: 150px;">
-                    <div>${readOnlyHtml}</div>
-                    <button type="button" class="btn-edit-cell" data-cell-key="${cellKey}" style="background: none; border: none; padding: 0.2rem; cursor: pointer; display: flex; align-items: center; justify-content: center;" title="Edit assignments">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-muted);"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
-                    </button>
-                  </div>
-                </td>
-              `;
-            } else {
-              // Edit mode
-              ratesCellsHtml += `
+            ratesCellsHtml += `
+              <td>
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; min-width: 150px;">
+                  <div>${readOnlyHtml}</div>
+                  <button type="button" class="btn-edit-cell" data-cell-key="${cellKey}" style="background: none; border: none; padding: 0.2rem; cursor: pointer; display: flex; align-items: center; justify-content: center;" title="Edit assignments">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-muted);"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                  </button>
+                </div>
+              </td>
+            `;
+          } else {
+            // Edit mode
+            ratesCellsHtml += `
               <td>
                 <div style="display: flex; flex-direction: column; gap: 0.35rem; align-items: flex-start; min-width: 180px; border: 1px solid var(--border); border-radius: 6px; padding: 0.5rem; background: var(--bg-elevated);">
                   <div style="display: flex; align-items: center; justify-content: space-between; width: 100%; border-bottom: 1px solid var(--border); padding-bottom: 0.25rem; margin-bottom: 0.25rem;">
