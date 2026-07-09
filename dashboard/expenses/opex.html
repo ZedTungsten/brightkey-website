@@ -511,9 +511,8 @@
                 .select('id, name, description, mode, cost_centavos, status, subscribed_date, unsubscribed_date')
                 .eq('company_id', this.companyId),
               sb.from('software_subscription_billing')
-                .select('subscription_id, cost_centavos, mode')
+                .select('subscription_id, billing_month, cost_centavos, mode')
                 .eq('company_id', this.companyId)
-                .eq('billing_month', startDate)
             ]);
 
             if (empRes.error) throw empRes.error;
@@ -996,6 +995,37 @@
           container.innerHTML = html;
         },
 
+        resolvePlanForMonth(s, targetMonthStr) {
+          const subBills = this.billingRecords.filter(b => b.subscription_id === s.id);
+          
+          // Check for exact override in the target month
+          const exactBill = subBills.find(b => b.billing_month === targetMonthStr);
+          if (exactBill) {
+            return { mode: exactBill.mode, cost_centavos: exactBill.cost_centavos };
+          }
+
+          // Pay-as-you-go is strictly month-to-month and does NOT propagate forward if no override exists
+          if (s.mode === 'pay_as_you_go') {
+            return { mode: 'pay_as_you_go', cost_centavos: 0 };
+          }
+
+          // Find all past billing overrides on or before the target month
+          const pastBills = subBills.filter(b => b.billing_month <= targetMonthStr);
+          if (pastBills.length > 0) {
+            pastBills.sort((a, b) => b.billing_month.localeCompare(a.billing_month));
+            const latestBill = pastBills[0];
+            
+            if (latestBill.mode === 'pay_as_you_go') {
+              return { mode: 'pay_as_you_go', cost_centavos: 0 };
+            }
+            
+            return { mode: latestBill.mode, cost_centavos: latestBill.cost_centavos };
+          }
+
+          // Default to base settings
+          return { mode: s.mode, cost_centavos: s.cost_centavos };
+        },
+
         switchSubTab(tab) {
           const summaryView = document.getElementById('view-summary');
           const softwareView = document.getElementById('view-software');
@@ -1084,14 +1114,9 @@
 
           // 1. Render Summary View
           activeInMonthSubs.forEach(s => {
-            const override = this.billingRecords.find(b => b.subscription_id === s.id);
-            let mode = s.mode;
-            let costCentavos = s.cost_centavos;
-            
-            if (override) {
-              mode = override.mode;
-              costCentavos = override.cost_centavos;
-            }
+            const plan = this.resolvePlanForMonth(s, currentMonthDateStr);
+            const mode = plan.mode;
+            const costCentavos = plan.cost_centavos;
 
             if (mode === 'unsubscribed') return;
 
@@ -1124,14 +1149,9 @@
 
           // 2. Render Full Manager List
           managerFilteredSubs.forEach(s => {
-            const override = this.billingRecords.find(b => b.subscription_id === s.id);
-            let mode = s.mode;
-            let costCentavos = s.cost_centavos;
-            
-            if (override) {
-              mode = override.mode;
-              costCentavos = override.cost_centavos;
-            }
+            const plan = this.resolvePlanForMonth(s, currentMonthDateStr);
+            const mode = plan.mode;
+            const costCentavos = plan.cost_centavos;
 
             let resolvedCostCentavos = 0;
             if (mode === 'unsubscribed') {
@@ -1239,16 +1259,17 @@
           document.getElementById('sub-subscribed-date').value = sub.subscribed_date || '';
           document.getElementById('sub-unsubscribed-date').value = sub.unsubscribed_date || '';
 
-          // Look at current month override
-          const override = this.billingRecords.find(b => b.subscription_id === sub.id);
-          const currentMode = override ? override.mode : sub.mode;
-          const currentCost = override ? override.cost_centavos : sub.cost_centavos;
+          // Resolve active plan for the current selected month
+          const year = this.currentDate.getFullYear();
+          const month = this.currentDate.getMonth() + 1;
+          const currentMonthDateStr = `${year}-${String(month).padStart(2, '0')}-01`;
+          const plan = this.resolvePlanForMonth(sub, currentMonthDateStr);
 
-          document.getElementById('sub-mode').value = currentMode;
-          document.getElementById('sub-cost').value = (currentCost / 100).toFixed(2);
+          document.getElementById('sub-mode').value = plan.mode;
+          document.getElementById('sub-cost').value = (plan.cost_centavos / 100).toFixed(2);
           document.getElementById('opt-unsubscribed').style.display = 'block';
 
-          this.handleModeChange(currentMode);
+          this.handleModeChange(plan.mode);
 
           modal.style.display = 'flex';
           modal.offsetHeight; // reflow
