@@ -125,97 +125,8 @@
         });
       }
 
-      const custNameInput = document.getElementById('event-cust-name');
-      if (custNameInput) {
-        custNameInput.addEventListener('input', handleCustomerNameChange);
-      }
-
-      const eventTypeSelect = document.getElementById('event-type');
-      if (eventTypeSelect) {
-        eventTypeSelect.addEventListener('change', toggleEventCustDetailsSection);
-      }
-
       await loadData();
     });
-
-    function toggleEventCustDetailsSection() {
-      const type = document.getElementById('event-type').value;
-      const section = document.getElementById('event-cust-details-section');
-      const requiredInputs = [
-        document.getElementById('event-cust-name'),
-        document.getElementById('event-cust-address'),
-        document.getElementById('event-cust-city'),
-        document.getElementById('event-cust-province'),
-        document.getElementById('event-cust-phone'),
-        document.getElementById('event-cust-email')
-      ];
-
-      if (type === 'day_off') {
-        if (section) section.style.display = 'none';
-        requiredInputs.forEach(input => {
-          if (input) {
-            input.required = false;
-            input.disabled = true;
-          }
-        });
-      } else {
-        if (section) section.style.display = 'flex';
-        requiredInputs.forEach(input => {
-          if (input) {
-            input.required = true;
-            input.disabled = false;
-          }
-        });
-      }
-    }
-
-    function handleCustomerNameChange(e) {
-      const name = e.target.value.trim();
-      if (!name) {
-        document.getElementById('event-cust-address').value = '';
-        document.getElementById('event-cust-city').value = '';
-        document.getElementById('event-cust-province').value = '';
-        document.getElementById('event-cust-phone').value = '';
-        document.getElementById('event-cust-email').value = '';
-        document.getElementById('event-cust-map').value = '';
-        document.getElementById('event-cust-notes').value = '';
-        return;
-      }
-
-      const sorted = [...dbBookings].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
-      const matched = sorted.find(b => b.customer_name && b.customer_name.trim().toLowerCase() === name.toLowerCase());
-
-      if (matched) {
-        let city = matched.customer_city || '';
-        let province = matched.customer_province || '';
-        
-        if ((!city || !province) && matched.customer_address) {
-          const parts = matched.customer_address.split(',').map(s => s.trim()).filter(Boolean);
-          if (parts.length >= 2) {
-            if (!province) province = parts[parts.length - 1];
-            if (!city) city = parts[parts.length - 2];
-          } else if (parts.length === 1) {
-            if (!city) city = parts[0];
-          }
-        }
-
-        document.getElementById('event-cust-address').value = matched.customer_address || '';
-        document.getElementById('event-cust-city').value = city;
-        document.getElementById('event-cust-province').value = province;
-        document.getElementById('event-cust-phone').value = matched.customer_phone || '';
-        document.getElementById('event-cust-email').value = matched.customer_email || '';
-        document.getElementById('event-cust-map').value = matched.google_map_pin_url || '';
-        document.getElementById('event-cust-notes').value = matched.notes || '';
-      } else {
-        document.getElementById('event-cust-address').value = '';
-        document.getElementById('event-cust-city').value = '';
-        document.getElementById('event-cust-province').value = '';
-        document.getElementById('event-cust-phone').value = '';
-        document.getElementById('event-cust-email').value = '';
-        document.getElementById('event-cust-map').value = '';
-        document.getElementById('event-cust-notes').value = '';
-      }
-    }
 
     async function loadData() {
       renderSkeletons();
@@ -1963,19 +1874,8 @@
       document.getElementById('day-events-create-form').style.display = 'flex';
       
       // Clear inputs
-      document.getElementById('event-cust-name').value = '';
-      document.getElementById('event-cust-address').value = '';
-      document.getElementById('event-cust-city').value = '';
-      document.getElementById('event-cust-province').value = '';
-      document.getElementById('event-cust-phone').value = '';
-      document.getElementById('event-cust-email').value = '';
-      document.getElementById('event-cust-map').value = '';
-      document.getElementById('event-cust-notes').value = '';
       document.getElementById('event-time-slot').value = 'Morning';
-      document.getElementById('event-type').value = 'backjob';
       
-      toggleEventCustDetailsSection();
-
       // Uncheck all checkboxes
       const checkboxes = document.querySelectorAll('input[name="event-installers"]');
       checkboxes.forEach(cb => cb.checked = false);
@@ -1987,17 +1887,6 @@
     }
 
     async function createDayEvent() {
-      const eventType = document.getElementById('event-type').value;
-      const isDayOff = eventType === 'day_off';
-
-      const nameInput = document.getElementById('event-cust-name');
-      const customerName = isDayOff ? 'Day off' : nameInput.value.trim();
-      if (!isDayOff && !customerName) {
-        showToast('Please enter a Customer Name.', true);
-        nameInput.focus();
-        return;
-      }
-
       const timeSlot = document.getElementById('event-time-slot').value;
       
       // Collect selected installers
@@ -2013,19 +1902,9 @@
       const installerIdStr = installersList.length > 0 ? installersList.map(i => i.id).join(' | ') : null;
       const installerNameStr = installersList.length > 0 ? installersList.map(i => i.name).join(' | ') : null;
 
-      let eventTypeName = 'Backjob';
-      let typePrefix = 'BJ';
-      if (eventType === 'ocular') {
-        eventTypeName = 'Ocular';
-        typePrefix = 'OC';
-      } else if (isDayOff) {
-        eventTypeName = 'Day off';
-        typePrefix = 'DO';
-      }
-
-      // Find matched previous customer to copy details from
-      const sorted = [...dbBookings].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
-      const matched = sorted.find(b => b.customer_name && b.customer_name.trim().toLowerCase() === customerName.toLowerCase());
+      const eventTypeName = 'Day off';
+      const typePrefix = 'DO';
+      const customerName = 'Day off';
 
       const randomSuffix = Date.now();
       const folderRefId = `${typePrefix}-${randomSuffix}`;
@@ -2035,13 +1914,14 @@
       const installerNamesList = installersList.map(i => formatInstallerName(i.name));
       const installerNamesJoined = installerNamesList.join(', ');
       const productName = installerNamesJoined ? `${eventTypeName} - ${installerNamesJoined}` : eventTypeName;
-      const customerAddress = isDayOff ? 'Day off' : document.getElementById('event-cust-address').value.trim();
-      const customerCity = isDayOff ? '' : document.getElementById('event-cust-city').value.trim();
-      const customerProvince = isDayOff ? '' : document.getElementById('event-cust-province').value.trim();
-      const customerPhone = isDayOff ? '' : document.getElementById('event-cust-phone').value.trim();
-      const customerEmail = isDayOff ? '' : document.getElementById('event-cust-email').value.trim();
-      const googleMapPinUrl = isDayOff ? null : (document.getElementById('event-cust-map').value.trim() || null);
-      const notes = isDayOff ? null : (document.getElementById('event-cust-notes').value.trim() || null);
+
+      const customerAddress = 'Day off';
+      const customerCity = '';
+      const customerProvince = '';
+      const customerPhone = '';
+      const customerEmail = '';
+      const googleMapPinUrl = null;
+      const notes = null;
 
       const payload = {
         company_id: currentCompanyId,
