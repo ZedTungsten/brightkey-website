@@ -877,39 +877,57 @@
                 .filter(a => a.employee_id === emp.id)
                 .reduce((sum, a) => sum + (Number(a.amount) || 0), 0);
 
-              let leadCount = 0;
-              let assistCount = 0;
-              let serviceEarnings = 0;
-
+              // Gather all completed door jobs for this employee in the month
+              const doorJobs = [];
               this.bookings.forEach(b => {
+                if (b.status === 'cancelled') return;
                 const assignedDoors = this.getAssignedDoorsForBookingAndEmployee(b, emp.id);
                 assignedDoors.forEach(d => {
-                  if (!d.completed) return;
-
-                  if (d.roles.includes('lead')) {
-                    leadCount++;
-                  } else if (d.roles.includes('assist')) {
-                    assistCount++;
-                  }
-
-                  if (d.roles.includes('service')) {
-                    d.skus.forEach(sku => {
-                      const matchedService = extraServicesList.find(es => es.sku === sku);
-                      if (matchedService) {
-                        serviceEarnings += matchedService.rate;
-                      }
+                  if (d.completed) {
+                    doorJobs.push({
+                      ...d,
+                      scheduled_date: b.scheduled_date || '1970-01-01'
                     });
                   }
                 });
               });
 
-              const totalCredit = (leadCount * leadWeight) + (assistCount * assistWeight);
-              let thresholdEarnings = 0;
-              if (totalCredit > thresholdVal) {
-                const extraCredit = totalCredit - thresholdVal;
-                thresholdEarnings = extraCredit * leadRateVal;
-              }
-              installationPayout = thresholdEarnings + serviceEarnings;
+              // Sort doors chronologically by scheduled_date
+              doorJobs.sort((a, b) => new Date(a.scheduled_date) - new Date(b.scheduled_date));
+
+              let runningCredit = 0;
+              let totalThresholdEarnings = 0;
+              let totalServiceEarnings = 0;
+
+              doorJobs.forEach(job => {
+                let weight = 0;
+                if (job.roles.includes('lead')) weight = leadWeight;
+                else if (job.roles.includes('assist')) weight = assistWeight;
+
+                // Service pay
+                let servicePayForJob = 0;
+                if (job.roles.includes('service')) {
+                  job.skus.forEach(sku => {
+                    const matchedService = extraServicesList.find(es => es.sku === sku);
+                    if (matchedService) {
+                      servicePayForJob += matchedService.rate;
+                    }
+                  });
+                }
+                totalServiceEarnings += servicePayForJob;
+
+                // Extra threshold pay
+                let thresholdPayForJob = 0;
+                const previousCredit = runningCredit;
+                const newCredit = previousCredit + weight;
+                if (newCredit > thresholdVal) {
+                  thresholdPayForJob = weight * leadRateVal;
+                }
+                totalThresholdEarnings += thresholdPayForJob;
+                runningCredit = newCredit;
+              });
+
+              installationPayout = totalThresholdEarnings + totalServiceEarnings;
 
               const employeeCommAssignments = this.commissionAssignments.filter(a => a.employee_id === emp.id);
               employeeCommAssignments.forEach(a => {
