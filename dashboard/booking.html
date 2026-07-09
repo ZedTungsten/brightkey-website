@@ -382,6 +382,28 @@
           <!-- Customer Info -->
           <div class="panel">
             <div class="panel-title">Customer Information</div>
+            <div class="form-row" style="margin-bottom: 1rem;">
+              <div class="form-group" style="grid-column: span 2; display: flex; flex-direction: column; gap: 0.5rem;">
+                <label style="display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; font-weight: 600; color: var(--text-primary); cursor: pointer; user-select: none;">
+                  <input type="checkbox" id="prev-cust-checkbox" onchange="togglePrevCustomerFields(this)" style="cursor: pointer;" />
+                  Previous Customer
+                </label>
+                <div id="prev-customer-fields" style="display: none; gap: 0.75rem; width: 100%;">
+                  <div style="flex: 1;">
+                    <label class="form-label" style="font-size: 0.75rem;">Month & Year</label>
+                    <select class="form-select" id="prev-cust-month-year" onchange="onPrevCustMonthYearChange(this)" style="width: 100%;">
+                      <option value="">Select Month & Year</option>
+                    </select>
+                  </div>
+                  <div style="flex: 1;">
+                    <label class="form-label" style="font-size: 0.75rem;">Select Customer</label>
+                    <select class="form-select" id="prev-cust-select" onchange="onPrevCustSelected(this)" style="width: 100%;">
+                      <option value="">Select Customer</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
             <div class="form-row">
               <div class="form-group">
                 <label class="form-label">Full Name <span style="color: var(--danger);">*</span></label>
@@ -643,6 +665,131 @@
     let dbEmployees = [];
     let dbWarehouses = [];
     let dbInventory = [];
+    let dbBookings = null;
+
+    async function togglePrevCustomerFields(chk) {
+      const fieldsDiv = document.getElementById('prev-customer-fields');
+      if (!fieldsDiv) return;
+      
+      if (chk.checked) {
+        fieldsDiv.style.display = 'flex';
+        if (dbBookings === null) {
+          const selectMonthYear = document.getElementById('prev-cust-month-year');
+          if (selectMonthYear) {
+            selectMonthYear.innerHTML = '<option value="">Loading...</option>';
+          }
+          try {
+            const sb = window.BKAuth.sb;
+            const { data, error } = await sb.from('installation_bookings')
+              .select('customer_name, customer_social, customer_email, customer_phone, customer_address, customer_city, customer_province, google_map_pin_url, scheduled_date, created_at')
+              .eq('company_id', currentCompanyId)
+              .order('scheduled_date', { ascending: false });
+            
+            if (error) throw error;
+            dbBookings = data || [];
+            
+            populateMonthYearDropdown();
+          } catch (err) {
+            console.error('Error fetching previous customers:', err);
+            if (selectMonthYear) {
+              selectMonthYear.innerHTML = '<option value="">Failed to load</option>';
+            }
+          }
+        }
+      } else {
+        fieldsDiv.style.display = 'none';
+      }
+    }
+
+    function populateMonthYearDropdown() {
+      const selectMonthYear = document.getElementById('prev-cust-month-year');
+      if (!selectMonthYear) return;
+      selectMonthYear.innerHTML = '<option value="">Select Month & Year</option>';
+      
+      const monthNames = [
+        'January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December'
+      ];
+      
+      const uniqueMonthYears = new Set();
+      dbBookings.forEach(b => {
+        if (b.scheduled_date) {
+          const d = new Date(b.scheduled_date);
+          if (!isNaN(d.getTime())) {
+            const val = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+            const label = `${monthNames[d.getMonth()]} ${d.getFullYear()}`;
+            uniqueMonthYears.add(JSON.stringify({ val, label }));
+          }
+        }
+      });
+      
+      const sortedOptions = Array.from(uniqueMonthYears)
+        .map(json => JSON.parse(json))
+        .sort((a, b) => b.val.localeCompare(a.val));
+      
+      sortedOptions.forEach(opt => {
+        const option = document.createElement('option');
+        option.value = opt.val;
+        option.textContent = opt.label;
+        selectMonthYear.appendChild(option);
+      });
+    }
+
+    function onPrevCustMonthYearChange(select) {
+      const monthYear = select.value;
+      const selectCustomer = document.getElementById('prev-cust-select');
+      if (!selectCustomer) return;
+      
+      selectCustomer.innerHTML = '<option value="">Select Customer</option>';
+      if (!monthYear || !dbBookings) return;
+      
+      const filtered = dbBookings.filter(b => {
+        if (!b.scheduled_date) return false;
+        return b.scheduled_date.startsWith(monthYear);
+      });
+      
+      const seen = new Set();
+      filtered.forEach(b => {
+        if (b.customer_name && !seen.has(b.customer_name.trim().toLowerCase())) {
+          seen.add(b.customer_name.trim().toLowerCase());
+          const option = document.createElement('option');
+          option.value = b.customer_name;
+          option.textContent = b.customer_name;
+          selectCustomer.appendChild(option);
+        }
+      });
+    }
+
+    function onPrevCustSelected(select) {
+      const name = select.value;
+      if (!name || !dbBookings) return;
+      
+      const matched = dbBookings.find(b => b.customer_name && b.customer_name.trim().toLowerCase() === name.trim().toLowerCase());
+      if (matched) {
+        let city = matched.customer_city || '';
+        let province = matched.customer_province || '';
+        
+        if ((!city || !province) && matched.customer_address) {
+          const parts = matched.customer_address.split(',').map(s => s.trim()).filter(Boolean);
+          if (parts.length >= 2) {
+            if (!province) province = parts[parts.length - 1];
+            if (!city) city = parts[parts.length - 2];
+          } else if (parts.length === 1) {
+            if (!city) city = parts[0];
+          }
+        }
+
+        document.getElementById('cust-name').value = matched.customer_name || '';
+        document.getElementById('cust-social').value = matched.customer_social || '';
+        document.getElementById('cust-email').value = matched.customer_email || '';
+        document.getElementById('cust-phone').value = matched.customer_phone || '';
+        document.getElementById('cust-address').value = matched.customer_address || '';
+        document.getElementById('cust-city').value = city;
+        document.getElementById('cust-province').value = province;
+        document.getElementById('cust-zip').value = '';
+        document.getElementById('cust-map-pin').value = matched.google_map_pin_url || '';
+      }
+    }
 
     const MOCK_EMPLOYEES = []; // Cleared dummy/fake installers
 
