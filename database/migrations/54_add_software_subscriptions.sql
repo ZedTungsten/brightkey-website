@@ -9,6 +9,9 @@ CREATE TABLE IF NOT EXISTS public.software_subscriptions (
     status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'unsubscribed')),
     subscribed_date DATE NOT NULL DEFAULT CURRENT_DATE,
     unsubscribed_date DATE,
+    billing_url TEXT,
+    account_email TEXT,
+    card_last_four TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -16,6 +19,7 @@ CREATE TABLE IF NOT EXISTS public.software_subscriptions (
 -- 2. Add columns if they do not exist
 ALTER TABLE public.software_subscriptions ADD COLUMN IF NOT EXISTS billing_url TEXT;
 ALTER TABLE public.software_subscriptions ADD COLUMN IF NOT EXISTS account_email TEXT;
+ALTER TABLE public.software_subscriptions ADD COLUMN IF NOT EXISTS card_last_four TEXT;
 
 -- 3. Enable RLS
 ALTER TABLE public.software_subscriptions ENABLE ROW LEVEL SECURITY;
