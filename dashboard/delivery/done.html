@@ -245,8 +245,8 @@
 
               <!-- Done Tab Content -->
               <div class="tab-content" id="tab-content-done">
-                <!-- Top controls row with Month Switcher -->
-                <div style="display: flex; justify-content: flex-start; align-items: center; margin-bottom: 1.5rem;">
+                <!-- Top controls row with Month Switcher and Search -->
+                <div style="display: flex; justify-content: flex-start; align-items: center; gap: 1rem; margin-bottom: 1.5rem;">
                   <div class="month-nav-container">
                     <button onclick="DeliveryApp.changeMonth(-1)" class="month-nav-btn" aria-label="Previous month">
                       <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
@@ -256,6 +256,7 @@
                       <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
                     </button>
                   </div>
+                  <input type="text" id="search-done" oninput="DeliveryApp.renderDoneQueue()" placeholder="Search Name or Order..." style="background:var(--bg-elevated); border:1px solid var(--border); border-radius:6px; padding:0.4rem 0.75rem; color:var(--text-primary); font-size:0.85rem; font-family:inherit; outline:none; width: 220px; height: 38px;" />
                 </div>
 
                 <div class="panel">
@@ -526,6 +527,9 @@
         const filterYear = this.currentDate.getFullYear();
         const filterMonth = this.currentDate.getMonth();
 
+        const searchInput = document.getElementById('search-done');
+        const query = searchInput ? searchInput.value.toLowerCase().trim() : '';
+
         // 1. Group activeTransactions by reference_id
         const groupedMap = {};
         this.activeTransactions.forEach(t => {
@@ -551,6 +555,15 @@
             continue;
           }
 
+          const customerName = txs[0].customer_name || (db ? db.customer_name : 'N/A');
+          if (query) {
+            const matchesName = customerName.toLowerCase().includes(query);
+            const matchesOrder = refId.toLowerCase().includes(query);
+            if (!matchesName && !matchesOrder) {
+              continue;
+            }
+          }
+
           // Use delivery booking delivered_at or transaction timestamps for completed date
           let dateCompletedStr = '';
           if (db && db.delivered_at) {
@@ -561,7 +574,7 @@
 
           this.consolidatedOrders.push({
             reference_id: refId,
-            customer_name: txs[0].customer_name || (db ? db.customer_name : 'N/A'),
+            customer_name: customerName,
             customer_city: txs[0].customer_city || (db ? db.customer_city : 'N/A'),
             txs: txs,
             db: db,
