@@ -285,9 +285,12 @@
           </div>
         </div>
       </div>
-      <div class="modal-footer" style="padding: 1rem 1.25rem;">
-        <button type="button" class="btn btn-outline" onclick="closeSupplierModal()">Cancel</button>
-        <button type="button" class="btn btn-primary" id="btn-save-supplier" onclick="saveSupplier()">Save Supplier</button>
+      <div class="modal-footer" style="padding: 1rem 1.25rem; display: flex; justify-content: space-between; align-items: center;">
+        <button type="button" class="btn btn-danger btn-sm" id="btn-delete-supplier" onclick="deleteCurrentSupplier()" style="background: rgba(220, 38, 38, 0.1); color: var(--danger); border: 1px solid rgba(220, 38, 38, 0.2); font-size: 0.8rem; display: none;">Delete</button>
+        <div style="display: flex; gap: 0.5rem; margin-left: auto;">
+          <button type="button" class="btn btn-outline" onclick="closeSupplierModal()">Cancel</button>
+          <button type="button" class="btn btn-primary" id="btn-save-supplier" onclick="saveSupplier()">Save Supplier</button>
+        </div>
       </div>
     </div>
   </div>
@@ -715,8 +718,8 @@
               <!-- Payment info -->
               <div style="margin-top:0.4rem; padding-top:0.4rem; border-top:1px solid var(--border); font-size:0.75rem; color:var(--text-secondary);">
                 <div style="font-weight:700; color:var(--text-muted); text-transform:uppercase; font-size:0.65rem; margin-bottom:0.15rem; letter-spacing: 0.03em;">Payment Details</div>
-                <div style="text-overflow:ellipsis; overflow:hidden; white-space:nowrap;">Name: <strong>${escapeHtml(s.payment_account_name || '—')}</strong></div>
-                <div style="text-overflow:ellipsis; overflow:hidden; white-space:nowrap;">No: <strong>${escapeHtml(s.payment_account_number || '—')}</strong></div>
+                <div style="text-overflow:ellipsis; overflow:hidden; white-space:nowrap;">Acct. Name: <strong>${escapeHtml(s.payment_account_name || '—')}</strong></div>
+                <div style="text-overflow:ellipsis; overflow:hidden; white-space:nowrap;">Acct. No: <strong>${escapeHtml(s.payment_account_number || '—')}</strong></div>
               </div>
             </div>
 
@@ -731,10 +734,11 @@
                 No QR Code
               </div>`}
 
-              <!-- Edit/Delete buttons -->
-              <div style="display:flex; gap:0.25rem; width: 100%;">
-                <button class="btn btn-outline btn-sm" onclick="window.editSupplier('${s.id}')" style="flex:1; height:24px; padding:0; font-size:0.7rem; justify-content:center;">Edit</button>
-                <button class="btn btn-outline btn-sm" onclick="window.deleteSupplier('${s.id}')" style="flex:1; height:24px; padding:0; font-size:0.7rem; color:var(--danger); border-color:rgba(239,68,68,0.2); justify-content:center;">Del</button>
+              <!-- Edit button (Pencil icon) -->
+              <div style="display:flex; justify-content:flex-end; width: 100%;">
+                <button class="btn btn-outline" onclick="window.editSupplier('${s.id}')" style="width:28px; height:28px; padding:0; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; color:var(--text-secondary); border-color:var(--border);" title="Edit Supplier">
+                  <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                </button>
               </div>
             </div>
           </div>
@@ -761,6 +765,7 @@
       document.getElementById('supplier-qr-photo-preview').src = '';
       document.getElementById('supplier-qr-placeholder').style.display = 'flex';
 
+      document.getElementById('btn-delete-supplier').style.display = 'none';
       document.getElementById('supplier-modal').classList.add('open');
     };
 
@@ -805,7 +810,24 @@
         placeholder.style.display = 'flex';
       }
 
+      document.getElementById('btn-delete-supplier').style.display = 'block';
       document.getElementById('supplier-modal').classList.add('open');
+    };
+
+    window.deleteCurrentSupplier = function() {
+      const id = document.getElementById('supplier-id').value;
+      if (!id) return;
+      showConfirmModal('Delete this supplier?', async () => {
+        try {
+          const { error } = await sb.from('suppliers').delete().eq('id', id);
+          if (error) throw error;
+          showToast('Supplier deleted successfully.');
+          closeSupplierModal();
+          await loadSuppliers();
+        } catch (err) {
+          showToast('Failed to delete supplier: ' + err.message, true);
+        }
+      });
     };
 
     window.deleteSupplier = function(id) {
