@@ -386,26 +386,33 @@
           .filter(a => Array.isArray(a.visibility) && a.visibility.includes('warehouse.member'))
           .map(a => a.name);
           
-        let whMemberEmails = new Set();
         if (whMemberAssignmentNames.length > 0) {
           const { data: empData } = await sb.from('employees')
-            .select('email, work_email')
+            .select('email, work_email, first_name, last_name')
             .eq('company_id', currentCompanyId)
             .in('assignment', whMemberAssignmentNames);
             
-          (empData || []).forEach(e => {
-            if (e.work_email) whMemberEmails.add(e.work_email.toLowerCase().trim());
-            if (e.email) whMemberEmails.add(e.email.toLowerCase().trim());
-          });
+          window.eligibleWarehouseEmployees = (empData || []).map(e => {
+            const email = (e.work_email || e.email || '').toLowerCase().trim();
+            const fullName = `${e.first_name || ''} ${e.last_name || ''}`.trim() || email;
+            
+            // Try to find matching tenant member
+            const member = SettingsPage.allTeamMembers.find(m => 
+              m.user_email && m.user_email.toLowerCase().trim() === email
+            );
+            
+            return {
+              email: email,
+              user_id: member ? member.user_id : null,
+              displayName: fullName
+            };
+          }).filter(e => e.email);
+        } else {
+          window.eligibleWarehouseEmployees = [];
         }
-        
-        // Filter the dropdown list to only show users with warehouse.member visibility
-        SettingsPage.allTeamMembers = SettingsPage.allTeamMembers.filter(m => {
-          if (!m.user_email) return false;
-          return whMemberEmails.has(m.user_email.toLowerCase().trim());
-        });
       } catch (err) {
         console.error('Failed to filter warehouse members:', err);
+        window.eligibleWarehouseEmployees = [];
       }
 
       await loadWarehouses();
@@ -557,12 +564,24 @@
       // Populate members dropdown (filter out already assigned managers and current user)
       const select = document.getElementById('edit-wh-add-manager-select');
       if (select) {
-        const existingManagerIds = new Set((wh.managers || []).map(m => m.user_id));
-        const eligibleMembers = SettingsPage.allTeamMembers.filter(m =>
-          !existingManagerIds.has(m.user_id) && m.user_id
+        // Collect emails of already assigned members
+        const assignedEmails = new Set((wh.managers || []).map(m => (m.employee_email || '').toLowerCase().trim()).filter(Boolean));
+        // Fallback for user_ids
+        (wh.managers || []).forEach(m => {
+          if (m.user_id && !m.employee_email) {
+            const member = SettingsPage.allTeamMembers.find(tm => tm.user_id === m.user_id);
+            if (member && member.user_email) {
+              assignedEmails.add(member.user_email.toLowerCase().trim());
+            }
+          }
+        });
+
+        const eligibleList = (window.eligibleWarehouseEmployees || []).filter(emp =>
+          !assignedEmails.has(emp.email)
         );
+
         select.innerHTML = '<option value="">-- Choose Member --</option>' +
-          eligibleMembers.map(m => `<option value="${m.user_id}">${escapeHtml(m.full_name || m.user_email || 'Unknown')}</option>`).join('');
+          eligibleList.map(emp => `<option value="${emp.email}" data-userid="${emp.user_id || ''}">${escapeHtml(emp.displayName)} (${escapeHtml(emp.email)})</option>`).join('');
       }
 
       // Reset add permission checkboxes to checked by default
@@ -654,9 +673,14 @@
       }
 
       listDiv.innerHTML = wh.managers.map(mgr => {
-        const member = SettingsPage.allTeamMembers.find(m => m.user_id === mgr.user_id);
-        const displayName = member ? (member.full_name || member.user_email || 'Unknown') : 'Unknown';
-        const email = member ? (member.user_email || '') : '';
+        // Try to find matching employee from eligible list by email
+        const emp = (window.eligibleWarehouseEmployees || []).find(e =>
+          e.email === (mgr.employee_email || '').toLowerCase().trim()
+        );
+        const member = mgr.user_id ? SettingsPage.allTeamMembers.find(m => m.user_id === mgr.user_id) : null;
+        
+        const displayName = emp ? emp.displayName : (member ? (member.full_name || member.user_email) : 'Unknown');
+        const email = mgr.employee_email || (member ? member.user_email : '');
         
         return `
           <div style="background:var(--bg-elevated); padding:0.6rem; border-radius:6px; border:1px solid var(--border); display:flex; flex-direction:column; gap:0.4rem;">
@@ -695,12 +719,17 @@
 
     window.addManagerFromModal = async function() {
       const whId = document.getElementById('edit-wh-id').value;
-      const userId = document.getElementById('edit-wh-add-manager-select').value;
-      if (!whId || !userId) return;
+      const select = document.getElementById('edit-wh-add-manager-select');
+      const email = select.value;
+      if (!whId || !email) return;
+
+      const selectedOption = select.options[select.selectedIndex];
+      const userId = selectedOption.getAttribute('data-userid') || null;
 
       const payload = {
         warehouse_id: whId,
-        user_id: userId,
+        user_id: userId ? userId : null,
+        employee_email: email,
         can_inspect: document.getElementById('add-wh-perm-inspect').checked,
         can_pack: document.getElementById('add-wh-perm-pack').checked,
         can_dispatch: document.getElementById('add-wh-perm-dispatch').checked,
@@ -717,16 +746,19 @@
         showToast('Member added successfully.');
         await loadWarehouses();
         
-        // Refresh select dropdown options
+        // Refresh dropdown list
         const wh = warehouses.find(w => w.id === whId);
-        const select = document.getElementById('edit-wh-add-manager-select');
-        if (select && wh) {
-          const existingManagerIds = new Set((wh.managers || []).map(m => m.user_id));
-          const eligibleMembers = SettingsPage.allTeamMembers.filter(m =>
-            !existingManagerIds.has(m.user_id) && m.user_id
-          );
+        if (wh) {
+          const assignedEmails = new Set((wh.managers || []).map(m => (m.employee_email || '').toLowerCase().trim()).filter(Boolean));
+          (wh.managers || []).forEach(m => {
+            if (m.user_id && !m.employee_email) {
+              const member = SettingsPage.allTeamMembers.find(tm => tm.user_id === m.user_id);
+              if (member && member.user_email) assignedEmails.add(member.user_email.toLowerCase().trim());
+            }
+          });
+          const eligibleList = (window.eligibleWarehouseEmployees || []).filter(emp => !assignedEmails.has(emp.email));
           select.innerHTML = '<option value="">-- Choose Member --</option>' +
-            eligibleMembers.map(m => `<option value="${m.user_id}">${escapeHtml(m.full_name || m.user_email || 'Unknown')}</option>`).join('');
+            eligibleList.map(emp => `<option value="${emp.email}" data-userid="${emp.user_id || ''}">${escapeHtml(emp.displayName)} (${escapeHtml(emp.email)})</option>`).join('');
         }
 
         renderWarehouseModalManagers();
@@ -743,17 +775,21 @@
           showToast('Member removed successfully.');
           await loadWarehouses();
           
-          // Refresh select dropdown options
+          // Refresh dropdown list
           const whId = document.getElementById('edit-wh-id').value;
           const wh = warehouses.find(w => w.id === whId);
           const select = document.getElementById('edit-wh-add-manager-select');
           if (select && wh) {
-            const existingManagerIds = new Set((wh.managers || []).map(m => m.user_id));
-            const eligibleMembers = SettingsPage.allTeamMembers.filter(m =>
-              !existingManagerIds.has(m.user_id) && m.user_id
-            );
+            const assignedEmails = new Set((wh.managers || []).map(m => (m.employee_email || '').toLowerCase().trim()).filter(Boolean));
+            (wh.managers || []).forEach(m => {
+              if (m.user_id && !m.employee_email) {
+                const member = SettingsPage.allTeamMembers.find(tm => tm.user_id === m.user_id);
+                if (member && member.user_email) assignedEmails.add(member.user_email.toLowerCase().trim());
+              }
+            });
+            const eligibleList = (window.eligibleWarehouseEmployees || []).filter(emp => !assignedEmails.has(emp.email));
             select.innerHTML = '<option value="">-- Choose Member --</option>' +
-              eligibleMembers.map(m => `<option value="${m.user_id}">${escapeHtml(m.full_name || m.user_email || 'Unknown')}</option>`).join('');
+              eligibleList.map(emp => `<option value="${emp.email}" data-userid="${emp.user_id || ''}">${escapeHtml(emp.displayName)} (${escapeHtml(emp.email)})</option>`).join('');
           }
 
           renderWarehouseModalManagers();

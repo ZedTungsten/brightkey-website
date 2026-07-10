@@ -25,7 +25,8 @@ CREATE TABLE public.warehouses (
 CREATE TABLE public.warehouse_managers (
   id           uuid    PRIMARY KEY DEFAULT gen_random_uuid(),
   warehouse_id uuid    NOT NULL REFERENCES public.warehouses(id) ON DELETE CASCADE,
-  user_id      uuid    NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  user_id      uuid    REFERENCES auth.users(id) ON DELETE CASCADE,
+  employee_email text,
   can_inspect  boolean NOT NULL DEFAULT true,
   can_pack     boolean NOT NULL DEFAULT true,
   can_dispatch boolean NOT NULL DEFAULT true,
