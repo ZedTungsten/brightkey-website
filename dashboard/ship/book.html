@@ -281,6 +281,12 @@
         <input type="text" id="cship-ref-order" class="form-input" readonly style="background:var(--bg-elevated); cursor:not-allowed;" />
       </div>
 
+      <!-- Warehouse -->
+      <div class="form-group" style="margin-bottom: 0.75rem;">
+        <label class="form-label">Warehouse</label>
+        <select id="cship-warehouse" class="form-input" style="font-size:0.82rem;"></select>
+      </div>
+
       <!-- Customer Name & Existing Customer Checkbox -->
       <div class="form-group" style="margin-bottom: 0.75rem;">
         <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -484,6 +490,7 @@
       deliveryBookings: [],
       allProducts: [],
       existingCustomers: [],
+      warehouses: [],
       cshipPhotoBlob: null,
       cshipStream: null,
       selectedOrder: null,
@@ -542,6 +549,12 @@
             .order('sku');
           if (pErr) throw pErr;
           this.allProducts = pData || [];
+
+          const { data: wData, error: wErr } = await sb.from('warehouses')
+            .select('id, name')
+            .order('name');
+          if (wErr) throw wErr;
+          this.warehouses = wData || [];
 
           this.renderSendOutQueue();
         } catch (err) {
@@ -736,6 +749,12 @@
         document.getElementById('cship-photo-preview').style.display = 'none';
         document.getElementById('cship-photo-preview').src = '';
         document.getElementById('cship-placeholder').style.display = 'flex';
+
+        // Populate warehouses dropdown
+        const whSelect = document.getElementById('cship-warehouse');
+        if (whSelect) {
+          whSelect.innerHTML = this.warehouses.map(w => `<option value="${w.id}">${esc(w.name)}</option>`).join('');
+        }
 
         // Clear SKU rows and add one empty row
         document.getElementById('cship-sku-list').innerHTML = '';
@@ -966,7 +985,11 @@
         const btn = document.getElementById('btn-submit-cship');
         if (btn.disabled) return;
 
+        const typeEl = document.querySelector('input[name="cship-type"]:checked');
+        const isReceive = typeEl && typeEl.value === 'receive';
+
         const refOrder = document.getElementById('cship-ref-order').value;
+        const warehouseId = document.getElementById('cship-warehouse').value;
         const customerName = document.getElementById('cship-customer-name').value.trim();
         const cityProvince = document.getElementById('cship-city-province').value.trim();
         const address = document.getElementById('cship-address').value.trim();
@@ -981,6 +1004,10 @@
         }
         if (!this.cshipPhotoBlob) {
           Toast.error('Packed photo proof is required.');
+          return;
+        }
+        if (!warehouseId) {
+          Toast.error('Please select a warehouse.');
           return;
         }
 
@@ -1035,20 +1062,53 @@
           const sb = window.BKAuth.sb;
           const now = new Date().toISOString();
 
+          // Define transaction details based on shipment type
+          const statusVal = isReceive ? 'ordered' : 'packed';
+
           const txRows = skuRows.map(row => ({
             reference_id: refOrder,
             sku: row.sku,
             quantity: row.qty,
             type: 'customer_order',
-            status: 'packed',
+            status: statusVal,
             customer_name: customerName,
             customer_city: cityProvince,
             packed_photo_url: photoUrl,
             company_id: this.companyId,
-            warehouse_id: this.activeWarehouseId,
+            warehouse_id: warehouseId,
             created_at: now,
             updated_at: now
           }));
+
+          // If Send Out, decrement available stocks and increment packed stocks directly
+          if (!isReceive) {
+            for (const row of skuRows) {
+              const { data: invRow, error: invErr } = await sb.from('inventory')
+                .select('*')
+                .eq('sku', row.sku)
+                .eq('warehouse_id', warehouseId);
+
+              if (invErr) throw invErr;
+
+              if (!invRow || invRow.length === 0) {
+                // If inventory record doesn't exist yet, insert one
+                const { error: insErr } = await sb.from('inventory').insert([{
+                  sku: row.sku,
+                  available: 0,
+                  packed: row.qty,
+                  warehouse_id: warehouseId
+                }]);
+                if (insErr) throw insErr;
+              } else {
+                const inv = invRow[0];
+                const { error: updErr } = await sb.from('inventory').update({
+                  available: Math.max(0, inv.available - row.qty),
+                  packed: (inv.packed || 0) + row.qty
+                }).eq('id', inv.id);
+                if (updErr) throw updErr;
+              }
+            }
+          }
 
           const { error: txErr } = await sb.from('inventory_transactions').insert(txRows);
           if (txErr) throw txErr;
