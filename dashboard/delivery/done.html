@@ -541,18 +541,21 @@
         for (const [refId, txs] of Object.entries(groupedMap)) {
           const db = this.deliveryBookings.find(b => b.reference_id === refId);
           
-          let dateStr = '';
-          if (db) {
-            dateStr = db.delivered_at || db.created_at;
-          } else {
-            dateStr = txs[0].updated_at || txs[0].created_at;
-          }
+          // Use transaction's created_at (order booking date) to filter months, aligning with all-orders.html
+          const filterDateStr = txs[0].created_at;
+          if (!filterDateStr) continue;
           
-          if (!dateStr) continue;
-          
-          const d = new Date(dateStr);
+          const d = new Date(filterDateStr);
           if (d.getFullYear() !== filterYear || d.getMonth() !== filterMonth) {
             continue;
+          }
+
+          // Use delivery booking delivered_at or transaction timestamps for completed date
+          let dateCompletedStr = '';
+          if (db && db.delivered_at) {
+            dateCompletedStr = db.delivered_at;
+          } else {
+            dateCompletedStr = txs[0].timestamp_received || txs[0].timestamp_dispatched || txs[0].updated_at || txs[0].created_at;
           }
 
           this.consolidatedOrders.push({
@@ -561,7 +564,7 @@
             customer_city: txs[0].customer_city || (db ? db.customer_city : 'N/A'),
             txs: txs,
             db: db,
-            dateCompleted: dateStr,
+            dateCompleted: dateCompletedStr,
             status: txs.some(t => t.status === 'received') ? 'received' : 'dispatched'
           });
         }
