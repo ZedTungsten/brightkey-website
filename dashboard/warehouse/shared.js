@@ -22,7 +22,11 @@ window.WarehousePage = {
   set activeTransactions(val) {
     this._activeTransactions = (val || []).filter(tx => {
       if (tx.type === 'customer_order') {
-        return tx.reference_id && tx.reference_id.startsWith('ORD-');
+        return tx.reference_id && (
+          tx.reference_id.startsWith('ORD-') || 
+          tx.reference_id.startsWith('RCV-') || 
+          tx.reference_id.startsWith('SND-')
+        );
       }
       return true;
     });
