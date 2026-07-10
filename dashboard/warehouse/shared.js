@@ -193,7 +193,7 @@ window.WarehousePage = {
 
   // 10. Update Badge Counts
   updateBadgeCounts: function() {
-    const receiveCount = this.activeTransactions.filter(t => ['ordered', 'returned', 'cancelled'].includes(t.status)).length;
+    const receiveCount = this.activeTransactions.filter(t => ['ordered', 'returned', 'cancelled'].includes(t.status) && t.type !== 'supplier_order').length;
     const inspectCount = [...new Set(this.activeTransactions.filter(t => t.status === 'reserved' && t.type === 'customer_order').map(t => t.reference_id))].length;
     const packCount = [...new Set(this.activeTransactions.filter(t => t.status === 'inspect' && t.type === 'customer_order').map(t => t.reference_id))].length;
     

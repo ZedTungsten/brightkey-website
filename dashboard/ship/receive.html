@@ -599,7 +599,7 @@
           
           const { data: txs, error: txErr } = await sb.from('inventory_transactions')
             .select('*')
-            .eq('type', 'customer_order');
+            .in('type', ['customer_order', 'supplier_order']);
           if (txErr) throw txErr;
           this.activeTransactions = txs || [];
 
@@ -628,7 +628,7 @@
 
           this.renderReceiveQueue();
         } catch (err) {
-          console.error(err);
+          console.error('Error loading ship/receive data:', err);
           Toast.error('Failed to load logistics queue: ' + err.message);
         }
       },
@@ -640,7 +640,7 @@
 
         const dispatchQueue = this.activeTransactions.filter(t => {
           if (t.status !== 'ordered') return false;
-          if (!t.reference_id || !t.reference_id.startsWith('RCV-')) return false;
+          if (!t.reference_id || (!t.reference_id.startsWith('RCV-') && !t.reference_id.startsWith('SUP-'))) return false;
           return true;
         });
 
