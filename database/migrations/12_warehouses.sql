@@ -14,6 +14,9 @@ CREATE TABLE public.warehouses (
   id          uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id   uuid        NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
   name        text        NOT NULL,
+  street_address text,
+  city        text,
+  province    text,
   is_active   boolean     NOT NULL DEFAULT true,
   created_at  timestamptz NOT NULL DEFAULT now()
 );

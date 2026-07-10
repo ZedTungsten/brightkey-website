@@ -141,43 +141,60 @@
     </div>
   </div>
 
-  <!-- Assign Manager Modal -->
-  <div class="modal-overlay" id="assign-manager-modal">
+  <!-- Edit Warehouse Modal -->
+  <div class="modal-overlay" id="warehouse-modal">
     <div class="modal-card" style="width: 520px; max-width: 92%;">
       <div class="modal-header">
-        <div class="modal-title">Assign Warehouse Manager</div>
-        <button class="modal-close" onclick="closeAssignManagerModal()">
+        <div class="modal-title" id="warehouse-modal-title">Edit Warehouse</div>
+        <button class="modal-close" onclick="closeWarehouseModal()">
           <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
       </div>
-      <div class="modal-body">
+      <div class="modal-body" style="display:flex; flex-direction:column; gap:0.75rem; padding: 1.25rem;">
+        <input type="hidden" id="edit-wh-id" />
+        
         <div class="form-group">
-          <label class="form-label">Warehouse</label>
-          <div id="assign-modal-wh-name" style="font-weight:700; color:var(--text-primary); font-size:0.95rem;"></div>
+          <label class="form-label">Warehouse Name</label>
+          <input type="text" id="edit-wh-name" class="form-input" placeholder="Warehouse name" style="background: var(--bg-base); color: var(--text-primary); border: 1px solid var(--border); padding: 0.5rem 0.75rem; border-radius: 6px; font-size: 0.85rem; outline: none;" required />
         </div>
+        
         <div class="form-group">
-          <label class="form-label" for="assign-user-select">Select Team Member</label>
-          <select id="assign-user-select" class="form-select">
-            <option value="">-- Choose a member --</option>
-          </select>
-          <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.3rem;">
-            Only Owner and Admin can manage warehouses by default. Users with Logistics access are view-only in Fulfillment. This assigns specific management permissions.
+          <label class="form-label">Street Address</label>
+          <input type="text" id="edit-wh-street" class="form-input" placeholder="123 Street Name" style="background: var(--bg-base); color: var(--text-primary); border: 1px solid var(--border); padding: 0.5rem 0.75rem; border-radius: 6px; font-size: 0.85rem; outline: none;" />
+        </div>
+        
+        <div style="display: flex; gap: 0.75rem;">
+          <div class="form-group" style="flex: 1;">
+            <label class="form-label">City</label>
+            <input type="text" id="edit-wh-city" class="form-input" placeholder="City" style="background: var(--bg-base); color: var(--text-primary); border: 1px solid var(--border); padding: 0.5rem 0.75rem; border-radius: 6px; font-size: 0.85rem; outline: none;" />
+          </div>
+          <div class="form-group" style="flex: 1;">
+            <label class="form-label">Province</label>
+            <input type="text" id="edit-wh-province" class="form-input" placeholder="Province" style="background: var(--bg-base); color: var(--text-primary); border: 1px solid var(--border); padding: 0.5rem 0.75rem; border-radius: 6px; font-size: 0.85rem; outline: none;" />
           </div>
         </div>
-        <div class="form-group">
-          <label class="form-label">Permissions</label>
-          <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.6rem;">
-            <label class="perm-check"><input type="checkbox" id="perm-pack" checked /> Pack</label>
-            <label class="perm-check"><input type="checkbox" id="perm-dispatch" checked /> Dispatch</label>
-            <label class="perm-check"><input type="checkbox" id="perm-cancel" checked /> Cancel</label>
-            <label class="perm-check"><input type="checkbox" id="perm-receive" checked /> Receive</label>
-            <label class="perm-check" style="grid-column: span 2;"><input type="checkbox" id="perm-manage-all-orders" checked /> Manage All Orders</label>
+
+        <div style="margin-top:0.4rem; padding-top:0.4rem; border-top:1px solid var(--border);">
+          <label class="form-label" style="font-weight:700; margin-bottom:0.4rem;">Warehouse Managers</label>
+          
+          <div style="display:flex; gap:0.5rem; margin-bottom:0.5rem;">
+            <select id="edit-wh-add-manager-select" class="form-select" style="flex:1; background:var(--bg-elevated); color:var(--text-primary); border:1px solid var(--border); padding:0.5rem 0.75rem; border-radius:6px; font-size:0.85rem; outline:none;">
+              <option value="">-- Choose Manager --</option>
+            </select>
+            <button type="button" class="btn btn-outline" onclick="addManagerFromModal()" style="height:36px;">Add</button>
+          </div>
+          
+          <div id="edit-wh-managers-list" style="display:flex; flex-direction:column; gap:0.4rem; max-height:160px; overflow-y:auto; padding-right:4px;">
+            <!-- Injected dynamically -->
           </div>
         </div>
       </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-outline" onclick="closeAssignManagerModal()">Cancel</button>
-        <button type="button" class="btn btn-primary" onclick="saveManagerAssignment()">Assign Manager</button>
+      <div class="modal-footer" style="display:flex; justify-content:space-between; align-items:center; padding: 1rem 1.25rem; border-top: 1px solid var(--border);">
+        <button type="button" id="btn-delete-warehouse" class="btn btn-danger" onclick="deleteCurrentWarehouse()">Delete</button>
+        <div style="display:flex; gap:0.5rem;">
+          <button type="button" class="btn btn-outline" onclick="closeWarehouseModal()">Cancel</button>
+          <button type="button" id="btn-save-warehouse" class="btn btn-primary" onclick="saveWarehouse()">Save</button>
+        </div>
       </div>
     </div>
   </div>
@@ -407,97 +424,37 @@
       }
 
       container.innerHTML = warehouses.map((wh, idx) => {
-        const managersHtml = buildManagersTableHtml(wh, idx);
+        const addressText = [wh.street_address, wh.city, wh.province].filter(Boolean).join(', ') || 'No address configured';
         return `
-          <div class="wh-card" id="wh-card-${wh.id}">
-            <div class="wh-card-header">
-              <div class="wh-number">${idx + 1}</div>
-              <input
-                class="wh-name-input"
-                id="wh-name-${wh.id}"
-                type="text"
-                value="${escapeHtml(wh.name)}"
-                placeholder="Warehouse name"
-                onblur="saveWarehouseName('${wh.id}', this.value)"
-                onkeydown="if(event.key==='Enter') this.blur()"
-              />
-              <div class="wh-actions">
-                <div class="toggle-wrap">
+          <div class="wh-card" id="wh-card-${wh.id}" style="background:var(--bg-surface); border:1px solid var(--border); border-radius:8px; padding:1rem; display:flex; flex-direction:column; gap:0.5rem; box-shadow:var(--shadow-sm); position:relative;">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:0.5rem;">
+              <div style="display:flex; gap:0.75rem; align-items:flex-start;">
+                <div class="wh-number" style="margin-top:0.1rem; width:22px; height:22px; background:rgba(6,182,212,0.1); color:var(--cyan-light); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:0.75rem; font-weight:700; flex-shrink:0;">${idx + 1}</div>
+                <div>
+                  <h4 style="margin:0; font-size:0.9rem; font-weight:700; color:var(--text-primary);">${escapeHtml(wh.name)}</h4>
+                  <div style="font-size:0.75rem; color:var(--text-secondary); margin-top:0.25rem; display:flex; align-items:center; gap:0.35rem;">
+                    <svg viewBox="0 0 24 24" width="11" height="11" stroke="currentColor" stroke-width="2.5" fill="none" style="color:var(--text-muted); flex-shrink: 0;"><path d="M12 2a10 10 0 0 0-10 10c0 5.25 10 12 10 12s10-6.75 10-12a10 10 0 0 0-10-10z"/><circle cx="12" cy="10" r="3"/></svg>
+                    <span style="word-break: break-word;">${escapeHtml(addressText)}</span>
+                  </div>
+                </div>
+              </div>
+              <div style="display:flex; align-items:center; gap:0.6rem; flex-shrink:0;">
+                <div class="toggle-wrap" style="gap:0.35rem;">
                   <label class="toggle-switch" title="${wh.is_active ? 'Active' : 'Inactive'}">
                     <input type="checkbox" ${wh.is_active ? 'checked' : ''} onchange="toggleWarehouseActive('${wh.id}', this.checked)" />
                     <span class="toggle-slider"></span>
                   </label>
-                  <span id="wh-status-${wh.id}" style="color:${wh.is_active ? 'var(--success)' : 'var(--text-muted)'}; font-size:0.8rem;">${wh.is_active ? 'Active' : 'Inactive'}</span>
+                  <span id="wh-status-${wh.id}" style="color:${wh.is_active ? 'var(--success)' : 'var(--text-muted)'}; font-size:0.75rem;">${wh.is_active ? 'Active' : 'Inactive'}</span>
                 </div>
-                ${warehouses.length > 1 ? `
-                <button class="btn btn-danger" style="padding:0.3rem 0.55rem;" onclick="deleteWarehouse('${wh.id}')" title="Delete warehouse">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
-                </button>` : ''}
-              </div>
-            </div>
-            <div class="wh-card-body">
-              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
-                <div style="font-size:0.78rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-muted);">
-                  Assigned Managers
-                  <span style="font-weight:400; text-transform:none; font-size:0.75rem; color:var(--text-muted); margin-left:0.4rem;">(Owner &amp; Admin manage all warehouses by default)</span>
-                </div>
-                <button class="btn btn-outline btn-sm" onclick="openAssignManagerModal('${wh.id}')">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                  Assign
+                
+                <button class="btn btn-outline" onclick="openEditWarehouseModal('${wh.id}')" style="width:28px; height:28px; padding:0; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; color:var(--text-secondary); border-color:var(--border);" title="Edit Warehouse">
+                  <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
                 </button>
               </div>
-              ${managersHtml}
             </div>
           </div>
         `;
       }).join('');
-    }
-
-    function buildManagersTableHtml(wh) {
-      if (!wh.managers || wh.managers.length === 0) {
-        return `<div style="font-size:0.82rem; color:var(--text-muted); padding:0.5rem 0;">No managers assigned yet.</div>`;
-      }
-
-      const rows = wh.managers.map(mgr => {
-        const member = SettingsPage.allTeamMembers.find(m => m.user_id === mgr.user_id);
-        const displayName = member ? (member.full_name || member.user_email || 'Unknown') : 'Unknown';
-        const email = member ? (member.user_email || '') : '';
-
-        const perms = [
-          { key: 'pack', label: 'Pack', val: mgr.can_pack },
-          { key: 'dispatch', label: 'Dispatch', val: mgr.can_dispatch },
-          { key: 'cancel', label: 'Cancel', val: mgr.can_cancel },
-          { key: 'receive', label: 'Receive', val: mgr.can_receive },
-          { key: 'manage_all_orders', label: 'Manage All Orders', val: mgr.can_manage_all_orders },
-        ];
-        const chipHtml = perms.map(p => `<span class="perm-chip ${p.val ? 'on' : ''}">${p.label}</span>`).join('');
-
-        return `
-          <tr>
-            <td>
-              <div style="font-weight:600; font-size:0.83rem;">${escapeHtml(displayName)}</div>
-              <div style="font-size:0.75rem; color:var(--text-muted);">${escapeHtml(email)}</div>
-            </td>
-            <td><div class="perm-chips">${chipHtml}</div></td>
-            <td style="text-align:right;">
-              <button class="btn btn-danger" style="padding:0.28rem 0.55rem; font-size:0.73rem;" onclick="removeManager('${wh.id}', '${mgr.id}')">Remove</button>
-            </td>
-          </tr>
-        `;
-      }).join('');
-
-      return `
-        <table class="wh-managers-table">
-          <thead>
-            <tr>
-              <th>Manager</th>
-              <th>Permissions</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>${rows}</tbody>
-        </table>
-      `;
     }
 
     window.addWarehouse = async function() {
@@ -540,116 +497,176 @@
       }
     };
 
-    window.saveWarehouseName = async function(whId, newName) {
-      const name = (newName || '').trim();
+    window.openEditWarehouseModal = function(whId) {
+      const wh = warehouses.find(w => w.id === whId);
+      if (!wh) return;
+
+      document.getElementById('edit-wh-id').value = wh.id;
+      document.getElementById('edit-wh-name').value = wh.name || '';
+      document.getElementById('edit-wh-street').value = wh.street_address || '';
+      document.getElementById('edit-wh-city').value = wh.city || '';
+      document.getElementById('edit-wh-province').value = wh.province || '';
+
+      // Populate managers dropdown (filter out already assigned managers and current user)
+      const select = document.getElementById('edit-wh-add-manager-select');
+      if (select) {
+        const existingManagerIds = new Set((wh.managers || []).map(m => m.user_id));
+        const eligibleMembers = SettingsPage.allTeamMembers.filter(m =>
+          !existingManagerIds.has(m.user_id) && m.user_id
+        );
+        select.innerHTML = '<option value="">-- Choose Manager --</option>' +
+          eligibleMembers.map(m => `<option value="${m.user_id}">${escapeHtml(m.full_name || m.user_email || 'Unknown')}</option>`).join('');
+      }
+
+      renderWarehouseModalManagers();
+      document.getElementById('warehouse-modal').classList.add('open');
+    };
+
+    window.closeWarehouseModal = function() {
+      document.getElementById('warehouse-modal').classList.remove('open');
+    };
+
+    window.saveWarehouse = async function() {
+      const whId = document.getElementById('edit-wh-id').value;
+      const name = document.getElementById('edit-wh-name').value.trim();
+      const street = document.getElementById('edit-wh-street').value.trim();
+      const city = document.getElementById('edit-wh-city').value.trim();
+      const province = document.getElementById('edit-wh-province').value.trim();
+
       if (!name) {
-        const wh = warehouses.find(w => w.id === whId);
-        if (wh) document.getElementById(`wh-name-${whId}`).value = wh.name;
+        showToast('Warehouse name is required.', true);
         return;
       }
-      const wh = warehouses.find(w => w.id === whId);
-      if (wh && wh.name === name) return; 
+
+      const btn = document.getElementById('btn-save-warehouse');
+      btn.disabled = true;
+      const originalText = btn.textContent;
+      btn.innerHTML = `<span class="bk-spinner" style="width:12px; height:12px; border-width:2px; display:inline-block; vertical-align:middle; margin-right:6px;"></span>Saving...`;
+
       try {
-        const { error } = await sb.from('warehouses').update({ name }).eq('id', whId);
+        const { error } = await sb
+          .from('warehouses')
+          .update({
+            name: name,
+            street_address: street,
+            city: city,
+            province: province
+          })
+          .eq('id', whId);
+
         if (error) throw error;
-        if (wh) wh.name = name;
-        showToast('Warehouse name saved.');
+        showToast('Warehouse updated successfully.');
+        closeWarehouseModal();
+        await loadWarehouses();
       } catch (err) {
-        showToast('Failed to save name: ' + err.message, true);
+        showToast('Failed to update warehouse: ' + err.message, true);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = originalText;
       }
     };
 
-    window.deleteWarehouse = function(whId) {
+    window.deleteCurrentWarehouse = function() {
+      const whId = document.getElementById('edit-wh-id').value;
+      if (!whId) return;
+
       if (warehouses.length <= 1) {
-        showToast('Cannot delete: at least one warehouse is required.', true);
+        showToast('Cannot delete the only remaining warehouse.', true);
         return;
       }
-      showConfirmModal('Are you sure you want to delete this warehouse? All assigned managers will be removed.', async () => {
+
+      showConfirmModal('Delete this warehouse? This action cannot be undone and will affect inventory records associated with it.', async () => {
         try {
           const { error } = await sb.from('warehouses').delete().eq('id', whId);
           if (error) throw error;
-          warehouses = warehouses.filter(w => w.id !== whId);
-          renderWarehouses();
-          showToast('Warehouse deleted.');
+          showToast('Warehouse deleted successfully.');
+          closeWarehouseModal();
+          await loadWarehouses();
         } catch (err) {
           showToast('Failed to delete warehouse: ' + err.message, true);
         }
       });
     };
 
-    window.openAssignManagerModal = function(whId) {
-      activeWarehouseId = whId;
+    window.renderWarehouseModalManagers = function() {
+      const whId = document.getElementById('edit-wh-id').value;
       const wh = warehouses.find(w => w.id === whId);
-      document.getElementById('assign-modal-wh-name').textContent = wh ? wh.name : '';
+      const listDiv = document.getElementById('edit-wh-managers-list');
+      if (!listDiv || !wh) return;
 
-      const select = document.getElementById('assign-user-select');
-      const existingManagerIds = new Set((wh?.managers || []).map(m => m.user_id));
+      if (!wh.managers || wh.managers.length === 0) {
+        listDiv.innerHTML = '<div style="font-size:0.8rem; color:var(--text-muted); padding:0.5rem 0;">No managers assigned yet.</div>';
+        return;
+      }
 
-      const eligibleMembers = SettingsPage.allTeamMembers.filter(m =>
-        !existingManagerIds.has(m.user_id) &&
-        m.user_id &&
-        m.user_id !== currentUser.id
-      );
-
-      select.innerHTML = '<option value="">-- Choose a member --</option>';
-      eligibleMembers.forEach(m => {
-        const opt = document.createElement('option');
-        opt.value = m.user_id;
-        opt.textContent = (m.full_name || m.user_email) + (m.full_name ? ` (${m.user_email})` : '');
-        select.appendChild(opt);
-      });
-
-      document.getElementById('perm-pack').checked = true;
-      document.getElementById('perm-dispatch').checked = true;
-      document.getElementById('perm-cancel').checked = true;
-      document.getElementById('perm-receive').checked = true;
-      document.getElementById('perm-manage-all-orders').checked = true;
-
-      document.getElementById('assign-manager-modal').classList.add('open');
+      listDiv.innerHTML = wh.managers.map(mgr => {
+        const member = SettingsPage.allTeamMembers.find(m => m.user_id === mgr.user_id);
+        const displayName = member ? (member.full_name || member.user_email || 'Unknown') : 'Unknown';
+        const email = member ? (member.user_email || '') : '';
+        
+        return `
+          <div style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-elevated); padding:0.4rem 0.6rem; border-radius:6px; border:1px solid var(--border);">
+            <div>
+              <div style="font-size:0.83rem; font-weight:600; color:var(--text-primary);">${escapeHtml(displayName)}</div>
+              <div style="font-size:0.72rem; color:var(--text-muted);">${escapeHtml(email)}</div>
+            </div>
+            <button type="button" class="btn btn-danger btn-sm" style="padding:0.15rem 0.4rem; font-size:0.75rem;" onclick="removeManagerFromModal('${mgr.id}')">Remove</button>
+          </div>
+        `;
+      }).join('');
     };
 
-    window.closeAssignManagerModal = function() {
-      document.getElementById('assign-manager-modal').classList.remove('open');
-      activeWarehouseId = null;
-    };
-
-    window.saveManagerAssignment = async function() {
-      const userId = document.getElementById('assign-user-select').value;
-      if (!userId) { showToast('Please select a team member.', true); return; }
-      if (!activeWarehouseId) return;
-
-      const payload = {
-        warehouse_id: activeWarehouseId,
-        user_id: userId,
-        can_pack: document.getElementById('perm-pack').checked,
-        can_dispatch: document.getElementById('perm-dispatch').checked,
-        can_cancel: document.getElementById('perm-cancel').checked,
-        can_receive: document.getElementById('perm-receive').checked,
-        can_manage_all_orders: document.getElementById('perm-manage-all-orders').checked,
-      };
+    window.addManagerFromModal = async function() {
+      const whId = document.getElementById('edit-wh-id').value;
+      const userId = document.getElementById('edit-wh-add-manager-select').value;
+      if (!whId || !userId) return;
 
       try {
-        const { data, error } = await sb.from('warehouse_managers').insert([payload]).select().single();
+        const { error } = await sb.from('warehouse_managers').insert([{ warehouse_id: whId, user_id: userId }]);
         if (error) throw error;
-        const wh = warehouses.find(w => w.id === activeWarehouseId);
-        if (wh) wh.managers.push(data);
-        closeAssignManagerModal();
-        renderWarehouses();
-        showToast('Manager assigned successfully.');
+        showToast('Manager added successfully.');
+        await loadWarehouses();
+        
+        // Refresh select dropdown options
+        const wh = warehouses.find(w => w.id === whId);
+        const select = document.getElementById('edit-wh-add-manager-select');
+        if (select && wh) {
+          const existingManagerIds = new Set((wh.managers || []).map(m => m.user_id));
+          const eligibleMembers = SettingsPage.allTeamMembers.filter(m =>
+            !existingManagerIds.has(m.user_id) && m.user_id
+          );
+          select.innerHTML = '<option value="">-- Choose Manager --</option>' +
+            eligibleMembers.map(m => `<option value="${m.user_id}">${escapeHtml(m.full_name || m.user_email || 'Unknown')}</option>`).join('');
+        }
+
+        renderWarehouseModalManagers();
       } catch (err) {
-        showToast('Failed to assign manager: ' + err.message, true);
+        showToast('Failed to add manager: ' + err.message, true);
       }
     };
 
-    window.removeManager = function(whId, managerId) {
-      showConfirmModal('Remove this manager from the warehouse?', async () => {
+    window.removeManagerFromModal = async function(mgrId) {
+      showConfirmModal('Remove this manager?', async () => {
         try {
-          const { error } = await sb.from('warehouse_managers').delete().eq('id', managerId);
+          const { error } = await sb.from('warehouse_managers').delete().eq('id', mgrId);
           if (error) throw error;
+          showToast('Manager removed successfully.');
+          await loadWarehouses();
+          
+          // Refresh select dropdown options
+          const whId = document.getElementById('edit-wh-id').value;
           const wh = warehouses.find(w => w.id === whId);
-          if (wh) wh.managers = wh.managers.filter(m => m.id !== managerId);
-          renderWarehouses();
-          showToast('Manager removed.');
+          const select = document.getElementById('edit-wh-add-manager-select');
+          if (select && wh) {
+            const existingManagerIds = new Set((wh.managers || []).map(m => m.user_id));
+            const eligibleMembers = SettingsPage.allTeamMembers.filter(m =>
+              !existingManagerIds.has(m.user_id) && m.user_id
+            );
+            select.innerHTML = '<option value="">-- Choose Manager --</option>' +
+              eligibleMembers.map(m => `<option value="${m.user_id}">${escapeHtml(m.full_name || m.user_email || 'Unknown')}</option>`).join('');
+          }
+
+          renderWarehouseModalManagers();
         } catch (err) {
           showToast('Failed to remove manager: ' + err.message, true);
         }
