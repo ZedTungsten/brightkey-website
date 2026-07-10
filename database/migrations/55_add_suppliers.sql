@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS public.suppliers (
   email TEXT,
   email_2 TEXT,
   website TEXT,
+  tin TEXT,
   payment_account_name TEXT,
   payment_account_number TEXT,
   qr_image_url TEXT,
