@@ -626,6 +626,10 @@
           if (wErr) throw wErr;
           this.warehouses = wData || [];
 
+          const { data: supsData, error: supsErr } = await sb.from('suppliers').select('id, name, city');
+          if (supsErr) throw supsErr;
+          this.suppliers = supsData || [];
+
           this.renderReceiveQueue();
         } catch (err) {
           console.error('Error loading ship/receive data:', err);
@@ -653,11 +657,19 @@
         const groups = {};
         dispatchQueue.forEach(t => {
           const refId = t.reference_id || 'N/A';
+          let resolvedCity = t.customer_city || 'N/A';
+          if (t.type === 'supplier_order') {
+            const foundSup = (this.suppliers || []).find(s => s.name === t.customer_name);
+            if (foundSup && foundSup.city) {
+              resolvedCity = foundSup.city;
+            }
+          }
+
           if (!groups[refId]) {
             groups[refId] = {
               reference_id: refId,
               customer_name: t.customer_name || 'N/A',
-              customer_city: t.customer_city || 'N/A',
+              customer_city: resolvedCity,
               packed_photo_url: t.packed_photo_url || '',
               items: []
             };
