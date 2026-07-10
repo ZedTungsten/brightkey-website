@@ -312,7 +312,7 @@
           const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
 
           try {
-            const [productsRes, bookingsRes, accountsRes, journalRes] = await Promise.all([
+            const [productsRes, bookingsRes, accountsRes, journalRes, deliveryRes] = await Promise.all([
               sb.from('products').select('sku, title, dealer_price, count_inventory, category'),
               sb.from('installation_bookings')
                 .select('scheduled_date, order_no, status, product_skus, product_qtys')
@@ -327,7 +327,12 @@
                 .select('account, debit, date')
                 .eq('company_id', this.companyId)
                 .gte('date', startDate)
-                .lte('date', endDate)
+                .lte('date', endDate),
+              sb.from('delivery_bookings')
+                .select('reference_id, base_fee, tip_1, tip_2, toll, delivered_at, status')
+                .eq('status', 'delivered')
+                .gte('delivered_at', startDate)
+                .lte('delivered_at', endDate)
             ]);
 
             this.products = productsRes.data || [];
@@ -335,6 +340,7 @@
             this.costHistory = [];
             this.journalAccounts = accountsRes.data || [];
             this.journalEntries = journalRes.data || [];
+            this.deliveryBookings = deliveryRes.data || [];
 
             try {
               const { data: histData, error: histErr } = await sb.from('product_cost_history')
@@ -499,30 +505,6 @@
           const container = document.getElementById('cogs-sections-container');
           if (!container) return 0;
 
-          // Map account name to category
-          const accountCategoryMap = {};
-          accounts.forEach(a => {
-            accountCategoryMap[a.name] = a.category;
-          });
-
-          // Group by categories (COGS and Shipping)
-          const categories = {
-            'COGS': {},
-            'Shipping': {}
-          };
-
-          journalEntries.forEach(entry => {
-            const cat = accountCategoryMap[entry.account];
-            if (cat && categories[cat] !== undefined) {
-              const debitVal = parseFloat(entry.debit || 0);
-              if (debitVal > 0) {
-                categories[cat][entry.account] = (categories[cat][entry.account] || 0) + debitVal;
-              }
-            }
-          });
-
-          let html = '';
-          let grandTotalCogsJournal = 0;
           const formatCurrency = (val) => {
             return '₱' + val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
           };
@@ -536,61 +518,152 @@
               .replace(/'/g, '&#039;');
           };
 
-          for (const [catName, accountsMap] of Object.entries(categories)) {
-            const accountsList = Object.entries(accountsMap).map(([name, debit]) => ({ name, debit }));
-            accountsList.sort((a, b) => a.name.localeCompare(b.name));
+          // 1. Process COGS category from general journal
+          const accountCategoryMap = {};
+          accounts.forEach(a => {
+            accountCategoryMap[a.name] = a.category;
+          });
 
-            let rowsHtml = '';
-            let totalDebit = 0;
+          const cogsAccountsMap = {};
+          journalEntries.forEach(entry => {
+            const cat = accountCategoryMap[entry.account];
+            if (cat === 'COGS') {
+              const debitVal = parseFloat(entry.debit || 0);
+              if (debitVal > 0) {
+                cogsAccountsMap[entry.account] = (cogsAccountsMap[entry.account] || 0) + debitVal;
+              }
+            }
+          });
 
-            if (accountsList.length > 0) {
-              accountsList.forEach(item => {
-                totalDebit += item.debit;
-                rowsHtml += `
-                  <tr>
-                    <td style="text-align: left; font-weight: 500;">${escapeHtml(item.name)}</td>
-                    <td style="text-align: right; font-weight: 500;">${formatCurrency(item.debit)}</td>
-                  </tr>
-                `;
-              });
-            } else {
-              rowsHtml = `
+          const cogsAccountsList = Object.entries(cogsAccountsMap).map(([name, debit]) => ({ name, debit }));
+          cogsAccountsList.sort((a, b) => a.name.localeCompare(b.name));
+
+          let cogsRowsHtml = '';
+          let cogsTotal = 0;
+
+          if (cogsAccountsList.length > 0) {
+            cogsAccountsList.forEach(item => {
+              cogsTotal += item.debit;
+              cogsRowsHtml += `
                 <tr>
-                  <td colspan="2" style="text-align: center; color: var(--text-muted); font-style: italic; padding: 1.5rem;">No expenses recorded for this category in this month.</td>
+                  <td style="text-align: left; font-weight: 500;">${escapeHtml(item.name)}</td>
+                  <td style="text-align: right; font-weight: 500;">${formatCurrency(item.debit)}</td>
                 </tr>
               `;
-            }
-
-            html += `
-              <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1rem; box-shadow: var(--shadow-sm);">
-                <div style="border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; margin-bottom: 0.75rem;">
-                  <h2 style="font-size: 0.88rem; font-weight: 700; color: var(--text-primary); margin: 0;">${escapeHtml(catName)}</h2>
-                </div>
-                
-                <div class="excel-container" style="margin-top: 0; max-height: 400px; overflow-y: auto;">
-                  <table class="excel-table">
-                    <thead>
-                      <tr>
-                        <th style="text-align: left;">Account</th>
-                        <th style="width: 200px; text-align: right;">Debit</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      ${rowsHtml}
-                      <tr class="total-row">
-                        <td style="text-align: left;">Total</td>
-                        <td style="text-align: right;">${formatCurrency(totalDebit)}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+            });
+          } else {
+            cogsRowsHtml = `
+              <tr>
+                <td colspan="2" style="text-align: center; color: var(--text-muted); font-style: italic; padding: 1.5rem;">No expenses recorded for this category in this month.</td>
+              </tr>
             `;
-            grandTotalCogsJournal += totalDebit;
           }
 
+          let html = `
+            <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1rem; box-shadow: var(--shadow-sm);">
+              <div style="border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; margin-bottom: 0.75rem;">
+                <h2 style="font-size: 0.88rem; font-weight: 700; color: var(--text-primary); margin: 0;">COGS</h2>
+              </div>
+              
+              <div class="excel-container" style="margin-top: 0; max-height: 400px; overflow-y: auto;">
+                <table class="excel-table">
+                  <thead>
+                    <tr>
+                      <th style="text-align: left;">Account</th>
+                      <th style="width: 200px; text-align: right;">Debit</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${cogsRowsHtml}
+                    <tr class="total-row">
+                      <td style="text-align: left;">Total</td>
+                      <td style="text-align: right;">${formatCurrency(cogsTotal)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          `;
+
+          // 2. Process Shipping category from delivery_bookings
+          let shippingRowsHtml = '';
+          let baseSum = 0;
+          let tip1Sum = 0;
+          let tip2Sum = 0;
+          let tollSum = 0;
+          let shippingTotalCentavos = 0;
+
+          if (this.deliveryBookings && this.deliveryBookings.length > 0) {
+            this.deliveryBookings.forEach(db => {
+              const base = db.base_fee || 0;
+              const tip1 = db.tip_1 || 0;
+              const tip2 = db.tip_2 || 0;
+              const toll = db.toll || 0;
+              const rowTotal = base + tip1 + tip2 + toll;
+
+              baseSum += base;
+              tip1Sum += tip1;
+              tip2Sum += tip2;
+              tollSum += toll;
+              shippingTotalCentavos += rowTotal;
+
+              shippingRowsHtml += `
+                <tr>
+                  <td style="text-align: left; font-weight: 500;">${escapeHtml(db.reference_id)}</td>
+                  <td style="text-align: right;">${formatCurrency(base / 100)}</td>
+                  <td style="text-align: right;">${formatCurrency(tip1 / 100)}</td>
+                  <td style="text-align: right;">${formatCurrency(tip2 / 100)}</td>
+                  <td style="text-align: right;">${formatCurrency(toll / 100)}</td>
+                  <td style="text-align: right; font-weight: 600;">${formatCurrency(rowTotal / 100)}</td>
+                </tr>
+              `;
+            });
+          } else {
+            shippingRowsHtml = `
+              <tr>
+                <td colspan="6" style="text-align: center; color: var(--text-muted); font-style: italic; padding: 1.5rem;">No completed deliveries recorded for this month.</td>
+              </tr>
+            `;
+          }
+
+          const grandShippingTotal = baseSum + tip1Sum + tip2Sum + tollSum;
+
+          html += `
+            <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1rem; box-shadow: var(--shadow-sm);">
+              <div style="border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; margin-bottom: 0.75rem;">
+                <h2 style="font-size: 0.88rem; font-weight: 700; color: var(--text-primary); margin: 0;">Shipping</h2>
+              </div>
+              
+              <div class="excel-container" style="margin-top: 0; max-height: 400px; overflow-y: auto;">
+                <table class="excel-table">
+                  <thead>
+                    <tr>
+                      <th style="text-align: left;">Ref Order</th>
+                      <th style="text-align: right;">Base</th>
+                      <th style="text-align: right;">Tip 1</th>
+                      <th style="text-align: right;">Tip 2</th>
+                      <th style="text-align: right;">Toll</th>
+                      <th style="text-align: right;">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${shippingRowsHtml}
+                    <tr class="total-row">
+                      <td style="text-align: left;">Total</td>
+                      <td style="text-align: right;">${formatCurrency(baseSum / 100)}</td>
+                      <td style="text-align: right;">${formatCurrency(tip1Sum / 100)}</td>
+                      <td style="text-align: right;">${formatCurrency(tip2Sum / 100)}</td>
+                      <td style="text-align: right;">${formatCurrency(tollSum / 100)}</td>
+                      <td style="text-align: right; font-weight: 700;">${formatCurrency(grandShippingTotal / 100)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          `;
+
           container.innerHTML = html;
-          return grandTotalCogsJournal;
+          return cogsTotal + (grandShippingTotal / 100);
         }
       };
 
