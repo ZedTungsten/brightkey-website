@@ -1,0 +1,1202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Receive Shipments — BrightKey Admin</title>
+  
+  <link rel="preconnect" href="https://fonts.bunny.net" />
+  <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../../css/style.css" />
+  <link rel="icon" type="image/svg+xml" href="../../assets/favicon.svg?v=2" />
+  
+  <style>
+    :root {
+      --bg-surface: #151f32;
+      --bg-elevated: #1e293b;
+      --border: #334155;
+      --text-primary: #f8fafc;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --cyan: #06b6d4;
+      --cyan-light: #22d3ee;
+      --danger: #ef4444;
+    }
+
+    body {
+      background: #0f172a;
+      color: var(--text-primary);
+      font-family: 'Commissioner', sans-serif;
+      margin: 0;
+    }
+
+    .delivery-container { max-width: 1200px; width: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: 2rem; }
+    
+    .panel {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06);
+    }
+    .panel-header {
+      padding: 1.25rem 1.5rem;
+      font-size: 0.95rem;
+      font-weight: 700;
+      border-bottom: 1px solid var(--border);
+      color: var(--text-primary);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .table-responsive {
+      width: 100%;
+      overflow-x: auto;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 0.85rem;
+    }
+    th {
+      background: rgba(30, 41, 59, 0.5);
+      padding: 1rem 1.5rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+      border-bottom: 1px solid var(--border);
+      text-transform: uppercase;
+      font-size: 0.75rem;
+      letter-spacing: 0.05em;
+    }
+    td {
+      padding: 1rem 1.5rem;
+      border-bottom: 1px solid var(--border);
+      color: var(--text-primary);
+      vertical-align: middle;
+    }
+    tr:last-child td {
+      border-bottom: none;
+    }
+    tr:hover td {
+      background: rgba(255, 255, 255, 0.02);
+    }
+    code {
+      font-family: monospace;
+      background: var(--bg-elevated);
+      padding: 0.2rem 0.4rem;
+      border-radius: 4px;
+      color: var(--cyan-light);
+      font-size: 0.8rem;
+    }
+
+    /* Form Styles */
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+    .form-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .form-input {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.6rem 0.8rem;
+      color: var(--text-primary);
+      font-size: 0.85rem;
+      transition: border-color 0.15s;
+    }
+    .form-input:focus {
+      outline: none;
+      border-color: var(--cyan);
+    }
+
+    /* Tabs Styling */
+    .drawer-tabs {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      overflow-x: auto;
+      background: var(--bg-surface);
+      border-top-left-radius: 12px;
+      border-top-right-radius: 12px;
+    }
+    .tab-btn {
+      padding: 0.9rem 1.25rem;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      border: none;
+      background: none;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      white-space: nowrap;
+      text-decoration: none;
+      transition: all 0.15s;
+    }
+    .tab-btn.active {
+      color: var(--cyan-light);
+      border-bottom-color: var(--cyan);
+    }
+    .tab-btn:hover:not(.active) {
+      color: var(--text-secondary);
+    }
+
+    /* Modal styles */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.5);
+      backdrop-filter: blur(4px);
+      z-index: 9999;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-overlay.open {
+      display: flex;
+    }
+    .modal-content {
+      width: 100%;
+      max-width: 500px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.75rem;
+      box-shadow: 0 12px 48px rgba(0,0,0,0.25);
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+    .modal-title {
+      margin: 0;
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+  </style>
+</head>
+<body>
+  <div class="toast-container" id="toast-container"></div>
+
+  <div class="dash-layout">
+    <!-- Sidebar -->
+    <aside class="dash-sidebar" id="dash-sidebar"></aside>
+
+    <!-- Main -->
+    <div class="dash-main">
+      <!-- Top Bar -->
+      <div class="top-bar">
+        <span class="top-bar-title">Logistics Ship</span>
+        <div style="flex:1;"></div>
+        <button class="btn btn-primary" onclick="DeliveryApp.openCreateShipmentModal()" style="display:flex; align-items:center; gap:0.4rem; font-size:0.82rem; height:34px; padding:0 1rem; border-radius:6px; font-weight:600;">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Create Shipment
+        </button>
+      </div>
+
+      <div class="content-area">
+        <main class="main-panel">
+          <!-- Tabs Navigation -->
+          <div class="drawer-tabs">
+            <a class="tab-btn" href="/dashboard/ship/send">Send</a>
+            <a class="tab-btn active" href="/dashboard/ship/receive">Receive</a>
+            <a class="tab-btn" href="/dashboard/ship/done">Done</a>
+          </div>
+
+          <div class="scroll-area">
+            <div class="delivery-container">
+
+              <!-- Receive Tab Content -->
+              <div class="tab-content" id="tab-content-receive">
+                <div class="panel">
+                  <div class="panel-header">Incoming Shipments Awaiting Receipt</div>
+                  <div class="table-responsive">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Packed Photo</th>
+                          <th>Ref Order</th>
+                          <th>Customer Name</th>
+                          <th>City</th>
+                          <th>SKU</th>
+                          <th>Qty</th>
+                          <th>Receive by</th>
+                          <th>Action</th>
+                        </tr>
+                      </thead>
+                      <tbody id="receive-list">
+                        <tr>
+                          <td colspan="8">
+                            <div style="text-align:center; padding:3rem; color:var(--text-muted);">
+                              <div class="bk-spinner" style="margin:0 auto 1rem;"></div>
+                              Loading incoming queue…
+                            </div>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <div id="receive-pagination" style="display:flex; justify-content:space-between; align-items:center; padding:0.75rem 1.25rem; border-top:1px solid var(--border); background:var(--bg-surface); font-size:0.8rem; color:var(--text-muted);"></div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Create Shipment -->
+  <div id="create-shipment-modal" class="modal-overlay">
+    <div class="modal-content" style="max-width: 550px; max-height: 90vh; overflow-y: auto;">
+      <h3 class="modal-title">Create Shipment</h3>
+      
+      <!-- Radio group: Send / Receive -->
+      <div class="form-group" style="margin-bottom: 0.75rem;">
+        <label class="form-label">Type</label>
+        <div style="display:flex; gap:1.5rem; margin-top:0.25rem;">
+          <label style="display:inline-flex; align-items:center; gap:0.4rem; font-size:0.85rem; font-weight:600; cursor:pointer;">
+            <input type="radio" name="cship-type" value="send" checked onchange="DeliveryApp.onShipmentTypeChange()" />
+            Send Out
+          </label>
+          <label style="display:inline-flex; align-items:center; gap:0.4rem; font-size:0.85rem; font-weight:600; cursor:pointer;">
+            <input type="radio" name="cship-type" value="receive" onchange="DeliveryApp.onShipmentTypeChange()" />
+            Receive
+          </label>
+        </div>
+      </div>
+
+      <!-- Ref Order -->
+      <div class="form-group" style="margin-bottom: 0.75rem;">
+        <label class="form-label">Ref Order</label>
+        <input type="text" id="cship-ref-order" class="form-input" readonly style="background:var(--bg-elevated); cursor:not-allowed;" />
+      </div>
+
+      <!-- Warehouse -->
+      <div class="form-group" style="margin-bottom: 0.75rem;">
+        <label class="form-label">Warehouse</label>
+        <select id="cship-warehouse" class="form-input" style="font-size:0.82rem;"></select>
+      </div>
+
+      <!-- Customer Name & Existing Customer Checkbox -->
+      <div class="form-group" style="margin-bottom: 0.75rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <label class="form-label" style="margin:0;">Customer Name</label>
+          <label style="display:inline-flex; align-items:center; gap:0.35rem; font-size:0.78rem; font-weight:600; cursor:pointer;">
+            <input type="checkbox" id="cship-is-existing" onchange="DeliveryApp.onExistingCheckboxChange()" />
+            Existing Customer
+          </label>
+        </div>
+        <input type="text" id="cship-customer-name" class="form-input" placeholder="Enter name" style="margin-top:0.35rem;" />
+      </div>
+
+      <!-- Existing Customer Select Row -->
+      <div id="cship-existing-container" style="display:none; flex-direction:column; gap:0.5rem; margin-bottom:0.75rem; background:var(--bg-elevated); padding:0.75rem; border-radius:6px; border:1px solid var(--border);">
+        <div style="display:flex; gap:0.5rem;">
+          <div style="flex:1;">
+            <label class="form-label" style="font-size:0.7rem;">Month</label>
+            <select id="cship-select-month" class="form-input" style="font-size:0.75rem; padding:0.25rem;" onchange="DeliveryApp.onExistingSearchChange()">
+              <option value="0">Jan</option>
+              <option value="1">Feb</option>
+              <option value="2">Mar</option>
+              <option value="3">Apr</option>
+              <option value="4">May</option>
+              <option value="5">Jun</option>
+              <option value="6">Jul</option>
+              <option value="7">Aug</option>
+              <option value="8">Sep</option>
+              <option value="9">Oct</option>
+              <option value="10">Nov</option>
+              <option value="11">Dec</option>
+            </select>
+          </div>
+          <div style="flex:1;">
+            <label class="form-label" style="font-size:0.7rem;">Year</label>
+            <select id="cship-select-year" class="form-input" style="font-size:0.75rem; padding:0.25rem;" onchange="DeliveryApp.onExistingSearchChange()">
+              <option value="2024">2024</option>
+              <option value="2025">2025</option>
+              <option value="2026">2026</option>
+              <option value="2027">2027</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label class="form-label" style="font-size:0.7rem;">Select Customer</label>
+          <select id="cship-select-customer" class="form-input" style="font-size:0.75rem; padding:0.25rem;" onchange="DeliveryApp.onCustomerSelectChange()">
+            <option value="">-- No Customers Found --</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Address -->
+      <div class="form-group" style="margin-bottom: 0.75rem;">
+        <label class="form-label">Address</label>
+        <textarea id="cship-address" class="form-input" placeholder="Enter full address" style="height:55px; resize:none;"></textarea>
+      </div>
+
+      <!-- City, Province -->
+      <div class="form-group" style="margin-bottom: 0.75rem;">
+        <label class="form-label">City, Province</label>
+        <input type="text" id="cship-city-province" class="form-input" placeholder="e.g. Bacoor, Cavite" />
+      </div>
+
+      <!-- Packed Photo Upload -->
+      <div class="form-group" style="margin-bottom: 0.75rem;">
+        <label class="form-label">Packed Photo Proof</label>
+        
+        <div id="cship-camera-container" style="display:none; position:relative; width:100%; aspect-ratio:16/10; background:#000; border-radius:8px; overflow:hidden; border:1px solid var(--border);">
+          <video id="cship-camera-stream" autoplay playsinline style="width:100%; height:100%; object-fit:cover;"></video>
+          <button type="button" class="btn btn-cyan" onclick="DeliveryApp.cshipCapturePhoto()" style="position:absolute; bottom:12px; left:50%; transform:translateX(-50%); border-radius:20px; padding:6px 16px; font-size:0.8rem; box-shadow:0 4px 12px rgba(0,0,0,0.3);">
+            Capture Photo
+          </button>
+        </div>
+
+        <div id="cship-upload-container" style="width:100%; aspect-ratio:16/10; background:var(--bg-elevated); border:2px dashed var(--border); border-radius:8px; display:flex; flex-direction:column; align-items:center; justify-content:center; overflow:hidden; position:relative; cursor:pointer;" onclick="document.getElementById('cship-file-input').click()">
+          <img id="cship-photo-preview" src="" style="width:100%; height:100%; object-fit:cover; display:none;" />
+          <div id="cship-placeholder" style="display:flex; flex-direction:column; align-items:center; gap:0.5rem; color:var(--text-muted); text-align:center; padding:1rem;">
+            <svg viewBox="0 0 24 24" width="28" height="28" stroke="currentColor" stroke-width="1.5" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+            <span style="font-size:0.78rem; font-weight:600;">Drag & drop photo here or click to select</span>
+          </div>
+        </div>
+        <input type="file" id="cship-file-input" accept="image/*" style="display:none;" onchange="DeliveryApp.onCshipFileSelect(event)" />
+        
+        <div style="display:flex; gap:0.5rem; margin-top:0.35rem;">
+          <button type="button" id="cship-btn-camera" class="btn btn-outline btn-sm" onclick="DeliveryApp.cshipStartCamera()" style="flex:1; height:32px; font-size:0.75rem;">Use Camera</button>
+          <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('cship-file-input').click()" style="flex:1; height:32px; font-size:0.75rem;">Upload Photo</button>
+        </div>
+      </div>
+
+      <!-- SKU QTY List Builder -->
+      <div class="form-group" style="margin-bottom: 0.75rem; border-top:1px solid var(--border); padding-top:0.75rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.35rem;">
+          <label class="form-label" style="margin:0;">Products &amp; Quantities</label>
+          <button type="button" class="btn btn-outline btn-sm" onclick="DeliveryApp.addSkuRow()" style="height:26px; padding:0 0.5rem; font-size:0.75rem; display:inline-flex; align-items:center; gap:0.25rem;">
+            + Add SKU
+          </button>
+        </div>
+        <div id="cship-sku-list" style="display:flex; flex-direction:column; gap:0.5rem;">
+          <!-- Rows will be injected here -->
+        </div>
+      </div>
+
+      <!-- Footer Buttons -->
+      <div style="display: flex; justify-content: flex-end; gap: 0.75rem; border-top: 1px solid var(--border); padding-top: 1rem; margin-top: 0.5rem;">
+        <button type="button" class="btn btn-outline" onclick="DeliveryApp.closeCreateShipmentModal()">Cancel</button>
+        <button type="button" id="btn-submit-cship" class="btn btn-primary" onclick="DeliveryApp.submitCreateShipment()">Create Shipment</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Receive Shipment -->
+  <div id="receive-modal" class="modal-overlay">
+    <div class="modal-content" style="max-height: 80vh; overflow-y: auto;">
+      <h3 class="modal-title">Receive Shipment</h3>
+      
+      <!-- Order details -->
+      <div style="font-size: 0.82rem; color: var(--text-secondary); line-height: 1.5; background: var(--bg-elevated); padding: 0.75rem; border-radius: 6px; border: 1px solid var(--border);">
+        <div><strong>Ref Order:</strong> <span id="modal-order-no" style="color: var(--text-primary);"></span></div>
+        <div><strong>Name:</strong> <span id="modal-customer-name" style="color: var(--text-primary);"></span></div>
+        <div><strong>City:</strong> <span id="modal-customer-city" style="color: var(--text-primary);"></span></div>
+      </div>
+
+      <!-- Packed Photo Display -->
+      <div id="modal-packed-photo-container" style="width: 100%; aspect-ratio: 16/10; border-radius: 6px; overflow: hidden; background: var(--bg-elevated); border: 1px solid var(--border); display: none; cursor: pointer;" onclick="maximizePhoto(document.getElementById('modal-packed-photo').src)">
+        <img id="modal-packed-photo" src="" style="width: 100%; height: 100%; object-fit: cover;" />
+      </div>
+
+      <!-- Upload Receive Proof Photo -->
+      <div class="form-group">
+        <label class="form-label">Received Photo Proof</label>
+        <div id="upload-container" style="width:100%; aspect-ratio:16/10; background:var(--bg-elevated); border:2px dashed var(--border); border-radius:8px; display:flex; flex-direction:column; align-items:center; justify-content:center; overflow:hidden; position:relative; cursor:pointer;" onclick="document.getElementById('delivery-file-input').click()">
+          <img id="delivery-photo-preview" src="" style="width:100%; height:100%; object-fit:cover; display:none;" />
+          <div id="upload-placeholder" style="display:flex; flex-direction:column; align-items:center; gap:0.5rem; color:var(--text-muted); text-align:center; padding:1.5rem;">
+            <svg viewBox="0 0 24 24" width="32" height="32" stroke="currentColor" stroke-width="1.5" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+            <span style="font-size:0.8rem; font-weight:600;">Drag & drop photo here or click to select</span>
+          </div>
+        </div>
+        <input type="file" id="delivery-file-input" accept="image/*" style="display:none;" onchange="handleDeliveryFileSelect(event)" />
+      </div>
+
+      <!-- Footer Buttons -->
+      <div style="display:flex; justify-content:flex-end; gap:0.75rem; border-top:1px solid var(--border); padding-top:1rem;">
+        <button type="button" class="btn btn-outline" onclick="closeReceiveModal()">Cancel</button>
+        <button type="button" id="btn-confirm-receive" class="btn btn-cyan" onclick="confirmReceive()" disabled>Confirm Receipt</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Lightbox Modal -->
+  <div id="lightbox-modal" class="modal-overlay" onclick="closeLightbox()" style="background: rgba(0,0,0,0.85); cursor: zoom-out;">
+    <div style="position: relative; max-width: 90vw; max-height: 90vh;">
+      <img id="lightbox-img" src="" style="max-width: 100%; max-height: 90vh; border-radius: 8px; box-shadow: 0 12px 48px rgba(0,0,0,0.5); object-fit: contain; cursor: default;" onclick="event.stopPropagation()" />
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="../../js/auth.js"></script>
+  <script src="../../js/sidebar.js"></script>
+  <script src="../../js/main.js"></script>
+
+  <script>
+    'use strict';
+
+    function esc(s) {
+      return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    const DeliveryApp = {
+      currentUser: null,
+      companyId: null,
+      activeTransactions: [],
+      bookings: [],
+      deliveryBookings: [],
+      allProducts: [],
+      existingCustomers: [],
+      warehouses: [],
+      cshipPhotoBlob: null,
+      cshipStream: null,
+      selectedOrder: null,
+      deliveryPhotoBlob: null,
+      currentPageReceive: 1,
+      itemsPerPage: 10,
+
+      async init() {
+        if (!window.BKAuth) return;
+
+        const authInfo = await window.BKAuth.checkRoleGate(['owner', 'admin', 'warehouse', 'logistics'], '../../admin.html');
+        if (!authInfo) return;
+
+        this.currentUser = authInfo.user;
+        this.companyId = await this.getCompanyId(authInfo.tenantId);
+
+        if (this.companyId) {
+          await this.loadData();
+        }
+      },
+
+      async getCompanyId(tenantId) {
+        try {
+          const sb = window.BKAuth.sb;
+          const { data } = await sb.from('companies').select('id').eq('tenant_id', tenantId).limit(1).maybeSingle();
+          return data?.id || null;
+        } catch (err) {
+          console.error(err);
+          return null;
+        }
+      },
+
+      async loadData() {
+        try {
+          const sb = window.BKAuth.sb;
+          
+          const { data: txs, error: txErr } = await sb.from('inventory_transactions')
+            .select('*')
+            .eq('type', 'customer_order');
+          if (txErr) throw txErr;
+          this.activeTransactions = txs || [];
+
+          const { data: bData, error: bErr } = await sb.from('installation_bookings')
+            .select('order_no, scheduled_date, customer_address, customer_phone');
+          if (bErr) throw bErr;
+          this.bookings = bData || [];
+
+          const { data: dbData, error: dbErr } = await sb.from('delivery_bookings')
+            .select('*')
+            .order('created_at', { ascending: false });
+          if (dbErr) throw dbErr;
+          this.deliveryBookings = dbData || [];
+
+          const { data: pData, error: pErr } = await sb.from('products')
+            .select('id, sku, title')
+            .order('sku');
+          if (pErr) throw pErr;
+          this.allProducts = pData || [];
+
+          const { data: wData, error: wErr } = await sb.from('warehouses')
+            .select('id, name')
+            .order('name');
+          if (wErr) throw wErr;
+          this.warehouses = wData || [];
+
+          this.renderReceiveQueue();
+        } catch (err) {
+          console.error(err);
+          Toast.error('Failed to load logistics queue: ' + err.message);
+        }
+      },
+
+      renderReceiveQueue() {
+        const tbody = document.getElementById('receive-list');
+        if (!tbody) return;
+        tbody.innerHTML = '';
+
+        const dispatchQueue = this.activeTransactions.filter(t => {
+          if (t.status !== 'ordered') return false;
+          if (!t.reference_id || !t.reference_id.startsWith('RCV-')) return false;
+          return true;
+        });
+
+        if (dispatchQueue.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:3rem; color:var(--text-muted);">No incoming shipments awaiting receipt.</td></tr>`;
+          this.renderPagination(0, this.currentPageReceive, 'receive-pagination');
+          return;
+        }
+
+        const groups = {};
+        dispatchQueue.forEach(t => {
+          const refId = t.reference_id || 'N/A';
+          if (!groups[refId]) {
+            groups[refId] = {
+              reference_id: refId,
+              customer_name: t.customer_name || 'N/A',
+              customer_city: t.customer_city || 'N/A',
+              packed_photo_url: t.packed_photo_url || '',
+              items: []
+            };
+          }
+          groups[refId].items.push(t);
+          if (t.packed_photo_url && !groups[refId].packed_photo_url) {
+            groups[refId].packed_photo_url = t.packed_photo_url;
+          }
+        });
+
+        const groupList = Object.values(groups);
+        const totalItems = groupList.length;
+
+        const maxPage = Math.ceil(totalItems / this.itemsPerPage) || 1;
+        if (this.currentPageReceive > maxPage) {
+          this.currentPageReceive = maxPage;
+        }
+
+        const startIdx = (this.currentPageReceive - 1) * this.itemsPerPage;
+        const endIdx = startIdx + this.itemsPerPage;
+        const paginatedGroups = groupList.slice(startIdx, endIdx);
+
+        paginatedGroups.forEach(group => {
+          const skusHtml = group.items.map(t => `<code>${t.sku}</code>`).join('<br/>');
+          const qtysHtml = group.items.map(t => `<strong>${t.quantity}</strong>`).join('<br/>');
+          
+          const booking = this.bookings.find(b => b.order_no === group.reference_id);
+          const dateFriendly = booking?.scheduled_date 
+            ? new Date(booking.scheduled_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) 
+            : new Date(group.items[0].created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+          let photoHtml = '—';
+          if (group.packed_photo_url) {
+            photoHtml = `<img src="${group.packed_photo_url}" alt="Packed Proof" style="width:80px; height:50px; object-fit:cover; border-radius:6px; border:1px solid var(--border); cursor:pointer;" onclick="maximizePhoto('${esc(group.packed_photo_url)}')" />`;
+          }
+
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${photoHtml}</td>
+            <td><strong>${esc(group.reference_id)}</strong></td>
+            <td>${esc(group.customer_name)}</td>
+            <td>${esc(group.customer_city)}</td>
+            <td>${skusHtml}</td>
+            <td>${qtysHtml}</td>
+            <td><strong>${dateFriendly}</strong></td>
+            <td>
+              <button class="btn btn-cyan btn-sm" onclick="DeliveryApp.openReceiveModal('${group.reference_id}')">
+                Receive
+              </button>
+            </td>
+          `;
+          tbody.appendChild(tr);
+        });
+
+        this.renderPagination(totalItems, this.currentPageReceive, 'receive-pagination');
+      },
+
+      renderPagination(totalItems, currentPage, containerId) {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+
+        if (totalItems === 0) {
+          container.style.display = 'none';
+          return;
+        }
+        container.style.display = 'flex';
+
+        const totalPages = Math.ceil(totalItems / this.itemsPerPage) || 1;
+        const start = (currentPage - 1) * this.itemsPerPage + 1;
+        const end = Math.min(currentPage * this.itemsPerPage, totalItems);
+
+        container.innerHTML = `
+          <span>Showing <strong>${start}</strong> to <strong>${end}</strong> of <strong>${totalItems}</strong> entries</span>
+          <div style="display:flex; gap:0.5rem; align-items:center;">
+            <button class="btn btn-outline btn-sm" style="padding:0.25rem 0.5rem; font-size:0.75rem;" ${currentPage === 1 ? 'disabled' : ''} onclick="DeliveryApp.changePage(${currentPage - 1})">Previous</button>
+            <span style="font-weight:600; color:var(--text-primary); font-size:0.75rem; padding:0 0.25rem;">Page ${currentPage} of ${totalPages}</span>
+            <button class="btn btn-outline btn-sm" style="padding:0.25rem 0.5rem; font-size:0.75rem;" ${currentPage === totalPages ? 'disabled' : ''} onclick="DeliveryApp.changePage(${currentPage + 1})">Next</button>
+          </div>
+        `;
+      },
+
+      changePage(newPage) {
+        this.currentPageReceive = newPage;
+        this.renderReceiveQueue();
+      },
+
+      openReceiveModal(referenceId) {
+        const matchingTx = this.activeTransactions.find(t => t.reference_id === referenceId);
+        if (!matchingTx) return;
+
+        this.selectedOrder = {
+          reference_id: referenceId,
+          customer_name: matchingTx.customer_name || 'N/A',
+          customer_city: matchingTx.customer_city || 'N/A',
+          packed_photo_url: matchingTx.packed_photo_url || '',
+          items: this.activeTransactions.filter(t => t.reference_id === referenceId && t.status === 'ordered')
+        };
+
+        this.deliveryPhotoBlob = null;
+
+        document.getElementById('modal-order-no').textContent = referenceId;
+        document.getElementById('modal-customer-name').textContent = this.selectedOrder.customer_name;
+        document.getElementById('modal-customer-city').textContent = this.selectedOrder.customer_city;
+
+        const photoContainer = document.getElementById('modal-packed-photo-container');
+        const photoImg = document.getElementById('modal-packed-photo');
+        if (this.selectedOrder.packed_photo_url) {
+          photoImg.src = this.selectedOrder.packed_photo_url;
+          photoContainer.style.display = 'block';
+        } else {
+          photoContainer.style.display = 'none';
+        }
+
+        document.getElementById('delivery-photo-preview').style.display = 'none';
+        document.getElementById('delivery-photo-preview').src = '';
+        document.getElementById('upload-placeholder').style.display = 'flex';
+        document.getElementById('btn-confirm-receive').disabled = true;
+
+        document.getElementById('receive-modal').classList.add('open');
+      },
+
+      openCreateShipmentModal() {
+        this.cshipPhotoBlob = null;
+        document.getElementById('cship-customer-name').value = '';
+        document.getElementById('cship-address').value = '';
+        document.getElementById('cship-city-province').value = '';
+        document.getElementById('cship-is-existing').checked = false;
+        document.getElementById('cship-existing-container').style.display = 'none';
+        
+        document.getElementById('cship-photo-preview').style.display = 'none';
+        document.getElementById('cship-photo-preview').src = '';
+        document.getElementById('cship-placeholder').style.display = 'flex';
+
+        const whSelect = document.getElementById('cship-warehouse');
+        if (whSelect) {
+          whSelect.innerHTML = this.warehouses.map(w => `<option value="${w.id}">${esc(w.name)}</option>`).join('');
+        }
+
+        document.getElementById('cship-sku-list').innerHTML = '';
+        this.addSkuRow();
+
+        const sendRadio = document.querySelector('input[name="cship-type"][value="send"]');
+        if (sendRadio) sendRadio.checked = true;
+
+        this.generateRefOrder();
+
+        const modal = document.getElementById('create-shipment-modal');
+        if (modal) modal.classList.add('open');
+      },
+
+      closeCreateShipmentModal() {
+        this.cshipStopCamera();
+        const container = document.getElementById('cship-camera-container');
+        if (container) container.style.display = 'none';
+        const uploadBox = document.getElementById('cship-upload-container');
+        if (uploadBox) uploadBox.style.display = 'flex';
+        
+        const modal = document.getElementById('create-shipment-modal');
+        if (modal) modal.classList.remove('open');
+      },
+
+      onShipmentTypeChange() {
+        this.generateRefOrder();
+      },
+
+      onExistingCheckboxChange() {
+        const isChecked = document.getElementById('cship-is-existing').checked;
+        const container = document.getElementById('cship-existing-container');
+        container.style.display = isChecked ? 'flex' : 'none';
+        
+        if (isChecked) {
+          const today = new Date();
+          document.getElementById('cship-select-month').value = String(today.getMonth());
+          document.getElementById('cship-select-year').value = String(today.getFullYear());
+          this.onExistingSearchChange();
+        }
+      },
+
+      onCshipFileSelect(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        this.cshipPhotoBlob = file;
+
+        const reader = new FileReader();
+        reader.onload = function(evt) {
+          const img = document.getElementById('cship-photo-preview');
+          img.src = evt.target.result;
+          img.style.display = 'block';
+          document.getElementById('cship-placeholder').style.display = 'none';
+        };
+        reader.readAsDataURL(file);
+      },
+
+      generateRefOrder() {
+        const today = new Date();
+        const yyyy = today.getFullYear();
+        const mm = String(today.getMonth() + 1).padStart(2, '0');
+        const dd = String(today.getDate()).padStart(2, '0');
+        const dateStr = `${yyyy}${mm}${dd}`;
+        
+        const typeEl = document.querySelector('input[name="cship-type"]:checked');
+        const prefix = (typeEl && typeEl.value === 'receive') ? 'RCV-' : 'SND-';
+        
+        const randomDigits = Math.floor(Math.random() * 900) + 100;
+        
+        const refEl = document.getElementById('cship-ref-order');
+        if (refEl) {
+          refEl.value = `${prefix}${dateStr}-${randomDigits}`;
+        }
+      },
+
+      async onExistingSearchChange() {
+        const month = parseInt(document.getElementById('cship-select-month').value);
+        const year = parseInt(document.getElementById('cship-select-year').value);
+        
+        const startDate = new Date(year, month, 1).toISOString();
+        const endDate = new Date(year, month + 1, 1).toISOString();
+
+        try {
+          const sb = window.BKAuth.sb;
+          const { data, error } = await sb.from('installation_bookings')
+            .select('customer_name, customer_address, customer_city, customer_province')
+            .gte('created_at', startDate)
+            .lt('created_at', endDate);
+
+          if (error) throw error;
+
+          const dropdown = document.getElementById('cship-select-customer');
+          if (data && data.length > 0) {
+            this.existingCustomers = data;
+            dropdown.innerHTML = '<option value="">-- Select Customer --</option>' + data.map((c, i) => `
+              <option value="${i}">${esc(c.customer_name)} (${esc(c.customer_city || 'No City')})</option>
+            `).join('');
+          } else {
+            this.existingCustomers = [];
+            dropdown.innerHTML = '<option value="">-- No Customers Found --</option>';
+          }
+        } catch (err) {
+          console.error(err);
+          Toast.error('Failed to load customers: ' + err.message);
+        }
+      },
+
+      onCustomerSelectChange() {
+        const val = document.getElementById('cship-select-customer').value;
+        if (val === '') return;
+        const idx = parseInt(val);
+        const customer = this.existingCustomers[idx];
+        if (!customer) return;
+
+        document.getElementById('cship-customer-name').value = customer.customer_name || '';
+        document.getElementById('cship-address').value = customer.customer_address || '';
+        
+        let cityProv = '';
+        if (customer.customer_city) {
+          cityProv += customer.customer_city;
+          if (customer.customer_province) {
+            cityProv += ', ' + customer.customer_province;
+          }
+        } else if (customer.customer_province) {
+          cityProv += customer.customer_province;
+        }
+        document.getElementById('cship-city-province').value = cityProv;
+      },
+
+      addSkuRow(skuVal = '', qtyVal = 1) {
+        const container = document.getElementById('cship-sku-list');
+        const rowId = 'sku-row-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
+        
+        const rowDiv = document.createElement('div');
+        rowDiv.id = rowId;
+        rowDiv.style.display = 'flex';
+        rowDiv.style.gap = '0.5rem';
+        rowDiv.style.alignItems = 'center';
+        
+        const skuSelect = document.createElement('select');
+        skuSelect.className = 'form-input sku-select-field';
+        skuSelect.style.flex = '2';
+        skuSelect.style.fontSize = '0.8rem';
+        skuSelect.innerHTML = '<option value="">-- Select SKU --</option>' + this.allProducts.map(p => `
+          <option value="${p.sku}" ${p.sku === skuVal ? 'selected' : ''}>${esc(p.sku)} - ${esc(p.title)}</option>
+        `).join('');
+        
+        const qtyInput = document.createElement('input');
+        qtyInput.type = 'number';
+        qtyInput.className = 'form-input qty-input-field';
+        qtyInput.style.flex = '1';
+        qtyInput.style.fontSize = '0.8rem';
+        qtyInput.value = qtyVal;
+        qtyInput.min = '1';
+        qtyInput.placeholder = 'Qty';
+        
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.className = 'btn btn-outline btn-sm';
+        removeBtn.style.padding = '0 0.5rem';
+        removeBtn.style.height = '36px';
+        removeBtn.style.color = 'var(--danger)';
+        removeBtn.style.borderColor = 'var(--danger)';
+        removeBtn.innerHTML = 'Remove';
+        removeBtn.onclick = () => {
+          rowDiv.remove();
+        };
+        
+        rowDiv.appendChild(skuSelect);
+        rowDiv.appendChild(qtyInput);
+        rowDiv.appendChild(removeBtn);
+        container.appendChild(rowDiv);
+      },
+
+      async cshipStartCamera() {
+        const container = document.getElementById('cship-camera-container');
+        const uploadBox = document.getElementById('cship-upload-container');
+        const video = document.getElementById('cship-camera-stream');
+        
+        try {
+          this.cshipStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+          video.srcObject = this.cshipStream;
+          container.style.display = 'block';
+          uploadBox.style.display = 'none';
+        } catch (err) {
+          console.error(err);
+          Toast.error('Could not access camera: ' + err.message);
+        }
+      },
+
+      cshipCapturePhoto() {
+        const video = document.getElementById('cship-camera-stream');
+        const container = document.getElementById('cship-camera-container');
+        const uploadBox = document.getElementById('cship-upload-container');
+        const preview = document.getElementById('cship-photo-preview');
+        const placeholder = document.getElementById('cship-placeholder');
+        
+        if (!this.cshipStream) return;
+        
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth || 640;
+        canvas.height = video.videoHeight || 480;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        
+        canvas.toBlob(blob => {
+          this.cshipPhotoBlob = blob;
+          preview.src = URL.createObjectURL(blob);
+          preview.style.display = 'block';
+          placeholder.style.display = 'none';
+          
+          this.cshipStopCamera();
+          container.style.display = 'none';
+          uploadBox.style.display = 'flex';
+        }, 'image/jpeg');
+      },
+
+      cshipStopCamera() {
+        if (this.cshipStream) {
+          this.cshipStream.getTracks().forEach(track => track.stop());
+          this.cshipStream = null;
+        }
+      },
+
+      async submitCreateShipment() {
+        const btn = document.getElementById('btn-submit-cship');
+        if (btn.disabled) return;
+
+        const typeEl = document.querySelector('input[name="cship-type"]:checked');
+        const isReceive = typeEl && typeEl.value === 'receive';
+
+        const refOrder = document.getElementById('cship-ref-order').value;
+        const warehouseId = document.getElementById('cship-warehouse').value;
+        const customerName = document.getElementById('cship-customer-name').value.trim();
+        const cityProvince = document.getElementById('cship-city-province').value.trim();
+        const address = document.getElementById('cship-address').value.trim();
+
+        if (!customerName) {
+          Toast.error('Customer Name is required.');
+          return;
+        }
+        if (!cityProvince) {
+          Toast.error('City, Province is required.');
+          return;
+        }
+        if (!this.cshipPhotoBlob) {
+          Toast.error('Packed photo proof is required.');
+          return;
+        }
+        if (!warehouseId) {
+          Toast.error('Please select a warehouse.');
+          return;
+        }
+
+        const skuRows = [];
+        const selectFields = document.querySelectorAll('.sku-select-field');
+        const qtyFields = document.querySelectorAll('.qty-input-field');
+        
+        for (let i = 0; i < selectFields.length; i++) {
+          const sku = selectFields[i].value;
+          const qty = parseInt(qtyFields[i].value || 0);
+          if (!sku) {
+            Toast.error('Please select a SKU for all rows.');
+            return;
+          }
+          if (qty <= 0) {
+            Toast.error('Quantity must be greater than 0.');
+            return;
+          }
+          skuRows.push({ sku, qty });
+        }
+
+        if (skuRows.length === 0) {
+          Toast.error('Please add at least one product SKU.');
+          return;
+        }
+
+        btn.disabled = true;
+        const originalText = btn.textContent;
+        btn.innerHTML = `<span class="bk-spinner" style="width:12px; height:12px; border-width:2px; display:inline-block; vertical-align:middle; margin-right:6px;"></span>Creating...`;
+
+        try {
+          const base64 = await blobToBase64(this.cshipPhotoBlob);
+          const fileName = `packed_${refOrder}_${Date.now()}.jpg`;
+
+          const uploadRes = await fetch('/api/upload', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              fileBase64: base64,
+              fileName: fileName,
+              category: 'installations',
+              refId: refOrder,
+              type: 'proof',
+              companyId: this.companyId || 'general'
+            })
+          });
+
+          if (!uploadRes.ok) throw new Error('Photo upload failed');
+          const uploadResult = await uploadRes.json();
+          const photoUrl = uploadResult.url;
+
+          const sb = window.BKAuth.sb;
+          const now = new Date().toISOString();
+
+          const statusVal = isReceive ? 'ordered' : 'packed';
+
+          const txRows = skuRows.map(row => ({
+            reference_id: refOrder,
+            sku: row.sku,
+            quantity: row.qty,
+            type: 'customer_order',
+            status: statusVal,
+            customer_name: customerName,
+            customer_city: cityProvince,
+            packed_photo_url: photoUrl,
+            company_id: this.companyId,
+            warehouse_id: warehouseId,
+            created_at: now,
+            updated_at: now
+          }));
+
+          if (!isReceive) {
+            for (const row of skuRows) {
+              const { data: invRow, error: invErr } = await sb.from('inventory')
+                .select('*')
+                .eq('sku', row.sku)
+                .eq('warehouse_id', warehouseId);
+
+              if (invErr) throw invErr;
+
+              if (!invRow || invRow.length === 0) {
+                const { error: insErr } = await sb.from('inventory').insert([{
+                  sku: row.sku,
+                  available: 0,
+                  packed: row.qty,
+                  warehouse_id: warehouseId
+                }]);
+                if (insErr) throw insErr;
+              } else {
+                const inv = invRow[0];
+                const { error: updErr } = await sb.from('inventory').update({
+                  available: Math.max(0, inv.available - row.qty),
+                  packed: (inv.packed || 0) + row.qty
+                }).eq('id', inv.id);
+                if (updErr) throw updErr;
+              }
+            }
+          }
+
+          const { error: txErr } = await sb.from('inventory_transactions').insert(txRows);
+          if (txErr) throw txErr;
+
+          await this.loadData();
+          this.closeCreateShipmentModal();
+          Toast.success('Shipment created successfully.');
+        } catch (err) {
+          console.error(err);
+          Toast.error('Failed to create shipment: ' + err.message);
+        } finally {
+          btn.disabled = false;
+          btn.textContent = originalText;
+        }
+      }
+    };
+
+    window.closeReceiveModal = function() {
+      document.getElementById('receive-modal').classList.remove('open');
+    };
+
+    window.maximizePhoto = function(src) {
+      if (!src) return;
+      const modal = document.getElementById('lightbox-modal');
+      const img = document.getElementById('lightbox-img');
+      img.src = src;
+      modal.classList.add('open');
+    };
+
+    window.closeLightbox = function() {
+      const modal = document.getElementById('lightbox-modal');
+      modal.classList.remove('open');
+    };
+
+    window.handleDeliveryFileSelect = function(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      
+      DeliveryApp.deliveryPhotoBlob = file;
+
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        const img = document.getElementById('delivery-photo-preview');
+        img.src = evt.target.result;
+        img.style.display = 'block';
+        document.getElementById('upload-placeholder').style.display = 'none';
+        document.getElementById('btn-confirm-receive').disabled = false;
+      };
+      reader.readAsDataURL(file);
+    };
+
+    window.confirmReceive = async function() {
+      const btn = document.getElementById('btn-confirm-receive');
+      if (btn.disabled || !DeliveryApp.selectedOrder || !DeliveryApp.deliveryPhotoBlob) return;
+
+      btn.disabled = true;
+      const originalText = btn.textContent;
+      btn.innerHTML = `<span class="bk-spinner" style="width:12px; height:12px; border-width:2px; display:inline-block; vertical-align:middle; margin-right:6px;"></span>Receiving...`;
+
+      try {
+        const base64 = await blobToBase64(DeliveryApp.deliveryPhotoBlob);
+        const fileName = `received_${DeliveryApp.selectedOrder.reference_id}_${Date.now()}.jpg`;
+
+        const uploadRes = await fetch('/api/upload', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fileBase64: base64,
+            fileName: fileName,
+            category: 'installations',
+            refId: DeliveryApp.selectedOrder.reference_id,
+            type: 'proof',
+            companyId: DeliveryApp.companyId || 'general'
+          })
+        });
+
+        if (!uploadRes.ok) throw new Error('Receive proof photo upload failed');
+        const uploadResult = await uploadRes.json();
+        const proofPhotoUrl = uploadResult.url;
+
+        const sb = window.BKAuth.sb;
+        const now = new Date().toISOString();
+
+        // 1. Increment Inventory Stocks for each SKU
+        for (const item of DeliveryApp.selectedOrder.items) {
+          const { data: invRow, error: invErr } = await sb.from('inventory')
+            .select('*')
+            .eq('sku', item.sku)
+            .eq('warehouse_id', item.warehouse_id);
+
+          if (invErr) throw invErr;
+
+          if (!invRow || invRow.length === 0) {
+            const { error: insErr } = await sb.from('inventory').insert([{
+              sku: item.sku,
+              available: item.quantity,
+              warehouse_id: item.warehouse_id
+            }]);
+            if (insErr) throw insErr;
+          } else {
+            const inv = invRow[0];
+            const { error: updErr } = await sb.from('inventory').update({
+              available: inv.available + item.quantity
+            }).eq('id', inv.id);
+            if (updErr) throw updErr;
+          }
+        }
+
+        // 2. Update transaction status to received
+        const { error: txErr } = await sb.from('inventory_transactions').update({
+          status: 'received',
+          timestamp_received: now
+        }).eq('reference_id', DeliveryApp.selectedOrder.reference_id);
+        if (txErr) throw txErr;
+
+        // 3. Create entry in delivery_bookings
+        const { error: dbErr } = await sb.from('delivery_bookings').insert([{
+          company_id: DeliveryApp.companyId,
+          reference_id: DeliveryApp.selectedOrder.reference_id,
+          customer_name: DeliveryApp.selectedOrder.customer_name,
+          customer_city: DeliveryApp.selectedOrder.customer_city,
+          delivery_photo_url: proofPhotoUrl,
+          status: 'delivered',
+          delivered_at: now
+        }]);
+        if (dbErr) throw dbErr;
+
+        Toast.success('Shipment received successfully.');
+        window.closeReceiveModal();
+        await DeliveryApp.loadData();
+      } catch (err) {
+        console.error(err);
+        Toast.error('Failed to receive shipment: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = originalText;
+      }
+    };
+
+    function blobToBase64(blob) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result.split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    }
+
+    window.DeliveryApp = DeliveryApp;
+
+    document.addEventListener('DOMContentLoaded', () => {
+      DeliveryApp.init();
+    });
+  </script>
+</body>
+</html>
