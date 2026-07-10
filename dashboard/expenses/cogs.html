@@ -240,6 +240,13 @@
             </table>
           </div>
         </div>
+
+        <!-- Dynamic COGS Journal Sections Container (similar to OPEX) -->
+        <div id="cogs-sections-container" style="display: flex; flex-direction: column; gap: 1.5rem; margin-top: 1.5rem;">
+          <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1rem; box-shadow: var(--shadow-sm); text-align: center; color: var(--text-muted); font-style: italic;">
+            Loading general ledger categories...
+          </div>
+        </div>
       </div>
     </main>
   </div>
@@ -316,19 +323,29 @@
           const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
 
           try {
-            const [productsRes, bookingsRes] = await Promise.all([
+            const [productsRes, bookingsRes, accountsRes, journalRes] = await Promise.all([
               sb.from('products').select('sku, title, dealer_price, count_inventory, category'),
               sb.from('installation_bookings')
                 .select('scheduled_date, order_no, status, product_skus, product_qtys')
                 .eq('company_id', this.companyId)
                 .neq('status', 'cancelled')
                 .gte('scheduled_date', startDate)
-                .lte('scheduled_date', endDate)
+                .lte('scheduled_date', endDate),
+              sb.from('journal_accounts')
+                .select('name, category')
+                .eq('company_id', this.companyId),
+              sb.from('general_journal')
+                .select('account, debit, date')
+                .eq('company_id', this.companyId)
+                .gte('date', startDate)
+                .lte('date', endDate)
             ]);
 
             this.products = productsRes.data || [];
             this.bookings = bookingsRes.data || [];
             this.costHistory = [];
+            this.journalAccounts = accountsRes.data || [];
+            this.journalEntries = journalRes.data || [];
 
             try {
               const { data: histData, error: histErr } = await sb.from('product_cost_history')
@@ -341,7 +358,11 @@
               console.warn('Failed to load product_cost_history, falling back to current catalog cost:', historyErr);
             }
 
-            this.renderStatement();
+            const supplierCostTotal = this.renderStatement() || 0;
+            const journalCogsTotal = this.renderCogsJournalReports(this.journalAccounts, this.journalEntries) || 0;
+
+            const finalGrandTotal = supplierCostTotal + journalCogsTotal;
+            document.getElementById('stat-total-cogs').textContent = '₱' + finalGrandTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
           } catch (err) {
             console.error('Error loading COGS data:', err);
@@ -479,10 +500,9 @@
           `;
 
           tbody.innerHTML = rowsHtml + totalRowHtml;
-
+          
           // Update Stats Cards
           document.getElementById('stat-total-sold').textContent = totalSold;
-          document.getElementById('stat-total-cogs').textContent = formatPHP(grandTotalCogsCentavos);
 
           // Render Category Cards
           const catGrid = document.getElementById('category-cards-grid');
@@ -505,6 +525,106 @@
               catGrid.style.display = 'none';
             }
           }
+
+          return grandTotalCogsCentavos / 100;
+        },
+
+        renderCogsJournalReports(accounts, journalEntries) {
+          const container = document.getElementById('cogs-sections-container');
+          if (!container) return 0;
+
+          // Map account name to category
+          const accountCategoryMap = {};
+          accounts.forEach(a => {
+            accountCategoryMap[a.name] = a.category;
+          });
+
+          // Group by categories (COGS and Shipping)
+          const categories = {
+            'COGS': {},
+            'Shipping': {}
+          };
+
+          journalEntries.forEach(entry => {
+            const cat = accountCategoryMap[entry.account];
+            if (cat && categories[cat] !== undefined) {
+              const debitVal = parseFloat(entry.debit || 0);
+              if (debitVal > 0) {
+                categories[cat][entry.account] = (categories[cat][entry.account] || 0) + debitVal;
+              }
+            }
+          });
+
+          let html = '';
+          let grandTotalCogsJournal = 0;
+          const formatCurrency = (val) => {
+            return '₱' + val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+          };
+          const escapeHtml = (str) => {
+            if (!str) return '';
+            return str
+              .replace(/&/g, '&amp;')
+              .replace(/</g, '&lt;')
+              .replace(/>/g, '&gt;')
+              .replace(/"/g, '&quot;')
+              .replace(/'/g, '&#039;');
+          };
+
+          for (const [catName, accountsMap] of Object.entries(categories)) {
+            const accountsList = Object.entries(accountsMap).map(([name, debit]) => ({ name, debit }));
+            accountsList.sort((a, b) => a.name.localeCompare(b.name));
+
+            let rowsHtml = '';
+            let totalDebit = 0;
+
+            if (accountsList.length > 0) {
+              accountsList.forEach(item => {
+                totalDebit += item.debit;
+                rowsHtml += `
+                  <tr>
+                    <td style="text-align: left; font-weight: 500;">${escapeHtml(item.name)}</td>
+                    <td style="text-align: right; font-weight: 500;">${formatCurrency(item.debit)}</td>
+                  </tr>
+                `;
+              });
+            } else {
+              rowsHtml = `
+                <tr>
+                  <td colspan="2" style="text-align: center; color: var(--text-muted); font-style: italic; padding: 1.5rem;">No expenses recorded for this category in this month.</td>
+                </tr>
+              `;
+            }
+
+            html += `
+              <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1rem; box-shadow: var(--shadow-sm);">
+                <div style="border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; margin-bottom: 0.75rem;">
+                  <h2 style="font-size: 0.88rem; font-weight: 700; color: var(--text-primary); margin: 0;">${escapeHtml(catName)}</h2>
+                </div>
+                
+                <div class="excel-container" style="margin-top: 0; max-height: 400px; overflow-y: auto;">
+                  <table class="excel-table">
+                    <thead>
+                      <tr>
+                        <th style="text-align: left;">Account</th>
+                        <th style="width: 200px; text-align: right;">Debit</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${rowsHtml}
+                      <tr class="total-row">
+                        <td style="text-align: left;">Total</td>
+                        <td style="text-align: right;">${formatCurrency(totalDebit)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            `;
+            grandTotalCogsJournal += totalDebit;
+          }
+
+          container.innerHTML = html;
+          return grandTotalCogsJournal;
         }
       };
 
