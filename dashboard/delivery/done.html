@@ -429,16 +429,17 @@
         }
       },
 
-      openEditModal(bookingId) {
-        const db = this.deliveryBookings.find(b => b.id === bookingId);
-        if (!db) return;
+      openEditModal(refId) {
+        const order = this.consolidatedOrders.find(o => o.reference_id === refId);
+        if (!order) return;
 
-        document.getElementById('emodal-booking-id').value = db.id;
-        document.getElementById('emodal-ref-order').textContent = db.reference_id || 'N/A';
-        document.getElementById('emodal-base').value = db.base_fee ? (db.base_fee / 100).toFixed(2) : '';
-        document.getElementById('emodal-tip-1').value = db.tip_1 ? (db.tip_1 / 100).toFixed(2) : '';
-        document.getElementById('emodal-tip-2').value = db.tip_2 ? (db.tip_2 / 100).toFixed(2) : '';
-        document.getElementById('emodal-toll').value = db.toll ? (db.toll / 100).toFixed(2) : '';
+        const db = order.db;
+        document.getElementById('emodal-booking-id').value = refId;
+        document.getElementById('emodal-ref-order').textContent = refId;
+        document.getElementById('emodal-base').value = (db && db.base_fee) ? (db.base_fee / 100).toFixed(2) : '';
+        document.getElementById('emodal-tip-1').value = (db && db.tip_1) ? (db.tip_1 / 100).toFixed(2) : '';
+        document.getElementById('emodal-tip-2').value = (db && db.tip_2) ? (db.tip_2 / 100).toFixed(2) : '';
+        document.getElementById('emodal-toll').value = (db && db.toll) ? (db.toll / 100).toFixed(2) : '';
 
         const modal = document.getElementById('edit-delivery-modal');
         if (modal) modal.classList.add('open');
@@ -453,7 +454,9 @@
         const saveBtn = document.getElementById('btn-save-edit');
         if (saveBtn) saveBtn.disabled = true;
 
-        const bookingId = document.getElementById('emodal-booking-id').value;
+        const refId = document.getElementById('emodal-booking-id').value;
+        const order = this.consolidatedOrders.find(o => o.reference_id === refId);
+        if (!order) return;
         
         const baseVal = parseFloat(document.getElementById('emodal-base').value || 0) * 100;
         const tip1Val = parseFloat(document.getElementById('emodal-tip-1').value || 0) * 100;
@@ -462,16 +465,35 @@
 
         try {
           const sb = window.BKAuth.sb;
-          const { error } = await sb.from('delivery_bookings')
-            .update({
-              base_fee: Math.round(baseVal),
-              tip_1: Math.round(tip1Val),
-              tip_2: Math.round(tip2Val),
-              toll: Math.round(tollVal)
-            })
-            .eq('id', bookingId);
+          
+          if (order.db) {
+            const { error } = await sb.from('delivery_bookings')
+              .update({
+                base_fee: Math.round(baseVal),
+                tip_1: Math.round(tip1Val),
+                tip_2: Math.round(tip2Val),
+                toll: Math.round(tollVal)
+              })
+              .eq('id', order.db.id);
 
-          if (error) throw error;
+            if (error) throw error;
+          } else {
+            const { error } = await sb.from('delivery_bookings')
+              .insert({
+                reference_id: refId,
+                customer_name: order.customer_name,
+                customer_city: order.customer_city,
+                base_fee: Math.round(baseVal),
+                tip_1: Math.round(tip1Val),
+                tip_2: Math.round(tip2Val),
+                toll: Math.round(tollVal),
+                status: order.status === 'received' ? 'delivered' : 'picked_up',
+                delivered_at: order.status === 'received' ? order.dateCompleted : null,
+                company_id: this.companyId
+              });
+
+            if (error) throw error;
+          }
 
           // Reload data
           await this.loadData();
