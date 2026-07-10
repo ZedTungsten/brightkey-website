@@ -122,7 +122,6 @@
             <div class="tab-panel active">
               <div class="panel-header">
                 <div class="panel-title">Assignments</div>
-                <button class="btn btn-primary btn-sm" onclick="saveAssignments()">Save Assignments</button>
               </div>
 
               <div class="table-scroll">
@@ -210,7 +209,7 @@
 
         return `
           <tr>
-            <td><input type="text" class="form-input" value="${escapeHtml(a.name)}" oninput="assignments[${idx}].name = this.value" placeholder="e.g. Installer" style="max-width: 200px;" /></td>
+            <td><input type="text" class="form-input" value="${escapeHtml(a.name)}" oninput="assignments[${idx}].name = this.value" onblur="autosaveAssignment(${idx})" onchange="autosaveAssignment(${idx})" placeholder="e.g. Installer" style="max-width: 200px;" /></td>
             <td>
               <div class="custom-multiselect" id="vis-select-${idx}">
                 <button type="button" class="multiselect-btn" onclick="toggleDropdown(${idx}, event)">
@@ -271,6 +270,8 @@
           .join(', ') || 'Select Visibility';
         btn.textContent = selectedLabels;
       }
+
+      autosaveAssignment(idx);
     };
 
     window.deleteAssignment = async function(idx, id) {
@@ -288,25 +289,35 @@
       showToast('Assignment removed.');
     };
 
-    window.saveAssignments = async function() {
-      for (const a of assignments) {
-        if (!a.name.trim()) { showToast('Assignment name cannot be empty.', true); return; }
+    window.autosaveAssignment = async function(idx) {
+      const a = assignments[idx];
+      if (!a) return;
+      const nameTrimmed = (a.name || '').trim();
+      
+      if (!a.id && !nameTrimmed) return; // don't save a blank unsaved row yet
+      
+      if (!nameTrimmed) {
+        showToast('Assignment name cannot be empty.', true);
+        return;
       }
+      
       try {
-        for (const a of assignments) {
-          if (a.id) {
-            const { error } = await sb.from('employee_assignments').update({ name: a.name.trim(), visibility: a.visibility }).eq('id', a.id);
-            if (error) throw error;
-          } else {
-            const { data, error } = await sb.from('employee_assignments').insert([{ company_id: currentCompanyId, name: a.name.trim(), visibility: a.visibility }]).select().single();
-            if (error) throw error;
-            a.id = data.id;
-          }
+        if (a.id) {
+          const { error } = await sb.from('employee_assignments')
+            .update({ name: nameTrimmed, visibility: a.visibility })
+            .eq('id', a.id);
+          if (error) throw error;
+        } else {
+          const { data, error } = await sb.from('employee_assignments')
+            .insert([{ company_id: currentCompanyId, name: nameTrimmed, visibility: a.visibility }])
+            .select()
+            .single();
+          if (error) throw error;
+          a.id = data.id;
         }
-        showToast('Assignments saved.');
-        renderAssignments();
+        showToast('Autosaved.');
       } catch (e) {
-        showToast('Save failed: ' + e.message, true);
+        showToast('Autosave failed: ' + e.message, true);
       }
     };
 
