@@ -386,17 +386,24 @@
           .filter(a => Array.isArray(a.visibility) && a.visibility.includes('warehouse.member'))
           .map(a => a.name);
           
-        let whMemberUserIds = [];
+        let whMemberEmails = new Set();
         if (whMemberAssignmentNames.length > 0) {
           const { data: empData } = await sb.from('employees')
-            .select('user_id')
+            .select('email, work_email')
             .eq('company_id', currentCompanyId)
             .in('assignment', whMemberAssignmentNames);
-          whMemberUserIds = (empData || []).map(e => e.user_id).filter(Boolean);
+            
+          (empData || []).forEach(e => {
+            if (e.work_email) whMemberEmails.add(e.work_email.toLowerCase().trim());
+            if (e.email) whMemberEmails.add(e.email.toLowerCase().trim());
+          });
         }
         
         // Filter the dropdown list to only show users with warehouse.member visibility
-        SettingsPage.allTeamMembers = SettingsPage.allTeamMembers.filter(m => whMemberUserIds.includes(m.user_id));
+        SettingsPage.allTeamMembers = SettingsPage.allTeamMembers.filter(m => {
+          if (!m.user_email) return false;
+          return whMemberEmails.has(m.user_email.toLowerCase().trim());
+        });
       } catch (err) {
         console.error('Failed to filter warehouse members:', err);
       }
