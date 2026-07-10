@@ -183,6 +183,40 @@
       font-weight: 600;
       color: var(--text-primary);
     }
+
+    /* ── Month Navigation ── */
+    .month-nav-container {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md, 8px);
+      padding: 0.5rem 1rem;
+    }
+    .month-nav-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      width: 28px;
+      height: 28px;
+      border-radius: var(--radius-sm, 4px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .month-nav-btn:hover {
+      background: var(--bg-base);
+      border-color: var(--text-secondary);
+    }
+    .month-display-label {
+      font-size: 0.9rem;
+      font-weight: 700;
+      min-width: 120px;
+      text-align: center;
+    }
   </style>
 </head>
 <body>
@@ -211,6 +245,19 @@
 
               <!-- Done Tab Content -->
               <div class="tab-content" id="tab-content-done">
+                <!-- Top controls row with Month Switcher -->
+                <div style="display: flex; justify-content: flex-start; align-items: center; margin-bottom: 1.5rem;">
+                  <div class="month-nav-container">
+                    <button onclick="DeliveryApp.changeMonth(-1)" class="month-nav-btn" aria-label="Previous month">
+                      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                    </button>
+                    <span class="month-display-label" id="month-label">---</span>
+                    <button onclick="DeliveryApp.changeMonth(1)" class="month-nav-btn" aria-label="Next month">
+                      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                    </button>
+                  </div>
+                </div>
+
                 <div class="panel">
                   <div class="panel-header">Picked Up Deliveries (Completed / In Progress)</div>
                   <div class="table-responsive">
@@ -307,6 +354,7 @@
       donePhotoBlob: null,
       currentPageDone: 1,
       itemsPerPage: 10,
+      currentDate: new Date(),
 
       async init() {
         if (!window.BKAuth) return;
@@ -317,8 +365,24 @@
         this.currentUser = authInfo.user;
         this.companyId = await this.getCompanyId(authInfo.tenantId);
 
+        this.updateMonthLabel();
+
         if (this.companyId) {
           await this.loadData();
+        }
+      },
+
+      changeMonth(dir) {
+        this.currentDate.setMonth(this.currentDate.getMonth() + dir);
+        this.updateMonthLabel();
+        this.currentPageDone = 1; // Reset pagination
+        this.renderDoneQueue();
+      },
+
+      updateMonthLabel() {
+        const labelEl = document.getElementById('month-label');
+        if (labelEl) {
+          labelEl.textContent = this.currentDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
         }
       },
 
@@ -361,10 +425,21 @@
         if (!tbody) return;
         tbody.innerHTML = '';
 
-        const doneQueue = this.deliveryBookings.filter(db => ['picked_up', 'delivered'].includes(db.status));
+        const filterYear = this.currentDate.getFullYear();
+        const filterMonth = this.currentDate.getMonth();
+
+        const doneQueue = this.deliveryBookings.filter(db => {
+          if (!['picked_up', 'delivered'].includes(db.status)) return false;
+          
+          const dateStr = db.delivered_at || db.created_at;
+          if (!dateStr) return false;
+          
+          const d = new Date(dateStr);
+          return d.getFullYear() === filterYear && d.getMonth() === filterMonth;
+        });
 
         if (doneQueue.length === 0) {
-          tbody.innerHTML = `<tr><td colspan="11" style="text-align:center; padding:3rem; color:var(--text-muted);">No completed or picked up orders.</td></tr>`;
+          tbody.innerHTML = `<tr><td colspan="11" style="text-align:center; padding:3rem; color:var(--text-muted);">No completed or picked up orders for this month.</td></tr>`;
           this.renderPagination(0, this.currentPageDone, 'done-pagination');
           return;
         }
