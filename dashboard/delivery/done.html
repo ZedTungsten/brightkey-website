@@ -274,12 +274,13 @@
                           <th>Tip 2</th>
                           <th>Toll</th>
                           <th>Date Completed</th>
+                          <th>Status</th>
                           <th>Action</th>
                         </tr>
                       </thead>
                       <tbody id="done-list">
                         <tr>
-                          <td colspan="11">
+                          <td colspan="12">
                             <div style="text-align:center; padding:3rem; color:var(--text-muted);">
                               <div class="bk-spinner" style="margin:0 auto 1rem;"></div>
                               Loading done queue…
@@ -329,6 +330,45 @@
       <div style="display: flex; justify-content: flex-end; gap: 0.75rem; border-top: 1px solid var(--border); padding-top: 1rem; margin-top: 0.25rem;">
         <button type="button" class="btn btn-outline" onclick="closeDoneModal()">Cancel</button>
         <button type="button" id="btn-confirm-done" class="btn btn-primary" onclick="confirmDone()" disabled>Confirm Delivery</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit Delivery Modal -->
+  <div id="edit-delivery-modal" class="modal-overlay">
+    <div class="modal-content" style="max-width: 400px;">
+      <h3 class="modal-title">Edit Delivery Fees</h3>
+      
+      <div style="font-size: 0.82rem; color: var(--text-secondary); line-height: 1.5; background: var(--bg-elevated); padding: 0.75rem; border-radius: 6px; border: 1px solid var(--border); margin-bottom: 0.5rem;">
+        <div><strong>Ref Order:</strong> <span id="emodal-ref-order" style="color: var(--text-primary);"></span></div>
+      </div>
+
+      <input type="hidden" id="emodal-booking-id" />
+
+      <div class="form-group" style="margin-bottom: 0.75rem;">
+        <label class="form-label">Base Fee (₱)</label>
+        <input type="number" step="0.01" id="emodal-base" class="form-input" placeholder="0.00" />
+      </div>
+
+      <div class="form-group" style="margin-bottom: 0.75rem;">
+        <label class="form-label">Tip 1 (₱)</label>
+        <input type="number" step="0.01" id="emodal-tip-1" class="form-input" placeholder="0.00" />
+      </div>
+
+      <div class="form-group" style="margin-bottom: 0.75rem;">
+        <label class="form-label">Tip 2 (₱)</label>
+        <input type="number" step="0.01" id="emodal-tip-2" class="form-input" placeholder="0.00" />
+      </div>
+
+      <div class="form-group" style="margin-bottom: 0.75rem;">
+        <label class="form-label">Toll (₱)</label>
+        <input type="number" step="0.01" id="emodal-toll" class="form-input" placeholder="0.00" />
+      </div>
+
+      <!-- Actions -->
+      <div style="display: flex; justify-content: flex-end; gap: 0.75rem; border-top: 1px solid var(--border); padding-top: 1rem; margin-top: 0.25rem;">
+        <button type="button" class="btn btn-outline" onclick="DeliveryApp.closeEditModal()">Cancel</button>
+        <button type="button" id="btn-save-edit" class="btn btn-primary" onclick="DeliveryApp.saveEdit()">Save Changes</button>
       </div>
     </div>
   </div>
@@ -386,6 +426,62 @@
         }
       },
 
+      openEditModal(bookingId) {
+        const db = this.deliveryBookings.find(b => b.id === bookingId);
+        if (!db) return;
+
+        document.getElementById('emodal-booking-id').value = db.id;
+        document.getElementById('emodal-ref-order').textContent = db.reference_id || 'N/A';
+        document.getElementById('emodal-base').value = db.base_fee ? (db.base_fee / 100).toFixed(2) : '';
+        document.getElementById('emodal-tip-1').value = db.tip_1 ? (db.tip_1 / 100).toFixed(2) : '';
+        document.getElementById('emodal-tip-2').value = db.tip_2 ? (db.tip_2 / 100).toFixed(2) : '';
+        document.getElementById('emodal-toll').value = db.toll ? (db.toll / 100).toFixed(2) : '';
+
+        const modal = document.getElementById('edit-delivery-modal');
+        if (modal) modal.classList.add('open');
+      },
+
+      closeEditModal() {
+        const modal = document.getElementById('edit-delivery-modal');
+        if (modal) modal.classList.remove('open');
+      },
+
+      async saveEdit() {
+        const saveBtn = document.getElementById('btn-save-edit');
+        if (saveBtn) saveBtn.disabled = true;
+
+        const bookingId = document.getElementById('emodal-booking-id').value;
+        
+        const baseVal = parseFloat(document.getElementById('emodal-base').value || 0) * 100;
+        const tip1Val = parseFloat(document.getElementById('emodal-tip-1').value || 0) * 100;
+        const tip2Val = parseFloat(document.getElementById('emodal-tip-2').value || 0) * 100;
+        const tollVal = parseFloat(document.getElementById('emodal-toll').value || 0) * 100;
+
+        try {
+          const sb = window.BKAuth.sb;
+          const { error } = await sb.from('delivery_bookings')
+            .update({
+              base_fee: Math.round(baseVal),
+              tip_1: Math.round(tip1Val),
+              tip_2: Math.round(tip2Val),
+              toll: Math.round(tollVal)
+            })
+            .eq('id', bookingId);
+
+          if (error) throw error;
+
+          // Reload data
+          await this.loadData();
+          this.closeEditModal();
+          Toast.success('Delivery fees updated successfully.');
+        } catch (err) {
+          console.error(err);
+          Toast.error('Failed to save changes: ' + err.message);
+        } finally {
+          if (saveBtn) saveBtn.disabled = false;
+        }
+      },
+
       async getCompanyId(tenantId) {
         try {
           const sb = window.BKAuth.sb;
@@ -429,8 +525,10 @@
         const filterMonth = this.currentDate.getMonth();
 
         const doneQueue = this.deliveryBookings.filter(db => {
-          if (!['picked_up', 'delivered'].includes(db.status)) return false;
-          
+          // Find matching dispatched or received transactions from warehouse/all-orders
+          const tx = this.activeTransactions.find(t => t.reference_id === db.reference_id && ['dispatched', 'received'].includes(t.status));
+          if (!tx) return false;
+
           const dateStr = db.delivered_at || db.created_at;
           if (!dateStr) return false;
           
@@ -439,7 +537,7 @@
         });
 
         if (doneQueue.length === 0) {
-          tbody.innerHTML = `<tr><td colspan="11" style="text-align:center; padding:3rem; color:var(--text-muted);">No completed or picked up orders for this month.</td></tr>`;
+          tbody.innerHTML = `<tr><td colspan="12" style="text-align:center; padding:3rem; color:var(--text-muted);">No completed or picked up orders for this month.</td></tr>`;
           this.renderPagination(0, this.currentPageDone, 'done-pagination');
           return;
         }
@@ -469,16 +567,29 @@
             ? new Date(db.delivered_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) 
             : '—';
 
+          // Get transaction status
+          const tx = this.activeTransactions.find(t => t.reference_id === db.reference_id && ['dispatched', 'received'].includes(t.status));
+          const txStatus = tx ? tx.status : '—';
+          const statusColors = {
+            dispatched: 'var(--cyan-light)',
+            received: '#10b981'
+          };
+          const statusText = txStatus.charAt(0).toUpperCase() + txStatus.slice(1);
+          const statusHtml = `<span style="font-weight: 700; color: ${statusColors[txStatus] || 'var(--text-secondary)'};">${statusText}</span>`;
+
           let actionHtml = '';
-          if (db.status === 'delivered') {
-            actionHtml = `<span style="font-size:0.75rem; color:var(--text-muted); font-weight:600;">Completed</span>`;
-          } else {
-            actionHtml = `
-              <button class="btn btn-cyan btn-sm" onclick="DeliveryApp.openDoneModal('${db.id}')">
+          if (db.status !== 'delivered') {
+            actionHtml += `
+              <button class="btn btn-cyan btn-sm" onclick="DeliveryApp.openDoneModal('${db.id}')" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.5rem;">
                 Received by Customer
               </button>
             `;
           }
+          actionHtml += `
+            <button class="btn btn-outline btn-sm" onclick="DeliveryApp.openEditModal('${db.id}')" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">
+              Edit
+            </button>
+          `;
 
           const tr = document.createElement('tr');
           tr.innerHTML = `
@@ -492,6 +603,7 @@
             <td>${t2Text}</td>
             <td>${tollText}</td>
             <td>${dateText}</td>
+            <td>${statusHtml}</td>
             <td>${actionHtml}</td>
           `;
           tbody.appendChild(tr);
