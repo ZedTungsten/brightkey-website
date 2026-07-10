@@ -68,10 +68,27 @@
             <div class="panel" style="margin-bottom: 2rem;">
               <div class="panel-header">Supplier Order Catalog</div>
               
-              <!-- Search & Page Stats -->
-              <div style="display: flex; gap: 1rem; align-items: center; justify-content: space-between; padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); flex-wrap: wrap; background: var(--bg-surface);">
-                <div style="display: flex; gap: 0.75rem; align-items: center; flex: 1; min-width: 280px;">
-                  <input type="search" id="supplier-search" placeholder="Search by SKU or title..." oninput="handleSupplierSearch(event)" class="form-input" style="max-width: 380px;" />
+              <!-- Business & Supplier Selectors -->
+              <div style="display: flex; gap: 1rem; padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); background: var(--bg-surface); flex-wrap: wrap;">
+                <div class="form-group" style="flex: 1; min-width: 200px; display: flex; flex-direction: column; gap: 0.4rem;">
+                  <label class="form-label" style="font-size: 0.72rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em;">Select Business</label>
+                  <select id="order-business-select" class="form-select" onchange="handleBusinessSelect(this.value)" style="height: 38px; background: var(--bg-base); color: var(--text-primary); border: 1px solid var(--border); padding: 0.5rem 0.75rem; border-radius: 6px; font-size: 0.85rem; outline: none;">
+                    <option value="">-- Choose Business --</option>
+                  </select>
+                </div>
+                <div class="form-group" style="flex: 1; min-width: 200px; display: flex; flex-direction: column; gap: 0.4rem;">
+                  <label class="form-label" style="font-size: 0.72rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em;">Select Supplier</label>
+                  <select id="order-supplier-select" class="form-select" onchange="handleSupplierSelect(this.value)" style="height: 38px; background: var(--bg-base); color: var(--text-primary); border: 1px solid var(--border); padding: 0.5rem 0.75rem; border-radius: 6px; font-size: 0.85rem; outline: none;" disabled>
+                    <option value="">-- Select Business First --</option>
+                  </select>
+                </div>
+              </div>
+
+              <div id="supplier-catalog-wrapper" style="display: none;">
+                <!-- Search & Page Stats -->
+                <div style="display: flex; gap: 1rem; align-items: center; justify-content: space-between; padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); flex-wrap: wrap; background: var(--bg-surface);">
+                  <div style="display: flex; gap: 0.75rem; align-items: center; flex: 1; min-width: 280px;">
+                    <input type="search" id="supplier-search" placeholder="Search by SKU or title..." oninput="handleSupplierSearch(event)" class="form-input" style="max-width: 380px;" />
                   <span id="supplier-count-badge" class="badge-status badge-packed" style="background: var(--bg-elevated); color: var(--text-secondary); border: 1px solid var(--border);">0 products</span>
                 </div>
                 <div id="supplier-page-info" style="font-size: 0.8rem; color: var(--text-muted); font-weight: 600;">Page 1 of 1</div>
@@ -142,6 +159,7 @@
                   </button>
                 </div>
               </div>
+            </div> <!-- End of supplier-catalog-wrapper -->
 
             </div>
           </div>
@@ -198,6 +216,9 @@
     const supplierOrderPageSize = 10;
     let supplierOrderQuantities = {};
     let supplierOrderPosting = false;
+    let suppliersList = [];
+    let selectedBusinessId = null;
+    let selectedSupplierId = null;
 
     // Initialize Page
     async function init() {
@@ -213,6 +234,18 @@
         await loadWarehouseTabs(authInfo.tenantId);
         showLoadingState();
         await loadCoreData();
+
+        // Load Businesses and Suppliers
+        const { data: bizData } = await sb.from('tenant_businesses').select('id, name').eq('company_id', companyId).order('name');
+        const bizSelect = document.getElementById('order-business-select');
+        if (bizSelect && bizData) {
+          bizSelect.innerHTML = '<option value="">-- Choose Business --</option>' +
+            bizData.map(b => `<option value="${b.id}">${escapeHtml(b.name)}</option>`).join('');
+        }
+        
+        const { data: suppliersData } = await sb.from('suppliers').select('*').eq('company_id', companyId).order('name');
+        suppliersList = suppliersData || [];
+
         await refreshDashboard();
         runAutoSyncInBackground();
 
@@ -666,14 +699,63 @@
 
 
 
+    window.handleBusinessSelect = function(bizId) {
+      selectedBusinessId = bizId;
+      selectedSupplierId = null;
+      
+      const supplierSelect = document.getElementById('order-supplier-select');
+      const catalogWrapper = document.getElementById('supplier-catalog-wrapper');
+      
+      if (!bizId) {
+        supplierSelect.disabled = true;
+        supplierSelect.innerHTML = '<option value="">-- Select Business First --</option>';
+        catalogWrapper.style.display = 'none';
+        supplierOrderQuantities = {};
+        return;
+      }
+      
+      // Filter suppliers
+      const filteredSuppliers = suppliersList.filter(s => s.business_id === null || s.business_id === bizId);
+      supplierSelect.innerHTML = '<option value="">-- Choose Supplier --</option>' +
+        filteredSuppliers.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+      supplierSelect.disabled = false;
+      
+      catalogWrapper.style.display = 'none';
+      supplierOrderQuantities = {};
+    };
+
+    window.handleSupplierSelect = function(supplierId) {
+      selectedSupplierId = supplierId;
+      const catalogWrapper = document.getElementById('supplier-catalog-wrapper');
+      
+      if (!supplierId) {
+        catalogWrapper.style.display = 'none';
+        supplierOrderQuantities = {};
+        return;
+      }
+      
+      catalogWrapper.style.display = 'block';
+      supplierOrderQuantities = {};
+      supplierOrderPage = 1;
+      renderSupplierOrderTab();
+    };
+
     // Render Tab 2: Supplier Order Catalog
     window.renderSupplierOrderTab = function() { if (!document.getElementById('supplier-product-list')) return;
       const tbody = document.getElementById('supplier-product-list');
       if (!tbody) return;
 
-      // Filter products
+      // Filter products by selected business
+      const bizSelect = document.getElementById('order-business-select');
+      const selectedBizOption = bizSelect ? bizSelect.options[bizSelect.selectedIndex] : null;
+      const bizName = (selectedBizOption && selectedBizOption.value) ? selectedBizOption.text : '';
+
       const query = supplierOrderSearch.toLowerCase().trim();
       const filtered = allProducts.filter(p => {
+        if (bizName) {
+          const productBiz = (p.business || '').toLowerCase();
+          if (productBiz !== bizName.toLowerCase()) return false;
+        }
         const sku = (p.sku || '').toLowerCase();
         const title = (p.title || '').toLowerCase();
         return !query || sku.includes(query) || title.includes(query);
@@ -896,12 +978,16 @@
           const random = Math.floor(100 + Math.random() * 900);
           const refOrder = `SUP-${yyyy}${mm}${dd}-${random}`;
 
+          const selectedSup = suppliersList.find(s => s.id === selectedSupplierId);
+          const supplierName = selectedSup ? selectedSup.name : 'Supplier';
+
           const payloads = items.map(item => ({
             reference_id: refOrder,
             sku: item.sku,
             quantity: item.qty,
             type: 'supplier_order',
             status: 'ordered',
+            customer_name: supplierName,
             timestamp_ordered: new Date().toISOString(),
             warehouse_id: activeWarehouseId || null
           }));
@@ -933,6 +1019,11 @@
           supplierOrderSearch = "";
           const searchInput = document.getElementById('supplier-search');
           if (searchInput) searchInput.value = "";
+
+          // Reset selections
+          const bizSelect = document.getElementById('order-business-select');
+          if (bizSelect) bizSelect.value = "";
+          handleBusinessSelect("");
 
           await refreshDashboard();
           showToast('Supplier order successfully requested!');
