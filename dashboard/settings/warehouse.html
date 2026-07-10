@@ -376,6 +376,31 @@
 
     window.initSettingsPage = async function() {
       await SettingsPage.loadAllTeamMembers();
+
+      try {
+        const { data: assData } = await sb.from('employee_assignments')
+          .select('name, visibility')
+          .eq('company_id', currentCompanyId);
+          
+        const whMemberAssignmentNames = (assData || [])
+          .filter(a => Array.isArray(a.visibility) && a.visibility.includes('warehouse.member'))
+          .map(a => a.name);
+          
+        let whMemberUserIds = [];
+        if (whMemberAssignmentNames.length > 0) {
+          const { data: empData } = await sb.from('employees')
+            .select('user_id')
+            .eq('company_id', currentCompanyId)
+            .in('assignment', whMemberAssignmentNames);
+          whMemberUserIds = (empData || []).map(e => e.user_id).filter(Boolean);
+        }
+        
+        // Filter the dropdown list to only show users with warehouse.member visibility
+        SettingsPage.allTeamMembers = SettingsPage.allTeamMembers.filter(m => whMemberUserIds.includes(m.user_id));
+      } catch (err) {
+        console.error('Failed to filter warehouse members:', err);
+      }
+
       await loadWarehouses();
       await loadBusinesses();
       await loadSuppliers();

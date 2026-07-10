@@ -10,6 +10,78 @@
   <link rel="icon" type="image/svg+xml" href="../../assets/favicon.svg?v=2" />
 
   <link rel="stylesheet" href="shared.css">
+  <style>
+    /* Custom multiselect styling */
+    .custom-multiselect {
+      position: relative;
+      display: inline-block;
+      width: 100%;
+      max-width: 320px;
+    }
+    .multiselect-btn {
+      width: 100%;
+      background: var(--bg-surface);
+      color: var(--text-primary);
+      border: 1px solid var(--border);
+      padding: 0.5rem 0.75rem;
+      border-radius: 6px;
+      font-size: 0.82rem;
+      text-align: left;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      outline: none;
+      box-shadow: var(--shadow-sm);
+    }
+    .multiselect-btn::after {
+      content: "";
+      width: 0;
+      height: 0;
+      border-left: 4px solid transparent;
+      border-right: 4px solid transparent;
+      border-top: 4px solid var(--text-muted);
+      margin-left: 0.5rem;
+    }
+    .multiselect-dropdown {
+      display: none;
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      margin-top: 4px;
+      max-height: 200px;
+      overflow-y: auto;
+      z-index: 10;
+      box-shadow: var(--shadow-lg);
+      padding: 0.35rem 0;
+    }
+    .multiselect-dropdown.open {
+      display: block;
+    }
+    .multiselect-option {
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+      padding: 0.4rem 0.75rem;
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      cursor: pointer;
+      user-select: none;
+      transition: background 0.15s;
+    }
+    .multiselect-option:hover {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+    }
+    .multiselect-option input[type="checkbox"] {
+      cursor: pointer;
+      margin: 0;
+    }
+  </style>
 </head>
 <body>
 
@@ -87,7 +159,8 @@
     let assignments = [];
     const VISIBILITY_OPTIONS = [
       { key: 'booking.door_specifications', label: 'Booking › Door Specifications' },
-      { key: 'sales.commissions', label: 'Sales › Commissions' }
+      { key: 'sales.commissions', label: 'Sales › Commissions' },
+      { key: 'warehouse.member', label: 'Warehouse Member' }
     ];
     const showToast = (msg, isError) => SettingsPage.showToast(msg, isError);
 
@@ -116,14 +189,64 @@
         tbody.innerHTML = '<tr><td colspan="3" class="empty-state">No assignments yet. Click "+ Add Assignment" to create one.</td></tr>';
         return;
       }
-      tbody.innerHTML = assignments.map((a, idx) => `
-        <tr>
-          <td><input type="text" class="form-input" value="${escapeHtml(a.name)}" oninput="assignments[${idx}].name = this.value" placeholder="e.g. Installer" style="max-width: 200px;" /></td>
-          <td><div class="vis-group">${VISIBILITY_OPTIONS.map(opt => `<label class="vis-label"><input type="checkbox" value="${opt.key}" ${a.visibility.includes(opt.key) ? 'checked' : ''} onchange="toggleVisibility(${idx}, '${opt.key}', this.checked)" />${opt.label}</label>`).join('')}</div></td>
-          <td><button class="btn btn-danger btn-sm" onclick="deleteAssignment(${idx}, '${a.id || ''}')" title="Delete assignment" style="padding: 0.35rem 0.55rem;"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button></td>
-        </tr>
-      `).join('');
+      tbody.innerHTML = assignments.map((a, idx) => {
+        const selectedLabels = VISIBILITY_OPTIONS
+          .filter(opt => a.visibility.includes(opt.key))
+          .map(opt => opt.label.split(' › ').pop())
+          .join(', ') || 'Select Visibility';
+          
+        const optionsHtml = VISIBILITY_OPTIONS.map(opt => {
+          const isChecked = a.visibility.includes(opt.key);
+          return `
+            <div class="multiselect-option" onclick="event.stopPropagation(); window.toggleOptionCheckbox(this)">
+              <input type="checkbox" value="${opt.key}" ${isChecked ? 'checked' : ''} onchange="toggleVisibility(${idx}, '${opt.key}', this.checked)" onclick="event.stopPropagation()" />
+              <span>${escapeHtml(opt.label)}</span>
+            </div>
+          `;
+        }).join('');
+
+        return `
+          <tr>
+            <td><input type="text" class="form-input" value="${escapeHtml(a.name)}" oninput="assignments[${idx}].name = this.value" placeholder="e.g. Installer" style="max-width: 200px;" /></td>
+            <td>
+              <div class="custom-multiselect" id="vis-select-${idx}">
+                <button type="button" class="multiselect-btn" onclick="toggleDropdown(${idx}, event)">
+                  ${escapeHtml(selectedLabels)}
+                </button>
+                <div class="multiselect-dropdown" id="vis-dropdown-${idx}">
+                  ${optionsHtml}
+                </div>
+              </div>
+            </td>
+            <td><button class="btn btn-danger btn-sm" onclick="deleteAssignment(${idx}, '${a.id || ''}')" title="Delete assignment" style="padding: 0.35rem 0.55rem;"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button></td>
+          </tr>
+        `;
+      }).join('');
     }
+
+    window.toggleOptionCheckbox = function(optionDiv) {
+      const chk = optionDiv.querySelector('input[type="checkbox"]');
+      if (chk) {
+        chk.checked = !chk.checked;
+        chk.dispatchEvent(new Event('change'));
+      }
+    };
+
+    window.toggleDropdown = function(idx, event) {
+      event.stopPropagation();
+      const dropdown = document.getElementById(`vis-dropdown-${idx}`);
+      const isOpen = dropdown.classList.contains('open');
+      
+      document.querySelectorAll('.multiselect-dropdown').forEach(d => d.classList.remove('open'));
+      
+      if (!isOpen) {
+        dropdown.classList.add('open');
+      }
+    };
+
+    window.addEventListener('click', () => {
+      document.querySelectorAll('.multiselect-dropdown').forEach(d => d.classList.remove('open'));
+    });
 
     window.addAssignment = function() {
       assignments.push({ id: null, name: '', visibility: [] });
@@ -136,6 +259,15 @@
       const vis = assignments[idx].visibility;
       if (checked && !vis.includes(key)) vis.push(key);
       if (!checked) assignments[idx].visibility = vis.filter(v => v !== key);
+      
+      const btn = document.querySelector(`#vis-select-${idx} .multiselect-btn`);
+      if (btn) {
+        const selectedLabels = VISIBILITY_OPTIONS
+          .filter(opt => vis.includes(opt.key))
+          .map(opt => opt.label.split(' › ').pop())
+          .join(', ') || 'Select Visibility';
+        btn.textContent = selectedLabels;
+      }
     };
 
     window.deleteAssignment = async function(idx, id) {
