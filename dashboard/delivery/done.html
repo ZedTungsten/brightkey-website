@@ -390,6 +390,7 @@
       companyId: null,
       activeTransactions: [],
       deliveryBookings: [],
+      consolidatedOrders: [],
       selectedBooking: null,
       donePhotoBlob: null,
       currentPageDone: 1,
@@ -524,25 +525,57 @@
         const filterYear = this.currentDate.getFullYear();
         const filterMonth = this.currentDate.getMonth();
 
-        const doneQueue = this.deliveryBookings.filter(db => {
-          // Find matching dispatched or received transactions from warehouse/all-orders
-          const tx = this.activeTransactions.find(t => t.reference_id === db.reference_id && ['dispatched', 'received'].includes(t.status));
-          if (!tx) return false;
-
-          const dateStr = db.delivered_at || db.created_at;
-          if (!dateStr) return false;
-          
-          const d = new Date(dateStr);
-          return d.getFullYear() === filterYear && d.getMonth() === filterMonth;
+        // 1. Group activeTransactions by reference_id
+        const groupedMap = {};
+        this.activeTransactions.forEach(t => {
+          if (!['dispatched', 'received'].includes(t.status)) return;
+          const refId = t.reference_id || 'N/A';
+          if (!groupedMap[refId]) {
+            groupedMap[refId] = [];
+          }
+          groupedMap[refId].push(t);
         });
 
-        if (doneQueue.length === 0) {
+        // 2. Consolidate and filter by month
+        this.consolidatedOrders = [];
+        for (const [refId, txs] of Object.entries(groupedMap)) {
+          const db = this.deliveryBookings.find(b => b.reference_id === refId);
+          
+          let dateStr = '';
+          if (db) {
+            dateStr = db.delivered_at || db.created_at;
+          } else {
+            dateStr = txs[0].updated_at || txs[0].created_at;
+          }
+          
+          if (!dateStr) continue;
+          
+          const d = new Date(dateStr);
+          if (d.getFullYear() !== filterYear || d.getMonth() !== filterMonth) {
+            continue;
+          }
+
+          this.consolidatedOrders.push({
+            reference_id: refId,
+            customer_name: txs[0].customer_name || (db ? db.customer_name : 'N/A'),
+            customer_city: txs[0].customer_city || (db ? db.customer_city : 'N/A'),
+            txs: txs,
+            db: db,
+            dateCompleted: dateStr,
+            status: txs.some(t => t.status === 'received') ? 'received' : 'dispatched'
+          });
+        }
+
+        // Sort consolidated orders by completed date (descending)
+        this.consolidatedOrders.sort((a, b) => new Date(b.dateCompleted) - new Date(a.dateCompleted));
+
+        if (this.consolidatedOrders.length === 0) {
           tbody.innerHTML = `<tr><td colspan="12" style="text-align:center; padding:3rem; color:var(--text-muted);">No completed or picked up orders for this month.</td></tr>`;
           this.renderPagination(0, this.currentPageDone, 'done-pagination');
           return;
         }
 
-        const totalItems = doneQueue.length;
+        const totalItems = this.consolidatedOrders.length;
 
         const maxPage = Math.ceil(totalItems / this.itemsPerPage) || 1;
         if (this.currentPageDone > maxPage) {
@@ -551,51 +584,49 @@
 
         const startIdx = (this.currentPageDone - 1) * this.itemsPerPage;
         const endIdx = startIdx + this.itemsPerPage;
-        const paginatedDone = doneQueue.slice(startIdx, endIdx);
+        const paginatedOrders = this.consolidatedOrders.slice(startIdx, endIdx);
 
-        paginatedDone.forEach(db => {
-          const items = this.activeTransactions.filter(t => t.reference_id === db.reference_id && ['dispatched', 'received'].includes(t.status));
-          const skusHtml = items.map(t => `<code>${t.sku}</code>`).join('<br/>') || '—';
-          const qtysHtml = items.map(t => `<strong>${t.quantity}</strong>`).join('<br/>') || '—';
+        paginatedOrders.forEach(order => {
+          const db = order.db;
+          const skusHtml = order.txs.map(t => `<code>${t.sku}</code>`).join('<br/>') || '—';
+          const qtysHtml = order.txs.map(t => `<strong>${t.quantity}</strong>`).join('<br/>') || '—';
 
-          const baseText = db.base_fee ? `₱${(db.base_fee / 100).toFixed(2)}` : '₱0.00';
-          const t1Text = db.tip_1 ? `₱${(db.tip_1 / 100).toFixed(2)}` : '₱0.00';
-          const t2Text = db.tip_2 ? `₱${(db.tip_2 / 100).toFixed(2)}` : '₱0.00';
-          const tollText = db.toll ? `₱${(db.toll / 100).toFixed(2)}` : '₱0.00';
+          const baseText = (db && db.base_fee) ? `₱${(db.base_fee / 100).toFixed(2)}` : '₱0.00';
+          const t1Text = (db && db.tip_1) ? `₱${(db.tip_1 / 100).toFixed(2)}` : '₱0.00';
+          const t2Text = (db && db.tip_2) ? `₱${(db.tip_2 / 100).toFixed(2)}` : '₱0.00';
+          const tollText = (db && db.toll) ? `₱${(db.toll / 100).toFixed(2)}` : '₱0.00';
 
-          const dateText = db.status === 'delivered' && db.delivered_at 
-            ? new Date(db.delivered_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) 
+          const dateText = order.dateCompleted 
+            ? new Date(order.dateCompleted).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) 
             : '—';
 
-          // Get transaction status
-          const tx = this.activeTransactions.find(t => t.reference_id === db.reference_id && ['dispatched', 'received'].includes(t.status));
-          const txStatus = tx ? tx.status : '—';
           const statusColors = {
             dispatched: 'var(--cyan-light)',
             received: '#10b981'
           };
-          const statusText = txStatus.charAt(0).toUpperCase() + txStatus.slice(1);
-          const statusHtml = `<span style="font-weight: 700; color: ${statusColors[txStatus] || 'var(--text-secondary)'};">${statusText}</span>`;
+          const statusText = order.status.charAt(0).toUpperCase() + order.status.slice(1);
+          const statusHtml = `<span style="font-weight: 700; color: ${statusColors[order.status] || 'var(--text-secondary)'};">${statusText}</span>`;
 
           let actionHtml = '';
-          if (db.status !== 'delivered') {
+          if (order.status !== 'received') {
+            const targetId = db ? db.id : `REF:${order.reference_id}`;
             actionHtml += `
-              <button class="btn btn-cyan btn-sm" onclick="DeliveryApp.openDoneModal('${db.id}')" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.5rem;">
+              <button class="btn btn-cyan btn-sm" onclick="DeliveryApp.openDoneModal('${targetId}')" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.5rem;">
                 Received by Customer
               </button>
             `;
           }
           actionHtml += `
-            <button class="btn btn-outline btn-sm" onclick="DeliveryApp.openEditModal('${db.id}')" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">
+            <button class="btn btn-outline btn-sm" onclick="DeliveryApp.openEditModal('${order.reference_id}')" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">
               Edit
             </button>
           `;
 
           const tr = document.createElement('tr');
           tr.innerHTML = `
-            <td><strong>${esc(db.reference_id)}</strong></td>
-            <td>${esc(db.customer_name || 'N/A')}</td>
-            <td>${esc(db.customer_city || 'N/A')}</td>
+            <td><strong>${esc(order.reference_id)}</strong></td>
+            <td>${esc(order.customer_name)}</td>
+            <td>${esc(order.customer_city)}</td>
             <td>${skusHtml}</td>
             <td>${qtysHtml}</td>
             <td>${baseText}</td>
@@ -641,8 +672,22 @@
         this.renderDoneQueue();
       },
 
-      openDoneModal(bookingId) {
-        const booking = this.deliveryBookings.find(b => b.id === bookingId);
+      openDoneModal(idOrRef) {
+        let booking;
+        if (idOrRef.startsWith('REF:')) {
+          const refId = idOrRef.substring(4);
+          const order = this.consolidatedOrders.find(o => o.reference_id === refId);
+          if (!order) return;
+          booking = {
+            id: idOrRef,
+            reference_id: refId,
+            customer_name: order.customer_name,
+            customer_city: order.customer_city,
+            isVirtual: true
+          };
+        } else {
+          booking = this.deliveryBookings.find(b => b.id === idOrRef);
+        }
         if (!booking) return;
 
         this.selectedBooking = booking;
@@ -713,15 +758,32 @@
         const sb = window.BKAuth.sb;
 
         const now = new Date().toISOString();
-        const { error: updErr } = await sb.from('delivery_bookings')
-          .update({
-            status: 'delivered',
-            received_photo_url: uploadResult.url,
-            delivered_at: now
-          })
-          .eq('id', DeliveryApp.selectedBooking.id);
-
-        if (updErr) throw updErr;
+        if (DeliveryApp.selectedBooking.isVirtual) {
+          const { error: insErr } = await sb.from('delivery_bookings')
+            .insert({
+              reference_id: DeliveryApp.selectedBooking.reference_id,
+              customer_name: DeliveryApp.selectedBooking.customer_name,
+              customer_city: DeliveryApp.selectedBooking.customer_city,
+              base_fee: 0,
+              tip_1: 0,
+              tip_2: 0,
+              toll: 0,
+              status: 'delivered',
+              received_photo_url: uploadResult.url,
+              delivered_at: now,
+              company_id: DeliveryApp.companyId
+            });
+          if (insErr) throw insErr;
+        } else {
+          const { error: updErr } = await sb.from('delivery_bookings')
+            .update({
+              status: 'delivered',
+              received_photo_url: uploadResult.url,
+              delivered_at: now
+            })
+            .eq('id', DeliveryApp.selectedBooking.id);
+          if (updErr) throw updErr;
+        }
 
         // Fetch transactions for this reference_id that are currently 'dispatched'
         const { data: txsToUpdate, error: txsErr } = await sb.from('inventory_transactions')
