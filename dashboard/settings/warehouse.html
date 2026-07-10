@@ -175,16 +175,31 @@
         </div>
 
         <div style="margin-top:0.4rem; padding-top:0.4rem; border-top:1px solid var(--border);">
-          <label class="form-label" style="font-weight:700; margin-bottom:0.4rem;">Warehouse Managers</label>
+          <label class="form-label" style="font-weight:700; margin-bottom:0.4rem;">Warehouse Members</label>
           
-          <div style="display:flex; gap:0.5rem; margin-bottom:0.5rem;">
-            <select id="edit-wh-add-manager-select" class="form-select" style="flex:1; background:var(--bg-elevated); color:var(--text-primary); border:1px solid var(--border); padding:0.5rem 0.75rem; border-radius:6px; font-size:0.85rem; outline:none;">
-              <option value="">-- Choose Manager --</option>
-            </select>
-            <button type="button" class="btn btn-outline" onclick="addManagerFromModal()" style="height:36px;">Add</button>
+          <div style="display:flex; flex-direction:column; gap:0.5rem; margin-bottom:0.75rem; background:var(--bg-elevated); padding:0.75rem; border-radius:6px; border:1px solid var(--border);">
+            <div style="font-size:0.72rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; margin-bottom:0.2rem;">Add New Member</div>
+            <div style="display:flex; gap:0.5rem;">
+              <select id="edit-wh-add-manager-select" class="form-select" style="flex:1; background:var(--bg-base); color:var(--text-primary); border:1px solid var(--border); padding:0.5rem 0.75rem; border-radius:6px; font-size:0.85rem; outline:none;">
+                <option value="">-- Choose Member --</option>
+              </select>
+              <button type="button" class="btn btn-primary" onclick="addManagerFromModal()" style="height:36px; padding:0 1rem; font-size:0.8rem;">Add Member</button>
+            </div>
+            
+            <div style="font-size:0.72rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; margin-top:0.4rem; margin-bottom:0.2rem;">Set Permissions for New Member</div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.4rem; font-size:0.78rem; color:var(--text-secondary);">
+              <label style="display:flex; align-items:center; gap:0.35rem; cursor:pointer;"><input type="checkbox" id="add-wh-perm-inspect" checked /> QA Inspect</label>
+              <label style="display:flex; align-items:center; gap:0.35rem; cursor:pointer;"><input type="checkbox" id="add-wh-perm-pack" checked /> Pack</label>
+              <label style="display:flex; align-items:center; gap:0.35rem; cursor:pointer;"><input type="checkbox" id="add-wh-perm-dispatch" checked /> Dispatch / Pick up</label>
+              <label style="display:flex; align-items:center; gap:0.35rem; cursor:pointer;"><input type="checkbox" id="add-wh-perm-receive" checked /> Receive</label>
+              <label style="display:flex; align-items:center; gap:0.35rem; cursor:pointer;"><input type="checkbox" id="add-wh-perm-transfer" checked /> Transfer</label>
+              <label style="display:flex; align-items:center; gap:0.35rem; cursor:pointer;"><input type="checkbox" id="add-wh-perm-order" checked /> Order</label>
+              <label style="display:flex; align-items:center; gap:0.35rem; cursor:pointer;"><input type="checkbox" id="add-wh-perm-edit-stocks" checked /> Edit Stocks</label>
+              <label style="display:flex; align-items:center; gap:0.35rem; cursor:pointer;"><input type="checkbox" id="add-wh-perm-manage-all-orders" checked /> Edit Status on All Orders</label>
+            </div>
           </div>
           
-          <div id="edit-wh-managers-list" style="display:flex; flex-direction:column; gap:0.4rem; max-height:160px; overflow-y:auto; padding-right:4px;">
+          <div id="edit-wh-managers-list" style="display:flex; flex-direction:column; gap:0.4rem; max-height:220px; overflow-y:auto; padding-right:4px;">
             <!-- Injected dynamically -->
           </div>
         </div>
@@ -507,16 +522,23 @@
       document.getElementById('edit-wh-city').value = wh.city || '';
       document.getElementById('edit-wh-province').value = wh.province || '';
 
-      // Populate managers dropdown (filter out already assigned managers and current user)
+      // Populate members dropdown (filter out already assigned managers and current user)
       const select = document.getElementById('edit-wh-add-manager-select');
       if (select) {
         const existingManagerIds = new Set((wh.managers || []).map(m => m.user_id));
         const eligibleMembers = SettingsPage.allTeamMembers.filter(m =>
           !existingManagerIds.has(m.user_id) && m.user_id
         );
-        select.innerHTML = '<option value="">-- Choose Manager --</option>' +
+        select.innerHTML = '<option value="">-- Choose Member --</option>' +
           eligibleMembers.map(m => `<option value="${m.user_id}">${escapeHtml(m.full_name || m.user_email || 'Unknown')}</option>`).join('');
       }
+
+      // Reset add permission checkboxes to checked by default
+      const addPerms = ['inspect', 'pack', 'dispatch', 'receive', 'transfer', 'order', 'edit-stocks', 'manage-all-orders'];
+      addPerms.forEach(p => {
+        const chk = document.getElementById(`add-wh-perm-${p}`);
+        if (chk) chk.checked = true;
+      });
 
       renderWarehouseModalManagers();
       document.getElementById('warehouse-modal').classList.add('open');
@@ -595,7 +617,7 @@
       if (!listDiv || !wh) return;
 
       if (!wh.managers || wh.managers.length === 0) {
-        listDiv.innerHTML = '<div style="font-size:0.8rem; color:var(--text-muted); padding:0.5rem 0;">No managers assigned yet.</div>';
+        listDiv.innerHTML = '<div style="font-size:0.8rem; color:var(--text-muted); padding:0.5rem 0;">No members assigned yet.</div>';
         return;
       }
 
@@ -605,15 +627,38 @@
         const email = member ? (member.user_email || '') : '';
         
         return `
-          <div style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-elevated); padding:0.4rem 0.6rem; border-radius:6px; border:1px solid var(--border);">
-            <div>
-              <div style="font-size:0.83rem; font-weight:600; color:var(--text-primary);">${escapeHtml(displayName)}</div>
-              <div style="font-size:0.72rem; color:var(--text-muted);">${escapeHtml(email)}</div>
+          <div style="background:var(--bg-elevated); padding:0.6rem; border-radius:6px; border:1px solid var(--border); display:flex; flex-direction:column; gap:0.4rem;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <div>
+                <span style="font-size:0.83rem; font-weight:600; color:var(--text-primary);">${escapeHtml(displayName)}</span>
+                <span style="font-size:0.72rem; color:var(--text-muted); margin-left:0.4rem;">(${escapeHtml(email)})</span>
+              </div>
+              <button type="button" class="btn btn-danger btn-sm" style="padding:0.15rem 0.4rem; font-size:0.75rem;" onclick="removeManagerFromModal('${mgr.id}')">Remove</button>
             </div>
-            <button type="button" class="btn btn-danger btn-sm" style="padding:0.15rem 0.4rem; font-size:0.75rem;" onclick="removeManagerFromModal('${mgr.id}')">Remove</button>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.35rem; font-size:0.72rem; color:var(--text-muted); border-top:1px solid var(--border); padding-top:0.35rem;">
+              <label style="display:flex; align-items:center; gap:0.25rem; cursor:pointer;"><input type="checkbox" ${mgr.can_inspect ? 'checked' : ''} onchange="updateManagerPerm('${mgr.id}', 'can_inspect', this.checked)" /> QA Inspect</label>
+              <label style="display:flex; align-items:center; gap:0.25rem; cursor:pointer;"><input type="checkbox" ${mgr.can_pack ? 'checked' : ''} onchange="updateManagerPerm('${mgr.id}', 'can_pack', this.checked)" /> Pack</label>
+              <label style="display:flex; align-items:center; gap:0.25rem; cursor:pointer;"><input type="checkbox" ${mgr.can_dispatch ? 'checked' : ''} onchange="updateManagerPerm('${mgr.id}', 'can_dispatch', this.checked)" /> Dispatch</label>
+              <label style="display:flex; align-items:center; gap:0.25rem; cursor:pointer;"><input type="checkbox" ${mgr.can_receive ? 'checked' : ''} onchange="updateManagerPerm('${mgr.id}', 'can_receive', this.checked)" /> Receive</label>
+              <label style="display:flex; align-items:center; gap:0.25rem; cursor:pointer;"><input type="checkbox" ${mgr.can_transfer ? 'checked' : ''} onchange="updateManagerPerm('${mgr.id}', 'can_transfer', this.checked)" /> Transfer</label>
+              <label style="display:flex; align-items:center; gap:0.25rem; cursor:pointer;"><input type="checkbox" ${mgr.can_order ? 'checked' : ''} onchange="updateManagerPerm('${mgr.id}', 'can_order', this.checked)" /> Order</label>
+              <label style="display:flex; align-items:center; gap:0.25rem; cursor:pointer;"><input type="checkbox" ${mgr.can_edit_stocks ? 'checked' : ''} onchange="updateManagerPerm('${mgr.id}', 'can_edit_stocks', this.checked)" /> Edit Stocks</label>
+              <label style="display:flex; align-items:center; gap:0.25rem; cursor:pointer;"><input type="checkbox" ${mgr.can_manage_all_orders ? 'checked' : ''} onchange="updateManagerPerm('${mgr.id}', 'can_manage_all_orders', this.checked)" /> All Orders</label>
+            </div>
           </div>
         `;
       }).join('');
+    };
+
+    window.updateManagerPerm = async function(mgrId, field, checked) {
+      try {
+        const { error } = await sb.from('warehouse_managers').update({ [field]: checked }).eq('id', mgrId);
+        if (error) throw error;
+        showToast('Permissions updated.');
+        await loadWarehouses();
+      } catch (err) {
+        showToast('Failed to update permission: ' + err.message, true);
+      }
     };
 
     window.addManagerFromModal = async function() {
@@ -621,10 +666,23 @@
       const userId = document.getElementById('edit-wh-add-manager-select').value;
       if (!whId || !userId) return;
 
+      const payload = {
+        warehouse_id: whId,
+        user_id: userId,
+        can_inspect: document.getElementById('add-wh-perm-inspect').checked,
+        can_pack: document.getElementById('add-wh-perm-pack').checked,
+        can_dispatch: document.getElementById('add-wh-perm-dispatch').checked,
+        can_receive: document.getElementById('add-wh-perm-receive').checked,
+        can_transfer: document.getElementById('add-wh-perm-transfer').checked,
+        can_order: document.getElementById('add-wh-perm-order').checked,
+        can_edit_stocks: document.getElementById('add-wh-perm-edit-stocks').checked,
+        can_manage_all_orders: document.getElementById('add-wh-perm-manage-all-orders').checked
+      };
+
       try {
-        const { error } = await sb.from('warehouse_managers').insert([{ warehouse_id: whId, user_id: userId }]);
+        const { error } = await sb.from('warehouse_managers').insert([payload]);
         if (error) throw error;
-        showToast('Manager added successfully.');
+        showToast('Member added successfully.');
         await loadWarehouses();
         
         // Refresh select dropdown options
@@ -635,22 +693,22 @@
           const eligibleMembers = SettingsPage.allTeamMembers.filter(m =>
             !existingManagerIds.has(m.user_id) && m.user_id
           );
-          select.innerHTML = '<option value="">-- Choose Manager --</option>' +
+          select.innerHTML = '<option value="">-- Choose Member --</option>' +
             eligibleMembers.map(m => `<option value="${m.user_id}">${escapeHtml(m.full_name || m.user_email || 'Unknown')}</option>`).join('');
         }
 
         renderWarehouseModalManagers();
       } catch (err) {
-        showToast('Failed to add manager: ' + err.message, true);
+        showToast('Failed to add member: ' + err.message, true);
       }
     };
 
     window.removeManagerFromModal = async function(mgrId) {
-      showConfirmModal('Remove this manager?', async () => {
+      showConfirmModal('Remove this member?', async () => {
         try {
           const { error } = await sb.from('warehouse_managers').delete().eq('id', mgrId);
           if (error) throw error;
-          showToast('Manager removed successfully.');
+          showToast('Member removed successfully.');
           await loadWarehouses();
           
           // Refresh select dropdown options
@@ -662,13 +720,13 @@
             const eligibleMembers = SettingsPage.allTeamMembers.filter(m =>
               !existingManagerIds.has(m.user_id) && m.user_id
             );
-            select.innerHTML = '<option value="">-- Choose Manager --</option>' +
+            select.innerHTML = '<option value="">-- Choose Member --</option>' +
               eligibleMembers.map(m => `<option value="${m.user_id}">${escapeHtml(m.full_name || m.user_email || 'Unknown')}</option>`).join('');
           }
 
           renderWarehouseModalManagers();
         } catch (err) {
-          showToast('Failed to remove manager: ' + err.message, true);
+          showToast('Failed to remove member: ' + err.message, true);
         }
       });
     };

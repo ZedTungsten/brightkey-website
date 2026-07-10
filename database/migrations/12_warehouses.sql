@@ -26,10 +26,15 @@ CREATE TABLE public.warehouse_managers (
   id           uuid    PRIMARY KEY DEFAULT gen_random_uuid(),
   warehouse_id uuid    NOT NULL REFERENCES public.warehouses(id) ON DELETE CASCADE,
   user_id      uuid    NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  can_inspect  boolean NOT NULL DEFAULT true,
   can_pack     boolean NOT NULL DEFAULT true,
   can_dispatch boolean NOT NULL DEFAULT true,
-  can_cancel   boolean NOT NULL DEFAULT true,
   can_receive  boolean NOT NULL DEFAULT true,
+  can_transfer boolean NOT NULL DEFAULT true,
+  can_order    boolean NOT NULL DEFAULT true,
+  can_edit_stocks boolean NOT NULL DEFAULT true,
+  can_manage_all_orders boolean NOT NULL DEFAULT true,
+  can_cancel   boolean NOT NULL DEFAULT true,
   created_at   timestamptz NOT NULL DEFAULT now(),
   UNIQUE(warehouse_id, user_id)
 );
