@@ -331,44 +331,44 @@ window.BKFinancialCalculators = {
     // 3. Salaries, Specials, Commissions, Adjustments
     months.forEach(m => {
       const mKey = m.key;
-      const monthRecords = payslipRecords.filter(r => r.payout_month === mKey);
+      const monthBookings = bookings.filter(b => {
+        if (!b.scheduled_date) return false;
+        const d = new Date(b.scheduled_date);
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` === mKey;
+      });
 
-      if (monthRecords.length > 0) {
-        monthRecords.forEach(r => {
-          monthlyValues[mKey].salaries += Math.round((Number(r.basic_paid || r.salary) || 0) * 100);
-          monthlyValues[mKey].salaries += Math.round((Number(r.special_payouts) || 0) * 100);
-          monthlyValues[mKey].commissions += Math.round((Number(r.commissions) || 0) * 100);
-          monthlyValues[mKey].adjustments += Math.round((Number(r.adjustments) || 0) * 100);
-        });
-      } else {
-        employees.forEach(emp => {
-          if (emp.employment_status !== 'Active') return;
+      employees.forEach(emp => {
+        // Fallback/Always calculate dynamically from active employment base salary
+        if (emp.employment_status === 'Active') {
           const baseSal = Math.round((emp.salary || emp.monthly_salary || 0) * 100);
           monthlyValues[mKey].salaries += baseSal;
-        });
+        }
 
+        // Resolve checked special payouts for this employee in the month
         const specialSchedules = trackerConfig.specialSchedules || [];
         specialSchedules.forEach(spec => {
-          monthlyValues[mKey].salaries += Math.round((Number(spec.value) || 0) * 100);
+          if (spec.employeeId === emp.id) {
+            const isPaid = specialPayoutState?.[mKey]?.[`${emp.id}_${spec.day}`] || false;
+            if (isPaid) {
+              monthlyValues[mKey].salaries += Math.round((Number(spec.value) || 0) * 100);
+            }
+          }
         });
 
-        const monthBookings = bookings.filter(b => {
-          if (!b.scheduled_date) return false;
-          const d = new Date(b.scheduled_date);
-          return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` === mKey;
-        });
+        // Resolve commissions for this employee in the month
         monthBookings.forEach(b => {
-          const bookingComms = commissionAssignments.filter(ca => ca.booking_id === b.id);
+          const bookingComms = commissionAssignments.filter(ca => ca.booking_id === b.id && ca.employee_id === emp.id);
           bookingComms.forEach(ca => {
             monthlyValues[mKey].commissions += (ca.amount || 0);
           });
         });
 
-        const monthAdjs = adjustmentsList.filter(a => a.date && a.date.slice(0, 7) === mKey);
-        monthAdjs.forEach(a => {
+        // Resolve adjustments for this employee in the month
+        const empAdjs = adjustmentsList.filter(a => a.employee_id === emp.id && a.date && a.date.slice(0, 7) === mKey);
+        empAdjs.forEach(a => {
           monthlyValues[mKey].adjustments += Math.round((Number(a.amount) || 0) * 100);
         });
-      }
+      });
     });
 
     // 4. Shipping
