@@ -463,40 +463,36 @@
             });
 
             this.employees.forEach(emp => {
-              const doorJobs = [];
+              let leadCount = 0;
+              let assistCount = 0;
+              let serviceEarnings = 0;
+
               monthBookings.forEach(b => {
                 const assignedDoors = this.getAssignedDoorsForEmployee(b, emp.id);
                 assignedDoors.forEach(d => {
-                  if (d.completed) doorJobs.push(d);
+                  if (!d.completed) return;
+                  if (d.roles.includes('lead')) {
+                    leadCount++;
+                  } else if (d.roles.includes('assist')) {
+                    assistCount++;
+                  }
+                  if (d.roles.includes('service')) {
+                    d.skus.forEach(sku => {
+                      const matchedService = extraServicesList.find(es => es.sku === sku);
+                      if (matchedService) {
+                        serviceEarnings += matchedService.rate;
+                      }
+                    });
+                  }
                 });
               });
 
-              doorJobs.sort((a, b) => new Date(a.scheduled_date) - new Date(b.scheduled_date));
-
-              let runningCredit = 0;
+              const totalCredit = (leadCount * leadWeight) + (assistCount * assistWeight);
               let thresholdEarnings = 0;
-              let serviceEarnings = 0;
-
-              doorJobs.forEach(job => {
-                let weight = 0;
-                if (job.roles.includes('lead')) weight = leadWeight;
-                else if (job.roles.includes('assist')) weight = assistWeight;
-
-                if (job.roles.includes('service')) {
-                  job.skus.forEach(sku => {
-                    const matchedService = extraServicesList.find(es => es.sku === sku);
-                    if (matchedService) serviceEarnings += matchedService.rate;
-                  });
-                }
-
-                const previousCredit = runningCredit;
-                const newCredit = previousCredit + weight;
-                if (newCredit > thresholdVal) {
-                  const extraCredit = weight;
-                  thresholdEarnings += (extraCredit * leadRateVal);
-                }
-                runningCredit = newCredit;
-              });
+              if (totalCredit > thresholdVal) {
+                const extraCredit = totalCredit - thresholdVal;
+                thresholdEarnings = extraCredit * leadRateVal;
+              }
 
               monthlyValues[mKey].installations += ((thresholdEarnings + serviceEarnings) * 100);
             });
