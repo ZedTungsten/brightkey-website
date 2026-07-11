@@ -227,7 +227,6 @@
         <!-- OPEX Total Card -->
         <div id="opex-total-card" style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1rem 1.5rem; box-shadow: var(--shadow-sm); margin-bottom: 1.5rem; display: flex; align-items: center; justify-content: space-between;">
           <div>
-            <span style="font-size: 0.78rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; display: block;">Total OPEX for this month</span>
             <span style="font-size: 1.5rem; font-weight: 800; color: var(--cyan-light); margin-top: 0.15rem; display: block;" id="opex-grand-total">₱0.00</span>
           </div>
         </div>
@@ -237,7 +236,7 @@
           <div>
             <div style="border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; margin-bottom: 0.75rem;">
               <h2 style="font-size: 1rem; font-weight: 800; color: var(--text-primary); margin: 0;">Operations</h2>
-              <span style="font-size: 0.72rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 0.15rem; display: block;">Salaries, Payouts, and Adjustments</span>
+              <span style="font-size: 0.72rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 0.15rem; display: block;">Salaries and Special Payouts</span>
             </div>
             
             <div class="excel-container" style="margin-top: 0;">
@@ -245,21 +244,72 @@
                 <thead>
                   <tr>
                     <th style="text-align: left;">Employee</th>
-                    <th style="width: 140px; text-align: right;">Salary</th>
-                    <th style="width: 140px; text-align: right;">Special Payout</th>
-                    <th style="width: 140px; text-align: right;">Adjustment</th>
-                    <th style="width: 140px; text-align: right;">Installation</th>
-                    <th style="width: 140px; text-align: right;">Commission</th>
-                    <th style="width: 140px; text-align: right;">Total Cost</th>
+                    <th style="width: 200px; text-align: right;">Salary</th>
+                    <th style="width: 200px; text-align: right;">Special Payout</th>
+                    <th style="width: 200px; text-align: right;">Total Salary</th>
                   </tr>
                 </thead>
                 <tbody id="salaries-table-body">
                   <tr class="shimmer-row">
                     <td style="text-align: left;">Loading...</td>
-                    <td></td><td></td><td></td><td></td><td></td><td></td>
+                    <td></td><td></td><td></td>
                   </tr>
                 </tbody>
               </table>
+            </div>
+          </div>
+
+          <!-- Adjustments Section -->
+          <div>
+            <div style="border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; margin-bottom: 0.75rem;">
+              <h2 style="font-size: 1rem; font-weight: 800; color: var(--text-primary); margin: 0;">Adjustments</h2>
+              <span style="font-size: 0.72rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 0.15rem; display: block;">Deductions and Additions</span>
+            </div>
+            
+            <div class="excel-container" style="margin-top: 0;">
+              <table class="excel-table">
+                <thead>
+                  <tr>
+                    <th style="text-align: left;">Employee</th>
+                    <th style="width: 200px; text-align: right;">Adjustment</th>
+                  </tr>
+                </thead>
+                <tbody id="adjustments-table-body">
+                  <tr class="shimmer-row">
+                    <td style="text-align: left;">Loading...</td>
+                    <td></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- COGS Section (Installation & Commission) -->
+          <div>
+            <div style="border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; margin-bottom: 0.75rem;">
+              <h2 style="font-size: 1rem; font-weight: 800; color: var(--text-primary); margin: 0;">COGS (Installations &amp; Commissions)</h2>
+              <span style="font-size: 0.72rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 0.15rem; display: block;">Installation Payouts and Sales Commissions</span>
+            </div>
+            
+            <div class="excel-container" style="margin-top: 0;">
+              <table class="excel-table">
+                <thead>
+                  <tr>
+                    <th style="text-align: left;">Employee</th>
+                    <th style="width: 200px; text-align: right;">Installation</th>
+                    <th style="width: 200px; text-align: right;">Commission</th>
+                    <th style="width: 200px; text-align: right;">Total COGS</th>
+                  </tr>
+                </thead>
+                <tbody id="cogs-table-body">
+                  <tr class="shimmer-row">
+                    <td style="text-align: left;">Loading...</td>
+                    <td></td><td></td><td></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
             </div>
           </div>
 
@@ -767,8 +817,15 @@
         },
 
         renderStatement() {
-          const tbody = document.getElementById('salaries-table-body');
-          tbody.innerHTML = '';
+          const salariesTbody = document.getElementById('salaries-table-body');
+          const adjustmentsTbody = document.getElementById('adjustments-table-body');
+          const cogsTbody = document.getElementById('cogs-table-body');
+
+          if (!salariesTbody || !adjustmentsTbody || !cogsTbody) return 0;
+
+          salariesTbody.innerHTML = '';
+          adjustmentsTbody.innerHTML = '';
+          cogsTbody.innerHTML = '';
 
           const formatPHP = (val) => {
             if (val === null || val === undefined || val === '' || Number(val) === 0) return '—';
@@ -781,8 +838,11 @@
           const targetMonthKey = `${year}-${String(month).padStart(2, '0')}`;
 
           if (this.employees.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 2rem;">No employees found.</td></tr>`;
-            return;
+            const emptyRow = (cols) => `<tr><td colspan="${cols}" style="text-align: center; color: var(--text-muted); padding: 2rem;">No employees found.</td></tr>`;
+            salariesTbody.innerHTML = emptyRow(4);
+            adjustmentsTbody.innerHTML = emptyRow(2);
+            cogsTbody.innerHTML = emptyRow(4);
+            return 0;
           }
 
           // Sort employees alphabetically by name
@@ -805,16 +865,29 @@
             if (sku === 'Welding Baseplate Stainless') sku = 'BASEPLATE-S';
             return { sku, rate: es.rate };
           });
+
           let grandTotalSalaries = 0;
           let grandTotalSpecials = 0;
+          let grandTotalSalaryTotal = 0;
+
           let grandTotalAdjustments = 0;
+
           let grandTotalInstallations = 0;
           let grandTotalCommissions = 0;
+          let grandTotalCogsTotal = 0;
+
           let grandTotalCost = 0;
 
-          const rowsHtml = sortedEmps.map(emp => {
-            // Check if there is a finalized snapshot record for this employee
-const record = this.payslipRecords.find(r => r.employee_id === emp.id);
+          let salaryRowsCount = 0;
+          let adjustmentRowsCount = 0;
+          let cogsRowsCount = 0;
+
+          let salariesHtml = '';
+          let adjustmentsHtml = '';
+          let cogsHtml = '';
+
+          sortedEmps.forEach(emp => {
+            const record = this.payslipRecords.find(r => r.employee_id === emp.id);
 
             let baseSalary = 0;
             let specialPayout = 0;
@@ -839,13 +912,11 @@ const record = this.payslipRecords.find(r => r.employee_id === emp.id);
               const assignedDoors = this.getAssignedDoorsForBookingAndEmployee(b, emp.id);
               assignedDoors.forEach(d => {
                 if (!d.completed) return;
-
                 if (d.roles.includes('lead')) {
                   leadCount++;
                 } else if (d.roles.includes('assist')) {
                   assistCount++;
                 }
-
                 if (d.roles.includes('service')) {
                   d.skus.forEach(sku => {
                     const matchedService = extraServicesList.find(es => es.sku === sku);
@@ -865,7 +936,7 @@ const record = this.payslipRecords.find(r => r.employee_id === emp.id);
             }
             installationPayout = thresholdEarnings + serviceEarnings;
 
-            // 2. Calculate commissions live from assignments to prevent stale snapshotted values
+            // 2. Calculate commissions live from assignments
             const employeeCommAssignments = this.commissionAssignments.filter(a => a.employee_id === emp.id);
             employeeCommAssignments.forEach(a => {
               const b = this.bookings.find(x => x.id === a.booking_id);
@@ -888,7 +959,7 @@ const record = this.payslipRecords.find(r => r.employee_id === emp.id);
               commissionPayout += (Number(a.amount) || 0) / 100;
             });
 
-            // 3. Resolve core fields (Salary, Special, Adjustments) from snapshot or live
+            // 3. Resolve core fields (Salary, Special, Adjustments)
             adjustmentVal = this.adjustments
               .filter(a => a.employee_id === emp.id)
               .reduce((sum, a) => sum + (Number(a.amount) || 0), 0);
@@ -897,9 +968,7 @@ const record = this.payslipRecords.find(r => r.employee_id === emp.id);
               baseSalary = Number(record.salary || record.basic_paid) || 0;
               specialPayout = Number(record.special_payouts) || 0;
             } else {
-              // Fall back to live calculations (only for Active employees)
               baseSalary = emp.employment_status === 'Active' ? (Number(emp.salary) || 0) : 0;
-
               specialPayout = emp.employment_status === 'Active'
                 ? this.specialSchedules
                   .filter(s => s.employeeId === emp.id)
@@ -907,53 +976,108 @@ const record = this.payslipRecords.find(r => r.employee_id === emp.id);
                 : 0;
             }
 
-            const totalCost = baseSalary + specialPayout + adjustmentVal + installationPayout + commissionPayout;
-
-            // Visibility guard: only show if they have a finalized record, are active with a base salary, or have active earnings in the month
-            const shouldShow = record || (emp.employment_status === 'Active' && (baseSalary > 0 || totalCost > 0)) || totalCost > 0;
-            if (!shouldShow) return null;
-
-            grandTotalSalaries += baseSalary;
-            grandTotalSpecials += specialPayout;
-            grandTotalAdjustments += adjustmentVal;
-            grandTotalInstallations += installationPayout;
-            grandTotalCommissions += commissionPayout;
-            grandTotalCost += totalCost;
+            const totalEmpCost = baseSalary + specialPayout + adjustmentVal + installationPayout + commissionPayout;
+            grandTotalCost += totalEmpCost;
 
             const fullName = `${emp.first_name || ''} ${emp.last_name || ''}`.trim();
 
-            return `
-              <tr>
-                <td>${fullName}</td>
-                <td>${formatPHP(baseSalary)}</td>
-                <td>${formatPHP(specialPayout)}</td>
-                <td style="color:${adjustmentVal < 0 ? 'var(--danger)' : 'var(--text-primary)'};">${formatPHP(adjustmentVal)}</td>
-                <td>${formatPHP(installationPayout)}</td>
-                <td>${formatPHP(commissionPayout)}</td>
-                <td>${formatPHP(totalCost)}</td>
+            // A. Add to Salaries Table if active/payout exists
+            const hasSalaryEarnings = baseSalary > 0 || specialPayout > 0;
+            const shouldShowSalary = record || (emp.employment_status === 'Active' && (baseSalary > 0 || totalEmpCost > 0)) || hasSalaryEarnings;
+            if (shouldShowSalary) {
+              const rowSalaryTotal = baseSalary + specialPayout;
+              grandTotalSalaries += baseSalary;
+              grandTotalSpecials += specialPayout;
+              grandTotalSalaryTotal += rowSalaryTotal;
+              salaryRowsCount++;
+
+              salariesHtml += `
+                <tr>
+                  <td style="text-align: left; font-weight: 500;">${fullName}</td>
+                  <td>${formatPHP(baseSalary)}</td>
+                  <td>${formatPHP(specialPayout)}</td>
+                  <td style="font-weight: 600;">${formatPHP(rowSalaryTotal)}</td>
+                </tr>
+              `;
+            }
+
+            // B. Add to Adjustments Table if adjustment exists
+            const hasAdjustments = adjustmentVal !== 0;
+            if (hasAdjustments || record) {
+              grandTotalAdjustments += adjustmentVal;
+              adjustmentRowsCount++;
+
+              adjustmentsHtml += `
+                <tr>
+                  <td style="text-align: left; font-weight: 500;">${fullName}</td>
+                  <td style="color:${adjustmentVal < 0 ? 'var(--danger)' : 'var(--text-primary)'}; font-weight: 500;">${formatPHP(adjustmentVal)}</td>
+                </tr>
+              `;
+            }
+
+            // C. Add to COGS Table if installation or commission exists
+            const hasCogsEarnings = installationPayout > 0 || commissionPayout > 0;
+            if (hasCogsEarnings || record) {
+              const rowCogsTotal = installationPayout + commissionPayout;
+              grandTotalInstallations += installationPayout;
+              grandTotalCommissions += commissionPayout;
+              grandTotalCogsTotal += rowCogsTotal;
+              cogsRowsCount++;
+
+              cogsHtml += `
+                <tr>
+                  <td style="text-align: left; font-weight: 500;">${fullName}</td>
+                  <td>${formatPHP(installationPayout)}</td>
+                  <td>${formatPHP(commissionPayout)}</td>
+                  <td style="font-weight: 600;">${formatPHP(rowCogsTotal)}</td>
+                </tr>
+              `;
+            }
+          });
+
+          // Render Salaries Tbody and Total Row
+          if (salaryRowsCount > 0) {
+            const totalRow = `
+              <tr class="total-row">
+                <td style="text-align: left;">TOTAL</td>
+                <td>${formatPHP(grandTotalSalaries)}</td>
+                <td>${formatPHP(grandTotalSpecials)}</td>
+                <td>${formatPHP(grandTotalSalaryTotal)}</td>
               </tr>
             `;
-          }).filter(Boolean).join('');
-
-          if (!rowsHtml) {
-            tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 2rem;">No active employees found.</td></tr>`;
-            return;
+            salariesTbody.innerHTML = salariesHtml + totalRow;
+          } else {
+            salariesTbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 2rem;">No active salaries.</td></tr>`;
           }
 
-          // Append Total Row
-          const totalRowHtml = `
-            <tr class="total-row">
-              <td>TOTAL</td>
-              <td>${formatPHP(grandTotalSalaries)}</td>
-              <td>${formatPHP(grandTotalSpecials)}</td>
-              <td style="color:${grandTotalAdjustments < 0 ? 'var(--danger)' : 'var(--text-primary)'};">${formatPHP(grandTotalAdjustments)}</td>
-              <td>${formatPHP(grandTotalInstallations)}</td>
-              <td>${formatPHP(grandTotalCommissions)}</td>
-              <td>${formatPHP(grandTotalCost)}</td>
-            </tr>
-          `;
+          // Render Adjustments Tbody and Total Row
+          if (adjustmentRowsCount > 0) {
+            const totalRow = `
+              <tr class="total-row">
+                <td style="text-align: left;">TOTAL</td>
+                <td style="color:${grandTotalAdjustments < 0 ? 'var(--danger)' : 'var(--text-primary)'};">${formatPHP(grandTotalAdjustments)}</td>
+              </tr>
+            `;
+            adjustmentsTbody.innerHTML = adjustmentsHtml + totalRow;
+          } else {
+            adjustmentsTbody.innerHTML = `<tr><td colspan="2" style="text-align: center; color: var(--text-muted); padding: 2rem;">No adjustments recorded.</td></tr>`;
+          }
 
-          tbody.innerHTML = rowsHtml + totalRowHtml;
+          // Render COGS Tbody and Total Row
+          if (cogsRowsCount > 0) {
+            const totalRow = `
+              <tr class="total-row">
+                <td style="text-align: left;">TOTAL</td>
+                <td>${formatPHP(grandTotalInstallations)}</td>
+                <td>${formatPHP(grandTotalCommissions)}</td>
+                <td>${formatPHP(grandTotalCogsTotal)}</td>
+              </tr>
+            `;
+            cogsTbody.innerHTML = cogsHtml + totalRow;
+          } else {
+            cogsTbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 2rem;">No active installations or commissions.</td></tr>`;
+          }
+
           return grandTotalCost;
         },
 
