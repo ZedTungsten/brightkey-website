@@ -551,6 +551,7 @@
 
     let sb;
     let currentDate = new Date();
+    let suppliersList = [];
 
     let allProducts = [];
     let allInventory = {};
@@ -714,12 +715,15 @@
         ? sb.from('installation_bookings').select('order_no, scheduled_date, customer_address, customer_phone')
         : Promise.resolve({ data: [], error: null });
 
+      const suppliersQuery = sb.from('suppliers').select('name, city');
+
       const [
         { data: invData, error: invErr },
         { data: txData, error: txErr },
         { data: delivData, error: delivErr },
-        { data: instData, error: instErr }
-      ] = await Promise.all([invQuery, txQuery, deliveryQuery, installQuery]);
+        { data: instData, error: instErr },
+        { data: supsData }
+      ] = await Promise.all([invQuery, txQuery, deliveryQuery, installQuery, suppliersQuery]);
 
       if (invErr) throw invErr;
       if (txErr) throw txErr;
@@ -728,6 +732,7 @@
 
       dbDeliveryBookings = delivData || [];
       dbInstallationBookings = instData || [];
+      suppliersList = supsData || [];
 
       allInventory = {};
       (invData || []).forEach(row => {
@@ -853,7 +858,14 @@
           }
         }
 
-        const city = t.customer_city || '—';
+        let city = t.customer_city || '';
+        if (!city && t.customer_name) {
+          const foundSup = (suppliersList || []).find(s => s.name === t.customer_name);
+          if (foundSup && foundSup.city) {
+            city = foundSup.city;
+          }
+        }
+        if (!city) city = '—';
         const sku = t.sku || '—';
         const qty = t.quantity || 0;
 
