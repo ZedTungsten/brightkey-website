@@ -288,16 +288,15 @@
         <select id="cship-warehouse" class="form-input" style="font-size:0.8rem; padding: 0.45rem 0.65rem;"></select>
       </div>
 
-      <!-- Customer Name & Existing Customer Checkbox -->
+      <!-- Existing Customer Checkbox & Month/Year/Select Selector (MOVED ABOVE CUSTOMER NAME) -->
       <div class="form-group" style="margin-bottom: 0.4rem;">
         <div style="display:flex; justify-content:space-between; align-items:center;">
-          <label class="form-label" style="margin:0;">Customer Name</label>
+          <label class="form-label" style="margin:0;">Customer Selection Mode</label>
           <label style="display:inline-flex; align-items:center; gap:0.35rem; font-size:0.75rem; font-weight:600; cursor:pointer;">
             <input type="checkbox" id="cship-is-existing" onchange="DeliveryApp.onExistingCheckboxChange()" />
             Existing Customer
           </label>
         </div>
-        <input type="text" id="cship-customer-name" class="form-input" placeholder="Enter name" style="margin-top:0.2rem; padding: 0.45rem 0.65rem; font-size: 0.8rem;" />
       </div>
 
       <!-- Existing Customer Select Row -->
@@ -338,16 +337,28 @@
         </div>
       </div>
 
+      <!-- Customer Name -->
+      <div class="form-group" style="margin-bottom: 0.4rem;">
+        <label class="form-label">Customer Name</label>
+        <input type="text" id="cship-customer-name" class="form-input" placeholder="Enter name" style="padding: 0.45rem 0.65rem; font-size: 0.8rem;" />
+      </div>
+
       <!-- Address -->
       <div class="form-group" style="margin-bottom: 0.4rem;">
         <label class="form-label">Address</label>
         <textarea id="cship-address" class="form-input" placeholder="Enter full address" style="height:45px; resize:none; padding: 0.45rem 0.65rem; font-size: 0.8rem;"></textarea>
       </div>
 
-      <!-- City, Province -->
-      <div class="form-group" style="margin-bottom: 0.4rem;">
-        <label class="form-label">City, Province</label>
-        <input type="text" id="cship-city-province" class="form-input" placeholder="e.g. Bacoor, Cavite" style="padding: 0.45rem 0.65rem; font-size: 0.8rem;" />
+      <!-- City and Province (SEPARATED) -->
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.4rem; margin-bottom: 0.4rem;">
+        <div class="form-group">
+          <label class="form-label">City</label>
+          <input type="text" id="cship-city" class="form-input" placeholder="e.g. Bacoor" style="padding: 0.45rem 0.65rem; font-size: 0.8rem;" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Province</label>
+          <input type="text" id="cship-province" class="form-input" placeholder="e.g. Cavite" style="padding: 0.45rem 0.65rem; font-size: 0.8rem;" />
+        </div>
       </div>
 
       <!-- Packed Photo Upload -->
@@ -389,9 +400,9 @@
         </div>
       </div>
 
-      <!-- Delivery Information Screenshot Upload (NEW) -->
+      <!-- Delivery Information Screenshot Upload (NEW - REQUIRED) -->
       <div style="border-top:1px solid var(--border); padding-top:0.4rem; margin-top:0.2rem; display:flex; flex-direction:column; gap:0.4rem;">
-        <label class="form-label">Delivery Details (Optional)</label>
+        <label class="form-label">Delivery Details</label>
         
         <div id="cship-del-camera-container" style="display:none; position:relative; width:100%; aspect-ratio:16/10; background:#000; border-radius:8px; overflow:hidden; border:1px solid var(--border);">
           <video id="cship-del-camera-stream" autoplay playsinline style="width:100%; height:100%; object-fit:cover;"></video>
@@ -980,9 +991,9 @@
               }
             });
 
-            // Convert to array and sort alphabetically by customer_name
+            // Convert to array and sort alphabetically by customer_name (localeCompare handles case and special characters correctly)
             const sortedData = Array.from(uniqueMap.values()).sort((a, b) => {
-              return a.customer_name.localeCompare(b.customer_name, undefined, { sensitivity: 'base' });
+              return a.customer_name.localeCompare(b.customer_name, 'en', { sensitivity: 'base', numeric: true });
             });
 
             this.existingCustomers = sortedData;
@@ -1007,18 +1018,31 @@
         if (!customer) return;
 
         document.getElementById('cship-customer-name').value = customer.customer_name || '';
-        document.getElementById('cship-address').value = customer.customer_address || '';
         
-        let cityProv = '';
-        if (customer.customer_city) {
-          cityProv += customer.customer_city;
-          if (customer.customer_province) {
-            cityProv += ', ' + customer.customer_province;
+        const fullAddress = (customer.customer_address || '').trim();
+        document.getElementById('cship-address').value = fullAddress;
+        
+        // Extract city & province from the last two words of the address
+        let city = customer.customer_city || '';
+        let province = customer.customer_province || '';
+
+        if (fullAddress) {
+          const parts = fullAddress.split(',').map(p => p.trim()).filter(Boolean);
+          if (parts.length >= 2) {
+            // e.g. "123 Street, Bacoor, Cavite" -> city="Bacoor", province="Cavite"
+            province = parts[parts.length - 1];
+            city = parts[parts.length - 2];
+          } else {
+            const words = fullAddress.split(/\s+/).map(w => w.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g,"").trim()).filter(Boolean);
+            if (words.length >= 2) {
+              province = words[words.length - 1];
+              city = words[words.length - 2];
+            }
           }
-        } else if (customer.customer_province) {
-          cityProv += customer.customer_province;
         }
-        document.getElementById('cship-city-province').value = cityProv;
+
+        document.getElementById('cship-city').value = city;
+        document.getElementById('cship-province').value = province;
       },
 
       addSkuRow(skuVal = '', qtyVal = 1) {
@@ -1192,19 +1216,28 @@
         const refOrder = document.getElementById('cship-ref-order').value;
         const warehouseId = document.getElementById('cship-warehouse').value;
         const customerName = document.getElementById('cship-customer-name').value.trim();
-        const cityProvince = document.getElementById('cship-city-province').value.trim();
+        const city = document.getElementById('cship-city').value.trim();
+        const province = document.getElementById('cship-province').value.trim();
         const address = document.getElementById('cship-address').value.trim();
 
         if (!customerName) {
           Toast.error('Customer Name is required.');
           return;
         }
-        if (!cityProvince) {
-          Toast.error('City, Province is required.');
+        if (!city) {
+          Toast.error('City is required.');
+          return;
+        }
+        if (!province) {
+          Toast.error('Province is required.');
           return;
         }
         if (!this.cshipPhotoBlob) {
           Toast.error('Packed photo proof is required.');
+          return;
+        }
+        if (!isReceive && !this.cshipDelPhotoBlob) {
+          Toast.error('Delivery screenshot details are required.');
           return;
         }
         if (!warehouseId) {
@@ -1265,6 +1298,7 @@
 
           // Define transaction details based on shipment type
           const statusVal = isReceive ? 'ordered' : 'packed';
+          const cityProvince = city + (province ? ', ' + province : '');
 
           const txRows = skuRows.map(row => ({
             reference_id: refOrder,
@@ -1314,7 +1348,7 @@
           const { error: txErr } = await sb.from('inventory_transactions').insert(txRows);
           if (txErr) throw txErr;
 
-          // If Send Out and deliveryPhotoBlob or any fee is provided, insert a delivery booking
+          // If Send Out and deliveryPhotoBlob is provided, insert a delivery booking
           let deliveryPhotoUrl = null;
           if (!isReceive && this.cshipDelPhotoBlob) {
             const base64Del = await blobToBase64(this.cshipDelPhotoBlob);
