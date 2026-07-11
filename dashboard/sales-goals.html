@@ -1805,7 +1805,9 @@
             }
 
             const rateConfig = rates.find(r => r.label === rateLabel);
-            const percent = rateConfig ? parseFloat(rateConfig.value) || 0 : 0;
+            const basePercent = rateConfig ? parseFloat(rateConfig.value) || 0 : 0;
+            const adjustment = getCommissionAdjustmentForBooking(b, rateLabel, productMap, config.adjustment_rules);
+            const percent = basePercent + adjustment;
 
             const activeRows = cellRows.filter(r => r.employee_id);
             const divisor = activeRows.length || 1;
@@ -2084,6 +2086,64 @@
         }
       }
       return false;
+    }
+
+    function getCommissionAdjustmentForBooking(b, rateLabel, productMap, adjustmentRules) {
+      if (!adjustmentRules || adjustmentRules.length === 0) return 0;
+      
+      const bDate = b.scheduled_date ? b.scheduled_date.slice(0, 10) : '';
+      if (!bDate) return 0;
+
+      const bookingSkus = (b.product_skus || '').split(' | ').map(s => s.trim().toLowerCase());
+
+      let totalAdjustment = 0;
+
+      adjustmentRules.forEach(r => {
+        // 1. Check date range
+        const rStart = r.start_date || '1970-01-01';
+        const rEnd = r.end_date || '9999-12-31';
+        if (bDate < rStart || bDate > rEnd) return;
+
+        // 2. Check label match (case-insensitive)
+        if (!r.label || r.label.trim().toLowerCase() !== rateLabel.trim().toLowerCase()) return;
+
+        // 3. Check scope match
+        let isMatch = false;
+        if (r.scope === 'businesses') {
+          const skuMatch = !r.sku || r.sku === 'all' || bookingSkus.includes(r.sku.toLowerCase());
+          const catMatch = !r.category || r.category === 'all' || bookingSkus.some(sku => {
+            const p = productMap[sku] || {};
+            return p.category && p.category.toLowerCase() === r.category.toLowerCase();
+          });
+          const bizMatch = !r.business || r.business === 'all' || bookingSkus.some(sku => {
+            const p = productMap[sku] || {};
+            return p.business && p.business.toLowerCase() === r.business.toLowerCase();
+          });
+          if (skuMatch && catMatch && bizMatch) {
+            isMatch = true;
+          }
+        } else if (r.scope === 'tags') {
+          const tagMatch = bookingSkus.some(sku => {
+            const p = productMap[sku] || {};
+            return p.tags && Array.isArray(p.tags) && p.tags.map(t => t.toLowerCase()).includes(r.tag.toLowerCase());
+          });
+          if (tagMatch) {
+            isMatch = true;
+          }
+        }
+
+        if (isMatch) {
+          let val = parseFloat(r.value) || 0;
+          if (r.operator === 'minus') {
+            val = -Math.abs(val);
+          } else {
+            val = Math.abs(val);
+          }
+          totalAdjustment += val;
+        }
+      });
+
+      return totalAdjustment;
     }
 
     function getBookingEligibleCentavos(b, productMap, eligibilityRules) {
