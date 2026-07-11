@@ -541,17 +541,33 @@
               monthlyValues[mKey].salaries += (baseSalary + specialPayout);
               monthlyValues[mKey].adjustments += adjustmentVal;
 
-              // Resolve commissions for this employee in the month
-              if (record) {
-                monthlyValues[mKey].commissions += Math.round((Number(record.commissions) || 0) * 100);
-              } else {
-                monthBookings.forEach(b => {
-                  const bookingComms = this.commissionAssignments.filter(ca => ca.booking_id === b.id && ca.employee_id === emp.id);
-                  bookingComms.forEach(ca => {
-                    monthlyValues[mKey].commissions += (ca.amount || 0);
-                  });
-                });
-              }
+              // Resolve commissions for this employee in the month matching COGS page logic exactly
+              let commissionPayoutCents = 0;
+              const employeeCommAssignments = this.commissionAssignments.filter(a => a.employee_id === emp.id);
+              employeeCommAssignments.forEach(a => {
+                const b = this.bookings.find(x => x.id === a.booking_id);
+                if (!b || b.status === 'cancelled') return;
+                if (!b.scheduled_date) return;
+                const bDate = new Date(b.scheduled_date);
+                const bookingMonthKey = `${bDate.getFullYear()}-${String(bDate.getMonth() + 1).padStart(2, '0')}`;
+                if (bookingMonthKey !== mKey) return;
+
+                let doors = [];
+                if (b.doors) {
+                  if (typeof b.doors === 'string') {
+                    try { doors = JSON.parse(b.doors); } catch(_) {}
+                  } else if (Array.isArray(b.doors)) {
+                    doors = b.doors;
+                  }
+                }
+
+                const door = doors[a.product_index];
+                const isDone = (door && door.completed) || ['done', 'completed', 'finished'].includes(b.status);
+                if (!isDone) return;
+
+                commissionPayoutCents += (Number(a.amount) || 0);
+              });
+              monthlyValues[mKey].commissions += commissionPayoutCents;
             });
           });
 
