@@ -236,8 +236,8 @@
         <main class="main-panel">
           <!-- Tabs Navigation -->
           <div class="drawer-tabs">
-            <a class="tab-btn" href="/dashboard/ship/send">Send</a>
-            <a class="tab-btn" href="/dashboard/ship/receive">Receive</a>
+            <a class="tab-btn" href="/dashboard/ship/send">Send <span id="badge-count-send" style="display:none; background:var(--cyan); color:white; font-size:0.75rem; padding:1px 6px; border-radius:10px; margin-left:4px;">0</span></a>
+            <a class="tab-btn" href="/dashboard/ship/receive">Receive <span id="badge-count-receive" style="display:none; background:var(--cyan); color:white; font-size:0.75rem; padding:1px 6px; border-radius:10px; margin-left:4px;">0</span></a>
             <a class="tab-btn active" href="/dashboard/ship/done">Done</a>
           </div>
 
@@ -547,10 +547,62 @@
             this.suppliers = [];
           }
 
+          this.updateBadgeCounts();
           this.renderDoneQueue();
         } catch (err) {
           console.error(err);
           Toast.error('Failed to load logistics queue: ' + err.message);
+        }
+      },
+
+      updateBadgeCounts() {
+        // 1. Calculate Send Count
+        const sendQueue = this.activeTransactions.filter(t => {
+          if (t.type !== 'customer_order') return false;
+          if (t.status !== 'packed') return false;
+          if (t.reference_id && t.reference_id.startsWith('RCV-')) return false;
+          const isBooked = this.deliveryBookings.some(db => db.reference_id === t.reference_id);
+          if (isBooked) return false;
+
+          if (t.reference_id) {
+            const hasUnpacked = this.activeTransactions.some(other => 
+              other.reference_id === t.reference_id && 
+              ['reserved', 'inspect'].includes(other.status)
+            );
+            if (hasUnpacked) return false;
+          }
+          return true;
+        });
+        const sendCount = [...new Set(sendQueue.map(t => t.reference_id))].length;
+
+        // 2. Calculate Receive Count
+        const receiveQueue = this.activeTransactions.filter(t => {
+          if (t.status !== 'ordered') return false;
+          if (!t.reference_id || (!t.reference_id.startsWith('RCV-') && !t.reference_id.startsWith('SUP-'))) return false;
+          return true;
+        });
+        const receiveCount = [...new Set(receiveQueue.map(t => t.reference_id))].length;
+
+        // 3. Update Send Badge
+        const sendEl = document.getElementById('badge-count-send');
+        if (sendEl) {
+          if (sendCount > 0) {
+            sendEl.innerText = sendCount;
+            sendEl.style.display = 'inline-block';
+          } else {
+            sendEl.style.display = 'none';
+          }
+        }
+
+        // 4. Update Receive Badge
+        const receiveEl = document.getElementById('badge-count-receive');
+        if (receiveEl) {
+          if (receiveCount > 0) {
+            receiveEl.innerText = receiveCount;
+            receiveEl.style.display = 'inline-block';
+          } else {
+            receiveEl.style.display = 'none';
+          }
         }
       },
 
