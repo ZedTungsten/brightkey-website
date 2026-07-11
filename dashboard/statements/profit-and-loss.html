@@ -250,7 +250,6 @@
           const endRange = this.months[0].end;
 
           try {
-            // Parallel fetches
             const [
               productsRes,
               bookingsRes,
@@ -259,32 +258,46 @@
               deliveriesRes,
               payoutSettingsRes,
               trackerConfigRes,
-              commissionsRes
+              commissionsRes,
+              adjustmentsRes,
+              reimbursementsRes,
+              journalAccountsRes,
+              generalJournalRes,
+              softwareSubscriptionsRes,
+              softwareBillingRes,
+              specialPayoutStateRes
             ] = await Promise.all([
               sb.from('products').select('sku, dealer_price, sale_price'),
               sb.from('installation_bookings')
-                .select('created_at, scheduled_date, order_no, grand_total, deposit_amount, balance_due, deduction_labels, deduction_values, status, product_skus, product_qtys, doors, installers, installer_id, products')
+                .select('id, created_at, scheduled_date, order_no, grand_total, deposit_amount, balance_due, deduction_labels, deduction_values, status, product_skus, product_qtys, doors, installers, installer_id, products')
                 .eq('company_id', this.companyId)
                 .neq('status', 'cancelled')
                 .gte('scheduled_date', startRange)
                 .lte('scheduled_date', endRange),
               sb.from('employees')
-                .select('id, email, first_name, last_name, monthly_salary')
+                .select('id, email, first_name, last_name, monthly_salary, salary')
                 .eq('company_id', this.companyId),
               sb.from('payslip_records')
-                .select('employee_id, payout_month, salary, basic_paid, commissions, special_payouts, total_payout')
+                .select('employee_id, payout_month, salary, basic_paid, commissions, special_payouts, total_payout, adjustments, adjustments_list')
                 .eq('company_id', this.companyId)
                 .gte('payout_month', this.months[5].key)
                 .lte('payout_month', this.months[0].key),
               sb.from('delivery_bookings')
-                .select('created_at, actual_distance_km, base_price, customer_tips')
+                .select('created_at, reference_id, actual_distance_km, base_price, customer_tips, base_fee, tip_1, tip_2, toll')
                 .eq('company_id', this.companyId)
                 .neq('status', 'cancelled')
                 .gte('created_at', startRange + ' 00:00:00')
                 .lte('created_at', endRange + ' 23:59:59'),
               sb.from('global_settings').select('value').eq('key', 'installer_payout_settings').eq('company_id', this.companyId).maybeSingle(),
               sb.from('global_settings').select('value').eq('key', 'salary_tracker_config').eq('company_id', this.companyId).maybeSingle(),
-              sb.from('commission_assignments').select('amount, booking_id').eq('company_id', this.companyId)
+              sb.from('commission_assignments').select('amount, booking_id, employee_id, product_index').eq('company_id', this.companyId),
+              sb.from('employee_adjustments').select('employee_id, amount, date').eq('company_id', this.companyId).gte('date', startRange).lte('date', endRange),
+              sb.from('employee_reimbursements').select('employee_id, amount, date').eq('company_id', this.companyId).gte('date', startRange).lte('date', endRange),
+              sb.from('journal_accounts').select('name, category').eq('company_id', this.companyId),
+              sb.from('general_journal').select('account, debit, date').eq('company_id', this.companyId).gte('date', startRange).lte('date', endRange),
+              sb.from('software_subscriptions').select('id, name, mode, cost_centavos, status, subscribed_date, unsubscribed_date').eq('company_id', this.companyId),
+              sb.from('software_subscription_billing').select('subscription_id, billing_month, cost_centavos, mode').eq('company_id', this.companyId),
+              sb.from('global_settings').select('value').eq('key', 'special_payout_state').eq('company_id', this.companyId).maybeSingle()
             ]);
 
             this.products = productsRes.data || [];
@@ -301,6 +314,13 @@
             };
             this.trackerConfig = trackerConfigRes.data?.value || {};
             this.commissionAssignments = commissionsRes.data || [];
+            this.adjustmentsList = adjustmentsRes.data || [];
+            this.reimbursementsList = reimbursementsRes.data || [];
+            this.journalAccounts = journalAccountsRes.data || [];
+            this.generalJournal = generalJournalRes.data || [];
+            this.softwareSubscriptions = softwareSubscriptionsRes.data || [];
+            this.softwareBilling = softwareBillingRes.data || [];
+            this.specialPayoutState = specialPayoutStateRes.data?.value || {};
 
             this.renderStatement();
 
@@ -477,29 +497,32 @@
           const headerRow = document.getElementById('table-header-row');
           headerRow.innerHTML = '<th>Line Item</th>' + this.months.map(m => `<th>${m.label}</th>`).join('');
 
-          // 1. Group Data by Month
+          // 1. Initialize Monthly Values
           const monthlyValues = {};
           this.months.forEach(m => {
             monthlyValues[m.key] = {
               revenueBooking: 0,
               supplierCost: 0,
-              labor: 0,
+              installations: 0,
               commissions: 0,
-              delivery: 0,
+              shipping: 0,
+              gasAllowance: 0,
+              packagingSupplies: 0,
+              otherCogs: {},
+              
               salaries: 0,
-              specialPayout: 0
+              adjustments: 0,
+              softwareApps: 0,
+              admin: { total: 0, details: {} },
+              marketingSales: { total: 0, details: {} },
+              operationsSupport: { total: 0, details: {} }
             };
           });
 
-          // Product maps
+          // Product maps for dealer price
           const dealerPriceMap = {};
-          const salePriceMap = {};
           this.products.forEach(p => {
-            if (p.sku) {
-              const skuLower = p.sku.toLowerCase();
-              dealerPriceMap[skuLower] = p.dealer_price || 0;
-              salePriceMap[skuLower] = p.sale_price || 0;
-            }
+            if (p.sku) dealerPriceMap[p.sku.toLowerCase()] = p.dealer_price || 0;
           });
 
           // Payout config details
@@ -514,18 +537,17 @@
             return { sku, rate: es.rate };
           });
 
-          // 2. Loop Bookings
+          // (A) Process Bookings for Revenue & Supplier Cost
           this.bookings.forEach(b => {
             if (!b.scheduled_date) return;
             const bDate = new Date(b.scheduled_date);
             const mKey = `${bDate.getFullYear()}-${String(bDate.getMonth() + 1).padStart(2, '0')}`;
             if (!monthlyValues[mKey]) return;
 
-            // (A) Revenue: Bookings starting with ORD-
+            // Revenue: Bookings starting with ORD-
             if (b.order_no && b.order_no.startsWith('ORD-')) {
               const grandTotal = parseInt(b.grand_total) || 0;
               const balanceDue = parseInt(b.balance_due) || 0;
-
               let depositCentavos = parseInt(b.deposit_amount) || 0;
               if (b.deduction_labels && b.deduction_values) {
                 const dLabels = b.deduction_labels.split('|').map(s => s.trim().toLowerCase());
@@ -536,23 +558,16 @@
                   }
                 });
               }
-
               const absDepositCentavos = Math.abs(depositCentavos);
               const orderGrandTotal = grandTotal > 0 ? grandTotal : (balanceDue + absDepositCentavos);
-              const revenueCentavos = orderGrandTotal + absDepositCentavos;
-
-              monthlyValues[mKey].revenueBooking += revenueCentavos;
+              monthlyValues[mKey].revenueBooking += (orderGrandTotal + absDepositCentavos);
             }
 
-            // (B) COGS: Supplier Cost
+            // Supplier Cost (from products/bookings)
             let skusArr = [];
             let qtysArr = [];
-            if (b.product_skus) {
-              skusArr = b.product_skus.split(' | ').filter(Boolean);
-            }
-            if (b.product_qtys) {
-              qtysArr = b.product_qtys.split(' | ').map(Number);
-            }
+            if (b.product_skus) skusArr = b.product_skus.split(' | ').filter(Boolean);
+            if (b.product_qtys) qtysArr = b.product_qtys.split(' | ').map(Number);
             skusArr.forEach((sku, idx) => {
               const qty = qtysArr[idx] || 0;
               const dPrice = dealerPriceMap[sku.toLowerCase()] || 0;
@@ -560,16 +575,13 @@
             });
           });
 
-          // (C) COGS: Labor (Threshold earnings + Service flat rate)
-          // Run calculation per month per employee
+          // (B) Calculate Installations per month per employee
           this.months.forEach(m => {
             const mKey = m.key;
-            // Get all bookings scheduled in this month
             const monthBookings = this.bookings.filter(b => {
               if (!b.scheduled_date) return false;
               const d = new Date(b.scheduled_date);
-              const bookingMonthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-              return bookingMonthKey === mKey;
+              return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` === mKey;
             });
 
             this.employees.forEach(emp => {
@@ -581,7 +593,6 @@
                 });
               });
 
-              // Sort doorJobs chronologically by scheduled_date
               doorJobs.sort((a, b) => new Date(a.scheduled_date) - new Date(b.scheduled_date));
 
               let runningCredit = 0;
@@ -593,18 +604,13 @@
                 if (job.roles.includes('lead')) weight = leadWeight;
                 else if (job.roles.includes('assist')) weight = assistWeight;
 
-                // Service pay
-                let servicePayForJob = 0;
                 if (job.roles.includes('service')) {
                   job.skus.forEach(sku => {
                     const matchedService = extraServicesList.find(es => es.sku === sku);
-                    if (matchedService) {
-                      serviceEarnings += matchedService.rate;
-                    }
+                    if (matchedService) serviceEarnings += matchedService.rate;
                   });
                 }
 
-                // Extra threshold pay
                 const previousCredit = runningCredit;
                 const newCredit = previousCredit + weight;
                 if (newCredit > thresholdVal) {
@@ -614,33 +620,44 @@
                 runningCredit = newCredit;
               });
 
-              // Labor = thresholdEarnings + serviceEarnings (in PHP, so multiply by 100 for centavos)
-              monthlyValues[mKey].labor += ((thresholdEarnings + serviceEarnings) * 100);
+              monthlyValues[mKey].installations += ((thresholdEarnings + serviceEarnings) * 100);
             });
           });
 
-          // (D) COGS: Sales Commissions & Special Payout
+          // (C) Salaries, Special Payouts, Commissions, Adjustments
           this.months.forEach(m => {
             const mKey = m.key;
-            const monthBookings = this.bookings.filter(b => {
-              if (!b.scheduled_date) return false;
-              const d = new Date(b.scheduled_date);
-              const bookingMonthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-              return bookingMonthKey === mKey;
-            });
-
-            // Find if there are finalized payslip records for this month
             const monthRecords = this.payslipRecords.filter(r => r.payout_month === mKey);
 
             if (monthRecords.length > 0) {
               monthRecords.forEach(r => {
+                monthlyValues[mKey].salaries += Math.round((Number(r.basic_paid || r.salary) || 0) * 100);
+                monthlyValues[mKey].salaries += Math.round((Number(r.special_payouts) || 0) * 100); // Salaries table computes salary + special payout
                 monthlyValues[mKey].commissions += Math.round((Number(r.commissions) || 0) * 100);
-                monthlyValues[mKey].specialPayout += Math.round((Number(r.special_payouts) || 0) * 100);
-                monthlyValues[mKey].salaries += Math.round((Number(r.basic_paid) || 0) * 100);
+                monthlyValues[mKey].adjustments += Math.round((Number(r.adjustments) || 0) * 100);
               });
             } else {
-              // Unfinalized month fallback calculations:
-              // Commissions from active commission_assignments
+              // Unfinalized month fallback
+              this.employees.forEach(emp => {
+                const baseSal = Math.round((emp.salary || emp.monthly_salary || 0) * 100);
+                monthlyValues[mKey].salaries += baseSal;
+              });
+
+              // Add Special Payout State checks
+              const specialSchedules = this.trackerConfig.specialSchedules || [];
+              specialSchedules.forEach(spec => {
+                const isPaid = this.specialPayoutState?.[mKey]?.[`${spec.employeeId}_${spec.day}`] || false;
+                if (isPaid) {
+                  monthlyValues[mKey].salaries += Math.round((Number(spec.value) || 0) * 100);
+                }
+              });
+
+              // Live commissions
+              const monthBookings = this.bookings.filter(b => {
+                if (!b.scheduled_date) return false;
+                const d = new Date(b.scheduled_date);
+                return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` === mKey;
+              });
               monthBookings.forEach(b => {
                 const bookingComms = this.commissionAssignments.filter(ca => ca.booking_id === b.id);
                 bookingComms.forEach(ca => {
@@ -648,43 +665,96 @@
                 });
               });
 
-              // Special schedule payouts from trackerConfig
-              const specialSchedules = this.trackerConfig.specialSchedules || [];
-              specialSchedules.forEach(spec => {
-                monthlyValues[mKey].specialPayout += Math.round((Number(spec.value) || 0) * 100);
-              });
-
-              // Salaries from active employee list
-              this.employees.forEach(emp => {
-                const salaryCentavos = Math.round((emp.monthly_salary || 0) * 100);
-                monthlyValues[mKey].salaries += salaryCentavos;
+              // Live adjustments
+              const monthAdjs = this.adjustmentsList.filter(a => a.date && a.date.slice(0, 7) === mKey);
+              monthAdjs.forEach(a => {
+                monthlyValues[mKey].adjustments += Math.round((Number(a.amount) || 0) * 100);
               });
             }
           });
 
-          // (E) COGS: Delivery
+          // (D) Shipping (Base + Tip 1 + Tip 2 + Toll from delivery_bookings mapped to dispatch date)
           this.deliveries.forEach(del => {
             const dDate = new Date(del.created_at);
             const mKey = `${dDate.getFullYear()}-${String(dDate.getMonth() + 1).padStart(2, '0')}`;
             if (!monthlyValues[mKey]) return;
-
-            const basePriceCentavos = Math.round((del.base_price || 0) * 100);
-            const tipsCentavos = Math.round((del.customer_tips || 0) * 100);
-            monthlyValues[mKey].delivery += (basePriceCentavos + tipsCentavos);
+            const baseFee = del.base_fee || (del.base_price * 100) || 0;
+            const tip1 = del.tip_1 || 0;
+            const tip2 = del.tip_2 || 0;
+            const toll = del.toll || 0;
+            monthlyValues[mKey].shipping += (baseFee + tip1 + tip2 + toll);
           });
 
-          // 3. Render Table rows
+          // (E) General Ledger Mapping (COGS and OPEX categories)
+          // Map account name to category
+          const accountCategoryMap = {};
+          this.journalAccounts.forEach(a => {
+            accountCategoryMap[a.name] = a.category;
+          });
+
+          this.generalJournal.forEach(entry => {
+            if (!entry.date) return;
+            const mKey = entry.date.slice(0, 7);
+            if (!monthlyValues[mKey]) return;
+
+            const category = accountCategoryMap[entry.account];
+            const debitVal = Math.round((parseFloat(entry.debit) || 0) * 100);
+            if (debitVal <= 0) return;
+
+            if (category === 'COGS') {
+              if (entry.account.toLowerCase() === 'gas allowance') {
+                monthlyValues[mKey].gasAllowance += debitVal;
+              } else if (entry.account.toLowerCase() === 'packaging supplies') {
+                monthlyValues[mKey].packagingSupplies += debitVal;
+              } else {
+                monthlyValues[mKey].otherCogs[entry.account] = (monthlyValues[mKey].otherCogs[entry.account] || 0) + debitVal;
+              }
+            } else if (category === 'OPEX - Admin') {
+              monthlyValues[mKey].admin.total += debitVal;
+              monthlyValues[mKey].admin.details[entry.account] = (monthlyValues[mKey].admin.details[entry.account] || 0) + debitVal;
+            } else if (category === 'OPEX - Marketing & Sales') {
+              monthlyValues[mKey].marketingSales.total += debitVal;
+              monthlyValues[mKey].marketingSales.details[entry.account] = (monthlyValues[mKey].marketingSales.details[entry.account] || 0) + debitVal;
+            } else if (category === 'OPEX - Operations Support') {
+              monthlyValues[mKey].operationsSupport.total += debitVal;
+              monthlyValues[mKey].operationsSupport.details[entry.account] = (monthlyValues[mKey].operationsSupport.details[entry.account] || 0) + debitVal;
+            }
+          });
+
+          // (F) Software & Apps Subscriptions Cost
+          this.months.forEach(m => {
+            const mKey = m.key;
+            // Filter billing records for this month
+            const monthBillings = this.softwareBilling.filter(b => b.billing_month === mKey);
+            if (monthBillings.length > 0) {
+              monthBillings.forEach(b => {
+                monthlyValues[mKey].softwareApps += (b.cost_centavos || 0);
+              });
+            } else {
+              // Fallback to active subscriptions
+              this.softwareSubscriptions.forEach(sub => {
+                if (sub.status === 'Active') {
+                  monthlyValues[mKey].softwareApps += (sub.cost_centavos || 0);
+                }
+              });
+            }
+          });
+
+          // 3. Render Table
           const formatPHP = (cents) => {
-            const val = cents / 100;
-            return `₱${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+            if (cents === 0) return '—';
+            const prefix = cents < 0 ? '-' : '';
+            const val = Math.abs(cents) / 100;
+            return `${prefix}₱${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
           };
 
           const tbody = document.getElementById('table-body');
           tbody.innerHTML = '';
 
-          const rowHtml = (title, key, className = '', indent = 0) => {
+          // Sub-item list builder helper
+          const rowHtml = (title, getterFn, className = '', indent = 0) => {
             const cells = this.months.map(m => {
-              const cents = monthlyValues[m.key][key] || 0;
+              const cents = getterFn(monthlyValues[m.key]) || 0;
               return `<td>${formatPHP(cents)}</td>`;
             }).join('');
             return `<tr class="${className}">
@@ -693,13 +763,15 @@
             </tr>`;
           };
 
-          // Net Profit Row Helper
+          // Net Profit Row
           const renderNetProfitRow = () => {
             const cells = this.months.map(m => {
-              const rev = monthlyValues[m.key].revenueBooking;
-              const cogs = monthlyValues[m.key].supplierCost + monthlyValues[m.key].labor + monthlyValues[m.key].commissions + monthlyValues[m.key].delivery;
+              const mv = monthlyValues[m.key];
+              const otherCogsSum = Object.values(mv.otherCogs).reduce((a, b) => a + b, 0);
+              const rev = mv.revenueBooking;
+              const cogs = mv.supplierCost + mv.installations + mv.commissions + mv.shipping + mv.gasAllowance + mv.packagingSupplies + otherCogsSum;
               const gp = rev - cogs;
-              const opex = monthlyValues[m.key].salaries + monthlyValues[m.key].specialPayout;
+              const opex = mv.salaries + mv.adjustments + mv.softwareApps + mv.admin.total + mv.marketingSales.total + mv.operationsSupport.total;
               const np = gp - opex;
               return `<td>${formatPHP(np)}</td>`;
             }).join('');
@@ -709,11 +781,13 @@
             </tr>`;
           };
 
-          // Gross Profit Row Helper
+          // Gross Profit Row
           const renderGrossProfitRow = () => {
             const cells = this.months.map(m => {
-              const rev = monthlyValues[m.key].revenueBooking;
-              const cogs = monthlyValues[m.key].supplierCost + monthlyValues[m.key].labor + monthlyValues[m.key].commissions + monthlyValues[m.key].delivery;
+              const mv = monthlyValues[m.key];
+              const otherCogsSum = Object.values(mv.otherCogs).reduce((a, b) => a + b, 0);
+              const rev = mv.revenueBooking;
+              const cogs = mv.supplierCost + mv.installations + mv.commissions + mv.shipping + mv.gasAllowance + mv.packagingSupplies + otherCogsSum;
               const gp = rev - cogs;
               return `<td>${formatPHP(gp)}</td>`;
             }).join('');
@@ -725,28 +799,71 @@
 
           let html = '';
 
-          // Net Profit
+          // Net Profit & Gross Profit first
           html += renderNetProfitRow();
-          
-          // Gross Profit
           html += renderGrossProfitRow();
 
-          // Group 1: Revenue
-          html += `<tr class="row-group-header"><td>Group 1: Revenue</td>${this.months.map(() => '<td></td>').join('')}</tr>`;
-          html += rowHtml('Booking', 'revenueBooking', '', 1);
+          // Revenue Header
+          html += `<tr class="row-group-header"><td>Revenue</td>${this.months.map(() => '<td></td>').join('')}</tr>`;
+          html += rowHtml('Booking', (mv) => mv.revenueBooking, '', 1);
 
-          // Group 2: COGS
-          html += `<tr class="row-group-header"><td>Group 2: COGS</td>${this.months.map(() => '<td></td>').join('')}</tr>`;
-          html += rowHtml('Supplier Cost', 'supplierCost', '', 1);
-          html += rowHtml('Labor', 'labor', '', 1);
-          html += rowHtml('Sales Commissions', 'commissions', '', 1);
-          html += rowHtml('Delivery', 'delivery', '', 1);
+          // COGS Header
+          html += `<tr class="row-group-header"><td>COGS</td>${this.months.map(() => '<td></td>').join('')}</tr>`;
+          html += rowHtml('Supplier Cost', (mv) => mv.supplierCost, '', 1);
+          html += rowHtml('Installations', (mv) => mv.installations, '', 1);
+          html += rowHtml('Commissions', (mv) => mv.commissions, '', 1);
+          html += rowHtml('Shipping', (mv) => mv.shipping, '', 1);
+          html += rowHtml('Gas Allowance', (mv) => mv.gasAllowance, '', 1);
+          html += rowHtml('Packaging Supplies', (mv) => mv.packagingSupplies, '', 1);
 
-          // Group 3: OPEX
-          html += `<tr class="row-group-header"><td>Group 3: OPEX</td>${this.months.map(() => '<td></td>').join('')}</tr>`;
-          html += `<tr class="row-subgroup-header"><td class="indent-1">Operations & Admin</td>${this.months.map(() => '<td></td>').join('')}</tr>`;
-          html += rowHtml('Salaries', 'salaries', '', 2);
-          html += rowHtml('Special Payout', 'specialPayout', '', 2);
+          // Additional future dynamic COGS items
+          const allOtherCogsKeys = new Set();
+          this.months.forEach(m => {
+            Object.keys(monthlyValues[m.key].otherCogs).forEach(k => allOtherCogsKeys.add(k));
+          });
+          const sortedOtherCogs = [...allOtherCogsKeys].sort();
+          sortedOtherCogs.forEach(item => {
+            html += rowHtml(item, (mv) => mv.otherCogs[item] || 0, '', 1);
+          });
+
+          // OPEX Header
+          html += `<tr class="row-group-header"><td>OPEX</td>${this.months.map(() => '<td></td>').join('')}</tr>`;
+          html += rowHtml('Salaries', (mv) => mv.salaries, '', 1);
+          html += rowHtml('Adjustments', (mv) => mv.adjustments, '', 1);
+          html += rowHtml('Software & Apps', (mv) => mv.softwareApps, '', 1);
+
+          // Admin Sub-section
+          html += `<tr class="row-subgroup-header"><td class="indent-1">Admin</td>${this.months.map(() => '<td></td>').join('')}</tr>`;
+          const allAdminKeys = new Set();
+          this.months.forEach(m => {
+            Object.keys(monthlyValues[m.key].admin.details).forEach(k => allAdminKeys.add(k));
+          });
+          const sortedAdmin = [...allAdminKeys].sort();
+          sortedAdmin.forEach(item => {
+            html += rowHtml(item, (mv) => mv.admin.details[item] || 0, '', 2);
+          });
+
+          // Marketing & Sales Sub-section
+          html += `<tr class="row-subgroup-header"><td class="indent-1">Marketing &amp; Sales</td>${this.months.map(() => '<td></td>').join('')}</tr>`;
+          const allMarketingKeys = new Set();
+          this.months.forEach(m => {
+            Object.keys(monthlyValues[m.key].marketingSales.details).forEach(k => allMarketingKeys.add(k));
+          });
+          const sortedMarketing = [...allMarketingKeys].sort();
+          sortedMarketing.forEach(item => {
+            html += rowHtml(item, (mv) => mv.marketingSales.details[item] || 0, '', 2);
+          });
+
+          // Operations & Support Sub-section
+          html += `<tr class="row-subgroup-header"><td class="indent-1">Operations &amp; Support</td>${this.months.map(() => '<td></td>').join('')}</tr>`;
+          const allOpsKeys = new Set();
+          this.months.forEach(m => {
+            Object.keys(monthlyValues[m.key].operationsSupport.details).forEach(k => allOpsKeys.add(k));
+          });
+          const sortedOps = [...allOpsKeys].sort();
+          sortedOps.forEach(item => {
+            html += rowHtml(item, (mv) => mv.operationsSupport.details[item] || 0, '', 2);
+          });
 
           tbody.innerHTML = html;
         }
