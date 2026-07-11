@@ -567,17 +567,36 @@
             });
           });
 
-          // 4. Shipping
-          this.deliveries.forEach(del => {
-            if (!del.timestamp_dispatched) return;
-            // Group by UTC date string prefix (YYYY-MM) to match database query string comparison in cogs.html
-            const mKey = del.timestamp_dispatched.slice(0, 7);
-            if (!monthlyValues[mKey]) return;
-            const baseFee = del.base_fee || 0;
-            const tip1 = del.tip_1 || 0;
-            const tip2 = del.tip_2 || 0;
-            const toll = del.toll || 0;
-            monthlyValues[mKey].shipping += (baseFee + tip1 + tip2 + toll);
+          // 4. Shipping (Matching COGS logic 1-to-1 per month)
+          this.months.forEach(m => {
+            const mKey = m.key;
+            const seenRefIds = new Set();
+            let baseSum = 0;
+            let tip1Sum = 0;
+            let tip2Sum = 0;
+            let tollSum = 0;
+
+            this.dispatchedTxs.forEach(tx => {
+              if (!tx.timestamp_dispatched) return;
+              const txMonthKey = tx.timestamp_dispatched.slice(0, 7);
+              if (txMonthKey !== mKey) return;
+
+              if (!tx.reference_id || seenRefIds.has(tx.reference_id)) return;
+              seenRefIds.add(tx.reference_id);
+
+              const fees = this.deliveryFeeMap[tx.reference_id] || {};
+              const base = fees.base_fee || 0;
+              const tip1 = fees.tip_1 || 0;
+              const tip2 = fees.tip_2 || 0;
+              const toll = fees.toll || 0;
+
+              baseSum += base;
+              tip1Sum += tip1;
+              tip2Sum += tip2;
+              tollSum += toll;
+            });
+
+            monthlyValues[mKey].shipping = baseSum + tip1Sum + tip2Sum + tollSum;
           });
 
           // 5. General Ledger Mapping
@@ -766,26 +785,11 @@
             this.employees = employeesRes.data || [];
             this.payslipRecords = payslipRecordsRes.data || [];
             
-            // Build delivery/shipping list aligned with cogs.html (dispatch date based shipping)
-            const dispatchedTxs = dispatchedTxRes?.data || [];
-            const deliveryFeeMap = {};
+            // Save raw shipping list data to align with cogs.html per-month deduplication
+            this.dispatchedTxs = dispatchedTxRes?.data || [];
+            this.deliveryFeeMap = {};
             (deliveryRes?.data || []).forEach(db => {
-              deliveryFeeMap[db.reference_id] = db;
-            });
-            const seenRefIds = new Set();
-            this.deliveries = [];
-            dispatchedTxs.forEach(tx => {
-              if (!tx.reference_id || seenRefIds.has(tx.reference_id)) return;
-              seenRefIds.add(tx.reference_id);
-              const fees = deliveryFeeMap[tx.reference_id] || {};
-              this.deliveries.push({
-                reference_id: tx.reference_id,
-                timestamp_dispatched: tx.timestamp_dispatched,
-                base_fee: fees.base_fee || 0,
-                tip_1: fees.tip_1 || 0,
-                tip_2: fees.tip_2 || 0,
-                toll: fees.toll || 0
-              });
+              this.deliveryFeeMap[db.reference_id] = db;
             });
 
             this.payoutSettings = payoutSettingsRes.data?.value || {
