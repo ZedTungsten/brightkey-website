@@ -425,7 +425,9 @@
         const eligibleCentavos = isEligible ? totalCentavos : 0;
 
         const rateConfig = (commissionsConfig.rates || []).find(r => r.label === rateLabel);
-        const percent = rateConfig ? parseFloat(rateConfig.value) || 0 : 0;
+        const basePercent = rateConfig ? parseFloat(rateConfig.value) || 0 : 0;
+        const adjustment = getCommissionAdjustmentForBooking(b, rateLabel, productMap, commissionsConfig.adjustment_rules);
+        const percent = basePercent + adjustment;
 
         const rowsToInsert = [];
         if (hasNone) {
@@ -573,7 +575,9 @@
           const eligibleCentavos = calc.finalEligibleCentavos;
 
           const rateConfig = (commissionsConfig.rates || []).find(r => r.label === rateLabel);
-          const percent = rateConfig ? parseFloat(rateConfig.value) || 0 : 0;
+          const basePercent = rateConfig ? parseFloat(rateConfig.value) || 0 : 0;
+          const adjustment = getCommissionAdjustmentForBooking(b, rateLabel, productMap, commissionsConfig.adjustment_rules);
+          const percent = basePercent + adjustment;
 
           if (employeeId === 'none') {
             cellAssignments[cellKey] = ['none'];
@@ -755,7 +759,9 @@
               }
 
               const rateConfig = (commissionsConfig.rates || []).find(r => r.label === rateLabel);
-              const percent = rateConfig ? parseFloat(rateConfig.value) || 0 : 0;
+              const basePercent = rateConfig ? parseFloat(rateConfig.value) || 0 : 0;
+              const adjustment = getCommissionAdjustmentForBooking(b, rateLabel, productMap, commissionsConfig.adjustment_rules);
+              const percent = basePercent + adjustment;
 
               const hasNone = employeeIds.includes('none');
               const activeEmployeeIds = employeeIds.filter(id => id !== '' && id !== 'none');
@@ -1045,6 +1051,64 @@
       };
     }
 
+    function getCommissionAdjustmentForBooking(b, rateLabel, productMap, adjustmentRules) {
+      if (!adjustmentRules || adjustmentRules.length === 0) return 0;
+      
+      const bDate = b.scheduled_date ? b.scheduled_date.slice(0, 10) : '';
+      if (!bDate) return 0;
+
+      const bookingSkus = (b.product_skus || '').split(' | ').map(s => s.trim().toLowerCase());
+
+      let totalAdjustment = 0;
+
+      adjustmentRules.forEach(r => {
+        // 1. Check date range
+        const rStart = r.start_date || '1970-01-01';
+        const rEnd = r.end_date || '9999-12-31';
+        if (bDate < rStart || bDate > rEnd) return;
+
+        // 2. Check label match (case-insensitive)
+        if (!r.label || r.label.trim().toLowerCase() !== rateLabel.trim().toLowerCase()) return;
+
+        // 3. Check scope match
+        let isMatch = false;
+        if (r.scope === 'businesses') {
+          const skuMatch = !r.sku || r.sku === 'all' || bookingSkus.includes(r.sku.toLowerCase());
+          const catMatch = !r.category || r.category === 'all' || bookingSkus.some(sku => {
+            const p = productMap[sku] || {};
+            return p.category && p.category.toLowerCase() === r.category.toLowerCase();
+          });
+          const bizMatch = !r.business || r.business === 'all' || bookingSkus.some(sku => {
+            const p = productMap[sku] || {};
+            return p.business && p.business.toLowerCase() === r.business.toLowerCase();
+          });
+          if (skuMatch && catMatch && bizMatch) {
+            isMatch = true;
+          }
+        } else if (r.scope === 'tags') {
+          const tagMatch = bookingSkus.some(sku => {
+            const p = productMap[sku] || {};
+            return p.tags && Array.isArray(p.tags) && p.tags.map(t => t.toLowerCase()).includes(r.tag.toLowerCase());
+          });
+          if (tagMatch) {
+            isMatch = true;
+          }
+        }
+
+        if (isMatch) {
+          let val = parseFloat(r.value) || 0;
+          if (r.operator === 'minus') {
+            val = -Math.abs(val);
+          } else {
+            val = Math.abs(val);
+          }
+          totalAdjustment += val;
+        }
+      });
+
+      return totalAdjustment;
+    }
+
     function renderCommissionsTable() {
       const headerRow = document.getElementById('table-headers-row');
       const tbody = document.getElementById('commissions-body');
@@ -1177,7 +1241,9 @@
         // Build dynamic rate cells
         let ratesCellsHtml = '';
         rates.forEach(r => {
-          const percent = parseFloat(r.value) || 0;
+          const basePercent = parseFloat(r.value) || 0;
+          const adjustment = getCommissionAdjustmentForBooking(b, r.label, productMap, commissionsConfig.adjustment_rules);
+          const percent = basePercent + adjustment;
           const cellKey = `${b.id}_ORDER_TOTAL_0_${r.label}`;
 
           if (!cellAssignments[cellKey]) {
@@ -1190,6 +1256,12 @@
           const splitPercent = percent / divisor;
           const eligibleCentavos = isCancelled ? 0 : finalEligibleCentavos;
           const splitCommAmountCentavos = Math.round(eligibleCentavos * (splitPercent / 100));
+
+          const adjHtml = adjustment !== 0 ? `
+            <span style="font-size: 0.72rem; font-weight: 700; color: ${adjustment < 0 ? '#ef4444' : '#10b981'}; margin-left: 2px;">
+              (${adjustment < 0 ? '-' : '+'}${Math.abs(adjustment)}%)
+            </span>
+          ` : '';
 
           // Generate employee select dropdown options
           let selectRowsHtml = '';
@@ -1213,6 +1285,7 @@
                   <span style="font-weight: 600; color: var(--text-primary); font-size: 0.8rem; white-space: nowrap;">
                     ${fmtPHP(splitCommAmountCentavos)}
                   </span>
+                  ${adjHtml}
                 ` : ''}
                 ${assignedIds.length > 0 ? `
                   <button type="button" class="btn-remove-assignee" data-cell-key="${cellKey}" data-index="${idx}" style="background: none; border: none; color: var(--danger); cursor: pointer; padding: 0.1rem 0.3rem; font-size: 0.75rem; display: flex; align-items: center; justify-content: center;" title="Remove assignee">
@@ -1245,7 +1318,7 @@
               <td>
                 <div style="display: flex; align-items: center; gap: 0.5rem; min-width: 150px;">
                   <input type="checkbox" class="bulk-cell-checkbox" data-cell-key="${cellKey}" style="accent-color:var(--cyan); width:14px; height:14px; cursor:pointer;" />
-                  <div>${cellContentHtml}</div>
+                  <div>${cellContentHtml} ${adjHtml}</div>
                 </div>
               </td>
             `;
@@ -1267,6 +1340,7 @@
                     <span style="font-weight: 700; color: var(--success); font-size: 0.78rem;">
                       ${fmtPHP(splitCommAmountCentavos)}
                     </span>
+                    ${adjHtml}
                   </div>
                 `);
               });
