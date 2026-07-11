@@ -694,8 +694,17 @@
         headerHtml += `<th style="width:100px; text-align:center;">Action</th>`;
         header.innerHTML = headerHtml;
 
-        const { grouped, unassigned } = this.groupEmployees();
-        let bodyHtml = '';
+        // Aggregators for total row
+        let sumBaseSalary = 0;
+        let sumComms = 0;
+        let sumInstPayouts = 0;
+        let sumReimbs = 0;
+        let sumAdjs = 0;
+        let sumSpecialDays = {};
+        let sumPayoutDays = {};
+        specialDays.forEach(day => sumSpecialDays[day] = 0);
+        sortedScheds.forEach(day => sumPayoutDays[day] = 0);
+        let sumGrandTotal = 0;
 
         const renderEmpRow = (emp) => {
           const baseSalary    = emp.salary || 0;
@@ -721,12 +730,19 @@
           // Adjustments for this month
           const empAdjs = this.adjustmentsList.filter(a => a.employeeId === emp.id && a.date?.startsWith(mk.substring(0,7))).reduce((s, a) => s + (Number(a.value) || 0), 0);
 
+          // Add to aggregators
+          sumBaseSalary += baseSalary;
+          sumComms += empComms;
+          sumReimbs += empReimbs;
+          sumAdjs += empAdjs;
+
           // Special payout cells
           let specialCellsHtml = '';
           let totalSpecials = 0;
           specialDays.forEach(day => {
             const specVal = this.specialSchedules.filter(s => s.employeeId === emp.id && Number(s.day) === day).reduce((s, x) => s + (Number(x.value) || 0), 0);
             totalSpecials += specVal;
+            sumSpecialDays[day] += specVal;
             if (specVal > 0) {
               const isPaid = this.specialPayoutState[mk]?.[`${emp.id}_${day}`] || false;
               const isPast = this.isPastDay(day);
@@ -744,6 +760,7 @@
           const numScheds = sortedScheds.length || 1;
           const salaryPortion = baseSalary / numScheds;
           const instPayouts = this.calculateInstallerPayouts(emp.id, mk, sortedScheds);
+          sumInstPayouts += instPayouts.totalInstallationPayout;
           
           sortedScheds.forEach((day, sIdx) => {
             const adjsVal  = this._adjsForSchedule(emp.id, day, mk, sortedScheds);
@@ -752,6 +769,7 @@
             const instPortion = instPayouts.cutoffPayouts[day] || 0;
             
             const totalSchedVal = salaryPortion + adjsVal + reimbsVal + commsVal + instPortion;
+            sumPayoutDays[day] += totalSchedVal;
             const isPaid = this.regularPayoutState[mk]?.[`${emp.id}_${day}`] || false;
             const isPast = this.isPastDay(day);
 
@@ -778,6 +796,7 @@
           });
 
           const grandTotal = baseSalary + empComms + empReimbs + empAdjs + totalSpecials + instPayouts.totalInstallationPayout;
+          sumGrandTotal += grandTotal;
 
           return `<tr class="employee-row" data-emp-id="${esc(emp.id)}">
             <td class="col-name col-sticky-1">${esc([emp.first_name, emp.last_name].filter(Boolean).join(' '))}</td>
@@ -818,6 +837,35 @@
         if (unassigned.length > 0) {
           bodyHtml += `<tr class="dept-header-row"><td colspan="${colspan}">Unassigned Department / Pool</td></tr>`;
           unassigned.forEach(emp => { bodyHtml += renderEmpRow(emp); });
+        }
+
+        // Append Total Row if employees exist
+        if (bodyHtml) {
+          let specTotalsHtml = '';
+          specialDays.forEach(day => {
+            specTotalsHtml += `<td style="font-weight:700;color:var(--text-primary);">${esc(php(sumSpecialDays[day]))}</td>`;
+          });
+          let payoutTotalsHtml = '';
+          sortedScheds.forEach(day => {
+            payoutTotalsHtml += `<td style="font-weight:700;color:var(--text-primary);">${esc(php(sumPayoutDays[day]))}</td>`;
+          });
+
+          bodyHtml += `
+            <tr class="total-row" style="background:var(--bg-base); font-weight:700; border-top: 2px solid var(--border);">
+              <td class="col-name col-sticky-1" style="font-weight:700;">TOTAL</td>
+              <td class="col-sticky-2"></td>
+              <td class="col-sticky-3"></td>
+              <td>${esc(php(sumBaseSalary))}</td>
+              <td>${esc(php(sumComms))}</td>
+              <td>${esc(php(sumInstPayouts))}</td>
+              <td>${esc(php(sumReimbs))}</td>
+              <td style="color:${sumAdjs < 0 ? 'var(--danger)' : 'var(--text-primary)'};">${esc(php(sumAdjs))}</td>
+              <td style="border-right:2px solid var(--border);padding:0;"></td>
+              ${specTotalsHtml}${payoutTotalsHtml}
+              <td style="font-weight:700;color:var(--text-primary);background:rgba(161,161,170,0.15);">${esc(php(sumGrandTotal))}</td>
+              <td></td>
+            </tr>
+          `;
         }
 
         tbody.innerHTML = bodyHtml || `<tr><td colspan="${colspan}" style="text-align:center;padding:3rem;color:var(--text-muted);">No employees found.</td></tr>`;
