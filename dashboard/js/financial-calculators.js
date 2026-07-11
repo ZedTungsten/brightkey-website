@@ -348,10 +348,7 @@ window.BKFinancialCalculators = {
 
         const specialSchedules = trackerConfig.specialSchedules || [];
         specialSchedules.forEach(spec => {
-          const isPaid = specialPayoutState?.[mKey]?.[`${spec.employeeId}_${spec.day}`] || false;
-          if (isPaid) {
-            monthlyValues[mKey].salaries += Math.round((Number(spec.value) || 0) * 100);
-          }
+          monthlyValues[mKey].salaries += Math.round((Number(spec.value) || 0) * 100);
         });
 
         const monthBookings = bookings.filter(b => {
