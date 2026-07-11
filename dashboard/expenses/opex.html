@@ -541,7 +541,7 @@
 
           try {
             // Fetch everything needed in parallel
-            const [empRes, configRes, payoutSetRes, adjRes, commRes, bookingsRes, payslipRes, accountsRes, journalRes, subRes, billRes] = await Promise.all([
+            const [empRes, configRes, payoutSetRes, adjRes, commRes, bookingsRes, payslipRes, accountsRes, journalRes, subRes, billRes, specPayoutRes] = await Promise.all([
               sb.from('employees')
                 .select('id, first_name, last_name, salary, employment_status')
                 .eq('company_id', this.companyId), // Query all employees so we can show terminated ones historically
@@ -583,7 +583,12 @@
                 .eq('company_id', this.companyId),
               sb.from('software_subscription_billing')
                 .select('subscription_id, billing_month, cost_centavos, mode')
+                .eq('company_id', this.companyId),
+              sb.from('global_settings')
+                .select('value')
+                .eq('key', 'special_payout_state')
                 .eq('company_id', this.companyId)
+                .maybeSingle()
             ]);
 
             if (empRes.error) throw empRes.error;
@@ -603,6 +608,7 @@
             this.payslipRecords = payslipRes.data || [];
             this.subscriptions = subRes.data || [];
             this.billingRecords = billRes.data || [];
+            this.specialPayoutState = specPayoutRes.data?.value || {};
 
             const salariesTotal = this.renderStatement() || 0;
             const opexTotal = this.renderOpexReports(accountsRes.data || [], journalRes.data || []) || 0;
@@ -847,11 +853,14 @@
               specialPayout = Number(record.special_payouts) || 0;
             } else {
               baseSalary = emp.employment_status === 'Active' ? (Number(emp.salary) || 0) : 0;
-              specialPayout = emp.employment_status === 'Active'
-                ? this.specialSchedules
-                  .filter(s => s.employeeId === emp.id)
-                  .reduce((sum, s) => sum + (Number(s.value) || 0), 0)
-                : 0;
+              
+              // Only count special payouts if they are checked/marked as paid in special_payout_state for this month key
+              specialPayout = this.specialSchedules
+                .filter(s => s.employeeId === emp.id)
+                .reduce((sum, s) => {
+                  const isPaid = this.specialPayoutState?.[targetMonthKey]?.[`${emp.id}_${s.day}`] || false;
+                  return sum + (isPaid ? (Number(s.value) || 0) : 0);
+                }, 0);
             }
 
             const totalEmpCost = baseSalary + specialPayout + adjustmentVal;
