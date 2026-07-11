@@ -539,6 +539,14 @@
           if (dbErr) throw dbErr;
           this.deliveryBookings = dbData || [];
 
+          try {
+            const { data: sups } = await sb.from('suppliers').select('name, city');
+            this.suppliers = sups || [];
+          } catch (supErr) {
+            console.warn('Could not load suppliers:', supErr);
+            this.suppliers = [];
+          }
+
           this.renderDoneQueue();
         } catch (err) {
           console.error(err);
@@ -599,10 +607,25 @@
             dateCompletedStr = txs[0].timestamp_received || txs[0].timestamp_dispatched || txs[0].updated_at || txs[0].created_at;
           }
 
+          let city = txs[0].customer_city;
+          if (!city || city === 'N/A') {
+            const isSup = refId.startsWith('SUP-') || txs.some(t => t.type === 'supplier_order');
+            if (isSup) {
+              const supName = customerName;
+              const foundSup = (this.suppliers || []).find(s => s.name && s.name.toLowerCase() === supName.toLowerCase());
+              if (foundSup && foundSup.city) {
+                city = foundSup.city;
+              }
+            }
+          }
+          if (!city) {
+            city = db ? db.customer_city : 'N/A';
+          }
+
           this.consolidatedOrders.push({
             reference_id: refId,
             customer_name: customerName,
-            customer_city: txs[0].customer_city || (db ? db.customer_city : 'N/A'),
+            customer_city: city,
             txs: txs,
             db: db,
             dateCompleted: dateCompletedStr,
