@@ -110,6 +110,11 @@
     .row-subitem td:first-child {
       font-weight: 400 !important;
     }
+    .excel-table td.cell-pct {
+      font-style: italic !important;
+      color: var(--text-muted, #737373) !important;
+      font-weight: 400 !important;
+    }
     .indent-1 {
       padding-left: 1.5rem !important;
     }
@@ -858,7 +863,7 @@
 
         renderStatement() {
           const headerRow = document.getElementById('table-header-row');
-          headerRow.innerHTML = '<th>Line Item</th>' + this.months.map(m => `<th>${m.label}</th>`).join('');
+          headerRow.innerHTML = '<th>Line Item</th>' + this.months.map(m => `<th colspan="2" style="text-align: center;">${m.label}</th>`).join('');
 
           // 1. Calculate Monthly Values locally
           const monthlyValues = this.calculateMonthlyReport();
@@ -885,17 +890,32 @@
           // Sub-item list builder helper
           const rowHtml = (title, getterFn, className = '', indent = 0) => {
             const cells = this.months.map(m => {
-              const cents = getterFn(monthlyValues[m.key]) || 0;
-              // If it's a margin row, format as percentage instead
+              const mv = monthlyValues[m.key];
+              const cents = getterFn(mv) || 0;
+              const rev = getRevenue(mv);
+              
+              let valCell = `<td>${formatPHP(cents)}</td>`;
+              let pctCell = `<td class="cell-pct">${formatPercentVal(cents, rev)}</td>`;
+              
               if (className.includes('margin')) {
-                return `<td>${cents}</td>`; // cents would be pre-formatted string here
+                valCell = `<td>—</td>`;
+                pctCell = `<td class="cell-pct">${cents}</td>`;
               }
-              return `<td>${formatPHP(cents)}</td>`;
+              
+              return valCell + pctCell;
             }).join('');
             return `<tr class="${className}">
               <td class="indent-${indent}">${title}</td>
               ${cells}
             </tr>`;
+          };
+
+          const formatPercentVal = (nom, den) => {
+            if (!den || den === 0) return '—';
+            const val = (nom / den) * 100;
+            const absVal = Math.abs(val);
+            const formattedVal = `${absVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
+            return val < 0 ? `(${formattedVal})` : formattedVal;
           };
 
           // Helper definitions
@@ -914,8 +934,10 @@
           // Net Profit Row
           const renderNetProfitRow = () => {
             const cells = this.months.map(m => {
-              const np = getNetProfit(monthlyValues[m.key]);
-              return `<td>${formatPHP(np)}</td>`;
+              const mv = monthlyValues[m.key];
+              const np = getNetProfit(mv);
+              const rev = getRevenue(mv);
+              return `<td>${formatPHP(np)}</td><td class="cell-pct">${formatPercentVal(np, rev)}</td>`;
             }).join('');
             return `<tr class="row-net-profit">
               <td>Net Profit</td>
@@ -929,7 +951,7 @@
               const mv = monthlyValues[m.key];
               const np = getNetProfit(mv);
               const rev = getRevenue(mv);
-              return `<td>${formatPercent(np, rev)}</td>`;
+              return `<td>—</td><td class="cell-pct">${formatPercent(np, rev)}</td>`;
             }).join('');
             return `<tr class="row-net-margin">
               <td>Net Margin</td>
@@ -940,8 +962,10 @@
           // Gross Profit Row
           const renderGrossProfitRow = () => {
             const cells = this.months.map(m => {
-              const gp = getGrossProfit(monthlyValues[m.key]);
-              return `<td>${formatPHP(gp)}</td>`;
+              const mv = monthlyValues[m.key];
+              const gp = getGrossProfit(mv);
+              const rev = getRevenue(mv);
+              return `<td>${formatPHP(gp)}</td><td class="cell-pct">${formatPercentVal(gp, rev)}</td>`;
             }).join('');
             return `<tr class="row-gross-profit">
               <td>Gross Profit</td>
@@ -955,7 +979,7 @@
               const mv = monthlyValues[m.key];
               const gp = getGrossProfit(mv);
               const rev = getRevenue(mv);
-              return `<td>${formatPercent(gp, rev)}</td>`;
+              return `<td>—</td><td class="cell-pct">${formatPercent(gp, rev)}</td>`;
             }).join('');
             return `<tr class="row-gross-margin">
               <td>Gross Margin</td>
@@ -972,26 +996,30 @@
           html += renderGrossMarginRow();
 
           // Spacer gap: gross margin and revenue
-          html += `<tr class="row-spacer"><td colspan="7"></td></tr>`;
+          html += `<tr class="row-spacer"><td colspan="13"></td></tr>`;
 
           // Revenue Header
           const revenueHeaderCells = this.months.map(m => {
-            const val = getRevenue(monthlyValues[m.key]);
-            return `<td>${formatPHP(val)}</td>`;
+            const mv = monthlyValues[m.key];
+            const val = getRevenue(mv);
+            const rev = getRevenue(mv);
+            return `<td>${formatPHP(val)}</td><td class="cell-pct">${formatPercentVal(val, rev)}</td>`;
           }).join('');
           html += `<tr class="row-group-header row-revenue-header"><td>Revenue</td>${revenueHeaderCells}</tr>`;
           html += rowHtml('Booking', (mv) => mv.revenueBooking, 'row-subitem', 1);
 
           // Spacer gap: booking and expenses
-          html += `<tr class="row-spacer"><td colspan="7"></td></tr>`;
+          html += `<tr class="row-spacer"><td colspan="13"></td></tr>`;
 
           // Expenses (Consolidated COGS + OPEX, ALL CAPS, very light red)
           html += rowHtml('EXPENSES', (mv) => getExpenses(mv), 'row-expenses', 0);
 
           // COGS Header
           const cogsHeaderCells = this.months.map(m => {
-            const val = getCogs(monthlyValues[m.key]);
-            return `<td>${formatPHP(val)}</td>`;
+            const mv = monthlyValues[m.key];
+            const val = getCogs(mv);
+            const rev = getRevenue(mv);
+            return `<td>${formatPHP(val)}</td><td class="cell-pct">${formatPercentVal(val, rev)}</td>`;
           }).join('');
           html += `<tr class="row-group-header"><td>COGS</td>${cogsHeaderCells}</tr>`;
           html += rowHtml('Supplier Cost', (mv) => mv.supplierCost, 'row-subitem', 1);
@@ -1013,8 +1041,10 @@
 
           // OPEX Header
           const opexHeaderCells = this.months.map(m => {
-            const val = getOpex(monthlyValues[m.key]);
-            return `<td>${formatPHP(val)}</td>`;
+            const mv = monthlyValues[m.key];
+            const val = getOpex(mv);
+            const rev = getRevenue(mv);
+            return `<td>${formatPHP(val)}</td><td class="cell-pct">${formatPercentVal(val, rev)}</td>`;
           }).join('');
           html += `<tr class="row-group-header"><td>OPEX</td>${opexHeaderCells}</tr>`;
           html += rowHtml('Salaries', (mv) => mv.salaries, 'row-subitem', 1);
@@ -1023,8 +1053,10 @@
 
           // Admin Sub-section
           const adminHeaderCells = this.months.map(m => {
-            const val = monthlyValues[m.key].admin.total;
-            return `<td>${formatPHP(val)}</td>`;
+            const mv = monthlyValues[m.key];
+            const val = mv.admin.total;
+            const rev = getRevenue(mv);
+            return `<td>${formatPHP(val)}</td><td class="cell-pct">${formatPercentVal(val, rev)}</td>`;
           }).join('');
           html += `<tr class="row-subgroup-header"><td class="indent-1">Admin</td>${adminHeaderCells}</tr>`;
           const allAdminKeys = new Set();
@@ -1038,8 +1070,10 @@
 
           // Marketing & Sales Sub-section
           const marketingHeaderCells = this.months.map(m => {
-            const val = monthlyValues[m.key].marketingSales.total;
-            return `<td>${formatPHP(val)}</td>`;
+            const mv = monthlyValues[m.key];
+            const val = mv.marketingSales.total;
+            const rev = getRevenue(mv);
+            return `<td>${formatPHP(val)}</td><td class="cell-pct">${formatPercentVal(val, rev)}</td>`;
           }).join('');
           html += `<tr class="row-subgroup-header"><td class="indent-1">Marketing &amp; Sales</td>${marketingHeaderCells}</tr>`;
           const allMarketingKeys = new Set();
@@ -1053,8 +1087,10 @@
 
           // Operations & Support Sub-section
           const opsHeaderCells = this.months.map(m => {
-            const val = monthlyValues[m.key].operationsSupport.total;
-            return `<td>${formatPHP(val)}</td>`;
+            const mv = monthlyValues[m.key];
+            const val = mv.operationsSupport.total;
+            const rev = getRevenue(mv);
+            return `<td>${formatPHP(val)}</td><td class="cell-pct">${formatPercentVal(val, rev)}</td>`;
           }).join('');
           html += `<tr class="row-subgroup-header"><td class="indent-1">Operations &amp; Support</td>${opsHeaderCells}</tr>`;
           const allOpsKeys = new Set();
