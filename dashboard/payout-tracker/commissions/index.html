@@ -130,8 +130,7 @@
         try {
           const { data, error } = await sb.from('employees')
             .select('id, first_name, last_name, employment_status')
-            .eq('company_id', this.companyId)
-            .eq('employment_status', 'Active');
+            .eq('company_id', this.companyId);
           if (error) throw error;
           this.employees = data || [];
         } catch (e) { this.employees = []; console.error(e); }
@@ -145,20 +144,34 @@
         // Commission assignments
         try {
           const { data, error } = await sb.from('commission_assignments')
-            .select('employee_id, booking_id, product_index, amount')
+            .select('employee_id, booking_id, product_index, amount, rate_label, sku')
             .eq('company_id', this.companyId);
           if (error) throw error;
           this.commissionAssignments = data || [];
         } catch (e) { this.commissionAssignments = []; console.error(e); }
 
-        // Installation bookings (only fields needed for commission calculation)
+        // Installation bookings (fields needed for commission calculation)
         try {
           const { data, error } = await sb.from('installation_bookings')
-            .select('id, status, updated_at, created_at, doors, scheduled_date')
+            .select('*')
             .eq('company_id', this.companyId);
           if (error) throw error;
           this.bookingsList = data || [];
         } catch (e) { this.bookingsList = []; console.error(e); }
+
+        // Products & Config
+        try {
+          const [productsRes, configRes] = await Promise.all([
+            sb.from('products').select('sku, business, category, tags'),
+            sb.from('global_settings').select('value').eq('key', 'commissions_config').eq('company_id', this.companyId).maybeSingle()
+          ]);
+          this.dbProducts = productsRes.data || [];
+          this.commissionsConfig = configRes.data?.value || { rates: [], eligibility_rules: [] };
+        } catch (e) {
+          console.error('Error loading config:', e);
+          this.dbProducts = [];
+          this.commissionsConfig = { rates: [], eligibility_rules: [] };
+        }
 
         // Commission payout state
         try {
@@ -214,6 +227,11 @@
           return schedDays[schedDays.length - 1];
         };
 
+        const productMap = {};
+        (this.dbProducts || []).forEach(p => {
+          if (p.sku) productMap[p.sku.toLowerCase()] = p;
+        });
+
         // Filter assignments completed in this month
         const monthAssignments = this.commissionAssignments.filter(a => {
           const b = this.bookingsList.find(x => x.id === a.booking_id);
@@ -228,17 +246,49 @@
           return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}` === mk;
         });
 
-        // Group by employee and schedule day
+        // Group by employee and schedule day, calculating amounts dynamically on the fly
         const empCommissions = {};
         const empDoneDates   = {};
         monthAssignments.forEach(a => {
-          if (!a.employee_id || !a.amount) return;
+          if (!a.employee_id) return;
           const b = this.bookingsList.find(x => x.id === a.booking_id);
-          const ds    = b?.scheduled_date;
+          if (!b) return;
+          const ds    = b.scheduled_date;
           const schedDay = getSchedDay(ds);
 
+          let eligibleCentavos = 0;
+          if (a.sku === 'ORDER_TOTAL') {
+            const calc = getBookingEligibleCentavos(b, productMap, this.commissionsConfig.eligibility_rules);
+            eligibleCentavos = calc.finalEligibleCentavos;
+          } else {
+            const skus = (b.product_skus || '').split(' | ').map(s => s.trim());
+            const qtys = (b.product_qtys || '').split(' | ').map(s => s.trim());
+            const unitPrices = (b.product_unit_prices || '').split(' | ').map(s => s.trim());
+
+            const qty = parseInt(qtys[a.product_index]) || 1;
+            const unitPriceDec = parseFloat(unitPrices[a.product_index]) || 0;
+            const totalCentavos = Math.round(unitPriceDec * qty * 100);
+
+            const product = productMap[a.sku?.toLowerCase()] || { sku: a.sku || '', business: '', category: '', tags: [] };
+            const isEligible = checkSkuEligibility(product, this.commissionsConfig.eligibility_rules);
+            eligibleCentavos = isEligible ? totalCentavos : 0;
+          }
+
+          const rateConfig = (this.commissionsConfig.rates || []).find(r => r.label === a.rate_label);
+          const basePercent = rateConfig ? parseFloat(rateConfig.value) || 0 : 0;
+          const adjustment = getCommissionAdjustmentForBooking(b, a.rate_label, productMap, this.commissionsConfig.adjustment_rules);
+          const percent = basePercent + adjustment;
+
+          const cellAssignments = this.commissionAssignments.filter(x => x.booking_id === a.booking_id && x.sku === a.sku && x.product_index === a.product_index && x.rate_label === a.rate_label);
+          const activeAssignees = cellAssignments.filter(x => x.employee_id && x.employee_id !== 'none');
+          const divisor = activeAssignees.length || 1;
+          const splitPercent = percent / divisor;
+          const splitCommAmountCentavos = Math.round(eligibleCentavos * (splitPercent / 100));
+
+          if (!splitCommAmountCentavos) return;
+
           empCommissions[a.employee_id] = empCommissions[a.employee_id] || {};
-          empCommissions[a.employee_id][schedDay] = (empCommissions[a.employee_id][schedDay] || 0) + a.amount;
+          empCommissions[a.employee_id][schedDay] = (empCommissions[a.employee_id][schedDay] || 0) + splitCommAmountCentavos;
 
           if (ds) {
             const label = new Date(ds).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -304,6 +354,148 @@
         }
       },
     };
+
+    function checkSkuEligibility(product, eligibilityRules) {
+      if (!eligibilityRules || eligibilityRules.length === 0) return false;
+      for (const rule of eligibilityRules) {
+        if (rule.scope === 'businesses') {
+          if (rule.business === 'all') return true;
+          if (rule.business === product.business) {
+            if (rule.category === 'all') return true;
+            if (rule.category === product.category) {
+              if (rule.sku === 'all') return true;
+              if (rule.sku === product.sku) return true;
+            }
+          }
+        } else if (rule.scope === 'tags') {
+          if (product.tags && Array.isArray(product.tags) && product.tags.includes(rule.tag)) {
+            return true;
+          }
+        }
+      }
+      return false;
+    }
+
+    function getBookingEligibleCentavos(b, productMap, eligibilityRules) {
+      const skus = (b.product_skus || '').split(' | ').map(s => s.trim());
+      const qtys = (b.product_qtys || '').split(' | ').map(s => s.trim());
+      const unitPrices = (b.product_unit_prices || '').split(' | ').map(s => s.trim());
+
+      let skuSumCentavos = 0;
+      let allSkuSumCentavos = 0;
+      const numItems = Math.max(skus.length, qtys.length);
+      for (let i = 0; i < numItems; i++) {
+        const sku = skus[i] || '';
+        if (!sku) continue;
+        const qty = parseInt(qtys[i]) || 1;
+        const unitPriceDec = parseFloat(unitPrices[i]) || 0;
+        const itemCentavos = Math.round(unitPriceDec * qty * 100);
+        
+        allSkuSumCentavos += itemCentavos;
+
+        const product = productMap[sku.toLowerCase()] || { sku, business: '', category: '', tags: [] };
+        const isEligible = checkSkuEligibility(product, eligibilityRules);
+        if (isEligible) {
+          skuSumCentavos += itemCentavos;
+        }
+      }
+
+      let depositCentavos = Math.round(Math.abs(parseInt(b.deposit_amount) || 0));
+      let discountCentavos = 0;
+      let freebiesCentavos = 0;
+      let customCentavos = 0;
+
+      if (b.deduction_labels && b.deduction_values) {
+        const labels = b.deduction_labels.split('|').map(s => s.trim().toLowerCase());
+        const values = b.deduction_values.split('|').map(s => s.trim());
+        labels.forEach((label, idx) => {
+          const valPHP = parseFloat(values[idx]) || 0;
+          const valCentavos = Math.round(Math.abs(valPHP) * 100);
+          if (label.includes('discount')) {
+            discountCentavos += valCentavos;
+          } else if (label.includes('freebie')) {
+            freebiesCentavos += valCentavos;
+          } else if (label.includes('custom')) {
+            customCentavos += valCentavos;
+          } else if (label.includes('deposit')) {
+            depositCentavos += valCentavos;
+          }
+        });
+      }
+
+      let chargesCentavos = 0;
+      if (b.charge_labels && b.charge_values) {
+        const labels = b.charge_labels.split('|').map(s => s.trim().toLowerCase());
+        const values = b.charge_values.split('|').map(s => s.trim());
+        labels.forEach((label, idx) => {
+          const valPHP = parseFloat(values[idx]) || 0;
+          const valCentavos = Math.round(Math.abs(valPHP) * 100);
+          if (!label.includes('credit card fee')) {
+            chargesCentavos += valCentavos;
+          }
+        });
+      }
+
+      const finalEligibleCentavos = Math.max(0, skuSumCentavos - discountCentavos);
+      const grandTotal = parseInt(b.grand_total) || 0;
+      const balanceDue = parseInt(b.balance_due) || 0;
+      const orderGrandTotal = grandTotal > 0 ? grandTotal : (balanceDue + depositCentavos);
+      const totalPriceCentavos = orderGrandTotal + depositCentavos;
+
+      return {
+        skuSumCentavos,
+        finalEligibleCentavos,
+        totalPriceCentavos
+      };
+    }
+
+    function getCommissionAdjustmentForBooking(b, rateLabel, productMap, adjustmentRules) {
+      if (!adjustmentRules || adjustmentRules.length === 0) return 0;
+      const bDate = b.scheduled_date ? b.scheduled_date.slice(0, 10) : '';
+      if (!bDate) return 0;
+
+      const bookingSkus = (b.product_skus || '').split(' | ').map(s => s.trim().toLowerCase());
+      let totalAdjustment = 0;
+
+      adjustmentRules.forEach(r => {
+        const rStart = r.start_date || '1970-01-01';
+        const rEnd = r.end_date || '9999-12-31';
+        if (bDate < rStart || bDate > rEnd) return;
+        if (!r.label || r.label.trim().toLowerCase() !== rateLabel.trim().toLowerCase()) return;
+
+        let isMatch = false;
+        if (r.scope === 'businesses') {
+          const skuMatch = !r.sku || r.sku === 'all' || bookingSkus.includes(r.sku.toLowerCase());
+          const catMatch = !r.category || r.category === 'all' || bookingSkus.some(sku => {
+            const p = productMap[sku] || {};
+            return p.category && p.category.toLowerCase() === r.category.toLowerCase();
+          });
+          const bizMatch = !r.business || r.business === 'all' || bookingSkus.some(sku => {
+            const p = productMap[sku] || {};
+            return p.business && p.business.toLowerCase() === r.business.toLowerCase();
+          });
+          if (skuMatch && catMatch && bizMatch) isMatch = true;
+        } else if (r.scope === 'tags') {
+          const tagMatch = bookingSkus.some(sku => {
+            const p = productMap[sku] || {};
+            return p.tags && Array.isArray(p.tags) && p.tags.map(t => t.toLowerCase()).includes(r.tag.toLowerCase());
+          });
+          if (tagMatch) isMatch = true;
+        }
+
+        if (isMatch) {
+          let val = parseFloat(r.value) || 0;
+          if (r.operator === 'minus') {
+            val = -Math.abs(val);
+          } else {
+            val = Math.abs(val);
+          }
+          totalAdjustment += val;
+        }
+      });
+
+      return totalAdjustment;
+    }
 
     document.addEventListener('DOMContentLoaded', () => {
       App.init();
