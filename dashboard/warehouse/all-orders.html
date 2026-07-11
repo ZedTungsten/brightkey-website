@@ -1433,7 +1433,17 @@
 
     async function updateBadgeCounts() {
       try {
-        const receiveCount = activeTransactions.filter(t => ['ordered', 'returned', 'cancelled'].includes(t.status) && t.type !== 'supplier_order').length;
+        const receiveCount = activeTransactions.filter(t => {
+          if (!['ordered', 'returned', 'cancelled'].includes(t.status)) return false;
+
+          const isIncoming = (t.reference_id && (t.reference_id.startsWith('RCV-') || t.reference_id.startsWith('SUP-')));
+          if (isIncoming) {
+            const isBooked = dbDeliveryBookings.some(db => db.reference_id === t.reference_id);
+            return isBooked;
+          }
+
+          return t.type !== 'supplier_order';
+        }).length;
         const inspectCount = [...new Set(activeTransactions.filter(t => t.status === 'reserved' && t.type === 'customer_order').map(t => t.reference_id))].length;
         const packCount = [...new Set(activeTransactions.filter(t => t.status === 'inspect' && t.type === 'customer_order').map(t => t.reference_id))].length;
         const dispatchCount = activeTransactions.filter(t => {

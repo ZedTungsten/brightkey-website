@@ -15,6 +15,8 @@ window.WarehousePage = {
     this._bookings = (val || []).filter(b => b.order_no && b.order_no.startsWith('ORD-'));
   },
 
+  deliveryBookings: [],
+
   _activeTransactions: [],
   get activeTransactions() {
     return this._activeTransactions;
@@ -193,7 +195,17 @@ window.WarehousePage = {
 
   // 10. Update Badge Counts
   updateBadgeCounts: function() {
-    const receiveCount = this.activeTransactions.filter(t => ['ordered', 'returned', 'cancelled'].includes(t.status) && t.type !== 'supplier_order').length;
+    const receiveCount = this.activeTransactions.filter(t => {
+      if (!['ordered', 'returned', 'cancelled'].includes(t.status)) return false;
+
+      const isIncoming = (t.reference_id && (t.reference_id.startsWith('RCV-') || t.reference_id.startsWith('SUP-')));
+      if (isIncoming) {
+        const isBooked = (this.deliveryBookings || []).some(db => db.reference_id === t.reference_id);
+        return isBooked;
+      }
+
+      return t.type !== 'supplier_order';
+    }).length;
     const inspectCount = [...new Set(this.activeTransactions.filter(t => t.status === 'reserved' && t.type === 'customer_order').map(t => t.reference_id))].length;
     const packCount = [...new Set(this.activeTransactions.filter(t => t.status === 'inspect' && t.type === 'customer_order').map(t => t.reference_id))].length;
     
