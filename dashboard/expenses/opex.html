@@ -553,7 +553,7 @@
                 .select('name, category')
                 .eq('company_id', this.companyId),
               sb.from('general_journal')
-                .select('account, debit, date')
+                .select('account, debit, date, description_1')
                 .eq('company_id', this.companyId)
                 .gte('date', startDate)
                 .lte('date', endDate),
@@ -967,7 +967,7 @@ const record = this.payslipRecords.find(r => r.employee_id === emp.id);
             accountCategoryMap[a.name] = a.category;
           });
 
-          // Group by categories
+          // Group by categories: categories[cat][account] = Array of entries
           const categories = {
             'OPEX - Admin': {},
             'OPEX - Marketing & Sales': {},
@@ -979,7 +979,10 @@ const record = this.payslipRecords.find(r => r.employee_id === emp.id);
             if (cat && categories[cat] !== undefined) {
               const debitVal = parseFloat(entry.debit || 0);
               if (debitVal > 0) {
-                categories[cat][entry.account] = (categories[cat][entry.account] || 0) + debitVal;
+                if (!categories[cat][entry.account]) {
+                  categories[cat][entry.account] = [];
+                }
+                categories[cat][entry.account].push(entry);
               }
             }
           });
@@ -1000,7 +1003,11 @@ const record = this.payslipRecords.find(r => r.employee_id === emp.id);
           };
 
           for (const [catName, accountsMap] of Object.entries(categories)) {
-            const accountsList = Object.entries(accountsMap).map(([name, debit]) => ({ name, debit }));
+            const accountsList = Object.entries(accountsMap).map(([name, entries]) => {
+              const totalDebit = entries.reduce((sum, e) => sum + parseFloat(e.debit || 0), 0);
+              return { name, entries, debit: totalDebit };
+            });
+
             // Sort alphabetically by account name
             accountsList.sort((a, b) => a.name.localeCompare(b.name));
 
@@ -1010,12 +1017,34 @@ const record = this.payslipRecords.find(r => r.employee_id === emp.id);
             if (accountsList.length > 0) {
               accountsList.forEach(item => {
                 totalDebit += item.debit;
-                rowsHtml += `
-                  <tr>
-                    <td style="text-align: left; font-weight: 500;">${escapeHtml(item.name)}</td>
-                    <td style="text-align: right; font-weight: 500;">${formatCurrency(item.debit)}</td>
-                  </tr>
-                `;
+                if (item.entries.length > 1) {
+                  // Render Account Row with total amount
+                  rowsHtml += `
+                    <tr style="background: var(--bg-elevated); font-weight: 600;">
+                      <td style="text-align: left;">${escapeHtml(item.name)}</td>
+                      <td style="text-align: right;">${formatCurrency(item.debit)}</td>
+                    </tr>
+                  `;
+                  // Render sub-items with description_1 as title
+                  item.entries.forEach(entry => {
+                    const subName = entry.description_1 || 'General Entry';
+                    const subDebit = parseFloat(entry.debit || 0);
+                    rowsHtml += `
+                      <tr>
+                        <td style="text-align: left; padding-left: 2rem; color: var(--text-secondary); font-style: italic; font-size: 0.82rem;">— ${escapeHtml(subName)}</td>
+                        <td style="text-align: right; color: var(--text-secondary); font-size: 0.82rem;">${formatCurrency(subDebit)}</td>
+                      </tr>
+                    `;
+                  });
+                } else {
+                  // If just 1 item, no subitem needed
+                  rowsHtml += `
+                    <tr>
+                      <td style="text-align: left; font-weight: 500;">${escapeHtml(item.name)}</td>
+                      <td style="text-align: right; font-weight: 500;">${formatCurrency(item.debit)}</td>
+                    </tr>
+                  `;
+                }
               });
             } else {
               rowsHtml = `
