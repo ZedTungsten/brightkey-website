@@ -265,7 +265,9 @@
               generalJournalRes,
               softwareSubscriptionsRes,
               softwareBillingRes,
-              specialPayoutStateRes
+              specialPayoutStateRes,
+              dispatchedTxRes,
+              deliveryRes
             ] = await Promise.all([
               sb.from('products').select('sku, dealer_price, sale_price'),
               sb.from('installation_bookings')
@@ -297,14 +299,45 @@
               sb.from('general_journal').select('account, debit, date').eq('company_id', this.companyId).gte('date', startRange).lte('date', endRange),
               sb.from('software_subscriptions').select('id, name, mode, cost_centavos, status, subscribed_date, unsubscribed_date').eq('company_id', this.companyId),
               sb.from('software_subscription_billing').select('subscription_id, billing_month, cost_centavos, mode').eq('company_id', this.companyId),
-              sb.from('global_settings').select('value').eq('key', 'special_payout_state').eq('company_id', this.companyId).maybeSingle()
+              sb.from('global_settings').select('value').eq('key', 'special_payout_state').eq('company_id', this.companyId).maybeSingle(),
+              sb.from('inventory_transactions')
+                .select('reference_id, customer_name, timestamp_dispatched')
+                .not('timestamp_dispatched', 'is', null)
+                .gte('timestamp_dispatched', startRange + 'T00:00:00')
+                .lte('timestamp_dispatched', endRange + 'T23:59:59'),
+              sb.from('delivery_bookings')
+                .select('reference_id, customer_name, base_fee, tip_1, tip_2, toll')
+                .eq('company_id', this.companyId)
+                .neq('status', 'cancelled')
             ]);
 
             this.products = productsRes.data || [];
             this.bookings = bookingsRes.data || [];
             this.employees = employeesRes.data || [];
             this.payslipRecords = payslipRecordsRes.data || [];
-            this.deliveries = deliveriesRes.data || [];
+            
+            // Build delivery/shipping list aligned with cogs.html (dispatch date based shipping)
+            const dispatchedTxs = dispatchedTxRes?.data || [];
+            const deliveryFeeMap = {};
+            (deliveryRes?.data || []).forEach(db => {
+              deliveryFeeMap[db.reference_id] = db;
+            });
+            const seenRefIds = new Set();
+            this.deliveries = [];
+            dispatchedTxs.forEach(tx => {
+              if (!tx.reference_id || seenRefIds.has(tx.reference_id)) return;
+              seenRefIds.add(tx.reference_id);
+              const fees = deliveryFeeMap[tx.reference_id] || {};
+              this.deliveries.push({
+                reference_id: tx.reference_id,
+                timestamp_dispatched: tx.timestamp_dispatched,
+                base_fee: fees.base_fee || 0,
+                tip_1: fees.tip_1 || 0,
+                tip_2: fees.tip_2 || 0,
+                toll: fees.toll || 0
+              });
+            });
+
             this.payoutSettings = payoutSettingsRes.data?.value || {
               installations_before_crediting: 15,
               lead_credit: 1.0,
@@ -675,10 +708,11 @@
 
           // (D) Shipping (Base + Tip 1 + Tip 2 + Toll from delivery_bookings mapped to dispatch date)
           this.deliveries.forEach(del => {
-            const dDate = new Date(del.created_at);
+            if (!del.timestamp_dispatched) return;
+            const dDate = new Date(del.timestamp_dispatched);
             const mKey = `${dDate.getFullYear()}-${String(dDate.getMonth() + 1).padStart(2, '0')}`;
             if (!monthlyValues[mKey]) return;
-            const baseFee = del.base_fee || (del.base_price * 100) || 0;
+            const baseFee = del.base_fee || 0;
             const tip1 = del.tip_1 || 0;
             const tip2 = del.tip_2 || 0;
             const toll = del.toll || 0;
