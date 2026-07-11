@@ -121,6 +121,10 @@
     .indent-2 {
       padding-left: 2.5rem !important;
     }
+    .tooltip-container:hover .tooltip-text {
+      visibility: visible !important;
+      opacity: 1 !important;
+    }
 
     /* ── Tab Container Bar ── */
     .drawer-tabs {
@@ -186,9 +190,14 @@
 
         <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.5rem; box-shadow: var(--shadow-sm);">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-            <div>
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
               <h2 style="font-size: 1rem; font-weight: 700; color: var(--text-primary); margin: 0;">Profit & Loss Statement</h2>
-              <p style="font-size: 0.78rem; color: var(--text-muted); margin: 0.25rem 0 0 0;">Last 6 months, calculated chronologically</p>
+              <div class="tooltip-container" style="position: relative; display: inline-block; cursor: pointer;">
+                <div style="width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid var(--text-muted); color: var(--text-muted); display: flex; align-items: center; justify-content: center; font-size: 0.72rem; font-weight: 700; line-height: 1;">?</div>
+                <div class="tooltip-text" style="visibility: hidden; width: 280px; background-color: var(--bg-surface); color: var(--text-primary); text-align: left; border: 1px solid var(--border); border-radius: var(--radius-md); padding: 0.75rem; position: absolute; z-index: 10; top: 125%; left: 0; box-shadow: var(--shadow-md); font-size: 0.76rem; line-height: 1.4; font-weight: 500;">
+                  Net Profit, Gross Profit, Expenses and COGS margin are computed against Revenue; OPEX computed against Gross Profit
+                </div>
+              </div>
             </div>
             <button onclick="PLApp.loadData()" class="btn btn-outline btn-sm" style="display: flex; align-items: center; gap: 0.4rem;">
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
@@ -888,14 +897,14 @@
           tbody.innerHTML = '';
 
           // Sub-item list builder helper
-          const rowHtml = (title, getterFn, className = '', indent = 0) => {
+          const rowHtml = (title, getterFn, className = '', indent = 0, denominatorFn = null) => {
             const cells = this.months.map(m => {
               const mv = monthlyValues[m.key];
               const cents = getterFn(mv) || 0;
-              const rev = getRevenue(mv);
+              const den = denominatorFn ? denominatorFn(mv) : getRevenue(mv);
               
               let valCell = `<td>${formatPHP(cents)}</td>`;
-              let pctCell = `<td class="cell-pct">${formatPercentVal(cents, rev)}</td>`;
+              let pctCell = `<td class="cell-pct">${formatPercentVal(cents, den)}</td>`;
               
               if (className.includes('margin')) {
                 valCell = `<td>—</td>`;
@@ -1013,20 +1022,20 @@
           const opexHeaderCells = this.months.map(m => {
             const mv = monthlyValues[m.key];
             const val = getOpex(mv);
-            const rev = getRevenue(mv);
-            return `<td>${formatPHP(val)}</td><td class="cell-pct">${formatPercentVal(val, rev)}</td>`;
+            const gp = getGrossProfit(mv);
+            return `<td>${formatPHP(val)}</td><td class="cell-pct">${formatPercentVal(val, gp)}</td>`;
           }).join('');
           html += `<tr class="row-group-header"><td>OPEX</td>${opexHeaderCells}</tr>`;
-          html += rowHtml('Salaries', (mv) => mv.salaries, 'row-subitem', 1);
-          html += rowHtml('Adjustments', (mv) => mv.adjustments, 'row-subitem', 1);
-          html += rowHtml('Software & Apps', (mv) => mv.softwareApps, 'row-subitem', 1);
+          html += rowHtml('Salaries', (mv) => mv.salaries, 'row-subitem', 1, getGrossProfit);
+          html += rowHtml('Adjustments', (mv) => mv.adjustments, 'row-subitem', 1, getGrossProfit);
+          html += rowHtml('Software & Apps', (mv) => mv.softwareApps, 'row-subitem', 1, getGrossProfit);
 
           // Admin Sub-section
           const adminHeaderCells = this.months.map(m => {
             const mv = monthlyValues[m.key];
             const val = mv.admin.total;
-            const rev = getRevenue(mv);
-            return `<td>${formatPHP(val)}</td><td class="cell-pct">${formatPercentVal(val, rev)}</td>`;
+            const gp = getGrossProfit(mv);
+            return `<td>${formatPHP(val)}</td><td class="cell-pct">${formatPercentVal(val, gp)}</td>`;
           }).join('');
           html += `<tr class="row-subgroup-header"><td class="indent-1">Admin</td>${adminHeaderCells}</tr>`;
           const allAdminKeys = new Set();
@@ -1035,15 +1044,15 @@
           });
           const sortedAdmin = [...allAdminKeys].sort();
           sortedAdmin.forEach(item => {
-            html += rowHtml(item, (mv) => mv.admin.details[item] || 0, 'row-sub-subitem', 2);
+            html += rowHtml(item, (mv) => mv.admin.details[item] || 0, 'row-sub-subitem', 2, getGrossProfit);
           });
 
           // Marketing & Sales Sub-section
           const marketingHeaderCells = this.months.map(m => {
             const mv = monthlyValues[m.key];
             const val = mv.marketingSales.total;
-            const rev = getRevenue(mv);
-            return `<td>${formatPHP(val)}</td><td class="cell-pct">${formatPercentVal(val, rev)}</td>`;
+            const gp = getGrossProfit(mv);
+            return `<td>${formatPHP(val)}</td><td class="cell-pct">${formatPercentVal(val, gp)}</td>`;
           }).join('');
           html += `<tr class="row-subgroup-header"><td class="indent-1">Marketing &amp; Sales</td>${marketingHeaderCells}</tr>`;
           const allMarketingKeys = new Set();
@@ -1052,15 +1061,15 @@
           });
           const sortedMarketing = [...allMarketingKeys].sort();
           sortedMarketing.forEach(item => {
-            html += rowHtml(item, (mv) => mv.marketingSales.details[item] || 0, 'row-sub-subitem', 2);
+            html += rowHtml(item, (mv) => mv.marketingSales.details[item] || 0, 'row-sub-subitem', 2, getGrossProfit);
           });
 
           // Operations & Support Sub-section
           const opsHeaderCells = this.months.map(m => {
             const mv = monthlyValues[m.key];
             const val = mv.operationsSupport.total;
-            const rev = getRevenue(mv);
-            return `<td>${formatPHP(val)}</td><td class="cell-pct">${formatPercentVal(val, rev)}</td>`;
+            const gp = getGrossProfit(mv);
+            return `<td>${formatPHP(val)}</td><td class="cell-pct">${formatPercentVal(val, gp)}</td>`;
           }).join('');
           html += `<tr class="row-subgroup-header"><td class="indent-1">Operations &amp; Support</td>${opsHeaderCells}</tr>`;
           const allOpsKeys = new Set();
@@ -1069,7 +1078,7 @@
           });
           const sortedOps = [...allOpsKeys].sort();
           sortedOps.forEach(item => {
-            html += rowHtml(item, (mv) => mv.operationsSupport.details[item] || 0, 'row-sub-subitem', 2);
+            html += rowHtml(item, (mv) => mv.operationsSupport.details[item] || 0, 'row-sub-subitem', 2, getGrossProfit);
           });
 
           tbody.innerHTML = html;
