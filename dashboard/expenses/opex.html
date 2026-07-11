@@ -283,34 +283,7 @@
               </table>
             </div>
           </div>
-
-          <!-- COGS Section (Installation & Commission) -->
-          <div>
-            <div style="border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; margin-bottom: 0.75rem;">
-              <h2 style="font-size: 1rem; font-weight: 800; color: var(--text-primary); margin: 0;">COGS (Installations &amp; Commissions)</h2>
-              <span style="font-size: 0.72rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 0.15rem; display: block;">Installation Payouts and Sales Commissions</span>
-            </div>
-            
-            <div class="excel-container" style="margin-top: 0;">
-              <table class="excel-table">
-                <thead>
-                  <tr>
-                    <th style="text-align: left;">Employee</th>
-                    <th style="width: 200px; text-align: right;">Installation</th>
-                    <th style="width: 200px; text-align: right;">Commission</th>
-                    <th style="width: 200px; text-align: right;">Total COGS</th>
-                  </tr>
-                </thead>
-                <tbody id="cogs-table-body">
-                  <tr class="shimmer-row">
-                    <td style="text-align: left;">Loading...</td>
-                    <td></td><td></td><td></td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-            </div>
+        </div>
           </div>
 
           <!-- Software & Apps Summary -->
@@ -819,13 +792,11 @@
         renderStatement() {
           const salariesTbody = document.getElementById('salaries-table-body');
           const adjustmentsTbody = document.getElementById('adjustments-table-body');
-          const cogsTbody = document.getElementById('cogs-table-body');
 
-          if (!salariesTbody || !adjustmentsTbody || !cogsTbody) return 0;
+          if (!salariesTbody || !adjustmentsTbody) return 0;
 
           salariesTbody.innerHTML = '';
           adjustmentsTbody.innerHTML = '';
-          cogsTbody.innerHTML = '';
 
           const formatPHP = (val) => {
             if (val === null || val === undefined || val === '' || Number(val) === 0) return '—';
@@ -833,15 +804,10 @@
             return `${prefix}₱${Math.abs(Number(val)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
           };
 
-          const year = this.currentDate.getFullYear();
-          const month = this.currentDate.getMonth() + 1;
-          const targetMonthKey = `${year}-${String(month).padStart(2, '0')}`;
-
           if (this.employees.length === 0) {
             const emptyRow = (cols) => `<tr><td colspan="${cols}" style="text-align: center; color: var(--text-muted); padding: 2rem;">No employees found.</td></tr>`;
             salariesTbody.innerHTML = emptyRow(4);
             adjustmentsTbody.innerHTML = emptyRow(2);
-            cogsTbody.innerHTML = emptyRow(4);
             return 0;
           }
 
@@ -852,39 +818,19 @@
             return nameA.localeCompare(nameB);
           });
 
-          // Payout config variables for installations
-          const thresholdVal = this.payoutSettings.installations_before_crediting || 15;
-          const leadWeight = this.payoutSettings.lead_credit !== undefined ? this.payoutSettings.lead_credit : 1.0;
-          const assistWeight = this.payoutSettings.assist_credit !== undefined ? this.payoutSettings.assist_credit : 0.5;
-          const leadRateVal = this.payoutSettings.lead_rate || 1000;
-          const assistRateVal = this.payoutSettings.assist_rate || 500;
-
-          const extraServicesList = (this.payoutSettings.extra_services || []).map(es => {
-            let sku = es.sku || es.name || '';
-            if (sku === 'Welding Baseplate Metal') sku = 'BASEPLATE-M';
-            if (sku === 'Welding Baseplate Stainless') sku = 'BASEPLATE-S';
-            return { sku, rate: es.rate };
-          });
-
           let grandTotalSalaries = 0;
           let grandTotalSpecials = 0;
           let grandTotalSalaryTotal = 0;
 
           let grandTotalAdjustments = 0;
 
-          let grandTotalInstallations = 0;
-          let grandTotalCommissions = 0;
-          let grandTotalCogsTotal = 0;
-
           let grandTotalCost = 0;
 
           let salaryRowsCount = 0;
           let adjustmentRowsCount = 0;
-          let cogsRowsCount = 0;
 
           let salariesHtml = '';
           let adjustmentsHtml = '';
-          let cogsHtml = '';
 
           sortedEmps.forEach(emp => {
             const record = this.payslipRecords.find(r => r.employee_id === emp.id);
@@ -892,72 +838,6 @@
             let baseSalary = 0;
             let specialPayout = 0;
             let adjustmentVal = 0;
-            let installationPayout = 0;
-            let commissionPayout = 0;
-
-            // 1. Calculate installationPayout live from bookings
-            const monthBookings = this.bookings.filter(b => {
-              if (!b.scheduled_date) return false;
-              if (b.status === 'cancelled') return false;
-              const d = new Date(b.scheduled_date);
-              const bookingMonthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-              return bookingMonthKey === targetMonthKey;
-            });
-
-            let leadCount = 0;
-            let assistCount = 0;
-            let serviceEarnings = 0;
-
-            monthBookings.forEach(b => {
-              const assignedDoors = this.getAssignedDoorsForBookingAndEmployee(b, emp.id);
-              assignedDoors.forEach(d => {
-                if (!d.completed) return;
-                if (d.roles.includes('lead')) {
-                  leadCount++;
-                } else if (d.roles.includes('assist')) {
-                  assistCount++;
-                }
-                if (d.roles.includes('service')) {
-                  d.skus.forEach(sku => {
-                    const matchedService = extraServicesList.find(es => es.sku === sku);
-                    if (matchedService) {
-                      serviceEarnings += matchedService.rate;
-                    }
-                  });
-                }
-              });
-            });
-
-            const totalCredit = (leadCount * leadWeight) + (assistCount * assistWeight);
-            let thresholdEarnings = 0;
-            if (totalCredit > thresholdVal) {
-              const extraCredit = totalCredit - thresholdVal;
-              thresholdEarnings = extraCredit * leadRateVal;
-            }
-            installationPayout = thresholdEarnings + serviceEarnings;
-
-            // 2. Calculate commissions live from assignments
-            const employeeCommAssignments = this.commissionAssignments.filter(a => a.employee_id === emp.id);
-            employeeCommAssignments.forEach(a => {
-              const b = this.bookings.find(x => x.id === a.booking_id);
-              if (!b || b.status === 'cancelled') return;
-              if (!b.scheduled_date || b.scheduled_date.slice(0, 7) !== targetMonthKey) return;
-
-              let doors = [];
-              if (b.doors) {
-                if (typeof b.doors === 'string') {
-                  try { doors = JSON.parse(b.doors); } catch(_) {}
-                } else if (Array.isArray(b.doors)) {
-                  doors = b.doors;
-                }
-              }
-
-              const door = doors[a.product_index];
-              const isDone = (door && door.completed) || ['done', 'completed', 'finished'].includes(b.status);
-              if (!isDone) return;
-
-              commissionPayout += (Number(a.amount) || 0) / 100;
-            });
 
             // 3. Resolve core fields (Salary, Special, Adjustments)
             adjustmentVal = this.adjustments
@@ -976,7 +856,7 @@
                 : 0;
             }
 
-            const totalEmpCost = baseSalary + specialPayout + adjustmentVal + installationPayout + commissionPayout;
+            const totalEmpCost = baseSalary + specialPayout + adjustmentVal;
             grandTotalCost += totalEmpCost;
 
             const fullName = `${emp.first_name || ''} ${emp.last_name || ''}`.trim();
@@ -1014,25 +894,6 @@
                 </tr>
               `;
             }
-
-            // C. Add to COGS Table if installation or commission exists
-            const hasCogsEarnings = installationPayout > 0 || commissionPayout > 0;
-            if (hasCogsEarnings || record) {
-              const rowCogsTotal = installationPayout + commissionPayout;
-              grandTotalInstallations += installationPayout;
-              grandTotalCommissions += commissionPayout;
-              grandTotalCogsTotal += rowCogsTotal;
-              cogsRowsCount++;
-
-              cogsHtml += `
-                <tr>
-                  <td style="text-align: left; font-weight: 500;">${fullName}</td>
-                  <td>${formatPHP(installationPayout)}</td>
-                  <td>${formatPHP(commissionPayout)}</td>
-                  <td style="font-weight: 600;">${formatPHP(rowCogsTotal)}</td>
-                </tr>
-              `;
-            }
           });
 
           // Render Salaries Tbody and Total Row
@@ -1061,21 +922,6 @@
             adjustmentsTbody.innerHTML = adjustmentsHtml + totalRow;
           } else {
             adjustmentsTbody.innerHTML = `<tr><td colspan="2" style="text-align: center; color: var(--text-muted); padding: 2rem;">No adjustments recorded.</td></tr>`;
-          }
-
-          // Render COGS Tbody and Total Row
-          if (cogsRowsCount > 0) {
-            const totalRow = `
-              <tr class="total-row">
-                <td style="text-align: left;">TOTAL</td>
-                <td>${formatPHP(grandTotalInstallations)}</td>
-                <td>${formatPHP(grandTotalCommissions)}</td>
-                <td>${formatPHP(grandTotalCogsTotal)}</td>
-              </tr>
-            `;
-            cogsTbody.innerHTML = cogsHtml + totalRow;
-          } else {
-            cogsTbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 2rem;">No active installations or commissions.</td></tr>`;
           }
 
           return grandTotalCost;
