@@ -320,14 +320,22 @@
         ? sb.from('warehouse_transfers').select('*')
         : Promise.resolve({ data: [], error: null });
 
+      const deliveryQuery = companyId
+        ? sb.from('delivery_bookings').select('*')
+        : Promise.resolve({ data: [], error: null });
+
       const [
         { data: invData, error: invErr },
         { data: txData, error: txErr },
-        { data: transData, error: transErr }
-      ] = await Promise.all([invQuery, txQuery, transferQuery]);
+        { data: transData, error: transErr },
+        { data: delivData, error: delivErr }
+      ] = await Promise.all([invQuery, txQuery, transferQuery, deliveryQuery]);
 
       if (invErr) throw invErr;
       if (txErr) throw txErr;
+      if (!delivErr) {
+        WarehousePage.deliveryBookings = delivData || [];
+      }
 
       allInventory = {};
       (invData || []).forEach(row => {
