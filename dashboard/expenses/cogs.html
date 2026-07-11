@@ -312,7 +312,7 @@
           const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
 
           try {
-            const [productsRes, bookingsRes, accountsRes, journalRes, deliveryRes] = await Promise.all([
+            const [productsRes, bookingsRes, accountsRes, journalRes, dispatchedTxRes, deliveryRes] = await Promise.all([
               sb.from('products').select('sku, title, dealer_price, count_inventory, category'),
               sb.from('installation_bookings')
                 .select('scheduled_date, order_no, status, product_skus, product_qtys')
@@ -328,11 +328,15 @@
                 .eq('company_id', this.companyId)
                 .gte('date', startDate)
                 .lte('date', endDate),
+              sb.from('inventory_transactions')
+                .select('reference_id, customer_name, timestamp_dispatched')
+                .eq('type', 'customer_order')
+                .eq('status', 'dispatched')
+                .not('timestamp_dispatched', 'is', null)
+                .gte('timestamp_dispatched', startDate + 'T00:00:00')
+                .lte('timestamp_dispatched', endDate + 'T23:59:59'),
               sb.from('delivery_bookings')
-                .select('reference_id, customer_name, base_fee, tip_1, tip_2, toll, picked_up_at, status')
-                .not('picked_up_at', 'is', null)
-                .gte('picked_up_at', startDate)
-                .lte('picked_up_at', endDate)
+                .select('reference_id, customer_name, base_fee, tip_1, tip_2, toll')
             ]);
 
             this.products = productsRes.data || [];
@@ -340,7 +344,29 @@
             this.costHistory = [];
             this.journalAccounts = accountsRes.data || [];
             this.journalEntries = journalRes.data || [];
-            this.deliveryBookings = deliveryRes.data || [];
+
+            // Build shipping list: unique reference_ids dispatched this month (per inventory_transactions),
+            // merged with fee amounts from delivery_bookings by reference_id.
+            const dispatchedTxs = dispatchedTxRes.data || [];
+            const deliveryFeeMap = {};
+            (deliveryRes.data || []).forEach(db => {
+              deliveryFeeMap[db.reference_id] = db;
+            });
+            const seenRefIds = new Set();
+            this.deliveryBookings = [];
+            dispatchedTxs.forEach(tx => {
+              if (!tx.reference_id || seenRefIds.has(tx.reference_id)) return;
+              seenRefIds.add(tx.reference_id);
+              const fees = deliveryFeeMap[tx.reference_id] || {};
+              this.deliveryBookings.push({
+                reference_id: tx.reference_id,
+                customer_name: fees.customer_name || tx.customer_name || '',
+                base_fee: fees.base_fee || 0,
+                tip_1: fees.tip_1 || 0,
+                tip_2: fees.tip_2 || 0,
+                toll: fees.toll || 0
+              });
+            });
 
             try {
               const { data: histData, error: histErr } = await sb.from('product_cost_history')
