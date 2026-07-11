@@ -69,9 +69,39 @@
     }
     .row-subgroup-header td {
       font-weight: 600 !important;
-      font-style: italic;
       text-align: left;
       background: var(--bg-surface) !important;
+    }
+    .row-net-margin td {
+      font-weight: 700 !important;
+      background: var(--cyan-dim, #ecfeff) !important;
+      color: var(--cyan, #0891b2) !important;
+      font-size: 0.82rem;
+      border-bottom: 1.5px solid var(--cyan) !important;
+    }
+    .row-gross-margin td {
+      font-weight: 700 !important;
+      background: var(--bg-base) !important;
+      font-size: 0.80rem;
+      border-bottom: 1.5px solid var(--text-primary) !important;
+    }
+    .row-total td {
+      font-weight: 700 !important;
+      background: var(--bg-base) !important;
+      font-size: 0.82rem;
+      border-top: 1.5px solid var(--border) !important;
+      border-bottom: 1.5px solid var(--border) !important;
+    }
+    .row-expenses td {
+      font-weight: 700 !important;
+      background: var(--bg-base) !important;
+      font-size: 0.84rem;
+      border-top: 1.5px solid var(--text-primary) !important;
+      border-bottom: 1.5px solid var(--text-primary) !important;
+    }
+    .row-sub-subitem td {
+      font-weight: 400 !important;
+      color: var(--text-secondary) !important;
     }
     .indent-1 {
       padding-left: 1.5rem !important;
@@ -834,6 +864,12 @@
             return `${prefix}₱${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
           };
 
+          const formatPercent = (nom, den) => {
+            if (!den || den === 0) return '—';
+            const val = (nom / den) * 100;
+            return `${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
+          };
+
           const tbody = document.getElementById('table-body');
           tbody.innerHTML = '';
 
@@ -841,6 +877,10 @@
           const rowHtml = (title, getterFn, className = '', indent = 0) => {
             const cells = this.months.map(m => {
               const cents = getterFn(monthlyValues[m.key]) || 0;
+              // If it's a margin row, format as percentage instead
+              if (className.includes('margin')) {
+                return `<td>${cents}</td>`; // cents would be pre-formatted string here
+              }
               return `<td>${formatPHP(cents)}</td>`;
             }).join('');
             return `<tr class="${className}">
@@ -849,16 +889,23 @@
             </tr>`;
           };
 
+          // Helper definitions
+          const getRevenue = (mv) => mv.revenueBooking;
+          const getCogs = (mv) => {
+            const otherCogsSum = Object.values(mv.otherCogs).reduce((a, b) => a + b, 0);
+            return mv.supplierCost + mv.installations + mv.commissions + mv.shipping + mv.gasAllowance + mv.packagingSupplies + otherCogsSum;
+          };
+          const getOpex = (mv) => {
+            return mv.salaries + mv.adjustments + mv.softwareApps + mv.admin.total + mv.marketingSales.total + mv.operationsSupport.total;
+          };
+          const getExpenses = (mv) => getCogs(mv) + getOpex(mv);
+          const getNetProfit = (mv) => getRevenue(mv) - getCogs(mv) - getOpex(mv);
+          const getGrossProfit = (mv) => getRevenue(mv) - getCogs(mv);
+
           // Net Profit Row
           const renderNetProfitRow = () => {
             const cells = this.months.map(m => {
-              const mv = monthlyValues[m.key];
-              const otherCogsSum = Object.values(mv.otherCogs).reduce((a, b) => a + b, 0);
-              const rev = mv.revenueBooking;
-              const cogs = mv.supplierCost + mv.installations + mv.commissions + mv.shipping + mv.gasAllowance + mv.packagingSupplies + otherCogsSum;
-              const gp = rev - cogs;
-              const opex = mv.salaries + mv.adjustments + mv.softwareApps + mv.admin.total + mv.marketingSales.total + mv.operationsSupport.total;
-              const np = gp - opex;
+              const np = getNetProfit(monthlyValues[m.key]);
               return `<td>${formatPHP(np)}</td>`;
             }).join('');
             return `<tr class="row-net-profit">
@@ -867,14 +914,24 @@
             </tr>`;
           };
 
+          // Net Margin Row
+          const renderNetMarginRow = () => {
+            const cells = this.months.map(m => {
+              const mv = monthlyValues[m.key];
+              const np = getNetProfit(mv);
+              const rev = getRevenue(mv);
+              return `<td>${formatPercent(np, rev)}</td>`;
+            }).join('');
+            return `<tr class="row-net-margin">
+              <td>Net Margin</td>
+              ${cells}
+            </tr>`;
+          };
+
           // Gross Profit Row
           const renderGrossProfitRow = () => {
             const cells = this.months.map(m => {
-              const mv = monthlyValues[m.key];
-              const otherCogsSum = Object.values(mv.otherCogs).reduce((a, b) => a + b, 0);
-              const rev = mv.revenueBooking;
-              const cogs = mv.supplierCost + mv.installations + mv.commissions + mv.shipping + mv.gasAllowance + mv.packagingSupplies + otherCogsSum;
-              const gp = rev - cogs;
+              const gp = getGrossProfit(monthlyValues[m.key]);
               return `<td>${formatPHP(gp)}</td>`;
             }).join('');
             return `<tr class="row-gross-profit">
@@ -883,15 +940,35 @@
             </tr>`;
           };
 
+          // Gross Margin Row
+          const renderGrossMarginRow = () => {
+            const cells = this.months.map(m => {
+              const mv = monthlyValues[m.key];
+              const gp = getGrossProfit(mv);
+              const rev = getRevenue(mv);
+              return `<td>${formatPercent(gp, rev)}</td>`;
+            }).join('');
+            return `<tr class="row-gross-margin">
+              <td>Gross Margin</td>
+              ${cells}
+            </tr>`;
+          };
+
           let html = '';
 
-          // Net Profit & Gross Profit first
+          // Net Profit & Gross Profit margins at the top
           html += renderNetProfitRow();
+          html += renderNetMarginRow();
           html += renderGrossProfitRow();
+          html += renderGrossMarginRow();
 
           // Revenue Header
           html += `<tr class="row-group-header"><td>Revenue</td>${this.months.map(() => '<td></td>').join('')}</tr>`;
           html += rowHtml('Booking', (mv) => mv.revenueBooking, '', 1);
+          html += rowHtml('Total Revenue', (mv) => getRevenue(mv), 'row-total', 1);
+
+          // Expenses (Consolidated COGS + OPEX)
+          html += rowHtml('Expenses', (mv) => getExpenses(mv), 'row-expenses', 0);
 
           // COGS Header
           html += `<tr class="row-group-header"><td>COGS</td>${this.months.map(() => '<td></td>').join('')}</tr>`;
@@ -902,7 +979,7 @@
           html += rowHtml('Gas Allowance', (mv) => mv.gasAllowance, '', 1);
           html += rowHtml('Packaging Supplies', (mv) => mv.packagingSupplies, '', 1);
 
-          // Additional future dynamic COGS items
+          // Additional dynamic COGS items
           const allOtherCogsKeys = new Set();
           this.months.forEach(m => {
             Object.keys(monthlyValues[m.key].otherCogs).forEach(k => allOtherCogsKeys.add(k));
@@ -911,6 +988,7 @@
           sortedOtherCogs.forEach(item => {
             html += rowHtml(item, (mv) => mv.otherCogs[item] || 0, '', 1);
           });
+          html += rowHtml('Total COGS', (mv) => getCogs(mv), 'row-total', 1);
 
           // OPEX Header
           html += `<tr class="row-group-header"><td>OPEX</td>${this.months.map(() => '<td></td>').join('')}</tr>`;
@@ -926,7 +1004,7 @@
           });
           const sortedAdmin = [...allAdminKeys].sort();
           sortedAdmin.forEach(item => {
-            html += rowHtml(item, (mv) => mv.admin.details[item] || 0, '', 2);
+            html += rowHtml(item, (mv) => mv.admin.details[item] || 0, 'row-sub-subitem', 2);
           });
 
           // Marketing & Sales Sub-section
@@ -937,7 +1015,7 @@
           });
           const sortedMarketing = [...allMarketingKeys].sort();
           sortedMarketing.forEach(item => {
-            html += rowHtml(item, (mv) => mv.marketingSales.details[item] || 0, '', 2);
+            html += rowHtml(item, (mv) => mv.marketingSales.details[item] || 0, 'row-sub-subitem', 2);
           });
 
           // Operations & Support Sub-section
@@ -948,8 +1026,9 @@
           });
           const sortedOps = [...allOpsKeys].sort();
           sortedOps.forEach(item => {
-            html += rowHtml(item, (mv) => mv.operationsSupport.details[item] || 0, '', 2);
+            html += rowHtml(item, (mv) => mv.operationsSupport.details[item] || 0, 'row-sub-subitem', 2);
           });
+          html += rowHtml('Total OPEX', (mv) => getOpex(mv), 'row-total', 1);
 
           tbody.innerHTML = html;
         }
