@@ -722,22 +722,56 @@
           });
 
           // (F) Software & Apps Subscriptions Cost
+          const resolvePlanForMonth = (s, targetMonthStr) => {
+            const subBills = this.softwareBilling.filter(b => b.subscription_id === s.id);
+            const exactBill = subBills.find(b => b.billing_month === targetMonthStr);
+            if (exactBill) return { mode: exactBill.mode, cost_centavos: exactBill.cost_centavos };
+
+            if (s.mode === 'pay_as_you_go') {
+              const subStartMonth = (s.subscribed_date || '').slice(0, 7);
+              if (subStartMonth === targetMonthStr) return { mode: 'pay_as_you_go', cost_centavos: s.cost_centavos };
+              return { mode: 'pay_as_you_go', cost_centavos: 0 };
+            }
+
+            const pastBills = subBills.filter(b => b.billing_month <= targetMonthStr);
+            if (pastBills.length > 0) {
+              pastBills.sort((a, b) => b.billing_month.localeCompare(a.billing_month));
+              const latestBill = pastBills[0];
+              if (latestBill.mode === 'pay_as_you_go') return { mode: 'pay_as_you_go', cost_centavos: 0 };
+              return { mode: latestBill.mode, cost_centavos: latestBill.cost_centavos };
+            }
+            return { mode: s.mode, cost_centavos: s.cost_centavos };
+          };
+
           this.months.forEach(m => {
             const mKey = m.key;
-            // Filter billing records for this month
-            const monthBillings = this.softwareBilling.filter(b => b.billing_month === mKey);
-            if (monthBillings.length > 0) {
-              monthBillings.forEach(b => {
-                monthlyValues[mKey].softwareApps += (b.cost_centavos || 0);
-              });
-            } else {
-              // Fallback to active subscriptions
-              this.softwareSubscriptions.forEach(sub => {
-                if (sub.status === 'Active') {
-                  monthlyValues[mKey].softwareApps += (sub.cost_centavos || 0);
-                }
-              });
-            }
+            const currentMonthDateStr = `${mKey}-01`;
+            const currentMonthLastDayStr = `${mKey}-${new Date(m.year, m.month, 0).getDate()}`;
+
+            // Filter out unsubscribed subscriptions for this specific historical month
+            const activeInMonthSubs = this.softwareSubscriptions.filter(s => {
+              const subDate = s.subscribed_date || '1970-01-01';
+              const unsubDate = s.unsubscribed_date;
+              const isSubscribed = subDate <= currentMonthLastDayStr;
+              const isNotUnsubscribed = !unsubDate || unsubDate >= currentMonthDateStr;
+              return isSubscribed && isNotUnsubscribed;
+            });
+
+            activeInMonthSubs.forEach(s => {
+              const plan = resolvePlanForMonth(s, mKey);
+              const mode = plan.mode;
+              const costCentavos = plan.cost_centavos;
+
+              if (mode === 'unsubscribed') return;
+
+              let resolvedCostCentavos = 0;
+              if (mode === 'pay_as_you_go' || mode === 'monthly') {
+                resolvedCostCentavos = costCentavos;
+              } else if (mode === 'annual') {
+                resolvedCostCentavos = Math.round(costCentavos / 12);
+              }
+              monthlyValues[mKey].softwareApps += resolvedCostCentavos;
+            });
           });
 
           // 3. Render Table
