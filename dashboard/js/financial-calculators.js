@@ -436,7 +436,7 @@ window.BKFinancialCalculators = {
       });
 
       activeInMonthSubs.forEach(s => {
-        const plan = this.resolvePlanForMonth(s, mKey, softwareBilling);
+        const plan = this.resolvePlanForMonth(s, currentMonthDateStr, softwareBilling);
         const mode = plan.mode;
         const costCentavos = plan.cost_centavos;
 
