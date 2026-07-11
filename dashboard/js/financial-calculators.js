@@ -342,6 +342,7 @@ window.BKFinancialCalculators = {
         });
       } else {
         employees.forEach(emp => {
+          if (emp.employment_status !== 'Active') return;
           const baseSal = Math.round((emp.salary || emp.monthly_salary || 0) * 100);
           monthlyValues[mKey].salaries += baseSal;
         });
