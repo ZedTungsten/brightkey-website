@@ -212,12 +212,17 @@
 
       const bookingsQuery = sb.from('installation_bookings').select('order_no, scheduled_date, scheduled_time');
 
+      const deliveryQuery = companyId
+        ? sb.from('delivery_bookings').select('*')
+        : Promise.resolve({ data: [], error: null });
+
       const [
         { data: invData, error: invErr },
         { data: txData, error: txErr },
         { data: transData, error: transErr },
-        { data: bData, error: bErr }
-      ] = await Promise.all([invQuery, txQuery, transferQuery, bookingsQuery]);
+        { data: bData, error: bErr },
+        { data: delivData, error: delivErr }
+      ] = await Promise.all([invQuery, txQuery, transferQuery, bookingsQuery, deliveryQuery]);
 
       if (invErr) throw invErr;
       if (txErr) throw txErr;
@@ -225,6 +230,9 @@
         console.error('Failed to fetch installation bookings:', bErr);
       } else {
         bookings = bData || [];
+      }
+      if (!delivErr) {
+        WarehousePage.deliveryBookings = delivData || [];
       }
 
       allInventory = {};
