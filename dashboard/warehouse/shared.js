@@ -287,6 +287,13 @@ window.WarehousePage = {
     if (bErr) throw bErr;
     this.bookings = bData || [];
 
+    try {
+      const { data: delivData } = await this.sb.from('delivery_bookings').select('*');
+      this.deliveryBookings = delivData || [];
+    } catch (e) {
+      console.warn('Failed to load delivery bookings in shared.js:', e);
+    }
+
     const { data: txRefs, error: refErr } = await this.sb.from('inventory_transactions').select('reference_id, status').eq('type', 'customer_order');
     if (refErr) throw refErr;
 
@@ -317,6 +324,27 @@ window.WarehousePage = {
       for (const tx of wrongCityTxs) {
         await this.sb.from('inventory_transactions').update({ customer_city: city }).eq('id', tx.id);
         tx.customer_city = city;
+      }
+
+      // Sync customer_name: patch any transaction whose stored name differs from the booking
+      const bookingName = booking.customer_name || '';
+      if (bookingName) {
+        const wrongNameTxs = this.activeTransactions.filter(t =>
+          t.reference_id === orderNo && t.customer_name !== bookingName
+        );
+        for (const tx of wrongNameTxs) {
+          await this.sb.from('inventory_transactions').update({ customer_name: bookingName }).eq('id', tx.id);
+          tx.customer_name = bookingName;
+        }
+
+        // Also patch delivery_bookings if the name drifted there
+        const wrongNameDb = (this.deliveryBookings || []).filter(db =>
+          db.reference_id === orderNo && db.customer_name !== bookingName
+        );
+        for (const db of wrongNameDb) {
+          await this.sb.from('delivery_bookings').update({ customer_name: bookingName }).eq('id', db.id);
+          db.customer_name = bookingName;
+        }
       }
 
       if (!existingRefs[orderNo]) {
