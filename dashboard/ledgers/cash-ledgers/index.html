@@ -200,7 +200,9 @@
                 <thead>
                   <tr>
                     <th class="text-left">Account</th>
+                    <th>Starting Balance</th>
                     <th>Net Month Balance</th>
+                    <th>Total</th>
                   </tr>
                 </thead>
                 <tbody id="summary-tbody"></tbody>
@@ -364,6 +366,18 @@
 
           if (currentErr) throw currentErr;
 
+          // 3. Fetch starting balances from global_settings
+          const { data: config, error: configErr } = await sb
+            .from('global_settings')
+            .select('value')
+            .eq('company_id', this.companyId)
+            .eq('key', 'cash_starting_balances')
+            .maybeSingle();
+
+          if (configErr) throw configErr;
+
+          this.savedBalances = config?.value || {};
+
           console.log('CashPosition selectedMonth:', this.selectedMonth);
           console.log('CashPosition currentEntries count:', currentEntries?.length);
 
@@ -391,7 +405,9 @@
         });
 
         const cashAccountsData = [];
-        let totalAvailableCash = 0;
+        let totalStartingBalance = 0;
+        let totalNetMonthBalance = 0;
+        let totalCombinedCash = 0;
 
         const detailedContainer = document.getElementById('detailed-tables-container');
         detailedContainer.innerHTML = '';
@@ -433,6 +449,7 @@
 
           // Render detailed table for this account (latest first)
           const latestFirstTx = [...monthTransactions].reverse();
+          let rowsHtml = '';
           if (latestFirstTx.length === 0) {
             rowsHtml = `
               <tr>
@@ -458,13 +475,24 @@
             }).join('');
           }
 
-          // Save net balance for the summary table
+          // Fetch starting balance for this account
+          const monthData = this.savedBalances[this.selectedMonth] || {};
+          const startingVal = monthData[account.id] !== undefined ? monthData[account.id] : (monthData[account.name] || 0);
+          const startingBalance = parseFloat(startingVal);
+          
           const netBalance = totalDebit - totalCredit;
+          const accountTotal = startingBalance + netBalance;
+
           cashAccountsData.push({
             name: account.name,
-            balance: netBalance
+            starting: startingBalance,
+            net: netBalance,
+            total: accountTotal
           });
-          totalAvailableCash += netBalance;
+
+          totalStartingBalance += startingBalance;
+          totalNetMonthBalance += netBalance;
+          totalCombinedCash += accountTotal;
 
           const tableHtml = `
             <div class="account-title" style="display: flex; justify-content: space-between; align-items: center;">
@@ -505,12 +533,16 @@
           return `
             <tr>
               <td class="text-left">${this.escapeHtml(acc.name)}</td>
-              <td>${this.formatPHP(acc.balance)}</td>
+              <td>${this.formatPHP(acc.starting)}</td>
+              <td>${this.formatPHP(acc.net)}</td>
+              <td style="font-weight: 600;">${this.formatPHP(acc.total)}</td>
             </tr>`;
         }).join('') + `
           <tr class="row-total">
             <td class="text-left">Total</td>
-            <td>${this.formatPHP(totalAvailableCash)}</td>
+            <td>${this.formatPHP(totalStartingBalance)}</td>
+            <td>${this.formatPHP(totalNetMonthBalance)}</td>
+            <td>${this.formatPHP(totalCombinedCash)}</td>
           </tr>`;
       },
 
