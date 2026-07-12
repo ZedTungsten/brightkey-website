@@ -645,8 +645,8 @@
             }
           }
 
-          const creditAccId = document.getElementById('f-credit-acct').value;
-          const debitAccId  = document.getElementById('f-debit-acct').value;
+          const creditAccId = parseInt(document.getElementById('f-credit-acct').value, 10);
+          const debitAccId  = parseInt(document.getElementById('f-debit-acct').value, 10);
           const creditAccName = this.accounts.find(a => a.id === creditAccId)?.name || '';
           const debitAccName  = this.accounts.find(a => a.id === debitAccId)?.name || '';
 
@@ -1703,17 +1703,18 @@
               }
             }
           } else if (col === 'account') {
-            const selectedAcct = this.accounts.find(a => a.id === newVal);
+            const intVal = parseInt(newVal, 10);
+            const selectedAcct = this.accounts.find(a => a.id === intVal);
             const selectedName = selectedAcct ? selectedAcct.name : '';
             if (!this.pendingChanges[id]) this.pendingChanges[id] = {};
             
             const origId = r.account_id || this.accounts.find(a => a.name === r.account)?.id;
-            if (newVal !== origId) {
+            if (intVal !== origId) {
               this.pendingChanges[id]['account'] = { 
                 old: r.account, 
                 new: selectedName, 
                 oldId: r.account_id,
-                newId: newVal,
+                newId: intVal,
                 entryNum: r.entry_number 
               };
             } else {
@@ -1780,8 +1781,8 @@
 
         document.getElementById('orphan-reassign-btn').addEventListener('click', async () => {
           const rowId  = this.activeOrphanId;
-          const newAccId = document.getElementById('orphan-reassign-sel').value;
-          if (!rowId || !newAccId) return;
+          const newAccId = parseInt(document.getElementById('orphan-reassign-sel').value, 10);
+          if (!rowId || isNaN(newAccId)) return;
           const newAccName = this.accounts.find(a => a.id === newAccId)?.name || '';
           try {
             await sbPatch('general_journal', `id=eq.${rowId}`, { account_id: newAccId, account: newAccName });
