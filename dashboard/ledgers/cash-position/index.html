@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Cash Position — BrightKey Portal</title>
+  <title>Cash Position Ledger — BrightKey Portal</title>
   <link rel="preconnect" href="https://fonts.bunny.net" />
   <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/css/style.css" />
@@ -33,6 +33,118 @@
     }
     .tab-btn.active { color: var(--cyan-light); border-bottom-color: var(--cyan); }
     .tab-btn:hover:not(.active) { color: var(--text-secondary); }
+
+    /* ── Filter Bar ── */
+    .filter-bar {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      padding: 1rem 2rem;
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border);
+    }
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+
+    /* ── Excel-style Table (OPEX/COGS layout from P&L) ── */
+    .excel-container {
+      width: 100%;
+      overflow-x: auto;
+      border: 1px solid var(--border);
+      background: var(--bg-surface);
+      margin-top: 1.5rem;
+      border-radius: var(--radius-md);
+    }
+    .excel-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 9.5pt;
+      color: var(--text-primary);
+      font-family: var(--font-sans), Arial, sans-serif;
+    }
+    .excel-table th, .excel-table td {
+      border: 1px solid var(--border);
+      padding: 0.55rem 0.85rem;
+      text-align: right;
+    }
+    .excel-table th {
+      background: var(--bg-base, #fafafa);
+      font-weight: 700;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      font-size: 8.5pt;
+      letter-spacing: 0.05em;
+      text-align: right;
+    }
+    .excel-table td {
+      background: var(--bg-surface) !important;
+    }
+    .excel-table th:first-child, .excel-table td:first-child {
+      text-align: left;
+    }
+    .excel-table .text-left {
+      text-align: left;
+    }
+    .excel-table .text-center {
+      text-align: center;
+    }
+
+    /* ── Hierarchy Row Styles ── */
+    .row-group-header td {
+      font-weight: 700 !important;
+      background: var(--bg-base) !important;
+      text-transform: uppercase;
+    }
+    .row-group-header td:first-child {
+      text-align: left;
+    }
+    .row-subgroup-header td {
+      font-weight: 600 !important;
+    }
+    .row-subgroup-header td:first-child {
+      text-align: left;
+    }
+    .row-total td {
+      font-weight: 700 !important;
+      border-top: 1.5px solid var(--border) !important;
+      border-bottom: 2px double var(--text-primary) !important;
+    }
+    .row-total td:first-child {
+      text-align: left;
+    }
+    .row-starting td {
+      font-style: italic;
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+
+    .account-title {
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-top: 2rem;
+      margin-bottom: 0.5rem;
+      letter-spacing: -0.02em;
+    }
+
+    /* ── State Indicators ── */
+    .loading-state, .error-state, .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.75rem;
+      padding: 4rem 2rem;
+      border: 1px dashed var(--border);
+      border-radius: var(--radius-md);
+      background: var(--bg-elevated);
+      color: var(--text-muted);
+      text-align: center;
+      margin-top: 1.5rem;
+    }
   </style>
 </head>
 <body>
@@ -50,9 +162,38 @@
         <a href="/dashboard/ledgers/cash-position" class="tab-btn active">Cash Position</a>
       </nav>
 
+      <!-- Month Filter Bar -->
+      <div class="filter-bar">
+        <div class="form-group">
+          <label class="form-label" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted);" for="filter-month">Month Filter</label>
+          <select id="filter-month" class="form-select" style="min-width: 180px; padding: 0.4rem 0.75rem; font-size: 0.85rem;"></select>
+        </div>
+      </div>
+
       <main style="overflow-y: auto; flex: 1; min-width: 0; width: 100%;">
         <div class="int-wrap">
-          <!-- Blank for now -->
+          
+          <div id="state-container"></div>
+          
+          <div id="ledger-content" style="display: none;">
+            <!-- Summary Table Section -->
+            <div class="account-title" style="margin-top: 0;">Cash Summary</div>
+            <div class="excel-container">
+              <table class="excel-table">
+                <thead>
+                  <tr>
+                    <th class="text-left">Account</th>
+                    <th>Balance</th>
+                  </tr>
+                </thead>
+                <tbody id="summary-tbody"></tbody>
+              </table>
+            </div>
+
+            <!-- Detailed Tables Section -->
+            <div id="detailed-tables-container"></div>
+          </div>
+
         </div>
       </main>
     </div>
@@ -62,11 +203,330 @@
   <script src="/js/auth.js" defer></script>
   <script src="/js/sidebar.js" defer></script>
   <script>
-    document.addEventListener('DOMContentLoaded', async () => {
-      if (window.BKAuth) {
-        await window.BKAuth.checkRoleGate(['Finance'], '../../../admin.html');
-      }
+    document.addEventListener('DOMContentLoaded', () => {
+      CashPositionApp.init();
     });
+
+    const CashPositionApp = {
+      companyId: null,
+      accounts: [],
+      journalEntries: [],
+      selectedMonth: '', // YYYY-MM
+
+      async init() {
+        if (window.BKAuth) {
+          const authInfo = await window.BKAuth.checkRoleGate(['Finance'], '../../../admin.html');
+          
+          // Resolve companyId
+          const sb = window.BKAuth.sb;
+          const { data: co } = await sb.from('companies').select('id').eq('tenant_id', authInfo.tenantId).limit(1).maybeSingle();
+          this.companyId = co?.id || null;
+        }
+
+        this.populateMonthFilter();
+        this.bindEvents();
+        await this.loadData();
+      },
+
+      populateMonthFilter() {
+        const select = document.getElementById('filter-month');
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const currentMonth = now.getMonth() + 1; // 1-indexed
+
+        select.innerHTML = '';
+        for (let year = 2025; year <= 2028; year++) {
+          for (let month = 1; month <= 12; month++) {
+            const opt = document.createElement('option');
+            const date = new Date(year, month - 1, 1);
+            const label = date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+            const val = `${year}-${String(month).padStart(2, '0')}`;
+            opt.value = val;
+            opt.textContent = label;
+            
+            if (year === currentYear && month === currentMonth) {
+              opt.selected = true;
+              this.selectedMonth = val;
+            }
+            select.appendChild(opt);
+          }
+        }
+      },
+
+      bindEvents() {
+        document.getElementById('filter-month').addEventListener('change', async (e) => {
+          this.selectedMonth = e.target.value;
+          await this.loadData();
+        });
+      },
+
+      showLoading(msg = 'Loading ledger data…') {
+        document.getElementById('ledger-content').style.display = 'none';
+        document.getElementById('state-container').innerHTML = `
+          <div class="loading-state">
+            <div class="btn-loading" style="width: 24px; height: 24px; border-width: 2.5px;"></div>
+            <div>${msg}</div>
+          </div>`;
+        document.getElementById('state-container').style.display = 'block';
+      },
+
+      showError(msg) {
+        document.getElementById('ledger-content').style.display = 'none';
+        document.getElementById('state-container').innerHTML = `
+          <div class="error-state">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--danger)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            <div style="font-weight:700;color:var(--text-primary);">Failed to load Ledger</div>
+            <div style="font-size:0.85rem;">${msg}</div>
+          </div>`;
+        document.getElementById('state-container').style.display = 'block';
+      },
+
+      showEmpty() {
+        document.getElementById('ledger-content').style.display = 'none';
+        document.getElementById('state-container').innerHTML = `
+          <div class="empty-state">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            <div style="font-weight:700;color:var(--text-primary);">No Cash Accounts Found</div>
+            <div style="font-size:0.83rem;max-width:320px;">Ensure you have accounts registered under the "Cash & Cash Equivalents" category in the General Journal configuration.</div>
+          </div>`;
+        document.getElementById('state-container').style.display = 'block';
+      },
+
+      async loadData() {
+        if (!this.companyId) {
+          this.showError('Company not resolved.');
+          return;
+        }
+
+        this.showLoading();
+
+        try {
+          const sb = window.BKAuth.sb;
+          
+          // 1. Fetch Accounts in Cash & Cash Equivalents
+          const { data: accts, error: acctErr } = await sb
+            .from('journal_accounts')
+            .select('id, name, category')
+            .eq('company_id', this.companyId)
+            .eq('category', 'Cash & Cash Equivalents');
+
+          if (acctErr) throw acctErr;
+          
+          if (!accts || accts.length === 0) {
+            this.showEmpty();
+            return;
+          }
+
+          this.accounts = accts;
+
+          // 2. Fetch all journal entries for the company
+          // We need entries up to the end of the selected month to calculate running balances
+          const [year, month] = this.selectedMonth.split('-').map(Number);
+          const endOfMonthDate = new Date(year, month, 0).toISOString().split('T')[0];
+
+          const { data: entries, error: entryErr } = await sb
+            .from('general_journal')
+            .select('id, entry_number, date, account_id, account, debit, credit, description_1, description_2')
+            .eq('company_id', this.companyId)
+            .lte('date', endOfMonthDate)
+            .order('date', { ascending: true })
+            .order('entry_number', { ascending: true })
+            .order('id', { ascending: true }); // Ensure stable ordering
+
+          if (entryErr) throw entryErr;
+
+          this.journalEntries = entries || [];
+
+          this.renderLedger();
+
+        } catch (e) {
+          console.error(e);
+          this.showError(e.message);
+        }
+      },
+
+      renderLedger() {
+        document.getElementById('state-container').style.display = 'none';
+        document.getElementById('ledger-content').style.display = 'block';
+
+        const [selectedYear, selectedMonthNum] = this.selectedMonth.split('-').map(Number);
+        
+        // Group all journal entries by entry_number to resolve offset accounts
+        const entriesByNumber = {};
+        this.journalEntries.forEach(entry => {
+          if (!entriesByNumber[entry.entry_number]) {
+            entriesByNumber[entry.entry_number] = [];
+          }
+          entriesByNumber[entry.entry_number].push(entry);
+        });
+
+        const cashAccountsData = [];
+        let totalAvailableCash = 0;
+
+        const detailedContainer = document.getElementById('detailed-tables-container');
+        detailedContainer.innerHTML = '';
+
+        this.accounts.forEach(account => {
+          // Calculate starting balance: transactions before the selected month
+          let startingBalance = 0;
+          const monthTransactions = [];
+
+          this.journalEntries.forEach(entry => {
+            // Check if transaction belongs to this cash account
+            // Support both account_id comparison and name-based fallback
+            const isMatch = (entry.account_id && Number(entry.account_id) === Number(account.id)) || 
+                            (!entry.account_id && entry.account === account.name);
+
+            if (!isMatch) return;
+
+            const [eYear, eMonth] = entry.date.split('-').map(Number);
+            const debitVal = parseFloat(entry.debit || 0);
+            const creditVal = parseFloat(entry.credit || 0);
+
+            // Check if before the selected month
+            if (eYear < selectedYear || (eYear === selectedYear && eMonth < selectedMonthNum)) {
+              startingBalance += (debitVal - creditVal);
+            } else if (eYear === selectedYear && eMonth === selectedMonthNum) {
+              monthTransactions.push({
+                ...entry,
+                debitVal,
+                creditVal
+              });
+            }
+          });
+
+          // Compute running balance chronologically
+          let runningBal = startingBalance;
+          const transactionsWithBalance = monthTransactions.map(tx => {
+            runningBal += (tx.debitVal - tx.creditVal);
+            
+            // Resolve offset account
+            let offsetAccountStr = '—';
+            const companionRows = entriesByNumber[tx.entry_number] || [];
+            const offsetNames = companionRows
+              .filter(r => r.id !== tx.id)
+              .map(r => r.account);
+            
+            if (offsetNames.length > 0) {
+              offsetAccountStr = offsetNames.join(' / ');
+            }
+
+            return {
+              ...tx,
+              runningBalance: runningBal,
+              offsetAccount: offsetAccountStr
+            };
+          });
+
+          // Save final balance for the summary table
+          cashAccountsData.push({
+            name: account.name,
+            balance: runningBal
+          });
+          totalAvailableCash += runningBal;
+
+          // Render detailed table for this account
+          // Render in reverse chronological order (latest first)
+          const latestFirstTx = [...transactionsWithBalance].reverse();
+
+          let rowsHtml = '';
+          if (latestFirstTx.length === 0) {
+            rowsHtml = `
+              <tr>
+                <td colspan="7" class="text-center" style="font-style: italic; color: var(--text-muted); padding: 1.5rem 0.85rem;">
+                  No transactions recorded in this month.
+                </td>
+              </tr>`;
+          } else {
+            rowsHtml = latestFirstTx.map((tx, idx) => {
+              return `
+                <tr>
+                  <td class="text-center" style="color: var(--text-muted); width: 45px;">${latestFirstTx.length - idx}</td>
+                  <td class="text-center" style="font-family: var(--font-mono, monospace); font-size: 0.8rem;">
+                    ${this.escapeHtml(this.formatEntryNum(tx.entry_number))}
+                  </td>
+                  <td class="text-center">${tx.date}</td>
+                  <td class="text-left">${this.escapeHtml(tx.offsetAccount)}</td>
+                  <td>${tx.debitVal > 0 ? this.formatPHP(tx.debitVal) : '—'}</td>
+                  <td>${tx.creditVal > 0 ? this.formatPHP(tx.creditVal) : '—'}</td>
+                  <td style="font-weight: 600;">${this.formatPHP(tx.runningBalance)}</td>
+                </tr>`;
+            }).join('');
+          }
+
+          const tableHtml = `
+            <div class="account-title">${this.escapeHtml(account.name)}</div>
+            <div class="excel-container">
+              <table class="excel-table">
+                <thead>
+                  <tr>
+                    <th class="text-center" style="width: 45px;">#</th>
+                    <th class="text-center" style="width: 120px;">Entry Number</th>
+                    <th class="text-center" style="width: 110px;">Date</th>
+                    <th class="text-left">Account</th>
+                    <th style="width: 130px;">Debit</th>
+                    <th style="width: 130px;">Credit</th>
+                    <th style="width: 140px;">Balance</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr class="row-starting">
+                    <td colspan="4" class="text-left">Starting Balance (Accrual Carry Forward)</td>
+                    <td>—</td>
+                    <td>—</td>
+                    <td style="font-weight: 600;">${this.formatPHP(startingBalance)}</td>
+                  </tr>
+                  ${rowsHtml}
+                  <tr class="row-total">
+                    <td colspan="4" class="text-left">Closing Balance</td>
+                    <td>—</td>
+                    <td>—</td>
+                    <td>${this.formatPHP(runningBal)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>`;
+          
+          detailedContainer.innerHTML += tableHtml;
+        });
+
+        // Render Summary Table
+        const summaryTbody = document.getElementById('summary-tbody');
+        summaryTbody.innerHTML = cashAccountsData.map(acc => {
+          return `
+            <tr>
+              <td class="text-left">${this.escapeHtml(acc.name)}</td>
+              <td>${this.formatPHP(acc.balance)}</td>
+            </tr>`;
+        }).join('') + `
+          <tr class="row-total">
+            <td class="text-left">Total Available Cash</td>
+            <td>${this.formatPHP(totalAvailableCash)}</td>
+          </tr>`;
+      },
+
+      formatPHP(val) {
+        return '₱' + parseFloat(val).toLocaleString('en-PH', {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2
+        });
+      },
+
+      formatEntryNum(num) {
+        if (!num) return '—';
+        return 'BK-AA' + String(num).padStart(4, '0');
+      },
+
+      escapeHtml(str) {
+        if (!str) return '';
+        return str
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#039;');
+      }
+    };
   </script>
 
 </body>
