@@ -387,7 +387,8 @@
             og.label = cat;
             g[cat].forEach(a => {
               const o = document.createElement('option');
-              o.value = o.textContent = a.name;
+              o.value = a.id;
+              o.textContent = a.name;
               og.appendChild(o);
             });
             sel.appendChild(og);
@@ -407,7 +408,8 @@
         this.accounts.forEach(a => {
           if (a.is_visible === false) return;
           const o = document.createElement('option');
-          o.value = o.textContent = a.name;
+          o.value = a.id;
+          o.textContent = a.name;
           oSel.appendChild(o);
         });
       },
@@ -643,9 +645,14 @@
             }
           }
 
+          const creditAccId = document.getElementById('f-credit-acct').value;
+          const debitAccId  = document.getElementById('f-debit-acct').value;
+          const creditAccName = this.accounts.find(a => a.id === creditAccId)?.name || '';
+          const debitAccName  = this.accounts.find(a => a.id === debitAccId)?.name || '';
+
           await sbPost('general_journal', [
-            { company_id: this.companyId, entry_number: entryNum, year: yr, month: mo, date, account: debitAcc,  debit: amount, credit: null, description_1: desc1, description_2: desc2, attachments: uploadedUrls },
-            { company_id: this.companyId, entry_number: entryNum, year: yr, month: mo, date, account: creditAcc, debit: null, credit: amount, description_1: desc1, description_2: desc2, attachments: uploadedUrls },
+            { company_id: this.companyId, entry_number: entryNum, year: yr, month: mo, date, account_id: debitAccId, account: debitAccName,  debit: amount, credit: null, description_1: desc1, description_2: desc2, attachments: uploadedUrls },
+            { company_id: this.companyId, entry_number: entryNum, year: yr, month: mo, date, account_id: creditAccId, account: creditAccName, debit: null, credit: amount, description_1: desc1, description_2: desc2, attachments: uploadedUrls },
           ]);
 
           Toast.success(`Entry ${fmtEntry(entryNum)} added.`);
@@ -1530,11 +1537,34 @@
           const hasDiff = Object.keys(chgs).length > 0;
           // Merge staged changes into display values
           const d = { ...r };
-          Object.entries(chgs).forEach(([k, v]) => { d[k] = v.new; });
+          Object.entries(chgs).forEach(([k, v]) => { 
+            d[k] = v.new; 
+            if (k === 'account' && v.newId !== undefined) {
+              d.account_id = v.newId;
+            }
+          });
 
-          const orphan = !known.has(d.account) && !isDel;
-          const acctObj = this.accounts.find(a => a.name === d.account);
-          const isCatDeleted = acctObj && this.deletedCategories.includes(acctObj.category);
+          let displayName = d.account || '—';
+          let orphan = false;
+          let isCatDeleted = false;
+
+          if (d.account_id) {
+            const acctObj = this.accounts.find(a => a.id === d.account_id);
+            if (acctObj) {
+              displayName = acctObj.name;
+              isCatDeleted = this.deletedCategories.includes(acctObj.category);
+            } else {
+              orphan = !isDel;
+            }
+          } else {
+            // Fallback to name-based lookup for older entries
+            const acctObj = this.accounts.find(a => a.name === d.account);
+            if (acctObj) {
+              isCatDeleted = this.deletedCategories.includes(acctObj.category);
+            } else {
+              orphan = !isDel;
+            }
+          }
 
           let rowCls = '';
           if (isDel)             rowCls = 'row-pending-delete';
@@ -1543,7 +1573,7 @@
           else if (isCatDeleted) rowCls = 'row-deleted-cat';
 
           const oa = orphan && !this.editMode
-            ? ` onclick="JournalApp.openOrphanPop(event,${r.id},'${esc(d.account)}')" title="Unknown account — click to fix"` : '';
+            ? ` onclick="JournalApp.openOrphanPop(event,${r.id},'${esc(displayName)}')" title="Unknown account — click to fix"` : '';
 
           const ec = (col) => (!isDel && this.editMode) ? ` data-col="${col}" data-id="${r.id}"` : '';
 
@@ -1568,7 +1598,7 @@
             <td class="num" style="color:var(--text-muted);font-size:0.72rem;">${off + i + 1}</td>
             <td class="entry-num"${ec('entry_number')}>${fmtEntry(d.entry_number)}</td>
             <td${ec('date')}>${d.date || '—'}</td>
-            <td${ec('account')} style="${orphan || isCatDeleted ? 'color:var(--danger);font-weight:600;' : ''}"${isCatDeleted ? ' title="Account is not assigned to an active category"' : ''}>${isCatDeleted ? WARN_ICON : ''}${esc(d.account)}</td>
+            <td${ec('account')} style="${orphan || isCatDeleted ? 'color:var(--danger);font-weight:600;' : ''}"${isCatDeleted ? ' title="Account is not assigned to an active category"' : ''}>${isCatDeleted ? WARN_ICON : ''}${esc(displayName)}</td>
             <td class="debit"${ec('debit')}>${d.debit   ? php(d.debit)   : '—'}</td>
             <td class="credit"${ec('credit')}>${d.credit ? php(d.credit) : '—'}</td>
             <td${ec('description_1')}>${esc(d.description_1 || '')}</td>
@@ -1597,7 +1627,7 @@
 
         // Current value: apply any pending change
         const staged = (this.pendingChanges[id] || {})[col];
-        const currentVal = staged ? staged.new : r[col];
+        const currentVal = staged ? staged.newId : (r.account_id || (this.accounts.find(a => a.name === r.account)?.id));
 
         let html;
         if (col === 'account') {
@@ -1607,7 +1637,7 @@
           catKeys.forEach(cat => {
             opts += `<optgroup label="${esc(cat)}">`;
             g[cat].forEach(a => {
-              opts += `<option value="${esc(a.name)}"${a.name === currentVal ? ' selected' : ''}>${esc(a.name)}</option>`;
+              opts += `<option value="${a.id}"${a.id === currentVal ? ' selected' : ''}>${esc(a.name)}</option>`;
             });
             opts += `</optgroup>`;
           });
@@ -1672,6 +1702,24 @@
                 if (!Object.keys(this.pendingChanges[rowId]).length) delete this.pendingChanges[rowId];
               }
             }
+          } else if (col === 'account') {
+            const selectedAcct = this.accounts.find(a => a.id === newVal);
+            const selectedName = selectedAcct ? selectedAcct.name : '';
+            if (!this.pendingChanges[id]) this.pendingChanges[id] = {};
+            
+            const origId = r.account_id || this.accounts.find(a => a.name === r.account)?.id;
+            if (newVal !== origId) {
+              this.pendingChanges[id]['account'] = { 
+                old: r.account, 
+                new: selectedName, 
+                oldId: r.account_id,
+                newId: newVal,
+                entryNum: r.entry_number 
+              };
+            } else {
+              delete this.pendingChanges[id]['account'];
+              if (!Object.keys(this.pendingChanges[id]).length) delete this.pendingChanges[id];
+            }
           } else {
             if (!this.pendingChanges[id]) this.pendingChanges[id] = {};
             if (JSON.stringify(newVal) !== JSON.stringify(origVal)) {
@@ -1732,10 +1780,11 @@
 
         document.getElementById('orphan-reassign-btn').addEventListener('click', async () => {
           const rowId  = this.activeOrphanId;
-          const newAcc = document.getElementById('orphan-reassign-sel').value;
-          if (!rowId || !newAcc) return;
+          const newAccId = document.getElementById('orphan-reassign-sel').value;
+          if (!rowId || !newAccId) return;
+          const newAccName = this.accounts.find(a => a.id === newAccId)?.name || '';
           try {
-            await sbPatch('general_journal', `id=eq.${rowId}`, { account: newAcc });
+            await sbPatch('general_journal', `id=eq.${rowId}`, { account_id: newAccId, account: newAccName });
             Toast.success('Account reassigned.');
             this.closeOrphanPop();
             await this.loadEntries();
@@ -1975,6 +2024,11 @@
             const patch = {};
             for (const [col, chg] of Object.entries(fields)) {
               patch[col] = chg.new;
+              if (col === 'account') {
+                if (chg.newId !== undefined) {
+                  patch.account_id = chg.newId;
+                }
+              }
               if (col === 'date' && chg.new) {
                 const [yr, mo] = chg.new.split('-').map(Number);
                 patch.year = yr; patch.month = mo;
