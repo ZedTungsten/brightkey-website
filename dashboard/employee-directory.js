@@ -931,8 +931,8 @@
           ${cell(emp.last_name, 'last_name', 'text', 'col-last-name')}
           ${cellDate(emp.date_of_birth, 'date_of_birth', 'grp-personal')}
           ${cell(emp.address, 'address', 'text', 'grp-personal col-address')}
-          ${cell(emp.city, 'city', 'text', 'grp-personal')}
-          ${cell(emp.province, 'province', 'text', 'grp-personal')}
+          ${cell(emp.city, 'city', 'text', 'grp-personal col-city')}
+          ${cell(emp.province, 'province', 'text', 'grp-personal col-province')}
           ${cell(emp.contact_number, 'contact_number', 'text', 'grp-personal col-contact')}
           ${cell(emp.emergency_contact_number, 'emergency_contact_number', 'text', 'grp-personal')}
           ${cell(emp.email, 'email', 'text', 'grp-personal col-email')}
