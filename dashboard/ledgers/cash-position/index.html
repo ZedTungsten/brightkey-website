@@ -187,6 +187,20 @@
           <div id="state-container"></div>
           
           <div id="ledger-content" style="display: none;">
+            <!-- Summary Table Section -->
+            <div class="account-title" style="margin-top: 0;">Cash Summary</div>
+            <div class="excel-container" style="margin-bottom: 2rem;">
+              <table class="excel-table">
+                <thead>
+                  <tr>
+                    <th class="text-left">Account</th>
+                    <th>Net Month Balance</th>
+                  </tr>
+                </thead>
+                <tbody id="summary-tbody"></tbody>
+              </table>
+            </div>
+
             <!-- Detailed Tables Section -->
             <div id="detailed-tables-container"></div>
           </div>
@@ -370,6 +384,9 @@
           entriesByNumber[entry.entry_number].push(entry);
         });
 
+        const cashAccountsData = [];
+        let totalAvailableCash = 0;
+
         const detailedContainer = document.getElementById('detailed-tables-container');
         detailedContainer.innerHTML = '';
 
@@ -435,6 +452,14 @@
             }).join('');
           }
 
+          // Save net balance for the summary table
+          const netBalance = totalDebit - totalCredit;
+          cashAccountsData.push({
+            name: account.name,
+            balance: netBalance
+          });
+          totalAvailableCash += netBalance;
+
           const tableHtml = `
             <div class="account-title" style="display: flex; justify-content: space-between; align-items: center;">
               <span>${this.escapeHtml(account.name)}</span>
@@ -467,14 +492,33 @@
           
           detailedContainer.innerHTML += tableHtml;
         });
+
+        // Render Summary Table
+        const summaryTbody = document.getElementById('summary-tbody');
+        summaryTbody.innerHTML = cashAccountsData.map(acc => {
+          return `
+            <tr>
+              <td class="text-left">${this.escapeHtml(acc.name)}</td>
+              <td>${this.formatPHP(acc.balance)}</td>
+            </tr>`;
+        }).join('') + `
+          <tr class="row-total">
+            <td class="text-left">Total</td>
+            <td>${this.formatPHP(totalAvailableCash)}</td>
+          </tr>`;
       },
 
       formatPHP(val) {
-        const sign = val < 0 ? '-' : '';
-        return sign + '₱' + Math.abs(parseFloat(val)).toLocaleString('en-PH', {
+        const isNegative = val < 0;
+        const absVal = Math.abs(parseFloat(val));
+        const formatted = '₱' + absVal.toLocaleString('en-PH', {
           minimumFractionDigits: 2,
           maximumFractionDigits: 2
         });
+        if (isNegative) {
+          return `<span style="color: var(--danger); font-weight: inherit;">(${formatted})</span>`;
+        }
+        return formatted;
       },
 
       formatEntryNum(num) {
