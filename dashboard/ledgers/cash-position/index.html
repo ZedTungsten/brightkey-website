@@ -163,10 +163,11 @@
       </nav>
 
       <!-- Month Filter Bar -->
-      <div class="filter-bar">
-        <div class="form-group">
-          <label class="form-label" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted);" for="filter-month">Month Filter</label>
-          <select id="filter-month" class="form-select" style="min-width: 180px; padding: 0.4rem 0.75rem; font-size: 0.85rem;"></select>
+      <div class="filter-bar" style="padding: 1rem 2rem;">
+        <div style="display: flex; align-items: center; gap: 1rem; user-select: none;">
+          <button id="prev-month" class="btn btn-outline btn-sm" style="padding: 0.3rem 0.6rem; cursor: pointer; border-radius: var(--radius-md); font-weight: 700; font-size: 0.9rem;">&lt;</button>
+          <span id="current-month-display" style="font-size: 0.95rem; font-weight: 700; min-width: 120px; text-align: center; color: var(--text-primary);">—</span>
+          <button id="next-month" class="btn btn-outline btn-sm" style="padding: 0.3rem 0.6rem; cursor: pointer; border-radius: var(--radius-md); font-weight: 700; font-size: 0.9rem;">&gt;</button>
         </div>
       </div>
 
@@ -223,39 +224,48 @@
           this.companyId = co?.id || null;
         }
 
-        this.populateMonthFilter();
+        this.initSelectedMonth();
         this.bindEvents();
         await this.loadData();
       },
 
-      populateMonthFilter() {
-        const select = document.getElementById('filter-month');
+      initSelectedMonth() {
         const now = new Date();
-        const currentYear = now.getFullYear();
-        const currentMonth = now.getMonth() + 1; // 1-indexed
+        const year = now.getFullYear();
+        const month = now.getMonth() + 1; // 1-indexed
+        this.selectedMonth = `${year}-${String(month).padStart(2, '0')}`;
+        this.updateMonthDisplay();
+      },
 
-        select.innerHTML = '';
-        for (let year = 2025; year <= 2028; year++) {
-          for (let month = 1; month <= 12; month++) {
-            const opt = document.createElement('option');
-            const date = new Date(year, month - 1, 1);
-            const label = date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-            const val = `${year}-${String(month).padStart(2, '0')}`;
-            opt.value = val;
-            opt.textContent = label;
-            
-            if (year === currentYear && month === currentMonth) {
-              opt.selected = true;
-              this.selectedMonth = val;
-            }
-            select.appendChild(opt);
-          }
-        }
+      updateMonthDisplay() {
+        const [year, month] = this.selectedMonth.split('-').map(Number);
+        const date = new Date(year, month - 1, 1);
+        const label = date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+        document.getElementById('current-month-display').textContent = label;
       },
 
       bindEvents() {
-        document.getElementById('filter-month').addEventListener('change', async (e) => {
-          this.selectedMonth = e.target.value;
+        document.getElementById('prev-month').addEventListener('click', async () => {
+          let [year, month] = this.selectedMonth.split('-').map(Number);
+          month--;
+          if (month < 1) {
+            month = 12;
+            year--;
+          }
+          this.selectedMonth = `${year}-${String(month).padStart(2, '0')}`;
+          this.updateMonthDisplay();
+          await this.loadData();
+        });
+
+        document.getElementById('next-month').addEventListener('click', async () => {
+          let [year, month] = this.selectedMonth.split('-').map(Number);
+          month++;
+          if (month > 12) {
+            month = 1;
+            year++;
+          }
+          this.selectedMonth = `${year}-${String(month).padStart(2, '0')}`;
+          this.updateMonthDisplay();
           await this.loadData();
         });
       },
