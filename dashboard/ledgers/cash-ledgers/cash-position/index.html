@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cash Position — BrightKey Portal</title>
+  <link rel="preconnect" href="https://fonts.bunny.net" />
+  <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg?v=2" />
+  <style>
+    .int-wrap { max-width: 800px; margin: 0 auto; padding: 2rem 2rem 5rem; }
+
+    .drawer-tabs {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      overflow-x: auto;
+      background: var(--bg-surface);
+    }
+    .tab-btn {
+      padding: 0.9rem 1.25rem;
+      font-size: 0.82rem; font-weight: 600;
+      color: var(--text-muted);
+      border: none; background: none; cursor: pointer;
+      border-bottom: 2px solid transparent;
+      white-space: nowrap; transition: all 0.15s;
+      font-family: var(--font-sans);
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      line-height: 1;
+    }
+    .tab-btn.active { color: var(--cyan-light); border-bottom-color: var(--cyan); }
+    .tab-btn:hover:not(.active) { color: var(--text-secondary); }
+
+    /* ── Filter & Action Bar ── */
+    .action-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1rem 2rem;
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border);
+    }
+
+    /* ── Excel-style Table ── */
+    .excel-container {
+      width: 100%;
+      border: 1px solid var(--border);
+      background: var(--bg-surface);
+      margin-top: 1.5rem;
+      border-radius: var(--radius-md);
+      overflow: hidden;
+    }
+    .excel-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 9.5pt;
+      color: var(--text-primary);
+      font-family: var(--font-sans), Arial, sans-serif;
+    }
+    .excel-table th, .excel-table td {
+      border: 1px solid var(--border);
+      padding: 0.7rem 1rem;
+      text-align: right;
+    }
+    .excel-table th {
+      background: var(--bg-base, #fafafa);
+      font-weight: 700;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      font-size: 8.5pt;
+      letter-spacing: 0.05em;
+      text-align: right;
+    }
+    .excel-table td {
+      background: var(--bg-surface) !important;
+    }
+    .excel-table th:first-child, .excel-table td:first-child {
+      text-align: left;
+    }
+    .excel-table .text-left {
+      text-align: left;
+    }
+    .row-total td {
+      font-weight: 700 !important;
+      border-top: 1.5px solid var(--border) !important;
+      border-bottom: 2px double var(--text-primary) !important;
+      background: var(--bg-surface) !important;
+    }
+    .row-total td:first-child {
+      text-align: left;
+    }
+
+    /* ── Modal overlay (Pattern A) ── */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.4);
+      backdrop-filter: blur(4px);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-overlay.open {
+      display: flex;
+    }
+    .modal-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      width: 440px;
+      max-width: 90%;
+      padding: 1.75rem;
+      box-shadow: var(--shadow-lg);
+      animation: modalSlide 0.2s forwards;
+    }
+    @keyframes modalSlide {
+      from { transform: translateY(15px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+    .modal-header {
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 1.25rem;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 0.75rem;
+    }
+    .modal-body {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    .input-row {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+    .input-row label {
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+    .input-row input {
+      padding: 0.5rem 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      background: var(--bg-base);
+      color: var(--text-primary);
+      font-size: 0.9rem;
+      width: 100%;
+    }
+    .input-row input:focus {
+      outline: none;
+      border-color: var(--cyan);
+    }
+    .modal-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 0.75rem;
+    }
+
+    /* ── States ── */
+    .loading-state, .error-state, .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.75rem;
+      padding: 4rem 2rem;
+      border: 1px dashed var(--border);
+      border-radius: var(--radius-md);
+      background: var(--bg-elevated);
+      color: var(--text-muted);
+      text-align: center;
+      margin-top: 1.5rem;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="dash-layout">
+    <aside class="dash-sidebar" id="dash-sidebar"></aside>
+
+    <div class="dash-main">
+      <div class="top-bar">
+        <div class="top-bar-title">Ledgers</div>
+      </div>
+
+      <!-- Tab bar -->
+      <nav class="drawer-tabs">
+        <a href="/dashboard/ledgers/cash-ledgers" class="tab-btn active">Cash Ledgers</a>
+      </nav>
+
+      <!-- Subtab bar -->
+      <div class="drawer-tabs" style="background: var(--bg-surface); padding-left: 2rem; border-bottom: 1px solid var(--border);">
+        <a href="/dashboard/ledgers/cash-ledgers/" class="tab-btn" style="font-size: 0.78rem; padding: 0.6rem 1rem;">Summary</a>
+        <a href="/dashboard/ledgers/cash-ledgers/cash-position/" class="tab-btn active" style="font-size: 0.78rem; padding: 0.6rem 1rem;">Cash Position</a>
+      </div>
+
+      <!-- Action Bar -->
+      <div class="action-bar">
+        <!-- Month Navigator -->
+        <div style="display: flex; align-items: center; gap: 1rem; user-select: none;">
+          <button id="prev-month" class="btn btn-outline btn-sm" style="padding: 0.3rem 0.6rem; cursor: pointer; border-radius: var(--radius-md); font-weight: 700; font-size: 0.9rem;">&lt;</button>
+          <span id="current-month-display" style="font-size: 0.95rem; font-weight: 700; min-width: 120px; text-align: center; color: var(--text-primary);">—</span>
+          <button id="next-month" class="btn btn-outline btn-sm" style="padding: 0.3rem 0.6rem; cursor: pointer; border-radius: var(--radius-md); font-weight: 700; font-size: 0.9rem;">&gt;</button>
+        </div>
+
+        <!-- Edit Starting Balance Button -->
+        <button id="edit-balances-btn" class="btn btn-primary" style="padding: 0.5rem 1rem; font-size: 0.85rem; font-weight: 600; cursor: pointer; border-radius: var(--radius-md);">
+          Edit Starting Balance
+        </button>
+      </div>
+
+      <main style="overflow-y: auto; flex: 1; min-width: 0; width: 100%;">
+        <div class="int-wrap">
+          
+          <div id="state-container"></div>
+          
+          <div id="ledger-content" style="display: none;">
+            <div class="excel-container">
+              <table class="excel-table">
+                <thead>
+                  <tr>
+                    <th class="text-left">Account</th>
+                    <th>Starting Balance</th>
+                  </tr>
+                </thead>
+                <tbody id="balances-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- Modal overlay (Pattern A) -->
+  <div id="edit-balances-modal" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">Edit Starting Balances</div>
+      <div id="modal-inputs-container" class="modal-body"></div>
+      <div class="modal-footer">
+        <button id="modal-cancel-btn" class="btn btn-outline" style="padding: 0.5rem 1rem; font-weight: 600; border-radius: var(--radius-md);">Cancel</button>
+        <button id="modal-save-btn" class="btn btn-primary" style="padding: 0.5rem 1rem; font-weight: 600; border-radius: var(--radius-md);">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="/js/auth.js" defer></script>
+  <script src="/js/sidebar.js" defer></script>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      window.BKAuth.checkRoleGate(
+        ['owner', 'admin', 'hr', 'finance'],
+        '../admin.html'
+      ).then(async (authInfo) => {
+        if (!authInfo) return;
+        window.CashPositionApp.init(authInfo);
+      });
+    });
+
+    window.CashPositionApp = {
+      tenantId: null,
+      companyId: null,
+      selectedMonth: '', // YYYY-MM
+      accounts: [],
+      savedBalances: {}, // keyed by YYYY-MM
+
+      async init(authInfo) {
+        this.tenantId = authInfo.tenantId;
+        
+        try {
+          const sb = window.BKAuth.sb;
+          const { data: co } = await sb
+            .from('companies')
+            .select('id')
+            .eq('tenant_id', this.tenantId)
+            .limit(1)
+            .maybeSingle();
+
+          if (!co) {
+            this.showError('No company resolved for this tenant.');
+            return;
+          }
+          this.companyId = co.id;
+
+          this.initSelectedMonth();
+          this.setupEvents();
+          await this.loadData();
+
+        } catch (e) {
+          console.error(e);
+          this.showError(e.message);
+        }
+      },
+
+      initSelectedMonth() {
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = now.getMonth() + 1; // 1-indexed
+        this.selectedMonth = `${year}-${String(month).padStart(2, '0')}`;
+        this.updateMonthDisplay();
+      },
+
+      updateMonthDisplay() {
+        const [year, month] = this.selectedMonth.split('-').map(Number);
+        const date = new Date(year, month - 1, 1);
+        const label = date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+        document.getElementById('current-month-display').textContent = label;
+      },
+
+      setupEvents() {
+        document.getElementById('prev-month').addEventListener('click', async () => {
+          let [year, month] = this.selectedMonth.split('-').map(Number);
+          month--;
+          if (month < 1) {
+            month = 12;
+            year--;
+          }
+          this.selectedMonth = `${year}-${String(month).padStart(2, '0')}`;
+          this.updateMonthDisplay();
+          await this.loadData();
+        });
+
+        document.getElementById('next-month').addEventListener('click', async () => {
+          let [year, month] = this.selectedMonth.split('-').map(Number);
+          month++;
+          if (month > 12) {
+            month = 1;
+            year++;
+          }
+          this.selectedMonth = `${year}-${String(month).padStart(2, '0')}`;
+          this.updateMonthDisplay();
+          await this.loadData();
+        });
+
+        // Edit button triggers modal
+        document.getElementById('edit-balances-btn').addEventListener('click', () => {
+          this.openEditModal();
+        });
+
+        // Modal actions
+        document.getElementById('modal-cancel-btn').addEventListener('click', () => {
+          this.closeEditModal();
+        });
+
+        document.getElementById('modal-save-btn').addEventListener('click', async () => {
+          await this.saveBalances();
+        });
+      },
+
+      async loadData() {
+        if (!this.companyId) {
+          this.showError('Company not resolved.');
+          return;
+        }
+
+        this.showLoading();
+
+        try {
+          const sb = window.BKAuth.sb;
+          
+          // 1. Fetch Accounts in Cash & Cash Equivalents
+          const { data: accts, error: acctErr } = await sb
+            .from('journal_accounts')
+            .select('id, name, category')
+            .eq('company_id', this.companyId)
+            .eq('category', 'Cash & Cash Equivalents');
+
+          if (acctErr) throw acctErr;
+          
+          if (!accts || accts.length === 0) {
+            this.showEmpty();
+            return;
+          }
+
+          this.accounts = accts;
+
+          // 2. Fetch starting balances from global_settings
+          const { data: config, error: configErr } = await sb
+            .from('global_settings')
+            .select('value')
+            .eq('company_id', this.companyId)
+            .eq('key', 'cash_starting_balances')
+            .maybeSingle();
+
+          if (configErr) throw configErr;
+
+          this.savedBalances = config?.value || {};
+
+          this.renderBalances();
+
+        } catch (e) {
+          console.error(e);
+          this.showError(e.message);
+        }
+      },
+
+      renderBalances() {
+        document.getElementById('state-container').style.display = 'none';
+        document.getElementById('ledger-content').style.display = 'block';
+
+        const monthData = this.savedBalances[this.selectedMonth] || {};
+        let totalStarting = 0;
+
+        const tbody = document.getElementById('balances-tbody');
+        tbody.innerHTML = '';
+
+        this.accounts.forEach(account => {
+          // Resolve starting balance by account ID first, then name fallback
+          const val = monthData[account.id] !== undefined ? monthData[account.id] : (monthData[account.name] || 0);
+          const balance = parseFloat(val);
+          totalStarting += balance;
+
+          const rowHtml = `
+            <tr>
+              <td class="text-left">${this.escapeHtml(account.name)}</td>
+              <td>${this.formatPHP(balance)}</td>
+            </tr>`;
+          tbody.innerHTML += rowHtml;
+        });
+
+        // Render Total row
+        const totalRow = `
+          <tr class="row-total">
+            <td class="text-left">Total</td>
+            <td>${this.formatPHP(totalStarting)}</td>
+          </tr>`;
+        tbody.innerHTML += totalRow;
+      },
+
+      openEditModal() {
+        const monthData = this.savedBalances[this.selectedMonth] || {};
+        const container = document.getElementById('modal-inputs-container');
+        container.innerHTML = '';
+
+        this.accounts.forEach(account => {
+          const val = monthData[account.id] !== undefined ? monthData[account.id] : (monthData[account.name] || 0);
+          const inputRow = `
+            <div class="input-row">
+              <label>${this.escapeHtml(account.name)}</label>
+              <input type="number" step="0.01" data-account-id="${account.id}" value="${parseFloat(val).toFixed(2)}" />
+            </div>`;
+          container.innerHTML += inputRow;
+        });
+
+        document.getElementById('edit-balances-modal').classList.add('open');
+      },
+
+      closeEditModal() {
+        document.getElementById('edit-balances-modal').classList.remove('open');
+      },
+
+      async saveBalances() {
+        const sb = window.BKAuth.sb;
+        const container = document.getElementById('modal-inputs-container');
+        const inputs = container.querySelectorAll('input');
+        
+        const monthData = {};
+        inputs.forEach(input => {
+          const acctId = input.getAttribute('data-account-id');
+          const value = parseFloat(input.value) || 0;
+          monthData[acctId] = value;
+        });
+
+        const updatedValue = {
+          ...this.savedBalances,
+          [this.selectedMonth]: monthData
+        };
+
+        try {
+          const { error } = await sb
+            .from('global_settings')
+            .upsert({
+              company_id: this.companyId,
+              key: 'cash_starting_balances',
+              value: updatedValue
+            }, {
+              onConflict: 'company_id,key'
+            });
+
+          if (error) throw error;
+
+          this.savedBalances = updatedValue;
+          this.closeEditModal();
+          this.renderBalances();
+
+        } catch (e) {
+          console.error(e);
+          alert('Error saving starting balances: ' + e.message);
+        }
+      },
+
+      formatPHP(val) {
+        const isNegative = val < 0;
+        const absVal = Math.abs(parseFloat(val));
+        const formatted = '₱' + absVal.toLocaleString('en-PH', {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2
+        });
+        if (isNegative) {
+          return `<span style="color: var(--danger); font-weight: inherit;">(${formatted})</span>`;
+        }
+        return formatted;
+      },
+
+      escapeHtml(str) {
+        if (!str) return '';
+        return str
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#039;');
+      },
+
+      showLoading() {
+        const container = document.getElementById('state-container');
+        container.style.display = 'block';
+        document.getElementById('ledger-content').style.display = 'none';
+        container.innerHTML = `
+          <div class="loading-state">
+            <div style="font-weight: 600;">Loading cash accounts...</div>
+          </div>`;
+      },
+
+      showEmpty() {
+        const container = document.getElementById('state-container');
+        container.style.display = 'block';
+        document.getElementById('ledger-content').style.display = 'none';
+        container.innerHTML = `
+          <div class="empty-state">
+            <div style="font-weight: 600;">No Cash & Cash Equivalents accounts found.</div>
+          </div>`;
+      },
+
+      showError(msg) {
+        const container = document.getElementById('state-container');
+        container.style.display = 'block';
+        document.getElementById('ledger-content').style.display = 'none';
+        container.innerHTML = `
+          <div class="error-state">
+            <div style="font-weight: 600; color: var(--danger);">Error</div>
+            <div>${this.escapeHtml(msg)}</div>
+          </div>`;
+      }
+    };
+  </script>
+</body>
+</html>
