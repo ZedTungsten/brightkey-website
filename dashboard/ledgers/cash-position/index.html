@@ -410,12 +410,10 @@
 
           // Render detailed table for this account (latest first)
           const latestFirstTx = [...monthTransactions].reverse();
-
-          let rowsHtml = '';
           if (latestFirstTx.length === 0) {
             rowsHtml = `
               <tr>
-                <td colspan="6" class="text-center" style="font-style: italic; color: var(--text-muted); padding: 1.5rem 0.85rem;">
+                <td colspan="8" class="text-center" style="font-style: italic; color: var(--text-muted); padding: 1.5rem 0.85rem;">
                   No transactions recorded in this month.
                 </td>
               </tr>`;
@@ -429,6 +427,8 @@
                   </td>
                   <td class="text-center">${tx.date}</td>
                   <td class="text-left">${this.escapeHtml(tx.offsetAccount)}</td>
+                  <td class="text-left">${this.escapeHtml(tx.description_1 || '')}</td>
+                  <td class="text-left">${this.escapeHtml(tx.description_2 || '')}</td>
                   <td>${tx.debitVal > 0 ? this.formatPHP(tx.debitVal) : '—'}</td>
                   <td>${tx.creditVal > 0 ? this.formatPHP(tx.creditVal) : '—'}</td>
                 </tr>`;
@@ -436,7 +436,10 @@
           }
 
           const tableHtml = `
-            <div class="account-title">${this.escapeHtml(account.name)}</div>
+            <div class="account-title" style="display: flex; justify-content: space-between; align-items: center;">
+              <span>${this.escapeHtml(account.name)}</span>
+              <span>${this.formatPHP(totalDebit - totalCredit)}</span>
+            </div>
             <div class="excel-container">
               <table class="excel-table">
                 <thead>
@@ -445,6 +448,8 @@
                     <th class="text-center" style="width: 120px;">Entry Number</th>
                     <th class="text-center" style="width: 110px;">Date</th>
                     <th class="text-left">Account</th>
+                    <th class="text-left" style="min-width: 140px;">Desc 1</th>
+                    <th class="text-left" style="min-width: 140px;">Desc 2</th>
                     <th style="width: 130px;">Debit</th>
                     <th style="width: 130px;">Credit</th>
                   </tr>
@@ -452,7 +457,7 @@
                 <tbody>
                   ${rowsHtml}
                   <tr class="row-total">
-                    <td colspan="4" class="text-left">Total</td>
+                    <td colspan="6" class="text-left">Total</td>
                     <td>${totalDebit > 0 ? this.formatPHP(totalDebit) : '—'}</td>
                     <td>${totalCredit > 0 ? this.formatPHP(totalCredit) : '—'}</td>
                   </tr>
@@ -465,7 +470,8 @@
       },
 
       formatPHP(val) {
-        return '₱' + parseFloat(val).toLocaleString('en-PH', {
+        const sign = val < 0 ? '-' : '';
+        return sign + '₱' + Math.abs(parseFloat(val)).toLocaleString('en-PH', {
           minimumFractionDigits: 2,
           maximumFractionDigits: 2
         });
