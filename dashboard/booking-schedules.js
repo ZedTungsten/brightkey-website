@@ -1899,12 +1899,13 @@
 
       const installerNames = window._installerAssignmentNames || [];
       const installers = dbEmployees.filter(emp => {
+        const empAssigns = (emp.assignment || '').split(',').map(s => s.trim());
+        const empAssignsLower = empAssigns.map(s => s.toLowerCase());
         if (installerNames.length > 0) {
-          return emp.assignment && installerNames.includes(emp.assignment);
+          return empAssigns.some(a => installerNames.includes(a));
         }
         const title = (emp.title || emp.position || '').toLowerCase();
-        const assignment = (emp.assignment || '').toLowerCase();
-        return title.includes('installer') || title.includes('operations') || title.includes('field') || assignment.includes('installer');
+        return title.includes('installer') || title.includes('operations') || title.includes('field') || empAssignsLower.includes('installer');
       });
 
       if (installers.length === 0) {
@@ -2329,13 +2330,13 @@
       const installerNames = window._installerAssignmentNames || [];
       const installers = dbEmployees.filter(emp => {
         // Filter by assignment if assignments are configured
+        const empAssigns = (emp.assignment || '').split(',').map(s => s.trim());
+        const empAssignsLower = empAssigns.map(s => s.toLowerCase());
         if (installerNames.length > 0) {
-          return emp.assignment && installerNames.includes(emp.assignment);
+          return empAssigns.some(a => installerNames.includes(a));
         }
-        // Fallback: title/position/assignment-based filter for when assignments aren't set up yet
         const title = (emp.title || emp.position || '').toLowerCase();
-        const assignment = (emp.assignment || '').toLowerCase();
-        return title.includes('installer') || title.includes('operations') || title.includes('field') || assignment.includes('installer');
+        return title.includes('installer') || title.includes('operations') || title.includes('field') || empAssignsLower.includes('installer');
       });
       let html = '<option value="">-- Unassigned --</option>';
       installers.forEach(inst => {

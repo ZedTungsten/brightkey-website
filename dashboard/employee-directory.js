@@ -688,12 +688,35 @@
           if (!isEdit) {
             return val ? `<td>${esc(val)}</td>` : `<td class="cell-empty">—</td>`;
           }
-          const opts = App.assignments.map(a =>
-            `<option value="${esc(a.name)}" ${val === a.name ? 'selected' : ''}>${esc(a.name)}</option>`
-          ).join('');
-          return `<td><select class="cell-input cell-select" data-id="${esc(id)}" data-field="assignment">
-            <option value="">— None —</option>${opts}
-          </select></td>`;
+          const currentVals = val.split(',').map(s => s.trim()).filter(Boolean);
+          if (currentVals.length === 0) currentVals.push('');
+
+          const dropdownsHtml = currentVals.map((curVal, idx) => {
+            const opts = App.assignments.map(a =>
+              `<option value="${esc(a.name)}" ${curVal === a.name ? 'selected' : ''}>${esc(a.name)}</option>`
+            ).join('');
+            const removeBtn = currentVals.length > 1
+              ? `<button class="btn btn-outline btn-sm" onclick="App.removeAssignmentDropdownElement(this, '${esc(id)}')" style="padding: 0.15rem 0.35rem; margin-left: 0.25rem; font-size: 0.72rem; line-height: 1; border-color: var(--border);">&times;</button>`
+              : '';
+            return `
+              <div style="display: flex; align-items: center; margin-bottom: 0.25rem;">
+                <select class="cell-select-custom assignment-select" data-id="${esc(id)}" onchange="App.handleAssignmentChange('${esc(id)}')" style="padding: 0.25rem 0.5rem; border: 1px solid var(--border); border-radius: 4px; background: var(--bg-surface); color: var(--text-primary); outline: none; font-size: 0.82rem; min-width: 120px;">
+                  <option value="">— None —</option>
+                  ${opts}
+                </select>
+                ${removeBtn}
+              </div>
+            `;
+          }).join('');
+
+          return `
+            <td>
+              <div id="assignment-container-${esc(id)}">
+                ${dropdownsHtml}
+              </div>
+              <button class="btn btn-outline btn-sm" onclick="App.addAssignmentDropdown('${esc(id)}')" style="padding: 0.15rem 0.35rem; margin-top: 0.25rem; font-size: 0.72rem; line-height: 1; border-color: var(--border);">+ Add</button>
+            </td>
+          `;
         };
 
         const shiftDaysCell = () => {
@@ -1793,6 +1816,81 @@
           toast('Failed to save: ' + err.message, 'error');
         }
       }
+    };
+
+    App.addAssignmentDropdown = function(empId) {
+      const container = document.getElementById(`assignment-container-${empId}`);
+      if (!container) return;
+      const opts = this.assignments.map(a =>
+        `<option value="${esc(a.name)}">${esc(a.name)}</option>`
+      ).join('');
+      const div = document.createElement('div');
+      div.style.display = 'flex';
+      div.style.alignItems = 'center';
+      div.style.marginBottom = '0.25rem';
+      div.innerHTML = `
+        <select class="cell-select-custom assignment-select" data-id="${esc(empId)}" onchange="App.handleAssignmentChange('${esc(empId)}')" style="padding: 0.25rem 0.5rem; border: 1px solid var(--border); border-radius: 4px; background: var(--bg-surface); color: var(--text-primary); outline: none; font-size: 0.82rem; min-width: 120px;">
+          <option value="">— None —</option>
+          ${opts}
+        </select>
+        <button class="btn btn-outline btn-sm" onclick="App.removeAssignmentDropdownElement(this, '${esc(empId)}')" style="padding: 0.15rem 0.35rem; margin-left: 0.25rem; font-size: 0.72rem; line-height: 1; border-color: var(--border);">&times;</button>
+      `;
+      container.appendChild(div);
+      this.handleAssignmentChange(empId);
+      this.refreshRemoveButtons(empId);
+    };
+
+    App.removeAssignmentDropdownElement = function(button, empId) {
+      const row = button.parentElement;
+      if (row) {
+        row.remove();
+        this.handleAssignmentChange(empId);
+        this.refreshRemoveButtons(empId);
+      }
+    };
+
+    App.refreshRemoveButtons = function(empId) {
+      const container = document.getElementById(`assignment-container-${empId}`);
+      if (!container) return;
+      const selects = container.querySelectorAll('.assignment-select');
+      const rows = container.querySelectorAll('div');
+      rows.forEach(row => {
+        const btn = row.querySelector('button');
+        if (selects.length > 1) {
+          if (!btn) {
+            const newBtn = document.createElement('button');
+            newBtn.className = 'btn btn-outline btn-sm';
+            newBtn.style.padding = '0.15rem 0.35rem';
+            newBtn.style.marginLeft = '0.25rem';
+            newBtn.style.fontSize = '0.72rem';
+            newBtn.style.lineHeight = '1';
+            newBtn.style.borderColor = 'var(--border)';
+            newBtn.innerHTML = '&times;';
+            newBtn.onclick = () => App.removeAssignmentDropdownElement(newBtn, empId);
+            row.appendChild(newBtn);
+          }
+        } else {
+          if (btn) btn.remove();
+        }
+      });
+    };
+
+    App.handleAssignmentChange = function(empId) {
+      const container = document.getElementById(`assignment-container-${empId}`);
+      if (!container) return;
+      const selects = container.querySelectorAll('.assignment-select');
+      const values = [];
+      selects.forEach(sel => {
+        if (sel.value) values.push(sel.value);
+      });
+      const joined = values.join(', ');
+      
+      if (!this.dirty[empId]) this.dirty[empId] = {};
+      this.dirty[empId]['assignment'] = joined;
+      
+      const tr = document.querySelector(`tr[data-id="${empId}"]`);
+      if (tr) tr.classList.add('row-dirty');
+      this.updateDirtyInfo();
     };
 
     /* ── Boot ── */
