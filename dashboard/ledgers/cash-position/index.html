@@ -329,29 +329,49 @@
 
           this.accounts = accts;
 
-          // 2. Fetch all journal entries for the company
-          // We need entries up to the end of the selected month to calculate running balances
+          // 2. Fetch starting balance and current month entries separately to avoid the 1000-row limit truncation
           const [year, month] = this.selectedMonth.split('-').map(Number);
           const lastDay = new Date(year, month, 0).getDate();
+          const startOfMonthDate = `${year}-${String(month).padStart(2, '0')}-01`;
           const endOfMonthDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
 
-          const { data: entries, error: entryErr } = await sb
+          const accountIds = this.accounts.map(a => a.id);
+          const accountNames = this.accounts.map(a => a.name);
+          const idFilter = `account_id.in.(${accountIds.join(',')})`;
+          const nameFilter = `account.in.(${accountNames.map(n => `"${n}"`).join(',')})`;
+          const orFilter = `${idFilter},${nameFilter}`;
+
+          // Fetch starting balance entries (Cash accounts only, before selected month)
+          const { data: startingEntries, error: startErr } = await sb
+            .from('general_journal')
+            .select('debit, credit, account_id, account')
+            .eq('company_id', this.companyId)
+            .lt('date', startOfMonthDate)
+            .or(orFilter)
+            .range(0, 9999);
+
+          if (startErr) throw startErr;
+
+          // Fetch current month entries (All accounts to resolve offsets, within selected month)
+          const { data: currentEntries, error: currentErr } = await sb
             .from('general_journal')
             .select('id, entry_number, date, account_id, account, debit, credit, description_1, description_2')
             .eq('company_id', this.companyId)
+            .gte('date', startOfMonthDate)
             .lte('date', endOfMonthDate)
             .order('date', { ascending: true })
             .order('entry_number', { ascending: true })
-            .order('id', { ascending: true }); // Ensure stable ordering
+            .order('id', { ascending: true })
+            .range(0, 9999);
 
-          if (entryErr) throw entryErr;
+          if (currentErr) throw currentErr;
 
           console.log('CashPosition selectedMonth:', this.selectedMonth);
-          console.log('CashPosition endOfMonthDate:', endOfMonthDate);
-          console.log('CashPosition entries count:', entries?.length);
-          console.log('CashPosition entries:', entries);
+          console.log('CashPosition startingEntries count:', startingEntries?.length);
+          console.log('CashPosition currentEntries count:', currentEntries?.length);
 
-          this.journalEntries = entries || [];
+          this.startingEntries = startingEntries || [];
+          this.currentEntries = currentEntries || [];
 
           this.renderLedger();
 
@@ -365,11 +385,9 @@
         document.getElementById('state-container').style.display = 'none';
         document.getElementById('ledger-content').style.display = 'block';
 
-        const [selectedYear, selectedMonthNum] = this.selectedMonth.split('-').map(Number);
-        
-        // Group all journal entries by entry_number to resolve offset accounts
+        // Group current month entries by entry_number to resolve offset accounts
         const entriesByNumber = {};
-        this.journalEntries.forEach(entry => {
+        this.currentEntries.forEach(entry => {
           if (!entriesByNumber[entry.entry_number]) {
             entriesByNumber[entry.entry_number] = [];
           }
@@ -385,28 +403,24 @@
         this.accounts.forEach(account => {
           // Calculate starting balance: transactions before the selected month
           let startingBalance = 0;
-          const monthTransactions = [];
-
-          this.journalEntries.forEach(entry => {
-            // Check if transaction belongs to this cash account
-            // Support both account_id comparison and name-based fallback
+          this.startingEntries.forEach(entry => {
             const isMatch = (entry.account_id && Number(entry.account_id) === Number(account.id)) || 
                             (entry.account && entry.account.trim().toLowerCase() === account.name.trim().toLowerCase());
+            if (isMatch) {
+              startingBalance += (parseFloat(entry.debit || 0) - parseFloat(entry.credit || 0));
+            }
+          });
 
-            if (!isMatch) return;
-
-            const [eYear, eMonth] = entry.date.split('-').map(Number);
-            const debitVal = parseFloat(entry.debit || 0);
-            const creditVal = parseFloat(entry.credit || 0);
-
-            // Check if before the selected month
-            if (eYear < selectedYear || (eYear === selectedYear && eMonth < selectedMonthNum)) {
-              startingBalance += (debitVal - creditVal);
-            } else if (eYear === selectedYear && eMonth === selectedMonthNum) {
+          // Month's transactions
+          const monthTransactions = [];
+          this.currentEntries.forEach(entry => {
+            const isMatch = (entry.account_id && Number(entry.account_id) === Number(account.id)) || 
+                            (entry.account && entry.account.trim().toLowerCase() === account.name.trim().toLowerCase());
+            if (isMatch) {
               monthTransactions.push({
                 ...entry,
-                debitVal,
-                creditVal
+                debitVal: parseFloat(entry.debit || 0),
+                creditVal: parseFloat(entry.credit || 0)
               });
             }
           });
