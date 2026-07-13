@@ -132,7 +132,7 @@
               <div class="j-card-title" style="margin: 0;">Equity Allocation</div>
             </div>
             
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem;">
               <div class="form-group">
                 <label class="form-label" for="retained-earnings">Retained Earnings (%)</label>
                 <input type="number" id="retained-earnings" class="form-input" min="0" max="100" step="0.01" value="100.00" oninput="EquitySettingsApp.validateTotal()" />
@@ -141,11 +141,18 @@
                 <label class="form-label" for="capital-buffer">Capital Buffer (%)</label>
                 <input type="number" id="capital-buffer" class="form-input" min="0" max="100" step="0.01" value="0.00" oninput="EquitySettingsApp.validateTotal()" />
               </div>
+              <div class="form-group">
+                <label class="form-label" for="distribution-pct">Distribution (%)</label>
+                <input type="number" id="distribution-pct" class="form-input" min="0" max="100" step="0.01" value="0.00" oninput="EquitySettingsApp.validateTotal()" />
+              </div>
             </div>
 
             <div style="border-top: 1px solid var(--border); padding-top: 1.5rem;">
               <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem;">
-                <span style="font-size: 0.82rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); letter-spacing: 0.05em;">Distribution Allocations</span>
+                <div>
+                  <span style="font-size: 0.82rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); letter-spacing: 0.05em;">Distribution Allocations</span>
+                  <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 0.15rem;" id="dist-subtotal-text">Employee shares total: 0.00% (must equal 100%)</div>
+                </div>
                 <button class="btn btn-outline btn-sm" onclick="EquitySettingsApp.openAddEmpModal()">+ Add Employee</button>
               </div>
 
@@ -167,7 +174,6 @@
               <input type="number" id="loan-payment" class="form-input" min="0" max="100" step="0.01" value="0.00" oninput="EquitySettingsApp.validateTotal()" />
             </div>
           </div>
-
 
         </div>
       </main>
@@ -235,6 +241,7 @@
       activeConfig: {
         retained_earnings_pct: 100,
         capital_buffer_pct: 0,
+        distribution_pct: 0,
         loan_payment_pct: 0,
         distributions: {}
       },
@@ -314,6 +321,7 @@
               effective_date: `${key}-01`,
               retained_earnings_pct: Number(val.retained_earnings_pct ?? 100),
               capital_buffer_pct: Number(val.capital_buffer_pct ?? 0),
+              distribution_pct: Number(val.distribution_pct ?? 0),
               loan_payment_pct: Number(val.loan_payment_pct ?? 0),
               distributions: val.distributions || {}
             }));
@@ -328,6 +336,7 @@
             this.activeConfig = {
               retained_earnings_pct: Number(latest.retained_earnings_pct ?? 100),
               capital_buffer_pct: Number(latest.capital_buffer_pct ?? 0),
+              distribution_pct: Number(latest.distribution_pct ?? 0),
               loan_payment_pct: Number(latest.loan_payment_pct ?? 0),
               distributions: { ...latest.distributions }
             };
@@ -335,6 +344,7 @@
             this.activeConfig = {
               retained_earnings_pct: 100,
               capital_buffer_pct: 0,
+              distribution_pct: 0,
               loan_payment_pct: 0,
               distributions: {}
             };
@@ -352,6 +362,7 @@
       renderEditor() {
         document.getElementById('retained-earnings').value = this.activeConfig.retained_earnings_pct;
         document.getElementById('capital-buffer').value = this.activeConfig.capital_buffer_pct;
+        document.getElementById('distribution-pct').value = this.activeConfig.distribution_pct;
         document.getElementById('loan-payment').value = this.activeConfig.loan_payment_pct;
 
         const listContainer = document.getElementById('distributions-list');
@@ -387,6 +398,7 @@
       validateTotal() {
         const retained = parseFloat(document.getElementById('retained-earnings').value) || 0;
         const buffer = parseFloat(document.getElementById('capital-buffer').value) || 0;
+        const distPct = parseFloat(document.getElementById('distribution-pct').value) || 0;
         const loan = parseFloat(document.getElementById('loan-payment').value) || 0;
         
         let distSum = 0;
@@ -395,22 +407,37 @@
           distSum += parseFloat(inp.value) || 0;
         });
 
-        const total = retained + buffer + distSum + loan;
+        const total = retained + buffer + distPct + loan;
         const overallDisplay = document.getElementById('overall-total-display');
+        const distSubtotalText = document.getElementById('dist-subtotal-text');
 
         if (overallDisplay) overallDisplay.textContent = `${total.toFixed(2)}%`;
+        if (distSubtotalText) {
+          distSubtotalText.textContent = `Employee shares total: ${distSum.toFixed(2)}% (must equal 100%)`;
+        }
+
+        let isValid = true;
 
         if (Math.abs(total - 100) < 0.001) {
-          if (overallDisplay) {
-            overallDisplay.style.color = 'var(--cyan-light)';
-          }
-          return true;
+          if (overallDisplay) overallDisplay.style.color = 'var(--cyan-light)';
         } else {
-          if (overallDisplay) {
-            overallDisplay.style.color = 'var(--danger)';
-          }
-          return false;
+          if (overallDisplay) overallDisplay.style.color = 'var(--danger)';
+          isValid = false;
         }
+
+        // If distribution is allocated (>0) or if there are assigned employees, they must sum to exactly 100%
+        if (distPct > 0 || distInputs.length > 0) {
+          if (Math.abs(distSum - 100) < 0.001) {
+            if (distSubtotalText) distSubtotalText.style.color = 'var(--text-muted)';
+          } else {
+            if (distSubtotalText) distSubtotalText.style.color = 'var(--danger)';
+            isValid = false;
+          }
+        } else {
+          if (distSubtotalText) distSubtotalText.style.color = 'var(--text-muted)';
+        }
+
+        return isValid;
       },
 
       openAddEmpModal() {
@@ -457,6 +484,7 @@
       syncInputsToMemory() {
         this.activeConfig.retained_earnings_pct = parseFloat(document.getElementById('retained-earnings').value) || 0;
         this.activeConfig.capital_buffer_pct = parseFloat(document.getElementById('capital-buffer').value) || 0;
+        this.activeConfig.distribution_pct = parseFloat(document.getElementById('distribution-pct').value) || 0;
         this.activeConfig.loan_payment_pct = parseFloat(document.getElementById('loan-payment').value) || 0;
 
         const distInputs = document.querySelectorAll('.dist-pct-input');
@@ -470,7 +498,15 @@
         this.syncInputsToMemory();
         
         if (!this.validateTotal()) {
-          toast('Failed to save: Total allocation must equal 100%.', 'error');
+          const distPct = parseFloat(document.getElementById('distribution-pct').value) || 0;
+          let distSum = 0;
+          document.querySelectorAll('.dist-pct-input').forEach(inp => { distSum += parseFloat(inp.value) || 0; });
+          
+          if (Math.abs(distPct + parseFloat(document.getElementById('retained-earnings').value) + parseFloat(document.getElementById('capital-buffer').value) + parseFloat(document.getElementById('loan-payment').value) - 100) > 0.001) {
+            toast('Failed to save: Total profit allocation must equal 100%.', 'error');
+          } else {
+            toast('Failed to save: Employee distribution shares must sum to 100%.', 'error');
+          }
           return;
         }
 
@@ -481,6 +517,7 @@
           effective_date: todayStr,
           retained_earnings_pct: this.activeConfig.retained_earnings_pct,
           capital_buffer_pct: this.activeConfig.capital_buffer_pct,
+          distribution_pct: this.activeConfig.distribution_pct,
           loan_payment_pct: this.activeConfig.loan_payment_pct,
           distributions: { ...this.activeConfig.distributions }
         };
