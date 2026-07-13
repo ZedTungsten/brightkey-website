@@ -114,11 +114,22 @@
       <main style="overflow-y: auto; flex: 1; min-width: 0; width: 100%;">
         <div class="int-wrap">
           
-          <!-- Settings card -->
-          <div class="j-card" style="margin-bottom: 0;">
-            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; border-bottom: 1px solid var(--border); padding-bottom: 0.75rem;">
-              <div class="j-card-title" style="margin: 0;">Equity Allocation Settings</div>
+          <!-- Profit Allocation main header row -->
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1rem 1.5rem; box-shadow: var(--shadow-sm);">
+            <div>
+              <h2 style="font-size: 1.1rem; font-weight: 800; color: var(--text-primary); margin: 0;">Profit Allocation</h2>
+              <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.15rem;">Summing equity and liability allocation (must equal 100%)</div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 1.5rem;">
+              <div id="overall-total-display" style="font-size: 1.25rem; font-weight: 800; color: var(--cyan-light);">100.00%</div>
               <button class="btn btn-cyan btn-sm" id="btn-save-settings" onclick="EquitySettingsApp.saveSettings()">Save Settings</button>
+            </div>
+          </div>
+
+          <!-- Equity Allocation container -->
+          <div class="j-card" style="margin-bottom: 1.5rem;">
+            <div style="border-bottom: 1px solid var(--border); padding-bottom: 0.75rem; margin-bottom: 1.5rem;">
+              <div class="j-card-title" style="margin: 0;">Equity Allocation</div>
             </div>
             
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem;">
@@ -132,7 +143,7 @@
               </div>
             </div>
 
-            <div style="border-top: 1px solid var(--border); padding-top: 1.5rem; margin-bottom: 1.5rem;">
+            <div style="border-top: 1px solid var(--border); padding-top: 1.5rem;">
               <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem;">
                 <span style="font-size: 0.82rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); letter-spacing: 0.05em;">Distribution Allocations</span>
                 <button class="btn btn-outline btn-sm" onclick="EquitySettingsApp.openAddEmpModal()">+ Add Employee</button>
@@ -143,12 +154,24 @@
                 <!-- Rendered dynamically -->
               </div>
             </div>
+          </div>
 
-            <!-- Live Sum Validation Indicator -->
-            <div id="validation-bar" style="display: flex; align-items: center; justify-content: space-between; padding: 1rem; border-radius: var(--radius-md); border: 1px solid var(--border); font-size: 0.88rem; font-weight: 600; background: var(--bg-elevated);">
-              <span id="validation-total-text">Total Allocation: 100.00%</span>
-              <span id="validation-status-text" style="color: var(--cyan-light);">Ready to save</span>
+          <!-- Liability Allocation container -->
+          <div class="j-card" style="margin-bottom: 1.5rem;">
+            <div style="border-bottom: 1px solid var(--border); padding-bottom: 0.75rem; margin-bottom: 1.5rem;">
+              <div class="j-card-title" style="margin: 0;">Liability Allocation</div>
             </div>
+            
+            <div class="form-group" style="max-width: 50%;">
+              <label class="form-label" for="loan-payment">Loan Payment (%)</label>
+              <input type="number" id="loan-payment" class="form-input" min="0" max="100" step="0.01" value="0.00" oninput="EquitySettingsApp.validateTotal()" />
+            </div>
+          </div>
+
+          <!-- Live Sum Validation Indicator -->
+          <div id="validation-bar" style="display: flex; align-items: center; justify-content: space-between; padding: 1rem; border-radius: var(--radius-md); border: 1px solid var(--border); font-size: 0.88rem; font-weight: 600; background: var(--bg-elevated);">
+            <span id="validation-total-text">Total Allocation: 100.00%</span>
+            <span id="validation-status-text" style="color: var(--cyan-light);">Ready to save</span>
           </div>
 
         </div>
@@ -217,6 +240,7 @@
       activeConfig: {
         retained_earnings_pct: 100,
         capital_buffer_pct: 0,
+        loan_payment_pct: 0,
         distributions: {}
       },
 
@@ -284,6 +308,7 @@
               effective_date: `${key}-01`,
               retained_earnings_pct: Number(val.retained_earnings_pct ?? 100),
               capital_buffer_pct: Number(val.capital_buffer_pct ?? 0),
+              loan_payment_pct: Number(val.loan_payment_pct ?? 0),
               distributions: val.distributions || {}
             }));
           } else {
@@ -295,14 +320,16 @@
           if (this.versions.length > 0) {
             const latest = this.versions[0];
             this.activeConfig = {
-              retained_earnings_pct: latest.retained_earnings_pct,
-              capital_buffer_pct: latest.capital_buffer_pct,
+              retained_earnings_pct: Number(latest.retained_earnings_pct ?? 100),
+              capital_buffer_pct: Number(latest.capital_buffer_pct ?? 0),
+              loan_payment_pct: Number(latest.loan_payment_pct ?? 0),
               distributions: { ...latest.distributions }
             };
           } else {
             this.activeConfig = {
               retained_earnings_pct: 100,
               capital_buffer_pct: 0,
+              loan_payment_pct: 0,
               distributions: {}
             };
           }
@@ -319,6 +346,7 @@
       renderEditor() {
         document.getElementById('retained-earnings').value = this.activeConfig.retained_earnings_pct;
         document.getElementById('capital-buffer').value = this.activeConfig.capital_buffer_pct;
+        document.getElementById('loan-payment').value = this.activeConfig.loan_payment_pct;
 
         const listContainer = document.getElementById('distributions-list');
         if (!listContainer) return;
@@ -353,6 +381,7 @@
       validateTotal() {
         const retained = parseFloat(document.getElementById('retained-earnings').value) || 0;
         const buffer = parseFloat(document.getElementById('capital-buffer').value) || 0;
+        const loan = parseFloat(document.getElementById('loan-payment').value) || 0;
         
         let distSum = 0;
         const distInputs = document.querySelectorAll('.dist-pct-input');
@@ -360,17 +389,22 @@
           distSum += parseFloat(inp.value) || 0;
         });
 
-        const total = retained + buffer + distSum;
+        const total = retained + buffer + distSum + loan;
         const totalTextEl = document.getElementById('validation-total-text');
         const statusTextEl = document.getElementById('validation-status-text');
         const validationBarEl = document.getElementById('validation-bar');
+        const overallDisplay = document.getElementById('overall-total-display');
 
         if (totalTextEl) totalTextEl.textContent = `Total Allocation: ${total.toFixed(2)}%`;
+        if (overallDisplay) overallDisplay.textContent = `${total.toFixed(2)}%`;
 
         if (Math.abs(total - 100) < 0.001) {
           if (statusTextEl) {
             statusTextEl.textContent = 'Ready to save';
             statusTextEl.style.color = 'var(--cyan-light)';
+          }
+          if (overallDisplay) {
+            overallDisplay.style.color = 'var(--cyan-light)';
           }
           if (validationBarEl) {
             validationBarEl.style.borderColor = 'var(--border)';
@@ -381,6 +415,9 @@
           if (statusTextEl) {
             statusTextEl.textContent = `Warning: Total allocation must equal 100%`;
             statusTextEl.style.color = 'var(--danger)';
+          }
+          if (overallDisplay) {
+            overallDisplay.style.color = 'var(--danger)';
           }
           if (validationBarEl) {
             validationBarEl.style.borderColor = 'var(--danger)';
@@ -434,6 +471,7 @@
       syncInputsToMemory() {
         this.activeConfig.retained_earnings_pct = parseFloat(document.getElementById('retained-earnings').value) || 0;
         this.activeConfig.capital_buffer_pct = parseFloat(document.getElementById('capital-buffer').value) || 0;
+        this.activeConfig.loan_payment_pct = parseFloat(document.getElementById('loan-payment').value) || 0;
 
         const distInputs = document.querySelectorAll('.dist-pct-input');
         distInputs.forEach(inp => {
@@ -457,6 +495,7 @@
           effective_date: todayStr,
           retained_earnings_pct: this.activeConfig.retained_earnings_pct,
           capital_buffer_pct: this.activeConfig.capital_buffer_pct,
+          loan_payment_pct: this.activeConfig.loan_payment_pct,
           distributions: { ...this.activeConfig.distributions }
         };
 
