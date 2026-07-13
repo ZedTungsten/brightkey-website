@@ -73,6 +73,32 @@
     let currentYear = todayYear;
     let currentMonth = todayMonth;
 
+    // ── Hash-based month state (e.g. #07-2026) ────────────────────────────────
+    (function initMonthFromHash() {
+      const hash = window.location.hash.replace('#', '');
+      const match = hash.match(/^(\d{2})-(\d{4})$/);
+      if (match) {
+        const m = parseInt(match[1], 10) - 1;
+        const y = parseInt(match[2], 10);
+        if (m >= 0 && m <= 11 && y >= 2000) {
+          currentMonth = m;
+          currentYear = y;
+        }
+      }
+    })();
+
+    function updateHash() {
+      const mm = String(currentMonth + 1).padStart(2, '0');
+      window.location.replace(`#${mm}-${currentYear}`);
+    }
+
+    function getMonthDateRange(year, month) {
+      const start = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+      const lastDay = new Date(year, month + 1, 0).getDate();
+      const end = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+      return { start, end };
+    }
+
     const MONTH_NAMES = [
       'January', 'February', 'March', 'April', 'May', 'June',
       'July', 'August', 'September', 'October', 'November', 'December'
@@ -125,39 +151,27 @@
         });
       }
 
-      await loadData();
+      await loadStaticData();
+      await loadMonthBookings();
     });
 
-    async function loadData() {
-      renderSkeletons();
+    // Fetches employees, products, settings — once per page load
+    async function loadStaticData() {
       try {
-        // Fetch bookings matching company_id, employees, assignments, and products in parallel
-        const [bookingsRes, employeesRes, assignmentsRes, productsRes] = await Promise.all([
-          sb.from('installation_bookings').select('*').eq('company_id', currentCompanyId),
+        const [employeesRes, assignmentsRes, productsRes] = await Promise.all([
           sb.from('employees').select('id, employee_number, first_name, last_name, title, department, assignment'),
           sb.from('employee_assignments').select('id, name, visibility').eq('company_id', currentCompanyId || ''),
           sb.from('products').select('sku, category')
         ]);
 
         dbProducts = productsRes?.data || [];
-        let data = bookingsRes.data;
-        if (bookingsRes.error) {
-          // Fallback if company_id column does not exist in this database instance yet
-          if (bookingsRes.error.message && bookingsRes.error.message.includes('column') && bookingsRes.error.message.includes('company_id')) {
-            console.warn('Fallback: company_id column missing on installation_bookings. Querying without filter.');
-            const fallbackResult = await sb
-              .from('installation_bookings')
-              .select('*');
-            if (fallbackResult.error) throw fallbackResult.error;
-            data = fallbackResult.data;
-          } else {
-            throw bookingsRes.error;
-          }
-        }
-        dbBookings = data || [];
         dbEmployees = employeesRes.data || [];
-        
-        // Fetch booking media requirements
+
+        window._installerAssignmentNames = (assignmentsRes.data || [])
+          .filter(a => Array.isArray(a.visibility) && a.visibility.includes('booking.door_specifications'))
+          .map(a => a.name);
+
+        // Booking media requirements
         try {
           const { data: mediaReqsRes } = await sb
             .from('global_settings')
@@ -165,22 +179,15 @@
             .eq('key', 'booking_media_requirements')
             .eq('company_id', currentCompanyId)
             .maybeSingle();
-
-          if (mediaReqsRes && mediaReqsRes.value && Array.isArray(mediaReqsRes.value)) {
-            bookingMediaRequirements = mediaReqsRes.value;
-          } else {
-            bookingMediaRequirements = [];
-          }
+          bookingMediaRequirements = (mediaReqsRes?.value && Array.isArray(mediaReqsRes.value))
+            ? mediaReqsRes.value : [];
           localStorage.setItem('bk_booking_media_requirements', JSON.stringify(bookingMediaRequirements));
         } catch (mediaErr) {
           console.error('Error loading media requirements:', mediaErr);
-          const cachedMediaReqs = localStorage.getItem('bk_booking_media_requirements');
-          if (cachedMediaReqs) {
-            try { bookingMediaRequirements = JSON.parse(cachedMediaReqs); } catch(_) {}
-          }
+          try { bookingMediaRequirements = JSON.parse(localStorage.getItem('bk_booking_media_requirements') || '[]'); } catch(_) {}
         }
-        
-        // Fetch booking checklist
+
+        // Booking checklist
         try {
           const { data: checklistSetting } = await sb
             .from('global_settings')
@@ -188,25 +195,49 @@
             .eq('key', 'booking_checklist')
             .eq('company_id', currentCompanyId)
             .maybeSingle();
-
-          if (checklistSetting && checklistSetting.value && Array.isArray(checklistSetting.value)) {
-            bookingChecklist = checklistSetting.value;
-          } else {
-            bookingChecklist = [];
-          }
+          bookingChecklist = (checklistSetting?.value && Array.isArray(checklistSetting.value))
+            ? checklistSetting.value : [];
           localStorage.setItem('bk_booking_checklist', JSON.stringify(bookingChecklist));
         } catch (checklistErr) {
           console.error('Error loading checklist:', checklistErr);
-          const cachedChecklist = localStorage.getItem('bk_booking_checklist');
-          if (cachedChecklist) {
-            try { bookingChecklist = JSON.parse(cachedChecklist); } catch(_) {}
+          try { bookingChecklist = JSON.parse(localStorage.getItem('bk_booking_checklist') || '[]'); } catch(_) {}
+        }
+      } catch (err) {
+        console.error('Failed to load static data:', err);
+        showToast('Failed to load configuration: ' + err.message, true);
+      }
+    }
+
+    // Fetches only the current month's bookings — re-called on month navigation
+    async function loadMonthBookings() {
+      renderSkeletons();
+      updateHash();
+      const { start, end } = getMonthDateRange(currentYear, currentMonth);
+      try {
+        const bookingsRes = await sb
+          .from('installation_bookings')
+          .select('*')
+          .eq('company_id', currentCompanyId)
+          .gte('scheduled_date', start)
+          .lte('scheduled_date', end);
+
+        let data = bookingsRes.data;
+        if (bookingsRes.error) {
+          if (bookingsRes.error.message && bookingsRes.error.message.includes('column') && bookingsRes.error.message.includes('company_id')) {
+            console.warn('Fallback: company_id column missing. Querying without filter.');
+            const fallbackResult = await sb
+              .from('installation_bookings')
+              .select('*')
+              .gte('scheduled_date', start)
+              .lte('scheduled_date', end);
+            if (fallbackResult.error) throw fallbackResult.error;
+            data = fallbackResult.data;
+          } else {
+            throw bookingsRes.error;
           }
         }
-        
-        window._installerAssignmentNames = (assignmentsRes.data || [])
-          .filter(a => Array.isArray(a.visibility) && a.visibility.includes('booking.door_specifications'))
-          .map(a => a.name);
 
+        dbBookings = data || [];
         applyFilterAndRender();
       } catch (err) {
         console.error('Failed to load bookings:', err);
@@ -256,8 +287,7 @@
         currentMonth = 0;
         currentYear++;
       }
-      drawCalendar();
-      drawAllBookingsList();
+      loadMonthBookings();
     }
 
     window.switchMainTab = function(tab) {
