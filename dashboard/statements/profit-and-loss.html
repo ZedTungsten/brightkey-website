@@ -199,15 +199,25 @@
                 </div>
               </div>
             </div>
-            <button onclick="PLApp.loadData()" class="btn btn-outline btn-sm" style="display: flex; align-items: center; gap: 0.4rem;">
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
-              Refresh
-            </button>
+            <div style="display: flex; gap: 0.5rem;">
+              <button onclick="PLApp.loadData()" class="btn btn-outline btn-sm" style="display: flex; align-items: center; gap: 0.4rem;">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+                Refresh
+              </button>
+              <button id="btn-lock-mode" onclick="PLApp.toggleLockMode()" class="btn btn-outline btn-sm" style="display: flex; align-items: center; gap: 0.4rem;">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                Lock Months
+              </button>
+            </div>
           </div>
 
           <div class="excel-container">
             <table class="excel-table" id="pl-table">
               <thead>
+                <tr id="action-header-row" style="display: none;">
+                  <th></th>
+                  <!-- Dynamic Lock/Unlock buttons -->
+                </tr>
                 <tr id="table-header-row">
                   <th>Line Item</th>
                   <!-- Dynamic Month Headers -->
@@ -247,6 +257,8 @@
         adjustments: [],
         deliveries: [],
         payoutSettings: null,
+        lockedStatements: [],
+        lockModeActive: false,
 
         resolvePlanForMonth(s, targetMonthStr) {
           const subBills = this.softwareBilling.filter(b => b.subscription_id === s.id);
@@ -716,6 +728,15 @@
             });
           });
 
+          // Merge locked statements
+          if (this.lockedStatements && this.lockedStatements.length > 0) {
+            this.lockedStatements.forEach(ls => {
+              if (monthlyValues[ls.month]) {
+                monthlyValues[ls.month] = ls.statement_data;
+              }
+            });
+          }
+
           return monthlyValues;
         },
 
@@ -768,97 +789,133 @@
           }
 
           const sb = window.BKAuth.sb;
-          const startRange = this.months[5].start;
-          const endRange = this.months[0].end;
 
           try {
-            const [
-              productsRes,
-              bookingsRes,
-              employeesRes,
-              payslipRecordsRes,
-              deliveriesRes,
-              payoutSettingsRes,
-              trackerConfigRes,
-              commissionsRes,
-              adjustmentsRes,
-              reimbursementsRes,
-              journalAccountsRes,
-              generalJournalRes,
-              softwareSubscriptionsRes,
-              softwareBillingRes,
-              specialPayoutStateRes,
-              dispatchedTxRes,
-              deliveryRes
-            ] = await Promise.all([
-              sb.from('products').select('sku, dealer_price, sale_price'),
-              sb.from('installation_bookings')
-                .select('id, created_at, scheduled_date, order_no, grand_total, deposit_amount, balance_due, deduction_labels, deduction_values, status, product_skus, product_qtys, doors, installers, installer_id, products')
-                .eq('company_id', this.companyId)
-                .neq('status', 'cancelled')
-                .gte('scheduled_date', startRange)
-                .lte('scheduled_date', endRange),
-              sb.from('employees')
-                .select('id, email, first_name, last_name, salary, employment_status')
-                .eq('company_id', this.companyId),
-              sb.from('payslip_records')
-                .select('employee_id, payout_month, salary, basic_paid, commissions, special_payouts, total_payout, adjustments, adjustments_list')
-                .eq('company_id', this.companyId)
-                .gte('payout_month', this.months[5].key)
-                .lte('payout_month', this.months[0].key),
-              sb.from('delivery_bookings')
-                .select('created_at, reference_id, actual_distance_km, base_price, customer_tips, base_fee, tip_1, tip_2, toll')
-                .eq('company_id', this.companyId)
-                .neq('status', 'cancelled')
-                .gte('created_at', startRange + ' 00:00:00')
-                .lte('created_at', endRange + ' 23:59:59'),
-              sb.from('global_settings').select('value').eq('key', 'installer_payout_settings').eq('company_id', this.companyId).maybeSingle(),
-              sb.from('global_settings').select('value').eq('key', 'salary_tracker_config').eq('company_id', this.companyId).maybeSingle(),
-              sb.from('commission_assignments').select('amount, booking_id, employee_id, product_index').eq('company_id', this.companyId),
-              sb.from('employee_adjustments').select('employee_id, amount, date').eq('company_id', this.companyId).gte('date', startRange).lte('date', endRange),
-              sb.from('employee_reimbursements').select('employee_id, amount, date').eq('company_id', this.companyId).gte('date', startRange).lte('date', endRange),
-              sb.from('journal_accounts').select('name, category').eq('company_id', this.companyId),
-              sb.from('general_journal').select('account, debit, date').eq('company_id', this.companyId).gte('date', startRange).lte('date', endRange),
-              sb.from('software_subscriptions').select('id, name, mode, cost_centavos, status, subscribed_date, unsubscribed_date').eq('company_id', this.companyId),
-              sb.from('software_subscription_billing').select('subscription_id, billing_month, cost_centavos, mode').eq('company_id', this.companyId),
-              sb.from('global_settings').select('value').eq('key', 'special_payout_state').eq('company_id', this.companyId).maybeSingle(),
-              sb.from('inventory_transactions')
-                .select('reference_id, customer_name, timestamp_dispatched')
-                .not('timestamp_dispatched', 'is', null)
-                .gte('timestamp_dispatched', startRange + 'T00:00:00')
-                .lte('timestamp_dispatched', endRange + 'T23:59:59'),
-              sb.from('delivery_bookings')
-                .select('reference_id, customer_name, base_fee, tip_1, tip_2, toll')
-            ]);
+            // First fetch locked statements
+            const { data: lockedRes, error: lockedErr } = await sb
+              .from('locked_profit_loss_statements')
+              .select('month, statement_data')
+              .eq('company_id', this.companyId);
 
-            this.products = productsRes.data || [];
-            this.bookings = bookingsRes.data || [];
-            this.employees = employeesRes.data || [];
-            this.payslipRecords = payslipRecordsRes.data || [];
-            
-            // Save raw shipping list data to align with cogs.html per-month deduplication
-            this.dispatchedTxs = dispatchedTxRes?.data || [];
-            this.deliveryFeeMap = {};
-            (deliveryRes?.data || []).forEach(db => {
-              this.deliveryFeeMap[db.reference_id] = db;
-            });
+            if (lockedErr) {
+              console.error('Error fetching locked statements:', lockedErr);
+            }
+            this.lockedStatements = lockedRes || [];
 
-            this.payoutSettings = payoutSettingsRes.data?.value || {
-              installations_before_crediting: 15,
-              lead_credit: 1.0,
-              assist_credit: 0.5,
-              lead_rate: 1000,
-              extra_services: []
-            };
-            this.trackerConfig = trackerConfigRes.data?.value || {};
-            this.commissionAssignments = commissionsRes.data || [];
-            this.adjustmentsList = adjustmentsRes.data || [];
-            this.reimbursementsList = reimbursementsRes.data || [];
-            this.journalAccounts = journalAccountsRes.data || [];
-            this.generalJournal = generalJournalRes.data || [];
-            this.softwareSubscriptions = softwareSubscriptionsRes.data || [];
-            this.softwareBilling = softwareBillingRes.data || [];
-            this.specialPayoutState = specialPayoutStateRes.data?.value || {};
+            // Determine unlocked months range
+            const unlockedMonths = this.months.filter(m => !this.lockedStatements.some(ls => ls.month === m.key));
+
+            if (unlockedMonths.length === 0) {
+              // All 6 months are locked! Skip fetching other tables
+              this.products = [];
+              this.bookings = [];
+              this.employees = [];
+              this.payslipRecords = [];
+              this.dispatchedTxs = [];
+              this.deliveryFeeMap = {};
+              this.payoutSettings = {
+                installations_before_crediting: 15,
+                lead_credit: 1.0,
+                assist_credit: 0.5,
+                lead_rate: 1000,
+                extra_services: []
+              };
+              this.trackerConfig = {};
+              this.commissionAssignments = [];
+              this.adjustmentsList = [];
+              this.reimbursementsList = [];
+              this.journalAccounts = [];
+              this.generalJournal = [];
+              this.softwareSubscriptions = [];
+              this.softwareBilling = [];
+              this.specialPayoutState = {};
+            } else {
+              // Find the range bounds for unlocked months
+              const sortedUnlocked = [...unlockedMonths].sort((a, b) => a.key.localeCompare(b.key));
+              const startRange = sortedUnlocked[0].start;
+              const endRange = sortedUnlocked[sortedUnlocked.length - 1].end;
+              const startMonthKey = sortedUnlocked[0].key;
+              const endMonthKey = sortedUnlocked[sortedUnlocked.length - 1].key;
+
+              const [
+                productsRes,
+                bookingsRes,
+                employeesRes,
+                payslipRecordsRes,
+                payoutSettingsRes,
+                trackerConfigRes,
+                commissionsRes,
+                adjustmentsRes,
+                reimbursementsRes,
+                journalAccountsRes,
+                generalJournalRes,
+                softwareSubscriptionsRes,
+                softwareBillingRes,
+                specialPayoutStateRes,
+                dispatchedTxRes,
+                deliveryRes
+              ] = await Promise.all([
+                sb.from('products').select('sku, dealer_price, sale_price'),
+                sb.from('installation_bookings')
+                  .select('id, created_at, scheduled_date, order_no, grand_total, deposit_amount, balance_due, deduction_labels, deduction_values, status, product_skus, product_qtys, doors, installers, installer_id, products')
+                  .eq('company_id', this.companyId)
+                  .neq('status', 'cancelled')
+                  .gte('scheduled_date', startRange)
+                  .lte('scheduled_date', endRange),
+                sb.from('employees')
+                  .select('id, email, first_name, last_name, salary, employment_status')
+                  .eq('company_id', this.companyId),
+                sb.from('payslip_records')
+                  .select('employee_id, payout_month, salary, basic_paid, commissions, special_payouts, total_payout, adjustments, adjustments_list')
+                  .eq('company_id', this.companyId)
+                  .gte('payout_month', startMonthKey)
+                  .lte('payout_month', endMonthKey),
+                sb.from('global_settings').select('value').eq('key', 'installer_payout_settings').eq('company_id', this.companyId).maybeSingle(),
+                sb.from('global_settings').select('value').eq('key', 'salary_tracker_config').eq('company_id', this.companyId).maybeSingle(),
+                sb.from('commission_assignments').select('amount, booking_id, employee_id, product_index').eq('company_id', this.companyId),
+                sb.from('employee_adjustments').select('employee_id, amount, date').eq('company_id', this.companyId).gte('date', startRange).lte('date', endRange),
+                sb.from('employee_reimbursements').select('employee_id, amount, date').eq('company_id', this.companyId).gte('date', startRange).lte('date', endRange),
+                sb.from('journal_accounts').select('name, category').eq('company_id', this.companyId),
+                sb.from('general_journal').select('account, debit, date').eq('company_id', this.companyId).gte('date', startRange).lte('date', endRange),
+                sb.from('software_subscriptions').select('id, name, mode, cost_centavos, status, subscribed_date, unsubscribed_date').eq('company_id', this.companyId),
+                sb.from('software_subscription_billing').select('subscription_id, billing_month, cost_centavos, mode').eq('company_id', this.companyId),
+                sb.from('global_settings').select('value').eq('key', 'special_payout_state').eq('company_id', this.companyId).maybeSingle(),
+                sb.from('inventory_transactions')
+                  .select('reference_id, customer_name, timestamp_dispatched')
+                  .not('timestamp_dispatched', 'is', null)
+                  .gte('timestamp_dispatched', startRange + 'T00:00:00')
+                  .lte('timestamp_dispatched', endRange + 'T23:59:59'),
+                sb.from('delivery_bookings')
+                  .select('reference_id, customer_name, base_fee, tip_1, tip_2, toll')
+              ]);
+
+              this.products = productsRes.data || [];
+              this.bookings = bookingsRes.data || [];
+              this.employees = employeesRes.data || [];
+              this.payslipRecords = payslipRecordsRes.data || [];
+              this.dispatchedTxs = dispatchedTxRes?.data || [];
+              this.deliveryFeeMap = {};
+              (deliveryRes?.data || []).forEach(db => {
+                this.deliveryFeeMap[db.reference_id] = db;
+              });
+
+              this.payoutSettings = payoutSettingsRes.data?.value || {
+                installations_before_crediting: 15,
+                lead_credit: 1.0,
+                adjust_credit: 0.5, // Note: assist_credit fallback in calculateMonthlyReport
+                lead_rate: 1000,
+                extra_services: []
+              };
+              this.trackerConfig = trackerConfigRes.data?.value || {};
+              this.commissionAssignments = commissionsRes.data || [];
+              this.adjustmentsList = adjustmentsRes.data || [];
+              this.reimbursementsList = reimbursementsRes.data || [];
+              this.journalAccounts = journalAccountsRes.data || [];
+              this.generalJournal = generalJournalRes.data || [];
+              this.softwareSubscriptions = softwareSubscriptionsRes.data || [];
+              this.softwareBilling = softwareBillingRes.data || [];
+              this.specialPayoutState = specialPayoutStateRes.data?.value || {};
+            }
 
             this.renderStatement();
 
@@ -871,6 +928,48 @@
         },
 
         renderStatement() {
+          const actionRow = document.getElementById('action-header-row');
+          if (this.lockModeActive) {
+            actionRow.style.display = 'table-row';
+            actionRow.innerHTML = '<th></th>' + this.months.map(m => {
+              const isLocked = this.lockedStatements.some(ls => ls.month === m.key);
+              if (isLocked) {
+                return `
+                  <th colspan="2" style="text-align: center; background: var(--bg-base); padding: 0.45rem 0.85rem;">
+                    <button onclick="PLApp.unlockMonth('${m.key}')" class="btn btn-sm" style="display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.75rem; background: rgba(6, 182, 212, 0.15); border: 1px solid var(--cyan); color: var(--cyan-light); cursor: pointer; padding: 0.35rem 0.65rem; border-radius: var(--radius-sm); font-weight: 600; width: 100%; justify-content: center; box-sizing: border-box;">
+                      <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                      Locked
+                    </button>
+                  </th>
+                `;
+              } else {
+                return `
+                  <th colspan="2" style="text-align: center; background: var(--bg-base); padding: 0.45rem 0.85rem;">
+                    <button onclick="PLApp.lockMonth('${m.key}')" class="btn btn-outline btn-sm" style="display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.75rem; cursor: pointer; padding: 0.35rem 0.65rem; border-radius: var(--radius-sm); font-weight: 600; width: 100%; justify-content: center; box-sizing: border-box;">
+                      <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 9.9-1"></path></svg>
+                      Lock
+                    </button>
+                  </th>
+                `;
+              }
+            }).join('');
+          } else {
+            actionRow.style.display = 'none';
+          }
+
+          const lockModeBtn = document.getElementById('btn-lock-mode');
+          if (lockModeBtn) {
+            if (this.lockModeActive) {
+              lockModeBtn.style.background = 'var(--cyan)';
+              lockModeBtn.style.color = '#fff';
+              lockModeBtn.style.borderColor = 'var(--cyan)';
+            } else {
+              lockModeBtn.style.background = '';
+              lockModeBtn.style.color = '';
+              lockModeBtn.style.borderColor = '';
+            }
+          }
+
           const headerRow = document.getElementById('table-header-row');
           headerRow.innerHTML = '<th>Line Item</th>' + this.months.map(m => `<th colspan="2" style="text-align: center;">${m.label}</th>`).join('');
 
@@ -1082,6 +1181,57 @@
           });
 
           tbody.innerHTML = html;
+        },
+
+        toggleLockMode() {
+          this.lockModeActive = !this.lockModeActive;
+          this.renderStatement();
+        },
+
+        async lockMonth(monthKey) {
+          const sb = window.BKAuth.sb;
+          const monthlyValues = this.calculateMonthlyReport();
+          const targetData = monthlyValues[monthKey];
+
+          if (!targetData) {
+            console.error('No statement data found for month', monthKey);
+            Toast.show('No statement data found for ' + monthKey, 'error');
+            return;
+          }
+
+          const { error } = await sb
+            .from('locked_profit_loss_statements')
+            .upsert({
+              company_id: this.companyId,
+              month: monthKey,
+              statement_data: targetData
+            }, { onConflict: 'company_id,month' });
+
+          if (error) {
+            console.error('Error locking month:', error);
+            Toast.show('Could not lock month. Please try again.', 'error');
+          } else {
+            Toast.show('Locked month ' + monthKey + ' successfully.', 'success');
+            await this.loadData();
+          }
+        },
+
+        async unlockMonth(monthKey) {
+          const sb = window.BKAuth.sb;
+
+          const { error } = await sb
+            .from('locked_profit_loss_statements')
+            .delete()
+            .eq('company_id', this.companyId)
+            .eq('month', monthKey);
+
+          if (error) {
+            console.error('Error unlocking month:', error);
+            Toast.show('Could not unlock month. Please try again.', 'error');
+          } else {
+            Toast.show('Unlocked month ' + monthKey + ' successfully.', 'success');
+            await this.loadData();
+          }
         }
       };
 
