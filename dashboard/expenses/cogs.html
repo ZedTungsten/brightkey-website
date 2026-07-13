@@ -354,8 +354,8 @@
           const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
 
           try {
-            const [productsRes, bookingsRes, accountsRes, journalRes, dispatchedTxRes, deliveryRes, empRes, configRes, payoutSetRes, commRes, allBookingsRes, payslipRes] = await Promise.all([
-              sb.from('products').select('sku, title, dealer_price, count_inventory, category'),
+            const [productsRes, bookingsRes, accountsRes, journalRes, dispatchedTxRes, deliveryRes, empRes, configRes, payoutSetRes, commRes, allBookingsRes, payslipRes, adjustmentsRes] = await Promise.all([
+              sb.from('products').select('id, sku, title, dealer_price, count_inventory, category'),
               sb.from('installation_bookings')
                 .select('scheduled_date, order_no, status, product_skus, product_qtys')
                 .eq('company_id', this.companyId)
@@ -399,7 +399,12 @@
               sb.from('payslip_records')
                 .select('employee_id, salary, basic_paid, commissions, adjustments, special_payouts, total_payout, adjustments_list')
                 .eq('company_id', this.companyId)
-                .eq('payout_month', `${year}-${String(month).padStart(2, '0')}`)
+                .eq('payout_month', `${year}-${String(month).padStart(2, '0')}`),
+              sb.from('supplier_cost_adjustments')
+                .select('*')
+                .eq('company_id', this.companyId)
+                .gte('adjustment_date', startDate)
+                .lte('adjustment_date', endDate)
             ]);
 
             this.products = productsRes.data || [];
@@ -412,6 +417,7 @@
             this.commissionAssignments = commRes.data || [];
             this.allBookings = allBookingsRes.data || [];
             this.payslipRecords = payslipRes.data || [];
+            this.supplierCostAdjustments = adjustmentsRes.data || [];
 
             // Build shipping list: unique reference_ids dispatched this month (per inventory_transactions),
             // merged with fee amounts from delivery_bookings by reference_id.
@@ -542,19 +548,32 @@
 
           const formatPHP = (cents) => {
             const val = cents / 100;
-            return `₱${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+            const prefix = val < 0 ? '(' : '';
+            const suffix = val < 0 ? ')' : '';
+            const formatted = `₱${Math.abs(val).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+            return `${prefix}${formatted}${suffix}`;
           };
 
-          if (sortedSkus.length === 0) {
+          const escapeHtml = (str) => {
+            if (!str) return '';
+            return str
+              .replace(/&/g, '&amp;')
+              .replace(/</g, '&lt;')
+              .replace(/>/g, '&gt;')
+              .replace(/"/g, '&quot;')
+              .replace(/'/g, '&#039;');
+          };
+
+          if (sortedSkus.length === 0 && (this.supplierCostAdjustments || []).length === 0) {
             tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 2rem;">No supplier costs recorded for this month.</td></tr>`;
             document.getElementById('stat-total-sold').textContent = '0';
             document.getElementById('stat-total-cogs').textContent = '₱0.00';
             const catGrid = document.getElementById('category-cards-grid');
             if (catGrid) catGrid.style.display = 'none';
-            return;
+            return 0;
           }
 
-          const rowsHtml = sortedSkus.map(item => {
+          let rowsHtml = sortedSkus.map(item => {
             const totalCost = item.totalCost;
             grandTotalCogsCentavos += totalCost;
 
@@ -583,6 +602,28 @@
             `;
           }).join('');
 
+          // Render Adjustments
+          (this.supplierCostAdjustments || []).forEach(adj => {
+            const amtCentavos = adj.amount_cents;
+            grandTotalCogsCentavos += amtCentavos;
+            
+            const isNegative = amtCentavos < 0;
+            const amtText = formatPHP(Math.abs(amtCentavos));
+            const formattedAmt = isNegative 
+              ? `<span style="color: var(--danger);">(${amtText})</span>` 
+              : formatPHP(amtCentavos);
+
+            rowsHtml += `
+              <tr>
+                <td>Adjustment</td>
+                <td>${escapeHtml(adj.description)}</td>
+                <td class="num-col"></td>
+                <td class="num-col"></td>
+                <td class="num-col">${formattedAmt}</td>
+              </tr>
+            `;
+          });
+
           // Append Total Row
           const totalRowHtml = `
             <tr class="total-row">
@@ -594,8 +635,6 @@
           `;
 
           tbody.innerHTML = rowsHtml + totalRowHtml;
-
-
 
           return grandTotalCogsCentavos / 100;
         },

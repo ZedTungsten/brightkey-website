@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Adjustments — BrightKey Finance</title>
+  <link rel="preconnect" href="https://fonts.bunny.net" />
+  <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../../css/style.css" />
+  <link rel="icon" type="image/svg+xml" href="../../assets/favicon.svg?v=2" />
+  <style>
+    .int-wrap { max-width: 1000px; margin: 0 auto; padding: 2rem 2rem 5rem; }
+
+    /* ── Tab Container Bar ── */
+    .drawer-tabs {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      overflow-x: auto;
+      background: var(--bg-surface);
+      margin-bottom: 1.5rem;
+    }
+    .tab-btn {
+      padding: 0.9rem 1.25rem;
+      font-size: 0.82rem; font-weight: 600;
+      color: var(--text-muted);
+      border: none; background: none; cursor: pointer;
+      border-bottom: 2px solid transparent;
+      white-space: nowrap; transition: all 0.15s;
+      font-family: var(--font-sans);
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      line-height: 1;
+    }
+    .tab-btn.active { color: var(--cyan-light); border-bottom-color: var(--cyan); }
+    .tab-btn:hover:not(.active) { color: var(--text-secondary); }
+
+    /* ── Month Navigation ── */
+    .month-nav-container {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 0.5rem 1rem;
+    }
+    .month-nav-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      width: 28px;
+      height: 28px;
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .month-nav-btn:hover {
+      background: var(--bg-base);
+      border-color: var(--text-secondary);
+    }
+    .month-display-label {
+      font-size: 0.9rem;
+      font-weight: 700;
+      min-width: 120px;
+      text-align: center;
+    }
+
+    /* ── Cards and Layout ── */
+    .summary-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 1.5rem;
+      box-shadow: var(--shadow-sm);
+      margin-bottom: 1.5rem;
+    }
+    .summary-title {
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .summary-amount {
+      font-size: 1.75rem;
+      font-weight: 800;
+      color: var(--cyan-light);
+      margin-top: 0.25rem;
+      display: block;
+    }
+    .summary-details {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin-top: 1rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--border);
+      font-size: 0.82rem;
+    }
+    .detail-item {
+      display: flex;
+      justify-content: space-between;
+      color: var(--text-secondary);
+    }
+    .detail-value {
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    /* ── Table Styling ── */
+    .excel-container {
+      width: 100%;
+      border: 1px solid var(--border);
+      background: var(--bg-surface);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      box-shadow: var(--shadow-sm);
+    }
+    .excel-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 9.5pt;
+      color: var(--text-primary);
+      font-family: var(--font-sans), Arial, sans-serif;
+    }
+    .excel-table th, .excel-table td {
+      border: 1px solid var(--border);
+      padding: 0.65rem 1rem;
+    }
+    .excel-table th {
+      background: var(--bg-elevated, #fafafa);
+      font-weight: 700;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      font-size: 8.5pt;
+      letter-spacing: 0.05em;
+      text-align: left;
+    }
+    .excel-table td {
+      background: var(--bg-surface);
+    }
+    .excel-table .num-col {
+      text-align: right;
+    }
+    .excel-table .action-col {
+      text-align: center;
+      width: 100px;
+    }
+
+    /* ── Modal (Pattern B Transition-based) ── */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(4px);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease;
+    }
+    .modal-overlay.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .modal-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      width: 100%;
+      max-width: 480px;
+      padding: 1.75rem;
+      box-shadow: var(--shadow-lg);
+      transform: translateY(15px);
+      transition: transform 0.2s ease;
+    }
+    .modal-overlay.open .modal-card {
+      transform: translateY(0);
+    }
+  </style>
+</head>
+<body class="bg-base text-primary">
+
+  <div class="dash-layout">
+    <!-- Sidebar -->
+    <aside class="dash-sidebar" id="dash-sidebar"></aside>
+
+    <!-- Main Content -->
+    <div class="dash-main">
+      <div class="top-bar">
+        <div class="top-bar-title">Adjustments</div>
+      </div>
+
+      <!-- Tab bar -->
+      <nav class="drawer-tabs">
+        <a href="/dashboard/finance-adjustments" class="tab-btn active">Supplier</a>
+      </nav>
+
+      <main style="overflow-y: auto; flex: 1; min-width: 0; width: 100%;">
+        <div class="int-wrap">
+          
+          <!-- Month Switcher & Create Adjustment Row -->
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+            <div class="month-nav-container">
+              <button onclick="AdjustmentApp.changeMonth(-1)" class="month-nav-btn" aria-label="Previous month">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+              </button>
+              <span class="month-display-label" id="month-label">---</span>
+              <button onclick="AdjustmentApp.changeMonth(1)" class="month-nav-btn" aria-label="Next month">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+              </button>
+            </div>
+
+            <button onclick="AdjustmentApp.openCreateModal()" class="btn btn-cyan btn-sm" style="display: flex; align-items: center; gap: 0.4rem;">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+              Create Adjustment
+            </button>
+          </div>
+
+          <!-- Total Card -->
+          <div class="summary-card">
+            <span class="summary-title">Total Supplier Cost for this Month</span>
+            <span class="summary-amount" id="stat-net-supplier-cost">₱0.00</span>
+            
+            <div class="summary-details">
+              <div class="detail-item">
+                <span>Base Supplier Cost:</span>
+                <span class="detail-value" id="stat-base-supplier-cost">₱0.00</span>
+              </div>
+              <div class="detail-item">
+                <span>Total Adjustments:</span>
+                <span class="detail-value" id="stat-total-adjustments">₱0.00</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- List of Adjustments -->
+          <div style="margin-bottom: 0.75rem; display: flex; align-items: center; justify-content: space-between;">
+            <h2 style="font-size: 0.88rem; font-weight: 700; color: var(--text-primary); margin: 0;">Adjustments List</h2>
+          </div>
+
+          <div class="excel-container">
+            <table class="excel-table">
+              <thead>
+                <tr>
+                  <th>Date Created</th>
+                  <th>Description</th>
+                  <th class="num-col" style="width: 180px;">Amount</th>
+                  <th class="action-col">Action</th>
+                </tr>
+              </thead>
+              <tbody id="adjustments-table-body">
+                <tr>
+                  <td colspan="4" class="text-center" style="padding: 2.5rem; color: var(--text-muted); font-style: italic; text-align: center;">Loading adjustments...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- Create Adjustment Modal (Pattern B) -->
+  <div class="modal-overlay" id="create-modal">
+    <div class="modal-card">
+      <h3 style="font-size: 1.1rem; font-weight: 700; color: var(--text-primary); margin: 0 0 1rem;">Create Supplier Cost Adjustment</h3>
+      <form id="create-form" onsubmit="AdjustmentApp.handleCreateSubmit(event)">
+        
+        <div class="form-group" style="margin-bottom: 1rem;">
+          <label class="form-label" for="adj-description">Description</label>
+          <input type="text" id="adj-description" class="form-input" placeholder="e.g. Supplier pricing discrepancy correction" required />
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem;">
+          <div class="form-group">
+            <label class="form-label" for="adj-amount">Amount (&#8369;)</label>
+            <input type="number" id="adj-amount" class="form-input" placeholder="0.00" step="0.01" required />
+            <small style="color: var(--text-muted); font-size: 0.72rem; display: block; margin-top: 0.25rem;">Allow negative values</small>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="adj-date">Adjustment Date</label>
+            <input type="date" id="adj-date" class="form-input" required />
+          </div>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 0.75rem;">
+          <button type="button" class="btn btn-outline btn-sm" onclick="AdjustmentApp.closeCreateModal()">Cancel</button>
+          <button type="submit" class="btn btn-cyan btn-sm">Create</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/sidebar.js"></script>
+  <script src="/js/main.js"></script>
+
+  <script>
+    'use strict';
+
+    const getSb = () => window.BKAuth.sb;
+    const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+    const escapeHtml = (str) => {
+      if (!str) return '';
+      return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    };
+
+    window.AdjustmentApp = {
+      tenantId: null,
+      companyId: null,
+      currentDate: new Date(),
+      products: [],
+      bookings: [],
+      adjustments: [],
+
+      async init() {
+        try {
+          const authInfo = await window.BKAuth.checkRoleGate(
+            ['Owner', 'Admin', 'HR', 'Finance'],
+            '../../admin.html'
+          );
+          if (!authInfo) return;
+          this.tenantId = authInfo.tenantId;
+
+          const { data: co } = await getSb()
+            .from('companies')
+            .select('id')
+            .eq('tenant_id', this.tenantId)
+            .limit(1)
+            .maybeSingle();
+
+          this.companyId = co?.id || null;
+          if (!this.companyId) return;
+
+          this.updateMonthLabel();
+          await this.loadData();
+        } catch (e) {
+          console.error(e);
+        }
+      },
+
+      updateMonthLabel() {
+        const el = document.getElementById('month-label');
+        if (el) {
+          el.textContent = `${MONTHS[this.currentDate.getMonth()]} ${this.currentDate.getFullYear()}`;
+        }
+        // Set default date in modal form to match first day of current selected month
+        const y = this.currentDate.getFullYear();
+        const m = String(this.currentDate.getMonth() + 1).padStart(2, '0');
+        document.getElementById('adj-date').value = `${y}-${m}-01`;
+      },
+
+      changeMonth(diff) {
+        this.currentDate.setMonth(this.currentDate.getMonth() + diff);
+        this.updateMonthLabel();
+        this.loadData();
+      },
+
+      async loadData() {
+        const tbody = document.getElementById('adjustments-table-body');
+        if (tbody) {
+          tbody.innerHTML = '<tr><td colspan="4" class="text-center" style="padding: 2.5rem; color: var(--text-muted); font-style: italic; text-align: center;">Loading adjustments and cogs...</td></tr>';
+        }
+
+        const year = this.currentDate.getFullYear();
+        const month = this.currentDate.getMonth() + 1;
+        const lastDay = new Date(year, month, 0).getDate();
+
+        const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+        const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+
+        try {
+          // 1. Fetch bookings in selected month, all products (rule 10: select id), and adjustments in parallel
+          const [bookingsRes, productsRes, adjustmentsRes] = await Promise.all([
+            getSb()
+              .from('installation_bookings')
+              .select('scheduled_date, order_no, status, product_skus, product_qtys')
+              .eq('company_id', this.companyId)
+              .neq('status', 'cancelled')
+              .gte('scheduled_date', startDate)
+              .lte('scheduled_date', endDate),
+            getSb()
+              .from('products')
+              .select('id, sku, dealer_price'),
+            getSb()
+              .from('supplier_cost_adjustments')
+              .select('*')
+              .eq('company_id', this.companyId)
+              .gte('adjustment_date', startDate)
+              .lte('adjustment_date', endDate)
+              .order('created_at', { ascending: false })
+          ]);
+
+          this.bookings = bookingsRes.data || [];
+          this.products = productsRes.data || [];
+          this.adjustments = adjustmentsRes.data || [];
+
+          this.calculateAndRender();
+        } catch (err) {
+          console.error(err);
+          if (tbody) {
+            tbody.innerHTML = `<tr><td colspan="4" class="text-center" style="color: var(--danger); text-align: center;">Failed to load adjustments: ${err.message}</td></tr>`;
+          }
+        }
+      },
+
+      calculateAndRender() {
+        // Calculate Base Supplier Cost exactly like P&L
+        const dealerPriceMap = {};
+        this.products.forEach(p => {
+          if (p.sku) dealerPriceMap[p.sku.toLowerCase()] = p.dealer_price || 0;
+        });
+
+        let baseSupplierCostCentavos = 0;
+        this.bookings.forEach(b => {
+          let skusArr = [];
+          let qtysArr = [];
+          if (b.product_skus) skusArr = b.product_skus.split(' | ').filter(Boolean);
+          if (b.product_qtys) qtysArr = b.product_qtys.split(' | ').map(Number);
+          skusArr.forEach((sku, idx) => {
+            const qty = qtysArr[idx] || 0;
+            const dPrice = dealerPriceMap[sku.toLowerCase()] || 0;
+            baseSupplierCostCentavos += (qty * dPrice);
+          });
+        });
+
+        // Calculate total adjustments
+        let totalAdjustmentsCentavos = 0;
+        this.adjustments.forEach(adj => {
+          totalAdjustmentsCentavos += adj.amount_cents;
+        });
+
+        const netSupplierCostCentavos = baseSupplierCostCentavos + totalAdjustmentsCentavos;
+
+        // Render card values
+        document.getElementById('stat-base-supplier-cost').textContent = this.formatCurrency(baseSupplierCostCentavos / 100);
+        
+        const adjVal = totalAdjustmentsCentavos / 100;
+        const adjEl = document.getElementById('stat-total-adjustments');
+        adjEl.textContent = this.formatCurrency(adjVal);
+        if (adjVal < 0) {
+          adjEl.style.color = 'var(--danger)';
+        } else {
+          adjEl.style.color = '';
+        }
+
+        const netVal = netSupplierCostCentavos / 100;
+        const netEl = document.getElementById('stat-net-supplier-cost');
+        netEl.textContent = this.formatCurrency(netVal);
+        if (netVal < 0) {
+          netEl.style.color = 'var(--danger)';
+        } else {
+          netEl.style.color = '';
+        }
+
+        // Render Adjustments List Table
+        const tbody = document.getElementById('adjustments-table-body');
+        if (this.adjustments.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="4" class="text-center" style="padding: 2.5rem; color: var(--text-muted); font-style: italic; text-align: center;">No adjustments found for this month.</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = this.adjustments.map(adj => {
+          const formattedDate = new Date(adj.created_at).toLocaleDateString(undefined, {
+            year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+          });
+          const isNegative = adj.amount_cents < 0;
+          const amtText = this.formatCurrency(Math.abs(adj.amount_cents) / 100);
+          const formattedAmt = isNegative 
+            ? `<span style="color: var(--danger);">(${amtText})</span>` 
+            : this.formatCurrency(adj.amount_cents / 100);
+
+          return `
+            <tr>
+              <td>${formattedDate}</td>
+              <td style="font-weight: 500;">${escapeHtml(adj.description)}</td>
+              <td class="num-col" style="font-weight: 600;">${formattedAmt}</td>
+              <td class="action-col">
+                <button onclick="AdjustmentApp.deleteAdjustment('${adj.id}')" class="btn btn-outline btn-sm" style="color: var(--danger); border-color: rgba(239, 68, 68, 0.2); padding: 0.25rem 0.5rem; font-size: 0.72rem;">Delete</button>
+              </td>
+            </tr>
+          `;
+        }).join('');
+      },
+
+      openCreateModal() {
+        const modal = document.getElementById('create-modal');
+        if (!modal) return;
+        
+        // Reset form fields
+        document.getElementById('create-form').reset();
+        this.updateMonthLabel(); // ensures date field defaults correctly to selected month
+
+        modal.style.display = 'flex';
+        modal.offsetHeight; // force reflow (Rule 12 Pattern B)
+        modal.classList.add('open');
+      },
+
+      closeCreateModal() {
+        const modal = document.getElementById('create-modal');
+        if (!modal) return;
+        modal.classList.remove('open');
+        setTimeout(() => {
+          modal.style.display = 'none';
+        }, 150);
+      },
+
+      async handleCreateSubmit(event) {
+        event.preventDefault();
+        const description = document.getElementById('adj-description').value.trim();
+        const amountFloat = parseFloat(document.getElementById('adj-amount').value);
+        const adjustmentDate = document.getElementById('adj-date').value;
+
+        if (!description || isNaN(amountFloat) || !adjustmentDate) {
+          Toast.show('Please fill in all fields correctly.', 'error');
+          return;
+        }
+
+        const amountCents = Math.round(amountFloat * 100);
+
+        try {
+          const { error } = await getSb()
+            .from('supplier_cost_adjustments')
+            .insert({
+              company_id: this.companyId,
+              description,
+              amount_cents: amountCents,
+              adjustment_date: adjustmentDate
+            });
+
+          if (error) throw error;
+
+          Toast.show('Adjustment created successfully.', 'success');
+          this.closeCreateModal();
+          await this.loadData();
+        } catch (err) {
+          console.error(err);
+          Toast.show('Failed to create adjustment: ' + err.message, 'error');
+        }
+      },
+
+      async deleteAdjustment(id) {
+        // Use custom confirm overlay since native alerts/confirms are prohibited (Rule 6)
+        const ok = await BKDialog.ask({
+          title: 'Delete Adjustment',
+          message: 'Are you sure you want to delete this adjustment? This will immediately affect COGS and statements.',
+          okText: 'Delete',
+          danger: true
+        });
+        if (!ok) return;
+
+        try {
+          const { error } = await getSb()
+            .from('supplier_cost_adjustments')
+            .delete()
+            .eq('id', id);
+
+          if (error) throw error;
+
+          Toast.show('Adjustment deleted successfully.', 'success');
+          await this.loadData();
+        } catch (err) {
+          console.error(err);
+          Toast.show('Failed to delete adjustment: ' + err.message, 'error');
+        }
+      },
+
+      formatCurrency(val) {
+        if (val === null || val === undefined) return '—';
+        const prefix = val < 0 ? '(' : '';
+        const suffix = val < 0 ? ')' : '';
+        return `${prefix}₱${Math.abs(val).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${suffix}`;
+      }
+    };
+
+    document.addEventListener('DOMContentLoaded', () => {
+      AdjustmentApp.init();
+    });
+  </script>
+</body>
+</html>

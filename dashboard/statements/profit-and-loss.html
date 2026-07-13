@@ -517,6 +517,15 @@
             });
           });
 
+          // Process Supplier Cost Adjustments
+          (this.supplierCostAdjustments || []).forEach(adj => {
+            if (!adj.adjustment_date) return;
+            const mKey = adj.adjustment_date.slice(0, 7);
+            if (!monthlyValues[mKey]) return;
+            if (this.lockedStatements.some(ls => ls.month === mKey)) return;
+            monthlyValues[mKey].supplierCost += adj.amount_cents;
+          });
+
           // 2. Installations
           this.months.forEach(m => {
             const mKey = m.key;
@@ -827,6 +836,14 @@
                 extra_services: []
               };
               this.trackerConfig = {};
+              this.products = [];
+              this.bookings = [];
+              this.employees = [];
+              this.payslipRecords = [];
+              this.dispatchedTxs = [];
+              this.deliveryFeeMap = {};
+              this.payoutSettings = {};
+              this.trackerConfig = {};
               this.commissionAssignments = [];
               this.adjustmentsList = [];
               this.reimbursementsList = [];
@@ -835,6 +852,7 @@
               this.softwareSubscriptions = [];
               this.softwareBilling = [];
               this.specialPayoutState = {};
+              this.supplierCostAdjustments = [];
             } else {
               // Find the range bounds for unlocked months
               const sortedUnlocked = [...unlockedMonths].sort((a, b) => a.key.localeCompare(b.key));
@@ -859,9 +877,10 @@
                 softwareBillingRes,
                 specialPayoutStateRes,
                 dispatchedTxRes,
-                deliveryRes
+                deliveryRes,
+                supplierCostAdjustmentsRes
               ] = await Promise.all([
-                sb.from('products').select('sku, dealer_price, sale_price'),
+                sb.from('products').select('id, sku, dealer_price, sale_price'),
                 sb.from('installation_bookings')
                   .select('id, created_at, scheduled_date, order_no, grand_total, deposit_amount, balance_due, deduction_labels, deduction_values, status, product_skus, product_qtys, doors, installers, installer_id, products')
                   .eq('company_id', this.companyId)
@@ -892,7 +911,12 @@
                   .gte('timestamp_dispatched', startRange + 'T00:00:00')
                   .lte('timestamp_dispatched', endRange + 'T23:59:59'),
                 sb.from('delivery_bookings')
-                  .select('reference_id, customer_name, base_fee, tip_1, tip_2, toll')
+                  .select('reference_id, customer_name, base_fee, tip_1, tip_2, toll'),
+                sb.from('supplier_cost_adjustments')
+                  .select('*')
+                  .eq('company_id', this.companyId)
+                  .gte('adjustment_date', startRange)
+                  .lte('adjustment_date', endRange)
               ]);
 
               this.products = productsRes.data || [];
@@ -904,6 +928,7 @@
               (deliveryRes?.data || []).forEach(db => {
                 this.deliveryFeeMap[db.reference_id] = db;
               });
+              this.supplierCostAdjustments = supplierCostAdjustmentsRes.data || [];
 
               this.payoutSettings = payoutSettingsRes.data?.value || {
                 installations_before_crediting: 15,
