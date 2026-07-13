@@ -287,8 +287,8 @@
         const currentMonthKey = this.months[0].key;
 
         try {
-          // Fetch only the locked statement for the current month, employees, and equity settings
-          const [lockedRes, employeesRes, equitySettingsRes] = await Promise.all([
+          // Fetch only the locked statement for the current month, employees, equity settings, and saved checks
+          const [lockedRes, employeesRes, equitySettingsRes, checksRes] = await Promise.all([
             getSb()
               .from('locked_profit_loss_statements')
               .select('statement_data')
@@ -296,8 +296,11 @@
               .eq('month', currentMonthKey)
               .maybeSingle(),
             getSb().from('employees').select('id, first_name, last_name, salary, employment_status').eq('company_id', this.companyId),
-            getSb().from('global_settings').select('value').eq('key', 'equity_settings').eq('company_id', this.companyId).maybeSingle()
+            getSb().from('global_settings').select('value').eq('key', 'equity_settings').eq('company_id', this.companyId).maybeSingle(),
+            getSb().from('global_settings').select('value').eq('key', `profit_allocation_checks_${currentMonthKey}`).eq('company_id', this.companyId).maybeSingle()
           ]);
+
+          this.savedChecks = checksRes.data?.value || {};
 
           this.employees = employeesRes.data || [];
           this.equitySettings = equitySettingsRes.data?.value || [];
@@ -453,27 +456,32 @@
           }
         }
 
-        this.saveChecks();
+        this.saveChecks().catch(console.error);
       },
 
       storageKey() {
         const monthKey = this.months[0]?.key || 'unknown';
-        return `bk-profit-alloc-checks-${this.companyId}-${monthKey}`;
+        return `profit_allocation_checks_${monthKey}`;
       },
 
-      saveChecks() {
+      async saveChecks() {
         const state = {};
         document.querySelectorAll('#allocation-table-body input[type="checkbox"][data-row]').forEach(cb => {
           state[cb.dataset.row] = cb.checked;
         });
-        localStorage.setItem(this.storageKey(), JSON.stringify(state));
+        // Update local cache so restoreChecks is instant on next render within the same session
+        this.savedChecks = state;
+        // Persist to Supabase so all devices stay in sync
+        await getSb().from('global_settings').upsert({
+          company_id: this.companyId,
+          key: this.storageKey(),
+          value: state
+        }, { onConflict: 'company_id,key' });
       },
 
       restoreChecks() {
-        const raw = localStorage.getItem(this.storageKey());
-        if (!raw) return;
-        let state;
-        try { state = JSON.parse(raw); } catch(_) { return; }
+        const state = this.savedChecks || {};
+        if (!Object.keys(state).length) return;
 
         Object.entries(state).forEach(([rowId, checked]) => {
           const row = document.getElementById(rowId);
