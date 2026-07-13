@@ -366,7 +366,7 @@
                 .select('name, category')
                 .eq('company_id', this.companyId),
               sb.from('general_journal')
-                .select('account, debit, date')
+                .select('account, debit, date, desc_1, desc_2')
                 .eq('company_id', this.companyId)
                 .gte('date', startDate)
                 .lte('date', endDate),
@@ -629,12 +629,22 @@
             if (cat === 'COGS') {
               const debitVal = parseFloat(entry.debit || 0);
               if (debitVal > 0) {
-                cogsAccountsMap[entry.account] = (cogsAccountsMap[entry.account] || 0) + debitVal;
+                if (!cogsAccountsMap[entry.account]) {
+                  cogsAccountsMap[entry.account] = [];
+                }
+                cogsAccountsMap[entry.account].push({
+                  debit: debitVal,
+                  desc1: entry.desc_1 || '—',
+                  desc2: entry.desc_2 || ''
+                });
               }
             }
           });
 
-          const cogsAccountsList = Object.entries(cogsAccountsMap).map(([name, debit]) => ({ name, debit }));
+          const cogsAccountsList = Object.entries(cogsAccountsMap).map(([name, entries]) => {
+            const totalDebit = entries.reduce((sum, e) => sum + e.debit, 0);
+            return { name, entries, totalDebit };
+          });
           cogsAccountsList.sort((a, b) => a.name.localeCompare(b.name));
 
           let cogsRowsHtml = '';
@@ -642,13 +652,31 @@
 
           if (cogsAccountsList.length > 0) {
             cogsAccountsList.forEach(item => {
-              cogsTotal += item.debit;
-              cogsRowsHtml += `
-                <tr>
-                  <td style="text-align: left; font-weight: 500;">${escapeHtml(item.name)}</td>
-                  <td style="text-align: right; font-weight: 500;">${formatCurrency(item.debit)}</td>
-                </tr>
-              `;
+              cogsTotal += item.totalDebit;
+              
+              if (item.entries.length === 1) {
+                cogsRowsHtml += `
+                  <tr>
+                    <td style="text-align: left; font-weight: 500; padding-left: 0.6rem;">${escapeHtml(item.name)}</td>
+                    <td style="text-align: right; font-weight: 500;">${formatCurrency(item.totalDebit)}</td>
+                  </tr>
+                `;
+              } else {
+                cogsRowsHtml += `
+                  <tr style="background: var(--bg-elevated, #fafafa);">
+                    <td style="text-align: left; font-weight: 700; padding-left: 0.6rem;">${escapeHtml(item.name)}</td>
+                    <td style="text-align: right; font-weight: 700;">${formatCurrency(item.totalDebit)}</td>
+                  </tr>
+                `;
+                item.entries.forEach(entry => {
+                  cogsRowsHtml += `
+                    <tr>
+                      <td style="text-align: left; padding-left: 2rem; color: var(--text-muted); font-size: 0.78rem;">${escapeHtml(entry.desc1)}</td>
+                      <td style="text-align: right; color: var(--text-muted); font-size: 0.78rem;">${formatCurrency(entry.debit)}</td>
+                    </tr>
+                  `;
+                });
+              }
             });
           } else {
             cogsRowsHtml = `
