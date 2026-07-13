@@ -381,10 +381,11 @@
 
         let html = '';
 
-        const getRowHtml = (id, label, pct, amt, isSubitem = false) => {
+        const getRowHtml = (id, label, pct, amt, isSubitem = false, parentId = null) => {
           const indentStyle = isSubitem ? 'padding-left: 2.5rem; color: var(--text-secondary); font-size: 0.8rem;' : 'font-weight: 600; padding-left: 1.25rem;';
           const rowClass = isSubitem ? 'sub-allocation-row' : 'main-allocation-row';
           const pctText = isSubitem ? `${pct.toFixed(2)}% of Dist` : `${pct.toFixed(2)}%`;
+          const parentAttr = isSubitem && parentId ? `data-parent="row-${parentId}"` : '';
           
           return `
             <tr class="${rowClass}" id="row-${id}">
@@ -392,7 +393,7 @@
               <td style="text-align: right; ${isSubitem ? 'color: var(--text-secondary); font-size: 0.8rem;' : 'font-weight: 500;'}">${pctText}</td>
               <td style="text-align: right; ${isSubitem ? 'color: var(--text-secondary); font-size: 0.8rem;' : 'font-weight: 600;'}">${this.formatCurrency(amt)}</td>
               <td style="text-align: center;">
-                <input type="checkbox" onchange="ProfitAllocationApp.toggleRowAllocation(this, 'row-${id}')" style="cursor: pointer; width: 16px; height: 16px;" />
+                <input type="checkbox" ${parentAttr} data-row="row-${id}" onchange="ProfitAllocationApp.toggleRowAllocation(this, 'row-${id}')" style="cursor: pointer; width: 16px; height: 16px;" />
               </td>
             </tr>
           `;
@@ -407,7 +408,7 @@
             const emp = this.employees.find(e => e.id === empId);
             const fullName = emp ? `${emp.first_name} ${emp.last_name}` : 'Unknown Employee';
             const empAmt = distAmt * (sharePct / 100);
-            html += getRowHtml(`emp-${empId}`, `— ${fullName}`, sharePct, empAmt, true);
+            html += getRowHtml(`emp-${empId}`, `— ${fullName}`, sharePct, empAmt, true, 'distribution');
           });
         }
 
@@ -432,6 +433,23 @@
           row.classList.add('allocated-row');
         } else {
           row.classList.remove('allocated-row');
+        }
+
+        // If this is a subitem, check if all siblings are checked → auto-check parent
+        const parentRowId = checkbox.dataset.parent;
+        if (parentRowId) {
+          const allSiblings = document.querySelectorAll(`input[type="checkbox"][data-parent="${parentRowId}"]`);
+          const allChecked = allSiblings.length > 0 && Array.from(allSiblings).every(cb => cb.checked);
+          const parentRow = document.getElementById(parentRowId);
+          const parentCheckbox = parentRow ? parentRow.querySelector('input[type="checkbox"]') : null;
+          if (parentCheckbox) {
+            parentCheckbox.checked = allChecked;
+            if (allChecked) {
+              parentRow.classList.add('allocated-row');
+            } else {
+              parentRow.classList.remove('allocated-row');
+            }
+          }
         }
       },
 
