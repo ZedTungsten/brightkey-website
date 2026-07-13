@@ -424,6 +424,7 @@
         `;
 
         tbody.innerHTML = html;
+        this.restoreChecks();
       },
 
       toggleRowAllocation(checkbox, rowId) {
@@ -451,6 +452,54 @@
             }
           }
         }
+
+        this.saveChecks();
+      },
+
+      storageKey() {
+        const monthKey = this.months[0]?.key || 'unknown';
+        return `bk-profit-alloc-checks-${this.companyId}-${monthKey}`;
+      },
+
+      saveChecks() {
+        const state = {};
+        document.querySelectorAll('#allocation-table-body input[type="checkbox"][data-row]').forEach(cb => {
+          state[cb.dataset.row] = cb.checked;
+        });
+        localStorage.setItem(this.storageKey(), JSON.stringify(state));
+      },
+
+      restoreChecks() {
+        const raw = localStorage.getItem(this.storageKey());
+        if (!raw) return;
+        let state;
+        try { state = JSON.parse(raw); } catch(_) { return; }
+
+        Object.entries(state).forEach(([rowId, checked]) => {
+          const row = document.getElementById(rowId);
+          const cb = row ? row.querySelector('input[type="checkbox"]') : null;
+          if (!cb) return;
+          cb.checked = checked;
+          if (checked) {
+            row.classList.add('allocated-row');
+          } else {
+            row.classList.remove('allocated-row');
+          }
+        });
+
+        // Re-evaluate parent auto-check after restoring
+        document.querySelectorAll('#allocation-table-body input[type="checkbox"][data-parent]').forEach(cb => {
+          const parentRowId = cb.dataset.parent;
+          const allSiblings = document.querySelectorAll(`input[type="checkbox"][data-parent="${parentRowId}"]`);
+          const allChecked = allSiblings.length > 0 && Array.from(allSiblings).every(s => s.checked);
+          const parentRow = document.getElementById(parentRowId);
+          const parentCheckbox = parentRow ? parentRow.querySelector('input[type="checkbox"]') : null;
+          if (parentCheckbox) {
+            parentCheckbox.checked = allChecked;
+            if (allChecked) parentRow.classList.add('allocated-row');
+            else parentRow.classList.remove('allocated-row');
+          }
+        });
       },
 
       formatCurrency(val) {
