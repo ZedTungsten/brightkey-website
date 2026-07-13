@@ -7,9 +7,10 @@
   <link rel="preconnect" href="https://fonts.bunny.net" />
   <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/css/style.css" />
+  <link rel="stylesheet" href="/dashboard/payout-tracker/shared.css" />
   <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg?v=2" />
   <style>
-    .int-wrap { max-width: 1200px; margin: 0 auto; padding: 2rem 2rem 5rem; }
+    .int-wrap { max-width: 1000px; margin: 0 auto; padding: 2rem 2rem 5rem; }
 
     .drawer-tabs {
       display: flex;
@@ -34,20 +35,81 @@
     .tab-btn.active { color: var(--cyan-light); border-bottom-color: var(--cyan); }
     .tab-btn:hover:not(.active) { color: var(--text-secondary); }
 
-    /* ── Info state block ── */
-    .info-state {
+    /* ── Date Navigator ── */
+    .month-nav-btn {
+      background: var(--bg-base);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text-primary);
+      width: 32px;
+      height: 32px;
       display: flex;
-      flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 0.75rem;
-      padding: 6rem 2rem;
-      border: 1px dashed var(--border);
-      border-radius: var(--radius-md);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .month-nav-btn:hover {
       background: var(--bg-elevated);
-      color: var(--text-muted);
-      text-align: center;
+      border-color: var(--cyan);
+    }
+
+    /* ── Excel-style Table ── */
+    .excel-container {
+      width: 100%;
+      border: 1px solid var(--border);
+      background: var(--bg-surface);
+      border-radius: var(--radius-md);
+      overflow: hidden;
       margin-top: 1.5rem;
+      box-shadow: var(--shadow-sm);
+    }
+    .excel-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 9.5pt;
+      color: var(--text-primary);
+      font-family: var(--font-sans), Arial, sans-serif;
+    }
+    .excel-table th, .excel-table td {
+      border: 1px solid var(--border);
+      padding: 0.8rem 1.2rem;
+      text-align: right;
+    }
+    .excel-table th {
+      background: var(--bg-elevated, #fafafa);
+      font-weight: 700;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      font-size: 8.5pt;
+      letter-spacing: 0.05em;
+      text-align: right;
+    }
+    .excel-table td {
+      background: var(--bg-surface);
+    }
+    .excel-table th:first-child, .excel-table td:first-child {
+      text-align: left;
+    }
+    .excel-table .text-left {
+      text-align: left;
+    }
+    .excel-table .text-center {
+      text-align: center;
+    }
+    .row-total td {
+      font-weight: 700 !important;
+      border-top: 1.5px solid var(--border) !important;
+      border-bottom: 2px double var(--text-primary) !important;
+      background: var(--bg-elevated) !important;
+    }
+    .row-total td:first-child {
+      text-align: left;
+    }
+
+    /* ── Allocated state coloring ── */
+    tr.allocated-row td {
+      background-color: rgba(6, 182, 212, 0.06) !important;
     }
   </style>
 </head>
@@ -77,25 +139,511 @@
 
       <main style="overflow-y: auto; flex: 1; min-width: 0; width: 100%;">
         <div class="int-wrap">
-          <div class="info-state">
-            <div style="font-size: 1.1rem; font-weight: 600; color: var(--text-secondary);">Allocations Summary</div>
-            <div>This view is under development.</div>
+          
+          <!-- Month/Year Navigator & Net Profit Summary -->
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1rem 1.5rem; box-shadow: var(--shadow-sm);">
+            <div style="display: flex; align-items: center; gap: 0.75rem;">
+              <button onclick="ProfitAllocationApp.changeMonth(-1)" class="month-nav-btn" aria-label="Previous month">&lt;</button>
+              <span id="month-display" style="font-size: 0.88rem; font-weight: 700; color: var(--text-primary); min-width: 120px; text-align: center;"></span>
+              <button onclick="ProfitAllocationApp.changeMonth(1)" class="month-nav-btn" aria-label="Next month">&gt;</button>
+            </div>
+            
+            <div style="display: flex; align-items: center; gap: 1.5rem;">
+              <div style="text-align: right;">
+                <span style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700;">Net Profit</span>
+                <span id="net-profit-display" style="font-size: 1.25rem; font-weight: 800; color: var(--cyan-light); display: block; margin-top: 0.1rem;">₱0.00</span>
+              </div>
+              <button onclick="ProfitAllocationApp.loadData()" class="btn btn-outline btn-sm" style="display: flex; align-items: center; gap: 0.4rem;">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+                Refresh
+              </button>
+            </div>
           </div>
+
+          <!-- Main Table Container -->
+          <div class="excel-container">
+            <table class="excel-table">
+              <thead>
+                <tr>
+                  <th style="text-align: left;">Allocation Category</th>
+                  <th style="width: 150px; text-align: right;">Percentage</th>
+                  <th style="width: 250px; text-align: right;">Allocated Amount</th>
+                  <th style="width: 120px; text-align: center;">Allocated</th>
+                </tr>
+              </thead>
+              <tbody id="allocation-table-body">
+                <tr>
+                  <td colspan="4" class="text-center" style="padding: 2.5rem; color: var(--text-muted); font-style: italic;">Loading allocations...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
         </div>
       </main>
     </div>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-  <script src="/js/auth.js" defer></script>
-  <script src="/js/sidebar.js" defer></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/sidebar.js"></script>
+  <script src="/js/main.js"></script>
 
   <script>
+    'use strict';
+
+    const getSb = () => window.BKAuth.sb;
+    const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+    window.ProfitAllocationApp = {
+      tenantId: null,
+      companyId: null,
+      currentDate: new Date(),
+      products: [],
+      bookings: [],
+      employees: [],
+      payslipRecords: [],
+      dispatchedTxs: [],
+      deliveryFeeMap: {},
+      payoutSettings: {},
+      trackerConfig: {},
+      commissionAssignments: [],
+      adjustmentsList: [],
+      reimbursementsList: [],
+      journalAccounts: [],
+      generalJournal: [],
+      softwareSubscriptions: [],
+      softwareBilling: [],
+      specialPayoutState: {},
+      equitySettings: [], // Versioned equity settings
+
+      async init() {
+        try {
+          const authInfo = await window.BKAuth.checkRoleGate(
+            ['owner', 'admin', 'hr', 'finance'],
+            '../../admin.html'
+          );
+          if (!authInfo) return;
+          this.tenantId = authInfo.tenantId;
+
+          const { data: co } = await getSb().from('companies').select('id').eq('tenant_id', this.tenantId).limit(1).maybeSingle();
+          this.companyId = co?.id || null;
+          if (!this.companyId) return;
+
+          this.updateMonthDisplay();
+          await this.loadData();
+        } catch (e) {
+          console.error(e);
+        }
+      },
+
+      updateMonthDisplay() {
+        const el = document.getElementById('month-display');
+        if (el) el.textContent = `${MONTHS[this.currentDate.getMonth()]} ${this.currentDate.getFullYear()}`;
+      },
+
+      changeMonth(diff) {
+        this.currentDate.setMonth(this.currentDate.getMonth() + diff);
+        this.updateMonthDisplay();
+        this.loadData();
+      },
+
+      async loadData() {
+        const tbody = document.getElementById('allocation-table-body');
+        if (tbody) {
+          tbody.innerHTML = '<tr><td colspan="4" class="text-center" style="padding: 2.5rem; color: var(--text-muted); font-style: italic;">Calculating profit and allocations...</td></tr>';
+        }
+
+        const year = this.currentDate.getFullYear();
+        const month = this.currentDate.getMonth() + 1;
+        const lastDay = new Date(year, month, 0).getDate();
+
+        const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+        const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+
+        try {
+          const [
+            productsRes, bookingsRes, employeesRes, payslipRecordsRes,
+            deliveryRes, payoutSettingsRes, trackerConfigRes, commissionsRes,
+            adjustmentsRes, reimbursementsRes, journalAccountsRes, generalJournalRes,
+            softwareSubscriptionsRes, softwareBillingRes, specialPayoutStateRes,
+            dispatchedTxRes, equitySettingsRes
+          ] = await Promise.all([
+            getSb().from('products').select('sku, dealer_price'),
+            getSb().from('installation_bookings')
+              .select('scheduled_date, order_no, status, product_skus, product_qtys, grand_total, balance_due, deposit_amount, deduction_labels, deduction_values, doors')
+              .eq('company_id', this.companyId)
+              .neq('status', 'cancelled')
+              .gte('scheduled_date', startDate)
+              .lte('scheduled_date', endDate),
+            getSb().from('employees').select('id, first_name, last_name, salary, employment_status').eq('company_id', this.companyId),
+            getSb().from('payslip_records').select('employee_id, payout_month, salary, basic_paid, commissions, special_payouts, total_payout, adjustments, adjustments_list').eq('company_id', this.companyId).eq('payout_month', `${year}-${String(month).padStart(2, '0')}`),
+            getSb().from('delivery_bookings').select('reference_id, customer_name, base_fee, tip_1, tip_2, toll'),
+            getSb().from('global_settings').select('value').eq('key', 'installer_payout_settings').eq('company_id', this.companyId).maybeSingle(),
+            getSb().from('global_settings').select('value').eq('key', 'salary_tracker_config').eq('company_id', this.companyId).maybeSingle(),
+            getSb().from('commission_assignments').select('amount, booking_id, employee_id, product_index').eq('company_id', this.companyId),
+            getSb().from('employee_adjustments').select('employee_id, amount, date').eq('company_id', this.companyId).gte('date', startDate).lte('date', endDate),
+            getSb().from('employee_reimbursements').select('employee_id, amount, date').eq('company_id', this.companyId).gte('date', startDate).lte('date', endDate),
+            getSb().from('journal_accounts').select('name, category').eq('company_id', this.companyId),
+            getSb().from('general_journal').select('account, debit, date').eq('company_id', this.companyId).gte('date', startDate).lte('date', endDate),
+            getSb().from('software_subscriptions').select('id, name, mode, cost_centavos, status, subscribed_date, unsubscribed_date').eq('company_id', this.companyId),
+            getSb().from('software_subscription_billing').select('subscription_id, billing_month, cost_centavos, mode').eq('company_id', this.companyId).eq('billing_month', `${year}-${String(month).padStart(2, '0')}`),
+            getSb().from('global_settings').select('value').eq('key', 'special_payout_state').eq('company_id', this.companyId).maybeSingle(),
+            getSb().from('inventory_transactions')
+              .select('reference_id, customer_name, timestamp_dispatched')
+              .not('timestamp_dispatched', 'is', null)
+              .gte('timestamp_dispatched', startDate + 'T00:00:00')
+              .lte('timestamp_dispatched', endDate + 'T23:59:59'),
+            getSb().from('global_settings').select('value').eq('key', 'equity_settings').eq('company_id', this.companyId).maybeSingle()
+          ]);
+
+          this.products = productsRes.data || [];
+          this.bookings = bookingsRes.data || [];
+          this.employees = employeesRes.data || [];
+          this.payslipRecords = payslipRecordsRes.data || [];
+          this.dispatchedTxs = dispatchedTxRes?.data || [];
+          this.deliveryFeeMap = {};
+          (deliveryRes?.data || []).forEach(db => {
+            this.deliveryFeeMap[db.reference_id] = db;
+          });
+          this.payoutSettings = payoutSettingsRes.data?.value || {};
+          this.trackerConfig = trackerConfigRes.data?.value || {};
+          this.commissionAssignments = commissionsRes.data || [];
+          this.adjustmentsList = adjustmentsRes.data || [];
+          this.reimbursementsList = reimbursementsRes.data || [];
+          this.journalAccounts = journalAccountsRes.data || [];
+          this.generalJournal = generalJournalRes.data || [];
+          this.softwareSubscriptions = softwareSubscriptionsRes.data || [];
+          this.softwareBilling = softwareBillingRes.data || [];
+          this.specialPayoutState = specialPayoutStateRes.data?.value || {};
+          this.equitySettings = equitySettingsRes.data?.value || [];
+
+          // 1. Calculate Profit & Loss for this single selected month (in cents)
+          const netProfitCents = this.calculateNetProfitForMonth(`${year}-${String(month).padStart(2, '0')}`);
+          const netProfit = netProfitCents / 100;
+
+          document.getElementById('net-profit-display').textContent = this.formatCurrency(netProfit);
+
+          // 2. Resolve Active Point-In-Time Allocation Configuration
+          const config = this.resolveActiveSettings(startDate);
+
+          // 3. Render Table
+          this.renderAllocationTable(netProfit, config);
+        } catch (e) {
+          console.error(e);
+          if (tbody) {
+            tbody.innerHTML = `<tr><td colspan="4" class="text-center" style="color: var(--danger);">Calculation failed: ${e.message}</td></tr>`;
+          }
+        }
+      },
+
+      resolveActiveSettings(targetDateStr) {
+        if (!Array.isArray(this.equitySettings) || this.equitySettings.length === 0) {
+          return { retained_earnings_pct: 100, capital_buffer_pct: 0, distribution_pct: 0, loan_payment_pct: 0, distributions: {} };
+        }
+        
+        // Find latest config whose effective_date <= targetDateStr
+        const targetDate = new Date(targetDateStr);
+        const match = this.equitySettings.find(ver => new Date(ver.effective_date) <= targetDate);
+        
+        return match || this.equitySettings[this.equitySettings.length - 1];
+      },
+
+      calculateNetProfitForMonth(monthKey) {
+        const mv = {
+          revenueBooking: 0,
+          supplierCost: 0,
+          installations: 0,
+          commissions: 0,
+          shipping: 0,
+          gasAllowance: 0,
+          packagingSupplies: 0,
+          otherCogs: {},
+          salaries: 0,
+          adjustments: 0,
+          softwareApps: 0,
+          admin: { total: 0, details: {} },
+          marketingSales: { total: 0, details: {} },
+          operationsSupport: { total: 0, details: {} }
+        };
+
+        const dealerPriceMap = {};
+        this.products.forEach(p => {
+          if (p.sku) dealerPriceMap[p.sku.toLowerCase()] = p.dealer_price || 0;
+        });
+
+        // 1. Revenue & Supplier Cost from Bookings
+        this.bookings.forEach(b => {
+          if (b.order_no && b.order_no.startsWith('ORD-')) {
+            const grandTotal = parseInt(b.grand_total) || 0;
+            const balanceDue = parseInt(b.balance_due) || 0;
+            let depositCentavos = parseInt(b.deposit_amount) || 0;
+            if (b.deduction_labels && b.deduction_values) {
+              const dLabels = b.deduction_labels.split('|').map(s => s.trim().toLowerCase());
+              const dValues = b.deduction_values.split('|').map(s => s.trim());
+              dLabels.forEach((label, idx) => {
+                if (label.includes('deposit')) {
+                  depositCentavos += Math.round((parseFloat(dValues[idx]) || 0) * 100);
+                }
+              });
+            }
+            const absDepositCentavos = Math.abs(depositCentavos);
+            const orderGrandTotal = grandTotal > 0 ? grandTotal : (balanceDue + absDepositCentavos);
+            mv.revenueBooking += (orderGrandTotal + absDepositCentavos);
+          }
+
+          let skusArr = [];
+          let qtysArr = [];
+          if (b.product_skus) skusArr = b.product_skus.split(' | ').filter(Boolean);
+          if (b.product_qtys) qtysArr = b.product_qtys.split(' | ').map(Number);
+          skusArr.forEach((sku, idx) => {
+            const qty = qtysArr[idx] || 0;
+            const dPrice = dealerPriceMap[sku.toLowerCase()] || 0;
+            mv.supplierCost += (qty * dPrice);
+          });
+        });
+
+        // 2. Installations
+        const thresholdVal = this.payoutSettings.installations_before_crediting || 15;
+        const leadWeight = this.payoutSettings.lead_credit !== undefined ? this.payoutSettings.lead_credit : 1.0;
+        const assistWeight = this.payoutSettings.assist_credit !== undefined ? this.payoutSettings.assist_credit : 0.5;
+        const leadRateVal = this.payoutSettings.lead_rate || 1000;
+        const extraServicesList = (this.payoutSettings.extra_services || []).map(es => ({
+          sku: es.sku || es.name || '',
+          rate: es.rate
+        }));
+
+        this.employees.forEach(emp => {
+          let leadCount = 0;
+          let assistCount = 0;
+          let serviceEarnings = 0;
+
+          this.bookings.forEach(b => {
+            const assignedDoors = this.getAssignedDoorsForEmployee(b, emp.id);
+            assignedDoors.forEach(d => {
+              if (!d.completed) return;
+              if (d.roles.includes('lead')) leadCount++;
+              else if (d.roles.includes('assist')) assistCount++;
+              if (d.roles.includes('service')) {
+                d.skus.forEach(sku => {
+                  const matchedService = extraServicesList.find(es => es.sku === sku);
+                  if (matchedService) serviceEarnings += matchedService.rate;
+                });
+              }
+            });
+          });
+
+          const totalCredit = (leadCount * leadWeight) + (assistCount * assistWeight);
+          let thresholdEarnings = 0;
+          if (totalCredit > thresholdVal) {
+            thresholdEarnings = (totalCredit - thresholdVal) * leadRateVal;
+          }
+          mv.installations += ((thresholdEarnings + serviceEarnings) * 100);
+        });
+
+        // 3. Commissions
+        this.commissionAssignments.forEach(ca => {
+          const matchedBooking = this.bookings.find(b => b.id === ca.booking_id);
+          if (matchedBooking) {
+            mv.commissions += (parseInt(ca.amount) || 0);
+          }
+        });
+
+        // 4. Shipping / Deliveries
+        this.dispatchedTxs.forEach(tx => {
+          const deliv = this.deliveryFeeMap[tx.reference_id];
+          if (deliv) {
+            const fee = parseInt(deliv.base_fee) || 0;
+            const tips = (parseInt(deliv.tip_1) || 0) + (parseInt(deliv.tip_2) || 0);
+            const toll = parseInt(deliv.toll) || 0;
+            mv.shipping += (fee + tips + toll);
+          }
+        });
+
+        // 5. Salaries, Adjustments & Software
+        this.employees.forEach(emp => {
+          const payslip = this.payslipRecords.find(r => r.employee_id === emp.id);
+          if (payslip) {
+            mv.salaries += Number(payslip.salary || payslip.basic_paid) || 0;
+            mv.adjustments += Number(payslip.adjustments) || 0;
+          } else if (emp.employment_status === 'Active') {
+            mv.salaries += Number(emp.salary) || 0;
+          }
+        });
+
+        // Auto-accumulate software subscription costs
+        this.softwareBilling.forEach(b => {
+          mv.softwareApps += (b.cost_centavos || 0);
+        });
+
+        // 6. General Journal categorization
+        const accountCategoryMap = {};
+        this.journalAccounts.forEach(a => {
+          accountCategoryMap[a.name] = a.category;
+        });
+
+        this.generalJournal.forEach(entry => {
+          const cat = accountCategoryMap[entry.account];
+          const debitVal = parseFloat(entry.debit || 0);
+          if (debitVal <= 0) return;
+
+          const cents = Math.round(debitVal * 100);
+
+          if (cat === 'COGS') {
+            if (entry.account === 'Gas Allowance') {
+              mv.gasAllowance += cents;
+            } else if (entry.account === 'Packaging Supplies') {
+              mv.packagingSupplies += cents;
+            } else {
+              mv.otherCogs[entry.account] = (mv.otherCogs[entry.account] || 0) + cents;
+            }
+          } else if (cat && cat.startsWith('OPEX')) {
+            let section = 'admin';
+            if (cat === 'OPEX - Marketing & Sales') section = 'marketingSales';
+            else if (cat === 'OPEX - Operations Support') section = 'operationsSupport';
+
+            mv[section].total += cents;
+            mv[section].details[entry.account] = (mv[section].details[entry.account] || 0) + cents;
+          }
+        });
+
+        // Compute net profit
+        const revenue = mv.revenueBooking;
+        const otherCogsSum = Object.values(mv.otherCogs).reduce((a, b) => a + b, 0);
+        const cogs = mv.supplierCost + mv.installations + mv.commissions + mv.shipping + mv.gasAllowance + mv.packagingSupplies + otherCogsSum;
+        const opex = mv.salaries + mv.adjustments + mv.softwareApps + mv.admin.total + mv.marketingSales.total + mv.operationsSupport.total;
+        
+        return revenue - cogs - opex;
+      },
+
+      getAssignedDoorsForEmployee(booking, employeeId) {
+        if (!booking.doors) return [];
+        let doorsArr = [];
+        try {
+          doorsArr = Array.isArray(booking.doors) ? booking.doors : JSON.parse(booking.doors);
+        } catch (e) {
+          return [];
+        }
+        const assignedDoors = [];
+        doorsArr.forEach(door => {
+          const installers = door.installers || [];
+          const hasRole = installers.some(inst => {
+            const instId = inst.id || inst.installer_id;
+            return instId === employeeId;
+          });
+          if (hasRole) {
+            const empRoles = [];
+            installers.forEach(inst => {
+              const instId = inst.id || inst.installer_id;
+              if (instId === employeeId) {
+                if (inst.role) empRoles.push(inst.role.toLowerCase());
+              }
+            });
+            const skus = [];
+            if (door.product_skus) {
+              door.product_skus.split(' | ').forEach(s => skus.push(s.trim()));
+            }
+            assignedDoors.push({
+              doorIndex: door.index,
+              roles: empRoles,
+              completed: door.status === 'completed',
+              skus: skus
+            });
+          }
+        });
+        return assignedDoors;
+      },
+
+      renderAllocationTable(netProfit, config) {
+        const tbody = document.getElementById('allocation-table-body');
+        if (!tbody) return;
+
+        // Apply percentages
+        const retainedPct = config.retained_earnings_pct ?? 100;
+        const bufferPct = config.capital_buffer_pct ?? 0;
+        const distPct = config.distribution_pct ?? 0;
+        const loanPct = config.loan_payment_pct ?? 0;
+
+        const retainedAmt = netProfit * (retainedPct / 100);
+        const bufferAmt = netProfit * (bufferPct / 100);
+        const distAmt = netProfit * (distPct / 100);
+        const loanAmt = netProfit * (loanPct / 100);
+
+        let html = '';
+
+        // Helper row renderer
+        const getRowHtml = (id, label, pct, amt, isSubitem = false) => {
+          const indentStyle = isSubitem ? 'padding-left: 2.5rem; color: var(--text-muted); font-size: 0.8rem;' : 'font-weight: 600; padding-left: 1.25rem;';
+          const rowClass = isSubitem ? 'sub-allocation-row' : 'main-allocation-row';
+          const pctText = isSubitem ? `${pct.toFixed(2)}% of Dist` : `${pct.toFixed(2)}%`;
+          
+          return `
+            <tr class="${rowClass}" id="row-${id}">
+              <td style="${indentStyle}">${escapeHtml(label)}</td>
+              <td style="text-align: right; ${isSubitem ? 'color: var(--text-muted); font-size: 0.8rem;' : 'font-weight: 500;'}">${pctText}</td>
+              <td style="text-align: right; ${isSubitem ? 'color: var(--text-muted); font-size: 0.8rem;' : 'font-weight: 600;'}">${this.formatCurrency(amt)}</td>
+              <td style="text-align: center;">
+                <input type="checkbox" onchange="ProfitAllocationApp.toggleRowAllocation(this, 'row-${id}')" style="cursor: pointer; width: 16px; height: 16px;" />
+              </td>
+            </tr>
+          `;
+        };
+
+        // 1. Retained Earnings
+        html += getRowHtml('retained', 'Retained Earnings', retainedPct, retainedAmt);
+        
+        // 2. Capital Buffer
+        html += getRowHtml('buffer', 'Capital Buffer', bufferPct, bufferAmt);
+
+        // 3. Distribution (Parent Row)
+        html += getRowHtml('distribution', 'Distribution', distPct, distAmt);
+
+        // 4. Employees subitems under Distribution
+        if (distPct > 0 && config.distributions && Object.keys(config.distributions).length > 0) {
+          Object.entries(config.distributions).forEach(([empId, sharePct]) => {
+            const emp = this.employees.find(e => e.id === empId);
+            const fullName = emp ? `${emp.first_name} ${emp.last_name}` : 'Unknown Employee';
+            const empAmt = distAmt * (sharePct / 100);
+            html += getRowHtml(`emp-${empId}`, `— ${fullName}`, sharePct, empAmt, true);
+          });
+        }
+
+        // 5. Loan Payment
+        html += getRowHtml('loan', 'Loan Payment', loanPct, loanAmt);
+
+        // 6. Total row
+        html += `
+          <tr class="row-total">
+            <td style="font-weight: 700; padding-left: 1.25rem;">TOTAL</td>
+            <td style="text-align: right; font-weight: 700;">100.00%</td>
+            <td style="text-align: right; font-weight: 700;">${this.formatCurrency(netProfit)}</td>
+            <td></td>
+          </tr>
+        `;
+
+        tbody.innerHTML = html;
+      },
+
+      toggleRowAllocation(checkbox, rowId) {
+        const row = document.getElementById(rowId);
+        if (!row) return;
+        if (checkbox.checked) {
+          row.classList.add('allocated-row');
+        } else {
+          row.classList.remove('allocated-row');
+        }
+      },
+
+      formatCurrency(val) {
+        if (val === null || val === undefined) return '—';
+        const prefix = val < 0 ? '(' : '';
+        const suffix = val < 0 ? ')' : '';
+        return `${prefix}₱${Math.abs(val).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${suffix}`;
+      }
+    };
+
     document.addEventListener('DOMContentLoaded', () => {
-      window.BKAuth.checkRoleGate(
-        ['owner', 'admin', 'hr', 'finance'],
-        '../../admin.html'
-      );
+      ProfitAllocationApp.init();
     });
   </script>
 </body>
