@@ -893,17 +893,29 @@
             }
 
             // B. Add to Adjustments Table if adjustment exists
-            const hasAdjustments = adjustmentVal !== 0;
-            if (hasAdjustments) {
+            const empAdjustmentsList = this.adjustments.filter(a => a.employee_id === emp.id);
+            if (empAdjustmentsList.length > 0) {
               grandTotalAdjustments += adjustmentVal;
               adjustmentRowsCount++;
 
+              // Render parent row for the employee
               adjustmentsHtml += `
-                <tr>
-                  <td style="text-align: left; font-weight: 500;">${fullName}</td>
-                  <td style="color:${adjustmentVal < 0 ? 'var(--danger)' : 'var(--text-primary)'}; font-weight: 500;">${formatPHP(adjustmentVal)}</td>
+                <tr style="background: var(--bg-elevated, #fafafa);">
+                  <td style="text-align: left; font-weight: 700; padding-left: 0.6rem;">${fullName}</td>
+                  <td style="text-align: right; color:${adjustmentVal < 0 ? 'var(--danger)' : 'var(--text-primary)'}; font-weight: 700;">${formatPHP(adjustmentVal)}</td>
                 </tr>
               `;
+
+              // Render sub-items for each adjustment
+              empAdjustmentsList.forEach(adj => {
+                const adjVal = Number(adj.amount) || 0;
+                adjustmentsHtml += `
+                  <tr>
+                    <td style="text-align: left; padding-left: 2rem; color: var(--text-muted); font-size: 0.78rem;">${escapeHtml(adj.label || 'Adjustment')}</td>
+                    <td style="text-align: right; color:${adjVal < 0 ? 'var(--danger)' : 'var(--text-muted)'}; font-size: 0.78rem;">${formatPHP(adjVal)}</td>
+                  </tr>
+                `;
+              });
             }
           });
 
@@ -927,7 +939,7 @@
             const totalRow = `
               <tr class="total-row">
                 <td style="text-align: left;">TOTAL</td>
-                <td style="color:${grandTotalAdjustments < 0 ? 'var(--danger)' : 'var(--text-primary)'};">${formatPHP(grandTotalAdjustments)}</td>
+                <td style="text-align: right; color:${grandTotalAdjustments < 0 ? 'var(--danger)' : 'var(--text-primary)'};">${formatPHP(grandTotalAdjustments)}</td>
               </tr>
             `;
             adjustmentsTbody.innerHTML = adjustmentsHtml + totalRow;
