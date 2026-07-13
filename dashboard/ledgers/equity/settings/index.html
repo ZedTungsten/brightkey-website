@@ -3,13 +3,14 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Equity Ledgers — BrightKey Portal</title>
+  <title>Equity Settings — BrightKey Portal</title>
   <link rel="preconnect" href="https://fonts.bunny.net" />
   <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/css/style.css" />
+  <link rel="stylesheet" href="/dashboard/payout-tracker/shared.css" />
   <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg?v=2" />
   <style>
-    .int-wrap { max-width: 1200px; margin: 0 auto; padding: 2rem 2rem 5rem; }
+    .int-wrap { max-width: 800px; margin: 0 auto; padding: 2rem 2rem 5rem; }
 
     .drawer-tabs {
       display: flex;
@@ -34,20 +35,62 @@
     .tab-btn.active { color: var(--cyan-light); border-bottom-color: var(--cyan); }
     .tab-btn:hover:not(.active) { color: var(--text-secondary); }
 
-    /* ── Info state block ── */
-    .info-state {
-      display: flex;
-      flex-direction: column;
+    /* ── Modal overlay (Pattern A) ── */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.4);
+      backdrop-filter: blur(4px);
+      z-index: 1000;
       align-items: center;
       justify-content: center;
+    }
+    .modal-overlay.open {
+      display: flex;
+    }
+    .modal-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      width: 440px;
+      max-width: 90%;
+      padding: 1.75rem;
+      box-shadow: var(--shadow-lg);
+      animation: modalSlide 0.2s forwards;
+    }
+    @keyframes modalSlide {
+      from { transform: translateY(15px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+    .modal-header {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 1.25rem;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 0.75rem;
+    }
+    .modal-body {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    .input-row {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+    .input-row label {
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+    .modal-footer {
+      display: flex;
+      justify-content: flex-end;
       gap: 0.75rem;
-      padding: 6rem 2rem;
-      border: 1px dashed var(--border);
-      border-radius: var(--radius-md);
-      background: var(--bg-elevated);
-      color: var(--text-muted);
-      text-align: center;
-      margin-top: 1.5rem;
     }
   </style>
 </head>
@@ -75,25 +118,402 @@
 
       <main style="overflow-y: auto; flex: 1; min-width: 0; width: 100%;">
         <div class="int-wrap">
-          <div class="info-state">
-            <div style="font-size: 1.1rem; font-weight: 600; color: var(--text-secondary);">Settings View</div>
-            <div>This view is under development.</div>
+          <!-- Month selector -->
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem;background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-md);padding:0.75rem 1.25rem;width:100%;box-sizing:border-box;">
+            <div style="display:flex;align-items:center;gap:1rem;">
+              <button class="btn btn-outline btn-sm" id="btn-prev-month">&lt;</button>
+              <span id="month-display" style="font-size:0.88rem;font-weight:700;color:var(--text-primary);min-width:140px;text-align:center;"></span>
+              <button class="btn btn-outline btn-sm" id="btn-next-month">&gt;</button>
+            </div>
+            <button class="btn btn-cyan btn-sm" id="btn-save-settings">Save Settings</button>
+          </div>
+
+          <!-- Settings card -->
+          <div class="j-card">
+            <div class="j-card-title">Equity Allocation Settings</div>
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem;">
+              <div class="form-group">
+                <label class="form-label" for="retained-earnings">Retained Earnings (%)</label>
+                <input type="number" id="retained-earnings" class="form-input" min="0" max="100" step="0.01" value="100.00" oninput="EquitySettingsApp.validateTotal()" />
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="capital-buffer">Capital Buffer (%)</label>
+                <input type="number" id="capital-buffer" class="form-input" min="0" max="100" step="0.01" value="0.00" oninput="EquitySettingsApp.validateTotal()" />
+              </div>
+            </div>
+
+            <div style="border-top: 1px solid var(--border); padding-top: 1.5rem; margin-bottom: 1.5rem;">
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem;">
+                <span style="font-size: 0.82rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); letter-spacing: 0.05em;">Distribution Allocations</span>
+                <button class="btn btn-outline btn-sm" onclick="EquitySettingsApp.openAddEmpModal()">+ Add Employee</button>
+              </div>
+
+              <!-- List of assigned employees -->
+              <div id="distributions-list" style="display: flex; flex-direction: column; gap: 0.75rem;">
+                <!-- Rendered dynamically -->
+              </div>
+            </div>
+
+            <!-- Live Sum Validation Indicator -->
+            <div id="validation-bar" style="display: flex; align-items: center; justify-content: space-between; padding: 1rem; border-radius: var(--radius-md); border: 1px solid var(--border); font-size: 0.88rem; font-weight: 600; background: var(--bg-elevated);">
+              <span id="validation-total-text">Total Allocation: 100.00%</span>
+              <span id="validation-status-text" style="color: var(--cyan-light);">Ready to save</span>
+            </div>
           </div>
         </div>
       </main>
     </div>
   </div>
 
+  <!-- Modal: Add Distribution Employee -->
+  <div class="modal-overlay" id="add-employee-modal">
+    <div class="modal-card">
+      <div class="modal-header">Add Distribution Employee</div>
+      <div class="modal-body">
+        <div class="input-row">
+          <label for="modal-emp-select">Select Employee</label>
+          <select id="modal-emp-select" class="form-select" style="background: var(--bg-surface); color: var(--text-primary); border: 1px solid var(--border); border-radius: 4px; padding: 0.5rem; outline: none; width: 100%;"></select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline btn-sm" onclick="EquitySettingsApp.closeAddEmpModal()">Cancel</button>
+        <button class="btn btn-cyan btn-sm" onclick="EquitySettingsApp.addEmpFromModal()">Add</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast-container" aria-live="polite"></div>
+
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-  <script src="/js/auth.js" defer></script>
-  <script src="/js/sidebar.js" defer></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/sidebar.js"></script>
+  <script src="/js/main.js"></script>
 
   <script>
+    'use strict';
+
+    const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+    const getSb = () => window.BKAuth.sb;
+    
+    const toast = (msg, type = 'success') => {
+      const el = document.createElement('div');
+      el.className = `toast toast-${type}`;
+      el.textContent = msg;
+      let container = document.getElementById('toast-container');
+      if (!container) {
+        container = document.createElement('div');
+        container.id = 'toast-container';
+        document.body.appendChild(container);
+      }
+      container.appendChild(el);
+      setTimeout(() => el.remove(), 3500);
+    };
+
+    const escapeHtml = (str) => {
+      if (!str) return '';
+      return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    };
+
+    window.EquitySettingsApp = {
+      tenantId: null,
+      companyId: null,
+      selectedYear: new Date().getFullYear(),
+      selectedMonth: new Date().getMonth(),
+      distributionEmployees: [], 
+      allEquitySettings: {}, 
+      currentMonthAllocations: {
+        retained_earnings_pct: 100,
+        capital_buffer_pct: 0,
+        distributions: {} 
+      },
+
+      async init() {
+        try {
+          const authInfo = await window.BKAuth.checkRoleGate(
+            ['owner', 'admin', 'hr', 'finance'],
+            '../admin.html'
+          );
+          if (!authInfo) return;
+          this.tenantId = authInfo.tenantId;
+
+          const { data: co } = await getSb().from('companies').select('id').eq('tenant_id', this.tenantId).limit(1).maybeSingle();
+          this.companyId = co?.id || null;
+          if (!this.companyId) {
+            toast('Failed to resolve company.', 'error');
+            return;
+          }
+
+          this.updateMonthDisplay();
+          await this.loadEmployees();
+          await this.loadGlobalSettings();
+          this.loadCurrentMonthAllocations();
+          this.render();
+          this.bindEvents();
+        } catch (e) {
+          console.error(e);
+          toast('Initialization failed: ' + e.message, 'error');
+        }
+      },
+
+      async loadEmployees() {
+        try {
+          const { data, error } = await getSb()
+            .from('employees')
+            .select('id, first_name, last_name, assignment')
+            .eq('company_id', this.companyId)
+            .eq('employment_status', 'Active');
+          
+          if (error) throw error;
+          
+          this.distributionEmployees = (data || []).filter(e => {
+            const assigns = (e.assignment || '').split(',').map(s => s.trim().toLowerCase());
+            return assigns.includes('distribution');
+          });
+        } catch (e) {
+          console.error('Error loading employees:', e);
+          toast('Error loading employees: ' + e.message, 'error');
+        }
+      },
+
+      async loadGlobalSettings() {
+        try {
+          const { data, error } = await getSb()
+            .from('global_settings')
+            .select('value')
+            .eq('key', 'equity_settings')
+            .eq('company_id', this.companyId)
+            .maybeSingle();
+          
+          if (error) throw error;
+          this.allEquitySettings = data?.value || {};
+        } catch (e) {
+          console.error('Error loading settings:', e);
+          toast('Error loading settings: ' + e.message, 'error');
+        }
+      },
+
+      monthKey() {
+        return `${this.selectedYear}-${String(this.selectedMonth + 1).padStart(2, '0')}`;
+      },
+
+      loadCurrentMonthAllocations() {
+        const key = this.monthKey();
+        const mAlloc = this.allEquitySettings[key];
+        if (mAlloc) {
+          this.currentMonthAllocations = {
+            retained_earnings_pct: Number(mAlloc.retained_earnings_pct ?? 100),
+            capital_buffer_pct: Number(mAlloc.capital_buffer_pct ?? 0),
+            distributions: mAlloc.distributions || {}
+          };
+        } else {
+          this.currentMonthAllocations = {
+            retained_earnings_pct: 100,
+            capital_buffer_pct: 0,
+            distributions: {}
+          };
+        }
+      },
+
+      updateMonthDisplay() {
+        const el = document.getElementById('month-display');
+        if (el) el.textContent = `${MONTHS[this.selectedMonth]} ${this.selectedYear}`;
+      },
+
+      changeMonth(diff) {
+        let m = this.selectedMonth + diff;
+        let y = this.selectedYear;
+        if (m < 0) { m = 11; y--; }
+        if (m > 11) { m = 0; y++; }
+        this.selectedMonth = m;
+        this.selectedYear = y;
+        this.updateMonthDisplay();
+        this.loadCurrentMonthAllocations();
+        this.render();
+      },
+
+      bindEvents() {
+        document.getElementById('btn-prev-month').addEventListener('click', () => this.changeMonth(-1));
+        document.getElementById('btn-next-month').addEventListener('click', () => this.changeMonth(1));
+        document.getElementById('btn-save-settings').addEventListener('click', () => this.saveSettings());
+      },
+
+      validateTotal() {
+        const retained = parseFloat(document.getElementById('retained-earnings').value) || 0;
+        const buffer = parseFloat(document.getElementById('capital-buffer').value) || 0;
+        
+        let distSum = 0;
+        const distInputs = document.querySelectorAll('.dist-pct-input');
+        distInputs.forEach(inp => {
+          distSum += parseFloat(inp.value) || 0;
+        });
+
+        const total = retained + buffer + distSum;
+        const totalTextEl = document.getElementById('validation-total-text');
+        const statusTextEl = document.getElementById('validation-status-text');
+        const validationBarEl = document.getElementById('validation-bar');
+
+        if (totalTextEl) totalTextEl.textContent = `Total Allocation: ${total.toFixed(2)}%`;
+
+        if (Math.abs(total - 100) < 0.001) {
+          if (statusTextEl) {
+            statusTextEl.textContent = 'Ready to save';
+            statusTextEl.style.color = 'var(--cyan-light)';
+          }
+          if (validationBarEl) {
+            validationBarEl.style.borderColor = 'var(--border)';
+            validationBarEl.style.background = 'var(--bg-elevated)';
+          }
+          return true;
+        } else {
+          if (statusTextEl) {
+            statusTextEl.textContent = `Warning: Total allocation must equal 100%`;
+            statusTextEl.style.color = 'var(--danger)';
+          }
+          if (validationBarEl) {
+            validationBarEl.style.borderColor = 'var(--danger)';
+            validationBarEl.style.background = 'rgba(239, 68, 68, 0.05)';
+          }
+          return false;
+        }
+      },
+
+      render() {
+        document.getElementById('retained-earnings').value = this.currentMonthAllocations.retained_earnings_pct;
+        document.getElementById('capital-buffer').value = this.currentMonthAllocations.capital_buffer_pct;
+
+        const listContainer = document.getElementById('distributions-list');
+        if (!listContainer) return;
+
+        const distEntries = Object.entries(this.currentMonthAllocations.distributions);
+        if (distEntries.length === 0) {
+          listContainer.innerHTML = `<div style="text-align:center; padding:1.5rem; color:var(--text-muted); font-size:0.82rem; border:1px dashed var(--border); border-radius:6px;">No distribution employees assigned for this month.</div>`;
+          this.validateTotal();
+          return;
+        }
+
+        listContainer.innerHTML = distEntries.map(([empId, pct]) => {
+          const emp = this.distributionEmployees.find(e => e.id === empId);
+          const fullName = emp ? `${emp.first_name} ${emp.last_name}` : 'Unknown Employee';
+          return `
+            <div style="display:flex; align-items:center; justify-content:space-between; background:var(--bg-elevated); padding:0.6rem 1rem; border-radius:6px; border:1px solid var(--border);">
+              <span style="font-size:0.88rem; font-weight:600; color:var(--text-primary);">${escapeHtml(fullName)}</span>
+              <div style="display:flex; align-items:center; gap:0.75rem;">
+                <div style="display:flex; align-items:center; gap:0.25rem;">
+                  <input type="number" class="form-input dist-pct-input" data-emp-id="${escapeHtml(empId)}" min="0" max="100" step="0.01" value="${pct}" oninput="EquitySettingsApp.validateTotal()" style="width:90px; padding:0.35rem 0.5rem; font-size:0.85rem;" />
+                  <span style="font-size:0.85rem; color:var(--text-secondary);">%</span>
+                </div>
+                <button class="btn btn-outline btn-sm" onclick="EquitySettingsApp.removeEmployee('${escapeHtml(empId)}')" style="padding:0.25rem 0.5rem; color:var(--danger); border-color:var(--border);">&times;</button>
+              </div>
+            </div>
+          `;
+        }).join('');
+
+        this.validateTotal();
+      },
+
+      openAddEmpModal() {
+        const selectEl = document.getElementById('modal-emp-select');
+        if (!selectEl) return;
+
+        const assignedIds = Object.keys(this.currentMonthAllocations.distributions);
+        const availableEmps = this.distributionEmployees.filter(e => !assignedIds.includes(e.id));
+
+        if (availableEmps.length === 0) {
+          toast('No additional employees with "Distribution" assignment found.', 'info');
+          return;
+        }
+
+        selectEl.innerHTML = availableEmps.map(e => `
+          <option value="${escapeHtml(e.id)}">${escapeHtml(`${e.first_name} ${e.last_name}`)}</option>
+        `).join('');
+
+        document.getElementById('add-employee-modal').classList.add('open');
+      },
+
+      closeAddEmpModal() {
+        document.getElementById('add-employee-modal').classList.remove('open');
+      },
+
+      addEmpFromModal() {
+        const selectEl = document.getElementById('modal-emp-select');
+        if (!selectEl || !selectEl.value) return;
+
+        const empId = selectEl.value;
+        
+        this.syncInputsToMemory();
+
+        this.currentMonthAllocations.distributions[empId] = 0;
+        this.closeAddEmpModal();
+        this.render();
+      },
+
+      removeEmployee(empId) {
+        this.syncInputsToMemory();
+        delete this.currentMonthAllocations.distributions[empId];
+        this.render();
+      },
+
+      syncInputsToMemory() {
+        this.currentMonthAllocations.retained_earnings_pct = parseFloat(document.getElementById('retained-earnings').value) || 0;
+        this.currentMonthAllocations.capital_buffer_pct = parseFloat(document.getElementById('capital-buffer').value) || 0;
+
+        const distInputs = document.querySelectorAll('.dist-pct-input');
+        distInputs.forEach(inp => {
+          const empId = inp.dataset.empId;
+          this.currentMonthAllocations.distributions[empId] = parseFloat(inp.value) || 0;
+        });
+      },
+
+      async saveSettings() {
+        this.syncInputsToMemory();
+        
+        if (!this.validateTotal()) {
+          toast('Failed to save: Total allocation must equal 100%.', 'error');
+          return;
+        }
+
+        const key = this.monthKey();
+        this.allEquitySettings[key] = {
+          retained_earnings_pct: this.currentMonthAllocations.retained_earnings_pct,
+          capital_buffer_pct: this.currentMonthAllocations.capital_buffer_pct,
+          distributions: this.currentMonthAllocations.distributions
+        };
+
+        const btn = document.getElementById('btn-save-settings');
+        btn.disabled = true;
+        const origText = btn.textContent;
+        btn.textContent = 'Saving...';
+
+        try {
+          const { error } = await getSb()
+            .from('global_settings')
+            .upsert({
+              key: 'equity_settings',
+              company_id: this.companyId,
+              value: this.allEquitySettings
+            });
+
+          if (error) throw error;
+          toast('Settings saved successfully.', 'success');
+        } catch (e) {
+          console.error('Error saving settings:', e);
+          toast('Save failed: ' + e.message, 'error');
+        } finally {
+          btn.disabled = false;
+          btn.textContent = origText;
+        }
+      }
+    };
+
     document.addEventListener('DOMContentLoaded', () => {
-      window.BKAuth.checkRoleGate(
-        ['owner', 'admin', 'hr', 'finance'],
-        '../admin.html'
-      );
+      EquitySettingsApp.init();
     });
   </script>
 </body>
