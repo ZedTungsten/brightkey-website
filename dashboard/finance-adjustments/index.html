@@ -272,7 +272,7 @@
   <!-- Create Adjustment Modal (Pattern B) -->
   <div class="modal-overlay" id="create-modal">
     <div class="modal-card">
-      <h3 style="font-size: 1.1rem; font-weight: 700; color: var(--text-primary); margin: 0 0 1rem;">Create Supplier Cost Adjustment</h3>
+      <h3 id="modal-title" style="font-size: 1.1rem; font-weight: 700; color: var(--text-primary); margin: 0 0 1rem;">Create Supplier Cost Adjustment</h3>
       <form id="create-form" onsubmit="AdjustmentApp.handleCreateSubmit(event)">
         
         <div class="form-group" style="margin-bottom: 1rem;">
@@ -293,7 +293,7 @@
 
         <div style="display: flex; justify-content: flex-end; gap: 0.75rem;">
           <button type="button" class="btn btn-outline btn-sm" onclick="AdjustmentApp.closeCreateModal()">Cancel</button>
-          <button type="submit" class="btn btn-cyan btn-sm">Create</button>
+          <button type="submit" id="submit-btn" class="btn btn-cyan btn-sm">Create</button>
         </div>
       </form>
     </div>
@@ -327,6 +327,7 @@
       products: [],
       bookings: [],
       adjustments: [],
+      editingAdjustmentId: null,
 
       async init() {
         try {
@@ -491,7 +492,14 @@
               <td style="font-weight: 500;">${escapeHtml(adj.description)}</td>
               <td class="num-col" style="font-weight: 600;">${formattedAmt}</td>
               <td class="action-col">
-                <button onclick="AdjustmentApp.deleteAdjustment('${adj.id}')" class="btn btn-outline btn-sm" style="color: var(--danger); border-color: rgba(239, 68, 68, 0.2); padding: 0.25rem 0.5rem; font-size: 0.72rem;">Delete</button>
+                <div style="display: flex; align-items: center; justify-content: center; gap: 0.5rem;">
+                  <button onclick="AdjustmentApp.openEditModal('${adj.id}')" class="btn btn-outline btn-sm" style="color: var(--text-secondary); padding: 0.35rem; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--radius-sm);" title="Edit">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+                  </button>
+                  <button onclick="AdjustmentApp.deleteAdjustment('${adj.id}')" class="btn btn-outline btn-sm" style="color: var(--danger); border-color: rgba(239, 68, 68, 0.2); padding: 0.35rem; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--radius-sm);" title="Delete">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                  </button>
+                </div>
               </td>
             </tr>
           `;
@@ -499,6 +507,7 @@
       },
 
       openCreateModal() {
+        this.editingAdjustmentId = null;
         const modal = document.getElementById('create-modal');
         if (!modal) return;
         
@@ -506,12 +515,35 @@
         document.getElementById('create-form').reset();
         this.updateMonthLabel(); // ensures date field defaults correctly to selected month
 
+        document.getElementById('modal-title').textContent = 'Create Supplier Cost Adjustment';
+        document.getElementById('submit-btn').textContent = 'Create';
+
+        modal.style.display = 'flex';
+        modal.offsetHeight; // force reflow (Rule 12 Pattern B)
+        modal.classList.add('open');
+      },
+
+      openEditModal(id) {
+        this.editingAdjustmentId = id;
+        const adj = this.adjustments.find(a => a.id === id);
+        if (!adj) return;
+
+        document.getElementById('adj-description').value = adj.description;
+        document.getElementById('adj-amount').value = (adj.amount_cents / 100).toFixed(2);
+        document.getElementById('adj-date').value = adj.adjustment_date;
+
+        document.getElementById('modal-title').textContent = 'Edit Supplier Cost Adjustment';
+        document.getElementById('submit-btn').textContent = 'Update';
+
+        const modal = document.getElementById('create-modal');
+        if (!modal) return;
         modal.style.display = 'flex';
         modal.offsetHeight; // force reflow (Rule 12 Pattern B)
         modal.classList.add('open');
       },
 
       closeCreateModal() {
+        this.editingAdjustmentId = null;
         const modal = document.getElementById('create-modal');
         if (!modal) return;
         modal.classList.remove('open');
@@ -534,23 +566,37 @@
         const amountCents = Math.round(amountFloat * 100);
 
         try {
-          const { error } = await getSb()
-            .from('supplier_cost_adjustments')
-            .insert({
-              company_id: this.companyId,
-              description,
-              amount_cents: amountCents,
-              adjustment_date: adjustmentDate
-            });
+          if (this.editingAdjustmentId) {
+            const { error } = await getSb()
+              .from('supplier_cost_adjustments')
+              .update({
+                description,
+                amount_cents: amountCents,
+                adjustment_date: adjustmentDate
+              })
+              .eq('id', this.editingAdjustmentId);
 
-          if (error) throw error;
+            if (error) throw error;
+            Toast.show('Adjustment updated successfully.', 'success');
+          } else {
+            const { error } = await getSb()
+              .from('supplier_cost_adjustments')
+              .insert({
+                company_id: this.companyId,
+                description,
+                amount_cents: amountCents,
+                adjustment_date: adjustmentDate
+              });
 
-          Toast.show('Adjustment created successfully.', 'success');
+            if (error) throw error;
+            Toast.show('Adjustment created successfully.', 'success');
+          }
+
           this.closeCreateModal();
           await this.loadData();
         } catch (err) {
           console.error(err);
-          Toast.show('Failed to create adjustment: ' + err.message, 'error');
+          Toast.show('Failed to save adjustment: ' + err.message, 'error');
         }
       },
 
