@@ -266,17 +266,28 @@
 
       async loadEmployees() {
         try {
-          const { data, error } = await getSb()
-            .from('employees')
-            .select('id, first_name, last_name, assignment')
-            .eq('company_id', this.companyId)
-            .eq('employment_status', 'Active');
+          const [empRes, assignRes] = await Promise.all([
+            getSb()
+              .from('employees')
+              .select('id, first_name, last_name, assignment')
+              .eq('company_id', this.companyId)
+              .eq('employment_status', 'Active'),
+            getSb()
+              .from('employee_assignments')
+              .select('name, visibility')
+              .eq('company_id', this.companyId)
+          ]);
           
-          if (error) throw error;
+          if (empRes.error) throw empRes.error;
+          if (assignRes.error) throw assignRes.error;
+
+          const distAssignmentNames = (assignRes.data || [])
+            .filter(a => Array.isArray(a.visibility) && a.visibility.includes('distribution'))
+            .map(a => a.name.toLowerCase().trim());
           
-          this.distributionEmployees = (data || []).filter(e => {
-            const assigns = (e.assignment || '').split(',').map(s => s.trim().toLowerCase());
-            return assigns.includes('distribution');
+          this.distributionEmployees = (empRes.data || []).filter(e => {
+            const empAssigns = (e.assignment || '').split(',').map(s => s.trim().toLowerCase());
+            return empAssigns.some(name => distAssignmentNames.includes(name));
           });
         } catch (e) {
           console.error('Error loading employees:', e);
