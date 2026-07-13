@@ -247,7 +247,7 @@
 
           <!-- New Supplier Cost Adjustment Table -->
           <div id="supplier-adjustment-section" style="margin-top: 1.5rem; display: none;">
-            <div style="border-top: 1px dashed var(--border); padding-top: 1rem; margin-bottom: 0.75rem;">
+            <div style="margin-bottom: 0.75rem; margin-top: 1rem;">
               <h3 style="font-size: 0.82rem; font-weight: 700; color: var(--text-secondary); margin: 0;">Supplier Cost Adjustment</h3>
             </div>
             <div class="excel-container">
@@ -261,6 +261,24 @@
                 <tbody id="supplier-adjustment-table-body">
                 </tbody>
               </table>
+            </div>
+          </div>
+
+          <!-- Supplier Cost Summary Section -->
+          <div id="supplier-cost-summary-section" style="margin-top: 1.5rem; display: none; border-top: 1px solid var(--border); padding-top: 1rem;">
+            <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 0.5rem; font-size: 0.85rem; font-weight: 600;">
+              <div style="display: flex; justify-content: space-between; width: 320px; color: var(--text-secondary);">
+                <span>Supplier Cost:</span>
+                <span id="summary-base-supplier-cost">₱0.00</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; width: 320px; color: var(--text-secondary);">
+                <span>Total Adjustments:</span>
+                <span id="summary-adjustments-cost">₱0.00</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; width: 320px; font-weight: 800; font-size: 0.95rem; border-top: 2px double var(--border); padding-top: 0.5rem; margin-top: 0.25rem; color: var(--cyan-light);">
+                <span>Supplier Cost Total:</span>
+                <span id="summary-net-supplier-cost">₱0.00</span>
+              </div>
             </div>
           </div>
         </div>
@@ -625,13 +643,15 @@
             `;
           }).join('');
 
+          const baseSupplierCostCentavos = grandTotalCogsCentavos;
+
           // Append Total Row (Inventory Only)
           const totalRowHtml = `
             <tr class="total-row">
               <td colspan="2">TOTAL</td>
               <td class="num-col">${totalSold}</td>
               <td class="num-col"></td>
-              <td class="num-col">${formatPHP(grandTotalCogsCentavos)}</td>
+              <td class="num-col">${formatPHP(baseSupplierCostCentavos)}</td>
             </tr>
           `;
 
@@ -641,6 +661,7 @@
           let adjustmentsTotalCentavos = 0;
           const adjSection = document.getElementById('supplier-adjustment-section');
           const adjTbody = document.getElementById('supplier-adjustment-table-body');
+          const summarySection = document.getElementById('supplier-cost-summary-section');
 
           if (this.supplierCostAdjustments && this.supplierCostAdjustments.length > 0) {
             let adjRowsHtml = this.supplierCostAdjustments.map(adj => {
@@ -672,9 +693,17 @@
 
             if (adjTbody) adjTbody.innerHTML = adjRowsHtml + adjTotalRowHtml;
             if (adjSection) adjSection.style.display = 'block';
+
+            if (summarySection) {
+              document.getElementById('summary-base-supplier-cost').textContent = formatPHP(baseSupplierCostCentavos);
+              document.getElementById('summary-adjustments-cost').textContent = formatPHP(adjustmentsTotalCentavos);
+              document.getElementById('summary-net-supplier-cost').textContent = formatPHP(baseSupplierCostCentavos + adjustmentsTotalCentavos);
+              summarySection.style.display = 'block';
+            }
           } else {
             if (adjSection) adjSection.style.display = 'none';
             if (adjTbody) adjTbody.innerHTML = '';
+            if (summarySection) summarySection.style.display = 'none';
           }
 
           return grandTotalCogsCentavos / 100;
