@@ -244,6 +244,25 @@
               </tbody>
             </table>
           </div>
+
+          <!-- New Supplier Cost Adjustment Table -->
+          <div id="supplier-adjustment-section" style="margin-top: 1.5rem; display: none;">
+            <div style="border-top: 1px dashed var(--border); padding-top: 1rem; margin-bottom: 0.75rem;">
+              <h3 style="font-size: 0.82rem; font-weight: 700; color: var(--text-secondary); margin: 0;">Supplier Cost Adjustment</h3>
+            </div>
+            <div class="excel-container">
+              <table class="excel-table">
+                <thead>
+                  <tr>
+                    <th>Description</th>
+                    <th class="num-col" style="width: 250px;">Total Cost</th>
+                  </tr>
+                </thead>
+                <tbody id="supplier-adjustment-table-body">
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
 
         <!-- COGS Section (Installation & Commission) -->
@@ -606,29 +625,7 @@
             `;
           }).join('');
 
-          // Render Adjustments
-          (this.supplierCostAdjustments || []).forEach(adj => {
-            const amtCentavos = adj.amount_cents;
-            grandTotalCogsCentavos += amtCentavos;
-            
-            const isNegative = amtCentavos < 0;
-            const amtText = formatPHP(Math.abs(amtCentavos));
-            const formattedAmt = isNegative 
-              ? `<span style="color: var(--danger);">(${amtText})</span>` 
-              : formatPHP(amtCentavos);
-
-            rowsHtml += `
-              <tr>
-                <td>Adjustment</td>
-                <td>${escapeHtml(adj.description)}</td>
-                <td class="num-col"></td>
-                <td class="num-col"></td>
-                <td class="num-col">${formattedAmt}</td>
-              </tr>
-            `;
-          });
-
-          // Append Total Row
+          // Append Total Row (Inventory Only)
           const totalRowHtml = `
             <tr class="total-row">
               <td colspan="2">TOTAL</td>
@@ -639,6 +636,46 @@
           `;
 
           tbody.innerHTML = rowsHtml + totalRowHtml;
+
+          // Render Adjustments
+          let adjustmentsTotalCentavos = 0;
+          const adjSection = document.getElementById('supplier-adjustment-section');
+          const adjTbody = document.getElementById('supplier-adjustment-table-body');
+
+          if (this.supplierCostAdjustments && this.supplierCostAdjustments.length > 0) {
+            let adjRowsHtml = this.supplierCostAdjustments.map(adj => {
+              const amtCentavos = adj.amount_cents;
+              adjustmentsTotalCentavos += amtCentavos;
+              grandTotalCogsCentavos += amtCentavos;
+
+              const isNegative = amtCentavos < 0;
+              const amtText = formatPHP(Math.abs(amtCentavos));
+              const formattedAmt = isNegative 
+                ? `<span style="color: var(--danger);">(${amtText})</span>` 
+                : formatPHP(amtCentavos);
+
+              return `
+                <tr>
+                  <td>${escapeHtml(adj.description)}</td>
+                  <td class="num-col">${formattedAmt}</td>
+                </tr>
+              `;
+            }).join('');
+
+            // Append Adjustment Total Row
+            const adjTotalRowHtml = `
+              <tr class="total-row">
+                <td>TOTAL</td>
+                <td class="num-col">${formatPHP(adjustmentsTotalCentavos)}</td>
+              </tr>
+            `;
+
+            if (adjTbody) adjTbody.innerHTML = adjRowsHtml + adjTotalRowHtml;
+            if (adjSection) adjSection.style.display = 'block';
+          } else {
+            if (adjSection) adjSection.style.display = 'none';
+            if (adjTbody) adjTbody.innerHTML = '';
+          }
 
           return grandTotalCogsCentavos / 100;
         },
