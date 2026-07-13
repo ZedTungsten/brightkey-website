@@ -10,7 +10,7 @@
   <link rel="stylesheet" href="/dashboard/payout-tracker/shared.css" />
   <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg?v=2" />
   <style>
-    .int-wrap { max-width: 1100px; margin: 0 auto; padding: 2rem 2rem 5rem; }
+    .int-wrap { max-width: 800px; margin: 0 auto; padding: 2rem 2rem 5rem; }
 
     .drawer-tabs {
       display: flex;
@@ -34,36 +34,6 @@
     }
     .tab-btn.active { color: var(--cyan-light); border-bottom-color: var(--cyan); }
     .tab-btn:hover:not(.active) { color: var(--text-secondary); }
-
-    /* ── Version Item Styling ── */
-    .version-item {
-      padding: 0.75rem 1rem;
-      border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-      background: var(--bg-surface);
-      cursor: pointer;
-      display: flex;
-      flex-direction: column;
-      gap: 0.25rem;
-      transition: all 0.15s;
-    }
-    .version-item:hover {
-      border-color: var(--cyan-border);
-      background: var(--bg-elevated);
-    }
-    .version-item.active {
-      border-color: var(--cyan);
-      background: rgba(6, 182, 212, 0.05);
-    }
-    .version-item__date {
-      font-size: 0.85rem;
-      font-weight: 700;
-      color: var(--text-primary);
-    }
-    .version-item__meta {
-      font-size: 0.72rem;
-      color: var(--text-muted);
-    }
 
     /* ── Modal overlay (Pattern A) ── */
     .modal-overlay {
@@ -148,64 +118,44 @@
 
       <main style="overflow-y: auto; flex: 1; min-width: 0; width: 100%;">
         <div class="int-wrap">
-          <div style="display: flex; gap: 2rem; align-items: flex-start;">
+          
+          <!-- Settings card -->
+          <div class="j-card" style="margin-bottom: 0;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; border-bottom: 1px solid var(--border); padding-bottom: 0.75rem;">
+              <div class="j-card-title" style="margin: 0;">Equity Allocation Settings</div>
+              <button class="btn btn-cyan btn-sm" id="btn-save-settings" onclick="EquitySettingsApp.saveSettings()">Save Settings</button>
+            </div>
             
-            <!-- Left Panel: History Timeline -->
-            <div style="width: 280px; flex-shrink: 0; background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.25rem; box-shadow: var(--shadow-sm);">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem;">
+              <div class="form-group">
+                <label class="form-label" for="retained-earnings">Retained Earnings (%)</label>
+                <input type="number" id="retained-earnings" class="form-input" min="0" max="100" step="0.01" value="100.00" oninput="EquitySettingsApp.validateTotal()" />
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="capital-buffer">Capital Buffer (%)</label>
+                <input type="number" id="capital-buffer" class="form-input" min="0" max="100" step="0.01" value="0.00" oninput="EquitySettingsApp.validateTotal()" />
+              </div>
+            </div>
+
+            <div style="border-top: 1px solid var(--border); padding-top: 1.5rem; margin-bottom: 1.5rem;">
               <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem;">
-                <span style="font-size: 0.82rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); letter-spacing: 0.05em;">Timeline</span>
-                <button class="btn btn-outline btn-sm" onclick="EquitySettingsApp.createNewVersion()" style="padding: 0.25rem 0.5rem; font-size: 0.72rem; line-height: 1;">+ New</button>
+                <span style="font-size: 0.82rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); letter-spacing: 0.05em;">Distribution Allocations</span>
+                <button class="btn btn-outline btn-sm" onclick="EquitySettingsApp.openAddEmpModal()">+ Add Employee</button>
               </div>
-              <div id="versions-list" style="display: flex; flex-direction: column; gap: 0.5rem; max-height: 500px; overflow-y: auto; scrollbar-width: thin;">
-                <!-- Populate dynamically -->
+
+              <!-- List of assigned employees -->
+              <div id="distributions-list" style="display: flex; flex-direction: column; gap: 0.75rem;">
+                <!-- Rendered dynamically -->
               </div>
             </div>
 
-            <!-- Right Panel: Config Editor -->
-            <div class="j-card" style="flex: 1; margin-bottom: 0;" id="editor-card">
-              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; border-bottom: 1px solid var(--border); padding-bottom: 0.75rem;">
-                <div class="j-card-title" style="margin: 0;" id="editor-title">Configuration Details</div>
-                <div style="display: flex; gap: 0.5rem;">
-                  <button class="btn btn-outline btn-sm" id="btn-delete-version" onclick="EquitySettingsApp.deleteCurrentVersion()" style="color: var(--danger); border-color: var(--border);">Delete</button>
-                  <button class="btn btn-cyan btn-sm" id="btn-save-settings" onclick="EquitySettingsApp.saveSettings()">Save Version</button>
-                </div>
-              </div>
-              
-              <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem;">
-                <div class="form-group">
-                  <label class="form-label" for="effective-date">Effective Date</label>
-                  <input type="date" id="effective-date" class="form-input" onchange="EquitySettingsApp.handleEffectiveDateChange()" />
-                </div>
-                <div class="form-group">
-                  <label class="form-label" for="retained-earnings">Retained Earnings (%)</label>
-                  <input type="number" id="retained-earnings" class="form-input" min="0" max="100" step="0.01" value="100.00" oninput="EquitySettingsApp.validateTotal()" />
-                </div>
-                <div class="form-group">
-                  <label class="form-label" for="capital-buffer">Capital Buffer (%)</label>
-                  <input type="number" id="capital-buffer" class="form-input" min="0" max="100" step="0.01" value="0.00" oninput="EquitySettingsApp.validateTotal()" />
-                </div>
-              </div>
-
-              <div style="border-top: 1px solid var(--border); padding-top: 1.5rem; margin-bottom: 1.5rem;">
-                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem;">
-                  <span style="font-size: 0.82rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); letter-spacing: 0.05em;">Distribution Allocations</span>
-                  <button class="btn btn-outline btn-sm" onclick="EquitySettingsApp.openAddEmpModal()">+ Add Employee</button>
-                </div>
-
-                <!-- List of assigned employees -->
-                <div id="distributions-list" style="display: flex; flex-direction: column; gap: 0.75rem;">
-                  <!-- Rendered dynamically -->
-                </div>
-              </div>
-
-              <!-- Live Sum Validation Indicator -->
-              <div id="validation-bar" style="display: flex; align-items: center; justify-content: space-between; padding: 1rem; border-radius: var(--radius-md); border: 1px solid var(--border); font-size: 0.88rem; font-weight: 600; background: var(--bg-elevated);">
-                <span id="validation-total-text">Total Allocation: 100.00%</span>
-                <span id="validation-status-text" style="color: var(--cyan-light);">Ready to save</span>
-              </div>
+            <!-- Live Sum Validation Indicator -->
+            <div id="validation-bar" style="display: flex; align-items: center; justify-content: space-between; padding: 1rem; border-radius: var(--radius-md); border: 1px solid var(--border); font-size: 0.88rem; font-weight: 600; background: var(--bg-elevated);">
+              <span id="validation-total-text">Total Allocation: 100.00%</span>
+              <span id="validation-status-text" style="color: var(--cyan-light);">Ready to save</span>
             </div>
-
           </div>
+
         </div>
       </main>
     </div>
@@ -268,10 +218,12 @@
       tenantId: null,
       companyId: null,
       distributionEmployees: [], 
-      versions: [], // Array of configurations ordered by date descending
-      selectedIndex: 0,
-      isNewVersion: false,
-      newVersionTemp: null,
+      versions: [], 
+      activeConfig: {
+        retained_earnings_pct: 100,
+        capital_buffer_pct: 0,
+        distributions: {}
+      },
 
       async init() {
         try {
@@ -291,7 +243,6 @@
 
           await this.loadEmployees();
           await this.loadGlobalSettings();
-          this.renderTimeline();
           this.renderEditor();
         } catch (e) {
           console.error(e);
@@ -330,12 +281,11 @@
           
           if (error) throw error;
           
-          // Parse value as an array of historical configs
           const raw = data?.value;
           if (Array.isArray(raw)) {
             this.versions = raw;
           } else if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
-            // Convert old YYYY-MM based object structure to array if needed
+            // Convert old structure if any
             this.versions = Object.entries(raw).map(([key, val]) => ({
               effective_date: `${key}-01`,
               retained_earnings_pct: Number(val.retained_earnings_pct ?? 100),
@@ -346,20 +296,23 @@
             this.versions = [];
           }
 
-          // Sort descending by effective date
           this.sortVersions();
 
-          if (this.versions.length === 0) {
-            // Default first version
-            this.versions.push({
-              effective_date: new Date().toISOString().split('T')[0],
+          // Populate activeConfig from the most recent version
+          if (this.versions.length > 0) {
+            const latest = this.versions[0];
+            this.activeConfig = {
+              retained_earnings_pct: latest.retained_earnings_pct,
+              capital_buffer_pct: latest.capital_buffer_pct,
+              distributions: { ...latest.distributions }
+            };
+          } else {
+            this.activeConfig = {
               retained_earnings_pct: 100,
               capital_buffer_pct: 0,
               distributions: {}
-            });
+            };
           }
-          this.selectedIndex = 0;
-          this.isNewVersion = false;
         } catch (e) {
           console.error('Error loading settings:', e);
           toast('Error loading settings: ' + e.message, 'error');
@@ -370,100 +323,16 @@
         this.versions.sort((a, b) => new Date(b.effective_date) - new Date(a.effective_date));
       },
 
-      renderTimeline() {
-        const container = document.getElementById('versions-list');
-        if (!container) return;
-
-        if (this.versions.length === 0) {
-          container.innerHTML = `<div style="text-align:center; padding:1rem; font-size:0.75rem; color:var(--text-muted);">No versions configured.</div>`;
-          return;
-        }
-
-        container.innerHTML = this.versions.map((ver, idx) => {
-          const isActive = !this.isNewVersion && idx === this.selectedIndex;
-          const fmtDate = new Date(ver.effective_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-          const distCount = Object.keys(ver.distributions || {}).length;
-          
-          return `
-            <div class="version-item ${isActive ? 'active' : ''}" onclick="EquitySettingsApp.selectVersion(${idx})">
-              <span class="version-item__date">${escapeHtml(fmtDate)}</span>
-              <span class="version-item__meta">Retained: ${ver.retained_earnings_pct}%, Buffer: ${ver.capital_buffer_pct}%, Dist: ${distCount} emps</span>
-            </div>
-          `;
-        }).join('');
-
-        if (this.isNewVersion) {
-          const fmtDate = this.newVersionTemp.effective_date 
-            ? new Date(this.newVersionTemp.effective_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-            : 'Draft Date';
-          container.insertAdjacentHTML('afterbegin', `
-            <div class="version-item active" style="border-color:var(--cyan); background:rgba(6,182,212,0.08);">
-              <span class="version-item__date" style="color:var(--cyan-light);">${escapeHtml(fmtDate)} (Draft)</span>
-              <span class="version-item__meta">Draft New Version</span>
-            </div>
-          `);
-        }
-      },
-
-      selectVersion(idx) {
-        this.isNewVersion = false;
-        this.newVersionTemp = null;
-        this.selectedIndex = idx;
-        this.renderTimeline();
-        this.renderEditor();
-      },
-
-      createNewVersion() {
-        // Copy currently selected version as template
-        const template = this.versions[this.selectedIndex] || {
-          retained_earnings_pct: 100,
-          capital_buffer_pct: 0,
-          distributions: {}
-        };
-
-        this.newVersionTemp = {
-          effective_date: new Date().toISOString().split('T')[0],
-          retained_earnings_pct: template.retained_earnings_pct,
-          capital_buffer_pct: template.capital_buffer_pct,
-          distributions: { ...template.distributions }
-        };
-
-        this.isNewVersion = true;
-        this.renderTimeline();
-        this.renderEditor();
-      },
-
-      getCurrentConfig() {
-        return this.isNewVersion ? this.newVersionTemp : this.versions[this.selectedIndex];
-      },
-
       renderEditor() {
-        const config = this.getCurrentConfig();
-        if (!config) return;
-
-        document.getElementById('editor-title').textContent = this.isNewVersion ? 'Create New Version' : 'Configuration Details';
-        document.getElementById('effective-date').value = config.effective_date;
-        document.getElementById('retained-earnings').value = config.retained_earnings_pct;
-        document.getElementById('capital-buffer').value = config.capital_buffer_pct;
-
-        // Delete button is disabled if there is only 1 configuration and it's not a new draft
-        const btnDelete = document.getElementById('btn-delete-version');
-        if (btnDelete) {
-          if (this.isNewVersion) {
-            btnDelete.textContent = 'Cancel';
-            btnDelete.style.display = 'inline-block';
-          } else {
-            btnDelete.textContent = 'Delete';
-            btnDelete.style.display = this.versions.length > 1 ? 'inline-block' : 'none';
-          }
-        }
+        document.getElementById('retained-earnings').value = this.activeConfig.retained_earnings_pct;
+        document.getElementById('capital-buffer').value = this.activeConfig.capital_buffer_pct;
 
         const listContainer = document.getElementById('distributions-list');
         if (!listContainer) return;
 
-        const distEntries = Object.entries(config.distributions || {});
+        const distEntries = Object.entries(this.activeConfig.distributions || {});
         if (distEntries.length === 0) {
-          listContainer.innerHTML = `<div style="text-align:center; padding:1.5rem; color:var(--text-muted); font-size:0.82rem; border:1px dashed var(--border); border-radius:6px;">No distribution employees assigned for this version.</div>`;
+          listContainer.innerHTML = `<div style="text-align:center; padding:1.5rem; color:var(--text-muted); font-size:0.82rem; border:1px dashed var(--border); border-radius:6px;">No distribution employees assigned.</div>`;
           this.validateTotal();
           return;
         }
@@ -528,23 +397,11 @@
         }
       },
 
-      handleEffectiveDateChange() {
-        const dateVal = document.getElementById('effective-date').value;
-        const config = this.getCurrentConfig();
-        if (config && dateVal) {
-          config.effective_date = dateVal;
-          this.renderTimeline();
-        }
-      },
-
       openAddEmpModal() {
-        const config = this.getCurrentConfig();
-        if (!config) return;
-
         const selectEl = document.getElementById('modal-emp-select');
         if (!selectEl) return;
 
-        const assignedIds = Object.keys(config.distributions || {});
+        const assignedIds = Object.keys(this.activeConfig.distributions || {});
         const availableEmps = this.distributionEmployees.filter(e => !assignedIds.includes(e.id));
 
         if (availableEmps.length === 0) {
@@ -570,78 +427,26 @@
         const empId = selectEl.value;
         this.syncInputsToMemory();
 
-        const config = this.getCurrentConfig();
-        if (config) {
-          config.distributions[empId] = 0;
-        }
+        this.activeConfig.distributions[empId] = 0;
         this.closeAddEmpModal();
         this.renderEditor();
       },
 
       removeEmployee(empId) {
         this.syncInputsToMemory();
-        const config = this.getCurrentConfig();
-        if (config && config.distributions) {
-          delete config.distributions[empId];
-        }
+        delete this.activeConfig.distributions[empId];
         this.renderEditor();
       },
 
       syncInputsToMemory() {
-        const config = this.getCurrentConfig();
-        if (!config) return;
-
-        config.retained_earnings_pct = parseFloat(document.getElementById('retained-earnings').value) || 0;
-        config.capital_buffer_pct = parseFloat(document.getElementById('capital-buffer').value) || 0;
-        config.effective_date = document.getElementById('effective-date').value;
+        this.activeConfig.retained_earnings_pct = parseFloat(document.getElementById('retained-earnings').value) || 0;
+        this.activeConfig.capital_buffer_pct = parseFloat(document.getElementById('capital-buffer').value) || 0;
 
         const distInputs = document.querySelectorAll('.dist-pct-input');
         distInputs.forEach(inp => {
           const empId = inp.dataset.empId;
-          config.distributions[empId] = parseFloat(inp.value) || 0;
+          this.activeConfig.distributions[empId] = parseFloat(inp.value) || 0;
         });
-      },
-
-      deleteCurrentVersion() {
-        if (this.isNewVersion) {
-          // Cancel draft
-          this.isNewVersion = false;
-          this.newVersionTemp = null;
-          this.renderTimeline();
-          this.renderEditor();
-          toast('Draft cancelled.', 'info');
-          return;
-        }
-
-        if (this.versions.length <= 1) return;
-
-        const btn = document.getElementById('btn-delete-version');
-        if (!btn.dataset.confirming) {
-          btn.dataset.confirming = 'true';
-          btn.textContent = 'Confirm Delete?';
-          btn.style.backgroundColor = 'var(--danger)';
-          btn.style.color = '#fff';
-          btn.style.borderColor = 'var(--danger)';
-          this.deleteTimeout = setTimeout(() => {
-            btn.removeAttribute('data-confirming');
-            btn.textContent = 'Delete';
-            btn.style.backgroundColor = '';
-            btn.style.color = 'var(--danger)';
-            btn.style.borderColor = 'var(--border)';
-          }, 3000);
-          return;
-        }
-
-        clearTimeout(this.deleteTimeout);
-        btn.removeAttribute('data-confirming');
-        btn.textContent = 'Delete';
-        btn.style.backgroundColor = '';
-        btn.style.color = 'var(--danger)';
-        btn.style.borderColor = 'var(--border)';
-
-        this.versions.splice(this.selectedIndex, 1);
-        this.selectedIndex = 0;
-        this.saveGlobalSettingsToServer('Version deleted.');
       },
 
       async saveSettings() {
@@ -652,41 +457,26 @@
           return;
         }
 
-        const config = this.getCurrentConfig();
-        if (!config.effective_date) {
-          toast('Failed to save: Effective date is required.', 'error');
-          return;
-        }
-
-        // Check if there is already a version with this date
-        const dateMatchIdx = this.versions.findIndex(v => v.effective_date === config.effective_date);
+        const todayStr = new Date().toISOString().split('T')[0];
         
-        if (this.isNewVersion) {
-          if (dateMatchIdx !== -1) {
-            toast('A configuration version with this effective date already exists.', 'error');
-            return;
-          }
-          this.versions.push(config);
-          this.isNewVersion = false;
-          this.newVersionTemp = null;
+        // Check if there is already a version created today
+        const existingIdx = this.versions.findIndex(v => v.effective_date === todayStr);
+
+        const newVersion = {
+          effective_date: todayStr,
+          retained_earnings_pct: this.activeConfig.retained_earnings_pct,
+          capital_buffer_pct: this.activeConfig.capital_buffer_pct,
+          distributions: { ...this.activeConfig.distributions }
+        };
+
+        if (existingIdx !== -1) {
+          this.versions[existingIdx] = newVersion;
         } else {
-          // Editing existing version
-          if (dateMatchIdx !== -1 && dateMatchIdx !== this.selectedIndex) {
-            toast('Another version with this effective date already exists.', 'error');
-            return;
-          }
-          this.versions[this.selectedIndex] = config;
+          this.versions.push(newVersion);
         }
 
         this.sortVersions();
-        
-        // Relocate selectedIndex to match the saved version's new position
-        this.selectedIndex = this.versions.findIndex(v => v.effective_date === config.effective_date);
 
-        await this.saveGlobalSettingsToServer('Settings saved successfully.');
-      },
-
-      async saveGlobalSettingsToServer(successMessage) {
         const btn = document.getElementById('btn-save-settings');
         btn.disabled = true;
         const origText = btn.textContent;
@@ -702,9 +492,7 @@
             });
 
           if (error) throw error;
-          toast(successMessage, 'success');
-          this.renderTimeline();
-          this.renderEditor();
+          toast('Settings saved successfully.', 'success');
         } catch (e) {
           console.error('Error saving settings:', e);
           toast('Save failed: ' + e.message, 'error');
