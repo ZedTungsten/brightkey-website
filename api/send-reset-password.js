@@ -63,7 +63,7 @@ export default async function handler(req, res) {
     if (emp && emp.company_id) {
       const { data: integrationData } = await supabase
         .from('company_integrations')
-        .select('hr_resend_api_key, hr_resend_from_email, hr_smtp_host, hr_smtp_port, hr_smtp_user, hr_smtp_pass, resend_api_key, resend_from_email, smtp_host, smtp_port, smtp_user, smtp_pass')
+        .select('hr_sender_name, hr_resend_api_key, hr_resend_from_email, hr_smtp_host, hr_smtp_port, hr_smtp_user, hr_smtp_pass, resend_api_key, resend_from_email, smtp_host, smtp_port, smtp_user, smtp_pass')
         .eq('company_id', emp.company_id)
         .maybeSingle();
       integration = integrationData;
@@ -75,6 +75,12 @@ export default async function handler(req, res) {
     const smtpPass = integration?.hr_smtp_pass || integration?.smtp_pass;
     const smtpHost = integration?.hr_smtp_host || integration?.smtp_host || 'smtp.gmail.com';
     const smtpPort = integration?.hr_smtp_port || integration?.smtp_port || 465;
+    const senderName = integration?.hr_sender_name || 'BrightKey Solutions';
+
+    let finalFrom = activeEmailFrom;
+    if (finalFrom && !finalFrom.includes('<')) {
+      finalFrom = `"${senderName}" <${finalFrom}>`;
+    }
 
     let emailSent = false;
 
@@ -91,8 +97,13 @@ export default async function handler(req, res) {
           }
         });
 
+        let finalSmtpFrom = smtpUser;
+        if (finalSmtpFrom && !finalSmtpFrom.includes('<')) {
+          finalSmtpFrom = `"${senderName}" <${finalSmtpFrom}>`;
+        }
+
         await transporter.sendMail({
-          from: `"BrightKey Solutions" <${smtpUser}>`,
+          from: finalSmtpFrom,
           to: email.toLowerCase().trim(),
           subject: 'Reset Your BrightKey Password',
           html: `
@@ -127,7 +138,7 @@ export default async function handler(req, res) {
               'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-              from: activeEmailFrom,
+              from: finalFrom,
               to: email.toLowerCase().trim(),
               subject: 'Reset Your BrightKey Password',
               html: `

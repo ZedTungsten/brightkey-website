@@ -152,5 +152,10 @@ ALTER TABLE public.company_integrations ADD COLUMN IF NOT EXISTS general_smtp_po
 ALTER TABLE public.company_integrations ADD COLUMN IF NOT EXISTS general_smtp_user TEXT;
 ALTER TABLE public.company_integrations ADD COLUMN IF NOT EXISTS general_smtp_pass TEXT;
 
+ALTER TABLE public.company_integrations ADD COLUMN IF NOT EXISTS hr_sender_name TEXT;
+ALTER TABLE public.company_integrations ADD COLUMN IF NOT EXISTS marketing_sender_name TEXT;
+ALTER TABLE public.company_integrations ADD COLUMN IF NOT EXISTS general_sender_name TEXT;
+
+
 
 
