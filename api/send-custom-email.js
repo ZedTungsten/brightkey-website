@@ -122,7 +122,9 @@ function compileHtmlBody(blocks, settings, logo, address, eventId, recipientEmai
 
   const logoSize = settings.logoSize || 'medium';
   let logoHeight = '48px';
-  if (logoSize === 'small') logoHeight = '24px';
+  if (logoSize === 'smallest') logoHeight = '24px';
+  else if (logoSize === 'small') logoHeight = '36px';
+  else if (logoSize === 'medium') logoHeight = '48px';
   else if (logoSize === 'large') logoHeight = '72px';
 
   const logoHtml = logo

@@ -383,9 +383,9 @@ window.EventsApp = {
     // Set up company logo and address in preview
     const logoContainer = document.getElementById('mockup-logo-container');
     if (this.companyLogo) {
-      logoContainer.innerHTML = `<img src="${this.companyLogo}" alt="Logo" style="max-height: 48px; object-fit: contain;" />`;
+      logoContainer.innerHTML = `<img src="${this.companyLogo}" alt="Logo" style="max-height: 48px; object-fit: contain; display: block !important; margin: 0 auto !important;" />`;
     } else {
-      logoContainer.innerHTML = `<div style="font-size: 0.78rem; font-weight: 800; color: var(--text-muted); border: 1.5px dashed var(--border); padding: 0.4rem; display: inline-block;">Company Logo</div>`;
+      logoContainer.innerHTML = `<div style="font-size: 0.78rem; font-weight: 800; color: var(--text-muted); border: 1.5px dashed var(--border); padding: 0.4rem; display: inline-block; margin: 0 auto !important;">Company Logo</div>`;
     }
     document.getElementById('mockup-address-container').innerHTML = this.companyAddress;
 
@@ -536,14 +536,21 @@ window.EventsApp = {
     // Apply logo size and alignment (center locked)
     const logoSize = document.getElementById('style-logo-size').value;
     let logoHeight = '48px';
-    if (logoSize === 'small') logoHeight = '24px';
+    if (logoSize === 'smallest') logoHeight = '24px';
+    else if (logoSize === 'small') logoHeight = '36px';
+    else if (logoSize === 'medium') logoHeight = '48px';
     else if (logoSize === 'large') logoHeight = '72px';
 
     const logoContainer = document.getElementById('mockup-logo-container');
     logoContainer.style.textAlign = 'center';
+    logoContainer.style.display = 'flex';
+    logoContainer.style.justifyContent = 'center';
+    logoContainer.style.alignItems = 'center';
     const logoImg = logoContainer.querySelector('img');
     if (logoImg) {
       logoImg.style.maxHeight = logoHeight;
+      logoImg.style.display = 'block';
+      logoImg.style.margin = '0 auto';
     }
 
     // Footer address is center aligned regardless
