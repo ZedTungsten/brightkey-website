@@ -495,9 +495,11 @@
             return d.completed || allProductsCancelled;
           });
 
-          const isDayOff = b.product_skus === 'Day off';
+          const todayStr = `${todayYear}-${String(todayMonth + 1).padStart(2, '0')}-${String(todayDay).padStart(2, '0')}`;
+          const isDayOff = b.product_skus && b.product_skus.toLowerCase().includes('day off');
+          const isDayOffPassed = isDayOff && (b.scheduled_date <= todayStr);
 
-          const hasMedia = isDayOff || (doorsArr.length > 0 && doorsArr.every(d => {
+          const hasMedia = isDayOffPassed || (doorsArr.length > 0 && doorsArr.every(d => {
             const attachedSkus = d.products || [];
             const allProductsCancelled = attachedSkus.length > 0 && attachedSkus.every(sku => {
               const matchedProd = productsArr.find(p => p.sku === sku);
@@ -520,13 +522,14 @@
 
           const isFullyDone = ['done', 'completed', 'finished'].includes(b.status) 
             || (isDone && hasMedia)
-            || (isDeliveryOnly && isDispatched);
+            || (isDeliveryOnly && isDispatched)
+            || isDayOffPassed;
 
           const badgeHtml = isAborted
             ? `<span style="font-size:0.6rem;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Aborted</span>`
             : (isFullyDone 
                 ? `<div style="display:flex; flex-direction:column; gap:2px; align-items:flex-start;">
-                     <span class="calendar-inst-badge" style="background:#22C55E; color:#fff; border:none; font-size:0.6rem; margin-top:2px;">${isDeliveryOnly ? deliveryBadgeText : 'Done, Media Uploaded'}</span>
+                     ${isDayOff ? '' : `<span class="calendar-inst-badge" style="background:#22C55E; color:#fff; border:none; font-size:0.6rem; margin-top:2px;">${isDeliveryOnly ? deliveryBadgeText : 'Done, Media Uploaded'}</span>`}
                      ${b.installer_name ? `<span class="calendar-inst-badge" style="background:#E4E4E7; color:#71717A; font-size:0.58rem; margin-top:1px;">${escapeHtml(formatInstallerName(b.installer_name))}</span>` : ''}
                    </div>`
                 : (b.installer_name ? `<span class="calendar-inst-badge">${escapeHtml(formatInstallerName(b.installer_name))}</span>` : ''));
