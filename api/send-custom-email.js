@@ -92,11 +92,11 @@ function compileHtmlBody(blocks, settings, logo, address, eventId, recipientEmai
   }
 
   const logoHtml = logo
-    ? `<div style="text-align: center; margin-bottom: 24px;"><img src="${logo}" alt="Company Logo" style="max-height: 48px; object-fit: contain;" /></div>`
+    ? `<div style="text-align: ${align}; margin-bottom: 24px;"><img src="${logo}" alt="Company Logo" style="max-height: 48px; object-fit: contain;" /></div>`
     : '';
 
   const addressHtml = address
-    ? `<div style="text-align: center; border-top: 1px solid #e5e7eb; padding-top: 16px; margin-top: 36px; font-size: 11px; color: #9ca3af; font-family: sans-serif;">${esc(address)}</div>`
+    ? `<div style="text-align: ${align}; border-top: 1px solid #e5e7eb; padding-top: 16px; margin-top: 36px; font-size: 11px; color: #9ca3af; font-family: sans-serif; line-height: 1.4;">${address}</div>`
     : '';
 
   return `
@@ -219,12 +219,38 @@ export default async function handler(req, res) {
       });
     }
 
+    // 5. Fetch company profile config for logo & footer
+    const { data: coProfile } = await supabase
+      .from('global_settings')
+      .select('value')
+      .eq('key', 'company_profile_config')
+      .eq('company_id', companyId)
+      .maybeSingle();
+
+    let finalLogo = logo;
+    let finalAddressHtml = address;
+    if (coProfile?.value) {
+      finalLogo = coProfile.value.logoDark || coProfile.value.logoLight || logo;
+      const coName = coProfile.value.companyName || 'BrightKey Solutions';
+      const addr1 = coProfile.value.companyAddressLine1 || '';
+      const addr2 = coProfile.value.companyAddressLine2 || '';
+      const coPhone = coProfile.value.phone || '';
+      const coEmail = coProfile.value.email || '';
+
+      finalAddressHtml = `
+        <div style="font-weight: 700; margin-bottom: 2px;">${esc(coName)}</div>
+        ${addr1 ? `<div>${esc(addr1)}</div>` : ''}
+        ${addr2 ? `<div>${esc(addr2)}</div>` : ''}
+        ${(coPhone || coEmail) ? `<div style="margin-top: 2px; color: #9ca3af;">${esc(coPhone)}${coPhone && coEmail ? ' | ' : ''}${esc(coEmail)}</div>` : ''}
+      `.trim();
+    }
+
     // Combine attendeeCta into compiler settings
     const compilerSettings = { ...settings, attendeeCta };
 
     // Send email to all resolved addresses
     for (const recipient of emails) {
-      const compiledHtml = compileHtmlBody(blocks, compilerSettings, logo, address, eventId, recipient, origin);
+      const compiledHtml = compileHtmlBody(blocks, compilerSettings, finalLogo, finalAddressHtml, eventId, recipient, origin);
       
       if (isSmtp) {
         let finalSmtpFrom = smtpUser;
