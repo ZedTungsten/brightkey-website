@@ -485,6 +485,11 @@
           }
         });
 
+        const hasMissingWorkPermit = dayBookings.some(b => b.needs_work_permit && !b.work_permit_image_url && b.status !== 'cancelled');
+        const workPermitPill = hasMissingWorkPermit 
+          ? `<span style="background:#EF4444; color:#fff; font-size:0.6rem; font-weight:700; padding:1px 6px; border-radius:4px; line-height:1.2; text-transform:uppercase; letter-spacing:0.02em;">Workpermit missing</span>`
+          : '';
+
         const isToday = (currentYear === todayYear && currentMonth === todayMonth && day === todayDay);
         const cellClass = isToday ? 'calendar-cell today' : 'calendar-cell';
 
@@ -492,6 +497,7 @@
           <div class="${cellClass}" onclick="handleDayClick('${dateStr}', event)">
             <div class="calendar-cell-header">
               <span class="calendar-cell-num">${day}</span>
+              ${workPermitPill}
             </div>
             <div class="calendar-half am">
               ${amHtml}
