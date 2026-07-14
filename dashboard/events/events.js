@@ -354,7 +354,7 @@ window.EventsApp = {
         const coEmail = coProfile.value.email || '';
 
         this.companyAddress = `
-          <div style="font-weight: 700; margin-bottom: 2px;">${esc(coName)}</div>
+          <div style="font-weight: 700; font-size: 13px; margin-bottom: 2px;">${esc(coName)}</div>
           ${addr1 ? `<div>${esc(addr1)}</div>` : ''}
           ${addr2 ? `<div>${esc(addr2)}</div>` : ''}
           ${(coPhone || coEmail) ? `<div style="margin-top: 2px; color: var(--text-muted);">${esc(coPhone)}${coPhone && coEmail ? ' | ' : ''}${esc(coEmail)}</div>` : ''}
@@ -589,6 +589,7 @@ window.EventsApp = {
       } else if (b.type === 'signature') {
         el.style.marginTop = '1.5rem';
         el.style.fontStyle = 'italic';
+        el.style.textAlign = 'left';
         el.innerHTML = esc(b.value || 'Warm regards,\nHR Team').replace(/\n/g, '<br/>');
       } else if (b.type === 'bullet-list') {
         const items = (b.value || '').split('\n').filter(i => i.trim() !== '');
@@ -611,6 +612,12 @@ window.EventsApp = {
 
     // Render mockup social links above the address footer
     const socialColor = document.getElementById('style-social-color').value;
+    const socialSize = document.getElementById('style-social-size').value;
+    let iconSize = '18px';
+    let wrapperSize = '28px';
+    if (socialSize === 'small') { iconSize = '24px'; wrapperSize = '36px'; }
+    else if (socialSize === 'medium') { iconSize = '32px'; wrapperSize = '44px'; }
+
     const socialContainer = document.getElementById('mockup-social-container');
     if (socialContainer) {
       socialContainer.style.textAlign = 'center';
@@ -626,11 +633,15 @@ window.EventsApp = {
         socialContainer.innerHTML = '';
       } else {
         socialContainer.style.display = 'flex';
-        socialContainer.innerHTML = activeLinks.map(item => `
-          <a href="${esc(item.url)}" target="_blank" style="color: ${socialColor}; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; transition: opacity 0.15s;" onmouseover="this.style.opacity=0.8" onmouseout="this.style.opacity=1">
-            ${window.SocialIcons[item.platform] || ''}
-          </a>
-        `).join('');
+        socialContainer.innerHTML = activeLinks.map(item => {
+          let svgHtml = window.SocialIcons[item.platform] || '';
+          svgHtml = svgHtml.replace('<svg', `<svg style="width: ${iconSize} !important; height: ${iconSize} !important;"`);
+          return `
+            <a href="${esc(item.url)}" target="_blank" style="color: ${socialColor}; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; width: ${wrapperSize}; height: ${wrapperSize}; transition: opacity 0.15s;" onmouseover="this.style.opacity=0.8" onmouseout="this.style.opacity=1">
+              ${svgHtml}
+            </a>
+          `;
+        }).join('');
       }
     }
 
@@ -677,8 +688,8 @@ window.EventsApp = {
         if (settings.gap) document.getElementById('style-gap').value = settings.gap;
         if (settings.linkColor) document.getElementById('style-link-color').value = settings.linkColor;
         if (settings.ctaAffirm) document.getElementById('style-cta-affirm').value = settings.ctaAffirm;
-        if (settings.ctaNegative) document.getElementById('style-cta-negative').value = settings.ctaNegative;
         if (settings.socialColor) document.getElementById('style-social-color').value = settings.socialColor;
+        if (settings.socialSize) document.getElementById('style-social-size').value = settings.socialSize;
 
         // Restore check state for social links
         const activeSocials = settings.socialLinks || [];
@@ -728,6 +739,7 @@ window.EventsApp = {
       ctaAffirm: document.getElementById('style-cta-affirm').value,
       ctaNegative: document.getElementById('style-cta-negative').value,
       socialColor: document.getElementById('style-social-color').value,
+      socialSize: document.getElementById('style-social-size').value,
       socialLinks: (this.availableSocialLinks || []).filter(item => {
         const chk = document.getElementById(`social-chk-${item.platform}`);
         return chk && chk.checked;
@@ -779,6 +791,7 @@ window.EventsApp = {
       ctaAffirm: document.getElementById('style-cta-affirm').value,
       ctaNegative: document.getElementById('style-cta-negative').value,
       socialColor: document.getElementById('style-social-color').value,
+      socialSize: document.getElementById('style-social-size').value,
       socialLinks: (this.availableSocialLinks || []).filter(item => {
         const chk = document.getElementById(`social-chk-${item.platform}`);
         return chk && chk.checked;
@@ -860,6 +873,7 @@ window.EventsApp = {
       ctaAffirm: document.getElementById('style-cta-affirm').value,
       ctaNegative: document.getElementById('style-cta-negative').value,
       socialColor: document.getElementById('style-social-color').value,
+      socialSize: document.getElementById('style-social-size').value,
       socialLinks: (this.availableSocialLinks || []).filter(item => {
         const chk = document.getElementById(`social-chk-${item.platform}`);
         return chk && chk.checked;

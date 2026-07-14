@@ -34,6 +34,10 @@ function compileHtmlBody(blocks, settings, logo, address, eventId, recipientEmai
 
   const socialLinks = settings.socialLinks || [];
   const socialColor = settings.socialColor || '#52525b';
+  const socialSize = settings.socialSize || 'smallest';
+  let iconSize = '18px';
+  if (socialSize === 'small') iconSize = '24px';
+  else if (socialSize === 'medium') iconSize = '32px';
 
   const backendSocialIcons = {
     Facebook: `<svg viewBox="0 0 24 24" width="18" height="18" fill="${socialColor}" style="display:inline-block; vertical-align:middle;"><path d="M22 12c0-5.52-4.48-10-10-10S2 6.48 2 12c0 4.84 3.44 8.87 8 9.8V15H8v-3h2V9.5C10 7.57 11.57 6 13.5 6H16v3h-2c-.55 0-1 .45-1 1v2h3v3h-3v6.95c4.56-.93 8-4.96 8-9.75z"/></svg>`,
@@ -52,11 +56,15 @@ function compileHtmlBody(blocks, settings, logo, address, eventId, recipientEmai
   if (socialLinks.length > 0) {
     socialHtml = `
       <div style="text-align: center; margin-top: 24px; margin-bottom: 12px;">
-        ${socialLinks.map(item => `
-          <a href="${item.url}" target="_blank" style="text-decoration:none; margin-right:12px; display:inline-block;">
-            ${backendSocialIcons[item.platform] || ''}
-          </a>
-        `).join('')}
+        ${socialLinks.map(item => {
+          let svgHtml = backendSocialIcons[item.platform] || '';
+          svgHtml = svgHtml.replace('width="18"', `width="${iconSize}"`).replace('height="18"', `height="${iconSize}"`);
+          return `
+            <a href="${item.url}" target="_blank" style="text-decoration:none; margin-right:12px; display:inline-block;">
+              ${svgHtml}
+            </a>
+          `;
+        }).join('')}
       </div>
     `;
   }
@@ -78,7 +86,7 @@ function compileHtmlBody(blocks, settings, logo, address, eventId, recipientEmai
     } else if (b.type === 'body') {
       blocksHtml += `<p style="${blockStyle}">${esc(b.value).replace(/\n/g, '<br/>')}</p>`;
     } else if (b.type === 'signature') {
-      blocksHtml += `<p style="${blockStyle} margin-top: 28px; font-style: italic;">${esc(b.value).replace(/\n/g, '<br/>')}</p>`;
+      blocksHtml += `<p style="${blockStyle} text-align: left; margin-top: 28px; font-style: italic;">${esc(b.value).replace(/\n/g, '<br/>')}</p>`;
     } else if (b.type === 'bullet-list') {
       const items = (b.value || '').split('\n').filter(i => i.trim() !== '');
       if (items.length > 0) {
@@ -132,7 +140,7 @@ function compileHtmlBody(blocks, settings, logo, address, eventId, recipientEmai
     : '';
 
   const addressHtml = address
-    ? `<div style="text-align: center; border-top: 1px solid #e5e7eb; padding-top: 16px; margin-top: 36px; font-size: 11px; color: #9ca3af; font-family: sans-serif; line-height: 1.4;">${address}</div>`
+    ? `<div style="text-align: center; margin-top: 36px; font-size: 11px; color: #9ca3af; font-family: sans-serif; line-height: 1.4;">${address}</div>`
     : '';
 
   return `
@@ -275,7 +283,7 @@ export default async function handler(req, res) {
       const coEmail = coProfile.value.email || '';
 
       finalAddressHtml = `
-        <div style="font-weight: 700; margin-bottom: 2px;">${esc(coName)}</div>
+        <div style="font-weight: 700; font-size: 13px; margin-bottom: 2px;">${esc(coName)}</div>
         ${addr1 ? `<div>${esc(addr1)}</div>` : ''}
         ${addr2 ? `<div>${esc(addr2)}</div>` : ''}
         ${(coPhone || coEmail) ? `<div style="margin-top: 2px; color: #9ca3af;">${esc(coPhone)}${coPhone && coEmail ? ' | ' : ''}${esc(coEmail)}</div>` : ''}
