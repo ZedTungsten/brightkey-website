@@ -83,18 +83,27 @@ export default async function handler(req, res) {
     const pagePath = invite_type === 'directory' ? 'employee-directory-registration.html' : 'employee-registration';
     const inviteLink = `${origin}/${pagePath}?tenant=${encodeURIComponent(tenant_id)}&company=${encodeURIComponent(company_id)}&role=${encodeURIComponent(role || '')}&email=${encodeURIComponent(email.toLowerCase().trim())}&sig=${signature}`;
 
-    // 6. Send email via Resend
+    // 6. Fetch company-specific Resend credentials if they exist
+    const { data: integration } = await supabase
+      .from('company_integrations')
+      .select('resend_api_key, resend_from_email')
+      .eq('company_id', company_id)
+      .maybeSingle();
+
+    const activeResendApiKey = integration?.resend_api_key || RESEND_API_KEY;
+    const activeEmailFrom = integration?.resend_from_email || EMAIL_FROM;
+
     let emailSent = false;
-    if (RESEND_API_KEY) {
+    if (activeResendApiKey) {
       try {
         const mailRes = await fetch('https://api.resend.com/emails', {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${RESEND_API_KEY}`,
+            'Authorization': `Bearer ${activeResendApiKey}`,
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            from: EMAIL_FROM,
+            from: activeEmailFrom,
             to: email,
             subject: 'Invitation to Join BrightKey Solutions Workspace',
             html: `
@@ -125,7 +134,7 @@ export default async function handler(req, res) {
         console.error('Failed to dispatch invite email:', err);
       }
     } else {
-      console.warn('RESEND_API_KEY not defined. Email dispatch skipped.');
+      console.warn('Resend API key not defined. Email dispatch skipped.');
     }
 
     return res.status(200).json({ success: true, email_sent: emailSent, fallback_link: inviteLink });

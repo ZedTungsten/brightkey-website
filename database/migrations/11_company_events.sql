@@ -122,3 +122,7 @@ END $$;
 ALTER TABLE public.company_events ADD COLUMN IF NOT EXISTS is_whole_day BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE public.company_events ADD COLUMN IF NOT EXISTS time_start TEXT;
 ALTER TABLE public.company_events ADD COLUMN IF NOT EXISTS time_end TEXT;
+
+ALTER TABLE public.company_integrations ADD COLUMN IF NOT EXISTS resend_api_key TEXT;
+ALTER TABLE public.company_integrations ADD COLUMN IF NOT EXISTS resend_from_email TEXT;
+
