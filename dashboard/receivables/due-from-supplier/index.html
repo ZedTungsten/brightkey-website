@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Due from Supplier — BrightKey Finance</title>
+  <link rel="preconnect" href="https://fonts.bunny.net" />
+  <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../../css/style.css" />
+  <link rel="icon" type="image/svg+xml" href="../../assets/favicon.svg?v=2" />
+  <style>
+    .int-wrap { max-width: 1200px; margin: 0 auto; padding: 2rem 2rem 5rem; }
+
+    /* ── Tab Container Bar ── */
+    .drawer-tabs {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      overflow-x: auto;
+      background: var(--bg-surface);
+    }
+    .tab-btn {
+      display: inline-block;
+      text-decoration: none;
+      padding: 0.9rem 1.25rem;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      border: none;
+      background: none;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      white-space: nowrap;
+      transition: all 0.15s;
+    }
+    .tab-btn.active {
+      color: var(--cyan-light);
+      border-bottom-color: var(--cyan);
+    }
+    .tab-btn:hover:not(.active) {
+      color: var(--text-secondary);
+    }
+
+    /* ── Controls, Filters & Search ── */
+    .filter-panel {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 1.25rem;
+      margin-bottom: 1.5rem;
+      box-shadow: var(--shadow-sm);
+    }
+    .search-row {
+      display: grid;
+      grid-template-columns: 2fr 1fr 1fr 1fr;
+      gap: 0.75rem;
+      align-items: center;
+    }
+    @media (max-width: 900px) {
+      .search-row { grid-template-columns: 1fr; }
+    }
+
+    /* ── Excel Table ── */
+    .excel-container {
+      width: 100%;
+      border: 1px solid var(--border);
+      background: var(--bg-surface);
+      border-radius: var(--radius-md);
+      overflow-x: auto;
+      box-shadow: var(--shadow-sm);
+    }
+    .excel-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 9.5pt;
+      color: var(--text-primary);
+      font-family: var(--font-sans), Arial, sans-serif;
+    }
+    .excel-table th, .excel-table td {
+      border: 1px solid var(--border);
+      padding: 0.7rem 0.9rem;
+    }
+    .excel-table th {
+      background: var(--bg-elevated, #fafafa);
+      font-weight: 700;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      font-size: 8pt;
+      letter-spacing: 0.05em;
+      text-align: left;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      box-shadow: inset 0 -1px 0 var(--border);
+      cursor: pointer;
+      user-select: none;
+    }
+    .excel-table th:hover {
+      background: var(--border);
+    }
+    .excel-table .num-col {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+  </style>
+</head>
+<body class="bg-base text-primary">
+
+  <div class="dash-layout">
+    <!-- Sidebar -->
+    <aside class="dash-sidebar" id="dash-sidebar"></aside>
+
+    <!-- Main Content -->
+    <div class="dash-main">
+      <div class="top-bar">
+        <div class="top-bar-title" id="page-title-label">Receivables (Due from Supplier)</div>
+      </div>
+
+      <div class="drawer-tabs">
+        <a class="tab-btn" href="/dashboard/receivables/customers" data-tab="customers">Customers</a>
+        <a class="tab-btn" href="/dashboard/receivables/due-from-owner" data-tab="owner">Due from Owner</a>
+        <a class="tab-btn" href="/dashboard/receivables/due-from-staff" data-tab="staff">Due from Staff</a>
+        <a class="tab-btn active" href="/dashboard/receivables/due-from-supplier" data-tab="supplier">Due from Supplier</a>
+      </div>
+
+      <main style="overflow-y: auto; flex: 1; min-width: 0; width: 100%;">
+        <div class="int-wrap">
+          
+          <!-- Controls, Filters & Search -->
+          <div class="filter-panel">
+            <div class="search-row">
+              <div class="search-input-wrap">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                <input type="text" id="search-input" class="form-input search-input" placeholder="Search description, entry no..." oninput="ReceivablesApp.handleSearch()" />
+              </div>
+              
+              <div>
+                <input type="date" id="filter-date-start" class="form-input" placeholder="Start Date" onchange="ReceivablesApp.handleSearch()" />
+              </div>
+
+              <div>
+                <input type="date" id="filter-date-end" class="form-input" placeholder="End Date" onchange="ReceivablesApp.handleSearch()" />
+              </div>
+
+              <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+                <button onclick="ReceivablesApp.loadData()" class="btn btn-outline btn-sm" title="Refresh">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- General Journal Table -->
+          <div class="excel-container">
+            <table class="excel-table">
+              <thead>
+                <tr>
+                  <th onclick="ReceivablesApp.toggleSort('date')">Date</th>
+                  <th onclick="ReceivablesApp.toggleSort('entry_number')">Entry #</th>
+                  <th onclick="ReceivablesApp.toggleSort('account')">Account</th>
+                  <th>Description</th>
+                  <th class="num-col" onclick="ReceivablesApp.toggleSort('debit')">Debit</th>
+                  <th class="num-col" onclick="ReceivablesApp.toggleSort('credit')">Credit</th>
+                  <th class="num-col">Balance</th>
+                </tr>
+              </thead>
+              <tbody id="receivables-table-body">
+                <tr>
+                  <td colspan="7" class="text-center" style="padding: 3rem; color: var(--text-muted); font-style: italic; text-align: center;">Loading ledger transactions...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/sidebar.js"></script>
+  <script src="/js/main.js"></script>
+
+  <script>
+    'use strict';
+
+    const getSb = () => window.BKAuth.sb;
+
+    const escapeHtml = (str) => {
+      if (!str) return '';
+      return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    };
+
+    window.ReceivablesApp = {
+      tenantId: null,
+      companyId: null,
+      rawItems: [],      // Holds general_journal structures chronologically
+      filteredItems: [],
+      sortField: 'date',
+      sortAsc: true,
+
+      async init() {
+        try {
+          const authInfo = await window.BKAuth.checkRoleGate(
+            ['Owner', 'Admin', 'HR', 'Finance'],
+            '../../admin.html'
+          );
+          if (!authInfo) return;
+          this.tenantId = authInfo.tenantId;
+
+          const { data: co } = await getSb()
+            .from('companies')
+            .select('id')
+            .eq('tenant_id', this.tenantId)
+            .limit(1)
+            .maybeSingle();
+
+          this.companyId = co?.id || null;
+          if (!this.companyId) return;
+
+          // Default filters dates
+          const today = new Date();
+          const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+          document.getElementById('filter-date-start').value = firstDay.toISOString().split('T')[0];
+          document.getElementById('filter-date-end').value = today.toISOString().split('T')[0];
+
+          await this.loadData();
+        } catch (e) {
+          console.error(e);
+        }
+      },
+
+      async loadData() {
+        const tbody = document.getElementById('receivables-table-body');
+        if (tbody) {
+          tbody.innerHTML = '<tr><td colspan="7" class="text-center" style="padding: 3rem; color: var(--text-muted); font-style: italic; text-align: center;">Loading ledger transactions...</td></tr>';
+        }
+
+        try {
+          // Fetch from general_journal where account ILIKE '%due from supplier%' for current company
+          const { data: journalEntries, error: jErr } = await getSb()
+            .from('general_journal')
+            .select('*')
+            .eq('company_id', this.companyId)
+            .ilike('account', '%due from supplier%')
+            .order('date', { ascending: true })
+            .order('entry_number', { ascending: true })
+            .order('id', { ascending: true });
+
+          if (jErr) throw jErr;
+
+          // Process chronological cumulative balance
+          let runningBalance = 0;
+          this.rawItems = (journalEntries || []).map(entry => {
+            const deb = parseFloat(entry.debit) || 0;
+            const cred = parseFloat(entry.credit) || 0;
+            runningBalance += (deb - cred);
+
+            return {
+              id: entry.id,
+              date: entry.date,
+              entry_number: entry.entry_number,
+              account: entry.account || '—',
+              description_1: entry.description_1 || '',
+              description_2: entry.description_2 || '',
+              debit: deb,
+              credit: cred,
+              balance: runningBalance
+            };
+          });
+
+          this.handleSearch();
+        } catch (err) {
+          console.error(err);
+          if (tbody) {
+            tbody.innerHTML = `<tr><td colspan="7" class="text-center" style="color: var(--danger); text-align: center;">Failed to load transactions: ${err.message}</td></tr>`;
+          }
+        }
+      },
+
+      handleSearch() {
+        const query = document.getElementById('search-input').value.toLowerCase().trim();
+        const startVal = document.getElementById('filter-date-start').value;
+        const endVal = document.getElementById('filter-date-end').value;
+
+        this.filteredItems = this.rawItems.filter(item => {
+          // Text Search
+          if (query) {
+            const desc1 = item.description_1.toLowerCase();
+            const desc2 = item.description_2.toLowerCase();
+            const entryNo = String(item.entry_number);
+            const acc = item.account.toLowerCase();
+            if (!desc1.includes(query) && !desc2.includes(query) && !entryNo.includes(query) && !acc.includes(query)) {
+              return false;
+            }
+          }
+
+          // Date Range Filtering
+          if (startVal && item.date && item.date < startVal) return false;
+          if (endVal && item.date && item.date > endVal) return false;
+
+          return true;
+        });
+
+        this.sortAndRender();
+      },
+
+      toggleSort(field) {
+        if (this.sortField === field) {
+          this.sortAsc = !this.sortAsc;
+        } else {
+          this.sortField = field;
+          this.sortAsc = true;
+        }
+        this.sortAndRender();
+      },
+
+      sortAndRender() {
+        // Sort mechanism (Note: balance is running balance in original chronological order)
+        this.filteredItems.sort((a, b) => {
+          let valA = a[this.sortField];
+          let valB = b[this.sortField];
+
+          if (typeof valA === 'string') valA = valA.toLowerCase();
+          if (typeof valB === 'string') valB = valB.toLowerCase();
+
+          if (valA < valB) return this.sortAsc ? -1 : 1;
+          if (valA > valB) return this.sortAsc ? 1 : -1;
+          return 0;
+        });
+
+        this.renderTable();
+      },
+
+      renderTable() {
+        const tbody = document.getElementById('receivables-table-body');
+        if (this.filteredItems.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="7" class="text-center" style="padding: 3rem; color: var(--text-muted); font-style: italic; text-align: center;">No ledger transactions found.</td></tr>';
+          return;
+        }
+
+        let totalDebit = 0;
+        let totalCredit = 0;
+
+        let rowsHtml = this.filteredItems.map(item => {
+          totalDebit += item.debit;
+          totalCredit += item.credit;
+
+          const dateStr = item.date ? new Date(item.date).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '—';
+          const descStr = [item.description_1, item.description_2].filter(Boolean).join(' | ');
+
+          return `
+            <tr>
+              <td>${dateStr}</td>
+              <td style="font-family: var(--font-mono); font-weight: 600;">${item.entry_number}</td>
+              <td style="font-weight: 500;">${escapeHtml(item.account)}</td>
+              <td>${escapeHtml(descStr || '—')}</td>
+              <td class="num-col">${this.formatCurrency(item.debit)}</td>
+              <td class="num-col">${this.formatCurrency(item.credit)}</td>
+              <td class="num-col" style="font-weight: 700; color: var(--cyan-light);">${this.formatCurrency(item.balance)}</td>
+            </tr>
+          `;
+        }).join('');
+
+        // Summary row
+        const summaryRowHtml = `
+          <tr style="font-weight: 800; background: var(--bg-elevated); border-top: 2px solid var(--border);">
+            <td colspan="4">TOTAL</td>
+            <td class="num-col">${this.formatCurrency(totalDebit)}</td>
+            <td class="num-col">${this.formatCurrency(totalCredit)}</td>
+            <td class="num-col" style="color: var(--cyan-light);">${this.formatCurrency(totalDebit - totalCredit)}</td>
+          </tr>
+        `;
+
+        tbody.innerHTML = rowsHtml + summaryRowHtml;
+      },
+
+      formatCurrency(val) {
+        if (val === null || val === undefined) return '—';
+        const prefix = val < 0 ? '(' : '';
+        const suffix = val < 0 ? ')' : '';
+        return `${prefix}₱${Math.abs(val).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${suffix}`;
+      }
+    };
+
+    document.addEventListener('DOMContentLoaded', () => {
+      ReceivablesApp.init();
+    });
+  </script>
+</body>
+</html>
