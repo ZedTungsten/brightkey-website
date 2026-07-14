@@ -52,6 +52,7 @@
     let currentTenantId;
     let currentCompanyId;
     let dbBookings = [];
+    let dbTransactionsMap = new Map();
     let dbEmployees = [];
     let dbProducts = [];
     let bookingMediaRequirements = [];
@@ -238,6 +239,31 @@
         }
 
         dbBookings = data || [];
+
+        // Fetch inventory_transactions statuses in batch for the loaded bookings
+        dbTransactionsMap.clear();
+        const orderNos = dbBookings.map(b => b.order_no).filter(Boolean);
+        if (orderNos.length > 0) {
+          try {
+            const { data: txsData, error: txsErr } = await sb
+              .from('inventory_transactions')
+              .select('reference_id, status')
+              .in('reference_id', orderNos);
+            if (!txsErr && txsData) {
+              txsData.forEach(tx => {
+                if (tx.reference_id) {
+                  if (!dbTransactionsMap.has(tx.reference_id)) {
+                    dbTransactionsMap.set(tx.reference_id, []);
+                  }
+                  dbTransactionsMap.get(tx.reference_id).push(tx.status);
+                }
+              });
+            }
+          } catch (e) {
+            console.warn('Failed to batch load inventory transactions:', e);
+          }
+        }
+
         applyFilterAndRender();
       } catch (err) {
         console.error('Failed to load bookings:', err);
@@ -480,13 +506,25 @@
             return (d.media_urls && d.media_urls.length > 0) || allProductsCancelled;
           }));
 
-          const isFullyDone = ['done', 'completed', 'finished'].includes(b.status) || (isDone && hasMedia);
+          const noInstallers = !b.installer_id && (!b.installers || b.installers.length === 0);
+          const noDoorsAssigned = doorsArr.length === 0 || doorsArr.every(d => {
+            return (!d.products || d.products.length === 0 || d.products.every(pSku => pSku === 'N/A' || pSku === '')) &&
+                   (!d.installers || d.installers.length === 0) &&
+                   (d.swing === 'N/A' || !d.swing || d.swing === '');
+          });
+          const isDeliveryOnly = noInstallers && noDoorsAssigned;
+          const txStatuses = dbTransactionsMap.get(b.order_no) || [];
+          const isDispatched = txStatuses.includes('dispatched');
+
+          const isFullyDone = ['done', 'completed', 'finished'].includes(b.status) 
+            || (isDone && hasMedia)
+            || (isDeliveryOnly && isDispatched);
 
           const badgeHtml = isAborted
             ? `<span style="font-size:0.6rem;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Aborted</span>`
             : (isFullyDone 
                 ? `<div style="display:flex; flex-direction:column; gap:2px; align-items:flex-start;">
-                     <span class="calendar-inst-badge" style="background:#22C55E; color:#fff; border:none; font-size:0.6rem; margin-top:2px;">Done, Media Uploaded</span>
+                     <span class="calendar-inst-badge" style="background:#22C55E; color:#fff; border:none; font-size:0.6rem; margin-top:2px;">${isDeliveryOnly ? 'Dispatched' : 'Done, Media Uploaded'}</span>
                      ${b.installer_name ? `<span class="calendar-inst-badge" style="background:#E4E4E7; color:#71717A; font-size:0.58rem; margin-top:1px;">${escapeHtml(formatInstallerName(b.installer_name))}</span>` : ''}
                    </div>`
                 : (b.installer_name ? `<span class="calendar-inst-badge">${escapeHtml(formatInstallerName(b.installer_name))}</span>` : ''));
