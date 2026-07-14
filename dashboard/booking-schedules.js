@@ -451,9 +451,35 @@
               doorsArr = b.doors;
             }
           }
-          const isDone = doorsArr.length > 0 && doorsArr.every(d => d.completed);
+          let productsArr = [];
+          if (b.products) {
+            if (typeof b.products === 'string') {
+              try { productsArr = JSON.parse(b.products); } catch(_) {}
+            } else if (Array.isArray(b.products)) {
+              productsArr = b.products;
+            }
+          }
+
+          const isDone = doorsArr.length > 0 && doorsArr.every(d => {
+            const attachedSkus = d.products || [];
+            const allProductsCancelled = attachedSkus.length > 0 && attachedSkus.every(sku => {
+              const matchedProd = productsArr.find(p => p.sku === sku);
+              return matchedProd ? !!matchedProd.cancelled : false;
+            });
+            return d.completed || allProductsCancelled;
+          });
+
           const isDayOff = b.product_skus === 'Day off';
-          const hasMedia = isDayOff || (doorsArr.length > 0 && doorsArr.every(d => d.media_urls && d.media_urls.length > 0));
+
+          const hasMedia = isDayOff || (doorsArr.length > 0 && doorsArr.every(d => {
+            const attachedSkus = d.products || [];
+            const allProductsCancelled = attachedSkus.length > 0 && attachedSkus.every(sku => {
+              const matchedProd = productsArr.find(p => p.sku === sku);
+              return matchedProd ? !!matchedProd.cancelled : false;
+            });
+            return (d.media_urls && d.media_urls.length > 0) || allProductsCancelled;
+          }));
+
           const isFullyDone = ['done', 'completed', 'finished'].includes(b.status) || (isDone && hasMedia);
 
           const badgeHtml = isAborted
