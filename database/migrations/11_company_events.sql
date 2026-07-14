@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS public.company_events (
   visibility_level INTEGER NOT NULL DEFAULT 1 CHECK (visibility_level BETWEEN 1 AND 10),
 
   is_date_range    BOOLEAN NOT NULL DEFAULT FALSE,
+  is_whole_day     BOOLEAN NOT NULL DEFAULT FALSE,
   date_from        DATE NOT NULL,
   date_to          DATE,          -- NULL when is_date_range = FALSE
 
