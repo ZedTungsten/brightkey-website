@@ -136,7 +136,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
-  const { companyId, eventId, subject, preheader, attendeeCta, blocks, settings, logo, address } = req.body;
+  const { companyId, eventId, subject, preheader, attendeeCta, blocks, settings, logo, address, testRecipient } = req.body;
 
   if (!companyId || !eventId || !subject || !blocks) {
     return res.status(400).json({ error: 'Missing required parameters.' });
@@ -176,17 +176,23 @@ export default async function handler(req, res) {
     const smtpPort = integration?.hr_smtp_port || integration?.smtp_port || 465;
     const senderName = integration?.hr_sender_name || 'BrightKey Solutions';
 
-    // 3. Resolve all employee emails from tenant_members
-    const { data: employees, error: empErr } = await supabase
-      .from('tenant_members')
-      .select('user_email')
-      .eq('tenant_id', tenantId);
+    // 3. Resolve recipient emails
+    let emails = [];
+    if (testRecipient) {
+      emails = [testRecipient];
+    } else {
+      const { data: employees, error: empErr } = await supabase
+        .from('tenant_members')
+        .select('user_email')
+        .eq('tenant_id', tenantId);
 
-    if (empErr) throw empErr;
+      if (empErr) throw empErr;
 
-    const emails = [...new Set(employees.map(e => e.user_email).filter(Boolean))];
+      emails = [...new Set(employees.map(e => e.user_email).filter(Boolean))];
+    }
+
     if (emails.length === 0) {
-      return res.status(400).json({ error: 'No employee profiles resolved for this tenant.' });
+      return res.status(400).json({ error: 'No recipient email addresses resolved.' });
     }
 
     // Determine request origin for link URLs
