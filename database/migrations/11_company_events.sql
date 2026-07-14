@@ -126,3 +126,9 @@ ALTER TABLE public.company_events ADD COLUMN IF NOT EXISTS time_end TEXT;
 ALTER TABLE public.company_integrations ADD COLUMN IF NOT EXISTS resend_api_key TEXT;
 ALTER TABLE public.company_integrations ADD COLUMN IF NOT EXISTS resend_from_email TEXT;
 
+ALTER TABLE public.company_integrations ADD COLUMN IF NOT EXISTS smtp_host TEXT;
+ALTER TABLE public.company_integrations ADD COLUMN IF NOT EXISTS smtp_port INTEGER;
+ALTER TABLE public.company_integrations ADD COLUMN IF NOT EXISTS smtp_user TEXT;
+ALTER TABLE public.company_integrations ADD COLUMN IF NOT EXISTS smtp_pass TEXT;
+
+

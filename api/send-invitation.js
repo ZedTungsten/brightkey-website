@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { createHash } from 'crypto';
+import nodemailer from 'nodemailer';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -83,58 +84,100 @@ export default async function handler(req, res) {
     const pagePath = invite_type === 'directory' ? 'employee-directory-registration.html' : 'employee-registration';
     const inviteLink = `${origin}/${pagePath}?tenant=${encodeURIComponent(tenant_id)}&company=${encodeURIComponent(company_id)}&role=${encodeURIComponent(role || '')}&email=${encodeURIComponent(email.toLowerCase().trim())}&sig=${signature}`;
 
-    // 6. Fetch company-specific Resend credentials if they exist
+    // 6. Fetch company-specific Resend / SMTP credentials if they exist
     const { data: integration } = await supabase
       .from('company_integrations')
-      .select('resend_api_key, resend_from_email')
+      .select('resend_api_key, resend_from_email, smtp_host, smtp_port, smtp_user, smtp_pass')
       .eq('company_id', company_id)
       .maybeSingle();
 
-    const activeResendApiKey = integration?.resend_api_key || RESEND_API_KEY;
-    const activeEmailFrom = integration?.resend_from_email || EMAIL_FROM;
-
     let emailSent = false;
-    if (activeResendApiKey) {
+
+    if (integration?.smtp_user && integration?.smtp_pass) {
+      // Send via SMTP (Gmail)
       try {
-        const mailRes = await fetch('https://api.resend.com/emails', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${activeResendApiKey}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            from: activeEmailFrom,
-            to: email,
-            subject: 'Invitation to Join BrightKey Solutions Workspace',
-            html: `
-              <div style="font-family: sans-serif; padding: 24px; color: #374151; max-width: 600px; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 8px; background-color: #ffffff;">
-                <h2 style="color: #0891b2; font-weight: bold; margin-bottom: 20px; text-align: center;">Join BrightKey Solutions</h2>
-                <p>Hello ${full_name},</p>
-                <p>You have been invited to join the BrightKey Solutions workspace for your organization${role ? ` as a <strong>${role.replace('_', ' ')}</strong>` : ''}. Please note that this secure invitation link will expire in 3 days (72 hours).</p>
-                <p style="margin-top: 24px; text-align: center;">
-                  <a href="${inviteLink}" style="background-color: #06b6d4; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">
-                    Accept Invitation & Set Up Account
-                  </a>
-                </p>
-                <p style="font-size: 13px; color: #9ca3af; margin-top: 32px; border-top: 1px solid #e5e7eb; padding-top: 16px;">
-                  If you didn't expect this invitation, please ignore this email.
-                </p>
-              </div>
-            `
-          })
+        const transporter = nodemailer.createTransport({
+          host: integration.smtp_host || 'smtp.gmail.com',
+          port: parseInt(integration.smtp_port) || 465,
+          secure: (parseInt(integration.smtp_port) || 465) === 465,
+          auth: {
+            user: integration.smtp_user,
+            pass: integration.smtp_pass
+          }
         });
 
-        if (mailRes.ok) {
-          emailSent = true;
-        } else {
-          const mailErr = await mailRes.json();
-          console.error('Resend API error:', mailErr);
-        }
+        await transporter.sendMail({
+          from: `"BrightKey Solutions" <${integration.smtp_user}>`,
+          to: email,
+          subject: 'Invitation to Join BrightKey Solutions Workspace',
+          html: `
+            <div style="font-family: sans-serif; padding: 24px; color: #374151; max-width: 600px; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 8px; background-color: #ffffff;">
+              <h2 style="color: #0891b2; font-weight: bold; margin-bottom: 20px; text-align: center;">Join BrightKey Solutions</h2>
+              <p>Hello ${full_name},</p>
+              <p>You have been invited to join the BrightKey Solutions workspace for your organization${role ? ` as a <strong>${role.replace('_', ' ')}</strong>` : ''}. Please note that this secure invitation link will expire in 3 days (72 hours).</p>
+              <p style="margin-top: 24px; text-align: center;">
+                <a href="${inviteLink}" style="background-color: #06b6d4; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">
+                  Accept Invitation & Set Up Account
+                </a>
+              </p>
+              <p style="font-size: 13px; color: #9ca3af; margin-top: 32px; border-top: 1px solid #e5e7eb; padding-top: 16px;">
+                If you didn't expect this invitation, please ignore this email.
+              </p>
+            </div>
+          `
+        });
+
+        emailSent = true;
       } catch (err) {
-        console.error('Failed to dispatch invite email:', err);
+        console.error('Failed to dispatch invite email via SMTP:', err);
       }
     } else {
-      console.warn('Resend API key not defined. Email dispatch skipped.');
+      // Fallback to Resend (either tenant's own or system-wide)
+      const activeResendApiKey = integration?.resend_api_key || RESEND_API_KEY;
+      const activeEmailFrom = integration?.resend_from_email || EMAIL_FROM;
+
+      if (activeResendApiKey) {
+        try {
+          const mailRes = await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${activeResendApiKey}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              from: activeEmailFrom,
+              to: email,
+              subject: 'Invitation to Join BrightKey Solutions Workspace',
+              html: `
+                <div style="font-family: sans-serif; padding: 24px; color: #374151; max-width: 600px; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 8px; background-color: #ffffff;">
+                  <h2 style="color: #0891b2; font-weight: bold; margin-bottom: 20px; text-align: center;">Join BrightKey Solutions</h2>
+                  <p>Hello ${full_name},</p>
+                  <p>You have been invited to join the BrightKey Solutions workspace for your organization${role ? ` as a <strong>${role.replace('_', ' ')}</strong>` : ''}. Please note that this secure invitation link will expire in 3 days (72 hours).</p>
+                  <p style="margin-top: 24px; text-align: center;">
+                    <a href="${inviteLink}" style="background-color: #06b6d4; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">
+                      Accept Invitation & Set Up Account
+                    </a>
+                  </p>
+                  <p style="font-size: 13px; color: #9ca3af; margin-top: 32px; border-top: 1px solid #e5e7eb; padding-top: 16px;">
+                    If you didn't expect this invitation, please ignore this email.
+                  </p>
+                </div>
+              `
+            })
+          });
+
+          if (mailRes.ok) {
+            emailSent = true;
+          } else {
+            const mailErr = await mailRes.json();
+            console.error('Resend API error:', mailErr);
+          }
+        } catch (err) {
+          console.error('Failed to dispatch invite email via Resend:', err);
+        }
+      } else {
+        console.warn('Resend API key not defined. Email dispatch skipped.');
+      }
     }
 
     return res.status(200).json({ success: true, email_sent: emailSent, fallback_link: inviteLink });
