@@ -633,6 +633,7 @@
       if (abortBtn) abortBtn.style.display = isAborted ? 'none' : '';
       if (reschedBtn) reschedBtn.disabled = isAborted;
 
+      document.getElementById('det-orderno').innerText = selectedBooking.order_no || 'N/A';
       document.getElementById('det-date').innerText = selectedBooking.scheduled_date ? formatDateFriendly(selectedBooking.scheduled_date) : 'Unscheduled';
       document.getElementById('det-time').innerText = selectedBooking.scheduled_time || 'AM Slot';
       document.getElementById('det-name').innerText = selectedBooking.customer_name || 'N/A';
