@@ -630,12 +630,6 @@
           }
 
           // Parse shifts
-          // Default shift is 09:00 AM to 06:00 PM
-          let shiftStartHour = 9;
-          let shiftStartMin = 0;
-          let shiftEndHour = 18;
-          let shiftEndMin = 0;
-
           const parseTimeStr = (str) => {
             if (!str) return null;
             const match = str.match(/(\d+):(\d+)\s*(AM|PM)/i);
@@ -650,38 +644,98 @@
             return null;
           };
 
+          let shift1Start = { hour: 9, minute: 0 };
+          let shift1End = { hour: 18, minute: 0 };
+          let shift2Start = null;
+          let shift2End = null;
+
           if (this.employee) {
             if (this.employee.shift_time_1) {
               const parts = this.employee.shift_time_1.split('-');
               if (parts.length === 2) {
                 const start = parseTimeStr(parts[0]);
                 const end = parseTimeStr(parts[1]);
-                if (start) {
-                  shiftStartHour = start.hour;
-                  shiftStartMin = start.minute;
-                }
-                if (end) {
-                  shiftEndHour = end.hour;
-                  shiftEndMin = end.minute;
-                }
+                if (start) shift1Start = start;
+                if (end) shift1End = end;
               } else {
                 const start = parseTimeStr(this.employee.shift_time_1);
-                if (start) {
-                  shiftStartHour = start.hour;
-                  shiftStartMin = start.minute;
-                }
+                if (start) shift1Start = start;
               }
             }
             if (this.employee.shift_time_2) {
               const parts = this.employee.shift_time_2.split('-');
-              const target = parts.length === 2 ? parts[1] : this.employee.shift_time_2;
-              const end = parseTimeStr(target);
-              if (end) {
-                shiftEndHour = end.hour;
-                shiftEndMin = end.minute;
+              if (parts.length === 2) {
+                const start = parseTimeStr(parts[0]);
+                const end = parseTimeStr(parts[1]);
+                if (start) shift2Start = start;
+                if (end) shift2End = end;
+              } else {
+                const start = parseTimeStr(this.employee.shift_time_2);
+                if (start) shift2Start = start;
               }
             }
           }
+
+          const getLateRemark = (checkInTime, shiftStart) => {
+            if (!checkInTime || !shiftStart) return '';
+            const targetStart = new Date(checkInTime);
+            targetStart.setHours(shiftStart.hour, shiftStart.minute, 0, 0);
+
+            if (checkInTime > targetStart) {
+              const diffMs = checkInTime - targetStart;
+              const diffMins = Math.floor(diffMs / 60000);
+              if (diffMins > 0) {
+                const hrs = Math.floor(diffMins / 60);
+                const mins = diffMins % 60;
+                return (hrs > 0 ? (mins > 0 ? `${hrs} hr ${mins} min` : `${hrs} hr`) : `${mins} min`) + ' late';
+              }
+            } else if (checkInTime < targetStart) {
+              const diffMs = targetStart - checkInTime;
+              const diffMins = Math.floor(diffMs / 60000);
+              if (diffMins > 0) {
+                const hrs = Math.floor(diffMins / 60);
+                const mins = diffMins % 60;
+                return (hrs > 0 ? (mins > 0 ? `${hrs} hr ${mins} min` : `${hrs} hr`) : `${mins} min`) + ' early';
+              }
+            }
+            return '';
+          };
+
+          const getEarlyOutRemark = (checkOutTime, shiftEnd) => {
+            if (!checkOutTime || !shiftEnd) return '';
+            const targetEnd = new Date(checkOutTime);
+            targetEnd.setHours(shiftEnd.hour, shiftEnd.minute, 0, 0);
+
+            if (checkOutTime < targetEnd) {
+              const diffMs = targetEnd - checkOutTime;
+              const diffMins = Math.floor(diffMs / 60000);
+              if (diffMins > 0) {
+                const hrs = Math.floor(diffMins / 60);
+                const mins = diffMins % 60;
+                return (hrs > 0 ? (mins > 0 ? `${hrs} hr ${mins} min` : `${hrs} hr`) : `${mins} min`) + ' early';
+              }
+            } else if (checkOutTime > targetEnd) {
+              const diffMs = checkOutTime - targetEnd;
+              const diffMins = Math.floor(diffMs / 60000);
+              if (diffMins > 0) {
+                const hrs = Math.floor(diffMins / 60);
+                const mins = diffMins % 60;
+                return (hrs > 0 ? (mins > 0 ? `${hrs} hr ${mins} min` : `${hrs} hr`) : `${mins} min`) + ' late';
+              }
+            }
+            return '';
+          };
+
+          const formatRemarkHtml = (remark, type) => {
+            if (!remark) return '';
+            let color = 'var(--text-secondary)';
+            if (type === 'in') {
+              color = remark.includes('late') ? 'var(--warning)' : (remark.includes('early') ? 'var(--cyan)' : 'var(--text-secondary)');
+            } else {
+              color = remark.includes('early') ? 'var(--danger)' : (remark.includes('late') ? 'var(--cyan)' : 'var(--text-secondary)');
+            }
+            return `<span style="font-size: 0.72rem; margin-top: 0.25rem; font-weight: 600; display: block; color: ${color};">${remark}</span>`;
+          };
 
           // ── Render shift badge ──
           const shiftBadgeWrap = document.getElementById('shift-badge-wrap');
@@ -719,7 +773,7 @@
                 }
               }
 
-              const timeStr = `${fmtH(shiftStartHour, shiftStartMin)} – ${fmtH(shiftEndHour, shiftEndMin)}`;
+              const timeStr = `${fmtH(shift1Start.hour, shift1Start.minute)} – ${fmtH(shift1End.hour, shift1End.minute)}`;
               shiftBadgeInner.textContent = daysStr ? `${daysStr}  ${timeStr}` : timeStr;
               shiftBadgeWrap.style.display = 'flex';
             } else {
@@ -746,98 +800,141 @@
             const dateStr = currentDateObj.toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' });
             const dayLogs = dayGroups[dateStr] || [];
 
+            // Sort logs of the day chronologically
+            const sortedLogs = dayLogs.slice().sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+            const sessions = [];
+            let currentSession = null;
 
-
-            let timeInStr = '—';
-            let timeOutStr = '—';
-            let lateStr = '—';
-            let earlyOutStr = '—';
-
-            // Find first available log of the day
-            const availableLogs = dayLogs.filter(l => l.status === 'available');
-            if (availableLogs.length > 0) {
-              const checkInTime = new Date(availableLogs[0].created_at);
-              timeInStr = checkInTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-              
-              // Calculate Late
-              const shiftStart = new Date(checkInTime);
-              shiftStart.setHours(shiftStartHour, shiftStartMin, 0, 0);
-              if (checkInTime > shiftStart) {
-                const diffMs = checkInTime - shiftStart;
-                const diffMins = Math.floor(diffMs / 60000);
-                if (diffMins > 0) {
-                  const hrs = Math.floor(diffMins / 60);
-                  const mins = diffMins % 60;
-                  lateStr = (hrs > 0 ? (mins > 0 ? `${hrs} hr ${mins} min` : `${hrs} hr`) : `${mins} min`) + ' late';
+            sortedLogs.forEach(log => {
+              if (log.status === 'available') {
+                if (currentSession && !currentSession.outLog) {
+                  currentSession = { inLog: log, outLog: null };
+                  sessions.push(currentSession);
+                } else {
+                  currentSession = { inLog: log, outLog: null };
+                  sessions.push(currentSession);
                 }
-              } else if (checkInTime < shiftStart) {
-                const diffMs = shiftStart - checkInTime;
-                const diffMins = Math.floor(diffMs / 60000);
-                if (diffMins > 0) {
-                  const hrs = Math.floor(diffMins / 60);
-                  const mins = diffMins % 60;
-                  lateStr = (hrs > 0 ? (mins > 0 ? `${hrs} hr ${mins} min` : `${hrs} hr`) : `${mins} min`) + ' early';
+              } else if (log.status === 'offline') {
+                if (currentSession && !currentSession.outLog) {
+                  currentSession.outLog = log;
+                } else {
+                  currentSession = { inLog: null, outLog: log };
+                  sessions.push(currentSession);
+                }
+              }
+            });
+
+            // Shift 1
+            const s1 = sessions[0] || null;
+            let s1InText = '—';
+            let s1InRemark = '';
+            
+            let s1OutText = '—';
+            let s1OutRemark = '';
+
+            if (s1) {
+              if (s1.inLog) {
+                const t = new Date(s1.inLog.created_at);
+                s1InText = t.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+                s1InRemark = getLateRemark(t, shift1Start);
+              }
+              if (s1.outLog) {
+                const t = new Date(s1.outLog.created_at);
+                s1OutText = t.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+                s1OutRemark = getEarlyOutRemark(t, shift1End);
+              } else if (s1.inLog) {
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                if (currentDateObj < today) {
+                  s1OutText = '<span style="color: var(--danger, #ef4444); font-weight: 600;">Forced Time-out</span>';
                 }
               }
             }
 
-            // Find last offline log of the day
-            const offlineLogs = dayLogs.filter(l => l.status === 'offline');
-            if (offlineLogs.length > 0) {
-              const checkOutTime = new Date(offlineLogs[offlineLogs.length - 1].created_at);
-              timeOutStr = checkOutTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+            // Shift 2
+            const s2 = sessions[1] || null;
+            let s2InText = '—';
+            let s2InRemark = '';
+            
+            let s2OutText = '—';
+            let s2OutRemark = '';
 
-              // Calculate Early Out
-              const shiftEnd = new Date(checkOutTime);
-              shiftEnd.setHours(shiftEndHour, shiftEndMin, 0, 0);
-              if (checkOutTime < shiftEnd) {
-                const diffMs = shiftEnd - checkOutTime;
-                const diffMins = Math.floor(diffMs / 60000);
-                if (diffMins > 0) {
-                  const hrs = Math.floor(diffMins / 60);
-                  const mins = diffMins % 60;
-                  earlyOutStr = (hrs > 0 ? (mins > 0 ? `${hrs} hr ${mins} min` : `${hrs} hr`) : `${mins} min`) + ' early';
-                }
-              } else if (checkOutTime > shiftEnd) {
-                const diffMs = checkOutTime - shiftEnd;
-                const diffMins = Math.floor(diffMs / 60000);
-                if (diffMins > 0) {
-                  const hrs = Math.floor(diffMins / 60);
-                  const mins = diffMins % 60;
-                  earlyOutStr = (hrs > 0 ? (mins > 0 ? `${hrs} hr ${mins} min` : `${hrs} hr`) : `${mins} min`) + ' late';
-                }
+            if (s2) {
+              if (s2.inLog) {
+                const t = new Date(s2.inLog.created_at);
+                s2InText = t.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+                s2InRemark = getLateRemark(t, shift2Start || shift1Start);
               }
-            } else if (availableLogs.length > 0) {
-              const today = new Date();
-              today.setHours(0, 0, 0, 0);
-              if (currentDateObj < today) {
-                timeOutStr = '<span style="color: var(--danger, #ef4444); font-weight: 600;">Forced Time-out</span>';
+              if (s2.outLog) {
+                const t = new Date(s2.outLog.created_at);
+                s2OutText = t.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+                s2OutRemark = getEarlyOutRemark(t, shift2End || shift1End);
+              } else if (s2.inLog) {
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                if (currentDateObj < today) {
+                  s2OutText = '<span style="color: var(--danger, #ef4444); font-weight: 600;">Forced Time-out</span>';
+                }
               }
             }
 
-
-            // Calculate Total Hours
-            let totalHoursStr = '—';
-            if (availableLogs.length > 0 && offlineLogs.length > 0) {
-              const checkInTime = new Date(availableLogs[0].created_at);
-              const checkOutTime = new Date(offlineLogs[offlineLogs.length - 1].created_at);
+            // Calculate Total Hours for Shift 1
+            let hrs1 = '';
+            if (s1 && s1.inLog && s1.outLog) {
+              const checkInTime = new Date(s1.inLog.created_at);
+              const checkOutTime = new Date(s1.outLog.created_at);
               if (checkOutTime >= checkInTime) {
-                const diffMs = checkOutTime - checkInTime;
+                let diffMs = checkOutTime - checkInTime;
                 const totalMins = Math.floor(diffMs / 60000);
-                const hrs = Math.floor(totalMins / 60);
-                const mins = totalMins % 60;
-                totalHoursStr = `${hrs}h ${mins}m`;
+                const h = Math.floor(totalMins / 60);
+                const m = totalMins % 60;
+                hrs1 = `${h}h ${m}m`;
               }
+            }
+
+            // Calculate Total Hours for Shift 2
+            let hrs2 = '';
+            if (s2 && s2.inLog && s2.outLog) {
+              const checkInTime = new Date(s2.inLog.created_at);
+              const checkOutTime = new Date(s2.outLog.created_at);
+              if (checkOutTime >= checkInTime) {
+                let diffMs = checkOutTime - checkInTime;
+                const totalMins = Math.floor(diffMs / 60000);
+                const h = Math.floor(totalMins / 60);
+                const m = totalMins % 60;
+                hrs2 = `${h}h ${m}m`;
+              }
+            }
+
+            let totalHoursHtml = '—';
+            if (hrs1 && hrs2) {
+              totalHoursHtml = `
+                <div style="display: flex; flex-direction: column; gap: 0.25rem;">
+                  <span style="font-weight:600; color:var(--text-primary);">${hrs1}</span>
+                  <span style="font-weight:600; color:var(--text-muted); font-size:0.75rem;">${hrs2}</span>
+                </div>
+              `;
+            } else if (hrs1) {
+              totalHoursHtml = `<span style="font-weight:600; color:var(--text-primary);">${hrs1}</span>`;
+            } else if (hrs2) {
+              totalHoursHtml = `<span style="font-weight:600; color:var(--text-primary);">${hrs2}</span>`;
             }
 
             currentWeekDays.push({
               dayNum: d,
               dateFriendly: currentDateObj.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }),
-              timeIn: timeInStr,
-              timeOut: timeOutStr,
-              late: lateStr,
-              earlyOut: earlyOutStr,
-              totalHours: totalHoursStr
+              
+              s1InText,
+              s1InRemark,
+              s1OutText,
+              s1OutRemark,
+
+              s2InText,
+              s2InRemark,
+              s2OutText,
+              s2OutRemark,
+
+              totalHoursHtml
             });
           }
 
@@ -866,10 +963,10 @@
                   <thead>
                     <tr>
                       <th>Date</th>
-                      <th>Time In</th>
-                      <th>Time Out</th>
-                      <th>In</th>
-                      <th>Out</th>
+                      <th>Time In 1</th>
+                      <th>Time Out 1</th>
+                      <th>Time In 2</th>
+                      <th>Time Out 2</th>
                       <th>Total Hours</th>
                     </tr>
                   </thead>
@@ -877,11 +974,33 @@
                     ${w.days.slice().reverse().map(r => `
                       <tr>
                         <td><strong>${r.dateFriendly}</strong></td>
-                        <td><span style="font-weight:600; color:var(--text-primary);">${r.timeIn}</span></td>
-                        <td><span style="font-weight:600; color:var(--text-primary);">${r.timeOut}</span></td>
-                        <td><span style="color:${r.late.includes('late') ? 'var(--warning)' : (r.late.includes('early') ? 'var(--cyan)' : 'var(--text-secondary)')}; font-weight:600;">${r.late}</span></td>
-                        <td><span style="color:${r.earlyOut.includes('early') ? 'var(--danger)' : (r.earlyOut.includes('late') ? 'var(--cyan)' : 'var(--text-secondary)')}; font-weight:600;">${r.earlyOut}</span></td>
-                        <td><span style="font-weight:600; color:var(--text-primary);">${r.totalHours}</span></td>
+                        
+                        <!-- Time In 1 -->
+                        <td>
+                          <span style="font-weight:600; color:var(--text-primary);">${r.s1InText}</span>
+                          ${formatRemarkHtml(r.s1InRemark, 'in')}
+                        </td>
+
+                        <!-- Time Out 1 -->
+                        <td>
+                          <span style="font-weight:600; color:var(--text-primary);">${r.s1OutText}</span>
+                          ${formatRemarkHtml(r.s1OutRemark, 'out')}
+                        </td>
+
+                        <!-- Time In 2 -->
+                        <td>
+                          <span style="font-weight:600; color:var(--text-primary);">${r.s2InText}</span>
+                          ${formatRemarkHtml(r.s2InRemark, 'in')}
+                        </td>
+
+                        <!-- Time Out 2 -->
+                        <td>
+                          <span style="font-weight:600; color:var(--text-primary);">${r.s2OutText}</span>
+                          ${formatRemarkHtml(r.s2OutRemark, 'out')}
+                        </td>
+
+                        <!-- Total Hours -->
+                        <td>${r.totalHoursHtml}</td>
                       </tr>
                     `).join('')}
                   </tbody>

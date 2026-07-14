@@ -117,3 +117,8 @@ DO $$ BEGIN
       );
   END IF;
 END $$;
+
+-- ── 6. Safe Alterations for existing tables ───────────────────────────────────
+ALTER TABLE public.company_events ADD COLUMN IF NOT EXISTS is_whole_day BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE public.company_events ADD COLUMN IF NOT EXISTS time_start TEXT;
+ALTER TABLE public.company_events ADD COLUMN IF NOT EXISTS time_end TEXT;
