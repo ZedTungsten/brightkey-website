@@ -452,13 +452,14 @@
             }
           }
           const isDone = doorsArr.length > 0 && doorsArr.every(d => d.completed);
+          const isEvent = b.product_skus === 'Backjob' || b.product_skus === 'Ocular' || b.product_skus === 'Day off';
           const hasCompleteMedia = doorsArr.length > 0 && doorsArr.every(d => {
-            if (!bookingMediaRequirements || bookingMediaRequirements.length === 0) {
+            if (isEvent || !bookingMediaRequirements || bookingMediaRequirements.length === 0) {
               return d.media_urls && d.media_urls.length > 0;
             }
             return bookingMediaRequirements.every(req => d.required_media && d.required_media[req.label]);
           });
-          const isFullyDone = isDone && hasCompleteMedia;
+          const isFullyDone = ['done', 'completed', 'finished'].includes(b.status) || (isDone && hasCompleteMedia);
 
           const badgeHtml = isAborted
             ? `<span style="font-size:0.6rem;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Aborted</span>`
