@@ -465,7 +465,6 @@
                    </div>`
                 : (b.installer_name ? `<span class="calendar-inst-badge">${escapeHtml(formatInstallerName(b.installer_name))}</span>` : ''));
 
-          const isDayOff = b.product_skus === 'Day off';
           const slotColorClass = isDayOff ? 'day-off' : (isAfternoon(b.scheduled_time) ? 'pm' : 'am');
           const slotHtml = `
             <div class="calendar-slot ${slotColorClass}${isAborted ? ' aborted' : ''}${isFullyDone ? ' completed-media' : ''}" title="${escapeHtml(b.customer_name)} (${escapeHtml(cityStr)})" onclick="event.stopPropagation(); showBookingDetails('${b.id}')">
