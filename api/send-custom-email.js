@@ -126,7 +126,7 @@ function compileHtmlBody(blocks, settings, logo, address, eventId, recipientEmai
   else if (logoSize === 'large') logoHeight = '72px';
 
   const logoHtml = logo
-    ? `<div style="text-align: ${align}; margin-bottom: 24px;"><img src="${logo}" alt="Company Logo" style="max-height: ${logoHeight}; object-fit: contain;" /></div>`
+    ? `<div style="text-align: center; margin-bottom: 24px;"><img src="${logo}" alt="Company Logo" style="max-height: ${logoHeight}; object-fit: contain;" /></div>`
     : '';
 
   const addressHtml = address
