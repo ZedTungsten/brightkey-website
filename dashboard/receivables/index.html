@@ -11,6 +11,40 @@
   <style>
     .int-wrap { max-width: 1200px; margin: 0 auto; padding: 2rem 2rem 5rem; }
 
+    /* ── Tab Container Bar ── */
+    .drawer-tabs {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      overflow-x: auto;
+      background: var(--bg-surface);
+    }
+
+    /* ── Tab Buttons ── */
+    .tab-btn {
+      padding: 0.9rem 1.25rem;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      border: none;
+      background: none;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      white-space: nowrap;
+      transition: all 0.15s;
+    }
+
+    /* ── Active Tab Styling ── */
+    .tab-btn.active {
+      color: var(--cyan-light);
+      border-bottom-color: var(--cyan);
+    }
+
+    /* ── Hover State ── */
+    .tab-btn:hover:not(.active) {
+      color: var(--text-secondary);
+    }
+
     /* ── Metric Callouts ── */
     .stat-grid {
       display: grid;
@@ -166,61 +200,82 @@
         <div class="top-bar-title">Receivables (Accounts Receivable)</div>
       </div>
 
+      <div class="drawer-tabs">
+        <button class="tab-btn active" onclick="ReceivablesApp.switchTab('customers')" data-tab="customers">Customers</button>
+        <button class="tab-btn" onclick="ReceivablesApp.switchTab('owner')" data-tab="owner">Due from Owner</button>
+        <button class="tab-btn" onclick="ReceivablesApp.switchTab('staff')" data-tab="staff">Due from Staff</button>
+        <button class="tab-btn" onclick="ReceivablesApp.switchTab('supplier')" data-tab="supplier">Due from Supplier</button>
+      </div>
+
       <main style="overflow-y: auto; flex: 1; min-width: 0; width: 100%;">
         <div class="int-wrap">
           
-          <!-- Key Metrics -->
-          <div class="stat-grid">
-            <div class="stat-card">
-              <span class="stat-label">Total Outstanding Receivables</span>
-              <div class="stat-value" id="stat-total-ar" style="color: var(--cyan-light);">₱0.00</div>
-              <div class="stat-desc">Sum of all active unpaid invoice balances</div>
+          <!-- Customers Tab Content -->
+          <div id="tab-customers" class="tab-content">
+            <!-- Key Metrics -->
+            <div class="stat-grid">
+              <div class="stat-card">
+                <span class="stat-label">Total Outstanding Receivables</span>
+                <div class="stat-value" id="stat-total-ar" style="color: var(--cyan-light);">₱0.00</div>
+                <div class="stat-desc">Sum of all active unpaid invoice balances</div>
+              </div>
+              <div class="stat-card">
+                <span class="stat-label">Overdue Invoices</span>
+                <div class="stat-value" id="stat-overdue-count" style="color: var(--danger);">0</div>
+                <div class="stat-desc">Bookings in the past with outstanding balance</div>
+              </div>
+              <div class="stat-card">
+                <span class="stat-label">Active Receivables Count</span>
+                <div class="stat-value" id="stat-active-count">0</div>
+                <div class="stat-desc">Number of orders awaiting payment</div>
+              </div>
             </div>
-            <div class="stat-card">
-              <span class="stat-label">Overdue Invoices</span>
-              <div class="stat-value" id="stat-overdue-count" style="color: var(--danger);">0</div>
-              <div class="stat-desc">Bookings in the past with outstanding balance</div>
+
+            <!-- Filter / Control row -->
+            <div class="controls-row">
+              <div class="search-input-wrap">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                <input type="text" id="search-input" class="form-input search-input" placeholder="Search customer or order no..." oninput="ReceivablesApp.handleSearch()" />
+              </div>
+
+              <button onclick="ReceivablesApp.loadData()" class="btn btn-outline btn-sm" style="display: flex; align-items: center; gap: 0.4rem;">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+                Refresh
+              </button>
             </div>
-            <div class="stat-card">
-              <span class="stat-label">Active Receivables Count</span>
-              <div class="stat-value" id="stat-active-count">0</div>
-              <div class="stat-desc">Number of orders awaiting payment</div>
+
+            <!-- Receivables Table -->
+            <div class="excel-container">
+              <table class="excel-table">
+                <thead>
+                  <tr>
+                    <th>Order No</th>
+                    <th>Customer</th>
+                    <th>Scheduled Date</th>
+                    <th class="num-col">Grand Total</th>
+                    <th class="num-col">Balance Due</th>
+                    <th>Status</th>
+                    <th class="action-col">Action</th>
+                  </tr>
+                </thead>
+                <tbody id="receivables-table-body">
+                  <tr>
+                    <td colspan="7" class="text-center" style="padding: 3rem; color: var(--text-muted); font-style: italic; text-align: center;">Loading outstanding accounts receivable...</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </div>
 
-          <!-- Filter / Control row -->
-          <div class="controls-row">
-            <div class="search-input-wrap">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-              <input type="text" id="search-input" class="form-input search-input" placeholder="Search customer or order no..." oninput="ReceivablesApp.handleSearch()" />
-            </div>
-
-            <button onclick="ReceivablesApp.loadData()" class="btn btn-outline btn-sm" style="display: flex; align-items: center; gap: 0.4rem;">
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
-              Refresh
-            </button>
+          <!-- Blank/Placeholder tabs -->
+          <div id="tab-owner" class="tab-content" style="display: none; padding: 3rem 0; text-align: center; color: var(--text-muted); font-style: italic;">
+            No outstanding balances from owners.
           </div>
-
-          <!-- Receivables Table -->
-          <div class="excel-container">
-            <table class="excel-table">
-              <thead>
-                <tr>
-                  <th>Order No</th>
-                  <th>Customer</th>
-                  <th>Scheduled Date</th>
-                  <th class="num-col">Grand Total</th>
-                  <th class="num-col">Balance Due</th>
-                  <th>Status</th>
-                  <th class="action-col">Action</th>
-                </tr>
-              </thead>
-              <tbody id="receivables-table-body">
-                <tr>
-                  <td colspan="7" class="text-center" style="padding: 3rem; color: var(--text-muted); font-style: italic; text-align: center;">Loading outstanding accounts receivable...</td>
-                </tr>
-              </tbody>
-            </table>
+          <div id="tab-staff" class="tab-content" style="display: none; padding: 3rem 0; text-align: center; color: var(--text-muted); font-style: italic;">
+            No outstanding balances from staff.
+          </div>
+          <div id="tab-supplier" class="tab-content" style="display: none; padding: 3rem 0; text-align: center; color: var(--text-muted); font-style: italic;">
+            No outstanding balances from suppliers.
           </div>
 
         </div>
@@ -301,6 +356,23 @@
         } catch (e) {
           console.error(e);
         }
+      },
+
+      switchTab(tabId) {
+        document.querySelectorAll('.drawer-tabs .tab-btn').forEach(btn => {
+          if (btn.getAttribute('data-tab') === tabId) {
+            btn.classList.add('active');
+          } else {
+            btn.classList.remove('active');
+          }
+        });
+
+        document.querySelectorAll('.tab-content').forEach(c => {
+          c.style.display = 'none';
+        });
+
+        const target = document.getElementById(`tab-${tabId}`);
+        if (target) target.style.display = 'block';
       },
 
       async loadData() {
