@@ -2731,7 +2731,12 @@
           if (isEvent || !bookingMediaRequirements || bookingMediaRequirements.length === 0) {
             return d.media_urls && d.media_urls.length > 0;
           }
-          return bookingMediaRequirements.every(req => d.required_media && d.required_media[req.label]);
+          return bookingMediaRequirements.every(req => {
+            if (req.label === 'Work Permit' && !b.needs_work_permit) {
+              return true;
+            }
+            return d.required_media && d.required_media[req.label];
+          });
         });
 
         const isDayOff = b.product_skus === 'Day off';
@@ -3659,6 +3664,15 @@
     let slotFiles = {}; // idx -> { file: File, url: string, progress: number }
     let otherFiles = []; // array of { name: string, url: string, progress: number }
 
+    function getActiveReqs() {
+      if (!selectedBooking) return [];
+      const isEvent = selectedBooking.product_skus === 'Backjob' || selectedBooking.product_skus === 'Ocular' || selectedBooking.product_skus === 'Day off';
+      return (isEvent ? [] : bookingMediaRequirements).filter(req => {
+        if (req.label === 'Work Permit' && !selectedBooking.needs_work_permit) return false;
+        return true;
+      });
+    }
+
     window.openUploadModal = function(doorIndex) {
       uploadDoorIndex = doorIndex;
       slotFiles = {};
@@ -3674,8 +3688,7 @@
       if (!door) return;
 
       // Populate existing required media from DB
-      const isEvent = selectedBooking && (selectedBooking.product_skus === 'Backjob' || selectedBooking.product_skus === 'Ocular' || selectedBooking.product_skus === 'Day off');
-      const activeReqs = isEvent ? [] : bookingMediaRequirements;
+      const activeReqs = getActiveReqs();
       if (door.required_media) {
         if (activeReqs && activeReqs.length > 0) {
           activeReqs.forEach((item, idx) => {
@@ -3722,8 +3735,7 @@
       const section = document.getElementById('required-media-section');
       if (!container) return;
 
-      const isEvent = selectedBooking && (selectedBooking.product_skus === 'Backjob' || selectedBooking.product_skus === 'Ocular' || selectedBooking.product_skus === 'Day off');
-      const activeReqs = isEvent ? [] : bookingMediaRequirements;
+      const activeReqs = getActiveReqs();
       if (!activeReqs || activeReqs.length === 0) {
         section.style.display = 'none';
         return;
@@ -3732,7 +3744,7 @@
       section.style.display = 'flex';
       container.innerHTML = '';
 
-      bookingMediaRequirements.forEach((item, idx) => {
+      activeReqs.forEach((item, idx) => {
         const itemRow = document.createElement('div');
 
         let typeText = 'Img/Vid';
@@ -3819,7 +3831,8 @@
       const file = event.target.files[0];
       if (!file) return;
 
-      const requirement = bookingMediaRequirements[idx];
+      const activeReqs = getActiveReqs();
+      const requirement = activeReqs[idx];
       const lowerName = file.name.toLowerCase();
 
       // Type checking
@@ -4075,8 +4088,7 @@
       const submitBtn = document.getElementById('btn-submit-upload');
       if (!submitBtn) return;
 
-      const isEvent = selectedBooking && (selectedBooking.product_skus === 'Backjob' || selectedBooking.product_skus === 'Ocular' || selectedBooking.product_skus === 'Day off');
-      const activeReqs = isEvent ? [] : bookingMediaRequirements;
+      const activeReqs = getActiveReqs();
 
       let allRequirementsFilled = true;
       if (activeReqs && activeReqs.length > 0) {
@@ -4128,8 +4140,7 @@
         if (!door) return;
 
         // 1. Build door.required_media
-        const isEvent = selectedBooking && (selectedBooking.product_skus === 'Backjob' || selectedBooking.product_skus === 'Ocular' || selectedBooking.product_skus === 'Day off');
-        const activeReqs = isEvent ? [] : bookingMediaRequirements;
+        const activeReqs = getActiveReqs();
         door.required_media = {};
         activeReqs.forEach((item, idx) => {
           const slot = slotFiles[idx];
