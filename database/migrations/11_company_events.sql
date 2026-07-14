@@ -17,6 +17,9 @@ CREATE TABLE IF NOT EXISTS public.company_events (
   date_from        DATE NOT NULL,
   date_to          DATE,          -- NULL when is_date_range = FALSE
 
+  time_start       TEXT,          -- HH:MM (24h), optional
+  time_end         TEXT,          -- HH:MM (24h), optional
+
   created_by       UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()

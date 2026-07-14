@@ -326,6 +326,17 @@
           </div>
         </div>
 
+        <!-- Time -->
+        <div>
+          <label class="form-label">Time</label>
+          <div style="display:flex;align-items:center;gap:0.6rem;flex-wrap:wrap;">
+            <input type="time" id="event-time-start" class="form-input" style="flex:1;min-width:8rem;border:1px solid var(--border);border-radius:6px;padding:0.55rem 0.75rem;" oninput="EventsApp.updateDuration()" />
+            <span style="color:var(--text-muted);font-weight:600;font-size:0.85rem;">to</span>
+            <input type="time" id="event-time-end" class="form-input" style="flex:1;min-width:8rem;border:1px solid var(--border);border-radius:6px;padding:0.55rem 0.75rem;" oninput="EventsApp.updateDuration()" />
+          </div>
+          <p id="duration-display" style="font-size:0.78rem;color:var(--cyan-light);font-weight:600;margin:0.35rem 0 0;min-height:1.1em;"></p>
+        </div>
+
       </div>
       <div class="modal-footer">
         <button onclick="EventsApp.closeModal()" class="btn btn-outline btn-sm">Cancel</button>
@@ -483,6 +494,9 @@
         document.getElementById('event-date').value = '';
         document.getElementById('event-date-from').value = '';
         document.getElementById('event-date-to').value = '';
+        document.getElementById('event-time-start').value = '';
+        document.getElementById('event-time-end').value = '';
+        document.getElementById('duration-display').textContent = '';
         this.toggleDateRange();
         document.getElementById('event-modal').classList.add('open');
       },
@@ -503,7 +517,10 @@
           document.getElementById('event-date').value = ev.date_from || '';
         }
 
+        document.getElementById('event-time-start').value = ev.time_start || '';
+        document.getElementById('event-time-end').value = ev.time_end || '';
         this.toggleDateRange();
+        this.updateDuration();
         document.getElementById('event-modal').classList.add('open');
       },
 
@@ -522,6 +539,8 @@
         const description = document.getElementById('event-description').value.trim() || null;
         const visibilityLevel = parseInt(document.getElementById('event-level').value, 10);
         const isRange = document.getElementById('is-date-range').checked;
+        const timeStart = document.getElementById('event-time-start').value || null;
+        const timeEnd   = document.getElementById('event-time-end').value || null;
 
         let dateFrom, dateTo = null;
         if (isRange) {
@@ -542,6 +561,8 @@
           is_date_range: isRange,
           date_from: dateFrom,
           date_to: isRange ? dateTo : null,
+          time_start: timeStart,
+          time_end: timeEnd,
         };
 
         try {
@@ -585,6 +606,26 @@
           console.error(e);
           window.Toast?.error?.('Failed to delete event.');
         }
+      },
+
+      /* ── Duration calculator ── */
+      updateDuration() {
+        const start = document.getElementById('event-time-start').value;
+        const end   = document.getElementById('event-time-end').value;
+        const el    = document.getElementById('duration-display');
+        if (!start || !end) { el.textContent = ''; return; }
+
+        const [sh, sm] = start.split(':').map(Number);
+        const [eh, em] = end.split(':').map(Number);
+        let totalMin = (eh * 60 + em) - (sh * 60 + sm);
+        if (totalMin <= 0) { el.textContent = ''; return; }
+
+        const hrs = Math.floor(totalMin / 60);
+        const mins = totalMin % 60;
+        const parts = [];
+        if (hrs > 0)  parts.push(hrs  === 1 ? '1 hour'        : `${hrs} hours`);
+        if (mins > 0) parts.push(mins === 1 ? '1 minute'      : `${mins} minutes`);
+        el.textContent = parts.join(' and ');
       },
 
       /* ── Send Email (stub) ── */
