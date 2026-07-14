@@ -87,27 +87,34 @@ export default async function handler(req, res) {
     // 6. Fetch company-specific Resend / SMTP credentials if they exist
     const { data: integration } = await supabase
       .from('company_integrations')
-      .select('resend_api_key, resend_from_email, smtp_host, smtp_port, smtp_user, smtp_pass')
+      .select('hr_resend_api_key, hr_resend_from_email, hr_smtp_host, hr_smtp_port, hr_smtp_user, hr_smtp_pass, resend_api_key, resend_from_email, smtp_host, smtp_port, smtp_user, smtp_pass')
       .eq('company_id', company_id)
       .maybeSingle();
 
+    const activeResendApiKey = integration?.hr_resend_api_key || integration?.resend_api_key || RESEND_API_KEY;
+    const activeEmailFrom = integration?.hr_resend_from_email || integration?.resend_from_email || EMAIL_FROM;
+    const smtpUser = integration?.hr_smtp_user || integration?.smtp_user;
+    const smtpPass = integration?.hr_smtp_pass || integration?.smtp_pass;
+    const smtpHost = integration?.hr_smtp_host || integration?.smtp_host || 'smtp.gmail.com';
+    const smtpPort = integration?.hr_smtp_port || integration?.smtp_port || 465;
+
     let emailSent = false;
 
-    if (integration?.smtp_user && integration?.smtp_pass) {
+    if (smtpUser && smtpPass) {
       // Send via SMTP (Gmail)
       try {
         const transporter = nodemailer.createTransport({
-          host: integration.smtp_host || 'smtp.gmail.com',
-          port: parseInt(integration.smtp_port) || 465,
-          secure: (parseInt(integration.smtp_port) || 465) === 465,
+          host: smtpHost,
+          port: parseInt(smtpPort) || 465,
+          secure: (parseInt(smtpPort) || 465) === 465,
           auth: {
-            user: integration.smtp_user,
-            pass: integration.smtp_pass
+            user: smtpUser,
+            pass: smtpPass
           }
         });
 
         await transporter.sendMail({
-          from: `"BrightKey Solutions" <${integration.smtp_user}>`,
+          from: `"BrightKey Solutions" <${smtpUser}>`,
           to: email,
           subject: 'Invitation to Join BrightKey Solutions Workspace',
           html: `
@@ -133,9 +140,6 @@ export default async function handler(req, res) {
       }
     } else {
       // Fallback to Resend (either tenant's own or system-wide)
-      const activeResendApiKey = integration?.resend_api_key || RESEND_API_KEY;
-      const activeEmailFrom = integration?.resend_from_email || EMAIL_FROM;
-
       if (activeResendApiKey) {
         try {
           const mailRes = await fetch('https://api.resend.com/emails', {

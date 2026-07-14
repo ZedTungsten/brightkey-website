@@ -131,4 +131,26 @@ ALTER TABLE public.company_integrations ADD COLUMN IF NOT EXISTS smtp_port INTEG
 ALTER TABLE public.company_integrations ADD COLUMN IF NOT EXISTS smtp_user TEXT;
 ALTER TABLE public.company_integrations ADD COLUMN IF NOT EXISTS smtp_pass TEXT;
 
+ALTER TABLE public.company_integrations ADD COLUMN IF NOT EXISTS hr_resend_api_key TEXT;
+ALTER TABLE public.company_integrations ADD COLUMN IF NOT EXISTS hr_resend_from_email TEXT;
+ALTER TABLE public.company_integrations ADD COLUMN IF NOT EXISTS hr_smtp_host TEXT;
+ALTER TABLE public.company_integrations ADD COLUMN IF NOT EXISTS hr_smtp_port INTEGER;
+ALTER TABLE public.company_integrations ADD COLUMN IF NOT EXISTS hr_smtp_user TEXT;
+ALTER TABLE public.company_integrations ADD COLUMN IF NOT EXISTS hr_smtp_pass TEXT;
+
+ALTER TABLE public.company_integrations ADD COLUMN IF NOT EXISTS marketing_resend_api_key TEXT;
+ALTER TABLE public.company_integrations ADD COLUMN IF NOT EXISTS marketing_resend_from_email TEXT;
+ALTER TABLE public.company_integrations ADD COLUMN IF NOT EXISTS marketing_smtp_host TEXT;
+ALTER TABLE public.company_integrations ADD COLUMN IF NOT EXISTS marketing_smtp_port INTEGER;
+ALTER TABLE public.company_integrations ADD COLUMN IF NOT EXISTS marketing_smtp_user TEXT;
+ALTER TABLE public.company_integrations ADD COLUMN IF NOT EXISTS marketing_smtp_pass TEXT;
+
+ALTER TABLE public.company_integrations ADD COLUMN IF NOT EXISTS general_resend_api_key TEXT;
+ALTER TABLE public.company_integrations ADD COLUMN IF NOT EXISTS general_resend_from_email TEXT;
+ALTER TABLE public.company_integrations ADD COLUMN IF NOT EXISTS general_smtp_host TEXT;
+ALTER TABLE public.company_integrations ADD COLUMN IF NOT EXISTS general_smtp_port INTEGER;
+ALTER TABLE public.company_integrations ADD COLUMN IF NOT EXISTS general_smtp_user TEXT;
+ALTER TABLE public.company_integrations ADD COLUMN IF NOT EXISTS general_smtp_pass TEXT;
+
+
 
