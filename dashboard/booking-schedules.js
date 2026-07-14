@@ -514,7 +514,9 @@
           });
           const isDeliveryOnly = noInstallers && noDoorsAssigned;
           const txStatuses = dbTransactionsMap.get(b.order_no) || [];
-          const isDispatched = txStatuses.includes('dispatched');
+          const isDispatched = txStatuses.includes('dispatched') || txStatuses.includes('received');
+          const isReceived = txStatuses.includes('received');
+          const deliveryBadgeText = isReceived ? 'Received' : 'Dispatched';
 
           const isFullyDone = ['done', 'completed', 'finished'].includes(b.status) 
             || (isDone && hasMedia)
@@ -524,7 +526,7 @@
             ? `<span style="font-size:0.6rem;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Aborted</span>`
             : (isFullyDone 
                 ? `<div style="display:flex; flex-direction:column; gap:2px; align-items:flex-start;">
-                     <span class="calendar-inst-badge" style="background:#22C55E; color:#fff; border:none; font-size:0.6rem; margin-top:2px;">${isDeliveryOnly ? 'Dispatched' : 'Done, Media Uploaded'}</span>
+                     <span class="calendar-inst-badge" style="background:#22C55E; color:#fff; border:none; font-size:0.6rem; margin-top:2px;">${isDeliveryOnly ? deliveryBadgeText : 'Done, Media Uploaded'}</span>
                      ${b.installer_name ? `<span class="calendar-inst-badge" style="background:#E4E4E7; color:#71717A; font-size:0.58rem; margin-top:1px;">${escapeHtml(formatInstallerName(b.installer_name))}</span>` : ''}
                    </div>`
                 : (b.installer_name ? `<span class="calendar-inst-badge">${escapeHtml(formatInstallerName(b.installer_name))}</span>` : ''));
