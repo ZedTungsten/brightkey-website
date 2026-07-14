@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Events — BrightKey HR</title>
+  <link rel="preconnect" href="https://fonts.bunny.net" />
+  <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg?v=2" />
+  <style>
+    /* ── Month Navigation ── */
+    .month-nav-container {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 0.5rem 1rem;
+    }
+    .month-nav-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      width: 28px;
+      height: 28px;
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .month-nav-btn:hover { background: var(--bg-base); border-color: var(--text-secondary); }
+    .month-display-label { font-size: 0.9rem; font-weight: 700; min-width: 120px; text-align: center; }
+
+    /* ── Excel-style Table ── */
+    .excel-container {
+      width: 100%;
+      overflow-x: auto;
+      border: 1px solid var(--border);
+      background: var(--bg-surface);
+      margin-top: 0;
+    }
+    .excel-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 10pt;
+      color: var(--text-primary);
+      font-family: 'commissioner', sans-serif;
+    }
+    .excel-table th, .excel-table td {
+      border: 1px solid var(--border);
+      padding: 0.35rem 0.6rem;
+      text-align: left;
+    }
+    .excel-table th {
+      background: var(--bg-base, #fafafa);
+      font-weight: 700;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      font-size: 10pt;
+      letter-spacing: 0.05em;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      box-shadow: inset 0 -1px 0 var(--border);
+    }
+    .excel-table th.num-col, .excel-table td.num-col { text-align: center; }
+    .excel-table td.action-col { text-align: center; white-space: nowrap; }
+
+    /* ── Tab Container Bar ── */
+    .drawer-tabs {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      overflow-x: auto;
+      background: var(--bg-surface);
+      margin-bottom: 1.5rem;
+    }
+    .tab-btn {
+      padding: 0.9rem 1.25rem;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      border: none;
+      background: none;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      white-space: nowrap;
+      transition: all 0.15s;
+      text-decoration: none;
+    }
+    .tab-btn.active { color: var(--cyan-light); border-bottom-color: var(--cyan); }
+    .tab-btn:hover:not(.active) { color: var(--text-secondary); }
+
+    /* ── Shimmer ── */
+    .shimmer-row td {
+      background: linear-gradient(90deg, var(--bg-surface) 25%, var(--bg-base) 50%, var(--bg-surface) 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+    }
+    @keyframes shimmer {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+
+    /* ── Level Badge ── */
+    .level-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 1.75rem;
+      height: 1.75rem;
+      border-radius: 50%;
+      font-size: 0.78rem;
+      font-weight: 800;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+    }
+
+    /* ── Action Buttons ── */
+    .action-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      background: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .action-btn:hover { background: var(--bg-elevated); color: var(--text-primary); border-color: var(--text-secondary); }
+    .action-btn.danger:hover { background: #fef2f2; color: var(--danger); border-color: var(--danger); }
+
+    /* ── Modal ── */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.45);
+      backdrop-filter: blur(4px);
+      z-index: 10000;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      width: 100%;
+      max-width: 520px;
+      box-shadow: var(--shadow-lg);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      animation: modalSlide 0.2s forwards;
+    }
+    @keyframes modalSlide {
+      from { transform: translateY(15px); opacity: 0; }
+      to   { transform: translateY(0);    opacity: 1; }
+    }
+    .modal-header {
+      padding: 1.25rem 1.5rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .modal-body {
+      padding: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      max-height: 70vh;
+      overflow-y: auto;
+    }
+    .modal-footer {
+      padding: 1.25rem 1.5rem;
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: flex-end;
+      gap: 0.75rem;
+    }
+    .form-label {
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+      display: block;
+      margin-bottom: 0.3rem;
+    }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+
+    /* ── Confirm Delete Modal ── */
+    #confirm-modal .modal-card { max-width: 400px; }
+  </style>
+</head>
+<body class="bg-base text-primary">
+  <div class="dash-layout">
+    <aside class="dash-sidebar" id="dash-sidebar"></aside>
+
+    <main class="dash-main">
+      <header class="dash-topbar" style="border-bottom: none; height: auto; min-height: 60px; display: flex; flex-direction: column; align-items: stretch; justify-content: space-between; padding-top: 1rem;">
+        <div style="display: flex; align-items: center; gap: 0.75rem; padding-left: 2rem; margin-bottom: 0.75rem;">
+          <h1 style="font-size: 1.1rem; font-weight: 800; letter-spacing: -0.02em;">HR</h1>
+        </div>
+        <div class="drawer-tabs" style="margin-bottom: 0; padding-left: 2rem; border-top: 1px solid var(--border);">
+          <a href="/dashboard/events" class="tab-btn active">Events</a>
+        </div>
+      </header>
+
+      <div style="padding: 2rem; max-width: 1200px; width: 100%; margin: 0 auto; box-sizing: border-box;">
+
+        <!-- Top controls row -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+          <div class="month-nav-container">
+            <button onclick="EventsApp.changeMonth(-1)" class="month-nav-btn" aria-label="Previous month">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+            </button>
+            <span class="month-display-label" id="month-label">---</span>
+            <button onclick="EventsApp.changeMonth(1)" class="month-nav-btn" aria-label="Next month">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+          </div>
+
+          <button onclick="EventsApp.openCreateModal()" class="btn btn-primary btn-sm" style="display: flex; align-items: center; gap: 0.4rem;">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Create Event
+          </button>
+        </div>
+
+        <!-- Events Table -->
+        <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.5rem; box-shadow: var(--shadow-sm);">
+          <div class="excel-container">
+            <table class="excel-table">
+              <thead>
+                <tr>
+                  <th>Date Created</th>
+                  <th>Title</th>
+                  <th>Description</th>
+                  <th class="num-col" style="width:5rem;">Level</th>
+                  <th>From Date</th>
+                  <th>To Date</th>
+                  <th class="num-col" style="width:6rem;">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="events-table-body">
+                <tr class="shimmer-row">
+                  <td>Loading...</td>
+                  <td></td><td></td><td></td><td></td><td></td><td></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- ── Create / Edit Modal ─────────────────────────────────────────────── -->
+  <div class="modal-overlay" id="event-modal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <span style="font-weight: 800; font-size: 0.95rem;" id="modal-title">Create Event</span>
+        <button onclick="EventsApp.closeModal()" style="background:none;border:none;cursor:pointer;color:var(--text-muted);">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+
+        <!-- Date Range Checkbox -->
+        <label style="display: flex; align-items: center; gap: 0.6rem; cursor: pointer; font-weight: 600; font-size: 0.85rem;">
+          <input type="checkbox" id="is-date-range" onchange="EventsApp.toggleDateRange()" style="width:1rem;height:1rem;accent-color:var(--cyan);" />
+          Date Range
+        </label>
+
+        <!-- Title -->
+        <div>
+          <label class="form-label" for="event-title">Title</label>
+          <input type="text" id="event-title" class="form-input" style="width:100%;border:1px solid var(--border);border-radius:6px;padding:0.55rem 0.75rem;" placeholder="Event title" />
+        </div>
+
+        <!-- Description -->
+        <div>
+          <label class="form-label" for="event-description">Description</label>
+          <textarea id="event-description" class="form-input" rows="3" style="width:100%;border:1px solid var(--border);border-radius:6px;padding:0.55rem 0.75rem;resize:vertical;" placeholder="Optional description"></textarea>
+        </div>
+
+        <!-- Visibility Level -->
+        <div>
+          <label class="form-label" for="event-level">Visibility Level</label>
+          <select id="event-level" class="form-select" style="width:100%;border:1px solid var(--border);border-radius:6px;padding:0.55rem 0.75rem;background:var(--bg-surface);color:var(--text-primary);">
+            <option value="1">Level 1 — All staff can see</option>
+            <option value="2">Level 2 — Level 2 and above</option>
+            <option value="3">Level 3 — Level 3 and above</option>
+            <option value="4">Level 4 — Level 4 and above</option>
+            <option value="5">Level 5 — Level 5 and above</option>
+          </select>
+          <p style="font-size: 0.72rem; color: var(--text-muted); margin-top: 0.3rem; margin-bottom: 0;">Staff at or above the selected level will see this event.</p>
+        </div>
+
+        <!-- Single Date -->
+        <div id="single-date-wrap">
+          <label class="form-label" for="event-date">Date</label>
+          <input type="date" id="event-date" class="form-input" style="width:100%;border:1px solid var(--border);border-radius:6px;padding:0.55rem 0.75rem;" />
+        </div>
+
+        <!-- Date Range Fields -->
+        <div id="range-date-wrap" style="display:none;">
+          <div class="form-row">
+            <div>
+              <label class="form-label" for="event-date-from">From Date</label>
+              <input type="date" id="event-date-from" class="form-input" style="width:100%;border:1px solid var(--border);border-radius:6px;padding:0.55rem 0.75rem;" />
+            </div>
+            <div>
+              <label class="form-label" for="event-date-to">To Date</label>
+              <input type="date" id="event-date-to" class="form-input" style="width:100%;border:1px solid var(--border);border-radius:6px;padding:0.55rem 0.75rem;" />
+            </div>
+          </div>
+        </div>
+
+      </div>
+      <div class="modal-footer">
+        <button onclick="EventsApp.closeModal()" class="btn btn-outline btn-sm">Cancel</button>
+        <button onclick="EventsApp.saveEvent()" class="btn btn-primary btn-sm" id="modal-save-btn">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Confirm Delete Modal ────────────────────────────────────────────── -->
+  <div class="modal-overlay" id="confirm-modal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <span style="font-weight: 800; font-size: 0.95rem;">Delete Event</span>
+        <button onclick="EventsApp.closeConfirm()" style="background:none;border:none;cursor:pointer;color:var(--text-muted);">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <p style="margin:0;color:var(--text-secondary);">Are you sure you want to delete this event? This action cannot be undone.</p>
+        <p style="margin:0;font-weight:700;color:var(--text-primary);" id="confirm-event-title"></p>
+      </div>
+      <div class="modal-footer">
+        <button onclick="EventsApp.closeConfirm()" class="btn btn-outline btn-sm">Cancel</button>
+        <button onclick="EventsApp.confirmDelete()" class="btn btn-sm" style="background:var(--danger,#ef4444);color:#fff;border:none;">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/sidebar.js"></script>
+  <script src="/js/main.js"></script>
+
+  <script>
+    'use strict';
+
+    const getSb = () => window.BKAuth.sb;
+    const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+    const esc = (v) => {
+      if (v === null || v === undefined) return '';
+      return String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+    };
+
+    const fmtDate = (d) => {
+      if (!d) return '—';
+      return new Date(d + 'T00:00:00').toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' });
+    };
+
+    window.EventsApp = {
+      tenantId: null,
+      companyId: null,
+      currentUserId: null,
+      currentYear: new Date().getFullYear(),
+      currentMonth: new Date().getMonth(),
+      editingId: null,
+      deletingId: null,
+
+      async init() {
+        try {
+          const authInfo = await window.BKAuth.checkRoleGate(['Owner','Admin','HR'], '../admin.html');
+          if (!authInfo) return;
+          this.tenantId = authInfo.tenantId;
+
+          const { data: { user } } = await getSb().auth.getUser();
+          this.currentUserId = user?.id || null;
+
+          const { data: co } = await getSb().from('companies').select('id').eq('tenant_id', this.tenantId).limit(1).maybeSingle();
+          this.companyId = co?.id || null;
+          if (!this.companyId) return;
+
+          await this.loadData();
+        } catch (e) { console.error(e); }
+      },
+
+      changeMonth(delta) {
+        this.currentMonth += delta;
+        if (this.currentMonth < 0)  { this.currentMonth = 11; this.currentYear--; }
+        if (this.currentMonth > 11) { this.currentMonth = 0;  this.currentYear++; }
+        this.loadData();
+      },
+
+      async loadData() {
+        document.getElementById('month-label').textContent = `${MONTH_NAMES[this.currentMonth]} ${this.currentYear}`;
+        const tbody = document.getElementById('events-table-body');
+        tbody.innerHTML = '<tr class="shimmer-row"><td>Loading...</td><td></td><td></td><td></td><td></td><td></td><td></td></tr>';
+
+        const startDate = `${this.currentYear}-${String(this.currentMonth + 1).padStart(2,'0')}-01`;
+        const lastDay   = new Date(this.currentYear, this.currentMonth + 1, 0).getDate();
+        const endDate   = `${this.currentYear}-${String(this.currentMonth + 1).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
+
+        try {
+          // Fetch events whose date_from falls within the selected month
+          const { data, error } = await getSb()
+            .from('company_events')
+            .select('*')
+            .eq('company_id', this.companyId)
+            .gte('date_from', startDate)
+            .lte('date_from', endDate)
+            .order('date_from', { ascending: true })
+            .order('created_at', { ascending: true });
+
+          if (error) throw error;
+          this.renderTable(data || []);
+        } catch (err) {
+          console.error(err);
+          tbody.innerHTML = `<tr><td colspan="7" style="color:var(--danger);text-align:center;padding:2rem;">Failed to load: ${esc(err.message)}</td></tr>`;
+        }
+      },
+
+      renderTable(events) {
+        const tbody = document.getElementById('events-table-body');
+        if (!events.length) {
+          tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);font-style:italic;padding:2rem;">No events for this month.</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = events.map(ev => {
+          const createdAt = ev.created_at ? new Date(ev.created_at).toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' }) : '—';
+          const toDate    = ev.is_date_range && ev.date_to ? fmtDate(ev.date_to) : '—';
+
+          return `<tr>
+            <td style="color:var(--text-muted);font-size:9pt;">${createdAt}</td>
+            <td style="font-weight:600;">${esc(ev.title)}</td>
+            <td style="color:var(--text-secondary);font-size:9pt;">${esc(ev.description || '—')}</td>
+            <td class="num-col"><span class="level-badge">${esc(ev.visibility_level)}</span></td>
+            <td>${fmtDate(ev.date_from)}</td>
+            <td>${toDate}</td>
+            <td class="action-col">
+              <div style="display:inline-flex;gap:0.3rem;">
+                <button class="action-btn" title="Send Email" onclick="EventsApp.sendEmail('${esc(ev.id)}')">
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                </button>
+                <button class="action-btn" title="Edit" onclick="EventsApp.openEditModal(${JSON.stringify(ev).replace(/"/g,'&quot;')})">
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                </button>
+                <button class="action-btn danger" title="Delete" onclick="EventsApp.openConfirm('${esc(ev.id)}', '${esc(ev.title)}')">
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                </button>
+              </div>
+            </td>
+          </tr>`;
+        }).join('');
+      },
+
+      /* ── Modal helpers ── */
+      openCreateModal() {
+        this.editingId = null;
+        document.getElementById('modal-title').textContent = 'Create Event';
+        document.getElementById('modal-save-btn').textContent = 'Create';
+        document.getElementById('event-title').value = '';
+        document.getElementById('event-description').value = '';
+        document.getElementById('event-level').value = '1';
+        document.getElementById('is-date-range').checked = false;
+        document.getElementById('event-date').value = '';
+        document.getElementById('event-date-from').value = '';
+        document.getElementById('event-date-to').value = '';
+        this.toggleDateRange();
+        document.getElementById('event-modal').classList.add('open');
+      },
+
+      openEditModal(ev) {
+        this.editingId = ev.id;
+        document.getElementById('modal-title').textContent = 'Edit Event';
+        document.getElementById('modal-save-btn').textContent = 'Save Changes';
+        document.getElementById('event-title').value = ev.title || '';
+        document.getElementById('event-description').value = ev.description || '';
+        document.getElementById('event-level').value = String(ev.visibility_level || 1);
+        document.getElementById('is-date-range').checked = !!ev.is_date_range;
+
+        if (ev.is_date_range) {
+          document.getElementById('event-date-from').value = ev.date_from || '';
+          document.getElementById('event-date-to').value = ev.date_to || '';
+        } else {
+          document.getElementById('event-date').value = ev.date_from || '';
+        }
+
+        this.toggleDateRange();
+        document.getElementById('event-modal').classList.add('open');
+      },
+
+      closeModal() {
+        document.getElementById('event-modal').classList.remove('open');
+      },
+
+      toggleDateRange() {
+        const isRange = document.getElementById('is-date-range').checked;
+        document.getElementById('single-date-wrap').style.display = isRange ? 'none' : 'block';
+        document.getElementById('range-date-wrap').style.display  = isRange ? 'block' : 'none';
+      },
+
+      async saveEvent() {
+        const title = document.getElementById('event-title').value.trim();
+        const description = document.getElementById('event-description').value.trim() || null;
+        const visibilityLevel = parseInt(document.getElementById('event-level').value, 10);
+        const isRange = document.getElementById('is-date-range').checked;
+
+        let dateFrom, dateTo = null;
+        if (isRange) {
+          dateFrom = document.getElementById('event-date-from').value;
+          dateTo   = document.getElementById('event-date-to').value || null;
+        } else {
+          dateFrom = document.getElementById('event-date').value;
+        }
+
+        if (!title) { window.Toast?.error?.('Title is required.'); return; }
+        if (!dateFrom) { window.Toast?.error?.('Date is required.'); return; }
+
+        const payload = {
+          company_id: this.companyId,
+          title,
+          description,
+          visibility_level: visibilityLevel,
+          is_date_range: isRange,
+          date_from: dateFrom,
+          date_to: isRange ? dateTo : null,
+        };
+
+        try {
+          let err;
+          if (this.editingId) {
+            ({ error: err } = await getSb().from('company_events').update(payload).eq('id', this.editingId));
+          } else {
+            payload.created_by = this.currentUserId;
+            ({ error: err } = await getSb().from('company_events').insert(payload));
+          }
+
+          if (err) throw err;
+          this.closeModal();
+          await this.loadData();
+        } catch (e) {
+          console.error(e);
+          window.Toast?.error?.('Failed to save event. Please try again.');
+        }
+      },
+
+      /* ── Delete ── */
+      openConfirm(id, title) {
+        this.deletingId = id;
+        document.getElementById('confirm-event-title').textContent = title;
+        document.getElementById('confirm-modal').classList.add('open');
+      },
+
+      closeConfirm() {
+        this.deletingId = null;
+        document.getElementById('confirm-modal').classList.remove('open');
+      },
+
+      async confirmDelete() {
+        if (!this.deletingId) return;
+        try {
+          const { error } = await getSb().from('company_events').delete().eq('id', this.deletingId);
+          if (error) throw error;
+          this.closeConfirm();
+          await this.loadData();
+        } catch (e) {
+          console.error(e);
+          window.Toast?.error?.('Failed to delete event.');
+        }
+      },
+
+      /* ── Send Email (stub) ── */
+      sendEmail(id) {
+        // Placeholder — email sending to be wired up later
+        window.Toast?.info?.('Email feature coming soon.');
+      }
+    };
+
+    document.addEventListener('DOMContentLoaded', () => EventsApp.init());
+  </script>
+</body>
+</html>
