@@ -260,8 +260,12 @@
 
     window.addSocialLinkRow = function(platform = '', url = '') {
       const list = document.getElementById('social-links-list');
-      const selectedPlatform = platform || 'Facebook';
       
+      // Remove empty placeholder if it exists
+      const placeholder = document.getElementById('social-empty-placeholder');
+      if (placeholder) placeholder.remove();
+
+      const selectedPlatform = platform || 'Facebook';
       const rowId = 'social-row-' + Date.now() + Math.random().toString(36).substr(2, 5);
 
       const row = document.createElement('div');
@@ -278,9 +282,19 @@
         </div>
         <span style="font-size: 0.78rem; font-weight: 600; width: 80px; color: var(--text-secondary); text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">${selectedPlatform}</span>
         <input type="text" class="form-input social-url-input" style="flex: 1; padding: 0.45rem 0.6rem; font-size: 0.8rem;" placeholder="Profile URL, e.g. https://${selectedPlatform.toLowerCase()}.com/username" value="${esc(url)}" />
-        <button class="btn btn-outline" style="padding: 0.45rem; color: var(--danger); border-color: var(--border);" onclick="document.getElementById('${rowId}').remove()" type="button">&times;</button>
+        <button class="btn btn-outline" style="padding: 0.45rem; color: var(--danger); border-color: var(--border);" onclick="window.removeSocialRow('${rowId}')" type="button">&times;</button>
       `;
       list.appendChild(row);
+    };
+
+    window.removeSocialRow = function(rowId) {
+      const row = document.getElementById(rowId);
+      if (row) row.remove();
+
+      const list = document.getElementById('social-links-list');
+      if (list && list.querySelectorAll('.social-link-row').length === 0) {
+        list.innerHTML = `<div id="social-empty-placeholder" style="color: var(--text-muted); font-style: italic; font-weight: 400; font-size: 0.85rem; padding: 0.5rem 0;">No Social Links added</div>`;
+      }
     };
 
     window.saveCompanySettings = async function() {
@@ -355,9 +369,13 @@
         if (list) {
           list.innerHTML = '';
           const savedLinks = config.socialLinks || [];
-          savedLinks.forEach(item => {
-            window.addSocialLinkRow(item.platform, item.url);
-          });
+          if (savedLinks.length === 0) {
+            list.innerHTML = `<div id="social-empty-placeholder" style="color: var(--text-muted); font-style: italic; font-weight: 400; font-size: 0.85rem; padding: 0.5rem 0;">No Social Links added</div>`;
+          } else {
+            savedLinks.forEach(item => {
+              window.addSocialLinkRow(item.platform, item.url);
+            });
+          }
         }
 
         window.companyLogoLight = config.logoLight || '';
