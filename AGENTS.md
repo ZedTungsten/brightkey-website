@@ -241,3 +241,11 @@ We use two distinct patterns for modal overlays. Do NOT mix them:
 > Never use destructive `DROP TABLE IF EXISTS ... CASCADE;` statement patterns in migration files, especially for established dashboard tables (like `software_subscriptions`). 
 > - **Always Use Safe Alterations**: Use `CREATE TABLE IF NOT EXISTS`, and add new columns or attributes using `ALTER TABLE public.<table_name> ADD COLUMN IF NOT EXISTS <column_name> <type>;` statements to preserve existing records and test data.
 > - **Conditional Policy Updates**: Use `DO $$` PL/pgSQL blocks to conditionally check and create policies `IF NOT EXISTS` to prevent execution crashes when rerun.
+
+---
+
+## 17. Popover and Dropdown Menu Clipping Prevention
+> [!IMPORTANT]
+> When implementing absolute-positioned popup elements like popovers, dropdown lists, tooltips, or selector menus inside cards, boxes, or grid layout panes:
+> - **Identify Overflow Constraints**: Shared card modules (e.g., `.wh-card`) or layouts often declare `overflow: hidden;` or `overflow: auto;`. This clips absolute-positioned child elements that expand beyond the parent container boundaries.
+> - **Apply Local Overrides**: Always explicitly declare `overflow: visible;` (or `overflow: visible !important;`) on the card or parent box wrapper hosting the interactive toggle trigger and popup component. This ensures flyout selections pop outside layout boundaries without being clipped.
