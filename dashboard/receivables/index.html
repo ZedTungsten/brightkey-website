@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Receivables — BrightKey Finance</title>
+  <link rel="preconnect" href="https://fonts.bunny.net" />
+  <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg?v=2" />
+  <style>
+    .int-wrap { max-width: 1200px; margin: 0 auto; padding: 2rem 2rem 5rem; }
+
+    /* ── Metric Callouts ── */
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 1.25rem;
+      margin-bottom: 2rem;
+    }
+    .stat-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 1.25rem;
+      box-shadow: var(--shadow-sm);
+    }
+    .stat-label {
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .stat-value {
+      font-size: 1.6rem;
+      font-weight: 800;
+      color: var(--text-primary);
+      margin-top: 0.35rem;
+    }
+    .stat-desc {
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      margin-top: 0.25rem;
+    }
+
+    /* ── Search & Filter ── */
+    .controls-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.25rem;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+    .search-input-wrap {
+      position: relative;
+      width: 100%;
+      max-width: 320px;
+    }
+    .search-input-wrap svg {
+      position: absolute;
+      left: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-muted);
+      pointer-events: none;
+    }
+    .search-input {
+      width: 100%;
+      padding-left: 2.25rem !important;
+      box-sizing: border-box;
+    }
+
+    /* ── Table Styling ── */
+    .excel-container {
+      width: 100%;
+      border: 1px solid var(--border);
+      background: var(--bg-surface);
+      border-radius: var(--radius-md);
+      overflow-x: auto;
+      box-shadow: var(--shadow-sm);
+    }
+    .excel-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 9.5pt;
+      color: var(--text-primary);
+      font-family: var(--font-sans), Arial, sans-serif;
+    }
+    .excel-table th, .excel-table td {
+      border: 1px solid var(--border);
+      padding: 0.75rem 1rem;
+    }
+    .excel-table th {
+      background: var(--bg-elevated, #fafafa);
+      font-weight: 700;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      font-size: 8.5pt;
+      letter-spacing: 0.05em;
+      text-align: left;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      box-shadow: inset 0 -1px 0 var(--border);
+    }
+    .excel-table td {
+      background: var(--bg-surface);
+    }
+    .excel-table tr:hover td {
+      background: var(--bg-base);
+    }
+    .excel-table .num-col {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+    .excel-table .action-col {
+      text-align: center;
+      width: 140px;
+    }
+
+    /* ── Modal (Pattern B Transition-based) ── */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(4px);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease;
+    }
+    .modal-overlay.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .modal-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      width: 100%;
+      max-width: 480px;
+      padding: 1.75rem;
+      box-shadow: var(--shadow-lg);
+      transform: translateY(15px);
+      transition: transform 0.2s ease;
+    }
+    .modal-overlay.open .modal-card {
+      transform: translateY(0);
+    }
+  </style>
+</head>
+<body class="bg-base text-primary">
+
+  <div class="dash-layout">
+    <!-- Sidebar -->
+    <aside class="dash-sidebar" id="dash-sidebar"></aside>
+
+    <!-- Main Content -->
+    <div class="dash-main">
+      <div class="top-bar">
+        <div class="top-bar-title">Receivables (Accounts Receivable)</div>
+      </div>
+
+      <main style="overflow-y: auto; flex: 1; min-width: 0; width: 100%;">
+        <div class="int-wrap">
+          
+          <!-- Key Metrics -->
+          <div class="stat-grid">
+            <div class="stat-card">
+              <span class="stat-label">Total Outstanding Receivables</span>
+              <div class="stat-value" id="stat-total-ar" style="color: var(--cyan-light);">₱0.00</div>
+              <div class="stat-desc">Sum of all active unpaid invoice balances</div>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">Overdue Invoices</span>
+              <div class="stat-value" id="stat-overdue-count" style="color: var(--danger);">0</div>
+              <div class="stat-desc">Bookings in the past with outstanding balance</div>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">Active Receivables Count</span>
+              <div class="stat-value" id="stat-active-count">0</div>
+              <div class="stat-desc">Number of orders awaiting payment</div>
+            </div>
+          </div>
+
+          <!-- Filter / Control row -->
+          <div class="controls-row">
+            <div class="search-input-wrap">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+              <input type="text" id="search-input" class="form-input search-input" placeholder="Search customer or order no..." oninput="ReceivablesApp.handleSearch()" />
+            </div>
+
+            <button onclick="ReceivablesApp.loadData()" class="btn btn-outline btn-sm" style="display: flex; align-items: center; gap: 0.4rem;">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+              Refresh
+            </button>
+          </div>
+
+          <!-- Receivables Table -->
+          <div class="excel-container">
+            <table class="excel-table">
+              <thead>
+                <tr>
+                  <th>Order No</th>
+                  <th>Customer</th>
+                  <th>Scheduled Date</th>
+                  <th class="num-col">Grand Total</th>
+                  <th class="num-col">Balance Due</th>
+                  <th>Status</th>
+                  <th class="action-col">Action</th>
+                </tr>
+              </thead>
+              <tbody id="receivables-table-body">
+                <tr>
+                  <td colspan="7" class="text-center" style="padding: 3rem; color: var(--text-muted); font-style: italic; text-align: center;">Loading outstanding accounts receivable...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- Record Payment Modal (Pattern B) -->
+  <div class="modal-overlay" id="payment-modal">
+    <div class="modal-card">
+      <h3 style="font-size: 1.1rem; font-weight: 700; color: var(--text-primary); margin: 0 0 0.5rem;">Record Customer Payment</h3>
+      <div id="payment-booking-info" style="font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 1.25rem; background: var(--bg-base); padding: 0.75rem; border-radius: var(--radius-sm); border: 1px solid var(--border);">
+        <!-- Populated dynamically -->
+      </div>
+      <form id="payment-form" onsubmit="ReceivablesApp.handlePaymentSubmit(event)">
+        
+        <div class="form-group" style="margin-bottom: 1.25rem;">
+          <label class="form-label" for="payment-amount">Payment Amount (&#8369;)</label>
+          <input type="number" id="payment-amount" class="form-input" placeholder="0.00" step="0.01" min="0.01" required />
+          <small id="payment-max-info" style="color: var(--text-muted); font-size: 0.72rem; display: block; margin-top: 0.25rem;"></small>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 0.75rem;">
+          <button type="button" class="btn btn-outline btn-sm" onclick="ReceivablesApp.closePaymentModal()">Cancel</button>
+          <button type="submit" class="btn btn-cyan btn-sm">Record Payment</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/sidebar.js"></script>
+  <script src="/js/main.js"></script>
+
+  <script>
+    'use strict';
+
+    const getSb = () => window.BKAuth.sb;
+
+    const escapeHtml = (str) => {
+      if (!str) return '';
+      return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    };
+
+    window.ReceivablesApp = {
+      tenantId: null,
+      companyId: null,
+      bookings: [],
+      filteredBookings: [],
+      selectedBooking: null,
+
+      async init() {
+        try {
+          const authInfo = await window.BKAuth.checkRoleGate(
+            ['Owner', 'Admin', 'HR', 'Finance'],
+            '../admin.html'
+          );
+          if (!authInfo) return;
+          this.tenantId = authInfo.tenantId;
+
+          const { data: co } = await getSb()
+            .from('companies')
+            .select('id')
+            .eq('tenant_id', this.tenantId)
+            .limit(1)
+            .maybeSingle();
+
+          this.companyId = co?.id || null;
+          if (!this.companyId) return;
+
+          await this.loadData();
+        } catch (e) {
+          console.error(e);
+        }
+      },
+
+      async loadData() {
+        const tbody = document.getElementById('receivables-table-body');
+        if (tbody) {
+          tbody.innerHTML = '<tr><td colspan="7" class="text-center" style="padding: 3rem; color: var(--text-muted); font-style: italic; text-align: center;">Loading outstanding accounts receivable...</td></tr>';
+        }
+
+        try {
+          // Fetch outstanding installation_bookings where balance_due > 0 (Rule 10: select id)
+          const { data, error } = await getSb()
+            .from('installation_bookings')
+            .select('id, scheduled_date, order_no, customer_name, grand_total, balance_due, status')
+            .eq('company_id', this.companyId)
+            .neq('status', 'cancelled')
+            .gt('balance_due', 0)
+            .order('scheduled_date', { ascending: true });
+
+          if (error) throw error;
+          this.bookings = data || [];
+          this.filteredBookings = [...this.bookings];
+
+          this.calculateAndRender();
+        } catch (err) {
+          console.error(err);
+          if (tbody) {
+            tbody.innerHTML = `<tr><td colspan="7" class="text-center" style="color: var(--danger); text-align: center;">Failed to load receivables: ${err.message}</td></tr>`;
+          }
+        }
+      },
+
+      calculateAndRender() {
+        let totalArCentavos = 0;
+        let overdueCount = 0;
+        const now = new Date();
+        now.setHours(0,0,0,0);
+
+        this.filteredBookings.forEach(b => {
+          totalArCentavos += b.balance_due || 0;
+          if (b.scheduled_date) {
+            const sched = new Date(b.scheduled_date);
+            sched.setHours(0,0,0,0);
+            if (sched < now) {
+              overdueCount++;
+            }
+          }
+        });
+
+        // Update stats
+        document.getElementById('stat-total-ar').textContent = this.formatCurrency(totalArCentavos / 100);
+        document.getElementById('stat-overdue-count').textContent = overdueCount;
+        document.getElementById('stat-active-count').textContent = this.filteredBookings.length;
+
+        // Render table
+        const tbody = document.getElementById('receivables-table-body');
+        if (this.filteredBookings.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="7" class="text-center" style="padding: 3rem; color: var(--text-muted); font-style: italic; text-align: center;">No active receivables found.</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = this.filteredBookings.map(b => {
+          const dateStr = b.scheduled_date ? new Date(b.scheduled_date).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : 'Unscheduled';
+          const statusClass = b.status === 'done' || b.status === 'completed' || b.status === 'finished' ? 'badge-success' : 'badge-warning';
+
+          return `
+            <tr>
+              <td style="font-family: var(--font-mono); font-weight: 600;">${escapeHtml(b.order_no || '—')}</td>
+              <td style="font-weight: 500;">${escapeHtml(b.customer_name || '—')}</td>
+              <td>${dateStr}</td>
+              <td class="num-col">${this.formatCurrency(b.grand_total / 100)}</td>
+              <td class="num-col" style="font-weight: 700; color: var(--cyan-light);">${this.formatCurrency(b.balance_due / 100)}</td>
+              <td><span class="badge ${statusClass}">${escapeHtml(b.status || 'pending')}</span></td>
+              <td class="action-col">
+                <button onclick="ReceivablesApp.openPaymentModal('${b.id}')" class="btn btn-cyan btn-sm" style="padding: 0.35rem 0.65rem; font-size: 0.75rem; font-weight: 600;">Record Payment</button>
+              </td>
+            </tr>
+          `;
+        }).join('');
+      },
+
+      handleSearch() {
+        const query = document.getElementById('search-input').value.toLowerCase().trim();
+        if (!query) {
+          this.filteredBookings = [...this.bookings];
+        } else {
+          this.filteredBookings = this.bookings.filter(b => {
+            const name = (b.customer_name || '').toLowerCase();
+            const orderNo = (b.order_no || '').toLowerCase();
+            return name.includes(query) || orderNo.includes(query);
+          });
+        }
+        this.calculateAndRender();
+      },
+
+      openPaymentModal(id) {
+        const b = this.bookings.find(x => x.id === id);
+        if (!b) return;
+
+        this.selectedBooking = b;
+
+        const info = document.getElementById('payment-booking-info');
+        info.innerHTML = `
+          <div style="display:flex; justify-content:space-between; margin-bottom:0.25rem;">
+            <span><strong>Customer:</strong></span>
+            <span>${escapeHtml(b.customer_name)}</span>
+          </div>
+          <div style="display:flex; justify-content:space-between; margin-bottom:0.25rem;">
+            <span><strong>Order No:</strong></span>
+            <span style="font-family:var(--font-mono);">${escapeHtml(b.order_no)}</span>
+          </div>
+          <div style="display:flex; justify-content:space-between;">
+            <span><strong>Outstanding Balance:</strong></span>
+            <span style="font-weight:700; color:var(--cyan-light);">${this.formatCurrency(b.balance_due / 100)}</span>
+          </div>
+        `;
+
+        const maxVal = (b.balance_due / 100).toFixed(2);
+        document.getElementById('payment-amount').value = maxVal;
+        document.getElementById('payment-amount').max = maxVal;
+        document.getElementById('payment-max-info').textContent = `Maximum allowed: ₱${maxVal}`;
+
+        const modal = document.getElementById('payment-modal');
+        if (!modal) return;
+        modal.style.display = 'flex';
+        modal.offsetHeight; // force reflow (Rule 12 Pattern B)
+        modal.classList.add('open');
+      },
+
+      closePaymentModal() {
+        const modal = document.getElementById('payment-modal');
+        if (!modal) return;
+        modal.classList.remove('open');
+        setTimeout(() => {
+          modal.style.display = 'none';
+        }, 150);
+        this.selectedBooking = null;
+      },
+
+      async handlePaymentSubmit(event) {
+        event.preventDefault();
+        if (!this.selectedBooking) return;
+
+        const amtFloat = parseFloat(document.getElementById('payment-amount').value);
+        if (isNaN(amtFloat) || amtFloat <= 0) {
+          Toast.show('Please enter a valid payment amount.', 'error');
+          return;
+        }
+
+        const amtCents = Math.round(amtFloat * 100);
+        const currentBalance = this.selectedBooking.balance_due;
+        const newBalance = Math.max(0, currentBalance - amtCents);
+
+        try {
+          const { error } = await getSb()
+            .from('installation_bookings')
+            .update({ balance_due: newBalance })
+            .eq('id', this.selectedBooking.id);
+
+          if (error) throw error;
+
+          Toast.show('Payment recorded successfully.', 'success');
+          this.closePaymentModal();
+          await this.loadData();
+        } catch (err) {
+          console.error(err);
+          Toast.show('Failed to record payment: ' + err.message, 'error');
+        }
+      },
+
+      formatCurrency(val) {
+        if (val === null || val === undefined) return '—';
+        const prefix = val < 0 ? '(' : '';
+        const suffix = val < 0 ? ')' : '';
+        return `${prefix}₱${Math.abs(val).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${suffix}`;
+      }
+    };
+
+    document.addEventListener('DOMContentLoaded', () => {
+      ReceivablesApp.init();
+    });
+  </script>
+</body>
+</html>

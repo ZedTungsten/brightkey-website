@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Payables — BrightKey Finance</title>
+  <link rel="preconnect" href="https://fonts.bunny.net" />
+  <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg?v=2" />
+  <style>
+    .int-wrap { max-width: 1200px; margin: 0 auto; padding: 2rem 2rem 5rem; }
+
+    /* ── Metric Callouts ── */
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 1.25rem;
+      margin-bottom: 2rem;
+    }
+    .stat-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 1.25rem;
+      box-shadow: var(--shadow-sm);
+    }
+    .stat-label {
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .stat-value {
+      font-size: 1.6rem;
+      font-weight: 800;
+      color: var(--text-primary);
+      margin-top: 0.35rem;
+    }
+    .stat-desc {
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      margin-top: 0.25rem;
+    }
+
+    /* ── Search & Filter ── */
+    .controls-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.25rem;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+    .search-input-wrap {
+      position: relative;
+      width: 100%;
+      max-width: 320px;
+    }
+    .search-input-wrap svg {
+      position: absolute;
+      left: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-muted);
+      pointer-events: none;
+    }
+    .search-input {
+      width: 100%;
+      padding-left: 2.25rem !important;
+      box-sizing: border-box;
+    }
+
+    /* ── Table Styling ── */
+    .excel-container {
+      width: 100%;
+      border: 1px solid var(--border);
+      background: var(--bg-surface);
+      border-radius: var(--radius-md);
+      overflow-x: auto;
+      box-shadow: var(--shadow-sm);
+    }
+    .excel-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 9.5pt;
+      color: var(--text-primary);
+      font-family: var(--font-sans), Arial, sans-serif;
+    }
+    .excel-table th, .excel-table td {
+      border: 1px solid var(--border);
+      padding: 0.75rem 1rem;
+    }
+    .excel-table th {
+      background: var(--bg-elevated, #fafafa);
+      font-weight: 700;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      font-size: 8.5pt;
+      letter-spacing: 0.05em;
+      text-align: left;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      box-shadow: inset 0 -1px 0 var(--border);
+    }
+    .excel-table td {
+      background: var(--bg-surface);
+    }
+    .excel-table tr:hover td {
+      background: var(--bg-base);
+    }
+    .excel-table .num-col {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+    .excel-table .action-col {
+      text-align: center;
+      width: 180px;
+    }
+
+    /* ── Modal (Pattern B Transition-based) ── */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(4px);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease;
+    }
+    .modal-overlay.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .modal-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      width: 100%;
+      max-width: 480px;
+      padding: 1.75rem;
+      box-shadow: var(--shadow-lg);
+      transform: translateY(15px);
+      transition: transform 0.2s ease;
+    }
+    .modal-overlay.open .modal-card {
+      transform: translateY(0);
+    }
+  </style>
+</head>
+<body class="bg-base text-primary">
+
+  <div class="dash-layout">
+    <!-- Sidebar -->
+    <aside class="dash-sidebar" id="dash-sidebar"></aside>
+
+    <!-- Main Content -->
+    <div class="dash-main">
+      <div class="top-bar">
+        <div class="top-bar-title">Payables (Accounts Payable)</div>
+      </div>
+
+      <main style="overflow-y: auto; flex: 1; min-width: 0; width: 100%;">
+        <div class="int-wrap">
+          
+          <!-- Key Metrics -->
+          <div class="stat-grid">
+            <div class="stat-card">
+              <span class="stat-label">Total Outstanding Payables</span>
+              <div class="stat-value" id="stat-total-ap" style="color: var(--cyan-light);">₱0.00</div>
+              <div class="stat-desc">Sum of all active unpaid supplier bills</div>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">Overdue Payables</span>
+              <div class="stat-value" id="stat-overdue-count" style="color: var(--danger);">0</div>
+              <div class="stat-desc">Bills past due date awaiting payment</div>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">Unpaid Bills Count</span>
+              <div class="stat-value" id="stat-active-count">0</div>
+              <div class="stat-desc">Total number of outstanding supplier payables</div>
+            </div>
+          </div>
+
+          <!-- Filter / Control row -->
+          <div class="controls-row">
+            <div class="search-input-wrap">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+              <input type="text" id="search-input" class="form-input search-input" placeholder="Search supplier or invoice..." oninput="PayablesApp.handleSearch()" />
+            </div>
+
+            <div style="display: flex; gap: 0.5rem;">
+              <button onclick="PayablesApp.openCreateModal()" class="btn btn-cyan btn-sm" style="display: flex; align-items: center; gap: 0.4rem;">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                Create Payable
+              </button>
+              <button onclick="PayablesApp.loadData()" class="btn btn-outline btn-sm" style="display: flex; align-items: center; gap: 0.4rem;">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+                Refresh
+              </button>
+            </div>
+          </div>
+
+          <!-- Payables Table -->
+          <div class="excel-container">
+            <table class="excel-table">
+              <thead>
+                <tr>
+                  <th>Due Date</th>
+                  <th>Supplier</th>
+                  <th>Invoice No</th>
+                  <th>Description</th>
+                  <th class="num-col">Amount</th>
+                  <th>Status</th>
+                  <th class="action-col">Action</th>
+                </tr>
+              </thead>
+              <tbody id="payables-table-body">
+                <tr>
+                  <td colspan="7" class="text-center" style="padding: 3rem; color: var(--text-muted); font-style: italic; text-align: center;">Loading outstanding accounts payable...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- Create Payable Modal (Pattern B) -->
+  <div class="modal-overlay" id="create-modal">
+    <div class="modal-card">
+      <h3 style="font-size: 1.1rem; font-weight: 700; color: var(--text-primary); margin: 0 0 1rem;">Create Supplier Payable</h3>
+      <form id="create-form" onsubmit="PayablesApp.handleCreateSubmit(event)">
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+          <div class="form-group">
+            <label class="form-label" for="payable-supplier">Supplier</label>
+            <select id="payable-supplier" class="form-select" required>
+              <option value="">Select Supplier...</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="payable-invoice">Invoice Number</label>
+            <input type="text" id="payable-invoice" class="form-input" placeholder="e.g. INV-2026-001" required />
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+          <div class="form-group">
+            <label class="form-label" for="payable-amount">Amount (&#8369;)</label>
+            <input type="number" id="payable-amount" class="form-input" placeholder="0.00" step="0.01" min="0.01" required />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="payable-due">Due Date</label>
+            <input type="date" id="payable-due" class="form-input" required />
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-bottom: 1.5rem;">
+          <label class="form-label" for="payable-desc">Description</label>
+          <input type="text" id="payable-desc" class="form-input" placeholder="e.g. Materials purchase order" required />
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 0.75rem;">
+          <button type="button" class="btn btn-outline btn-sm" onclick="PayablesApp.closeCreateModal()">Cancel</button>
+          <button type="submit" class="btn btn-cyan btn-sm">Create Payable</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/sidebar.js"></script>
+  <script src="/js/main.js"></script>
+
+  <script>
+    'use strict';
+
+    const getSb = () => window.BKAuth.sb;
+
+    const escapeHtml = (str) => {
+      if (!str) return '';
+      return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    };
+
+    window.PayablesApp = {
+      tenantId: null,
+      companyId: null,
+      payables: [],
+      filteredPayables: [],
+      suppliers: [],
+
+      async init() {
+        try {
+          const authInfo = await window.BKAuth.checkRoleGate(
+            ['Owner', 'Admin', 'HR', 'Finance'],
+            '../admin.html'
+          );
+          if (!authInfo) return;
+          this.tenantId = authInfo.tenantId;
+
+          const { data: co } = await getSb()
+            .from('companies')
+            .select('id')
+            .eq('tenant_id', this.tenantId)
+            .limit(1)
+            .maybeSingle();
+
+          this.companyId = co?.id || null;
+          if (!this.companyId) return;
+
+          await this.loadSuppliers();
+          await this.loadData();
+        } catch (e) {
+          console.error(e);
+        }
+      },
+
+      async loadSuppliers() {
+        try {
+          const { data, error } = await getSb()
+            .from('suppliers')
+            .select('id, name')
+            .eq('company_id', this.companyId)
+            .order('name');
+          if (error) throw error;
+
+          this.suppliers = data || [];
+          const select = document.getElementById('payable-supplier');
+          if (select) {
+            select.innerHTML = '<option value="">Select Supplier...</option>' + 
+              this.suppliers.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+          }
+        } catch (err) {
+          console.error('Failed to load suppliers:', err);
+        }
+      },
+
+      async loadData() {
+        const tbody = document.getElementById('payables-table-body');
+        if (tbody) {
+          tbody.innerHTML = '<tr><td colspan="7" class="text-center" style="padding: 3rem; color: var(--text-muted); font-style: italic; text-align: center;">Loading outstanding accounts payable...</td></tr>';
+        }
+
+        try {
+          // Fetch outstanding supplier payables
+          const { data, error } = await getSb()
+            .from('supplier_payables')
+            .select('*, suppliers(name)')
+            .eq('company_id', this.companyId)
+            .order('due_date', { ascending: true });
+
+          if (error) throw error;
+          this.payables = data || [];
+          this.filteredPayables = [...this.payables];
+
+          this.calculateAndRender();
+        } catch (err) {
+          console.error(err);
+          if (tbody) {
+            tbody.innerHTML = `<tr><td colspan="7" class="text-center" style="color: var(--danger); text-align: center;">Failed to load payables: ${err.message}</td></tr>`;
+          }
+        }
+      },
+
+      calculateAndRender() {
+        let totalApCentavos = 0;
+        let overdueCount = 0;
+        const now = new Date();
+        now.setHours(0,0,0,0);
+
+        this.filteredPayables.forEach(p => {
+          if (p.status === 'unpaid') {
+            totalApCentavos += p.amount_cents || 0;
+            if (p.due_date) {
+              const due = new Date(p.due_date);
+              due.setHours(0,0,0,0);
+              if (due < now) {
+                overdueCount++;
+              }
+            }
+          }
+        });
+
+        // Update stats
+        document.getElementById('stat-total-ap').textContent = this.formatCurrency(totalApCentavos / 100);
+        document.getElementById('stat-overdue-count').textContent = overdueCount;
+        document.getElementById('stat-active-count').textContent = this.filteredPayables.filter(p => p.status === 'unpaid').length;
+
+        // Render table
+        const tbody = document.getElementById('payables-table-body');
+        if (this.filteredPayables.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="7" class="text-center" style="padding: 3rem; color: var(--text-muted); font-style: italic; text-align: center;">No payables found.</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = this.filteredPayables.map(p => {
+          const dateStr = p.due_date ? new Date(p.due_date).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : 'No due date';
+          const statusClass = p.status === 'paid' ? 'badge-success' : p.status === 'void' ? 'badge-muted' : 'badge-danger';
+          const supplierName = p.suppliers?.name || 'Unknown Supplier';
+
+          let actionBtn = '';
+          if (p.status === 'unpaid') {
+            actionBtn = `
+              <button onclick="PayablesApp.markAsPaid('${p.id}')" class="btn btn-cyan btn-sm" style="padding: 0.35rem 0.65rem; font-size: 0.75rem; font-weight: 600; margin-right: 0.4rem;">Mark Paid</button>
+            `;
+          }
+
+          const deleteBtn = `
+            <button onclick="PayablesApp.deletePayable('${p.id}')" class="btn btn-outline btn-sm" style="color: var(--danger); border-color: rgba(239, 68, 68, 0.2); padding: 0.35rem; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--radius-sm);" title="Delete">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+            </button>
+          `;
+
+          return `
+            <tr>
+              <td>${dateStr}</td>
+              <td style="font-weight: 500;">${escapeHtml(supplierName)}</td>
+              <td style="font-family: var(--font-mono); font-weight: 600;">${escapeHtml(p.invoice_number || '—')}</td>
+              <td>${escapeHtml(p.description || '—')}</td>
+              <td class="num-col" style="font-weight: 700; color: ${p.status === 'unpaid' ? 'var(--cyan-light)' : ''};">${this.formatCurrency(p.amount_cents / 100)}</td>
+              <td><span class="badge ${statusClass}">${escapeHtml(p.status)}</span></td>
+              <td class="action-col">
+                <div style="display: flex; align-items: center; justify-content: center;">
+                  ${actionBtn}
+                  ${deleteBtn}
+                </div>
+              </td>
+            </tr>
+          `;
+        }).join('');
+      },
+
+      handleSearch() {
+        const query = document.getElementById('search-input').value.toLowerCase().trim();
+        if (!query) {
+          this.filteredPayables = [...this.payables];
+        } else {
+          this.filteredPayables = this.payables.filter(p => {
+            const supplier = (p.suppliers?.name || '').toLowerCase();
+            const inv = (p.invoice_number || '').toLowerCase();
+            const desc = (p.description || '').toLowerCase();
+            return supplier.includes(query) || inv.includes(query) || desc.includes(query);
+          });
+        }
+        this.calculateAndRender();
+      },
+
+      openCreateModal() {
+        const modal = document.getElementById('create-modal');
+        if (!modal) return;
+        document.getElementById('create-form').reset();
+        
+        modal.style.display = 'flex';
+        modal.offsetHeight; // force reflow (Rule 12 Pattern B)
+        modal.classList.add('open');
+      },
+
+      closeCreateModal() {
+        const modal = document.getElementById('create-modal');
+        if (!modal) return;
+        modal.classList.remove('open');
+        setTimeout(() => {
+          modal.style.display = 'none';
+        }, 150);
+      },
+
+      async handleCreateSubmit(event) {
+        event.preventDefault();
+        const supplierId = document.getElementById('payable-supplier').value;
+        const invoiceNumber = document.getElementById('payable-invoice').value.trim();
+        const amountFloat = parseFloat(document.getElementById('payable-amount').value);
+        const dueDate = document.getElementById('payable-due').value;
+        const description = document.getElementById('payable-desc').value.trim();
+
+        if (!supplierId || !invoiceNumber || isNaN(amountFloat) || !dueDate || !description) {
+          Toast.show('Please fill in all fields correctly.', 'error');
+          return;
+        }
+
+        const amountCents = Math.round(amountFloat * 100);
+
+        try {
+          const { error } = await getSb()
+            .from('supplier_payables')
+            .insert({
+              company_id: this.companyId,
+              supplier_id: supplierId,
+              invoice_number: invoiceNumber,
+              amount_cents: amountCents,
+              due_date: dueDate,
+              description,
+              status: 'unpaid'
+            });
+
+          if (error) throw error;
+
+          Toast.show('Payable created successfully.', 'success');
+          this.closeCreateModal();
+          await this.loadData();
+        } catch (err) {
+          console.error(err);
+          Toast.show('Failed to create payable: ' + err.message, 'error');
+        }
+      },
+
+      async markAsPaid(id) {
+        const ok = await BKDialog.ask({
+          title: 'Mark as Paid',
+          message: 'Are you sure you want to mark this payable as paid?',
+          okText: 'Mark Paid',
+          danger: false
+        });
+        if (!ok) return;
+
+        try {
+          const { error } = await getSb()
+            .from('supplier_payables')
+            .update({ status: 'paid' })
+            .eq('id', id);
+
+          if (error) throw error;
+
+          Toast.show('Payable marked as paid.', 'success');
+          await this.loadData();
+        } catch (err) {
+          console.error(err);
+          Toast.show('Failed to update payable: ' + err.message, 'error');
+        }
+      },
+
+      async deletePayable(id) {
+        const ok = await BKDialog.ask({
+          title: 'Delete Payable',
+          message: 'Are you sure you want to delete this payable record?',
+          okText: 'Delete',
+          danger: true
+        });
+        if (!ok) return;
+
+        try {
+          const { error } = await getSb()
+            .from('supplier_payables')
+            .delete()
+            .eq('id', id);
+
+          if (error) throw error;
+
+          Toast.show('Payable deleted successfully.', 'success');
+          await this.loadData();
+        } catch (err) {
+          console.error(err);
+          Toast.show('Failed to delete payable: ' + err.message, 'error');
+        }
+      },
+
+      formatCurrency(val) {
+        if (val === null || val === undefined) return '—';
+        const prefix = val < 0 ? '(' : '';
+        const suffix = val < 0 ? ')' : '';
+        return `${prefix}₱${Math.abs(val).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${suffix}`;
+      }
+    };
+
+    document.addEventListener('DOMContentLoaded', () => {
+      PayablesApp.init();
+    });
+  </script>
+</body>
+</html>
