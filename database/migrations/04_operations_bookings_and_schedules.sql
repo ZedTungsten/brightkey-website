@@ -1,3 +1,7 @@
+-- ==========================================
+-- Source: 04_operations.sql
+-- ==========================================
+
 -- =============================================================================
 -- BrightKey Consolidated Operations Schema (04_operations.sql)
 -- Consolidates inventory, inventory logs, inventory transactions,
@@ -421,3 +425,274 @@ CREATE POLICY "Customer Service module support_messages" ON public.support_messa
          OR public.has_module_access(auth.uid(), st.company_id, 'Operations')
     )
   );
+
+
+-- ==========================================
+-- Source: 28_add_delivery_bookings_table.sql
+-- ==========================================
+
+-- ============================================================
+-- Migration: 28_add_delivery_bookings_table.sql
+-- Creates delivery_bookings table to track delivery details.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS public.delivery_bookings (
+  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id          UUID REFERENCES public.companies(id) ON DELETE CASCADE,
+  reference_id        TEXT NOT NULL,
+  customer_name       TEXT,
+  customer_city       TEXT,
+  delivery_photo_url  TEXT,
+  base_fee            INTEGER DEFAULT 0, -- stored in centavos
+  tip_1               INTEGER DEFAULT 0, -- stored in centavos
+  tip_2               INTEGER DEFAULT 0, -- stored in centavos
+  toll                INTEGER DEFAULT 0, -- stored in centavos
+  status              TEXT DEFAULT 'booked' CHECK (status IN ('booked', 'picked_up', 'delivered')),
+  pickup_photos       TEXT[] DEFAULT '{}'::TEXT[],
+  picked_up_at        TIMESTAMPTZ,
+  received_photo_url  TEXT,
+  delivered_at        TIMESTAMPTZ,
+  created_at          TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE public.delivery_bookings ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Company delivery bookings access" ON public.delivery_bookings;
+
+CREATE POLICY "Company delivery bookings access" ON public.delivery_bookings
+  FOR ALL USING (
+    company_id IN (
+      SELECT id FROM public.companies
+      WHERE tenant_id IN (SELECT public.get_user_tenants(auth.uid()))
+    )
+  );
+
+
+-- ==========================================
+-- Source: 30_commission_assignments.sql
+-- ==========================================
+
+-- =============================================================================
+-- BrightKey Commission Assignments Table (30_commission_assignments.sql)
+-- Consolidates per-booking item sales commissions and provides multi-tenant RLS.
+-- =============================================================================
+
+-- Drop table if it exists
+DROP TABLE IF EXISTS public.commission_assignments CASCADE;
+
+-- Create commission_assignments table
+CREATE TABLE public.commission_assignments (
+  id             UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  company_id     UUID REFERENCES public.companies(id) ON DELETE CASCADE NOT NULL,
+  booking_id     UUID REFERENCES public.installation_bookings(id) ON DELETE CASCADE NOT NULL,
+  sku            TEXT NOT NULL,
+  product_index  INTEGER DEFAULT 0 NOT NULL,
+  employee_id    UUID REFERENCES public.employees(id) ON DELETE CASCADE ON UPDATE CASCADE,
+  rate_label     TEXT NOT NULL, -- e.g., 'Agent', 'Lead', 'Coordinator'
+  percent        NUMERIC(5,2) NOT NULL, -- e.g., 2.50
+  amount         INTEGER NOT NULL, -- Amount in centavos (PHP amount * 100)
+  created_at     TIMESTAMPTZ DEFAULT NOW(),
+  
+  -- Prevent assigning the same employee to the same role/SKU/index on a booking twice
+  CONSTRAINT unique_booking_sku_index_employee_role UNIQUE (booking_id, sku, product_index, employee_id, rate_label)
+);
+
+-- Indexing for fast queries during payroll & reports
+CREATE INDEX idx_commission_assignments_company ON public.commission_assignments(company_id);
+CREATE INDEX idx_commission_assignments_employee ON public.commission_assignments(employee_id);
+CREATE INDEX idx_commission_assignments_booking ON public.commission_assignments(booking_id);
+
+-- Enable Row Level Security (RLS)
+ALTER TABLE public.commission_assignments ENABLE ROW LEVEL SECURITY;
+
+-- Create RLS Policies
+CREATE POLICY "Allow company members read commissions" ON public.commission_assignments
+  FOR SELECT USING (
+    company_id IN (
+      SELECT c.id FROM public.companies c
+      JOIN public.tenant_members tm ON c.tenant_id = tm.tenant_id
+      WHERE tm.user_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "Allow company members insert commissions" ON public.commission_assignments
+  FOR INSERT WITH CHECK (
+    company_id IN (
+      SELECT c.id FROM public.companies c
+      JOIN public.tenant_members tm ON c.tenant_id = tm.tenant_id
+      WHERE tm.user_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "Allow company members update commissions" ON public.commission_assignments
+  FOR UPDATE USING (
+    company_id IN (
+      SELECT c.id FROM public.companies c
+      JOIN public.tenant_members tm ON c.tenant_id = tm.tenant_id
+      WHERE tm.user_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "Allow company members delete commissions" ON public.commission_assignments
+  FOR DELETE USING (
+    company_id IN (
+      SELECT c.id FROM public.companies c
+      JOIN public.tenant_members tm ON c.tenant_id = tm.tenant_id
+      WHERE tm.user_id = auth.uid()
+    )
+  );
+
+
+-- ==========================================
+-- Source: 34_backfill_booking_checklist.sql
+-- ==========================================
+
+-- Backfill booking_checklist in global_settings for all existing companies with the default calendar checklist items
+INSERT INTO public.global_settings (key, company_id, value)
+SELECT 
+  'booking_checklist',
+  id,
+  '[
+    {"text": "Door opens and closes smoothly without obstruction", "indent": false},
+    {"text": "Smart lock operates properly (locking and unlocking)", "indent": false},
+    {"text": "Smart lock is successfully connected to the mobile app", "indent": false},
+    {"text": "I know how to create an account on the app", "indent": true},
+    {"text": "I have registered RFID card on the device", "indent": true},
+    {"text": "All components, including the camera, screen, handle, keypad, mechanical unlock, and deadbolt, are free of defects", "indent": false},
+    {"text": "Screws and fasteners are securely installed", "indent": false},
+    {"text": "I have been invited to leave a review for LOOCK Cavite and has consented to taking a photo with the device for documentation", "indent": false},
+    {"text": "Warranty coverage: 1 year on factory defects, 7 days on installation warranty (excludes user-caused damage, service may apply)", "indent": false}
+  ]'::jsonb
+FROM public.companies
+ON CONFLICT (key, company_id) DO NOTHING;
+
+
+-- ==========================================
+-- Source: 40_sales_schedules_schema.sql
+-- ==========================================
+
+-- Migration 40: Create sales_schedules table
+-- Stores weekly repeating schedule blocks for Sales employees.
+-- Each row represents: an employee works on day_of_week from hour_start to hour_end.
+-- day_of_week follows JS convention: 0=Sun, 1=Mon, 2=Tue … 6=Sat.
+
+CREATE TABLE IF NOT EXISTS public.sales_schedules (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id   UUID NOT NULL REFERENCES public.companies(id) ON DELETE CASCADE,
+  employee_id  UUID NOT NULL REFERENCES public.employees(id) ON DELETE CASCADE ON UPDATE CASCADE,
+  day_of_week  SMALLINT NOT NULL CHECK (day_of_week BETWEEN 0 AND 6),
+  hour_start   SMALLINT NOT NULL CHECK (hour_start BETWEEN 0 AND 23),
+  hour_end     SMALLINT NOT NULL CHECK (hour_end   BETWEEN 1 AND 24),
+  color        TEXT,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT hour_range_valid CHECK (hour_end > hour_start)
+);
+
+-- Index for fast per-company lookups
+CREATE INDEX IF NOT EXISTS idx_sales_schedules_company
+  ON public.sales_schedules (company_id);
+
+CREATE INDEX IF NOT EXISTS idx_sales_schedules_employee
+  ON public.sales_schedules (company_id, employee_id);
+
+-- ── Row-Level Security ──
+ALTER TABLE public.sales_schedules ENABLE ROW LEVEL SECURITY;
+
+-- Members of the company may read schedules
+DROP POLICY IF EXISTS "Allow company members read sales_schedules" ON public.sales_schedules;
+CREATE POLICY "Allow company members read sales_schedules" ON public.sales_schedules
+  FOR SELECT USING (
+    company_id IN (
+      SELECT c.id FROM public.companies c
+      JOIN public.tenant_members tm ON c.tenant_id = tm.tenant_id
+      WHERE tm.user_id = auth.uid()
+    )
+  );
+
+-- Members of the company may insert/update/delete their company's schedules
+DROP POLICY IF EXISTS "Allow company members write sales_schedules" ON public.sales_schedules;
+CREATE POLICY "Allow company members write sales_schedules" ON public.sales_schedules
+  FOR ALL USING (
+    company_id IN (
+      SELECT c.id FROM public.companies c
+      JOIN public.tenant_members tm ON c.tenant_id = tm.tenant_id
+      WHERE tm.user_id = auth.uid()
+    )
+  )
+  WITH CHECK (
+    company_id IN (
+      SELECT c.id FROM public.companies c
+      JOIN public.tenant_members tm ON c.tenant_id = tm.tenant_id
+      WHERE tm.user_id = auth.uid()
+    )
+  );
+
+
+-- ==========================================
+-- Source: 45_add_needs_work_permit_to_installation_bookings.sql
+-- ==========================================
+
+-- Migration to add needs_work_permit column to installation_bookings
+ALTER TABLE public.installation_bookings
+ADD COLUMN needs_work_permit BOOLEAN DEFAULT false;
+
+
+-- ==========================================
+-- Source: 48_fix_commission_orphaned_employee_ids.sql
+-- ==========================================
+
+-- =============================================================================
+-- Migration 48: Fix commission_assignments orphaned employee_ids
+-- =============================================================================
+-- Root Cause: register-employee.js queried employees with .eq('email', ...)
+-- but the employees table column is 'email_address'. So when an existing
+-- HR-created employee registered, the lookup failed (returned null), causing
+-- a SECOND employee record to be inserted with a brand-new UUID.
+--
+-- Result: commission_assignments.employee_id still points to the OLD UUID
+-- (original HR record) but employees table now has a NEW UUID for that person.
+-- This makes the leaderboard show "Unknown Employee" because no match is found.
+--
+-- Fix: Re-point orphaned commission_assignments to the newer (auth-linked)
+-- employee record by matching on email_address + company_id.
+-- =============================================================================
+
+UPDATE public.commission_assignments ca
+SET employee_id = newer_emp.id
+FROM
+  public.employees older_emp
+  JOIN public.employees newer_emp
+    ON older_emp.email_address = newer_emp.email_address
+    AND older_emp.company_id = newer_emp.company_id
+    AND older_emp.id != newer_emp.id
+    AND newer_emp.created_at > older_emp.created_at
+WHERE
+  ca.employee_id = older_emp.id;
+
+-- After running and verifying, you can optionally delete the orphaned old records:
+-- DELETE FROM public.employees e
+-- WHERE NOT EXISTS (
+--   SELECT 1 FROM public.commission_assignments ca WHERE ca.employee_id = e.id
+-- )
+-- AND NOT EXISTS (
+--   SELECT 1 FROM public.tenant_members tm WHERE tm.user_id = e.id
+-- )
+-- AND e.created_at < (NOW() - INTERVAL '1 day');
+
+
+-- ==========================================
+-- Source: 52_add_booking_city_province.sql
+-- ==========================================
+
+-- Add customer_city and customer_province to installation_bookings table
+ALTER TABLE public.installation_bookings ADD COLUMN IF NOT EXISTS customer_city TEXT;
+ALTER TABLE public.installation_bookings ADD COLUMN IF NOT EXISTS customer_province TEXT;
+
+
+-- ==========================================
+-- Source: 53_add_show_total_to_installers.sql
+-- ==========================================
+
+-- Add show_total_to_installers column to installation_bookings
+ALTER TABLE public.installation_bookings ADD COLUMN show_total_to_installers BOOLEAN DEFAULT TRUE;

@@ -1,3 +1,7 @@
+-- ==========================================
+-- Source: 09_bookkeeping_and_journal.sql
+-- ==========================================
+
 -- =============================================================================
 -- BrightKey Consolidated Bookkeeping and Journal Schema (09_bookkeeping_and_journal.sql)
 -- Consolidates general journal, journal accounts, bookkeeping transactions, lines,
@@ -468,3 +472,606 @@ BEGIN
   );
 END;
 $$ LANGUAGE plpgsql;
+
+
+-- ==========================================
+-- Source: 49_add_is_visible_to_journal_accounts.sql
+-- ==========================================
+
+-- Add is_visible column to journal_accounts table
+ALTER TABLE public.journal_accounts ADD COLUMN IF NOT EXISTS is_visible BOOLEAN DEFAULT TRUE;
+
+
+-- ==========================================
+-- Source: 54_add_software_subscriptions.sql
+-- ==========================================
+
+-- 1. Create software_subscriptions table if not exists
+CREATE TABLE IF NOT EXISTS public.software_subscriptions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    company_id UUID NOT NULL REFERENCES public.companies(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    description TEXT,
+    mode TEXT NOT NULL CHECK (mode IN ('pay_as_you_go', 'monthly', 'annual')),
+    cost_centavos INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'unsubscribed')),
+    subscribed_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    unsubscribed_date DATE,
+    billing_url TEXT,
+    account_email TEXT,
+    card_last_four TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 2. Add columns if they do not exist
+ALTER TABLE public.software_subscriptions ADD COLUMN IF NOT EXISTS billing_url TEXT;
+ALTER TABLE public.software_subscriptions ADD COLUMN IF NOT EXISTS account_email TEXT;
+ALTER TABLE public.software_subscriptions ADD COLUMN IF NOT EXISTS card_last_four TEXT;
+
+-- 3. Enable RLS
+ALTER TABLE public.software_subscriptions ENABLE ROW LEVEL SECURITY;
+
+-- 4. Create policies conditionally
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies 
+        WHERE tablename = 'software_subscriptions' AND policyname = 'Allow company members read software_subscriptions'
+    ) THEN
+        CREATE POLICY "Allow company members read software_subscriptions" ON public.software_subscriptions
+            FOR SELECT USING (
+                company_id IN (
+                    SELECT c.id FROM public.companies c
+                    JOIN public.tenant_members tm ON c.tenant_id = tm.tenant_id
+                    WHERE tm.user_id = auth.uid()
+                )
+            );
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies 
+        WHERE tablename = 'software_subscriptions' AND policyname = 'Allow company members write software_subscriptions'
+    ) THEN
+        CREATE POLICY "Allow company members write software_subscriptions" ON public.software_subscriptions
+            FOR ALL USING (
+                company_id IN (
+                    SELECT c.id FROM public.companies c
+                    JOIN public.tenant_members tm ON c.tenant_id = tm.tenant_id
+                    WHERE tm.user_id = auth.uid()
+                )
+            );
+    END IF;
+END $$;
+
+-- 5. Create software_subscription_billing table if not exists
+CREATE TABLE IF NOT EXISTS public.software_subscription_billing (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    subscription_id UUID NOT NULL REFERENCES public.software_subscriptions(id) ON DELETE CASCADE,
+    company_id UUID NOT NULL REFERENCES public.companies(id) ON DELETE CASCADE,
+    billing_month DATE NOT NULL, -- First of the month, e.g. '2026-07-01'
+    cost_centavos INTEGER NOT NULL,
+    mode TEXT NOT NULL CHECK (mode IN ('pay_as_you_go', 'monthly', 'annual', 'unsubscribed')),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (subscription_id, billing_month)
+);
+
+-- 6. Enable RLS
+ALTER TABLE public.software_subscription_billing ENABLE ROW LEVEL SECURITY;
+
+-- 7. Create policies conditionally for billing table
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies 
+        WHERE tablename = 'software_subscription_billing' AND policyname = 'Allow company members read software_subscription_billing'
+    ) THEN
+        CREATE POLICY "Allow company members read software_subscription_billing" ON public.software_subscription_billing
+            FOR SELECT USING (
+                company_id IN (
+                    SELECT c.id FROM public.companies c
+                    JOIN public.tenant_members tm ON c.tenant_id = tm.tenant_id
+                    WHERE tm.user_id = auth.uid()
+                )
+            );
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies 
+        WHERE tablename = 'software_subscription_billing' AND policyname = 'Allow company members write software_subscription_billing'
+    ) THEN
+        CREATE POLICY "Allow company members write software_subscription_billing" ON public.software_subscription_billing
+            FOR ALL USING (
+                company_id IN (
+                    SELECT c.id FROM public.companies c
+                    JOIN public.tenant_members tm ON c.tenant_id = tm.tenant_id
+                    WHERE tm.user_id = auth.uid()
+                )
+            );
+    END IF;
+END $$;
+
+
+-- ==========================================
+-- Source: 55_add_suppliers.sql
+-- ==========================================
+
+-- Create Suppliers Table
+CREATE TABLE IF NOT EXISTS public.suppliers (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id UUID REFERENCES public.companies(id) ON DELETE CASCADE NOT NULL,
+  business_id UUID REFERENCES public.tenant_businesses(id) ON DELETE SET NULL,
+  name TEXT NOT NULL,
+  street_address TEXT,
+  city TEXT,
+  province TEXT,
+  contact_number TEXT,
+  contact_number_2 TEXT,
+  email TEXT,
+  email_2 TEXT,
+  website TEXT,
+  tin TEXT,
+  payment_account_name TEXT,
+  payment_account_number TEXT,
+  qr_image_url TEXT,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Enable RLS
+ALTER TABLE public.suppliers ENABLE ROW LEVEL SECURITY;
+
+-- Drop existing policies if any
+DROP POLICY IF EXISTS "Allow select suppliers" ON public.suppliers;
+DROP POLICY IF EXISTS "Allow manage suppliers" ON public.suppliers;
+
+-- Create Policies
+CREATE POLICY "Allow select suppliers" ON public.suppliers
+  FOR SELECT USING (
+    company_id IN (
+      SELECT c.id FROM public.companies c
+      JOIN public.tenant_members tm ON c.tenant_id = tm.tenant_id
+      WHERE tm.user_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "Allow manage suppliers" ON public.suppliers
+  FOR ALL USING (
+    company_id IN (
+      SELECT c.id FROM public.companies c
+      JOIN public.tenant_members tm ON c.tenant_id = tm.tenant_id
+      WHERE tm.user_id = auth.uid()
+    )
+  );
+
+
+-- ==========================================
+-- Source: 56_add_supplier_extra_contacts.sql
+-- ==========================================
+
+-- Add additional contact number and email to suppliers table
+ALTER TABLE public.suppliers ADD COLUMN IF NOT EXISTS contact_number_2 TEXT;
+ALTER TABLE public.suppliers ADD COLUMN IF NOT EXISTS email_2 TEXT;
+
+
+-- ==========================================
+-- Source: 57_add_supplier_tin.sql
+-- ==========================================
+
+-- Add tin column to suppliers table
+ALTER TABLE public.suppliers ADD COLUMN IF NOT EXISTS tin TEXT;
+
+
+-- ==========================================
+-- Source: 61_add_payment_bank_name_to_suppliers.sql
+-- ==========================================
+
+-- Migration to add payment_bank_name to suppliers table
+ALTER TABLE public.suppliers ADD COLUMN IF NOT EXISTS payment_bank_name TEXT;
+
+
+-- ==========================================
+-- Source: 62_add_account_id_to_general_journal.sql
+-- ==========================================
+
+-- Add account_id column referencing public.journal_accounts
+ALTER TABLE public.general_journal ADD COLUMN IF NOT EXISTS account_id BIGINT REFERENCES public.journal_accounts(id) ON DELETE SET NULL;
+
+-- Backfill existing entries by matching names
+UPDATE public.general_journal gj
+SET account_id = ja.id
+FROM public.journal_accounts ja
+WHERE gj.account = ja.name AND gj.company_id = ja.company_id;
+
+
+-- ==========================================
+-- Source: 63_locked_profit_loss_statements.sql
+-- ==========================================
+
+-- Migration: 63_locked_profit_loss_statements.sql
+-- Create table to cache computed Profit & Loss statements for locked months
+
+CREATE TABLE IF NOT EXISTS public.locked_profit_loss_statements (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id UUID NOT NULL REFERENCES public.companies(id) ON DELETE CASCADE,
+  month VARCHAR(7) NOT NULL, -- Format: YYYY-MM
+  statement_data JSONB NOT NULL, -- Stores all computed P&L values
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT locked_pl_company_month_unique UNIQUE (company_id, month)
+);
+
+-- Enable Row-Level Security
+ALTER TABLE public.locked_profit_loss_statements ENABLE ROW LEVEL SECURITY;
+
+-- Drop policies if they exist to prevent crashes on rerun
+DROP POLICY IF EXISTS "Allow company members read locked statements" ON public.locked_profit_loss_statements;
+DROP POLICY IF EXISTS "Allow company members insert locked statements" ON public.locked_profit_loss_statements;
+DROP POLICY IF EXISTS "Allow company members update locked statements" ON public.locked_profit_loss_statements;
+DROP POLICY IF EXISTS "Allow company members delete locked statements" ON public.locked_profit_loss_statements;
+
+-- Create policies for tenant members
+CREATE POLICY "Allow company members read locked statements" ON public.locked_profit_loss_statements
+  FOR SELECT USING (
+    company_id IN (
+      SELECT c.id FROM public.companies c
+      JOIN public.tenant_members tm ON c.tenant_id = tm.tenant_id
+      WHERE tm.user_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "Allow company members insert locked statements" ON public.locked_profit_loss_statements
+  FOR INSERT WITH CHECK (
+    company_id IN (
+      SELECT c.id FROM public.companies c
+      JOIN public.tenant_members tm ON c.tenant_id = tm.tenant_id
+      WHERE tm.user_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "Allow company members update locked statements" ON public.locked_profit_loss_statements
+  FOR UPDATE USING (
+    company_id IN (
+      SELECT c.id FROM public.companies c
+      JOIN public.tenant_members tm ON c.tenant_id = tm.tenant_id
+      WHERE tm.user_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "Allow company members delete locked statements" ON public.locked_profit_loss_statements
+  FOR DELETE USING (
+    company_id IN (
+      SELECT c.id FROM public.companies c
+      JOIN public.tenant_members tm ON c.tenant_id = tm.tenant_id
+      WHERE tm.user_id = auth.uid()
+    )
+  );
+
+
+-- ==========================================
+-- Source: 64_finance_adjustments_payables_receivables.sql
+-- ==========================================
+
+-- Migration: 64_finance_adjustments_payables_receivables.sql
+-- Consolidated tracking tables for Supplier Cost Adjustments, Supplier Payables (Accounts Payable), Company Receivables, and Receivable Payments
+
+-- 1. Create supplier_cost_adjustments table
+CREATE TABLE IF NOT EXISTS public.supplier_cost_adjustments (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id UUID NOT NULL REFERENCES public.companies(id) ON DELETE CASCADE,
+  description TEXT NOT NULL,
+  amount_cents INTEGER NOT NULL, -- positive or negative value in centavos
+  adjustment_date DATE NOT NULL, -- date the adjustment belongs to (for monthly scope)
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 2. Create supplier_payables table
+CREATE TABLE IF NOT EXISTS public.supplier_payables (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id UUID NOT NULL REFERENCES public.companies(id) ON DELETE CASCADE,
+  supplier_id UUID REFERENCES public.suppliers(id) ON DELETE SET NULL,
+  invoice_number TEXT,
+  amount_cents INTEGER NOT NULL, -- payable amount in centavos
+  due_date DATE NOT NULL,
+  status TEXT NOT NULL DEFAULT 'unpaid', -- unpaid, paid, void
+  description TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 3. Create company_receivables table
+CREATE TABLE IF NOT EXISTS public.company_receivables (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id UUID NOT NULL REFERENCES public.companies(id) ON DELETE CASCADE,
+  category TEXT NOT NULL CHECK (category IN ('owner', 'staff', 'supplier')),
+  party_name TEXT NOT NULL,
+  reference_no TEXT,
+  invoice_date DATE NOT NULL,
+  due_date DATE NOT NULL,
+  grand_total_cents INTEGER NOT NULL,
+  balance_due_cents INTEGER NOT NULL,
+  contact_number TEXT,
+  description TEXT,
+  status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'partial', 'paid', 'overdue', 'cancelled')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 4. Create receivable_payments table
+CREATE TABLE IF NOT EXISTS public.receivable_payments (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id UUID NOT NULL REFERENCES public.companies(id) ON DELETE CASCADE,
+  booking_id UUID REFERENCES public.installation_bookings(id) ON DELETE CASCADE,
+  receivable_id UUID REFERENCES public.company_receivables(id) ON DELETE CASCADE,
+  amount_cents INTEGER NOT NULL,
+  payment_date TIMESTAMPTZ NOT NULL DEFAULT now(),
+  payment_method TEXT NOT NULL DEFAULT 'Cash',
+  reference_number TEXT,
+  notes TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Enable Row-Level Security
+ALTER TABLE public.supplier_cost_adjustments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.supplier_payables ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.company_receivables ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.receivable_payments ENABLE ROW LEVEL SECURITY;
+
+-- Conditional policies for supplier_cost_adjustments
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies 
+    WHERE tablename = 'supplier_cost_adjustments' 
+      AND policyname = 'Allow company members read adjustments'
+  ) THEN
+    CREATE POLICY "Allow company members read adjustments" ON public.supplier_cost_adjustments
+      FOR SELECT USING (
+        company_id IN (
+          SELECT c.id FROM public.companies c
+          JOIN public.tenant_members tm ON c.tenant_id = tm.tenant_id
+          WHERE tm.user_id = auth.uid()
+        )
+      );
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies 
+    WHERE tablename = 'supplier_cost_adjustments' 
+      AND policyname = 'Allow company members insert adjustments'
+  ) THEN
+    CREATE POLICY "Allow company members insert adjustments" ON public.supplier_cost_adjustments
+      FOR INSERT WITH CHECK (
+        company_id IN (
+          SELECT c.id FROM public.companies c
+          JOIN public.tenant_members tm ON c.tenant_id = tm.tenant_id
+          WHERE tm.user_id = auth.uid()
+        )
+      );
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies 
+    WHERE tablename = 'supplier_cost_adjustments' 
+      AND policyname = 'Allow company members update adjustments'
+  ) THEN
+    CREATE POLICY "Allow company members update adjustments" ON public.supplier_cost_adjustments
+      FOR UPDATE USING (
+        company_id IN (
+          SELECT c.id FROM public.companies c
+          JOIN public.tenant_members tm ON c.tenant_id = tm.tenant_id
+          WHERE tm.user_id = auth.uid()
+        )
+      );
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies 
+    WHERE tablename = 'supplier_cost_adjustments' 
+      AND policyname = 'Allow company members delete adjustments'
+  ) THEN
+    CREATE POLICY "Allow company members delete adjustments" ON public.supplier_cost_adjustments
+      FOR DELETE USING (
+        company_id IN (
+          SELECT c.id FROM public.companies c
+          JOIN public.tenant_members tm ON c.tenant_id = tm.tenant_id
+          WHERE tm.user_id = auth.uid()
+        )
+      );
+  END IF;
+END
+$$;
+
+-- Conditional policies for supplier_payables
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies 
+    WHERE tablename = 'supplier_payables' 
+      AND policyname = 'Allow company members read payables'
+  ) THEN
+    CREATE POLICY "Allow company members read payables" ON public.supplier_payables
+      FOR SELECT USING (
+        company_id IN (
+          SELECT c.id FROM public.companies c
+          JOIN public.tenant_members tm ON c.tenant_id = tm.tenant_id
+          WHERE tm.user_id = auth.uid()
+        )
+      );
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies 
+    WHERE tablename = 'supplier_payables' 
+      AND policyname = 'Allow company members insert payables'
+  ) THEN
+    CREATE POLICY "Allow company members insert payables" ON public.supplier_payables
+      FOR INSERT WITH CHECK (
+        company_id IN (
+          SELECT c.id FROM public.companies c
+          JOIN public.tenant_members tm ON c.tenant_id = tm.tenant_id
+          WHERE tm.user_id = auth.uid()
+        )
+      );
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies 
+    WHERE tablename = 'supplier_payables' 
+      AND policyname = 'Allow company members update payables'
+  ) THEN
+    CREATE POLICY "Allow company members update payables" ON public.supplier_payables
+      FOR UPDATE USING (
+        company_id IN (
+          SELECT c.id FROM public.companies c
+          JOIN public.tenant_members tm ON c.tenant_id = tm.tenant_id
+          WHERE tm.user_id = auth.uid()
+        )
+      );
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies 
+    WHERE tablename = 'supplier_payables' 
+      AND policyname = 'Allow company members delete payables'
+  ) THEN
+    CREATE POLICY "Allow company members delete payables" ON public.supplier_payables
+      FOR DELETE USING (
+        company_id IN (
+          SELECT c.id FROM public.companies c
+          JOIN public.tenant_members tm ON c.tenant_id = tm.tenant_id
+          WHERE tm.user_id = auth.uid()
+        )
+      );
+  END IF;
+END
+$$;
+
+-- Conditional policies for company_receivables
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies 
+    WHERE tablename = 'company_receivables' 
+      AND policyname = 'Allow company members read company_receivables'
+  ) THEN
+    CREATE POLICY "Allow company members read company_receivables" ON public.company_receivables
+      FOR SELECT USING (
+        company_id IN (
+          SELECT c.id FROM public.companies c
+          JOIN public.tenant_members tm ON c.tenant_id = tm.tenant_id
+          WHERE tm.user_id = auth.uid()
+        )
+      );
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies 
+    WHERE tablename = 'company_receivables' 
+      AND policyname = 'Allow company members insert company_receivables'
+  ) THEN
+    CREATE POLICY "Allow company members insert company_receivables" ON public.company_receivables
+      FOR INSERT WITH CHECK (
+        company_id IN (
+          SELECT c.id FROM public.companies c
+          JOIN public.tenant_members tm ON c.tenant_id = tm.tenant_id
+          WHERE tm.user_id = auth.uid()
+        )
+      );
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies 
+    WHERE tablename = 'company_receivables' 
+      AND policyname = 'Allow company members update company_receivables'
+  ) THEN
+    CREATE POLICY "Allow company members update company_receivables" ON public.company_receivables
+      FOR UPDATE USING (
+        company_id IN (
+          SELECT c.id FROM public.companies c
+          JOIN public.tenant_members tm ON c.tenant_id = tm.tenant_id
+          WHERE tm.user_id = auth.uid()
+        )
+      );
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies 
+    WHERE tablename = 'company_receivables' 
+      AND policyname = 'Allow company members delete company_receivables'
+  ) THEN
+    CREATE POLICY "Allow company members delete company_receivables" ON public.company_receivables
+      FOR DELETE USING (
+        company_id IN (
+          SELECT c.id FROM public.companies c
+          JOIN public.tenant_members tm ON c.tenant_id = tm.tenant_id
+          WHERE tm.user_id = auth.uid()
+        )
+      );
+  END IF;
+END
+$$;
+
+-- Conditional policies for receivable_payments
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies 
+    WHERE tablename = 'receivable_payments' 
+      AND policyname = 'Allow company members read payments'
+  ) THEN
+    CREATE POLICY "Allow company members read payments" ON public.receivable_payments
+      FOR SELECT USING (
+        company_id IN (
+          SELECT c.id FROM public.companies c
+          JOIN public.tenant_members tm ON c.tenant_id = tm.tenant_id
+          WHERE tm.user_id = auth.uid()
+        )
+      );
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies 
+    WHERE tablename = 'receivable_payments' 
+      AND policyname = 'Allow company members insert payments'
+  ) THEN
+    CREATE POLICY "Allow company members insert payments" ON public.receivable_payments
+      FOR INSERT WITH CHECK (
+        company_id IN (
+          SELECT c.id FROM public.companies c
+          JOIN public.tenant_members tm ON c.tenant_id = tm.tenant_id
+          WHERE tm.user_id = auth.uid()
+        )
+      );
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies 
+    WHERE tablename = 'receivable_payments' 
+      AND policyname = 'Allow company members update payments'
+  ) THEN
+    CREATE POLICY "Allow company members update payments" ON public.receivable_payments
+      FOR UPDATE USING (
+        company_id IN (
+          SELECT c.id FROM public.companies c
+          JOIN public.tenant_members tm ON c.tenant_id = tm.tenant_id
+          WHERE tm.user_id = auth.uid()
+        )
+      );
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies 
+    WHERE tablename = 'receivable_payments' 
+      AND policyname = 'Allow company members delete payments'
+  ) THEN
+    CREATE POLICY "Allow company members delete payments" ON public.receivable_payments
+      FOR DELETE USING (
+        company_id IN (
+          SELECT c.id FROM public.companies c
+          JOIN public.tenant_members tm ON c.tenant_id = tm.tenant_id
+          WHERE tm.user_id = auth.uid()
+        )
+      );
+  END IF;
+END
+$$;
