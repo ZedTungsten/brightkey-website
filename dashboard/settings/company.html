@@ -113,20 +113,15 @@
                         <!-- Dynamic list elements go here -->
                       </div>
 
-                      <div style="display: flex; gap: 0.5rem; align-items: center; border-top: 1px solid var(--border); padding-top: 1rem;">
-                        <select id="social-platform-select" class="form-select" style="flex: 1; padding: 0.55rem 0.75rem; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-surface); color: var(--text-primary);">
-                          <option value="Facebook">Facebook</option>
-                          <option value="Messenger">Messenger</option>
-                          <option value="Instagram">Instagram</option>
-                          <option value="X">X (Twitter)</option>
-                          <option value="LinkedIn">LinkedIn</option>
-                          <option value="Tiktok">Tiktok</option>
-                          <option value="YouTube">YouTube</option>
-                          <option value="Pinterest">Pinterest</option>
-                          <option value="Amazon">Amazon</option>
-                          <option value="Medium">Medium</option>
-                        </select>
-                        <button class="btn btn-outline" onclick="addSocialLinkRow()" type="button">+ Add Social</button>
+                      <div style="position: relative; border-top: 1px solid var(--border); padding-top: 1rem; display: flex; justify-content: flex-end;">
+                        <button class="btn" style="background: var(--cyan); color: #ffffff; border: none; font-weight: 600; padding: 0.55rem 1rem; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 0.4rem;" onclick="toggleSocialDropdown(event)" type="button">
+                          + Add Social
+                        </button>
+                        
+                        <!-- Popover Dropdown menu -->
+                        <div id="social-popover-menu" style="display: none; position: absolute; right: 0; bottom: calc(100% + 8px); background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: var(--shadow-lg); z-index: 100; min-width: 170px; max-height: 250px; overflow-y: auto; padding: 0.35rem 0;">
+                          <!-- Clickable options populated via JS -->
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -184,6 +179,37 @@
 
     window.initSettingsPage = async function() {
       await loadCompanySettings();
+      
+      // Populate social popover menu
+      const platforms = ['Facebook', 'Messenger', 'Instagram', 'X', 'LinkedIn', 'Tiktok', 'YouTube', 'Pinterest', 'Amazon', 'Medium'];
+      const popover = document.getElementById('social-popover-menu');
+      if (popover) {
+        popover.innerHTML = platforms.map(p => `
+          <div style="display: flex; align-items: center; gap: 0.6rem; padding: 0.6rem 0.8rem; cursor: pointer; font-size: 0.8rem; font-weight: 500; color: var(--text-secondary); transition: background 0.15s;" 
+               onclick="addSocialLinkRow('${p}'); document.getElementById('social-popover-menu').style.display = 'none';"
+               onmouseover="this.style.background='var(--bg-base)'"
+               onmouseout="this.style.background='none'">
+            <div style="width: 16px; height: 16px; display: flex; align-items: center; justify-content: center;">
+              ${window.SocialIcons[p]}
+            </div>
+            <span>${p}</span>
+          </div>
+        `).join('');
+      }
+
+      // Close popover on click outside
+      document.addEventListener('click', () => {
+        const menu = document.getElementById('social-popover-menu');
+        if (menu) menu.style.display = 'none';
+      });
+    };
+
+    window.toggleSocialDropdown = function(event) {
+      event.stopPropagation();
+      const menu = document.getElementById('social-popover-menu');
+      if (menu) {
+        menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+      }
     };
 
     window.handleLogoUpload = function(event, theme) {
@@ -234,7 +260,7 @@
 
     window.addSocialLinkRow = function(platform = '', url = '') {
       const list = document.getElementById('social-links-list');
-      const selectedPlatform = platform || document.getElementById('social-platform-select').value;
+      const selectedPlatform = platform || 'Facebook';
       
       const rowId = 'social-row-' + Date.now() + Math.random().toString(36).substr(2, 5);
 
