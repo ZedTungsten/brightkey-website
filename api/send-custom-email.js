@@ -51,7 +51,7 @@ function compileHtmlBody(blocks, settings, logo, address, eventId, recipientEmai
   let socialHtml = '';
   if (socialLinks.length > 0) {
     socialHtml = `
-      <div style="text-align: ${align}; margin-top: 24px; margin-bottom: 12px;">
+      <div style="text-align: center; margin-top: 24px; margin-bottom: 12px;">
         ${socialLinks.map(item => `
           <a href="${item.url}" target="_blank" style="text-decoration:none; margin-right:12px; display:inline-block;">
             ${backendSocialIcons[item.platform] || ''}
@@ -120,12 +120,17 @@ function compileHtmlBody(blocks, settings, logo, address, eventId, recipientEmai
     `;
   }
 
+  const logoSize = settings.logoSize || 'medium';
+  let logoHeight = '48px';
+  if (logoSize === 'small') logoHeight = '24px';
+  else if (logoSize === 'large') logoHeight = '72px';
+
   const logoHtml = logo
-    ? `<div style="text-align: ${align}; margin-bottom: 24px;"><img src="${logo}" alt="Company Logo" style="max-height: 48px; object-fit: contain;" /></div>`
+    ? `<div style="text-align: ${align}; margin-bottom: 24px;"><img src="${logo}" alt="Company Logo" style="max-height: ${logoHeight}; object-fit: contain;" /></div>`
     : '';
 
   const addressHtml = address
-    ? `<div style="text-align: ${align}; border-top: 1px solid #e5e7eb; padding-top: 16px; margin-top: 36px; font-size: 11px; color: #9ca3af; font-family: sans-serif; line-height: 1.4;">${address}</div>`
+    ? `<div style="text-align: center; border-top: 1px solid #e5e7eb; padding-top: 16px; margin-top: 36px; font-size: 11px; color: #9ca3af; font-family: sans-serif; line-height: 1.4;">${address}</div>`
     : '';
 
   return `
