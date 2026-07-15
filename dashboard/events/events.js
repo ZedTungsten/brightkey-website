@@ -490,26 +490,49 @@ window.EventsApp = {
       return;
     }
 
+    const richTypes = ['body', 'signature', 'section-body', 'bullet-list', 'num-list'];
+
+    // SVG arrows for thicker appearance
+    const svgUp = `<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>`;
+    const svgDown = `<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>`;
+
     this.builderBlocks.forEach((block, idx) => {
       const card = document.createElement('div');
       card.className = 'block-card';
 
+      const isRich = richTypes.includes(block.type);
+      const textareaId = `block-ta-${block.id}`;
+
+      let formatToolbar = '';
+      if (isRich) {
+        formatToolbar = `
+          <div style="display:inline-flex; gap:2px; margin-left:0.5rem;">
+            <button class="action-btn" style="width:22px;height:22px;font-weight:900;font-size:0.85rem;" onclick="EventsApp.applyFormat('${block.id}','${textareaId}','bold')" title="Bold">B</button>
+            <button class="action-btn" style="width:22px;height:22px;font-style:italic;font-weight:700;font-size:0.85rem;" onclick="EventsApp.applyFormat('${block.id}','${textareaId}','italic')" title="Italic">I</button>
+            <button class="action-btn" style="width:22px;height:22px;text-decoration:underline;font-weight:700;font-size:0.85rem;" onclick="EventsApp.applyFormat('${block.id}','${textareaId}','underline')" title="Underline">U</button>
+          </div>
+        `;
+      }
+
       let inputHtml = '';
       if (block.type === 'bullet-list' || block.type === 'num-list') {
-        inputHtml = `<textarea class="form-input" style="font-size:0.85rem;" rows="3" placeholder="Enter list items (one per line)" oninput="EventsApp.updateBlockValue('${block.id}', this.value)">${esc(block.value)}</textarea>`;
-      } else if (block.type === 'body' || block.type === 'signature' || block.type === 'section-body') {
-        inputHtml = `<textarea class="form-input" style="font-size:0.85rem;" rows="3" placeholder="Enter paragraph text" oninput="EventsApp.updateBlockValue('${block.id}', this.value)">${esc(block.value)}</textarea>`;
+        inputHtml = `<textarea id="${textareaId}" class="form-input" style="font-size:0.85rem;" rows="3" placeholder="Enter list items (one per line)" oninput="EventsApp.updateBlockValue('${block.id}', this.value)">${esc(block.value)}</textarea>`;
+      } else if (isRich) {
+        inputHtml = `<textarea id="${textareaId}" class="form-input" style="font-size:0.85rem;" rows="3" placeholder="Enter paragraph text" oninput="EventsApp.updateBlockValue('${block.id}', this.value)">${esc(block.value)}</textarea>`;
       } else {
         inputHtml = `<input type="text" class="form-input" style="font-size:0.85rem;" placeholder="Enter header text" value="${esc(block.value)}" oninput="EventsApp.updateBlockValue('${block.id}', this.value)" />`;
       }
 
       card.innerHTML = `
         <div class="block-header">
-          <span>${block.type.replace('-', ' ')}</span>
+          <div style="display:flex;align-items:center;">
+            <span>${block.type.replace('-', ' ')}</span>
+            ${formatToolbar}
+          </div>
           <div style="display:flex; gap:0.25rem;">
-            <button class="action-btn" style="width:20px;height:20px;" onclick="EventsApp.moveBlock(${idx}, -1)" title="Move Up">&uarr;</button>
-            <button class="action-btn" style="width:20px;height:20px;" onclick="EventsApp.moveBlock(${idx}, 1)" title="Move Down">&darr;</button>
-            <button class="action-btn danger" style="width:20px;height:20px;" onclick="EventsApp.removeBlock('${block.id}')" title="Delete Block">&times;</button>
+            <button class="action-btn" style="width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;" onclick="EventsApp.moveBlock(${idx}, -1)" title="Move Up">${svgUp}</button>
+            <button class="action-btn" style="width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;" onclick="EventsApp.moveBlock(${idx}, 1)" title="Move Down">${svgDown}</button>
+            <button class="action-btn danger" style="width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;font-size:1rem;line-height:1;background:var(--danger,#ef4444);color:#fff;border-color:var(--danger,#ef4444);border-radius:4px;" onclick="EventsApp.removeBlock('${block.id}')" title="Delete Block">&times;</button>
           </div>
         </div>
         ${inputHtml}
@@ -518,12 +541,48 @@ window.EventsApp = {
     });
   },
 
+  applyFormat(blockId, textareaId, format) {
+    const ta = document.getElementById(textareaId);
+    if (!ta) return;
+    const start = ta.selectionStart;
+    const end = ta.selectionEnd;
+    const selected = ta.value.substring(start, end);
+    let wrapped = selected;
+    if (format === 'bold')      wrapped = `**${selected}**`;
+    else if (format === 'italic')     wrapped = `_${selected}_`;
+    else if (format === 'underline')  wrapped = `<u>${selected}</u>`;
+    ta.value = ta.value.substring(0, start) + wrapped + ta.value.substring(end);
+    ta.selectionStart = start;
+    ta.selectionEnd = start + wrapped.length;
+    ta.focus();
+    this.updateBlockValue(blockId, ta.value);
+  },
+
   updateBlockValue(id, value) {
     const block = this.builderBlocks.find(b => b.id === id);
     if (block) {
       block.value = value;
       this.updatePreview();
     }
+  },
+
+  _renderRichText(text) {
+    if (!text) return '';
+    // Escape HTML first, but preserve intentional <u> tags added by applyFormat
+    let out = String(text)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      // Restore <u> tags that were stored literally
+      .replace(/&lt;u&gt;/g, '<u>')
+      .replace(/&lt;\/u&gt;/g, '</u>');
+    // Convert **bold** and _italic_ markdown-lite
+    out = out
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/_(.+?)_/g, '<em>$1</em>');
+    // Convert newlines to <br>
+    out = out.replace(/\n/g, '<br/>');
+    return out;
   },
 
   toggleAttendeeResponse() {
@@ -594,27 +653,27 @@ window.EventsApp = {
         el.textContent = b.value || 'Section Title';
       } else if (b.type === 'section-body') {
         el.style.paddingLeft = indent;
-        el.innerHTML = esc(b.value || 'Section content paragraph.').replace(/\n/g, '<br/>');
+        el.innerHTML = this._renderRichText(b.value || 'Section content paragraph.');
       } else if (b.type === 'body') {
-        el.innerHTML = esc(b.value || 'Body paragraph text.').replace(/\n/g, '<br/>');
+        el.innerHTML = this._renderRichText(b.value || 'Body paragraph text.');
       } else if (b.type === 'signature') {
         el.style.marginTop = '1.5rem';
         el.style.fontStyle = 'italic';
         el.style.textAlign = 'left';
-        el.innerHTML = esc(b.value || 'Warm regards,\nHR Team').replace(/\n/g, '<br/>');
+        el.innerHTML = this._renderRichText(b.value || 'Warm regards,\nHR Team');
       } else if (b.type === 'bullet-list') {
         const items = (b.value || '').split('\n').filter(i => i.trim() !== '');
         if (items.length === 0) {
-          el.innerHTML = '<ul style="margin:0; padding-left:1.25rem;"><li>Bullet item</li></ul>';
+          el.innerHTML = '<ul style="margin:0; padding-left:1.5rem; list-style-type:disc;"><li>Bullet item</li></ul>';
         } else {
-          el.innerHTML = `<ul style="margin:0; padding-left:1.25rem; text-align:${alignment};">${items.map(i => `<li>${esc(i)}</li>`).join('')}</ul>`;
+          el.innerHTML = `<ul style="margin:0; padding-left:1.5rem; list-style-type:disc; text-align:${alignment};">${items.map(i => `<li>${this._renderRichText(i)}</li>`).join('')}</ul>`;
         }
       } else if (b.type === 'num-list') {
         const items = (b.value || '').split('\n').filter(i => i.trim() !== '');
         if (items.length === 0) {
-          el.innerHTML = '<ol style="margin:0; padding-left:1.25rem;"><li>List item</li></ol>';
+          el.innerHTML = '<ol style="margin:0; padding-left:1.5rem; list-style-type:decimal;"><li>List item</li></ol>';
         } else {
-          el.innerHTML = `<ol style="margin:0; padding-left:1.25rem; text-align:${alignment};">${items.map(i => `<li>${esc(i)}</li>`).join('')}</ol>`;
+          el.innerHTML = `<ol style="margin:0; padding-left:1.5rem; list-style-type:decimal; text-align:${alignment};">${items.map(i => `<li>${this._renderRichText(i)}</li>`).join('')}</ol>`;
         }
       }
 
