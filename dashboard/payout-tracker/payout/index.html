@@ -875,7 +875,7 @@
             </td>`;
           });
 
-          const grandTotal = baseSalary + empComms + empAdjs + totalSpecials + instPayouts.totalInstallationPayout + empGlAdd - empGlDed;
+          const grandTotal = baseSalary + empComms + empAdjs + totalSpecials + instPayouts.totalInstallationPayout + empGlAdd + empGlDed;
           sumGrandTotal += grandTotal;
 
           return `<tr class="employee-row" data-emp-id="${esc(emp.id)}">
@@ -1339,7 +1339,7 @@
         }
         if (empComms > 0) breakdownHtml += `<tr><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;font-weight:600;">Commissions</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;color:#4b5563;">Sales Commissions</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;text-align:right;font-variant-numeric:tabular-nums;">${php(empComms)}</td></tr>`;
         if (empGlAdd > 0) breakdownHtml += `<tr><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;font-weight:600;">Reimbursement</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;color:#4b5563;">Reimbursement</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;text-align:right;font-variant-numeric:tabular-nums;">${php(empGlAdd)}</td></tr>`;
-        if (empGlDed > 0) breakdownHtml += `<tr><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;font-weight:600;">Cash Advance</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;color:#4b5563;">Cash Advance</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;text-align:right;font-variant-numeric:tabular-nums;">-${php(empGlDed)}</td></tr>`;
+        if (empGlDed > 0) breakdownHtml += `<tr><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;font-weight:600;">Cash Advance</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;color:#4b5563;">Cash Advance</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;text-align:right;font-variant-numeric:tabular-nums;">${php(empGlDed)}</td></tr>`;
 
         empSpecs.forEach(spec => {
           const val = Number(spec.value) || 0;
@@ -1372,6 +1372,31 @@
             label: `Cutoff Payout (Day ${day})`,
             value: total
           });
+        });
+
+        // Fetch Cash Advances from GL and list them in Payout Schedule Allocation with dates
+        const glCashAdvances = (this.generalJournalEntries || []).filter(r => {
+          const assignedEmpId = this.accountAssignments[r.account_id];
+          if (assignedEmpId !== empId) return false;
+          const accName = (this.glAccountsMap?.[r.account_id] || '').toLowerCase();
+          if (!accName.includes('due from')) return false;
+          const d = new Date(r.date);
+          const entryMonthKey = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+          return entryMonthKey === mk;
+        });
+
+        glCashAdvances.forEach(r => {
+          const val = (parseFloat(r.debit) || 0) - (parseFloat(r.credit) || 0);
+          if (val > 0) {
+            const d = new Date(r.date);
+            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            const formattedDate = `${months[d.getUTCMonth()]} ${String(d.getUTCDate()).padStart(2, '0')}, ${d.getUTCFullYear()}`;
+            allocationItems.push({
+              day: d.getUTCDate(),
+              label: `Cash Advance (${formattedDate})`,
+              value: val
+            });
+          }
         });
 
         empSpecs.forEach(spec => {
