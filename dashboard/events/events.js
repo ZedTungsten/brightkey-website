@@ -658,7 +658,6 @@ window.EventsApp = {
         el.innerHTML = this._renderRichText(b.value || 'Body paragraph text.');
       } else if (b.type === 'signature') {
         el.style.marginTop = '1.5rem';
-        el.style.fontStyle = 'italic';
         el.style.textAlign = 'left';
         el.innerHTML = this._renderRichText(b.value || 'Warm regards,\nHR Team');
       } else if (b.type === 'bullet-list') {
