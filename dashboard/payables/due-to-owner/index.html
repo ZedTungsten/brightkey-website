@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Due to Owner — BrightKey Finance</title>
+  <link rel="preconnect" href="https://fonts.bunny.net" />
+  <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../../css/style.css" />
+  <link rel="icon" type="image/svg+xml" href="../../assets/favicon.svg?v=2" />
+  <style>
+    /* ── Month Navigation ── */
+    .month-nav-container {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 0.5rem 1rem;
+    }
+    .month-nav-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      width: 28px;
+      height: 28px;
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .month-nav-btn:hover {
+      background: var(--bg-base);
+      border-color: var(--text-secondary);
+    }
+    .month-display-label {
+      font-size: 0.9rem;
+      font-weight: 700;
+      min-width: 120px;
+      text-align: center;
+    }
+
+    /* ── Excel-style Table ── */
+    .excel-container {
+      width: 100%;
+      overflow-x: auto;
+      border: 1px solid var(--border);
+      background: var(--bg-surface);
+      margin-top: 0;
+      max-height: 400px;
+      overflow-y: auto;
+      transition: max-height 0.25s ease-out;
+    }
+    .excel-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 10pt;
+      color: var(--text-primary);
+      font-family: 'commissioner', sans-serif;
+    }
+    .excel-table th, .excel-table td {
+      border: 1px solid var(--border);
+      padding: 0.35rem 0.6rem;
+    }
+    .excel-table th {
+      background: var(--bg-base, #fafafa);
+      font-weight: 700;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      font-size: 10pt;
+      letter-spacing: 0.05em;
+      text-align: left;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      box-shadow: inset 0 -1px 0 var(--border);
+    }
+    .excel-table td {
+      text-align: left;
+    }
+    .excel-table td.num-col {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+    .excel-table th.num-col {
+      text-align: right;
+    }
+    .excel-table th:first-child, .excel-table td:first-child {
+      text-align: center;
+      font-weight: 600;
+      background: var(--bg-base, #fafafa);
+    }
+    .excel-table tr.total-row td {
+      font-weight: 700 !important;
+      background: var(--bg-base, #fafafa) !important;
+      border-top: 2px solid var(--text-primary) !important;
+      border-bottom: 2px double var(--text-primary) !important;
+    }
+
+    /* ── Tab Container Bar ── */
+    .drawer-tabs {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      overflow-x: auto;
+      background: var(--bg-surface);
+      margin-bottom: 1.5rem;
+    }
+    .tab-btn {
+      padding: 0.9rem 1.25rem;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      border: none;
+      background: none;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      white-space: nowrap;
+      transition: all 0.15s;
+      text-decoration: none;
+    }
+    .tab-btn.active {
+      color: var(--cyan-light);
+      border-bottom-color: var(--cyan);
+    }
+    .tab-btn:hover:not(.active) {
+      color: var(--text-secondary);
+    }
+
+    .shimmer-row td {
+      background: linear-gradient(90deg, var(--bg-surface) 25%, var(--bg-base) 50%, var(--bg-surface) 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+    }
+    @keyframes shimmer {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+  </style>
+</head>
+<body class="bg-base text-primary">
+  <div class="dash-layout">
+    <aside class="dash-sidebar" id="dash-sidebar"></aside>
+
+    <main class="dash-main">
+      <header class="dash-topbar" style="border-bottom: none; height: auto; min-height: 60px; display: flex; flex-direction: column; align-items: stretch; justify-content: space-between; padding-top: 1rem;">
+        <div style="display: flex; align-items: center; gap: 0.75rem; padding-left: 2rem; margin-bottom: 0.75rem;">
+          <h1 style="font-size: 1.1rem; font-weight: 800; letter-spacing: -0.02em;">Payables</h1>
+        </div>
+        <div class="drawer-tabs" style="margin-bottom: 0; padding-left: 2rem; border-top: 1px solid var(--border);">
+          <a href="/dashboard/payables/customers" class="tab-btn">Customers</a>
+          <a href="/dashboard/payables/due-to-owner" class="tab-btn active">Due to Owner</a>
+          <a href="/dashboard/payables/due-to-staff" class="tab-btn">Due to Staff</a>
+          <a href="/dashboard/payables/due-to-supplier" class="tab-btn">Due to Supplier</a>
+        </div>
+      </header>
+
+      <div style="padding: 2rem; max-width: 1200px; width: 100%; margin: 0 auto; box-sizing: border-box;">
+        <!-- Top controls row -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+          <div class="month-nav-container">
+            <button onclick="App.changeMonth(-1)" class="month-nav-btn" aria-label="Previous month">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+            </button>
+            <span class="month-display-label" id="month-label">---</span>
+            <button onclick="App.changeMonth(1)" class="month-nav-btn" aria-label="Next month">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+          </div>
+
+          <button onclick="App.loadData()" class="btn btn-outline btn-sm" style="display: flex; align-items: center; gap: 0.4rem;">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+            Refresh
+          </button>
+        </div>
+
+        <!-- Sections wrapper card -->
+        <div id="sections-container" style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.5rem; box-shadow: var(--shadow-sm); display: flex; flex-direction: column; gap: 2rem;">
+          <div>
+            <table class="excel-table" style="width:100%;border:1px solid var(--border);">
+              <tbody>
+                <tr class="shimmer-row">
+                  <td style="text-align:left;">Loading...</td>
+                  <td></td><td></td><td></td><td></td><td></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/sidebar.js"></script>
+  <script src="/js/main.js"></script>
+
+  <script>
+    'use strict';
+
+    const getSb = () => window.BKAuth.sb;
+    const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+    function fmtEntry(n) {
+      n = parseInt(n, 10);
+      if (isNaN(n)) return '—';
+      if (n < 0) return `BK-SS${Math.abs(n)}`;
+      let li, num;
+      if (n <= 9999) { li = 0; num = n; }
+      else { const off = n - 10000; li = 1 + Math.floor(off / 10000); num = off % 10000; }
+      const c1 = String.fromCharCode(65 + Math.floor(li / 26));
+      const c2 = String.fromCharCode(65 + (li % 26));
+      return `BK-${c1}${c2}${String(num).padStart(4, '0')}`;
+    }
+
+    const esc = (v) => {
+      if (v === null || v === undefined) return '';
+      return String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+    };
+
+    const fmtCurrency = (val) => {
+      if (!val && val !== 0) return '—';
+      const neg = val < 0;
+      return `${neg ? '(' : ''}₱${Math.abs(val).toLocaleString(undefined, { minimumFractionDigits:2, maximumFractionDigits:2 })}${neg ? ')' : ''}`;
+    };
+
+    window.App = {
+      tenantId: null,
+      companyId: null,
+      currentYear: new Date().getFullYear(),
+      currentMonth: new Date().getMonth(),
+
+      async init() {
+        try {
+          const authInfo = await window.BKAuth.checkRoleGate(['Owner','Admin','HR','Finance'], '../../admin.html');
+          if (!authInfo) return;
+          this.tenantId = authInfo.tenantId;
+
+          const { data: co } = await getSb().from('companies').select('id').eq('tenant_id', this.tenantId).limit(1).maybeSingle();
+          this.companyId = co?.id || null;
+          if (!this.companyId) return;
+
+          await this.loadData();
+        } catch (e) { console.error(e); }
+      },
+
+      changeMonth(delta) {
+        this.currentMonth += delta;
+        if (this.currentMonth < 0) { this.currentMonth = 11; this.currentYear--; }
+        if (this.currentMonth > 11) { this.currentMonth = 0; this.currentYear++; }
+        this.loadData();
+      },
+
+      async loadData() {
+        document.getElementById('month-label').textContent = `${MONTH_NAMES[this.currentMonth]} ${this.currentYear}`;
+        const container = document.getElementById('sections-container');
+        container.innerHTML = `<div><table class="excel-table" style="width:100%;border:1px solid var(--border);"><tbody><tr class="shimmer-row"><td style="text-align:left;">Loading...</td><td></td><td></td><td></td><td></td><td></td></tr></tbody></table></div>`;
+
+        const startDate = `${this.currentYear}-${String(this.currentMonth + 1).padStart(2,'0')}-01`;
+        const lastDay = new Date(this.currentYear, this.currentMonth + 1, 0).getDate();
+        const endDate = `${this.currentYear}-${String(this.currentMonth + 1).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
+
+        try {
+          const { data: entries, error } = await getSb()
+            .from('general_journal').select('*')
+            .eq('company_id', this.companyId)
+            .ilike('account', '%due to owner%')
+            .gte('date', startDate).lte('date', endDate)
+            .order('date', { ascending: true })
+            .order('entry_number', { ascending: true })
+            .order('id', { ascending: true });
+
+          if (error) throw error;
+          this.renderSections(entries || [], container);
+        } catch (err) {
+          console.error(err);
+          container.innerHTML = `<p style="color:var(--danger);padding:1rem;">Failed to load: ${esc(err.message)}</p>`;
+        }
+      },
+
+      renderSections(entries, container) {
+        if (!entries.length) {
+          container.innerHTML = `<p style="color:var(--text-muted);font-style:italic;text-align:center;padding:2rem 0;">No transactions for this month.</p>`;
+          return;
+        }
+
+        const groups = {};
+        const groupOrder = [];
+        entries.forEach(e => {
+          const key = (e.account || '').trim();
+          if (!groups[key]) { groups[key] = []; groupOrder.push(key); }
+          groups[key].push(e);
+        });
+
+        let html = '';
+        groupOrder.forEach(accountName => {
+          const rows = groups[accountName];
+          let totalDebit = 0, totalCredit = 0;
+
+          const rowsHtml = rows.map((e, idx) => {
+            const deb = parseFloat(e.debit) || 0;
+            const cred = parseFloat(e.credit) || 0;
+            totalDebit += deb;
+            totalCredit += cred;
+            return `<tr>
+              <td style="text-align:center;color:var(--text-muted);font-size:9pt;width:3rem;">${idx + 1}</td>
+              <td style="font-family:var(--font-mono);font-weight:600;white-space:nowrap;">${esc(fmtEntry(e.entry_number))}</td>
+              <td>${esc(e.description_1 || '—')}</td>
+              <td>${esc(e.description_2 || '—')}</td>
+              <td class="num-col">${fmtCurrency(deb)}</td>
+              <td class="num-col">${fmtCurrency(cred)}</td>
+            </tr>`;
+          }).join('');
+
+          html += `
+            <div>
+              <div style="border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; margin-bottom: 0.75rem;">
+                <h2 style="font-size: 1rem; font-weight: 800; color: var(--text-primary); margin: 0;">${esc(accountName)}</h2>
+              </div>
+              <div class="excel-container" style="margin-top: 0;">
+                <table class="excel-table">
+                  <thead>
+                    <tr>
+                      <th style="text-align:center;width:3rem;">#</th>
+                      <th>Entry #</th>
+                      <th>Description 1</th>
+                      <th>Description 2</th>
+                      <th class="num-col">Debit</th>
+                      <th class="num-col">Credit</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${rowsHtml}
+                    <tr class="total-row">
+                      <td colspan="4" style="text-align:left;">Total</td>
+                      <td class="num-col">${fmtCurrency(totalDebit)}</td>
+                      <td class="num-col">${fmtCurrency(totalCredit)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>`;
+        });
+
+        container.innerHTML = html;
+      }
+    };
+
+    document.addEventListener('DOMContentLoaded', () => App.init());
+  </script>
+</body>
+</html>
