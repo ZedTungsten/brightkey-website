@@ -449,6 +449,11 @@ export default async function handler(req, res) {
       }
 
       let finalHtml = replacePlaceholders(compiledHtml);
+      
+      // Prevent Gmail signature/thread clipping/collapsing by appending a hidden randomized reference
+      const buster = Math.random().toString(36).substring(2, 9);
+      finalHtml += `<div style="display:none !important; font-size:1px; line-height:0; color:transparent; opacity:0; overflow:hidden; max-height:0; max-width:0;">Ref: ${buster}</div>`;
+
       if (emp) {
         finalHtml += `<img src="${origin}/api/track-open?event_id=${eventId}&attendee_id=${emp.id}" width="1" height="1" style="display:none !important;" />`;
       }
