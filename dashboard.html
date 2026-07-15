@@ -802,6 +802,18 @@
           this.currentUser = await BKAuth.requireAuth('admin.html');
           if (!this.currentUser) return;
 
+          const urlParams = new URLSearchParams(window.location.search);
+          const searchQuery = urlParams.get('search');
+          if (searchQuery) {
+            this.renderSearchResults(searchQuery.trim());
+            // Hide the cover banner & default grid container
+            const coverBanner = document.getElementById('dashboard-cover-banner');
+            if (coverBanner) coverBanner.style.display = 'none';
+            const gridContainer = document.querySelector('.dashboard-grid-container');
+            if (gridContainer) gridContainer.style.display = 'none';
+            return;
+          }
+
           const name = this.currentUser.user_metadata?.full_name || this.currentUser.email.split('@')[0];
           const welcomeName = document.getElementById('welcome-name');
           if (welcomeName) welcomeName.textContent = name;
@@ -901,6 +913,141 @@
         } catch (err) {
           console.error('Initialization error:', err);
         }
+      },
+
+      async renderSearchResults(query) {
+        const DASHBOARD_PAGES = [
+          { path: '/dashboard.html', title: 'Home Dashboard', desc: 'Overview of daily tasks, milestones, announcement sticky notes, and quick action widgets.' },
+          { path: '/dashboard/team.html', title: 'Team Directory', desc: 'Invite new company members, assign role permissions, view department listings, and manage profiles.' },
+          { path: '/dashboard/attendance.html', title: 'Attendance Management', desc: 'Track employee daily clock-in/out logs, work hours, breaks, and active status indicators.' },
+          { path: '/dashboard/attendance-leaves.html', title: 'Leaves & Time-Off', desc: 'Submit and approve employee vacation, sick leave requests, and check annual leave balances.' },
+          { path: '/dashboard/payouts.html', title: 'Payouts & Cash Position', desc: 'Process payroll payouts, employee bonuses, adjustments, and monitor company cash holdings.' },
+          { path: '/dashboard/sales-goals.html', title: 'Sales Goals & Targets', desc: 'Monitor active company targets, team quotas, closed deals performance, and goal progress.' },
+          { path: '/dashboard/sales-commissions.html', title: 'Sales Commissions', desc: 'Lock commission payouts, assign custom rates per booking, and compute technician incentives.' },
+          { path: '/dashboard/sales-stocks.html', title: 'Inventory & Stocks', desc: 'Track stock counts, physical item inventory levels, store locations, and dispatch logs.' },
+          { path: '/dashboard/events/index.html', title: 'Events & Email Builder', desc: 'Design custom corporate templates, send mass invitation emails, and track RSVP attendees.' },
+          { path: '/dashboard/support-inbox.html', title: 'Support Inbox & Chats', desc: 'Manage customer service chats, review client query tickets, and assign support staff.' },
+          { path: '/dashboard/product-reviews.html', title: 'Product Reviews', desc: 'Approve, delete, or hide customer product rating comments, stars, and feedback reviews.' },
+          { path: '/dashboard/global-promo.html', title: 'Global Promotions', desc: 'Toggle website banner promotional alerts, active discount campaigns, and marketing banners.' },
+          { path: '/dashboard/integrations.html', title: 'Third-Party Integrations', desc: 'Configure Resend email API keys, Stripe payment configurations, and webhook credentials.' },
+          { path: '/dashboard/master-settings.html', title: 'Master Settings', desc: 'Configure company metadata profile, phone, address details, and global ERP settings.' },
+          { path: '/dashboard/booking-schedules.html', title: 'Booking Schedules', desc: 'View technician job bookings calendar, installation dates, and order numbers.' },
+          { path: '/dashboard/bookkeeping.html', title: 'ERP Bookkeeping', desc: 'Process journal double entries, allocate profits to owners, and compile profit and loss ledgers.' },
+          { path: '/dashboard/qa-guide.html', title: 'QA Guides & Manuals', desc: 'Browse training documents, inspection guides, standard operating procedures, and guides.' }
+        ];
+
+        const dashContent = document.querySelector('.dash-content');
+        if (!dashContent) return;
+
+        // Render search results wrapper with style overrides
+        dashContent.innerHTML = `
+          <div style="background:var(--bg-surface); border:1px solid var(--border); border-radius:var(--radius-md); padding:2rem; box-shadow:var(--shadow-sm); display:flex; flex-direction:column; gap:1.5rem; min-height:450px; font-family:var(--font); box-sizing:border-box; margin-bottom: 2rem;">
+            <div style="display:flex; align-items:center; gap:0.6rem; border-bottom:1px solid var(--border); padding-bottom:1.25rem;">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--cyan);"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+              <h2 style="font-size:1.25rem; font-weight:800; margin:0; color:var(--text-primary);">Search Results for "<span style="color:var(--cyan-light);">${esc(query)}</span>"</h2>
+            </div>
+            <div id="search-results-list" style="display:flex; flex-direction:column; gap:1.75rem;">
+              <div style="text-align:center; padding:4rem; color:var(--text-muted); font-size:0.9rem;">
+                <div class="spinner" style="border:3px solid var(--border); border-top:3px solid var(--cyan); border-radius:50%; width:24px; height:24px; animation:spin 1s linear infinite; margin:0 auto 1.25rem;"></div>
+                Scanning portal pages and content...
+              </div>
+            </div>
+          </div>
+          <style>
+            @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+            .search-highlight { background:#fef08a; color:#1e293b; padding:0 2px; border-radius:2px; font-weight:700; }
+          </style>
+        `;
+
+        const lowercaseQuery = query.toLowerCase();
+        const matchedResults = [];
+
+        // Scan pages asynchronously
+        for (const page of DASHBOARD_PAGES) {
+          let matched = false;
+          let titleMatch = page.title.toLowerCase().includes(lowercaseQuery);
+          let descMatch = page.desc.toLowerCase().includes(lowercaseQuery);
+          let bodySnippet = '';
+
+          try {
+            const res = await fetch(page.path);
+            if (res.ok) {
+              const htmlText = await res.text();
+              
+              // Strip tags, style, script blocks
+              const cleanText = htmlText
+                .replace(/<script[^>]*>([\s\S]*?)<\/script>/gi, '')
+                .replace(/<style[^>]*>([\s\S]*?)<\/style>/gi, '')
+                .replace(/<\/?[^>]+(>|$)/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim();
+              
+              const textIndex = cleanText.toLowerCase().indexOf(lowercaseQuery);
+              if (textIndex !== -1) {
+                matched = true;
+                const start = Math.max(0, textIndex - 70);
+                const end = Math.min(cleanText.length, textIndex + lowercaseQuery.length + 70);
+                bodySnippet = (start > 0 ? '...' : '') + cleanText.slice(start, end).trim() + (end < cleanText.length ? '...' : '');
+              }
+            }
+          } catch (fetchErr) {
+            console.error('Search fetch failed for path:', page.path, fetchErr);
+          }
+
+          if (titleMatch || descMatch || matched) {
+            matchedResults.push({
+              path: page.path,
+              title: page.title,
+              desc: page.desc,
+              snippet: bodySnippet,
+              titleMatch,
+              descMatch
+            });
+          }
+        }
+
+        const resultsContainer = document.getElementById('search-results-list');
+        if (!resultsContainer) return;
+
+        if (matchedResults.length === 0) {
+          resultsContainer.innerHTML = `
+            <div style="text-align:center; padding:4rem 2rem; color:var(--text-muted);">
+              <div style="font-size:3rem; margin-bottom:1rem;">🔍</div>
+              <div style="font-weight:700; color:var(--text-primary); margin-bottom:0.5rem; font-size:1rem;">No results found</div>
+              <p style="font-size:0.85rem; max-width:340px; margin:0 auto; line-height:1.5;">We couldn't find any portal pages or matching text for "${esc(query)}". Try searching for general terms like "attendance", "commissions", or "payouts".</p>
+            </div>
+          `;
+          return;
+        }
+
+        // Highlight matching query text helper
+        const highlightText = (text, queryText) => {
+          if (!text) return '';
+          const escapedQuery = queryText.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+          const regex = new RegExp(`(${escapedQuery})`, 'gi');
+          return text.replace(regex, '<mark class="search-highlight">$1</mark>');
+        };
+
+        resultsContainer.innerHTML = matchedResults.map(r => {
+          const highlightedTitle = highlightText(r.title, query);
+          const highlightedDesc = highlightText(r.desc, query);
+          const highlightedSnippet = r.snippet ? highlightText(r.snippet, query) : '';
+
+          return `
+            <div style="border-bottom:1px solid var(--border); padding-bottom:1.5rem; display:flex; flex-direction:column; gap:0.4rem;">
+              <div>
+                <a href="${r.path}" style="font-size:1.05rem; font-weight:700; color:var(--cyan-light); text-decoration:none; transition:color 0.15s; display:inline-block;" onmouseenter="this.style.color='var(--cyan)'" onmouseleave="this.style.color='var(--cyan-light)'">${highlightedTitle}</a>
+                <div style="font-family:monospace; font-size:0.7rem; color:var(--text-muted); margin-top:2px;">${r.path}</div>
+              </div>
+              <div style="font-size:0.85rem; color:var(--text-secondary); line-height:1.4;">${highlightedDesc}</div>
+              ${highlightedSnippet ? `
+                <div style="background:var(--bg-elevated); border-left:3.5px solid var(--border); border-radius:4px; padding:0.65rem 0.85rem; font-size:0.78rem; color:var(--text-muted); font-style:italic; margin-top:0.4rem; line-height:1.45; word-break:break-word;">
+                  ${highlightedSnippet}
+                </div>
+              ` : ''}
+            </div>
+          `;
+        }).join('');
       },
 
       getCalendarKey(date) {

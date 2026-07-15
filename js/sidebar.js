@@ -175,6 +175,18 @@
 
       <!-- Actual Sidebar Navigation Menu -->
       <div id="sidebar-nav-content" style="display: none; flex-direction: column; gap: 0.15rem;">
+        
+        <!-- Sidebar Search -->
+        <div class="sidebar-search-container" style="padding: 0 0.5rem; margin-bottom: 0.75rem; position: relative;">
+          <div style="position: relative; display: flex; align-items: center; width: 100%;">
+            <svg id="sidebar-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px; position: absolute; left: 12px; color: #9ca3af; pointer-events: none; transition: opacity 0.15s; z-index: 2;">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <input type="text" id="sidebar-search-input" placeholder="Search" style="width: 100%; height: 32px; background: #ffffff; border: 1px solid var(--border); border-radius: 16px; padding: 0 10px 0 32px; font-size: 0.8rem; color: #1f2937; outline: none; transition: all 0.15s; font-weight: 500;" />
+          </div>
+        </div>
+
         <a href="/dashboard" class="dash-nav-item" id="nav-item-home" style="font-weight: 600;">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
           <span class="dash-nav-text">Home</span>
@@ -386,6 +398,37 @@
     if (!sidebarContainer) return;
 
     sidebarContainer.innerHTML = sidebarHTML;
+
+    // Setup Search Bar event listeners
+    const searchInput = document.getElementById('sidebar-search-input');
+    const searchIcon = document.getElementById('sidebar-search-icon');
+    if (searchInput && searchIcon) {
+      searchInput.addEventListener('input', () => {
+        if (searchInput.value.length > 0) {
+          searchIcon.style.opacity = '0';
+          searchInput.style.paddingLeft = '10px';
+        } else {
+          searchIcon.style.opacity = '1';
+          searchInput.style.paddingLeft = '32px';
+        }
+      });
+      searchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          const query = searchInput.value.trim();
+          if (query) {
+            window.location.href = `/dashboard?search=${encodeURIComponent(query)}`;
+          }
+        }
+      });
+      // Pre-fill search input if search param exists in URL
+      const urlParams = new URLSearchParams(window.location.search);
+      const searchVal = urlParams.get('search');
+      if (searchVal) {
+        searchInput.value = searchVal;
+        searchIcon.style.opacity = '0';
+        searchInput.style.paddingLeft = '10px';
+      }
+    }
 
     // Create mobile floating favicon button at lower left
     if (!document.getElementById('mobile-floating-favicon')) {
