@@ -321,6 +321,41 @@
           const { data } = await sb.from('global_settings').select('value').eq('key', 'installer_payout_settings').eq('company_id', this.companyId).maybeSingle();
           this.installerPayoutSettings = data?.value || null;
         } catch (_) { this.installerPayoutSettings = null; }
+
+        // General Ledger Accounts Map
+        try {
+          const { data: glAccounts } = await sb.from('journal_accounts').select('id, name').eq('company_id', this.companyId);
+          this.glAccountsMap = {};
+          (glAccounts || []).forEach(a => {
+            this.glAccountsMap[a.id] = a.name.toLowerCase();
+          });
+        } catch (e) {
+          this.glAccountsMap = {};
+          console.error('Error loading journal accounts:', e);
+        }
+
+        // Fetch Assign Account config
+        try {
+          const { data: configData } = await sb.from('global_settings').select('value').eq('key', 'journal_account_employee_assignments').eq('company_id', this.companyId).maybeSingle();
+          this.accountAssignments = configData?.value?.assignments || {};
+        } catch (e) {
+          this.accountAssignments = {};
+          console.error('Error loading account assignments:', e);
+        }
+
+        // Fetch General Journal entries
+        try {
+          const { data: journalData, error: journalErr } = await sb
+            .from('general_journal')
+            .select('id, company_id, date, account, account_id, debit, credit, description_1, description_2')
+            .eq('company_id', this.companyId)
+            .not('account_id', 'is', null);
+          if (journalErr) throw journalErr;
+          this.generalJournalEntries = journalData || [];
+        } catch (e) {
+          this.generalJournalEntries = [];
+          console.error('Error loading general journal entries:', e);
+        }
       },
 
       getAssignedDoorsForBookingAndEmployee(b, empId) {
@@ -773,12 +808,14 @@
           const empReimbs = this.reimbursementsList.filter(r => r.employeeId === emp.id && r.date?.startsWith(mk.substring(0,7))).reduce((s, r) => s + (Number(r.value) || 0), 0);
           // Adjustments for this month
           const empAdjs = this.adjustmentsList.filter(a => a.employeeId === emp.id && a.date?.startsWith(mk.substring(0,7))).reduce((s, a) => s + (Number(a.value) || 0), 0);
+          const empGlAdd = this._glAdditionsForEmpMonth(emp.id, mk);
+          const empGlDed = this._glDeductionsForEmpMonth(emp.id, mk);
 
           // Add to aggregators
           sumBaseSalary += baseSalary;
           sumComms += empComms;
           sumReimbs += empReimbs;
-          sumAdjs += empAdjs;
+          sumAdjs += (empAdjs + empGlAdd - empGlDed);
 
           // Special payout cells
           let specialCellsHtml = '';
@@ -811,8 +848,10 @@
             const reimbsVal = this._reimbsForSchedule(emp.id, day, mk, sortedScheds);
             const commsVal  = this._commsForSchedule(emp.id, day, mk, sortedScheds);
             const instPortion = instPayouts.cutoffPayouts[day] || 0;
+            const glAddVal = this._glAdditionsForSchedule(emp.id, day, mk, sortedScheds);
+            const glDedVal = this._glDeductionsForSchedule(emp.id, day, mk, sortedScheds);
             
-            const totalSchedVal = salaryPortion + adjsVal + reimbsVal + commsVal + instPortion;
+            const totalSchedVal = salaryPortion + adjsVal + reimbsVal + commsVal + instPortion + glAddVal - glDedVal;
             sumPayoutDays[day] += totalSchedVal;
             const isPaid = this.regularPayoutState[mk]?.[`${emp.id}_${day}`] || false;
             const isPast = this.isPastDay(day);
@@ -823,6 +862,8 @@
             if (instPortion > 0) breakdownItems.push(`Inst: ${php(instPortion)}`);
             if (reimbsVal > 0) breakdownItems.push(`Reimb: ${php(reimbsVal)}`);
             if (adjsVal !== 0) breakdownItems.push(`Adj: ${php(adjsVal)}`);
+            if (glAddVal > 0) breakdownItems.push(`GL Add: ${php(glAddVal)}`);
+            if (glDedVal > 0) breakdownItems.push(`GL Ded: -${php(glDedVal)}`);
             
             const breakdownHtml = breakdownItems.length > 0 
               ? `<div class="payout-breakdown" style="font-size:0.68rem; color:var(--text-muted); line-height:1.2; margin-left:1.4rem; text-align:left; font-family:var(--font);">${breakdownItems.join('<br>')}</div>` 
@@ -839,8 +880,10 @@
             </td>`;
           });
 
-          const grandTotal = baseSalary + empComms + empReimbs + empAdjs + totalSpecials + instPayouts.totalInstallationPayout;
+          const grandTotal = baseSalary + empComms + empReimbs + empAdjs + totalSpecials + instPayouts.totalInstallationPayout + empGlAdd - empGlDed;
           sumGrandTotal += grandTotal;
+
+          const netAdjs = empAdjs + empGlAdd - empGlDed;
 
           return `<tr class="employee-row" data-emp-id="${esc(emp.id)}">
             <td class="col-name col-sticky-1">${esc([emp.first_name, emp.last_name].filter(Boolean).join(' '))}</td>
@@ -850,7 +893,7 @@
             <td>${esc(php(empComms))}</td>
             <td>${esc(php(instPayouts.totalInstallationPayout))}</td>
             <td>${esc(php(empReimbs))}</td>
-            <td style="color:${empAdjs < 0 ? 'var(--danger)' : 'var(--text-primary)'};">${esc(php(empAdjs))}</td>
+            <td style="color:${netAdjs < 0 ? 'var(--danger)' : 'var(--text-primary)'};" title="Manual Adj: ${php(empAdjs)}\nGL Additions: ${php(empGlAdd)}\nGL Deductions: -${php(empGlDed)}">${esc(php(netAdjs))}</td>
             <td style="border-right:2px solid var(--border);padding:0;"></td>
             ${specialCellsHtml}${payoutCellsHtml}
             <td style="font-weight:700;color:var(--text-primary);background:rgba(161,161,170,0.15);">${esc(php(grandTotal))}</td>
@@ -980,6 +1023,76 @@
           const d = new Date(ds);
           return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}` === mk;
         }).reduce((s, a) => s + this._getDynamicCommAmount(a, productMap), 0);
+      },
+
+      _glAdditionsForSchedule(empId, schedDay, mk, sortedScheds) {
+        if (!this.generalJournalEntries || !this.accountAssignments) return 0;
+        return this.generalJournalEntries.filter(r => {
+          const assignedEmpId = this.accountAssignments[r.account_id];
+          if (assignedEmpId !== empId) return false;
+          const accName = (this.glAccountsMap?.[r.account_id] || '').toLowerCase();
+          if (!accName.includes('due to')) return false;
+          const d = new Date(r.date);
+          const entryMonthKey = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+          if (entryMonthKey !== mk) return false;
+          return this.getScheduleDayForItemDay(d.getUTCDate(), sortedScheds) === schedDay;
+        }).reduce((s, r) => {
+          const credit = parseFloat(r.credit) || 0;
+          const debit = parseFloat(r.debit) || 0;
+          return s + (credit - debit);
+        }, 0);
+      },
+
+      _glDeductionsForSchedule(empId, schedDay, mk, sortedScheds) {
+        if (!this.generalJournalEntries || !this.accountAssignments) return 0;
+        return this.generalJournalEntries.filter(r => {
+          const assignedEmpId = this.accountAssignments[r.account_id];
+          if (assignedEmpId !== empId) return false;
+          const accName = (this.glAccountsMap?.[r.account_id] || '').toLowerCase();
+          if (!accName.includes('due from')) return false;
+          const d = new Date(r.date);
+          const entryMonthKey = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+          if (entryMonthKey !== mk) return false;
+          return this.getScheduleDayForItemDay(d.getUTCDate(), sortedScheds) === schedDay;
+        }).reduce((s, r) => {
+          const debit = parseFloat(r.debit) || 0;
+          const credit = parseFloat(r.credit) || 0;
+          return s + (debit - credit);
+        }, 0);
+      },
+
+      _glAdditionsForEmpMonth(empId, mk) {
+        if (!this.generalJournalEntries || !this.accountAssignments) return 0;
+        return this.generalJournalEntries.filter(r => {
+          const assignedEmpId = this.accountAssignments[r.account_id];
+          if (assignedEmpId !== empId) return false;
+          const accName = (this.glAccountsMap?.[r.account_id] || '').toLowerCase();
+          if (!accName.includes('due to')) return false;
+          const d = new Date(r.date);
+          const entryMonthKey = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+          return entryMonthKey === mk;
+        }).reduce((s, r) => {
+          const credit = parseFloat(r.credit) || 0;
+          const debit = parseFloat(r.debit) || 0;
+          return s + (credit - debit);
+        }, 0);
+      },
+
+      _glDeductionsForEmpMonth(empId, mk) {
+        if (!this.generalJournalEntries || !this.accountAssignments) return 0;
+        return this.generalJournalEntries.filter(r => {
+          const assignedEmpId = this.accountAssignments[r.account_id];
+          if (assignedEmpId !== empId) return false;
+          const accName = (this.glAccountsMap?.[r.account_id] || '').toLowerCase();
+          if (!accName.includes('due from')) return false;
+          const d = new Date(r.date);
+          const entryMonthKey = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+          return entryMonthKey === mk;
+        }).reduce((s, r) => {
+          const debit = parseFloat(r.debit) || 0;
+          const credit = parseFloat(r.credit) || 0;
+          return s + (debit - credit);
+        }, 0);
       },
 
       _adjsForSchedule(empId, schedDay, mk, sortedScheds) {
@@ -1116,6 +1229,27 @@
             finalTotalAdjs += instPayouts.serviceEarnings;
           }
 
+          const empGlAdd = this._glAdditionsForEmpMonth(empId, mk);
+          const empGlDed = this._glDeductionsForEmpMonth(empId, mk);
+          if (empGlAdd > 0) {
+            finalAdjObjs.push({
+              label: 'GL Additions (Due to)',
+              value: empGlAdd,
+              description: 'Additions from General Ledger',
+              date: new Date().toISOString()
+            });
+            finalTotalAdjs += empGlAdd;
+          }
+          if (empGlDed > 0) {
+            finalAdjObjs.push({
+              label: 'GL Deductions (Due from)',
+              value: -empGlDed,
+              description: 'Deductions from General Ledger',
+              date: new Date().toISOString()
+            });
+            finalTotalAdjs -= empGlDed;
+          }
+ 
           const grandTotal   = baseSalary + empComms + totalReimbs + finalTotalAdjs + totalSpecs;
 
           let resolvedDeptName = emp.department || '—';
@@ -1185,10 +1319,13 @@
           instPayouts = this.calculateInstallerPayouts(empId, mk, sortedScheds);
         }
 
+        const empGlAdd = this._glAdditionsForEmpMonth(empId, mk);
+        const empGlDed = this._glDeductionsForEmpMonth(empId, mk);
+
         const totalReimbs = empReimbs.reduce((s, r) => s + (Number(r.value) || 0), 0);
         const totalAdjs   = empAdjs.reduce((s, a) => s + (Number(a.value) || 0), 0);
         const totalSpecs  = empSpecs.reduce((s, x) => s + (Number(x.value) || 0), 0);
-        const grandTotal  = baseSalary + empComms + totalReimbs + totalAdjs + totalSpecs + thresholdEarnings + serviceEarnings;
+        const grandTotal  = baseSalary + empComms + totalReimbs + totalAdjs + totalSpecs + thresholdEarnings + serviceEarnings + empGlAdd - empGlDed;
 
         // Fetch payslip config lazily
         let payslipCfg = { logoStyle: 'light', signatoryName: 'Authorized Signatory', signatureUrl: '' };
@@ -1217,6 +1354,8 @@
           breakdownHtml += `<tr><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;font-weight:600;">Service Job Earnings</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;color:#4b5563;line-height:1.5;">${esc(serviceDescription).replace(/\n/g, '<br>')}</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;text-align:right;font-variant-numeric:tabular-nums;">${php(serviceEarnings)}</td></tr>`;
         }
         if (empComms > 0) breakdownHtml += `<tr><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;font-weight:600;">Commissions</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;color:#4b5563;">Sales Commissions</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;text-align:right;font-variant-numeric:tabular-nums;">${php(empComms)}</td></tr>`;
+        if (empGlAdd > 0) breakdownHtml += `<tr><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;font-weight:600;">GL Additions (Due to)</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;color:#4b5563;">Additions from General Ledger</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;text-align:right;font-variant-numeric:tabular-nums;">${php(empGlAdd)}</td></tr>`;
+        if (empGlDed > 0) breakdownHtml += `<tr><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;font-weight:600;">GL Deductions (Due from)</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;color:#4b5563;">Deductions from General Ledger</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;text-align:right;font-variant-numeric:tabular-nums;">-${php(empGlDed)}</td></tr>`;
 
         let cutoffHtml = '';
         let verifiedTotal = 0;
@@ -1226,10 +1365,12 @@
           const rv = empReimbs.filter(r => { const d = new Date(r.date); return this.getScheduleDayForItemDay(r.date ? new Date(r.date).getUTCDate() : 30, sortedScheds) === day; }).reduce((s, r) => s + (Number(r.value) || 0), 0);
           const cv = this._commsForSchedule(empId, day, mk, sortedScheds);
           const xv = empSpecs.filter(s => this.getScheduleDayForItemDay(Number(s.day), sortedScheds) === day).reduce((s, x) => s + (Number(x.value) || 0), 0);
+          const glAddVal = this._glAdditionsForSchedule(empId, day, mk, sortedScheds);
+          const glDedVal = this._glDeductionsForSchedule(empId, day, mk, sortedScheds);
           
           const instPortion = instPayouts.cutoffPayouts[day] || 0;
 
-          const total = sp + av + rv + cv + xv + instPortion;
+          const total = sp + av + rv + cv + xv + instPortion + glAddVal - glDedVal;
           verifiedTotal += total;
           cutoffHtml += `<div style="display:flex;justify-content:space-between;padding:0.5rem 0;font-size:0.85rem;border-bottom:1px dashed #e5e7eb;"><span style="font-weight:500;color:#4b5563;">Cutoff Payout (Day ${day})</span><span style="font-weight:700;color:#111827;font-variant-numeric:tabular-nums;margin-right:12px;">${php(total)}</span></div>`;
         });
