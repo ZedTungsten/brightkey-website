@@ -1628,8 +1628,10 @@ window.EventsApp = {
         .eq('id', this.builderEventId);
       if (error) throw error;
       console.log('Email configuration autosaved for event:', this.builderEventId);
+      window.Toast?.success?.('Email template autosaved.');
     } catch (e) {
       console.error('Autosave failed:', e);
+      window.Toast?.error?.('Autosave failed: ' + e.message);
     }
   }
 };
