@@ -156,6 +156,12 @@ window.EventsApp = {
             <button class="action-btn" title="Edit" onclick="EventsApp.openEditModal(${JSON.stringify(ev).replace(/"/g,'&quot;')})">
               <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
             </button>
+            <button class="action-btn" title="Duplicate" onclick="EventsApp.duplicateEvent(${JSON.stringify(ev).replace(/"/g,'&quot;')})">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+              </svg>
+            </button>
             <button class="action-btn danger" title="Delete" onclick="EventsApp.openConfirm('${esc(ev.id)}', '${esc(ev.title)}')">
               <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
             </button>
@@ -168,6 +174,7 @@ window.EventsApp = {
   /* ── Modal helpers ── */
   openCreateModal() {
     this.editingId = null;
+    this.duplicateSourceEvent = null;
     document.getElementById('modal-title').textContent = 'Create Event';
     document.getElementById('modal-save-btn').textContent = 'Create';
     document.getElementById('event-title').value = '';
@@ -181,6 +188,14 @@ window.EventsApp = {
     document.getElementById('event-time-end').value = '';
     document.getElementById('duration-display').textContent = '';
     document.getElementById('is-whole-day').checked = false;
+    
+    // Clear red borders if any
+    const inputs = ['event-date', 'event-date-from', 'event-date-to', 'event-time-start', 'event-time-end'];
+    inputs.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.border = '';
+    });
+
     this.toggleDateRange();
     this.toggleWholeDay();
     document.getElementById('event-modal').classList.add('open');
@@ -188,6 +203,7 @@ window.EventsApp = {
 
   openEditModal(ev) {
     this.editingId = ev.id;
+    this.duplicateSourceEvent = null;
     document.getElementById('modal-title').textContent = 'Edit Event';
     document.getElementById('modal-save-btn').textContent = 'Save Changes';
     document.getElementById('event-title').value = ev.title || '';
@@ -205,14 +221,74 @@ window.EventsApp = {
     document.getElementById('event-time-start').value = ev.time_start || '';
     document.getElementById('event-time-end').value = ev.time_end || '';
     document.getElementById('is-whole-day').checked = !!ev.is_whole_day;
+
+    // Clear red borders if any
+    const inputs = ['event-date', 'event-date-from', 'event-date-to', 'event-time-start', 'event-time-end'];
+    inputs.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.border = '';
+    });
+
     this.toggleDateRange();
     this.toggleWholeDay();
     this.updateDuration();
     document.getElementById('event-modal').classList.add('open');
   },
 
+  duplicateEvent(ev) {
+    this.editingId = null;
+    this.duplicateSourceEvent = ev;
+    
+    document.getElementById('modal-title').textContent = 'Duplicate Event';
+    document.getElementById('modal-save-btn').textContent = 'Duplicate';
+    
+    // Copy info fields
+    document.getElementById('event-title').value = (ev.title || '') + ' (Copy)';
+    document.getElementById('event-description').value = ev.description || '';
+    document.getElementById('event-level').value = String(ev.visibility_level || 1);
+    document.getElementById('is-date-range').checked = !!ev.is_date_range;
+    document.getElementById('is-whole-day').checked = !!ev.is_whole_day;
+
+    // LEAVE date & time fields blank
+    document.getElementById('event-date').value = '';
+    document.getElementById('event-date-from').value = '';
+    document.getElementById('event-date-to').value = '';
+    document.getElementById('event-time-start').value = '';
+    document.getElementById('event-time-end').value = '';
+    document.getElementById('duration-display').textContent = '';
+
+    // Apply red borders to highlight the empty date & time inputs
+    const highlightInputs = ['event-date', 'event-date-from', 'event-date-to', 'event-time-start', 'event-time-end'];
+    highlightInputs.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) {
+        el.style.border = '1.5px solid var(--red, #ef4444)';
+        // Clear red border on input/change once a value is entered
+        el.addEventListener('input', function handler() {
+          if (el.value) {
+            el.style.border = '';
+            el.removeEventListener('input', handler);
+          }
+        });
+      }
+    });
+
+    this.toggleDateRange();
+    this.toggleWholeDay();
+    document.getElementById('event-modal').classList.add('open');
+  },
+
   closeModal() {
+    this.editingId = null;
+    this.duplicateSourceEvent = null;
     document.getElementById('event-modal').classList.remove('open');
+    
+    // Clear any red borders when modal is closed
+    const inputs = ['event-date', 'event-date-from', 'event-date-to', 'event-time-start', 'event-time-end'];
+    inputs.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.border = '';
+    });
   },
 
   toggleDateRange() {
@@ -296,6 +372,13 @@ window.EventsApp = {
         ({ error: err } = await getSb().from('company_events').update(payload).eq('id', this.editingId));
       } else {
         payload.created_by = this.currentUserId;
+        if (this.duplicateSourceEvent) {
+          payload.email_subject = this.duplicateSourceEvent.email_subject;
+          payload.email_preheader = this.duplicateSourceEvent.email_preheader;
+          payload.email_attendee_response = this.duplicateSourceEvent.email_attendee_response;
+          payload.email_body_json = this.duplicateSourceEvent.email_body_json;
+          payload.email_settings = this.duplicateSourceEvent.email_settings;
+        }
         ({ error: err } = await getSb().from('company_events').insert(payload));
       }
 
