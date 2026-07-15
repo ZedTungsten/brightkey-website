@@ -435,16 +435,7 @@ window.EventsApp = {
     }
     document.getElementById('mockup-address-container').innerHTML = this.companyAddress;
 
-    // Autoload last used template if one exists
-    try {
-      const { data: lastTemplate } = await getSb()
-        .from('email_templates')
-        .select('*')
-        .eq('company_id', this.companyId)
-        .eq('category', 'HR')
-        .order('updated_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+
 
     // Check if the event already has an autosaved email config
     if (ev && ev.email_body_json) {
