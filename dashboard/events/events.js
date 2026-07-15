@@ -428,6 +428,7 @@ window.EventsApp = {
         if (settings.gap) document.getElementById('style-gap').value = settings.gap;
         if (settings.linkColor) document.getElementById('style-link-color').value = settings.linkColor;
         if (settings.ctaAffirm) document.getElementById('style-cta-affirm').value = settings.ctaAffirm;
+        if (settings.ctaNegative) document.getElementById('style-cta-negative').value = settings.ctaNegative;
         if (settings.socialColor) document.getElementById('style-social-color').value = settings.socialColor;
         if (settings.socialSize) document.getElementById('style-social-size').value = settings.socialSize;
 
@@ -996,6 +997,7 @@ window.EventsApp = {
         if (settings.gap) document.getElementById('style-gap').value = settings.gap;
         if (settings.linkColor) document.getElementById('style-link-color').value = settings.linkColor;
         if (settings.ctaAffirm) document.getElementById('style-cta-affirm').value = settings.ctaAffirm;
+        if (settings.ctaNegative) document.getElementById('style-cta-negative').value = settings.ctaNegative;
         if (settings.socialColor) document.getElementById('style-social-color').value = settings.socialColor;
         if (settings.socialSize) document.getElementById('style-social-size').value = settings.socialSize;
 
