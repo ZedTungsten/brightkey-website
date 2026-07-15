@@ -49,6 +49,41 @@ window.EventsApp = {
       if (!this.companyId) return;
 
       await this.loadData();
+
+      // Setup global delegate listeners for template autocomplete dropdown in email builder
+      const builderModal = document.getElementById('email-builder-modal');
+      if (builderModal) {
+        builderModal.addEventListener('input', (e) => {
+          if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+            const val = e.target.value;
+            const caretPos = e.target.selectionStart;
+            const textBefore = val.slice(0, caretPos);
+            const triggerIndex = textBefore.lastIndexOf('{{');
+            if (triggerIndex !== -1) {
+              const query = textBefore.slice(triggerIndex + 2);
+              if (!query.includes(' ') && !query.includes('}') && !query.includes('{')) {
+                this.showAutocompleteDropdown(e.target, triggerIndex, query);
+                return;
+              }
+            }
+            this.closeAutocomplete();
+          }
+        });
+
+        builderModal.addEventListener('keydown', (e) => {
+          if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+            this.handleAutocompleteKeydown(e);
+          }
+        });
+
+        // Close autocomplete on clicking outside
+        document.addEventListener('click', (e) => {
+          const dropdown = document.getElementById('autocomplete-dropdown');
+          if (dropdown && !dropdown.contains(e.target) && e.target !== this.activeAutocompleteInput) {
+            this.closeAutocomplete();
+          }
+        });
+      }
     } catch (e) { console.error(e); }
   },
 
@@ -474,6 +509,7 @@ window.EventsApp = {
 
   closeEmailBuilder() {
     document.getElementById('email-builder-modal').classList.remove('open');
+    this.closeAutocomplete();
   },
 
   updateCharCounts() {
@@ -1290,6 +1326,122 @@ window.EventsApp = {
       btn.disabled = false;
       btn.textContent = 'Send Test';
     }
+  },
+
+  // Autocomplete Dropdown Logic
+  showAutocompleteDropdown(inputEl, triggerIndex, query) {
+    let dropdown = document.getElementById('autocomplete-dropdown');
+    if (!dropdown) {
+      dropdown = document.createElement('div');
+      dropdown.id = 'autocomplete-dropdown';
+      dropdown.className = 'autocomplete-dropdown';
+      document.body.appendChild(dropdown);
+    }
+
+    this.activeAutocompleteInput = inputEl;
+    this.autocompleteTriggerPos = triggerIndex;
+
+    const placeholders = [
+      '{{firstname}}',
+      '{{lastname}}',
+      '{{email}}',
+      '{{workemail}}',
+      '{{city}}',
+      '{{department}}',
+      '{{team}}',
+      '{{position}}',
+      '{{reportingto}}'
+    ];
+
+    const filtered = placeholders.filter(p => p.slice(2).toLowerCase().startsWith(query.toLowerCase()));
+
+    if (filtered.length === 0) {
+      dropdown.style.display = 'none';
+      return;
+    }
+
+    dropdown.innerHTML = filtered.map((p, idx) => `
+      <div class="autocomplete-item ${idx === 0 ? 'active' : ''}" data-value="${p}" onclick="EventsApp.insertPlaceholder('${p}')">
+        ${p}
+      </div>
+    `).join('');
+
+    this.autocompleteActiveIndex = 0;
+    this.autocompleteItems = filtered;
+
+    const rect = inputEl.getBoundingClientRect();
+    dropdown.style.left = `${rect.left + window.scrollX}px`;
+    dropdown.style.top = `${rect.bottom + window.scrollY}px`;
+    dropdown.style.display = 'block';
+  },
+
+  insertPlaceholder(placeholder) {
+    const input = this.activeAutocompleteInput;
+    if (!input) return;
+
+    const val = input.value;
+    const triggerPos = this.autocompleteTriggerPos;
+    const caretPos = input.selectionStart;
+
+    const before = val.slice(0, triggerPos);
+    const after = val.slice(caretPos);
+    input.value = before + placeholder + after;
+
+    const newCursorPos = triggerPos + placeholder.length;
+    input.setSelectionRange(newCursorPos, newCursorPos);
+    input.focus();
+
+    // Trigger update preview & config
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+
+    this.closeAutocomplete();
+  },
+
+  closeAutocomplete() {
+    const dropdown = document.getElementById('autocomplete-dropdown');
+    if (dropdown) dropdown.style.display = 'none';
+    this.activeAutocompleteInput = null;
+    this.autocompleteTriggerPos = -1;
+    this.autocompleteActiveIndex = -1;
+    this.autocompleteItems = [];
+  },
+
+  handleAutocompleteKeydown(e) {
+    const dropdown = document.getElementById('autocomplete-dropdown');
+    if (!dropdown || dropdown.style.display === 'none') return;
+
+    const items = dropdown.querySelectorAll('.autocomplete-item');
+    if (items.length === 0) return;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      this.autocompleteActiveIndex = (this.autocompleteActiveIndex + 1) % items.length;
+      this.highlightAutocompleteItem(items);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      this.autocompleteActiveIndex = (this.autocompleteActiveIndex - 1 + items.length) % items.length;
+      this.highlightAutocompleteItem(items);
+    } else if (e.key === 'Enter' || e.key === 'Tab') {
+      e.preventDefault();
+      const activeItem = items[this.autocompleteActiveIndex];
+      if (activeItem) {
+        this.insertPlaceholder(activeItem.getAttribute('data-value'));
+      }
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      this.closeAutocomplete();
+    }
+  },
+
+  highlightAutocompleteItem(items) {
+    items.forEach((item, idx) => {
+      if (idx === this.autocompleteActiveIndex) {
+        item.classList.add('active');
+        item.scrollIntoView({ block: 'nearest' });
+      } else {
+        item.classList.remove('active');
+      }
+    });
   }
 };
 

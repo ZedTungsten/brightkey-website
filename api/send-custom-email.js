@@ -362,6 +362,71 @@ export default async function handler(req, res) {
     for (const recipient of emails) {
       const compiledHtml = compileHtmlBody(blocks, compilerSettings, finalLogo, finalAddressHtml, eventId, recipient, origin);
       
+      // Fetch recipient details from employee directory to enable mail merge / placeholders
+      const { data: emp } = await supabase
+        .from('employees')
+        .select('*')
+        .eq('company_id', companyId)
+        .ilike('email_address', recipient)
+        .limit(1)
+        .maybeSingle();
+
+      let reportingToName = 'N/A';
+      let city = 'N/A';
+
+      if (emp) {
+        if (emp.reporting_to) {
+          const { data: mgr } = await supabase
+            .from('employees')
+            .select('first_name, last_name')
+            .or(`id.eq.${emp.reporting_to},employee_number.eq.${emp.reporting_to}`)
+            .limit(1)
+            .maybeSingle();
+          if (mgr) {
+            reportingToName = `${mgr.first_name} ${mgr.last_name}`;
+          } else {
+            reportingToName = emp.reporting_to;
+          }
+        }
+        if (emp.address) {
+          const parts = emp.address.split(',').map(p => p.trim());
+          if (parts.length >= 2) {
+            city = parts[parts.length - 2];
+          } else {
+            city = parts[0] || 'N/A';
+          }
+        }
+      }
+
+      const replacePlaceholders = (text) => {
+        if (!text) return '';
+        if (!emp) {
+          return text
+            .replace(/\{\{firstname\}\}/g, '')
+            .replace(/\{\{lastname\}\}/g, '')
+            .replace(/\{\{email\}\}/g, recipient)
+            .replace(/\{\{workemail\}\}/g, recipient)
+            .replace(/\{\{city\}\}/g, 'N/A')
+            .replace(/\{\{department\}\}/g, 'N/A')
+            .replace(/\{\{team\}\}/g, 'N/A')
+            .replace(/\{\{position\}\}/g, 'N/A')
+            .replace(/\{\{reportingto\}\}/g, 'N/A');
+        }
+        return text
+          .replace(/\{\{firstname\}\}/g, emp.first_name || '')
+          .replace(/\{\{lastname\}\}/g, emp.last_name || '')
+          .replace(/\{\{email\}\}/g, emp.email_address || recipient)
+          .replace(/\{\{workemail\}\}/g, emp.email_address || recipient)
+          .replace(/\{\{city\}\}/g, city)
+          .replace(/\{\{department\}\}/g, emp.department || 'N/A')
+          .replace(/\{\{team\}\}/g, emp.department || 'N/A')
+          .replace(/\{\{position\}\}/g, emp.position || 'N/A')
+          .replace(/\{\{reportingto\}\}/g, reportingToName);
+      };
+
+      const finalHtml = replacePlaceholders(compiledHtml);
+      const finalSubject = replacePlaceholders(subject);
+
       if (isSmtp) {
         let finalSmtpFrom = smtpUser;
         if (finalSmtpFrom && !finalSmtpFrom.includes('<')) {
@@ -371,8 +436,8 @@ export default async function handler(req, res) {
         await transporter.sendMail({
           from: finalSmtpFrom,
           to: recipient,
-          subject: subject,
-          html: compiledHtml
+          subject: finalSubject,
+          html: finalHtml
         });
         sentCount++;
       } else if (activeResendApiKey) {
@@ -390,8 +455,8 @@ export default async function handler(req, res) {
           body: JSON.stringify({
             from: finalFrom,
             to: recipient,
-            subject: subject,
-            html: compiledHtml
+            subject: finalSubject,
+            html: finalHtml
           })
         });
 
