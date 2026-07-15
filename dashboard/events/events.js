@@ -451,21 +451,40 @@ window.EventsApp = {
         
         // Restore style settings inputs
         const settings = lastTemplate.settings || {};
-        if (settings.bgColor) document.getElementById('style-bg-color').value = settings.bgColor;
+        if (settings.bgColor) {
+          document.getElementById('style-bg-color').value = settings.bgColor;
+          document.getElementById('style-bg-color-hex').value = settings.bgColor.toUpperCase();
+        }
         if (settings.alignment) document.getElementById('style-alignment').value = settings.alignment;
         if (settings.logoSize) document.getElementById('style-logo-size').value = settings.logoSize;
         if (settings.headerSize) document.getElementById('style-header-size').value = settings.headerSize;
         if (settings.subSize) document.getElementById('style-subheader-size').value = settings.subSize;
         if (settings.bodySize) document.getElementById('style-body-size').value = settings.bodySize;
-        if (settings.bodyColor) document.getElementById('style-body-color').value = settings.bodyColor;
+        if (settings.bodyColor) {
+          document.getElementById('style-body-color').value = settings.bodyColor;
+          document.getElementById('style-body-color-hex').value = settings.bodyColor.toUpperCase();
+        }
         if (settings.indent) document.getElementById('style-indent').value = settings.indent;
         if (settings.lineHeight) document.getElementById('style-line-height').value = settings.lineHeight;
         if (settings.gap) document.getElementById('style-gap').value = settings.gap;
-        if (settings.linkColor) document.getElementById('style-link-color').value = settings.linkColor;
-        if (settings.ctaAffirm) document.getElementById('style-cta-affirm').value = settings.ctaAffirm;
-        if (settings.ctaNegative) document.getElementById('style-cta-negative').value = settings.ctaNegative;
-        if (settings.socialColor) document.getElementById('style-social-color').value = settings.socialColor;
+        if (settings.linkColor) {
+          document.getElementById('style-link-color').value = settings.linkColor;
+          document.getElementById('style-link-color-hex').value = settings.linkColor.toUpperCase();
+        }
+        if (settings.ctaAffirm) {
+          document.getElementById('style-cta-affirm').value = settings.ctaAffirm;
+          document.getElementById('style-cta-affirm-hex').value = settings.ctaAffirm.toUpperCase();
+        }
+        if (settings.ctaNegative) {
+          document.getElementById('style-cta-negative').value = settings.ctaNegative;
+          document.getElementById('style-cta-negative-hex').value = settings.ctaNegative.toUpperCase();
+        }
+        if (settings.socialColor) {
+          document.getElementById('style-social-color').value = settings.socialColor;
+          document.getElementById('style-social-color-hex').value = settings.socialColor.toUpperCase();
+        }
         if (settings.socialSize) document.getElementById('style-social-size').value = settings.socialSize;
+
 
         // Restore check state for social links
         const activeSocials = settings.socialLinks || [];
@@ -497,6 +516,14 @@ window.EventsApp = {
     document.getElementById('builder-subject').value = `Invitation: ${eventTitle}`;
     document.getElementById('builder-preheader').value = `You are invited to join us for ${eventTitle}`;
     document.getElementById('builder-attendee-response').checked = true;
+
+    // Initialize hex input text values from color inputs
+    const colorFields = ['style-bg-color', 'style-body-color', 'style-link-color', 'style-cta-affirm', 'style-cta-negative', 'style-social-color'];
+    colorFields.forEach(f => {
+      const colVal = document.getElementById(f)?.value || '';
+      const hexEl = document.getElementById(f + '-hex');
+      if (hexEl) hexEl.value = colVal.toUpperCase();
+    });
 
     this.updateCharCounts();
     this.renderBlocksList();
@@ -620,8 +647,12 @@ window.EventsApp = {
           <div style="display:flex; flex-wrap:wrap; align-items:center; gap:0.75rem;">
             <label style="display:inline-flex;align-items:center;gap:4px;font-size:0.72rem;">
               Color:
-              <input type="color" value="${col}" style="width:28px;height:22px;padding:0;border:1px solid var(--border);border-radius:3px;cursor:pointer;"
-                onchange="EventsApp.updateBlockConfig('${block.id}', 'color', this.value)">
+              <div style="display:inline-flex;align-items:center;gap:3px;">
+                <input type="color" id="hr-col-picker-${block.id}" value="${col}" style="width:24px;height:22px;padding:0;border:1px solid var(--border);border-radius:3px;cursor:pointer;"
+                  oninput="EventsApp.syncColorText(this, 'hr-col-hex-${block.id}'); EventsApp.updateBlockConfig('${block.id}', 'color', this.value)">
+                <input type="text" id="hr-col-hex-${block.id}" value="${col.toUpperCase()}" style="width:58px;height:22px;font-size:0.68rem;padding:0 3px;font-family:monospace;border:1px solid var(--border);border-radius:3px;background:var(--bg-surface);color:var(--text-primary);text-transform:uppercase;" maxlength="7"
+                  oninput="EventsApp.syncTextColor(this, 'hr-col-picker-${block.id}'); EventsApp.updateBlockConfig('${block.id}', 'color', document.getElementById('hr-col-picker-${block.id}').value)">
+              </div>
             </label>
             <span style="font-size:0.72rem; color:var(--text-muted);">Thickness:</span>
             ${['thin','medium','thick'].map(t => `
@@ -1021,21 +1052,40 @@ window.EventsApp = {
         
         // Set style inputs
         const settings = t.settings || {};
-        if (settings.bgColor) document.getElementById('style-bg-color').value = settings.bgColor;
+        if (settings.bgColor) {
+          document.getElementById('style-bg-color').value = settings.bgColor;
+          document.getElementById('style-bg-color-hex').value = settings.bgColor.toUpperCase();
+        }
         if (settings.alignment) document.getElementById('style-alignment').value = settings.alignment;
         if (settings.logoSize) document.getElementById('style-logo-size').value = settings.logoSize;
         if (settings.headerSize) document.getElementById('style-header-size').value = settings.headerSize;
         if (settings.subSize) document.getElementById('style-subheader-size').value = settings.subSize;
         if (settings.bodySize) document.getElementById('style-body-size').value = settings.bodySize;
-        if (settings.bodyColor) document.getElementById('style-body-color').value = settings.bodyColor;
+        if (settings.bodyColor) {
+          document.getElementById('style-body-color').value = settings.bodyColor;
+          document.getElementById('style-body-color-hex').value = settings.bodyColor.toUpperCase();
+        }
         if (settings.indent) document.getElementById('style-indent').value = settings.indent;
         if (settings.lineHeight) document.getElementById('style-line-height').value = settings.lineHeight;
         if (settings.gap) document.getElementById('style-gap').value = settings.gap;
-        if (settings.linkColor) document.getElementById('style-link-color').value = settings.linkColor;
-        if (settings.ctaAffirm) document.getElementById('style-cta-affirm').value = settings.ctaAffirm;
-        if (settings.ctaNegative) document.getElementById('style-cta-negative').value = settings.ctaNegative;
-        if (settings.socialColor) document.getElementById('style-social-color').value = settings.socialColor;
+        if (settings.linkColor) {
+          document.getElementById('style-link-color').value = settings.linkColor;
+          document.getElementById('style-link-color-hex').value = settings.linkColor.toUpperCase();
+        }
+        if (settings.ctaAffirm) {
+          document.getElementById('style-cta-affirm').value = settings.ctaAffirm;
+          document.getElementById('style-cta-affirm-hex').value = settings.ctaAffirm.toUpperCase();
+        }
+        if (settings.ctaNegative) {
+          document.getElementById('style-cta-negative').value = settings.ctaNegative;
+          document.getElementById('style-cta-negative-hex').value = settings.ctaNegative.toUpperCase();
+        }
+        if (settings.socialColor) {
+          document.getElementById('style-social-color').value = settings.socialColor;
+          document.getElementById('style-social-color-hex').value = settings.socialColor.toUpperCase();
+        }
         if (settings.socialSize) document.getElementById('style-social-size').value = settings.socialSize;
+
 
         // Restore check state for social links
         const activeSocials = settings.socialLinks || [];
@@ -1442,6 +1492,27 @@ window.EventsApp = {
         item.classList.remove('active');
       }
     });
+  },
+
+  syncColorText(colorInput, textInputId) {
+    const txt = document.getElementById(textInputId);
+    if (txt) {
+      txt.value = colorInput.value.toUpperCase();
+    }
+  },
+
+  syncTextColor(textInput, colorInputId) {
+    let val = textInput.value.trim();
+    if (!val.startsWith('#')) {
+      val = '#' + val;
+    }
+    const colorReg = /^#[0-9A-F]{6}$/i;
+    if (colorReg.test(val)) {
+      const colorInput = document.getElementById(colorInputId);
+      if (colorInput) {
+        colorInput.value = val;
+      }
+    }
   }
 };
 
