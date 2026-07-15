@@ -235,6 +235,35 @@ async function ensurePublicUrl(supabase, companyId, logoStr) {
 }
 
 export default async function handler(req, res) {
+  // Check if this is a tracking pixel open request
+  if (req.method === 'GET' || req.query.track) {
+    const { event_id, attendee_id } = req.query;
+
+    if (event_id && attendee_id && SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+      try {
+        const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+        // Record open event
+        await supabase
+          .from('company_event_attendees')
+          .update({ opened: true })
+          .eq('event_id', event_id)
+          .eq('employee_id', attendee_id);
+      } catch (e) {
+        console.error('Error tracking open pixel:', e);
+      }
+    }
+
+    // Respond with a 1x1 transparent GIF
+    const pixelBase64 = 'R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+    const pixelBuffer = Buffer.from(pixelBase64, 'base64');
+
+    res.setHeader('Content-Type', 'image/gif');
+    res.setHeader('Content-Length', pixelBuffer.length);
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    return res.status(200).send(pixelBuffer);
+  }
+
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
