@@ -253,23 +253,34 @@
       },
 
       async saveAssignments() {
-        const selects = document.querySelectorAll('.employee-assign-select');
-        const newAssignments = {};
-        selects.forEach(sel => {
-          const accountId = sel.dataset.accountId;
-          const employeeId = sel.value;
-          if (employeeId) {
-            newAssignments[accountId] = employeeId;
-          }
-        });
-
         try {
+          // Fetch existing assignments first to avoid losing assignments from other pages (payables vs receivables)
+          const { data: existing } = await getSb()
+            .from('global_settings')
+            .select('value')
+            .eq('key', 'journal_account_employee_assignments')
+            .eq('company_id', this.companyId)
+            .maybeSingle();
+
+          const existingAssignments = existing?.value?.assignments || {};
+
+          const selects = document.querySelectorAll('.employee-assign-select');
+          selects.forEach(sel => {
+            const accountId = sel.dataset.accountId;
+            const employeeId = sel.value;
+            if (employeeId) {
+              existingAssignments[accountId] = employeeId;
+            } else {
+              delete existingAssignments[accountId];
+            }
+          });
+
           const { error } = await getSb()
             .from('global_settings')
             .upsert({
               key: 'journal_account_employee_assignments',
               company_id: this.companyId,
-              value: { assignments: newAssignments }
+              value: { assignments: existingAssignments }
             });
 
           if (error) throw error;
