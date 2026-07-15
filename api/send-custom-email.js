@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import nodemailer from 'nodemailer';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const EMAIL_FROM = process.env.EMAIL_FROM || 'onboarding@resend.dev';
 
@@ -86,7 +86,7 @@ function compileHtmlBody(blocks, settings, logo, address, eventId, recipientEmai
     } else if (b.type === 'body') {
       blocksHtml += `<p style="${blockStyle}">${esc(b.value).replace(/\n/g, '<br/>')}</p>`;
     } else if (b.type === 'signature') {
-      blocksHtml += `<p style="${blockStyle} text-align: left; margin-top: 28px; font-style: italic;">${esc(b.value).replace(/\n/g, '<br/>')}</p>`;
+      blocksHtml += `<p style="${blockStyle} text-align: left; margin-top: 28px;">${esc(b.value).replace(/\n/g, '<br/>')}</p>`;
     } else if (b.type === 'bullet-list') {
       const items = (b.value || '').split('\n').filter(i => i.trim() !== '');
       if (items.length > 0) {
@@ -99,6 +99,18 @@ function compileHtmlBody(blocks, settings, logo, address, eventId, recipientEmai
         const liStyle = `margin-bottom: 6px; text-align: ${align};`;
         blocksHtml += `<ol style="${blockStyle} padding-left: 20px; list-style-type: decimal;">${items.map(i => `<li style="${liStyle}">${esc(i)}</li>`).join('')}</ol>`;
       }
+    } else if (b.type === 'spacer') {
+      const sizeMap = { small: '12px', medium: '28px', large: '48px' };
+      const h = sizeMap[b.config?.size || 'medium'];
+      blocksHtml += `<div style="height:${h}; line-height:${h}; font-size:1px;">&nbsp;</div>`;
+    } else if (b.type === 'hr') {
+      const cfg = b.config || {};
+      const color = cfg.color || '#d1d5db';
+      const thkMap = { thin: '1px', medium: '2px', thick: '4px' };
+      const lenMap = { short: '40%', medium: '70%', full: '100%' };
+      const bw = thkMap[cfg.thickness || 'thin'];
+      const lw = lenMap[cfg.length || 'full'];
+      blocksHtml += `<div style="text-align:center; margin-bottom:${gap};"><div style="display:inline-block; width:${lw}; height:${bw}; background:${color}; border-radius:2px;"></div></div>`;
     }
   });
 
