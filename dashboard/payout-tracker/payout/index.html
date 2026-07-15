@@ -1356,15 +1356,22 @@
           const sp = baseSalary / sortedScheds.length;
           const av = empAdjs.filter(a => { const d = new Date(a.date); return this.getScheduleDayForItemDay(d.getUTCDate(), sortedScheds) === day; }).reduce((s, a) => s + (Number(a.value) || 0), 0);
           const cv = this._commsForSchedule(empId, day, mk, sortedScheds);
-          const xv = empSpecs.filter(s => this.getScheduleDayForItemDay(Number(s.day), sortedScheds) === day).reduce((s, x) => s + (Number(x.value) || 0), 0);
           const glAddVal = this._glAdditionsForSchedule(empId, day, mk, sortedScheds);
           const glDedVal = this._glDeductionsForSchedule(empId, day, mk, sortedScheds);
           
           const instPortion = instPayouts.cutoffPayouts[day] || 0;
 
-          const total = sp + av + cv + xv + instPortion + glAddVal - glDedVal;
+          const total = sp + av + cv + instPortion + glAddVal - glDedVal;
           verifiedTotal += total;
           cutoffHtml += `<div style="display:flex;justify-content:space-between;padding:0.5rem 0;font-size:0.85rem;border-bottom:1px dashed #e5e7eb;"><span style="font-weight:500;color:#4b5563;">Cutoff Payout (Day ${day})</span><span style="font-weight:700;color:#111827;font-variant-numeric:tabular-nums;margin-right:12px;">${php(total)}</span></div>`;
+        });
+
+        empSpecs.forEach(spec => {
+          const val = Number(spec.value) || 0;
+          if (val > 0) {
+            verifiedTotal += val;
+            cutoffHtml += `<div style="display:flex;justify-content:space-between;padding:0.5rem 0;font-size:0.85rem;border-bottom:1px dashed #e5e7eb;"><span style="font-weight:500;color:#4b5563;">Special Payout (Day ${spec.day})</span><span style="font-weight:700;color:#111827;font-variant-numeric:tabular-nums;margin-right:12px;">${php(val)}</span></div>`;
+          }
         });
 
         const sigImg = payslipCfg.signatureUrl ? `<img src="${payslipCfg.signatureUrl}" alt="Signature" style="max-height:100px;max-width:170px;object-fit:contain;display:block;">` : `<div style="height:100px;width:150px;"></div>`;
