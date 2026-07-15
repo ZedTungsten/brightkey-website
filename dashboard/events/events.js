@@ -1835,7 +1835,8 @@ window.EventsApp = {
 
     } catch (e) {
       console.error(e);
-      treeContainer.innerHTML = '<div style="padding:1rem; text-align:center; color:var(--red); font-size:0.8rem;">Failed to load employee list.</div>';
+      const errMsg = e.message || e.details || (typeof e === 'object' ? JSON.stringify(e) : String(e));
+      treeContainer.innerHTML = `<div style="padding:1rem; text-align:center; color:var(--red); font-size:0.8rem;">Failed to load employee list: ${esc(errMsg)}</div>`;
     }
   },
 
