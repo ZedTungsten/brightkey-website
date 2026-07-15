@@ -101,7 +101,6 @@
         <a href="/dashboard/payout-tracker/adjustments"    class="tab-btn" data-page="adjustments">Adjustments</a>
         <a href="/dashboard/payout-tracker/commissions"    class="tab-btn" data-page="commissions">Commission</a>
         <a href="/dashboard/payout-tracker/installations"  class="tab-btn" data-page="installations">Installation</a>
-        <a href="/dashboard/payout-tracker/reimbursements" class="tab-btn" data-page="reimbursements">Reimbursement</a>
         <a href="/dashboard/payout-tracker/schedules"      class="tab-btn" data-page="schedules">Schedules</a>
         <a href="/dashboard/payout-tracker/payslip"        class="tab-btn" data-page="payslip">Payslip</a>
       </nav>
@@ -210,7 +209,6 @@
       specialPayoutState: {},
       commissionPayoutState: {},
       adjustmentsList: [],
-      reimbursementsList: [],
       commissionAssignments: [],
       bookingsList: [],
 
@@ -281,12 +279,6 @@
           const { data } = await sb.from('employee_adjustments').select('id, employee_id, amount, date, label, paid').eq('company_id', this.companyId);
           this.adjustmentsList = (data || []).map(a => ({ id: a.id, employeeId: a.employee_id, value: a.amount, date: a.date, label: a.label, paid: a.paid }));
         } catch (e) { this.adjustmentsList = []; console.error(e); }
-
-        // Reimbursements
-        try {
-          const { data } = await sb.from('employee_reimbursements').select('id, employee_id, amount, date, label, paid').eq('company_id', this.companyId);
-          this.reimbursementsList = (data || []).map(r => ({ id: r.id, employeeId: r.employee_id, value: r.amount, date: r.date, label: r.label, paid: r.paid }));
-        } catch (e) { this.reimbursementsList = []; console.error(e); }
 
         // Commission assignments
         try {
@@ -755,13 +747,13 @@
         const mk = this.monthKey();
         const specialDays  = [...new Set(this.specialSchedules.map(s => Number(s.day)))].sort((a, b) => a - b);
         const sortedScheds = [...this.payoutSchedules].sort((a, b) => a - b);
-        const colspan = 11 + specialDays.length + sortedScheds.length + 2;
+        const colspan = 10 + specialDays.length + sortedScheds.length + 2;
 
         let headerHtml = `
           <th class="col-sticky-1">Employee Name</th>
           <th class="col-sticky-2">Title / Position</th>
           <th class="col-sticky-3">Payment Details</th>
-          <th>Salary</th><th>Commission</th><th>Installation</th><th>Reimbursements</th><th>Adjustments</th><th>GL Reimb</th><th>GL Cash Adv</th>
+          <th>Salary</th><th>Commission</th><th>Installation</th><th>Adjustments</th><th>GL Reimb</th><th>GL Cash Adv</th>
           <th style="border-right:2px solid var(--border); width:1px; padding:0;"></th>
         `;
         specialDays.forEach(d => { headerHtml += `<th>Special (Day ${d})</th>`; });
@@ -777,7 +769,6 @@
         let sumBaseSalary = 0;
         let sumComms = 0;
         let sumInstPayouts = 0;
-        let sumReimbs = 0;
         let sumAdjs = 0;
         let sumGlReimbs = 0;
         let sumGlCashAdv = 0;
@@ -806,8 +797,6 @@
 
           // Commission for this month
           const empComms = this._commissionForEmpMonth(emp.id, mk);
-          // Reimbursements for this month
-          const empReimbs = this.reimbursementsList.filter(r => r.employeeId === emp.id && r.date?.startsWith(mk.substring(0,7))).reduce((s, r) => s + (Number(r.value) || 0), 0);
           // Adjustments for this month
           const empAdjs = this.adjustmentsList.filter(a => a.employeeId === emp.id && a.date?.startsWith(mk.substring(0,7))).reduce((s, a) => s + (Number(a.value) || 0), 0);
           const empGlAdd = this._glAdditionsForEmpMonth(emp.id, mk);
@@ -816,7 +805,6 @@
           // Add to aggregators
           sumBaseSalary += baseSalary;
           sumComms += empComms;
-          sumReimbs += empReimbs;
           sumAdjs += empAdjs;
           sumGlReimbs += empGlAdd;
           sumGlCashAdv += empGlDed;
@@ -849,13 +837,12 @@
           
           sortedScheds.forEach((day, sIdx) => {
             const adjsVal  = this._adjsForSchedule(emp.id, day, mk, sortedScheds);
-            const reimbsVal = this._reimbsForSchedule(emp.id, day, mk, sortedScheds);
             const commsVal  = this._commsForSchedule(emp.id, day, mk, sortedScheds);
             const instPortion = instPayouts.cutoffPayouts[day] || 0;
             const glAddVal = this._glAdditionsForSchedule(emp.id, day, mk, sortedScheds);
             const glDedVal = this._glDeductionsForSchedule(emp.id, day, mk, sortedScheds);
             
-            const totalSchedVal = salaryPortion + adjsVal + reimbsVal + commsVal + instPortion + glAddVal - glDedVal;
+            const totalSchedVal = salaryPortion + adjsVal + commsVal + instPortion + glAddVal - glDedVal;
             sumPayoutDays[day] += totalSchedVal;
             const isPaid = this.regularPayoutState[mk]?.[`${emp.id}_${day}`] || false;
             const isPast = this.isPastDay(day);
@@ -864,7 +851,6 @@
             if (salaryPortion > 0) breakdownItems.push(`Sal: ${php(salaryPortion)}`);
             if (commsVal > 0) breakdownItems.push(`Com: ${php(commsVal)}`);
             if (instPortion > 0) breakdownItems.push(`Inst: ${php(instPortion)}`);
-            if (reimbsVal > 0) breakdownItems.push(`Reimb: ${php(reimbsVal)}`);
             if (adjsVal !== 0) breakdownItems.push(`Adj: ${php(adjsVal)}`);
             if (glAddVal > 0) breakdownItems.push(`Reimb (GL): ${php(glAddVal)}`);
             if (glDedVal > 0) breakdownItems.push(`Cash Adv: -${php(glDedVal)}`);
@@ -884,10 +870,8 @@
             </td>`;
           });
 
-          const grandTotal = baseSalary + empComms + empReimbs + empAdjs + totalSpecials + instPayouts.totalInstallationPayout + empGlAdd - empGlDed;
+          const grandTotal = baseSalary + empComms + empAdjs + totalSpecials + instPayouts.totalInstallationPayout + empGlAdd - empGlDed;
           sumGrandTotal += grandTotal;
-
-          const netAdjs = empAdjs + empGlAdd - empGlDed;
 
           return `<tr class="employee-row" data-emp-id="${esc(emp.id)}">
             <td class="col-name col-sticky-1">${esc([emp.first_name, emp.last_name].filter(Boolean).join(' '))}</td>
@@ -896,7 +880,6 @@
             <td>${esc(php(baseSalary))}</td>
             <td>${esc(php(empComms))}</td>
             <td>${esc(php(instPayouts.totalInstallationPayout))}</td>
-            <td>${esc(php(empReimbs))}</td>
             <td style="color:${empAdjs < 0 ? 'var(--danger)' : 'var(--text-primary)'};">${esc(php(empAdjs))}</td>
             <td>${esc(php(empGlAdd))}</td>
             <td style="color:${empGlDed > 0 ? 'var(--danger)' : 'var(--text-primary)'};">${esc(empGlDed > 0 ? `-${php(empGlDed)}` : php(0))}</td>
@@ -951,7 +934,6 @@
               <td>${esc(php(sumBaseSalary))}</td>
               <td>${esc(php(sumComms))}</td>
               <td>${esc(php(sumInstPayouts))}</td>
-              <td>${esc(php(sumReimbs))}</td>
               <td style="color:${sumAdjs < 0 ? 'var(--danger)' : 'var(--text-primary)'};">${esc(php(sumAdjs))}</td>
               <td>${esc(php(sumGlReimbs))}</td>
               <td style="color:${sumGlCashAdv > 0 ? 'var(--danger)' : 'var(--text-primary)'};">${esc(sumGlCashAdv > 0 ? `-${php(sumGlCashAdv)}` : php(0))}</td>
@@ -1112,14 +1094,7 @@
         }).reduce((s, a) => s + (Number(a.value) || 0), 0);
       },
 
-      _reimbsForSchedule(empId, schedDay, mk, sortedScheds) {
-        return this.reimbursementsList.filter(r => {
-          if (r.employeeId !== empId) return false;
-          const d = new Date(r.date);
-          if (`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}` !== mk) return false;
-          return this.getScheduleDayForItemDay(d.getUTCDate(), sortedScheds) === schedDay;
-        }).reduce((s, r) => s + (Number(r.value) || 0), 0);
-      },
+
 
       _commsForSchedule(empId, schedDay, mk, sortedScheds, passedProductMap = null) {
         let productMap = passedProductMap;
@@ -1208,10 +1183,8 @@
         if (allChecked) {
           const baseSalary   = emp.salary || 0;
           const empComms     = this._commissionForEmpMonth(empId, mk);
-          const empReimbObjs = this.reimbursementsList.filter(r => { const d = new Date(r.date); return r.employeeId === empId && `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}` === mk; });
           const empAdjObjs   = this.adjustmentsList.filter(a => { const d = new Date(a.date); return a.employeeId === empId && `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}` === mk; });
           const empSpecs     = this.specialSchedules.filter(s => s.employeeId === empId);
-          const totalReimbs  = empReimbObjs.reduce((s, r) => s + (Number(r.value) || 0), 0);
           const totalAdjs    = empAdjObjs.reduce((s, a) => s + (Number(a.value) || 0), 0);
           const totalSpecs   = empSpecs.reduce((s, x) => s + (Number(x.value) || 0), 0);
 
@@ -1258,7 +1231,7 @@
             finalTotalAdjs -= empGlDed;
           }
  
-          const grandTotal   = baseSalary + empComms + totalReimbs + finalTotalAdjs + totalSpecs;
+          const grandTotal   = baseSalary + empComms + finalTotalAdjs + totalSpecs;
 
           let resolvedDeptName = emp.department || '—';
           const matchedDept = (this.companyStructure?.departments || []).find(d => d.managerId === empId || (d.subteams || []).some(s => s.managerId === empId || (s.colleagueIds || []).includes(empId)));
@@ -1269,10 +1242,10 @@
             department: resolvedDeptName, position: emp.title || '—',
             salary: baseSalary, basic_paid: baseSalary,
             commissions: empComms, adjustments: finalTotalAdjs,
-            reimbursements: totalReimbs, special_payouts: totalSpecs,
+            reimbursements: 0, special_payouts: totalSpecs,
             total_payout: grandTotal,
             adjustments_list: finalAdjObjs,
-            reimbursements_list: empReimbObjs,
+            reimbursements_list: [],
             special_schedules: empSpecs
           };
           try { await getSb().from('payslip_records').upsert(payload, { onConflict: 'employee_id,payout_month' }); } catch (e) { console.error(e); }
@@ -1292,7 +1265,6 @@
         // Build payslip HTML inline
         const baseSalary = emp.salary || 0;
         const empComms   = this._commissionForEmpMonth(empId, mk);
-        const empReimbs  = this.reimbursementsList.filter(r => { const d = new Date(r.date); return r.employeeId === empId && `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}` === mk; });
         let empAdjs      = this.adjustmentsList.filter(a => { const d = new Date(a.date); return a.employeeId === empId && `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}` === mk; });
         const empSpecs   = this.specialSchedules.filter(s => s.employeeId === empId);
 
@@ -1330,10 +1302,9 @@
         const empGlAdd = this._glAdditionsForEmpMonth(empId, mk);
         const empGlDed = this._glDeductionsForEmpMonth(empId, mk);
 
-        const totalReimbs = empReimbs.reduce((s, r) => s + (Number(r.value) || 0), 0);
         const totalAdjs   = empAdjs.reduce((s, a) => s + (Number(a.value) || 0), 0);
         const totalSpecs  = empSpecs.reduce((s, x) => s + (Number(x.value) || 0), 0);
-        const grandTotal  = baseSalary + empComms + totalReimbs + totalAdjs + totalSpecs + thresholdEarnings + serviceEarnings + empGlAdd - empGlDed;
+        const grandTotal  = baseSalary + empComms + totalAdjs + totalSpecs + thresholdEarnings + serviceEarnings + empGlAdd - empGlDed;
 
         // Fetch payslip config lazily
         let payslipCfg = { logoStyle: 'light', signatoryName: 'Authorized Signatory', signatureUrl: '' };
@@ -1370,7 +1341,6 @@
         sortedScheds.forEach((day, sIdx) => {
           const sp = baseSalary / sortedScheds.length;
           const av = empAdjs.filter(a => { const d = new Date(a.date); return this.getScheduleDayForItemDay(d.getUTCDate(), sortedScheds) === day; }).reduce((s, a) => s + (Number(a.value) || 0), 0);
-          const rv = empReimbs.filter(r => { const d = new Date(r.date); return this.getScheduleDayForItemDay(r.date ? new Date(r.date).getUTCDate() : 30, sortedScheds) === day; }).reduce((s, r) => s + (Number(r.value) || 0), 0);
           const cv = this._commsForSchedule(empId, day, mk, sortedScheds);
           const xv = empSpecs.filter(s => this.getScheduleDayForItemDay(Number(s.day), sortedScheds) === day).reduce((s, x) => s + (Number(x.value) || 0), 0);
           const glAddVal = this._glAdditionsForSchedule(empId, day, mk, sortedScheds);
@@ -1378,7 +1348,7 @@
           
           const instPortion = instPayouts.cutoffPayouts[day] || 0;
 
-          const total = sp + av + rv + cv + xv + instPortion + glAddVal - glDedVal;
+          const total = sp + av + cv + xv + instPortion + glAddVal - glDedVal;
           verifiedTotal += total;
           cutoffHtml += `<div style="display:flex;justify-content:space-between;padding:0.5rem 0;font-size:0.85rem;border-bottom:1px dashed #e5e7eb;"><span style="font-weight:500;color:#4b5563;">Cutoff Payout (Day ${day})</span><span style="font-weight:700;color:#111827;font-variant-numeric:tabular-nums;margin-right:12px;">${php(total)}</span></div>`;
         });
@@ -1442,7 +1412,6 @@
       async clearAllState() {
         document.getElementById('clear-all-modal').classList.remove('open');
         this.adjustmentsList = [];
-        this.reimbursementsList = [];
         this.regularPayoutState   = {};
         this.specialPayoutState   = {};
         this.commissionPayoutState = {};
@@ -1452,7 +1421,6 @@
           const sb = getSb();
           await Promise.all([
             sb.from('employee_adjustments').delete().eq('company_id', this.companyId),
-            sb.from('employee_reimbursements').delete().eq('company_id', this.companyId),
             sb.from('payslip_records').delete().eq('company_id', this.companyId),
             sb.from('global_settings').upsert({ key: 'regular_payout_state',    company_id: this.companyId, value: {} }),
             sb.from('global_settings').upsert({ key: 'special_payout_state',    company_id: this.companyId, value: {} }),

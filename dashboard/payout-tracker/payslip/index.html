@@ -37,7 +37,6 @@
         <a href="/dashboard/payout-tracker/adjustments"    class="tab-btn" data-page="adjustments">Adjustments</a>
         <a href="/dashboard/payout-tracker/commissions"    class="tab-btn" data-page="commissions">Commission</a>
         <a href="/dashboard/payout-tracker/installations"  class="tab-btn" data-page="installations">Installation</a>
-        <a href="/dashboard/payout-tracker/reimbursements" class="tab-btn" data-page="reimbursements">Reimbursement</a>
         <a href="/dashboard/payout-tracker/schedules"      class="tab-btn" data-page="schedules">Schedules</a>
         <a href="/dashboard/payout-tracker/payslip"        class="tab-btn" data-page="payslip">Payslip</a>
       </nav>
@@ -692,14 +691,12 @@
         const nextY = this.selectedMonth + 1 > 11 ? this.selectedYear + 1 : this.selectedYear;
         const end   = `${nextY}-${String(nextM + 1).padStart(2, '0')}-01`;
 
-        const [adjRes, reimbRes, commRes] = await Promise.allSettled([
+        const [adjRes, commRes] = await Promise.allSettled([
           sb.from('employee_adjustments').select('id, amount, date, label').eq('company_id', this.companyId).eq('employee_id', empId).gte('date', start).lt('date', end),
-          sb.from('employee_reimbursements').select('id, amount, date, label').eq('company_id', this.companyId).eq('employee_id', empId).gte('date', start).lt('date', end),
           sb.from('commission_assignments').select('booking_id, product_index, amount').eq('company_id', this.companyId).eq('employee_id', empId),
         ]);
 
         const adjs  = adjRes.status  === 'fulfilled' ? (adjRes.value.data || [])  : [];
-        const reimbs = reimbRes.status === 'fulfilled' ? (reimbRes.value.data || []) : [];
         let commAssignments = commRes.status === 'fulfilled' ? (commRes.value.data || []) : [];
 
         // Fetch relevant bookings for these assignments
@@ -738,7 +735,7 @@
 
         const empComms = parsedCommAssignments.reduce((s, a) => s + a.amount, 0);
 
-        return { adjs, reimbs, empComms, parsedCommAssignments };
+        return { adjs, empComms, parsedCommAssignments };
       },
 
       async generatePreview() {
@@ -755,12 +752,11 @@
         const empSpecs   = this.specialSchedules.filter(s => s.employeeId === emp.id);
 
         // Lazy fetch per-employee data for this month
-        let adjs = [], reimbs = [], empComms = 0, parsedCommAssignments = [];
+        let adjs = [], empComms = 0, parsedCommAssignments = [];
         try {
-          ({ adjs, reimbs, empComms, parsedCommAssignments } = await this.fetchEmployeeMonthData(empId));
+          ({ adjs, empComms, parsedCommAssignments } = await this.fetchEmployeeMonthData(empId));
         } catch (e) { console.error(e); }
 
-        const totalReimbs = reimbs.reduce((s, r) => s + (Number(r.amount) || 0), 0);
         const totalAdjs   = adjs.reduce((s, a) => s + (Number(a.amount) || 0), 0);
         const totalSpecs  = empSpecs.reduce((s, x) => s + (Number(x.value) || 0), 0);
 
@@ -792,39 +788,33 @@
         if (empComms > 0) breakdownHtml += `<tr><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;font-weight:600;">Commissions</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;color:#4b5563;">Sales Commissions</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;text-align:right;font-variant-numeric:tabular-nums;width:120px;">${php(empComms)}</td></tr>`;
 
         const getSchedDay = (itemDay, sortedScheds) => { for (const s of sortedScheds) { if (itemDay <= s) return s; } return sortedScheds[sortedScheds.length - 1]; };
- 
+
         if (adjs.length > 0) {
           const SM = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
           const labels  = adjs.map(a => { const d = new Date(a.date); return esc(a.label || 'Salary Adjustment') + (!isNaN(d.getTime()) ? ` (${SM[d.getMonth()]} ${d.getDate()})` : ''); }).join('<br>');
           const amounts = adjs.map(a => php(a.amount)).join('<br>');
           breakdownHtml += `<tr><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;font-weight:600;vertical-align:top;">Adjustments</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;color:#4b5563;vertical-align:top;line-height:1.5;">${labels}</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;text-align:right;font-variant-numeric:tabular-nums;vertical-align:top;line-height:1.5;width:120px;">${amounts}</td></tr>`;
         }
-        if (reimbs.length > 0) {
-          const labels  = reimbs.map(r => esc(r.label || 'Expense Reimbursement')).join('<br>');
-          const amounts = reimbs.map(r => php(r.amount)).join('<br>');
-          breakdownHtml += `<tr><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;font-weight:600;vertical-align:top;">Reimbursements</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;color:#4b5563;vertical-align:top;line-height:1.5;">${labels}</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;text-align:right;font-variant-numeric:tabular-nums;vertical-align:top;line-height:1.5;width:120px;">${amounts}</td></tr>`;
-        }
         if (empSpecs.length > 0) {
           const labels  = empSpecs.map(s => `${esc(s.label || 'Special Payout')} (Day ${s.day})`).join('<br>');
           const amounts = empSpecs.map(s => php(s.value)).join('<br>');
           breakdownHtml += `<tr><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;font-weight:600;vertical-align:top;">Special Payouts</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;color:#4b5563;vertical-align:top;line-height:1.5;">${labels}</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;text-align:right;font-variant-numeric:tabular-nums;vertical-align:top;line-height:1.5;width:120px;">${amounts}</td></tr>`;
         }
- 
+
         // Cutoff schedule rows
         let cutoffHtml = '';
         sortedScheds.forEach((day, sIdx) => {
           const sp = baseSalary / sortedScheds.length;
           const av = adjs.filter(a => { const d = new Date(a.date); return getSchedDay(d.getUTCDate(), sortedScheds) === day; }).reduce((s, a) => s + (Number(a.amount) || 0), 0);
-          const rv = reimbs.filter(r => { const d = new Date(r.date); return getSchedDay(d.getUTCDate(), sortedScheds) === day; }).reduce((s, r) => s + (Number(r.amount) || 0), 0);
           const cv = parsedCommAssignments.filter(c => { const d = new Date(c.date); return getSchedDay(d.getUTCDate(), sortedScheds) === day; }).reduce((s, c) => s + c.amount, 0);
           const xv = empSpecs.filter(s => getSchedDay(Number(s.day), sortedScheds) === day).reduce((s, x) => s + (Number(x.value) || 0), 0);
           
           const instPortion = instPayouts.cutoffPayouts[day] || 0;
 
-          const total = sp + av + rv + cv + xv + instPortion;
+          const total = sp + av + cv + xv + instPortion;
           cutoffHtml += `<div style="display:flex;justify-content:space-between;padding:0.5rem 0;font-size:0.85rem;border-bottom:1px dashed #e5e7eb;"><span style="font-weight:500;color:#4b5563;">Cutoff Payout (Day ${day})</span><span style="font-weight:700;color:#111827;font-variant-numeric:tabular-nums;margin-right:12px;">${php(total)}</span></div>`;
         });
-        const verifiedTotal = baseSalary + empComms + totalAdjs + totalReimbs + totalSpecs + instPayouts.totalInstallationPayout;
+        const verifiedTotal = baseSalary + empComms + totalAdjs + totalSpecs + instPayouts.totalInstallationPayout;
 
         // Company assets
         const logoUrl     = this.payslipConfig.logoStyle === 'dark' ? this.companyProfileConfig.logoDark : this.companyProfileConfig.logoLight;
