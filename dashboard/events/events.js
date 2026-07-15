@@ -400,18 +400,69 @@ window.EventsApp = {
     }
     document.getElementById('mockup-address-container').innerHTML = this.companyAddress;
 
-    // Default layout setup
-    this.builderBlocks = [
-      { id: '1', type: 'header', value: eventTitle },
-      { id: '2', type: 'subheader', value: `Join us on ${eventDate}` },
-      { id: '3', type: 'body', value: eventDesc || 'We are excited to invite you to our upcoming team event! Please see details below and let us know if you can make it.' },
-      { id: '4', type: 'signature', value: 'Best regards,\nHR Department' }
-    ];
+    // Autoload last used template if one exists
+    try {
+      const { data: lastTemplate } = await getSb()
+        .from('email_templates')
+        .select('*')
+        .eq('company_id', this.companyId)
+        .eq('category', 'HR')
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (lastTemplate) {
+        this.builderBlocks = lastTemplate.body_json || [];
+        
+        // Restore style settings inputs
+        const settings = lastTemplate.settings || {};
+        if (settings.bgColor) document.getElementById('style-bg-color').value = settings.bgColor;
+        if (settings.alignment) document.getElementById('style-alignment').value = settings.alignment;
+        if (settings.logoSize) document.getElementById('style-logo-size').value = settings.logoSize;
+        if (settings.headerSize) document.getElementById('style-header-size').value = settings.headerSize;
+        if (settings.subSize) document.getElementById('style-subheader-size').value = settings.subSize;
+        if (settings.bodySize) document.getElementById('style-body-size').value = settings.bodySize;
+        if (settings.bodyColor) document.getElementById('style-body-color').value = settings.bodyColor;
+        if (settings.indent) document.getElementById('style-indent').value = settings.indent;
+        if (settings.lineHeight) document.getElementById('style-line-height').value = settings.lineHeight;
+        if (settings.gap) document.getElementById('style-gap').value = settings.gap;
+        if (settings.linkColor) document.getElementById('style-link-color').value = settings.linkColor;
+        if (settings.ctaAffirm) document.getElementById('style-cta-affirm').value = settings.ctaAffirm;
+        if (settings.socialColor) document.getElementById('style-social-color').value = settings.socialColor;
+        if (settings.socialSize) document.getElementById('style-social-size').value = settings.socialSize;
+
+        // Restore check state for social links
+        const activeSocials = settings.socialLinks || [];
+        (this.availableSocialLinks || []).forEach(item => {
+          const chk = document.getElementById(`social-chk-${item.platform}`);
+          if (chk) {
+            chk.checked = activeSocials.some(s => s.platform === item.platform);
+          }
+        });
+      } else {
+        // Default layout setup
+        this.builderBlocks = [
+          { id: '1', type: 'header', value: eventTitle },
+          { id: '2', type: 'subheader', value: `Join us on ${eventDate}` },
+          { id: '3', type: 'body', value: eventDesc || 'We are excited to invite you to our upcoming team event! Please see details below and let us know if you can make it.' },
+          { id: '4', type: 'signature', value: 'Best regards,\nHR Department' }
+        ];
+      }
+    } catch (e) {
+      console.error('Error autoloading template:', e);
+      this.builderBlocks = [
+        { id: '1', type: 'header', value: eventTitle },
+        { id: '2', type: 'subheader', value: `Join us on ${eventDate}` },
+        { id: '3', type: 'body', value: eventDesc || 'We are excited to invite you to our upcoming team event! Please see details below and let us know if you can make it.' },
+        { id: '4', type: 'signature', value: 'Best regards,\nHR Department' }
+      ];
+    }
 
     document.getElementById('builder-subject').value = `Invitation: ${eventTitle}`;
     document.getElementById('builder-preheader').value = `You are invited to join us for ${eventTitle}`;
     document.getElementById('builder-attendee-response').checked = true;
 
+    this.updateCharCounts();
     this.renderBlocksList();
     this.toggleAttendeeResponse();
     this.updatePreview();
@@ -422,6 +473,20 @@ window.EventsApp = {
 
   closeEmailBuilder() {
     document.getElementById('email-builder-modal').classList.remove('open');
+  },
+
+  updateCharCounts() {
+    const subjectInput = document.getElementById('builder-subject');
+    const preheaderInput = document.getElementById('builder-preheader');
+    
+    if (subjectInput) {
+      const remaining = 100 - subjectInput.value.length;
+      document.getElementById('subject-char-count').textContent = `${remaining} remaining`;
+    }
+    if (preheaderInput) {
+      const remaining = 50 - preheaderInput.value.length;
+      document.getElementById('preheader-char-count').textContent = `${remaining} remaining`;
+    }
   },
 
 
