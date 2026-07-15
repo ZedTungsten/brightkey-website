@@ -446,56 +446,129 @@ window.EventsApp = {
         .limit(1)
         .maybeSingle();
 
-      if (lastTemplate) {
-        this.builderBlocks = lastTemplate.body_json || [];
-        
-        // Restore style settings inputs
-        const settings = lastTemplate.settings || {};
-        if (settings.bgColor) {
-          document.getElementById('style-bg-color').value = settings.bgColor;
-          document.getElementById('style-bg-color-hex').value = settings.bgColor.toUpperCase();
-        }
-        if (settings.alignment) document.getElementById('style-alignment').value = settings.alignment;
-        if (settings.logoSize) document.getElementById('style-logo-size').value = settings.logoSize;
-        if (settings.headerSize) document.getElementById('style-header-size').value = settings.headerSize;
-        if (settings.subSize) document.getElementById('style-subheader-size').value = settings.subSize;
-        if (settings.bodySize) document.getElementById('style-body-size').value = settings.bodySize;
-        if (settings.bodyColor) {
-          document.getElementById('style-body-color').value = settings.bodyColor;
-          document.getElementById('style-body-color-hex').value = settings.bodyColor.toUpperCase();
-        }
-        if (settings.indent) document.getElementById('style-indent').value = settings.indent;
-        if (settings.lineHeight) document.getElementById('style-line-height').value = settings.lineHeight;
-        if (settings.gap) document.getElementById('style-gap').value = settings.gap;
-        if (settings.linkColor) {
-          document.getElementById('style-link-color').value = settings.linkColor;
-          document.getElementById('style-link-color-hex').value = settings.linkColor.toUpperCase();
-        }
-        if (settings.ctaAffirm) {
-          document.getElementById('style-cta-affirm').value = settings.ctaAffirm;
-          document.getElementById('style-cta-affirm-hex').value = settings.ctaAffirm.toUpperCase();
-        }
-        if (settings.ctaNegative) {
-          document.getElementById('style-cta-negative').value = settings.ctaNegative;
-          document.getElementById('style-cta-negative-hex').value = settings.ctaNegative.toUpperCase();
-        }
-        if (settings.socialColor) {
-          document.getElementById('style-social-color').value = settings.socialColor;
-          document.getElementById('style-social-color-hex').value = settings.socialColor.toUpperCase();
-        }
-        if (settings.socialSize) document.getElementById('style-social-size').value = settings.socialSize;
+    // Check if the event already has an autosaved email config
+    if (ev && ev.email_body_json) {
+      this.builderBlocks = ev.email_body_json || [];
+      document.getElementById('builder-subject').value = ev.email_subject || '';
+      document.getElementById('builder-preheader').value = ev.email_preheader || '';
+      document.getElementById('builder-attendee-response').checked = (ev.email_attendee_response !== false);
+      if (ev.email_sender_name) document.getElementById('builder-sender-name').value = ev.email_sender_name;
+      if (ev.email_sender_email) document.getElementById('builder-sender-email').value = ev.email_sender_email;
 
+      // Restore style settings inputs
+      const settings = ev.email_settings || {};
+      if (settings.bgColor) {
+        document.getElementById('style-bg-color').value = settings.bgColor;
+        document.getElementById('style-bg-color-hex').value = settings.bgColor.toUpperCase();
+      }
+      if (settings.alignment) document.getElementById('style-alignment').value = settings.alignment;
+      if (settings.logoSize) document.getElementById('style-logo-size').value = settings.logoSize;
+      if (settings.headerSize) document.getElementById('style-header-size').value = settings.headerSize;
+      if (settings.subSize) document.getElementById('style-subheader-size').value = settings.subSize;
+      if (settings.bodySize) document.getElementById('style-body-size').value = settings.bodySize;
+      if (settings.bodyColor) {
+        document.getElementById('style-body-color').value = settings.bodyColor;
+        document.getElementById('style-body-color-hex').value = settings.bodyColor.toUpperCase();
+      }
+      if (settings.indent) document.getElementById('style-indent').value = settings.indent;
+      if (settings.lineHeight) document.getElementById('style-line-height').value = settings.lineHeight;
+      if (settings.gap) document.getElementById('style-gap').value = settings.gap;
+      if (settings.linkColor) {
+        document.getElementById('style-link-color').value = settings.linkColor;
+        document.getElementById('style-link-color-hex').value = settings.linkColor.toUpperCase();
+      }
+      if (settings.ctaAffirm) {
+        document.getElementById('style-cta-affirm').value = settings.ctaAffirm;
+        document.getElementById('style-cta-affirm-hex').value = settings.ctaAffirm.toUpperCase();
+      }
+      if (settings.ctaNegative) {
+        document.getElementById('style-cta-negative').value = settings.ctaNegative;
+        document.getElementById('style-cta-negative-hex').value = settings.ctaNegative.toUpperCase();
+      }
+      if (settings.socialColor) {
+        document.getElementById('style-social-color').value = settings.socialColor;
+        document.getElementById('style-social-color-hex').value = settings.socialColor.toUpperCase();
+      }
+      if (settings.socialSize) document.getElementById('style-social-size').value = settings.socialSize;
 
-        // Restore check state for social links
-        const activeSocials = settings.socialLinks || [];
-        (this.availableSocialLinks || []).forEach(item => {
-          const chk = document.getElementById(`social-chk-${item.platform}`);
-          if (chk) {
-            chk.checked = activeSocials.some(s => s.platform === item.platform);
+      // Restore check state for social links
+      const activeSocials = settings.socialLinks || [];
+      (this.availableSocialLinks || []).forEach(item => {
+        const chk = document.getElementById(`social-chk-${item.platform}`);
+        if (chk) {
+          chk.checked = activeSocials.some(s => s.platform === item.platform);
+        }
+      });
+    } else {
+      // Autoload last used template if one exists
+      try {
+        const { data: lastTemplate } = await getSb()
+          .from('email_templates')
+          .select('*')
+          .eq('company_id', this.companyId)
+          .eq('category', 'HR')
+          .order('updated_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (lastTemplate) {
+          this.builderBlocks = lastTemplate.body_json || [];
+          
+          // Restore style settings inputs
+          const settings = lastTemplate.settings || {};
+          if (settings.bgColor) {
+            document.getElementById('style-bg-color').value = settings.bgColor;
+            document.getElementById('style-bg-color-hex').value = settings.bgColor.toUpperCase();
           }
-        });
-      } else {
-        // Default layout setup
+          if (settings.alignment) document.getElementById('style-alignment').value = settings.alignment;
+          if (settings.logoSize) document.getElementById('style-logo-size').value = settings.logoSize;
+          if (settings.headerSize) document.getElementById('style-header-size').value = settings.headerSize;
+          if (settings.subSize) document.getElementById('style-subheader-size').value = settings.subSize;
+          if (settings.bodySize) document.getElementById('style-body-size').value = settings.bodySize;
+          if (settings.bodyColor) {
+            document.getElementById('style-body-color').value = settings.bodyColor;
+            document.getElementById('style-body-color-hex').value = settings.bodyColor.toUpperCase();
+          }
+          if (settings.indent) document.getElementById('style-indent').value = settings.indent;
+          if (settings.lineHeight) document.getElementById('style-line-height').value = settings.lineHeight;
+          if (settings.gap) document.getElementById('style-gap').value = settings.gap;
+          if (settings.linkColor) {
+            document.getElementById('style-link-color').value = settings.linkColor;
+            document.getElementById('style-link-color-hex').value = settings.linkColor.toUpperCase();
+          }
+          if (settings.ctaAffirm) {
+            document.getElementById('style-cta-affirm').value = settings.ctaAffirm;
+            document.getElementById('style-cta-affirm-hex').value = settings.ctaAffirm.toUpperCase();
+          }
+          if (settings.ctaNegative) {
+            document.getElementById('style-cta-negative').value = settings.ctaNegative;
+            document.getElementById('style-cta-negative-hex').value = settings.ctaNegative.toUpperCase();
+          }
+          if (settings.socialColor) {
+            document.getElementById('style-social-color').value = settings.socialColor;
+            document.getElementById('style-social-color-hex').value = settings.socialColor.toUpperCase();
+          }
+          if (settings.socialSize) document.getElementById('style-social-size').value = settings.socialSize;
+
+          // Restore check state for social links
+          const activeSocials = settings.socialLinks || [];
+          (this.availableSocialLinks || []).forEach(item => {
+            const chk = document.getElementById(`social-chk-${item.platform}`);
+            if (chk) {
+              chk.checked = activeSocials.some(s => s.platform === item.platform);
+            }
+          });
+        } else {
+          // Default layout setup
+          this.builderBlocks = [
+            { id: '1', type: 'header', value: eventTitle },
+            { id: '2', type: 'subheader', value: `Join us on ${eventDate}` },
+            { id: '3', type: 'body', value: eventDesc || 'We are excited to invite you to our upcoming team event! Please see details below and let us know if you can make it.' },
+            { id: '4', type: 'signature', value: 'Best regards,\nHR Department' }
+          ];
+        }
+      } catch (e) {
+        console.error('Error autoloading template:', e);
         this.builderBlocks = [
           { id: '1', type: 'header', value: eventTitle },
           { id: '2', type: 'subheader', value: `Join us on ${eventDate}` },
@@ -503,19 +576,11 @@ window.EventsApp = {
           { id: '4', type: 'signature', value: 'Best regards,\nHR Department' }
         ];
       }
-    } catch (e) {
-      console.error('Error autoloading template:', e);
-      this.builderBlocks = [
-        { id: '1', type: 'header', value: eventTitle },
-        { id: '2', type: 'subheader', value: `Join us on ${eventDate}` },
-        { id: '3', type: 'body', value: eventDesc || 'We are excited to invite you to our upcoming team event! Please see details below and let us know if you can make it.' },
-        { id: '4', type: 'signature', value: 'Best regards,\nHR Department' }
-      ];
-    }
 
-    document.getElementById('builder-subject').value = `Invitation: ${eventTitle}`;
-    document.getElementById('builder-preheader').value = `You are invited to join us for ${eventTitle}`;
-    document.getElementById('builder-attendee-response').checked = true;
+      document.getElementById('builder-subject').value = `Invitation: ${eventTitle}`;
+      document.getElementById('builder-preheader').value = `You are invited to join us for ${eventTitle}`;
+      document.getElementById('builder-attendee-response').checked = true;
+    }
 
     // Initialize hex input text values from color inputs
     const colorFields = ['style-bg-color', 'style-body-color', 'style-link-color', 'style-cta-affirm', 'style-cta-negative', 'style-social-color'];
@@ -754,6 +819,7 @@ window.EventsApp = {
   toggleAttendeeResponse() {
     const checked = document.getElementById('builder-attendee-response').checked;
     document.getElementById('mockup-cta-container').style.display = checked ? 'flex' : 'none';
+    this.debouncedAutosave();
   },
 
   updatePreview() {
@@ -909,6 +975,8 @@ window.EventsApp = {
     const btnNeg = document.getElementById('mockup-btn-negative');
     if (btnAffirm) btnAffirm.style.backgroundColor = affirmColor;
     if (btnNeg) btnNeg.style.backgroundColor = negColor;
+
+    this.debouncedAutosave();
   },
 
   // Templates List Modal & Management Flow
@@ -1512,6 +1580,65 @@ window.EventsApp = {
       if (colorInput) {
         colorInput.value = val;
       }
+    }
+  },
+
+  debouncedAutosave() {
+    if (this.autosaveTimeout) clearTimeout(this.autosaveTimeout);
+    this.autosaveTimeout = setTimeout(() => {
+      this.autosaveEmailConfig();
+    }, 1000);
+  },
+
+  async autosaveEmailConfig() {
+    if (!this.builderEventId) return;
+
+    // Fetch values from DOM safely
+    const senderNameEl = document.getElementById('builder-sender-name');
+    const senderEmailEl = document.getElementById('builder-sender-email');
+    const subjectEl = document.getElementById('builder-subject');
+    const preheaderEl = document.getElementById('builder-preheader');
+    const attendeeResponseEl = document.getElementById('builder-attendee-response');
+
+    const payload = {
+      email_sender_name: senderNameEl ? senderNameEl.value.trim() : '',
+      email_sender_email: senderEmailEl ? senderEmailEl.value.trim() : '',
+      email_subject: subjectEl ? subjectEl.value.trim() : '',
+      email_preheader: preheaderEl ? preheaderEl.value.trim() : '',
+      email_body_json: this.builderBlocks,
+      email_attendee_response: attendeeResponseEl ? attendeeResponseEl.checked : true,
+      email_settings: {
+        bgColor: document.getElementById('style-bg-color').value,
+        alignment: document.getElementById('style-alignment').value,
+        logoSize: document.getElementById('style-logo-size').value,
+        headerSize: document.getElementById('style-header-size').value,
+        subSize: document.getElementById('style-subheader-size').value,
+        bodySize: document.getElementById('style-body-size').value,
+        bodyColor: document.getElementById('style-body-color').value,
+        indent: document.getElementById('style-indent').value,
+        lineHeight: document.getElementById('style-line-height').value,
+        gap: document.getElementById('style-gap').value,
+        linkColor: document.getElementById('style-link-color').value,
+        ctaAffirm: document.getElementById('style-cta-affirm').value,
+        ctaNegative: document.getElementById('style-cta-negative').value,
+        socialColor: document.getElementById('style-social-color').value,
+        socialSize: document.getElementById('style-social-size').value,
+        socialLinks: (this.availableSocialLinks || []).filter(item => {
+          const chk = document.getElementById(`social-chk-${item.platform}`);
+          return chk && chk.checked;
+        }).map(item => ({ platform: item.platform, url: item.url }))
+      }
+    };
+
+    try {
+      const { error } = await getSb()
+        .from('company_events')
+        .update(payload)
+        .eq('id', this.builderEventId);
+      if (error) throw error;
+      console.log('Email configuration autosaved for event:', this.builderEventId);
+    } catch (e) {
+      console.error('Autosave failed:', e);
     }
   }
 };
