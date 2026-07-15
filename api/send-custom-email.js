@@ -15,6 +15,22 @@ function esc(str) {
     .replace(/'/g, '&#039;');
 }
 
+function renderRichText(text) {
+  if (!text) return '';
+  let out = String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/&lt;u&gt;/g, '<u>')
+    .replace(/&lt;\/u&gt;/g, '</u>');
+  out = out
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/_(.+?)_/g, '<em>$1</em>');
+  out = out.replace(/\n/g, '<br/>');
+  return out;
+}
+
+
 // Compile the builder blocks JSON and settings into beautiful HTML email body
 function compileHtmlBody(blocks, settings, logo, address, eventId, recipientEmail, origin) {
   const bgColor = settings.bgColor || '#ffffff';
@@ -80,22 +96,22 @@ function compileHtmlBody(blocks, settings, logo, address, eventId, recipientEmai
       blocksHtml += `<h3 style="${blockStyle} font-size: 17px; font-weight: 700; color: #111827; border-bottom: 1px solid #e5e7eb; padding-bottom: 6px; margin-top: 24px;">${esc(b.value)}</h3>`;
     } else if (b.type === 'section-body') {
       const indentedStyle = `${blockStyle} padding-left: ${indent};`;
-      blocksHtml += `<p style="${indentedStyle}">${esc(b.value).replace(/\n/g, '<br/>')}</p>`;
+      blocksHtml += `<p style="${indentedStyle}">${renderRichText(b.value)}</p>`;
     } else if (b.type === 'body') {
-      blocksHtml += `<p style="${blockStyle}">${esc(b.value).replace(/\n/g, '<br/>')}</p>`;
+      blocksHtml += `<p style="${blockStyle}">${renderRichText(b.value)}</p>`;
     } else if (b.type === 'signature') {
-      blocksHtml += `<p style="${blockStyle} text-align: left; margin-top: 28px;">${esc(b.value).replace(/\n/g, '<br/>')}</p>`;
+      blocksHtml += `<p style="${blockStyle} text-align: left; margin-top: 28px;">${renderRichText(b.value)}</p>`;
     } else if (b.type === 'bullet-list') {
       const items = (b.value || '').split('\n').filter(i => i.trim() !== '');
       if (items.length > 0) {
         const liStyle = `margin-bottom: 6px; text-align: ${align};`;
-        blocksHtml += `<ul style="${blockStyle} padding-left: 20px; list-style-type: disc;">${items.map(i => `<li style="${liStyle}">${esc(i)}</li>`).join('')}</ul>`;
+        blocksHtml += `<ul style="${blockStyle} padding-left: 20px; list-style-type: disc;">${items.map(i => `<li style="${liStyle}">${renderRichText(i)}</li>`).join('')}</ul>`;
       }
     } else if (b.type === 'num-list') {
       const items = (b.value || '').split('\n').filter(i => i.trim() !== '');
       if (items.length > 0) {
         const liStyle = `margin-bottom: 6px; text-align: ${align};`;
-        blocksHtml += `<ol style="${blockStyle} padding-left: 20px; list-style-type: decimal;">${items.map(i => `<li style="${liStyle}">${esc(i)}</li>`).join('')}</ol>`;
+        blocksHtml += `<ol style="${blockStyle} padding-left: 20px; list-style-type: decimal;">${items.map(i => `<li style="${liStyle}">${renderRichText(i)}</li>`).join('')}</ol>`;
       }
     } else if (b.type === 'spacer') {
       const sizeMap = { small: '12px', medium: '28px', large: '48px' };
@@ -184,6 +200,38 @@ function compileHtmlBody(blocks, settings, logo, address, eventId, recipientEmai
     </body>
     </html>
   `;
+}
+
+async function ensurePublicUrl(supabase, companyId, logoStr) {
+  if (!logoStr) return '';
+  if (!logoStr.startsWith('data:image/')) {
+    return logoStr;
+  }
+  try {
+    const match = logoStr.match(/^data:(.*?);base64,/);
+    const contentType = match ? match[1] : 'image/png';
+    const base64Data = logoStr.split(';base64,').pop();
+    const buffer = Buffer.from(base64Data, 'base64');
+    const ext = contentType.split('/').pop() || 'png';
+    const filePath = `companies/${companyId}/logos/email_logo.${ext}`;
+
+    const { error } = await supabase.storage
+      .from('brightkey-assets')
+      .upload(filePath, buffer, {
+        contentType: contentType,
+        upsert: true
+      });
+
+    if (error) {
+      console.error('Error uploading logo:', error);
+      return '';
+    }
+    const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/brightkey-assets/${filePath}`;
+    return publicUrl;
+  } catch (err) {
+    console.error('ensurePublicUrl error:', err);
+    return '';
+  }
 }
 
 export default async function handler(req, res) {
@@ -303,6 +351,9 @@ export default async function handler(req, res) {
         ${(coPhone || coEmail) ? `<div style="margin-top: 2px; color: #9ca3af;">${esc(coPhone)}${coPhone && coEmail ? ' | ' : ''}${esc(coEmail)}</div>` : ''}
       `.trim();
     }
+
+    // Convert base64 logo to a public Storage URL if needed to avoid message clipping
+    finalLogo = await ensurePublicUrl(supabase, companyId, finalLogo);
 
     // Combine attendeeCta into compiler settings
     const compilerSettings = { ...settings, attendeeCta };
