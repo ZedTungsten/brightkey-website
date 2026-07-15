@@ -201,7 +201,6 @@
           <a href="/dashboard/payouts" class="dash-nav-child" id="nav-item-payouts">Payouts</a>
         </div>
       </div>
-      <div style="border-bottom: 1px solid var(--border); margin: 0.25rem 0.75rem 0.4rem;"></div>
 
       <!-- Products -->
       <div class="dash-nav-group" id="nav-group-products" style="display: none;">
