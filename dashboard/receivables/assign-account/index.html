@@ -264,34 +264,15 @@
         });
 
         try {
-          const { data: existing } = await getSb()
+          const { error } = await getSb()
             .from('global_settings')
-            .select('id')
-            .eq('key', 'journal_account_employee_assignments')
-            .eq('company_id', this.companyId)
-            .maybeSingle();
+            .upsert({
+              key: 'journal_account_employee_assignments',
+              company_id: this.companyId,
+              value: { assignments: newAssignments }
+            });
 
-          const payload = {
-            key: 'journal_account_employee_assignments',
-            company_id: this.companyId,
-            value: { assignments: newAssignments }
-          };
-
-          let err;
-          if (existing?.id) {
-            const res = await getSb()
-              .from('global_settings')
-              .update(payload)
-              .eq('id', existing.id);
-            err = res.error;
-          } else {
-            const res = await getSb()
-              .from('global_settings')
-              .insert(payload);
-            err = res.error;
-          }
-
-          if (err) throw err;
+          if (error) throw error;
           showToast('Assignments saved successfully.');
         } catch (e) {
           console.error(e);
