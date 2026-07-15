@@ -223,6 +223,17 @@ window.EventsApp = {
     if (!title) { window.Toast?.error?.('Title is required.'); return; }
     if (!dateFrom) { window.Toast?.error?.('Date is required.'); return; }
 
+    if (!isWhole && timeStart && timeEnd) {
+      const [sh, sm] = timeStart.split(':').map(Number);
+      const [eh, em] = timeEnd.split(':').map(Number);
+      const startMin = sh * 60 + sm;
+      const endMin = eh * 60 + em;
+      if (startMin >= endMin) {
+        window.Toast?.error?.('Start time must be earlier than end time.');
+        return;
+      }
+    }
+
     const payload = {
       company_id: this.companyId,
       title,
