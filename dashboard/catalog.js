@@ -125,8 +125,8 @@
   // ─────────────────────────────────────────────────────
   let allProducts = [];
   let filtered = [];
-  let currentSortCol = 'created_at';
-  let currentSortDir = 'desc';
+  let currentSortCol = 'sku';
+  let currentSortDir = 'asc';
   let editingId = null;      // null = new product, uuid = editing existing
   let editingFeatureId = null; // id in the features table
   let deleteCallback = null;
