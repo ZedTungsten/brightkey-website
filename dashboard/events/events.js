@@ -145,6 +145,14 @@ window.EventsApp = {
             <button class="action-btn" title="Send Email" onclick="EventsApp.openEmailBuilder('${esc(ev.id)}')">
               <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
             </button>
+            <button class="action-btn" title="Attendees" onclick="EventsApp.openAttendeesModal('${esc(ev.id)}')">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                <circle cx="9" cy="7" r="4"></circle>
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+              </svg>
+            </button>
             <button class="action-btn" title="Edit" onclick="EventsApp.openEditModal(${JSON.stringify(ev).replace(/"/g,'&quot;')})">
               <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
             </button>
@@ -978,6 +986,118 @@ window.EventsApp = {
 
   closeTemplatesModal() {
     document.getElementById('templates-list-modal').classList.remove('open');
+  },
+
+  async openAttendeesModal(eventId) {
+    const modal = document.getElementById('event-attendees-modal');
+    if (!modal) return;
+
+    document.getElementById('attendees-modal-event-title').textContent = 'Loading event info...';
+    document.getElementById('stat-sent-count').textContent = '0';
+    document.getElementById('stat-opened-count').textContent = '0';
+    document.getElementById('stat-attending-count').textContent = '0';
+    document.getElementById('stat-declined-count').textContent = '0';
+
+    const tbody = document.getElementById('attendees-modal-table-body');
+    const emptyMsg = document.getElementById('attendees-modal-empty-msg');
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--text-muted);">Loading analytics data...</td></tr>';
+    emptyMsg.style.display = 'none';
+
+    modal.classList.add('open');
+
+    try {
+      // 1. Fetch Event details
+      const { data: event } = await getSb()
+        .from('company_events')
+        .select('title, date_from')
+        .eq('id', eventId)
+        .maybeSingle();
+
+      if (event) {
+        document.getElementById('attendees-modal-event-title').textContent = `${event.title} (${fmtDate(event.date_from)})`;
+      }
+
+      // 2. Fetch Attendees tracking data
+      const { data: records, error } = await getSb()
+        .from('company_event_attendees')
+        .select(`
+          status,
+          opened,
+          updated_at,
+          employees (
+            first_name,
+            last_name,
+            department
+          )
+        `)
+        .eq('event_id', eventId);
+
+      if (error) throw error;
+
+      if (!records || records.length === 0) {
+        tbody.innerHTML = '';
+        emptyMsg.style.display = 'block';
+        return;
+      }
+
+      let sentCount = records.length;
+      let openedCount = 0;
+      let attendingCount = 0;
+      let declinedCount = 0;
+
+      tbody.innerHTML = records.map(r => {
+        const emp = r.employees || {};
+        const fullName = emp.first_name ? `${emp.first_name} ${emp.last_name}` : 'Unknown Recipient';
+        const dept = emp.department || '—';
+        
+        if (r.opened) openedCount++;
+        if (r.status === 'attending') attendingCount++;
+        else if (r.status === 'not_attending') declinedCount++;
+
+        // Opened badge
+        const openedBadge = r.opened 
+          ? `<span style="display:inline-block;padding:2px 6px;font-size:0.68rem;font-weight:700;border-radius:4px;background:#ecfdf5;color:#10b981;">Yes</span>`
+          : `<span style="display:inline-block;padding:2px 6px;font-size:0.68rem;font-weight:700;border-radius:4px;background:#f3f4f6;color:#6b7280;">No</span>`;
+
+        // RSVP status badge
+        let rsvpBadge = '';
+        if (r.status === 'attending') {
+          rsvpBadge = `<span style="display:inline-block;padding:2px 6px;font-size:0.68rem;font-weight:700;border-radius:4px;background:#ecfdf5;color:#10b981;">Attending</span>`;
+        } else if (r.status === 'not_attending') {
+          rsvpBadge = `<span style="display:inline-block;padding:2px 6px;font-size:0.68rem;font-weight:700;border-radius:4px;background:#fef2f2;color:#ef4444;">Declined</span>`;
+        } else {
+          rsvpBadge = `<span style="display:inline-block;padding:2px 6px;font-size:0.68rem;font-weight:700;border-radius:4px;background:#f3f4f6;color:#6b7280;">No Response</span>`;
+        }
+
+        const lastResponse = r.updated_at 
+          ? new Date(r.updated_at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+          : '—';
+
+        return `
+          <tr>
+            <td style="font-weight:600;">${esc(fullName)}</td>
+            <td>${esc(dept)}</td>
+            <td style="text-align:center;">${openedBadge}</td>
+            <td style="text-align:center;">${rsvpBadge}</td>
+            <td style="text-align:center;color:var(--text-muted);font-size:0.75rem;">${lastResponse}</td>
+          </tr>
+        `;
+      }).join('');
+
+      document.getElementById('stat-sent-count').textContent = sentCount;
+      document.getElementById('stat-opened-count').textContent = openedCount;
+      document.getElementById('stat-attending-count').textContent = attendingCount;
+      document.getElementById('stat-declined-count').textContent = declinedCount;
+
+    } catch (e) {
+      console.error(e);
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--red);">Failed to load analytics tracking data.</td></tr>';
+    }
+  },
+
+  closeAttendeesModal() {
+    const modal = document.getElementById('event-attendees-modal');
+    if (modal) modal.classList.remove('open');
   },
 
   async loadTemplatesList() {

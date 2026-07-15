@@ -424,7 +424,34 @@ export default async function handler(req, res) {
           .replace(/\{\{reportingto\}\}/g, reportingToName);
       };
 
-      const finalHtml = replacePlaceholders(compiledHtml);
+      // Register the employee as a pending attendee for tracking if not already registered
+      if (emp) {
+        try {
+          const { data: existingAttendee } = await supabase
+            .from('company_event_attendees')
+            .select('status')
+            .eq('event_id', eventId)
+            .eq('employee_id', emp.id)
+            .maybeSingle();
+
+          if (!existingAttendee) {
+            await supabase
+              .from('company_event_attendees')
+              .insert({
+                event_id: eventId,
+                employee_id: emp.id,
+                status: 'pending'
+              });
+          }
+        } catch (dbErr) {
+          console.error('Error registering event attendee tracker:', dbErr);
+        }
+      }
+
+      let finalHtml = replacePlaceholders(compiledHtml);
+      if (emp) {
+        finalHtml += `<img src="${origin}/api/track-open?event_id=${eventId}&attendee_id=${emp.id}" width="1" height="1" style="display:none !important;" />`;
+      }
       const finalSubject = replacePlaceholders(subject);
 
       if (isSmtp) {
