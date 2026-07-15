@@ -772,7 +772,7 @@ async function buildProducts() {
     $('[data-template="thumbnails-container"]').html(thumbnailsHtml);
     $('[data-template="category"]').text(p.category || '');
     $('[data-template="sku"]').text(p.sku ? `SKU: ${p.sku}` : '');
-    $('[data-template="title"]').text(p.title);
+    $('[data-template="title"]').text(p.sku ? `${p.sku} - ${p.title}` : p.title);
     $('[data-template="price"]').html(priceStr);
     $('[data-template="description"]').text(descStr);
 
