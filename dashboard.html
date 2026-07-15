@@ -802,10 +802,17 @@
           this.currentUser = await BKAuth.requireAuth('admin.html');
           if (!this.currentUser) return;
 
+          const name = this.currentUser.user_metadata?.full_name || this.currentUser.email.split('@')[0];
+          const welcomeName = document.getElementById('welcome-name');
+          if (welcomeName) welcomeName.textContent = name;
+
+          const roleInfo = await BKAuth.getUserRole();
+          if (!roleInfo) return;
+
           const urlParams = new URLSearchParams(window.location.search);
           const searchQuery = urlParams.get('search');
           if (searchQuery) {
-            this.renderSearchResults(searchQuery.trim());
+            this.renderSearchResults(searchQuery.trim(), roleInfo);
             // Hide the cover banner & default grid container
             const coverBanner = document.getElementById('dashboard-cover-banner');
             if (coverBanner) coverBanner.style.display = 'none';
@@ -813,13 +820,6 @@
             if (gridContainer) gridContainer.style.display = 'none';
             return;
           }
-
-          const name = this.currentUser.user_metadata?.full_name || this.currentUser.email.split('@')[0];
-          const welcomeName = document.getElementById('welcome-name');
-          if (welcomeName) welcomeName.textContent = name;
-
-          const roleInfo = await BKAuth.getUserRole();
-          if (!roleInfo) return;
 
           const { data: co } = await BKAuth.sb.from('companies').select('id').eq('tenant_id', roleInfo.tenantId).limit(1).maybeSingle();
           this.companyId = co?.id;
@@ -915,73 +915,73 @@
         }
       },
 
-      async renderSearchResults(query) {
+      async renderSearchResults(query, roleInfo) {
         const DASHBOARD_PAGES = [
           // Main level
           { path: '/dashboard.html', title: 'Home Dashboard', desc: 'Overview of daily tasks, milestones, announcement sticky notes, and quick action widgets.' },
-          { path: '/dashboard/team.html', title: 'Team Directory', desc: 'Invite new company members, assign role permissions, view department listings, and manage profiles.' },
-          { path: '/dashboard/attendance.html', title: 'Attendance Management', desc: 'Track employee daily clock-in/out logs, work hours, breaks, and active status indicators.' },
-          { path: '/dashboard/attendance-leaves.html', title: 'Leaves & Time-Off', desc: 'Submit and approve employee vacation, sick leave requests, and check annual leave balances.' },
-          { path: '/dashboard/payouts.html', title: 'Payouts & Cash Position', desc: 'Process payroll payouts, employee bonuses, adjustments, and monitor company cash holdings.' },
-          { path: '/dashboard/sales-goals.html', title: 'Sales Goals & Targets', desc: 'Monitor active company targets, team quotas, closed deals performance, and goal progress.' },
-          { path: '/dashboard/sales-commissions.html', title: 'Sales Commissions', desc: 'Lock commission payouts, assign custom rates per booking, and compute technician incentives.' },
-          { path: '/dashboard/sales-stocks.html', title: 'Inventory & Stocks', desc: 'Track stock counts, physical item inventory levels, store locations, and dispatch logs.' },
-          { path: '/dashboard/events/index.html', title: 'Events & Email Builder', desc: 'Design custom corporate templates, send mass invitation emails, and track RSVP attendees.' },
-          { path: '/dashboard/support-inbox.html', title: 'Support Inbox & Chats', desc: 'Manage customer service chats, review client query tickets, and assign support staff.' },
-          { path: '/dashboard/product-reviews.html', title: 'Product Reviews', desc: 'Approve, delete, or hide customer product rating comments, stars, and feedback reviews.' },
-          { path: '/dashboard/global-promo.html', title: 'Global Promotions', desc: 'Toggle website banner promotional alerts, active discount campaigns, and marketing banners.' },
-          { path: '/dashboard/integrations.html', title: 'Third-Party Integrations', desc: 'Configure Resend email API keys, Stripe payment configurations, and webhook credentials.' },
-          { path: '/dashboard/master-settings.html', title: 'Master Settings', desc: 'Configure company metadata profile, phone, address details, and global ERP settings.' },
-          { path: '/dashboard/booking-schedules.html', title: 'Booking Schedules', desc: 'View technician job bookings calendar, installation dates, and order numbers.' },
-          { path: '/dashboard/bookkeeping.html', title: 'ERP Bookkeeping', desc: 'Process journal double entries, allocate profits to owners, and compile profit and loss ledgers.' },
-          { path: '/dashboard/qa-guide.html', title: 'QA Guides & Manuals', desc: 'Browse training documents, inspection guides, standard operating procedures, and guides.' },
-          { path: '/dashboard/add-products.html', title: 'Bulk Upload Products', desc: 'Bulk upload and register new products in the system catalog.' },
-          { path: '/dashboard/booking.html', title: 'Book Technician / Booking Form', desc: 'Schedule technician installations, dispatch orders, and book customer slots.' },
-          { path: '/dashboard/catalog.html', title: 'Product Catalog', desc: 'View, edit, and add products to the online catalog list.' },
-          { path: '/dashboard/employee-directory.html', title: 'Employee Directory', desc: 'List and view profiles of all company employees.' },
-          { path: '/dashboard/orders-invoices.html', title: 'Orders & Invoices', desc: 'Track customer sales orders, invoices, payment receipts, and balance dues.' },
-          { path: '/dashboard/organization-map.html', title: 'Organization Map', desc: 'Visualize company reporting tree, organizational structure, hierarchy, and roles.' },
+          { path: '/dashboard/team.html', title: 'Team Directory', desc: 'Invite new company members, assign role permissions, view department listings, and manage profiles.', module: 'HR' },
+          { path: '/dashboard/attendance.html', title: 'Attendance Management', desc: 'Track employee daily clock-in/out logs, work hours, breaks, and active status indicators.', module: 'HR' },
+          { path: '/dashboard/attendance-leaves.html', title: 'Leaves & Time-Off', desc: 'Submit and approve employee vacation, sick leave requests, and check annual leave balances.', module: 'HR' },
+          { path: '/dashboard/payouts.html', title: 'Payouts & Cash Position', desc: 'Process payroll payouts, employee bonuses, adjustments, and monitor company cash holdings.', module: 'HR' },
+          { path: '/dashboard/sales-goals.html', title: 'Sales Goals & Targets', desc: 'Monitor active company targets, team quotas, closed deals performance, and goal progress.', module: 'Sales' },
+          { path: '/dashboard/sales-commissions.html', title: 'Sales Commissions', desc: 'Lock commission payouts, assign custom rates per booking, and compute technician incentives.', module: 'Sales' },
+          { path: '/dashboard/sales-stocks.html', title: 'Inventory & Stocks', desc: 'Track stock counts, physical item inventory levels, store locations, and dispatch logs.', module: 'Sales' },
+          { path: '/dashboard/events/index.html', title: 'Events & Email Builder', desc: 'Design custom corporate templates, send mass invitation emails, and track RSVP attendees.', module: 'HR' },
+          { path: '/dashboard/support-inbox.html', title: 'Support Inbox & Chats', desc: 'Manage customer service chats, review client query tickets, and assign support staff.', module: 'Customer Service' },
+          { path: '/dashboard/product-reviews.html', title: 'Product Reviews', desc: 'Approve, delete, or hide customer product rating comments, stars, and feedback reviews.', module: 'Customer Service' },
+          { path: '/dashboard/global-promo.html', title: 'Global Promotions', desc: 'Toggle website banner promotional alerts, active discount campaigns, and marketing banners.', module: 'Marketing' },
+          { path: '/dashboard/integrations.html', title: 'Third-Party Integrations', desc: 'Configure Resend email API keys, Stripe payment configurations, and webhook credentials.', role: 'management-only' },
+          { path: '/dashboard/master-settings.html', title: 'Master Settings', desc: 'Configure company metadata profile, phone, address details, and global ERP settings.', role: 'master-only' },
+          { path: '/dashboard/booking-schedules.html', title: 'Booking Schedules', desc: 'View technician job bookings calendar, installation dates, and order numbers.', module: 'Operations' },
+          { path: '/dashboard/bookkeeping.html', title: 'ERP Bookkeeping', desc: 'Process journal double entries, allocate profits to owners, and compile profit and loss ledgers.', module: 'Finance' },
+          { path: '/dashboard/qa-guide.html', title: 'QA Guides & Manuals', desc: 'Browse training documents, inspection guides, standard operating procedures, and guides.', module: 'Logistics' },
+          { path: '/dashboard/add-products.html', title: 'Bulk Upload Products', desc: 'Bulk upload and register new products in the system catalog.', module: 'Products' },
+          { path: '/dashboard/booking.html', title: 'Book Technician / Booking Form', desc: 'Schedule technician installations, dispatch orders, and book customer slots.', module: 'Operations' },
+          { path: '/dashboard/catalog.html', title: 'Product Catalog', desc: 'View, edit, and add products to the online catalog list.', module: 'Products' },
+          { path: '/dashboard/employee-directory.html', title: 'Employee Directory', desc: 'List and view profiles of all company employees.', module: 'HR' },
+          { path: '/dashboard/orders-invoices.html', title: 'Orders & Invoices', desc: 'Track customer sales orders, invoices, payment receipts, and balance dues.', module: 'Operations' },
+          { path: '/dashboard/organization-map.html', title: 'Organization Map', desc: 'Visualize company reporting tree, organizational structure, hierarchy, and roles.', module: 'HR' },
           { path: '/dashboard/profile.html', title: 'User Profile', desc: 'Update your personal profile, email, avatar image, and security settings.' },
-          { path: '/dashboard/shipping-rates.html', title: 'Shipping Rates', desc: 'Configure global shipping zones, carrier costs, and pricing structures.' },
+          { path: '/dashboard/shipping-rates.html', title: 'Shipping Rates', desc: 'Configure global shipping zones, carrier costs, and pricing structures.', module: 'Logistics' },
 
           // Expenses folder
-          { path: '/dashboard/expenses/opex.html', title: 'Operational Expenses (OPEX)', desc: 'Track operational costs, rent, electricity, administrative fees, and monthly overheads.' },
-          { path: '/dashboard/expenses/cogs.html', title: 'Cost of Goods Sold (COGS)', desc: 'Monitor production costs, raw materials, supplier purchase orders, and direct costs.' },
+          { path: '/dashboard/expenses/opex.html', title: 'Operational Expenses (OPEX)', desc: 'Track operational costs, rent, electricity, administrative fees, and monthly overheads.', module: 'Finance' },
+          { path: '/dashboard/expenses/cogs.html', title: 'Cost of Goods Sold (COGS)', desc: 'Monitor production costs, raw materials, supplier purchase orders, and direct costs.', module: 'Finance' },
 
           // Warehouse folder
-          { path: '/dashboard/warehouse/inspect.html', title: 'Warehouse Inspect', desc: 'Inspect incoming supplier shipments, log damages, and verify item counts.' },
-          { path: '/dashboard/warehouse/dispatch.html', title: 'Warehouse Dispatch', desc: 'Dispatch customer orders, assign delivery drivers, and track courier packages.' },
-          { path: '/dashboard/warehouse/pack.html', title: 'Warehouse Packing', desc: 'Pack customer orders, scan item barcodes, and print shipping labels.' },
-          { path: '/dashboard/warehouse/receive.html', title: 'Warehouse Receiving', desc: 'Receive newly manufactured stock items or returned packages into the warehouse inventory.' },
-          { path: '/dashboard/warehouse/transfer.html', title: 'Warehouse Transfer', desc: 'Request and log physical stock inventory transfers between different warehouse hubs.' },
-          { path: '/dashboard/warehouse/all-orders.html', title: 'Warehouse All Orders', desc: 'View complete list of current, pending, and archived warehouse orders.' },
-          { path: '/dashboard/warehouse/order.html', title: 'Warehouse Order Details', desc: 'Inspect specific warehouse order picking sheets, statuses, and logs.' },
-          { path: '/dashboard/warehouse/summary.html', title: 'Warehouse Inventory Summary', desc: 'Check warehouse item quantities, safety levels, and storage locations.' },
+          { path: '/dashboard/warehouse/inspect.html', title: 'Warehouse Inspect', desc: 'Inspect incoming supplier shipments, log damages, and verify item counts.', module: 'Logistics' },
+          { path: '/dashboard/warehouse/dispatch.html', title: 'Warehouse Dispatch', desc: 'Dispatch customer orders, assign delivery drivers, and track courier packages.', module: 'Logistics' },
+          { path: '/dashboard/warehouse/pack.html', title: 'Warehouse Packing', desc: 'Pack customer orders, scan item barcodes, and print shipping labels.', module: 'Logistics' },
+          { path: '/dashboard/warehouse/receive.html', title: 'Warehouse Receiving', desc: 'Receive newly manufactured stock items or returned packages into the warehouse inventory.', module: 'Logistics' },
+          { path: '/dashboard/warehouse/transfer.html', title: 'Warehouse Transfer', desc: 'Request and log physical stock inventory transfers between different warehouse hubs.', module: 'Logistics' },
+          { path: '/dashboard/warehouse/all-orders.html', title: 'Warehouse All Orders', desc: 'View complete list of current, pending, and archived warehouse orders.', module: 'Logistics' },
+          { path: '/dashboard/warehouse/order.html', title: 'Warehouse Order Details', desc: 'Inspect specific warehouse order picking sheets, statuses, and logs.', module: 'Logistics' },
+          { path: '/dashboard/warehouse/summary.html', title: 'Warehouse Inventory Summary', desc: 'Check warehouse item quantities, safety levels, and storage locations.', module: 'Logistics' },
 
           // Ship folder
-          { path: '/dashboard/ship/send.html', title: 'Shipping Dispatch', desc: 'Prepare outgoing courier shipments and dispatch cargo manifests.' },
-          { path: '/dashboard/ship/receive.html', title: 'Shipping Receipts', desc: 'Track incoming shipping cargo manifests and supplier warehouse packages.' },
-          { path: '/dashboard/ship/done.html', title: 'Completed Shipments', desc: 'Archived list of successfully delivered courier and cargo shipments.' },
+          { path: '/dashboard/ship/send.html', title: 'Shipping Dispatch', desc: 'Prepare outgoing courier shipments and dispatch cargo manifests.', module: 'Logistics' },
+          { path: '/dashboard/ship/receive.html', title: 'Shipping Receipts', desc: 'Track incoming shipping cargo manifests and supplier warehouse packages.', module: 'Logistics' },
+          { path: '/dashboard/ship/done.html', title: 'Completed Shipments', desc: 'Archived list of successfully delivered courier and cargo shipments.', module: 'Logistics' },
 
           // Bookkeeping folders
-          { path: '/dashboard/general-journal.html', title: 'General Journal Entries', desc: 'Record double-entry bookkeeping journal entries and adjustments.' },
-          { path: '/dashboard/statements/profit-and-loss.html', title: 'Profit & Loss Statement', desc: 'Compile corporate balance statements, revenues, and expenditures.' },
-          { path: '/dashboard/statements/profit-allocation/index.html', title: 'Profit Allocation Ledger', desc: 'Allocate net business profit shares to investors, owners, and company funds.' },
-          { path: '/dashboard/statements/profit-allocation/settings/index.html', title: 'Profit Allocation Settings', desc: 'Configure profit share percentages and payout destination accounts.' },
-          { path: '/dashboard/ledgers/cash-ledgers/index.html', title: 'Cash Ledger Accounts', desc: 'Track transaction history for petty cash, main company vault, and bank accounts.' },
-          { path: '/dashboard/ledgers/cash-ledgers/cash-position/index.html', title: 'Cash Position Reports', desc: 'Review daily cash liquidity holdings and treasury reports.' },
-          { path: '/dashboard/ledgers/equity/index.html', title: 'Equity Ledger', desc: 'Log partner capital investments, drawings, and equity holdings.' },
-          { path: '/dashboard/finance-adjustments/index.html', title: 'Financial Adjustments', desc: 'Record inventory revaluations, depreciation, write-offs, and audits.' },
+          { path: '/dashboard/general-journal.html', title: 'General Journal Entries', desc: 'Record double-entry bookkeeping journal entries and adjustments.', module: 'Finance' },
+          { path: '/dashboard/statements/profit-and-loss.html', title: 'Profit & Loss Statement', desc: 'Compile corporate balance statements, revenues, and expenditures.', module: 'Finance' },
+          { path: '/dashboard/statements/profit-allocation/index.html', title: 'Profit Allocation Ledger', desc: 'Allocate net business profit shares to investors, owners, and company funds.', module: 'Finance' },
+          { path: '/dashboard/statements/profit-allocation/settings/index.html', title: 'Profit Allocation Settings', desc: 'Configure profit share percentages and payout destination accounts.', module: 'Finance' },
+          { path: '/dashboard/ledgers/cash-ledgers/index.html', title: 'Cash Ledger Accounts', desc: 'Track transaction history for petty cash, main company vault, and bank accounts.', module: 'Finance' },
+          { path: '/dashboard/ledgers/cash-ledgers/cash-position/index.html', title: 'Cash Position Reports', desc: 'Review daily cash liquidity holdings and treasury reports.', module: 'Finance' },
+          { path: '/dashboard/ledgers/equity/index.html', title: 'Equity Ledger', desc: 'Log partner capital investments, drawings, and equity holdings.', module: 'Finance' },
+          { path: '/dashboard/finance-adjustments/index.html', title: 'Financial Adjustments', desc: 'Record inventory revaluations, depreciation, write-offs, and audits.', module: 'Finance' },
 
           // Settings folder
-          { path: '/dashboard/settings/access.html', title: 'Access & Role Configurations', desc: 'Create custom system roles, gate dashboard modules, and assign permissions.' },
-          { path: '/dashboard/settings/assignments.html', title: 'Technician Booking Assignments', desc: 'Review active technician zones and default installation assignments.' },
-          { path: '/dashboard/settings/booking.html', title: 'Booking Slot Configurations', desc: 'Set up calendar working hours, slots, and technician capacities.' },
-          { path: '/dashboard/settings/company.html', title: 'Company Details Settings', desc: 'Update legal company name, logo image, business registration details, and currency.' },
-          { path: '/dashboard/settings/hr.html', title: 'HR & Leaves Policy', desc: 'Set up holiday calendars, leave policies, and annual leave accruals.' },
-          { path: '/dashboard/settings/installers.html', title: 'Technician Directories', desc: 'Register local installers, field technicians, and configure zones.' },
-          { path: '/dashboard/settings/logistics.html', title: 'Logistics Configurations', desc: 'Manage warehouse zones, carriers, custom packaging options, and box dimensions.' },
-          { path: '/dashboard/settings/sales.html', title: 'Sales Rules & Rates', desc: 'Define commission rate brackets, product targets, and sales incentives.' }
+          { path: '/dashboard/settings/access.html', title: 'Access & Role Configurations', desc: 'Create custom system roles, gate dashboard modules, and assign permissions.', role: 'admin-only' },
+          { path: '/dashboard/settings/assignments.html', title: 'Technician Booking Assignments', desc: 'Review active technician zones and default installation assignments.', role: 'admin-only' },
+          { path: '/dashboard/settings/booking.html', title: 'Booking Slot Configurations', desc: 'Set up calendar working hours, slots, and technician capacities.', role: 'admin-only' },
+          { path: '/dashboard/settings/company.html', title: 'Company Details Settings', desc: 'Update legal company name, logo image, business registration details, and currency.', role: 'admin-only' },
+          { path: '/dashboard/settings/hr.html', title: 'HR & Leaves Policy', desc: 'Set up holiday calendars, leave policies, and annual leave accruals.', role: 'admin-only' },
+          { path: '/dashboard/settings/installers.html', title: 'Technician Directories', desc: 'Register local installers, field technicians, and configure zones.', role: 'admin-only' },
+          { path: '/dashboard/settings/logistics.html', title: 'Logistics Configurations', desc: 'Manage warehouse zones, carriers, custom packaging options, and box dimensions.', role: 'admin-only' },
+          { path: '/dashboard/settings/sales.html', title: 'Sales Rules & Rates', desc: 'Define commission rate brackets, product targets, and sales incentives.', role: 'admin-only' }
         ];
 
         const dashContent = document.querySelector('.dash-content');
@@ -1012,6 +1012,27 @@
 
         // Scan pages asynchronously
         for (const page of DASHBOARD_PAGES) {
+          // Enforce Role-Based Access Control (RBAC) constraints
+          if (roleInfo) {
+            const userRole = roleInfo.role || null;
+            const accessibleModules = roleInfo.modules || [];
+            const isOwnerOrAdmin = ['owner', 'admin'].includes(userRole);
+            const userEmail = this.currentUser?.email || '';
+
+            // Check role constraints
+            if (page.role) {
+              if (page.role === 'admin-only' && !isOwnerOrAdmin) continue;
+              if (page.role === 'master-only' && userEmail !== 'johnzeustaller@gmail.com') continue;
+              if (page.role === 'management-only' && !['owner', 'admin', 'director'].includes(userRole?.toLowerCase())) continue;
+            }
+
+            // Check module constraints
+            if (page.module) {
+              const hasAccess = isOwnerOrAdmin || accessibleModules.includes(page.module);
+              if (!hasAccess) continue;
+            }
+          }
+
           let matched = false;
           let titleMatch = page.title.toLowerCase().includes(lowercaseQuery);
           let descMatch = page.desc.toLowerCase().includes(lowercaseQuery);
