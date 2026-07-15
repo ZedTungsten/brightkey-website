@@ -384,6 +384,7 @@
     let currentCompanyId = null;
     let cellAssignments = {}; // { [cellKey]: ['employeeId1', 'employeeId2'] }
     let editingCells = {}; // { [cellKey]: true }
+    let currentUserCanLock = false;
 
     function showToast(msg, isError = false) {
       const container = document.getElementById('toast-container');
@@ -409,6 +410,12 @@
       const rateLabel = parts[parts.length - 1];
       const productIndex = parseInt(parts[parts.length - 2], 10);
       const sku = parts.slice(1, parts.length - 2).join('_');
+
+      const b = dbBookings.find(x => x.id === bookingId);
+      if (b && b.commissions_locked) {
+        showToast("Cannot modify: Commissions are locked.", true);
+        return;
+      }
 
       try {
         const sb = window.BKAuth.sb;
@@ -583,6 +590,9 @@
           const productIndex = parseInt(parts[parts.length - 2], 10);
           const sku = parts.slice(1, parts.length - 2).join('_');
 
+          const b = dbBookings.find(x => x.id === bookingId);
+          if (!b || b.commissions_locked) continue;
+
           // Delete existing assignments for this specific cell key
           const { error: deleteError } = await sb
             .from('commission_assignments')
@@ -592,9 +602,6 @@
             .eq('product_index', productIndex)
             .eq('rate_label', rateLabel);
           if (deleteError) throw deleteError;
-
-          const b = dbBookings.find(x => x.id === bookingId);
-          if (!b) continue;
 
           // Calculate finalEligibleCentavos for this booking
           const calc = getBookingEligibleCentavos(b, productMap, commissionsConfig.eligibility_rules);
@@ -726,6 +733,25 @@
         console.error('Error fetching company ID:', err);
       }
 
+      // Check locking permissions
+      try {
+        const user = authInfo.user;
+        const [empRes, smRes] = await Promise.all([
+          sb.from('employees').select('id, level').eq('email', user.email).limit(1).maybeSingle(),
+          sb.from('global_settings').select('value').eq('key', 'sales_managers').eq('company_id', currentCompanyId).maybeSingle()
+        ]);
+        
+        const emp = empRes.data;
+        const salesManagers = (smRes.data?.value && Array.isArray(smRes.data.value.managers)) ? smRes.data.value.managers : [];
+        
+        const isOwner = authInfo.role === 'owner';
+        const isDirector = emp && parseInt(emp.level, 10) === 4;
+        const isSalesManager = emp && salesManagers.includes(emp.id);
+        currentUserCanLock = isOwner || isDirector || isSalesManager;
+      } catch (err) {
+        console.error('Error checking lock permissions:', err);
+      }
+
       // Save button handler
       const saveBtn = document.getElementById('btn-save-assignments');
       if (saveBtn) {
@@ -850,6 +876,12 @@
         table.addEventListener('change', (e) => {
           if (e.target.classList.contains('assignee-select')) {
             const cellKey = e.target.getAttribute('data-cell-key');
+            const bookingId = cellKey.split('_')[0];
+            const b = dbBookings.find(x => x.id === bookingId);
+            if (b && b.commissions_locked) {
+              showToast("Cannot modify: Commissions are locked.", true);
+              return;
+            }
             const index = parseInt(e.target.getAttribute('data-index'), 10);
             if (cellAssignments[cellKey]) {
               cellAssignments[cellKey][index] = e.target.value;
@@ -862,6 +894,12 @@
           const editBtn = e.target.closest('.btn-edit-cell');
           if (editBtn) {
             const cellKey = editBtn.getAttribute('data-cell-key');
+            const bookingId = cellKey.split('_')[0];
+            const b = dbBookings.find(x => x.id === bookingId);
+            if (b && b.commissions_locked) {
+              showToast("Cannot modify: Commissions are locked.", true);
+              return;
+            }
             editingCells[cellKey] = true;
             renderCommissionsTable();
           }
@@ -869,6 +907,14 @@
           const saveCellBtn = e.target.closest('.btn-save-cell');
           if (saveCellBtn) {
             const cellKey = saveCellBtn.getAttribute('data-cell-key');
+            const bookingId = cellKey.split('_')[0];
+            const b = dbBookings.find(x => x.id === bookingId);
+            if (b && b.commissions_locked) {
+              showToast("Cannot modify: Commissions are locked.", true);
+              delete editingCells[cellKey];
+              renderCommissionsTable();
+              return;
+            }
             delete editingCells[cellKey];
             saveCellAssignments(cellKey);
             renderCommissionsTable();
@@ -877,6 +923,12 @@
           const noneBtn = e.target.closest('.btn-assign-none');
           if (noneBtn) {
             const cellKey = noneBtn.getAttribute('data-cell-key');
+            const bookingId = cellKey.split('_')[0];
+            const b = dbBookings.find(x => x.id === bookingId);
+            if (b && b.commissions_locked) {
+              showToast("Cannot modify: Commissions are locked.", true);
+              return;
+            }
             cellAssignments[cellKey] = ['none'];
             renderCommissionsTable();
           }
@@ -884,6 +936,12 @@
           const addBtn = e.target.closest('.btn-add-assignee');
           if (addBtn) {
             const cellKey = addBtn.getAttribute('data-cell-key');
+            const bookingId = cellKey.split('_')[0];
+            const b = dbBookings.find(x => x.id === bookingId);
+            if (b && b.commissions_locked) {
+              showToast("Cannot modify: Commissions are locked.", true);
+              return;
+            }
             if (!cellAssignments[cellKey]) {
               cellAssignments[cellKey] = [];
             }
@@ -894,6 +952,12 @@
           const removeBtn = e.target.closest('.btn-remove-assignee');
           if (removeBtn) {
             const cellKey = removeBtn.getAttribute('data-cell-key');
+            const bookingId = cellKey.split('_')[0];
+            const b = dbBookings.find(x => x.id === bookingId);
+            if (b && b.commissions_locked) {
+              showToast("Cannot modify: Commissions are locked.", true);
+              return;
+            }
             const index = parseInt(removeBtn.getAttribute('data-index'), 10);
             if (cellAssignments[cellKey]) {
               cellAssignments[cellKey].splice(index, 1);
@@ -903,7 +967,38 @@
               renderCommissionsTable();
             }
           }
+
+          const toggleLockBtn = e.target.closest('.btn-toggle-lock');
+          if (toggleLockBtn) {
+            const bookingId = toggleLockBtn.getAttribute('data-booking-id');
+            const currentLocked = toggleLockBtn.getAttribute('data-locked') === 'true';
+            toggleBookingLock(bookingId, !currentLocked);
+          }
         });
+      }
+
+      async function toggleBookingLock(bookingId, targetLocked) {
+        if (!currentCompanyId) return;
+        try {
+          const sb = window.BKAuth.sb;
+          const { error } = await sb
+            .from('installation_bookings')
+            .update({ commissions_locked: targetLocked })
+            .eq('id', bookingId);
+
+          if (error) throw error;
+
+          const booking = dbBookings.find(b => b.id === bookingId);
+          if (booking) {
+            booking.commissions_locked = targetLocked;
+          }
+
+          showToast(targetLocked ? 'Commissions locked successfully' : 'Commissions unlocked successfully');
+          renderCommissionsTable();
+        } catch (err) {
+          console.error('Error toggling commissions lock:', err);
+          showToast(`Failed to update lock state: ${err.message}`, true);
+        }
       }
 
       if (currentCompanyId) {
@@ -1164,6 +1259,14 @@
         headerRow.appendChild(th);
       });
 
+      if (currentUserCanLock) {
+        const th = document.createElement('th');
+        th.textContent = 'Lock';
+        th.style.width = '80px';
+        th.style.textAlign = 'center';
+        headerRow.appendChild(th);
+      }
+
       const monthFilter = document.getElementById('month-filter');
       const selectedMonth = monthFilter ? monthFilter.value : '';
       const statusFilter = document.getElementById('status-filter');
@@ -1340,10 +1443,19 @@
               cellContentHtml = `<span style="font-weight:600; font-size:0.78rem;">${escapeHtml(names.join(', '))}</span>`;
             }
 
+            const isRowLocked = !!b.commissions_locked;
+            const controlHtml = isRowLocked ? `
+              <span style="display: flex; align-items: center; justify-content: center; width: 14px; height: 14px;" title="Commissions locked">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+              </span>
+            ` : `
+              <input type="checkbox" class="bulk-cell-checkbox" data-cell-key="${cellKey}" style="accent-color:var(--cyan); width:14px; height:14px; cursor:pointer;" />
+            `;
+
             ratesCellsHtml += `
               <td>
                 <div style="display: flex; align-items: center; gap: 0.5rem; min-width: 150px;">
-                  <input type="checkbox" class="bulk-cell-checkbox" data-cell-key="${cellKey}" style="accent-color:var(--cyan); width:14px; height:14px; cursor:pointer;" />
+                  ${controlHtml}
                   <div>${cellContentHtml} ${adjHtml}</div>
                 </div>
               </td>
@@ -1373,13 +1485,22 @@
               readOnlyHtml = `<div style="display: flex; flex-direction: column;">${namesHtml.join('')}</div>`;
             }
 
+            const isRowLocked = !!b.commissions_locked;
+            const actionControlHtml = isRowLocked ? `
+              <span style="display: flex; align-items: center; justify-content: center; padding: 0.2rem;" title="Commissions locked">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+              </span>
+            ` : `
+              <button type="button" class="btn-edit-cell" data-cell-key="${cellKey}" style="background: none; border: none; padding: 0.2rem; cursor: pointer; display: flex; align-items: center; justify-content: center;" title="Edit assignments">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-muted);"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+              </button>
+            `;
+
             ratesCellsHtml += `
               <td>
                 <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; min-width: 150px;">
                   <div>${readOnlyHtml}</div>
-                  <button type="button" class="btn-edit-cell" data-cell-key="${cellKey}" style="background: none; border: none; padding: 0.2rem; cursor: pointer; display: flex; align-items: center; justify-content: center;" title="Edit assignments">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-muted);"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
-                  </button>
+                  ${actionControlHtml}
                 </div>
               </td>
             `;
@@ -1432,12 +1553,23 @@
             </td>
             ${statusHtml}
             ${ratesCellsHtml}
+            ${currentUserCanLock ? `
+              <td style="text-align: center;">
+                <button type="button" class="btn-toggle-lock" data-booking-id="${b.id}" data-locked="${!!b.commissions_locked}" style="background: none; border: none; cursor: pointer; padding: 0.3rem; display: inline-flex; align-items: center; justify-content: center;" title="${b.commissions_locked ? 'Unlock commissions' : 'Lock commissions'}">
+                  ${b.commissions_locked ? `
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                  ` : `
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 9.9-1"></path></svg>
+                  `}
+                </button>
+              </td>
+            ` : ''}
           </tr>
         `);
       });
 
       if (rowsHtml.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="${10 + rates.length}" style="padding: 3rem; text-align: center; color: var(--text-muted);">No booking items found.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="${(currentUserCanLock ? 11 : 10) + rates.length}" style="padding: 3rem; text-align: center; color: var(--text-muted);">No booking items found.</td></tr>`;
         return;
       }
 
