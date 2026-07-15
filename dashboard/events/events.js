@@ -451,15 +451,19 @@ window.EventsApp = {
 
   addBlock(type) {
     let defaultValue = '';
+    let defaultConfig = {};
     if (type === 'header') defaultValue = 'New Header';
     else if (type === 'subheader') defaultValue = 'New Subheader';
     else if (type === 'section-header') defaultValue = 'Section Title';
     else if (type === 'signature') defaultValue = 'Sincerely,\nHR';
+    else if (type === 'spacer') defaultConfig = { size: 'medium' };
+    else if (type === 'hr') defaultConfig = { color: '#d1d5db', thickness: 'thin', length: 'full' };
     
     this.builderBlocks.push({
       id: String(Date.now() + Math.random()),
       type,
-      value: defaultValue
+      value: defaultValue,
+      config: defaultConfig
     });
     this.renderBlocksList();
     this.updatePreview();
@@ -515,7 +519,51 @@ window.EventsApp = {
       }
 
       let inputHtml = '';
-      if (block.type === 'bullet-list' || block.type === 'num-list') {
+      if (block.type === 'spacer') {
+        const sz = block.config?.size || 'medium';
+        inputHtml = `
+          <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+            <span style="font-size:0.72rem; color:var(--text-muted);">Size:</span>
+            ${['small','medium','large'].map(s => `
+              <label style="display:inline-flex;align-items:center;gap:3px;font-size:0.72rem;cursor:pointer;">
+                <input type="radio" name="spacer-sz-${block.id}" value="${s}" ${sz === s ? 'checked' : ''}
+                  onchange="EventsApp.updateBlockConfig('${block.id}', 'size', this.value)">
+                ${s.charAt(0).toUpperCase() + s.slice(1)}
+              </label>
+            `).join('')}
+          </div>
+        `;
+      } else if (block.type === 'hr') {
+        const cfg = block.config || {};
+        const col = cfg.color || '#d1d5db';
+        const thk = cfg.thickness || 'thin';
+        const len = cfg.length || 'full';
+        inputHtml = `
+          <div style="display:flex; flex-wrap:wrap; align-items:center; gap:0.75rem;">
+            <label style="display:inline-flex;align-items:center;gap:4px;font-size:0.72rem;">
+              Color:
+              <input type="color" value="${col}" style="width:28px;height:22px;padding:0;border:1px solid var(--border);border-radius:3px;cursor:pointer;"
+                onchange="EventsApp.updateBlockConfig('${block.id}', 'color', this.value)">
+            </label>
+            <span style="font-size:0.72rem; color:var(--text-muted);">Thickness:</span>
+            ${['thin','medium','thick'].map(t => `
+              <label style="display:inline-flex;align-items:center;gap:3px;font-size:0.72rem;cursor:pointer;">
+                <input type="radio" name="hr-thk-${block.id}" value="${t}" ${thk === t ? 'checked' : ''}
+                  onchange="EventsApp.updateBlockConfig('${block.id}', 'thickness', this.value)">
+                ${t.charAt(0).toUpperCase() + t.slice(1)}
+              </label>
+            `).join('')}
+            <span style="font-size:0.72rem; color:var(--text-muted);">Length:</span>
+            ${['short','medium','full'].map(l => `
+              <label style="display:inline-flex;align-items:center;gap:3px;font-size:0.72rem;cursor:pointer;">
+                <input type="radio" name="hr-len-${block.id}" value="${l}" ${len === l ? 'checked' : ''}
+                  onchange="EventsApp.updateBlockConfig('${block.id}', 'length', this.value)">
+                ${l.charAt(0).toUpperCase() + l.slice(1)}
+              </label>
+            `).join('')}
+          </div>
+        `;
+      } else if (block.type === 'bullet-list' || block.type === 'num-list') {
         inputHtml = `<textarea id="${textareaId}" class="form-input" style="font-size:0.85rem;" rows="3" placeholder="Enter list items (one per line)" oninput="EventsApp.updateBlockValue('${block.id}', this.value)">${esc(block.value)}</textarea>`;
       } else if (isRich) {
         inputHtml = `<textarea id="${textareaId}" class="form-input" style="font-size:0.85rem;" rows="3" placeholder="Enter paragraph text" oninput="EventsApp.updateBlockValue('${block.id}', this.value)">${esc(block.value)}</textarea>`;
@@ -562,6 +610,15 @@ window.EventsApp = {
     const block = this.builderBlocks.find(b => b.id === id);
     if (block) {
       block.value = value;
+      this.updatePreview();
+    }
+  },
+
+  updateBlockConfig(id, key, value) {
+    const block = this.builderBlocks.find(b => b.id === id);
+    if (block) {
+      if (!block.config) block.config = {};
+      block.config[key] = value;
       this.updatePreview();
     }
   },
@@ -674,6 +731,21 @@ window.EventsApp = {
         } else {
           el.innerHTML = `<ol style="margin:0; padding-left:1.5rem; list-style-type:decimal; text-align:${alignment};">${items.map(i => `<li>${this._renderRichText(i)}</li>`).join('')}</ol>`;
         }
+      } else if (b.type === 'spacer') {
+        const sizeMap = { small: '0.75rem', medium: '1.75rem', large: '3rem' };
+        el.style.display = 'block';
+        el.style.height = sizeMap[b.config?.size || 'medium'];
+        el.style.margin = '0';
+      } else if (b.type === 'hr') {
+        const cfg = b.config || {};
+        const color = cfg.color || '#d1d5db';
+        const thkMap = { thin: '1px', medium: '2px', thick: '4px' };
+        const lenMap = { short: '40%', medium: '70%', full: '100%' };
+        const borderWidth = thkMap[cfg.thickness || 'thin'];
+        const lineWidth = lenMap[cfg.length || 'full'];
+        el.style.margin = '0';
+        el.style.textAlign = 'center';
+        el.innerHTML = `<div style="display:inline-block; width:${lineWidth}; height:${borderWidth}; background:${color}; border-radius:2px;"></div>`;
       }
 
       renderContainer.appendChild(el);
