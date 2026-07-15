@@ -3,8 +3,6 @@ import nodemailer from 'nodemailer';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
-const RESEND_API_KEY = process.env.RESEND_API_KEY;
-const EMAIL_FROM = process.env.EMAIL_FROM || 'onboarding@resend.dev';
 
 // Helper to escape HTML characters in templates
 function esc(str) {
@@ -225,13 +223,17 @@ export default async function handler(req, res) {
       .eq('company_id', companyId)
       .maybeSingle();
 
-    const activeResendApiKey = integration?.hr_resend_api_key || integration?.resend_api_key || RESEND_API_KEY;
-    const activeEmailFrom = integration?.hr_resend_from_email || integration?.resend_from_email || EMAIL_FROM;
+    const activeResendApiKey = integration?.hr_resend_api_key || integration?.resend_api_key;
+    const activeEmailFrom = integration?.hr_resend_from_email || integration?.resend_from_email;
     const smtpUser = integration?.hr_smtp_user || integration?.smtp_user;
     const smtpPass = integration?.hr_smtp_pass || integration?.smtp_pass;
-    const smtpHost = integration?.hr_smtp_host || integration?.smtp_host || 'smtp.gmail.com';
-    const smtpPort = integration?.hr_smtp_port || integration?.smtp_port || 465;
+    const smtpHost = integration?.hr_smtp_host || integration?.smtp_host;
+    const smtpPort = integration?.hr_smtp_port || integration?.smtp_port;
     const senderName = integration?.hr_sender_name || 'BrightKey Solutions';
+
+    if (!activeResendApiKey && !(smtpUser && smtpPass)) {
+      return res.status(400).json({ error: 'Email integration is not configured. Please set up your Resend API Key or SMTP credentials in Settings under Integrations.' });
+    }
 
     // 3. Resolve recipient emails
     let emails = [];
