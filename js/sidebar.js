@@ -911,14 +911,29 @@
       },
 
       showChatLoading() {
-        const container = document.getElementById('chat-members-container');
-        if (!container) return;
-        container.innerHTML = `
-          <div style="height: 100%; min-height: 180px; display: flex; align-items: center; justify-content: center; gap: 0.6rem; color: var(--text-muted, #71717a); font-size: 0.78rem; font-weight: 600;">
-            <span aria-hidden="true" style="width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--border, #e4e4e7); border-top-color: var(--cyan, #06b6d4); animation: bkChatSpin 0.75s linear infinite;"></span>
-            <span>Loading...</span>
-          </div>
-        `;
+        const chatWin = document.getElementById('chat-window');
+        if (!chatWin) return;
+        let overlay = document.getElementById('chat-loading-overlay');
+        if (!overlay) {
+          overlay = document.createElement('div');
+          overlay.id = 'chat-loading-overlay';
+          overlay.style.cssText = 'position: absolute; inset: 0; background: #ffffff; z-index: 2000; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.75rem; transition: opacity 0.2s, visibility 0.2s; pointer-events: auto;';
+          overlay.innerHTML = `
+            <span style="width: 24px; height: 24px; border-radius: 50%; border: 2.5px solid var(--border, #e4e4e7); border-top-color: var(--cyan, #06b6d4); animation: bkChatSpin 0.75s linear infinite;"></span>
+            <span style="font-size: 0.8rem; font-weight: 600; color: var(--text-secondary, #52525b);">Loading status...</span>
+          `;
+          chatWin.appendChild(overlay);
+        }
+        overlay.style.opacity = '1';
+        overlay.style.visibility = 'visible';
+      },
+
+      hideChatLoading() {
+        const overlay = document.getElementById('chat-loading-overlay');
+        if (overlay) {
+          overlay.style.opacity = '0';
+          overlay.style.visibility = 'hidden';
+        }
       },
 
       showChatList() {
@@ -1117,6 +1132,7 @@
           this.renderInbox(inbox, allEmployees, presenceMap);
         } catch (e) {
           console.error(e);
+          this.hideChatLoading();
         }
       },
 
@@ -1181,6 +1197,7 @@
           const item = this.createTeammateItemElement(teammate, status);
           container.appendChild(item);
         });
+        this.hideChatLoading();
       },
 
       createTeammateItemElement(emp, status) {
