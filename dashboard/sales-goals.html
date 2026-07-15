@@ -592,6 +592,33 @@
       from { opacity: 0; transform: translateY(4px); }
       to { opacity: 1; transform: translateY(0); }
     }
+
+    /* ── Month Navigation ── */
+    .month-nav-container {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 0.5rem 1rem;
+      position: relative;
+    }
+    .month-nav-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      width: 28px;
+      height: 28px;
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .month-nav-btn:hover { background: var(--bg-base); border-color: var(--text-secondary); }
+    .month-display-label { font-size: 0.9rem; font-weight: 700; min-width: 120px; text-align: center; }
   </style>
 </head>
 <body>
@@ -629,7 +656,17 @@
                 <p>Monthly sales performance, top products, and commissions leaderboard.</p>
               </div>
               <div>
-                <select id="goals-month-select" class="filter-select" onchange="onMonthChange(this.value)" style="min-width: 150px;"></select>
+                <div class="month-nav-container">
+                  <button type="button" id="btn-month-prev" class="month-nav-btn" aria-label="Previous month" onclick="changeGoalsMonthOffset(-1)">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                  </button>
+                  <span id="month-display-label" class="month-display-label" style="cursor: pointer; user-select: none; position: relative; z-index: 2;" onclick="try { document.getElementById('month-filter').showPicker(); } catch(_) { document.getElementById('month-filter').click(); }">Loading...</span>
+                  <button type="button" id="btn-month-next" class="month-nav-btn" aria-label="Next month" onclick="changeGoalsMonthOffset(1)">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                  </button>
+                  <input type="month" id="month-filter" style="position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; pointer-events: none; z-index: 1; margin: 0; padding: 0;" onchange="onGoalsMonthPickerChange(this.value)" />
+                </div>
+                <select id="goals-month-select" style="display: none;"></select>
               </div>
             </div>
 
@@ -861,6 +898,7 @@
     let categoriesByBusiness = {}; // business -> Array of categories
     let productDetailsMap = {}; // SKU -> product details
     let currentSelectedMonth = '';
+    let monthsList = [];
     
     let allEmployees = []; // List of all employees to populate dropdowns
     let isGoalSettingsChangeAllowed = true;
@@ -912,6 +950,8 @@
         months.push(getYearMonthStr(target));
       }
 
+      monthsList = months;
+
       // Populate dashboard dropdown
       dashboardSelect.innerHTML = '';
       months.forEach(m => {
@@ -926,6 +966,7 @@
       currentSelectedMonth = currentMonthStr;
       
       dashboardSelect.value = currentSelectedMonth;
+      updateGoalsMonthUI();
 
       const ordersSelect = document.getElementById('orders-month-select');
       if (ordersSelect) {
@@ -968,7 +1009,7 @@
       } else if (tabName === 'orders') {
         renderOrdersTab();
       } else {
-        document.getElementById('goals-month-select').value = currentSelectedMonth;
+        if (window.updateGoalsMonthUI) window.updateGoalsMonthUI();
         loadGoalsDashboard();
       }
     };
@@ -1136,7 +1177,42 @@
     // Dropdown change handlers
     window.onMonthChange = function(val) {
       currentSelectedMonth = val;
+      updateGoalsMonthUI();
       loadGoalsDashboard();
+    };
+
+    window.updateGoalsMonthUI = function() {
+      const label = document.getElementById('month-display-label');
+      if (label) {
+        label.textContent = formatMonthName(currentSelectedMonth);
+      }
+      const goalsSelect = document.getElementById('goals-month-select');
+      if (goalsSelect) {
+        goalsSelect.value = currentSelectedMonth;
+      }
+      const monthFilter = document.getElementById('month-filter');
+      if (monthFilter) {
+        monthFilter.value = currentSelectedMonth;
+      }
+    };
+
+    window.changeGoalsMonthOffset = function(offset) {
+      let idx = monthsList.indexOf(currentSelectedMonth);
+      if (idx === -1) idx = monthsList.indexOf(getYearMonthStr(new Date()));
+      let newIdx = idx - offset;
+      if (newIdx >= 0 && newIdx < monthsList.length) {
+        currentSelectedMonth = monthsList[newIdx];
+        window.updateGoalsMonthUI();
+        loadGoalsDashboard();
+      }
+    };
+
+    window.onGoalsMonthPickerChange = function(val) {
+      if (val) {
+        currentSelectedMonth = val;
+        window.updateGoalsMonthUI();
+        loadGoalsDashboard();
+      }
     };
 
     // Populate Category Checklist under Settings tab
