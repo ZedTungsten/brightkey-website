@@ -32,7 +32,7 @@ function renderRichText(text) {
 
 
 // Compile the builder blocks JSON and settings into beautiful HTML email body
-function compileHtmlBody(blocks, settings, logo, address, eventId, recipientEmail, origin) {
+function compileHtmlBody(blocks, settings, logo, address, eventId, recipientEmail, origin, recipientId) {
   const bgColor = settings.bgColor || '#ffffff';
   const align = settings.alignment || 'left';
   const headSize = settings.headerSize || '28px';
@@ -131,8 +131,8 @@ function compileHtmlBody(blocks, settings, logo, address, eventId, recipientEmai
   // Attendee CTA logic
   let ctaHtml = '';
   if (settings.attendeeCta) {
-    const yesLink = `${origin}/dashboard/events?rsvp=yes&event=${eventId}&email=${encodeURIComponent(recipientEmail)}`;
-    const noLink = `${origin}/dashboard/events?rsvp=no&event=${eventId}&email=${encodeURIComponent(recipientEmail)}`;
+    const yesLink = `${origin}/events/response?event_id=${eventId}&attendee_id=${recipientId || ''}&status=attending`;
+    const noLink = `${origin}/events/response?event_id=${eventId}&attendee_id=${recipientId || ''}&status=not_attending`;
     ctaHtml = `
       <div style="text-align: center; margin-top: 32px; margin-bottom: 32px;">
         <!--[if mso]>
@@ -360,8 +360,6 @@ export default async function handler(req, res) {
 
     // Send email to all resolved addresses
     for (const recipient of emails) {
-      const compiledHtml = compileHtmlBody(blocks, compilerSettings, finalLogo, finalAddressHtml, eventId, recipient, origin);
-      
       // Fetch recipient details from employee directory to enable mail merge / placeholders
       const { data: emp } = await supabase
         .from('employees')
@@ -370,6 +368,8 @@ export default async function handler(req, res) {
         .ilike('email_address', recipient)
         .limit(1)
         .maybeSingle();
+
+      const compiledHtml = compileHtmlBody(blocks, compilerSettings, finalLogo, finalAddressHtml, eventId, recipient, origin, emp?.id);
 
       let reportingToName = 'N/A';
       let city = 'N/A';
