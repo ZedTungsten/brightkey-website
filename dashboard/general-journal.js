@@ -2140,13 +2140,25 @@
         });
         const sel = document.getElementById('log-month-filter');
         const prev = sel.value;
-        sel.innerHTML = '<option value="">All months</option>';
+        sel.innerHTML = '';
         months.forEach(m => {
           const o = document.createElement('option');
           o.value = m.key; o.textContent = m.label;
           sel.appendChild(o);
         });
-        if (prev) sel.value = prev;
+        
+        const now = new Date();
+        const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+        
+        if (prev && [...sel.options].some(o => o.value === prev)) {
+          sel.value = prev;
+        } else {
+          if (months.some(m => m.key === currentMonthKey)) {
+            sel.value = currentMonthKey;
+          } else if (sel.options.length > 0) {
+            sel.value = sel.options[0].value;
+          }
+        }
       },
 
       async loadCategories() {
