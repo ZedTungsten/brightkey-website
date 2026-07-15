@@ -851,8 +851,33 @@ window.EventsApp = {
     }
   },
 
-  saveTemplatePrompt() {
+  async saveTemplatePrompt() {
     document.getElementById('template-name-input').value = '';
+    document.getElementById('template-name-input').disabled = false;
+    document.getElementById('template-overwrite-confirm').style.display = 'none';
+    document.getElementById('template-overwrite-name-label').textContent = '';
+    document.getElementById('template-save-btn').textContent = 'Save Template';
+
+    // Populate overwrite dropdown with existing templates
+    const sel = document.getElementById('template-overwrite-select');
+    sel.innerHTML = '<option value="">-- None --</option>';
+    try {
+      const { data: templates } = await getSb()
+        .from('email_templates')
+        .select('id, name')
+        .eq('company_id', this.companyId)
+        .eq('category', 'HR')
+        .order('name');
+      if (templates) {
+        templates.forEach(t => {
+          const opt = document.createElement('option');
+          opt.value = t.id;
+          opt.textContent = t.name;
+          sel.appendChild(opt);
+        });
+      }
+    } catch (e) { console.error(e); }
+
     document.getElementById('template-name-modal').classList.add('open');
   },
 
@@ -860,9 +885,38 @@ window.EventsApp = {
     document.getElementById('template-name-modal').classList.remove('open');
   },
 
+  onOverwriteSelectChange() {
+    const sel = document.getElementById('template-overwrite-select');
+    const confirmDiv = document.getElementById('template-overwrite-confirm');
+    const nameLabel = document.getElementById('template-overwrite-name-label');
+    const nameInput = document.getElementById('template-name-input');
+    const saveBtn = document.getElementById('template-save-btn');
+    const selectedName = sel.options[sel.selectedIndex]?.textContent || '';
+
+    if (sel.value) {
+      // Overwrite mode
+      nameLabel.textContent = selectedName;
+      confirmDiv.style.display = 'block';
+      nameInput.value = '';
+      nameInput.disabled = true;
+      saveBtn.textContent = 'Overwrite';
+    } else {
+      // New template mode
+      confirmDiv.style.display = 'none';
+      nameInput.disabled = false;
+      saveBtn.textContent = 'Save Template';
+    }
+  },
+
   async confirmSaveTemplate() {
+    const overwriteSelect = document.getElementById('template-overwrite-select');
+    const overwriteId = overwriteSelect.value;
     const name = document.getElementById('template-name-input').value.trim();
-    if (!name) { window.Toast?.error?.('Please enter a template name.'); return; }
+
+    if (!overwriteId && !name) {
+      window.Toast?.error?.('Please enter a template name or select one to overwrite.');
+      return;
+    }
 
     const subject = document.getElementById('builder-subject').value.trim();
     const settings = {
@@ -887,21 +941,32 @@ window.EventsApp = {
       }).map(item => ({ platform: item.platform, url: item.url }))
     };
 
-    const payload = {
-      company_id: this.companyId,
-      name,
-      category: 'HR',
-      subject,
-      body_json: this.builderBlocks,
-      settings
-    };
-
     try {
-      const { error } = await getSb().from('email_templates').insert([payload]);
-      if (error) throw error;
+      if (overwriteId) {
+        // Overwrite existing template
+        const { error } = await getSb()
+          .from('email_templates')
+          .update({ subject, body_json: this.builderBlocks, settings })
+          .eq('id', overwriteId)
+          .eq('company_id', this.companyId);
+        if (error) throw error;
+        window.Toast?.success?.('Template overwritten successfully!');
+      } else {
+        // Insert new template
+        const payload = {
+          company_id: this.companyId,
+          name,
+          category: 'HR',
+          subject,
+          body_json: this.builderBlocks,
+          settings
+        };
+        const { error } = await getSb().from('email_templates').insert([payload]);
+        if (error) throw error;
+        window.Toast?.success?.('Template saved successfully!');
+      }
       this.closeSaveTemplate();
       await this.loadTemplatesDropdown();
-      window.Toast?.success?.('Template saved successfully!');
     } catch (e) {
       console.error(e);
       window.Toast?.error?.('Failed to save template: ' + e.message);
