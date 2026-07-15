@@ -1783,7 +1783,7 @@ window.EventsApp = {
       // 1. Fetch all employees in company
       const { data: employees, error } = await getSb()
         .from('employees')
-        .select('id, first_name, last_name, department, email_address')
+        .select('id, first_name, last_name, department, email')
         .eq('company_id', this.companyId)
         .order('department', { ascending: true })
         .order('first_name', { ascending: true });
@@ -1821,8 +1821,8 @@ window.EventsApp = {
                 const fullName = `${emp.first_name} ${emp.last_name}`;
                 return `
                   <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer; font-size:0.75rem; color:var(--text-secondary);">
-                    <input type="checkbox" class="emp-chk" data-emp-id="${emp.id}" data-emp-email="${esc(emp.email_address)}" data-dept-idx="${dIdx}" onchange="EventsApp.syncDeptState(${dIdx})" style="width:12px; height:12px; accent-color:var(--cyan);" />
-                    ${esc(fullName)} <span style="font-size:0.7rem; color:var(--text-muted);">(${esc(emp.email_address)})</span>
+                    <input type="checkbox" class="emp-chk" data-emp-id="${emp.id}" data-emp-email="${esc(emp.email)}" data-dept-idx="${dIdx}" onchange="EventsApp.syncDeptState(${dIdx})" style="width:12px; height:12px; accent-color:var(--cyan);" />
+                    ${esc(fullName)} <span style="font-size:0.7rem; color:var(--text-muted);">(${esc(emp.email)})</span>
                   </label>
                 `;
               }).join('')}
