@@ -400,9 +400,6 @@ window.EventsApp = {
     }
     document.getElementById('mockup-address-container').innerHTML = this.companyAddress;
 
-    // Fetch Templates
-    await this.loadTemplatesDropdown();
-
     // Default layout setup
     this.builderBlocks = [
       { id: '1', type: 'header', value: eventTitle },
@@ -427,27 +424,6 @@ window.EventsApp = {
     document.getElementById('email-builder-modal').classList.remove('open');
   },
 
-  async loadTemplatesDropdown() {
-    const select = document.getElementById('builder-template-select');
-    select.innerHTML = '<option value="">-- Select Template --</option>';
-    try {
-      const { data: templates } = await getSb()
-        .from('email_templates')
-        .select('id, name')
-        .eq('company_id', this.companyId)
-        .eq('category', 'HR')
-        .order('name');
-
-      if (templates) {
-        templates.forEach(t => {
-          const opt = document.createElement('option');
-          opt.value = t.id;
-          opt.textContent = t.name;
-          select.appendChild(opt);
-        });
-      }
-    } catch (e) { console.error('Error fetching email templates:', e); }
-  },
 
   addBlock(type) {
     let defaultValue = '';
@@ -802,8 +778,134 @@ window.EventsApp = {
     if (btnNeg) btnNeg.style.backgroundColor = negColor;
   },
 
-  // Template load/save helper
-  async loadTemplate(templateId) {
+  // Templates List Modal & Management Flow
+  openTemplatesModal() {
+    document.getElementById('templates-list-modal').classList.add('open');
+    this.loadTemplatesList();
+  },
+
+  closeTemplatesModal() {
+    document.getElementById('templates-list-modal').classList.remove('open');
+  },
+
+  async loadTemplatesList() {
+    const tbody = document.getElementById('templates-modal-table-body');
+    const emptyMsg = document.getElementById('templates-modal-empty-msg');
+    tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;padding:1.5rem;color:var(--text-muted);">Loading templates...</td></tr>';
+    emptyMsg.style.display = 'none';
+
+    try {
+      const { data: templates, error } = await getSb()
+        .from('email_templates')
+        .select('id, name, created_at')
+        .eq('company_id', this.companyId)
+        .eq('category', 'HR')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      if (!templates || templates.length === 0) {
+        tbody.innerHTML = '';
+        emptyMsg.style.display = 'block';
+        return;
+      }
+
+      tbody.innerHTML = templates.map(t => {
+        const createdDate = new Date(t.created_at).toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric'
+        });
+        const nameEscaped = (t.name || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+        return `
+          <tr>
+            <td style="border-left: none;">
+              <a href="javascript:void(0)" onclick="EventsApp.selectTemplate('${t.id}')" style="font-weight:600; color:var(--cyan-light); text-decoration:none; display:block; padding:0.2rem 0;">
+                ${t.name}
+              </a>
+            </td>
+            <td>${createdDate}</td>
+            <td style="border-right: none; text-align: center; white-space: nowrap; padding: 0.35rem 0.2rem;">
+              <button onclick="EventsApp.renameTemplatePrompt('${t.id}', '${nameEscaped}')" class="btn-action" style="background:none; border:none; color:var(--text-muted); cursor:pointer; padding:0.25rem 0.4rem; margin-right:0.25rem;" title="Rename">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4z"/></svg>
+              </button>
+              <button onclick="EventsApp.deleteTemplatePrompt('${t.id}', '${nameEscaped}')" class="btn-action" style="background:none; border:none; color:#ef4444; cursor:pointer; padding:0.25rem 0.4rem;" title="Delete">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    } catch (e) {
+      console.error(e);
+      tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;padding:1.5rem;color:#ef4444;">Failed to load templates.</td></tr>';
+    }
+  },
+
+  renameTemplatePrompt(id, oldName) {
+    this.activeRenameId = id;
+    document.getElementById('template-rename-input').value = oldName;
+    document.getElementById('template-rename-modal').classList.add('open');
+  },
+
+  closeRenameTemplate() {
+    document.getElementById('template-rename-modal').classList.remove('open');
+    this.activeRenameId = null;
+  },
+
+  async confirmRenameTemplate() {
+    const newName = document.getElementById('template-rename-input').value.trim();
+    if (!newName) {
+      window.Toast?.error?.('Please enter a template name.');
+      return;
+    }
+    try {
+      const { error } = await getSb()
+        .from('email_templates')
+        .update({ name: newName })
+        .eq('id', this.activeRenameId);
+
+      if (error) throw error;
+
+      window.Toast?.success?.('Template renamed successfully!');
+      this.closeRenameTemplate();
+      this.loadTemplatesList();
+    } catch (e) {
+      console.error(e);
+      window.Toast?.error?.('Failed to rename template: ' + e.message);
+    }
+  },
+
+  deleteTemplatePrompt(id, name) {
+    this.activeDeleteId = id;
+    document.getElementById('delete-template-name-label').textContent = name;
+    document.getElementById('template-delete-modal').classList.add('open');
+  },
+
+  closeDeleteTemplate() {
+    document.getElementById('template-delete-modal').classList.remove('open');
+    this.activeDeleteId = null;
+  },
+
+  async confirmDeleteTemplate() {
+    try {
+      const { error } = await getSb()
+        .from('email_templates')
+        .delete()
+        .eq('id', this.activeDeleteId);
+
+      if (error) throw error;
+
+      window.Toast?.success?.('Template deleted successfully!');
+      this.closeDeleteTemplate();
+      this.loadTemplatesList();
+    } catch (e) {
+      console.error(e);
+      window.Toast?.error?.('Failed to delete template: ' + e.message);
+    }
+  },
+
+  async selectTemplate(templateId) {
     if (!templateId) return;
     try {
       const { data: t } = await getSb()
@@ -844,6 +946,7 @@ window.EventsApp = {
         this.renderBlocksList();
         this.updatePreview();
         window.Toast?.success?.('Template loaded successfully.');
+        this.closeTemplatesModal();
       }
     } catch (e) {
       console.error(e);
@@ -966,7 +1069,6 @@ window.EventsApp = {
         window.Toast?.success?.('Template saved successfully!');
       }
       this.closeSaveTemplate();
-      await this.loadTemplatesDropdown();
     } catch (e) {
       console.error(e);
       window.Toast?.error?.('Failed to save template: ' + e.message);
