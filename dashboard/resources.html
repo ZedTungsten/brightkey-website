@@ -940,14 +940,6 @@
       <div class="form-group" id="file-gdrive-field" style="display:none;">
         <label class="form-label" for="file-gdrive-url">Google Drive Link</label>
         <input type="url" id="file-gdrive-url" class="form-input" placeholder="https://docs.google.com/document/d/... or sharing link" />
-        <label class="form-label" style="margin-top:0.4rem;">Google Drive File Type</label>
-        <select id="gdrive-file-type" class="form-select">
-          <option value="doc">Google Doc</option>
-          <option value="slide">Google Slides</option>
-          <option value="sheet">Google Sheets</option>
-          <option value="music">Audio / MP3 / Music</option>
-          <option value="video">Video File</option>
-        </select>
       </div>
 
       <div class="modal-footer">
@@ -2001,15 +1993,23 @@
 
           if (dbErr) throw dbErr;
           showToast('File uploaded successfully!');
-        } else {
           // Google Drive link
           const url = document.getElementById('file-gdrive-url').value.trim();
-          const fileType = document.getElementById('gdrive-file-type').value;
 
           if (!url) {
             showToast('Please provide a Google Drive sharing URL.', true);
             btn.disabled = false;
             return;
+          }
+
+          // Auto detect Google Drive file type from URL patterns
+          let fileType = 'doc'; // Fallback default
+          if (url.includes('/presentation') || url.includes('/slides')) {
+            fileType = 'slide';
+          } else if (url.includes('/spreadsheets') || url.includes('/sheets')) {
+            fileType = 'sheet';
+          } else if (url.includes('/document') || url.includes('/docs')) {
+            fileType = 'doc';
           }
 
           const { error: dbErr } = await sb.from('sales_resources').insert([{
