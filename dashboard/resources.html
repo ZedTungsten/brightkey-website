@@ -241,6 +241,54 @@
       gap: 0.75rem;
     }
 
+    /* ── Upload Progress Queue Bar ── */
+    .upload-progress-container {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.25rem;
+      margin-bottom: 0.5rem;
+      display: none;
+    }
+
+    .upload-item {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+    }
+
+    .upload-item-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .upload-bar-outer {
+      width: 100%;
+      height: 6px;
+      background: var(--border);
+      border-radius: 9999px;
+      overflow: hidden;
+    }
+
+    .upload-bar-inner {
+      width: 0%;
+      height: 100%;
+      background: var(--cyan);
+      border-radius: 9999px;
+      transition: width 0.1s ease;
+    }
+
     /* ── Modal Forms ── */
     .modal-overlay {
       display: none;
@@ -549,6 +597,11 @@
               <svg class="search-icon" viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
               <input type="search" id="resource-search" class="search-input" placeholder="Search files & folders..." oninput="handleSearch(this.value)" />
             </div>
+          </div>
+
+          <!-- Upload Queue Progress Bar Panel -->
+          <div class="upload-progress-container" id="upload-progress-panel">
+            <!-- Uploading files dynamically show here -->
           </div>
 
           <!-- Explorer Grid -->
@@ -1079,15 +1132,24 @@
       });
 
       // Handle file drop on the screen
-      window.addEventListener('drop', (e) => {
+      window.addEventListener('drop', async (e) => {
         e.preventDefault();
         dragCounter = 0;
         fullscreenOverlay.classList.remove('active');
         
         if (e.dataTransfer.files.length > 0) {
-          fileInput.files = e.dataTransfer.files;
-          handleFileSelect(fileInput);
-          openUploadFileModal();
+          const files = Array.from(e.dataTransfer.files);
+          const allowed = ['pdf', 'doc', 'docx', 'png', 'jpg', 'jpeg'];
+          
+          for (const file of files) {
+            const ext = file.name.split('.').pop().toLowerCase();
+            if (!allowed.includes(ext)) {
+              showToast(`Unsupported file type: ${file.name}. Please upload PDF, Doc, PNG or JPG files.`, true);
+              continue;
+            }
+            // Trigger automatic upload with custom loading bar
+            autoUploadFile(file);
+          }
         }
       });
 
@@ -1235,6 +1297,113 @@
         toggleFileSourceFields(source);
       }
     };
+
+    // Auto Upload dropped files with loading progress bars
+    async function autoUploadFile(file) {
+      const panel = document.getElementById('upload-progress-panel');
+      if (!panel) return;
+
+      panel.style.display = 'flex';
+
+      const uploadId = 'up_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+      
+      const itemEl = document.createElement('div');
+      itemEl.className = 'upload-item';
+      itemEl.id = uploadId;
+      itemEl.innerHTML = `
+        <div class="upload-item-header">
+          <span>Uploading: ${escFulfillment(file.name)}</span>
+          <span id="pct-${uploadId}">0%</span>
+        </div>
+        <div class="upload-bar-outer">
+          <div class="upload-bar-inner" id="bar-${uploadId}"></div>
+        </div>
+      `;
+      panel.appendChild(itemEl);
+
+      const ext = file.name.split('.').pop().toLowerCase();
+      let fileType = 'doc';
+      if (['png', 'jpg', 'jpeg'].includes(ext)) {
+        fileType = ext;
+      } else if (ext === 'pdf') {
+        fileType = 'pdf';
+      }
+
+      // Helper to animate progress bar simulation (Since Supabase client upload progress is promise-based only)
+      let progress = 0;
+      const progressInterval = setInterval(() => {
+        if (progress < 90) {
+          progress += Math.floor(Math.random() * 15) + 5;
+          if (progress > 90) progress = 90;
+          updateBar(progress);
+        }
+      }, 180);
+
+      function updateBar(val) {
+        const bar = document.getElementById(`bar-${uploadId}`);
+        const text = document.getElementById(`pct-${uploadId}`);
+        if (bar) bar.style.width = val + '%';
+        if (text) text.textContent = val + '%';
+      }
+
+      try {
+        const filePath = `companies/${currentCompanyId}/sales-resources/${Date.now()}_${file.name}`;
+        const { data: uploadData, error: uploadErr } = await sb.storage
+          .from('brightkey-assets')
+          .upload(filePath, file, { cacheControl: '3600', upsert: false });
+
+        if (uploadErr) throw uploadErr;
+
+        const { data: { publicUrl } } = sb.storage
+          .from('brightkey-assets')
+          .getPublicUrl(filePath);
+
+        // Strip file extension to get resource name
+        const baseName = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
+
+        const { error: dbErr } = await sb.from('sales_resources').insert([{
+          company_id: currentCompanyId,
+          name: baseName,
+          type: 'file',
+          file_type: fileType,
+          file_url: publicUrl,
+          parent_id: currentFolderId
+        }]);
+
+        if (dbErr) throw dbErr;
+
+        // Finish progress animation
+        clearInterval(progressInterval);
+        updateBar(100);
+
+        setTimeout(() => {
+          itemEl.remove();
+          // Hide panel if all items complete
+          if (panel.querySelectorAll('.upload-item').length === 0) {
+            panel.style.display = 'none';
+          }
+        }, 1000);
+
+        showToast(`Successfully uploaded ${file.name}`);
+        await loadResources();
+      } catch (err) {
+        clearInterval(progressInterval);
+        console.error(err);
+        itemEl.innerHTML = `
+          <div class="upload-item-header" style="color:var(--danger);">
+            <span>Failed: ${escFulfillment(file.name)}</span>
+            <span>Error</span>
+          </div>
+          <div style="font-size:0.72rem; color:var(--danger); margin-top:0.25rem;">${escFulfillment(err.message)}</div>
+        `;
+        setTimeout(() => {
+          itemEl.remove();
+          if (panel.querySelectorAll('.upload-item').length === 0) {
+            panel.style.display = 'none';
+          }
+        }, 5000);
+      }
+    }
 
     window.deleteResource = async function(e, id) {
       e.stopPropagation();
