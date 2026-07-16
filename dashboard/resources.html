@@ -1051,11 +1051,13 @@
 
       if (!dropZone || !fileInput || !fullscreenOverlay) return;
 
-      // Fullscreen drag detection
+      // Fullscreen drag detection with precise counter to handle leaving the window cleanly
+      let dragCounter = 0;
+
       window.addEventListener('dragenter', (e) => {
         e.preventDefault();
-        // Detect if dragging files (external) rather than internal elements
         if (e.dataTransfer.types.includes('Files')) {
+          dragCounter++;
           fullscreenOverlay.classList.add('active');
         }
       });
@@ -1064,13 +1066,22 @@
         e.preventDefault();
       });
 
-      fullscreenOverlay.addEventListener('dragleave', (e) => {
-        fullscreenOverlay.classList.remove('active');
+      window.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        // Check if cursor actually left the page boundaries
+        if (e.dataTransfer.types.includes('Files')) {
+          dragCounter--;
+          if (dragCounter <= 0 || e.clientY <= 0 || e.clientX <= 0 || e.clientX >= window.innerWidth || e.clientY >= window.innerHeight) {
+            dragCounter = 0;
+            fullscreenOverlay.classList.remove('active');
+          }
+        }
       });
 
       // Handle file drop on the screen
       window.addEventListener('drop', (e) => {
         e.preventDefault();
+        dragCounter = 0;
         fullscreenOverlay.classList.remove('active');
         
         if (e.dataTransfer.files.length > 0) {
