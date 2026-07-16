@@ -471,6 +471,7 @@
           </div>
         </div>
       </div>
+      <input type="file" id="direct-proof-file-input" accept="image/*" style="display:none;" />
 
       <!-- Edit Transaction Modal -->
       <div class="modal-overlay" id="edit-tx-modal" onclick="closeEditTxModalOuter(event)" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); backdrop-filter:blur(4px); z-index:9999; align-items:center; justify-content:center;">
@@ -1230,7 +1231,8 @@
         qImg.src = '';
         qImg.style.display = 'none';
         qPlaceholder.style.display = 'flex';
-        document.getElementById('proof-qa-container').onclick = null;
+        qPlaceholder.innerHTML = `<div style="display:flex; flex-direction:column; align-items:center; gap:0.35rem; color:var(--cyan);"><svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2.5" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg><span style="font-weight:700; font-size:0.75rem; text-transform:uppercase; letter-spacing:0.02em;">Upload QA Proof</span></div>`;
+        document.getElementById('proof-qa-container').onclick = () => triggerDirectProofUpload('qa', t.id);
       }
 
       // 1. Packed Proof
@@ -1247,7 +1249,8 @@
         pImg.src = '';
         pImg.style.display = 'none';
         pPlaceholder.style.display = 'flex';
-        document.getElementById('proof-packed-container').onclick = null;
+        pPlaceholder.innerHTML = `<div style="display:flex; flex-direction:column; align-items:center; gap:0.35rem; color:var(--cyan);"><svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2.5" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg><span style="font-weight:700; font-size:0.75rem; text-transform:uppercase; letter-spacing:0.02em;">Upload Packed Proof</span></div>`;
+        document.getElementById('proof-packed-container').onclick = () => triggerDirectProofUpload('packed', t.id);
       }
 
       // Aggregate delivery booking info
@@ -1306,7 +1309,8 @@
         bImg.src = '';
         bImg.style.display = 'none';
         bPlaceholder.style.display = 'flex';
-        document.getElementById('proof-booking-container').onclick = null;
+        bPlaceholder.innerHTML = `<div style="display:flex; flex-direction:column; align-items:center; gap:0.35rem; color:var(--cyan);"><svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2.5" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg><span style="font-weight:700; font-size:0.75rem; text-transform:uppercase; letter-spacing:0.02em;">Upload Booking Proof</span></div>`;
+        document.getElementById('proof-booking-container').onclick = () => triggerDirectProofUpload('booking', t.id);
       }
 
       // 3. Pickup Handover Screenshot Rendering
@@ -1323,7 +1327,8 @@
         pickImg.src = '';
         pickImg.style.display = 'none';
         pickPlaceholder.style.display = 'flex';
-        document.getElementById('proof-pickup-container').onclick = null;
+        pickPlaceholder.innerHTML = `<div style="display:flex; flex-direction:column; align-items:center; gap:0.35rem; color:var(--cyan);"><svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2.5" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg><span style="font-weight:700; font-size:0.75rem; text-transform:uppercase; letter-spacing:0.02em;">Upload Pickup Proof</span></div>`;
+        document.getElementById('proof-pickup-container').onclick = () => triggerDirectProofUpload('pickup', t.id);
       }
 
       // 4. Delivery Proof Screenshot Rendering
@@ -1340,7 +1345,8 @@
         delImg.src = '';
         delImg.style.display = 'none';
         delPlaceholder.style.display = 'flex';
-        document.getElementById('proof-delivery-container').onclick = null;
+        delPlaceholder.innerHTML = `<div style="display:flex; flex-direction:column; align-items:center; gap:0.35rem; color:var(--cyan);"><svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2.5" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg><span style="font-weight:700; font-size:0.75rem; text-transform:uppercase; letter-spacing:0.02em;">Upload Delivery Proof</span></div>`;
+        document.getElementById('proof-delivery-container').onclick = () => triggerDirectProofUpload('delivery', t.id);
       }
 
       // Show modal
@@ -1778,6 +1784,185 @@
       } finally {
         confirmBtn.disabled = false;
         confirmBtn.innerHTML = originalHtml;
+      }
+    };
+
+    let currentUploadProofType = null;
+    let currentUploadTxId = null;
+
+    function blobToBase64(blob) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const base64String = reader.result.split(',')[1];
+          resolve(base64String);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    }
+
+    function compressPackedImage(fileOrBlob) {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            let width = img.width;
+            let height = img.height;
+            const max = 1200;
+            if (width > max || height > max) {
+              if (width > height) {
+                height = Math.round((height * max) / width);
+                width = max;
+              } else {
+                width = Math.round((width * max) / height);
+                height = max;
+              }
+            }
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+            canvas.toBlob((blob) => {
+              resolve(blob);
+            }, 'image/jpeg', 0.8);
+          };
+          img.src = e.target.result;
+        };
+        reader.readAsDataURL(fileOrBlob);
+      });
+    }
+
+    window.triggerDirectProofUpload = function(type, txId) {
+      currentUploadProofType = type;
+      currentUploadTxId = txId;
+      document.getElementById('direct-proof-file-input').click();
+    };
+
+    document.getElementById('direct-proof-file-input').onchange = async function(e) {
+      const file = e.target.files[0];
+      if (!file || !currentUploadProofType || !currentUploadTxId) return;
+      
+      const t = activeTransactions.find(x => x.id === currentUploadTxId);
+      if (!t) return;
+
+      const refId = t.reference_id;
+      const type = currentUploadProofType;
+
+      const placeholderId = `proof-${type}-placeholder`;
+      const placeholder = document.getElementById(placeholderId);
+      const originalText = placeholder ? placeholder.innerHTML : 'No image uploaded';
+      if (placeholder) {
+        placeholder.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2.5" fill="none" style="animation: spin 1s linear infinite; margin-right: 6px;"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg> Uploading...`;
+      }
+
+      try {
+        const compressed = await compressPackedImage(file);
+        const base64 = await blobToBase64(compressed);
+        const fileName = `manual_${type}_${refId}_${Date.now()}.jpg`;
+
+        const r = await fetch('/api/upload', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fileBase64: base64,
+            fileName: fileName,
+            category: 'installations',
+            refId: refId,
+            type: 'proof',
+            companyId: companyId || 'general'
+          })
+        });
+
+        if (!r.ok) throw new Error('Upload failed');
+        const uploadResult = await r.json();
+
+        const now = new Date().toISOString();
+
+        if (type === 'qa') {
+          const { error } = await sb.from('inventory_transactions')
+            .update({ qa_photo_url: uploadResult.url, timestamp_inspect: now })
+            .eq('id', currentUploadTxId);
+          if (error) throw error;
+        } else if (type === 'packed') {
+          const { error } = await sb.from('inventory_transactions')
+            .update({ packed_photo_url: uploadResult.url, timestamp_packed: now })
+            .eq('id', currentUploadTxId);
+          if (error) throw error;
+        } else if (type === 'booking') {
+          const matching = dbDeliveryBookings.filter(x => x.reference_id === refId);
+          if (matching.length > 0) {
+            const { error } = await sb.from('delivery_bookings')
+              .update({ delivery_photo_url: uploadResult.url })
+              .eq('id', matching[0].id);
+            if (error) throw error;
+          } else {
+            const { error } = await sb.from('delivery_bookings')
+              .insert({
+                company_id: companyId,
+                reference_id: refId,
+                delivery_photo_url: uploadResult.url,
+                status: 'booked'
+              });
+            if (error) throw error;
+          }
+        } else if (type === 'pickup') {
+          const matching = dbDeliveryBookings.filter(x => x.reference_id === refId);
+          if (matching.length > 0) {
+            const { error } = await sb.from('delivery_bookings')
+              .update({ pickup_photos: [uploadResult.url], picked_up_at: now })
+              .eq('id', matching[0].id);
+            if (error) throw error;
+          } else {
+            const { error } = await sb.from('delivery_bookings')
+              .insert({
+                company_id: companyId,
+                reference_id: refId,
+                pickup_photos: [uploadResult.url],
+                picked_up_at: now,
+                status: 'picked_up'
+              });
+            if (error) throw error;
+          }
+        } else if (type === 'delivery') {
+          const matching = dbDeliveryBookings.filter(x => x.reference_id === refId);
+          if (matching.length > 0) {
+            const { error } = await sb.from('delivery_bookings')
+              .update({ received_photo_url: uploadResult.url, delivered_at: now })
+              .eq('id', matching[0].id);
+            if (error) throw error;
+          } else {
+            const { error } = await sb.from('delivery_bookings')
+              .insert({
+                company_id: companyId,
+                reference_id: refId,
+                received_photo_url: uploadResult.url,
+                delivered_at: now,
+                status: 'delivered'
+              });
+            if (error) throw error;
+          }
+        }
+
+        showToast('Proof photo uploaded successfully!');
+        
+        await loadCoreData();
+
+        if (typeof renderAllOrdersTab === 'function') {
+          renderAllOrdersTab();
+        }
+
+        showOrderDetailsModal(currentUploadTxId);
+      } catch (err) {
+        console.error(err);
+        showToast('Failed to upload proof: ' + err.message, true);
+        if (placeholder) {
+          placeholder.innerHTML = originalText;
+        }
+      } finally {
+        document.getElementById('direct-proof-file-input').value = '';
       }
     };
 
