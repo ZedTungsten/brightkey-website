@@ -144,6 +144,7 @@
     }
 
     .item-icon-wrapper {
+      position: relative; /* Support absolute superimposed badge layers */
       width: 48px;
       height: 48px;
       border-radius: 8px;
@@ -154,7 +155,7 @@
       margin-bottom: 0.5rem;
       color: var(--text-secondary);
       transition: color 0.15s;
-      overflow: hidden;
+      overflow: visible; /* Allow badge to slightly overhang if needed, or set overflow: hidden depending on badge fit */
       flex-shrink: 0;
     }
 
@@ -247,6 +248,31 @@
 
     .card-actions-trigger:hover {
       color: var(--text-primary);
+    }
+
+    /* Google Drive superimposed badge overlay styling */
+    .gdrive-badge {
+      position: absolute;
+      top: -3px;
+      left: -3px;
+      width: 14px;
+      height: 14px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+      z-index: 5;
+      padding: 1px;
+    }
+
+    .explorer-grid.list-view-active .gdrive-badge {
+      top: -2px;
+      left: -2px;
+      width: 12px;
+      height: 12px;
     }
 
     /* Multi-select Checkboxes styling */
@@ -1277,10 +1303,26 @@
           </div>
         ` : '';
 
+        // Determine if file is from Google Drive
+        const isGDrive = item.type !== 'folder' && (item.file_url.includes('google.com') || item.file_url.includes('drive.google.com') || item.file_url.includes('docs.google.com'));
+        const gdriveBadgeHtml = isGDrive ? `
+          <div class="gdrive-badge" title="Google Drive Link">
+            <svg viewBox="0 0 24 24" width="100%" height="100%">
+              <!-- Google Drive logo path -->
+              <polygon points="12,2 2,19 7,22 17,5" fill="#FFC107" />
+              <polygon points="12,2 17,5 7,22 2,19" fill="#1A73E8" />
+              <polygon points="2,19 7,22 22,22 17,14" fill="#34A853" />
+            </svg>
+          </div>
+        ` : '';
+
         card.innerHTML = `
           ${cardCheckboxHtml}
           ${listCheckboxHtml}
-          <div class="item-icon-wrapper">${iconHtml}</div>
+          <div class="item-icon-wrapper">
+            ${gdriveBadgeHtml}
+            ${iconHtml}
+          </div>
           <span class="item-name">${escFulfillment(displayName)}</span>
           ${metaHtml}
           ${actionMenuHtml}
