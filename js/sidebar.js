@@ -135,6 +135,73 @@
     }
   };
 
+  async function checkPendingShipments(companyId) {
+    if (!companyId) return;
+    const sb = window.BKAuth?.sb;
+    if (!sb) return;
+
+    try {
+      const [txRes, dbRes] = await Promise.all([
+        sb.from('inventory_transactions')
+          .select('id, type, status, reference_id')
+          .eq('company_id', companyId)
+          .in('type', ['customer_order', 'supplier_order']),
+        sb.from('delivery_bookings')
+          .select('reference_id')
+          .eq('company_id', companyId)
+      ]);
+
+      if (txRes.error || dbRes.error) return;
+
+      const txs = txRes.data || [];
+      const bookedRefs = new Set((dbRes.data || []).map(d => d.reference_id));
+
+      // Send count: packed customer_orders, not RCV- prefixed, not booked, no unpacked siblings
+      const sendQueue = txs.filter(t => {
+        if (t.type !== 'customer_order') return false;
+        if (t.status !== 'packed') return false;
+        if (t.reference_id && t.reference_id.startsWith('RCV-')) return false;
+        if (bookedRefs.has(t.reference_id)) return false;
+        if (t.reference_id) {
+          const hasUnpacked = txs.some(other =>
+            other.reference_id === t.reference_id &&
+            ['reserved', 'inspect'].includes(other.status)
+          );
+          if (hasUnpacked) return false;
+        }
+        return true;
+      });
+      const sendCount = new Set(sendQueue.map(t => t.reference_id)).size;
+
+      // Receive count: ordered transactions with RCV- or SUP- prefix, not booked
+      const receiveQueue = txs.filter(t => {
+        if (t.status !== 'ordered') return false;
+        if (!t.reference_id || (!t.reference_id.startsWith('RCV-') && !t.reference_id.startsWith('SUP-'))) return false;
+        if (bookedRefs.has(t.reference_id)) return false;
+        return true;
+      });
+      const receiveCount = new Set(receiveQueue.map(t => t.reference_id)).size;
+
+      const hasPending = sendCount > 0 || receiveCount > 0;
+
+      // Toggle red dots on sidebar
+      const logisticsBadge = document.getElementById('logistics-badge-dot');
+      const shipBadge = document.getElementById('ship-badge-dot');
+      if (logisticsBadge) logisticsBadge.style.display = hasPending ? 'inline-block' : 'none';
+      if (shipBadge) shipBadge.style.display = hasPending ? 'inline-block' : 'none';
+
+      window.BKShipmentsPending = hasPending;
+    } catch (e) {
+      console.error('Error checking pending shipments:', e);
+    }
+  }
+
+  window.BKRefreshShipmentsBadge = function() {
+    if (activeCompanyId) {
+      checkPendingShipments(activeCompanyId);
+    }
+  };
+
   // 1. Sidebar HTML Template (absolute links starting with "/")
   const sidebarHTML = `
       <div class="dash-logo-container" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem; flex-shrink: 0; min-height: 32px;">
@@ -280,14 +347,18 @@
       <div class="dash-nav-group" id="nav-group-logistics" style="display: none;">
         <button class="dash-nav-parent" onclick="toggleSubmenu(this)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
-          <span class="dash-nav-text">Logistics</span>
+          <span class="dash-nav-text" style="display: inline-flex; align-items: center; gap: 0.35rem;">Logistics <span id="logistics-badge-dot" style="display: none; width: 6px; height: 6px; border-radius: 50%; background-color: #ef4444;"></span></span>
           <svg class="dash-nav-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
         </button>
         <div class="dash-nav-children">
           <a href="/dashboard/warehouse/inspect" class="dash-nav-child" data-role="logistics">Warehouse</a>
-          <a href="/dashboard/ship/send" class="dash-nav-child" data-role="logistics">Ship</a>
-          <a href="/dashboard/shipping-rates" class="dash-nav-child" data-role="logistics">Shipping Rates</a>
+          <a href="/dashboard/ship/send" class="dash-nav-child" data-role="logistics" style="display: flex; align-items: center; justify-content: space-between;">
+            <span>Ship</span>
+            <span id="ship-badge-dot" style="display: none; width: 6px; height: 6px; border-radius: 50%; background-color: #ef4444;"></span>
+          </a>
+          <a href="/dashboard/inventory" class="dash-nav-child" data-role="logistics">Inventory</a>
           <a href="/dashboard/qa-guide" class="dash-nav-child" data-role="logistics">QA Guide</a>
+          <a href="/dashboard/shipping-rates" class="dash-nav-child" data-role="logistics">Shipping Rates</a>
         </div>
       </div>
 
@@ -575,6 +646,7 @@
         currentPath === href ||
         currentPath === href + '.html' ||
         (href === '/dashboard/warehouse/inspect' && currentPath.startsWith('/dashboard/warehouse/')) ||
+        (href === '/dashboard/inventory' && currentPath === '/dashboard/inventory') ||
         (href === '/dashboard/ship/send' && currentPath.startsWith('/dashboard/ship/')) ||
         (href === '/dashboard/payout-tracker/payout/' && currentPath.startsWith('/dashboard/payout-tracker/'))
       )) {
@@ -681,9 +753,10 @@
               const company = await window.BKAuth.getCompany(roleInfo.tenantId);
               activeCompanyId = company?.id || null;
               if (activeCompanyId) {
-                // Move expensive commissions check off the initial-load path (delay by 2s)
+                // Move expensive badge checks off the initial-load path (delay by 2s)
                 setTimeout(() => {
                   checkIncompleteCommissions(activeCompanyId);
+                  checkPendingShipments(activeCompanyId);
                 }, 2000);
               }
             } catch (coErr) {
