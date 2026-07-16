@@ -1016,6 +1016,7 @@
     let explorerViewMode = 'grid'; // Default layout is grid
     let selectedResourceIds = []; // Stores IDs of selected resources for bulk operations
     let currentMoveModalFolderId = null; // Tracks folder directory state within Move modal
+    let currentUserCanEdit = false; // Owner, Director, Sales Manager can delete, move, rename files
 
     window.setResourceViewMode = function(mode) {
       explorerViewMode = mode;
@@ -1073,6 +1074,26 @@
           return;
         }
         currentCompanyId = co?.id || null;
+
+        // Fetch employee level & sales manager configs to resolve file editing permission
+        try {
+          const user = authInfo.user;
+          const [empRes, smRes] = await Promise.all([
+            sb.from('employees').select('id, level').eq('email', user.email).limit(1).maybeSingle(),
+            sb.from('global_settings').select('value').eq('key', 'sales_managers').eq('company_id', currentCompanyId).maybeSingle()
+          ]);
+
+          const emp = empRes.data;
+          const salesManagers = (smRes.data?.value && Array.isArray(smRes.data.value.managers)) ? smRes.data.value.managers : [];
+
+          const isOwner = authInfo.role === 'owner';
+          const isDirector = emp && parseInt(emp.level, 10) === 4;
+          const isSalesManager = emp && salesManagers.includes(emp.id);
+
+          currentUserCanEdit = isOwner || isDirector || isSalesManager;
+        } catch (authErr) {
+          console.warn('[Permissions Gate] Failed to resolve details:', authErr);
+        }
 
         await loadResources();
       } else {
@@ -1221,25 +1242,20 @@
           card.classList.add('is-selected');
         }
 
-        // Checkbox wrappers
-        const cardCheckboxHtml = `
+        // Checkbox wrappers (Only rendered if user has editing permissions)
+        const cardCheckboxHtml = currentUserCanEdit ? `
           <div class="card-checkbox-wrapper" onclick="event.stopPropagation();">
             <input type="checkbox" class="card-checkbox" ${isSel ? 'checked' : ''} onchange="toggleSelectResource(event, '${item.id}')" />
           </div>
-        `;
-        const listCheckboxHtml = `
+        ` : '';
+        const listCheckboxHtml = currentUserCanEdit ? `
           <div class="list-checkbox-wrapper" onclick="event.stopPropagation();">
             <input type="checkbox" class="list-checkbox" ${isSel ? 'checked' : ''} onchange="toggleSelectResource(event, '${item.id}')" />
           </div>
-        `;
+        ` : '';
 
-        card.innerHTML = `
-          ${cardCheckboxHtml}
-          ${listCheckboxHtml}
-          <div class="item-icon-wrapper">${iconHtml}</div>
-          <span class="item-name">${escFulfillment(displayName)}</span>
-          ${metaHtml}
-          
+        // Action Trigger & Dropdown Menu HTML (Only rendered if user has editing permissions)
+        const actionMenuHtml = currentUserCanEdit ? `
           <!-- Actions Menu -->
           <div class="card-actions-trigger" onclick="toggleCardMenu(event, '${item.id}')">
             <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none"><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg>
@@ -1254,59 +1270,70 @@
               Delete
             </div>
           </div>
+        ` : '';
+
+        card.innerHTML = `
+          ${cardCheckboxHtml}
+          ${listCheckboxHtml}
+          <div class="item-icon-wrapper">${iconHtml}</div>
+          <span class="item-name">${escFulfillment(displayName)}</span>
+          ${metaHtml}
+          ${actionMenuHtml}
         `;
 
-        // Drag and Drop folder-movement features
-        card.setAttribute('draggable', 'true');
-        card.setAttribute('data-id', item.id);
-        card.setAttribute('data-type', item.type);
+        if (currentUserCanEdit) {
+          // Drag and Drop folder-movement features
+          card.setAttribute('draggable', 'true');
+          card.setAttribute('data-id', item.id);
+          card.setAttribute('data-type', item.type);
 
-        card.addEventListener('dragstart', (e) => {
-          e.dataTransfer.setData('text/plain', item.id);
-          card.classList.add('dragging');
-        });
-
-        card.addEventListener('dragend', () => {
-          card.classList.remove('dragging');
-        });
-
-        // Only folders can receive dropped items
-        if (item.type === 'folder') {
-          card.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            // Prevent dragging a folder onto itself
-            const draggedId = e.dataTransfer.types.includes('text/plain') ? 'valid' : '';
-            if (draggedId) {
-              card.classList.add('dragover-target');
-            }
+          card.addEventListener('dragstart', (e) => {
+            e.dataTransfer.setData('text/plain', item.id);
+            card.classList.add('dragging');
           });
 
-          card.addEventListener('dragleave', () => {
-            card.classList.remove('dragover-target');
+          card.addEventListener('dragend', () => {
+            card.classList.remove('dragging');
           });
 
-          card.addEventListener('drop', async (e) => {
-            e.preventDefault();
-            card.classList.remove('dragover-target');
-            const draggedId = e.dataTransfer.getData('text/plain');
-            
-            // Safety constraints
-            if (!draggedId || draggedId === item.id) return;
+          // Only folders can receive dropped items
+          if (item.type === 'folder') {
+            card.addEventListener('dragover', (e) => {
+              e.preventDefault();
+              // Prevent dragging a folder onto itself
+              const draggedId = e.dataTransfer.types.includes('text/plain') ? 'valid' : '';
+              if (draggedId) {
+                card.classList.add('dragover-target');
+              }
+            });
 
-            try {
-              // Perform moving parent_id update in Supabase
-              const { error } = await sb.from('sales_resources')
-                .update({ parent_id: item.id, updated_at: new Date().toISOString() })
-                .eq('id', draggedId);
+            card.addEventListener('dragleave', () => {
+              card.classList.remove('dragover-target');
+            });
 
-              if (error) throw error;
-              showToast('Item moved successfully.');
-              await loadResources();
-            } catch (err) {
-              console.error(err);
-              showToast('Failed to move item: ' + err.message, true);
-            }
-          });
+            card.addEventListener('drop', async (e) => {
+              e.preventDefault();
+              card.classList.remove('dragover-target');
+              const draggedId = e.dataTransfer.getData('text/plain');
+              
+              // Safety constraints
+              if (!draggedId || draggedId === item.id) return;
+
+              try {
+                // Perform moving parent_id update in Supabase
+                const { error } = await sb.from('sales_resources')
+                  .update({ parent_id: item.id, updated_at: new Date().toISOString() })
+                  .eq('id', draggedId);
+
+                if (error) throw error;
+                showToast('Item moved successfully.');
+                await loadResources();
+              } catch (err) {
+                console.error(err);
+                showToast('Failed to move item: ' + err.message, true);
+              }
+            });
+          }
         }
 
         card.addEventListener('click', (e) => {
@@ -1437,6 +1464,10 @@
 
     window.triggerBulkDelete = async function() {
       if (selectedResourceIds.length === 0) return;
+      if (!currentUserCanEdit) {
+        showToast('Permission denied: Only Owner, Director, and Sales Manager can delete resources.', true);
+        return;
+      }
       const count = selectedResourceIds.length;
       const confirmed = await window.confirmAction(`Are you sure you want to delete (${count}) files?`);
       if (!confirmed) return;
@@ -1611,6 +1642,10 @@
 
     window.executeBulkMove = async function() {
       if (selectedResourceIds.length === 0) return;
+      if (!currentUserCanEdit) {
+        showToast('Permission denied: Only Owner, Director, and Sales Manager can move resources.', true);
+        return;
+      }
 
       const btn = document.getElementById('btn-confirm-move');
       btn.disabled = true;
@@ -1664,6 +1699,10 @@
     };
 
     window.saveFolder = async function() {
+      if (!currentUserCanEdit) {
+        showToast('Permission denied: Only Owner, Director, and Sales Manager can manage resources.', true);
+        return;
+      }
       const name = document.getElementById('folder-name-input').value.trim();
       if (!name) {
         showToast('Please specify a valid name.', true);
@@ -2118,6 +2157,10 @@
 
     window.deleteResource = async function(e, id) {
       e.stopPropagation();
+      if (!currentUserCanEdit) {
+        showToast('Permission denied: Only Owner, Director, and Sales Manager can delete resources.', true);
+        return;
+      }
       const confirmed = await window.confirmAction('Are you sure you want to delete this resource?');
       if (!confirmed) return;
 
