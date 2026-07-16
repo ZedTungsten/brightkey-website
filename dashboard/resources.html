@@ -961,16 +961,17 @@
       
       <!-- Side-by-side search & navigation control -->
       <div class="viewer-controls-bar" id="side-by-side-controls" style="display:none;">
-        <div style="display:flex; align-items:center; gap:0.5rem;">
-          <input type="text" id="viewer-search-input" class="form-input" style="height:28px; width:150px; font-size:0.75rem; background:rgba(0,0,0,0.3); border-color:rgba(255,255,255,0.2); color:#fff;" placeholder="Search script..." />
-          <button class="viewer-btn" onclick="searchInsideViewer()">Search</button>
+        <button class="viewer-btn" onclick="turnSideBySidePage(-2)">
+          <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none"><polyline points="15 18 9 12 15 6"></polyline></svg>
+          Prev Page
+        </button>
+        <div style="font-size:0.78rem; font-weight:700; color:#fff;" id="side-by-side-page-indicator">
+          Pages 1 - 2
         </div>
-        <div style="width:1.5px; height:18px; background:rgba(255,255,255,0.2);"></div>
-        <div style="display:flex; align-items:center; gap:0.5rem; font-size:0.75rem; font-weight:700;">
-          <span>Jump to page</span>
-          <input type="number" id="viewer-page-input" class="form-input" style="height:28px; width:50px; text-align:center; font-size:0.75rem; background:rgba(0,0,0,0.3); border-color:rgba(255,255,255,0.2); color:#fff;" min="1" value="1" />
-          <button class="viewer-btn" onclick="jumpToViewerPage()">Go</button>
-        </div>
+        <button class="viewer-btn" onclick="turnSideBySidePage(2)">
+          Next Page
+          <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none"><polyline points="9 18 15 12 9 6"></polyline></svg>
+        </button>
       </div>
 
       <button type="button" class="viewer-btn" style="font-size:1.4rem;" onclick="closeFileViewer()">&times;</button>
@@ -1016,6 +1017,7 @@
     let selectedResourceIds = []; // Stores IDs of selected resources for bulk operations
     let currentMoveModalFolderId = null; // Tracks folder directory state within Move modal
     let currentUserCanEdit = false; // Owner, Director, Sales Manager can delete, move, rename files
+    let currentSideBySideLeftPage = 1; // Tracks current left page index in side-by-side mode
 
     window.setResourceViewMode = function(mode) {
       explorerViewMode = mode;
@@ -2312,17 +2314,29 @@
         // View full height of file naturally by letting it take vertical height and scrolling the .viewer-body wrapper
         body.innerHTML = `<div style="width:100%; height:100%; display:flex; justify-content:center; align-items:center; overflow:hidden;"><img src="${displayUrl}" style="max-width:100%; max-height:calc(100vh - 120px); object-fit:contain; border-radius:6px; box-shadow:0 12px 32px rgba(0,0,0,0.5); display:block;" onerror="this.src='${embedUrl}';" /></div>`;
       } else if (item.file_type === 'doc' || item.file_type === 'slide') {
-        // Doc or Slides — Render side-by-side 2-page preview with custom search and navigation controls
+        // Reset page tracks on resource load
+        currentSideBySideLeftPage = 1;
         ctrlBar.style.display = 'flex';
+        
+        // Update header page indicators
+        const pageInd = document.getElementById('side-by-side-page-indicator');
+        if (pageInd) pageInd.textContent = `Pages 1 - 2`;
+
+        // Apply hash paging parameters to direct iframe views
+        // Google Docs uses page parameter in hash link: e.g. #page=1
+        // Google Slides uses slide parameter in URL/hash link: e.g. #slide=id.p1
+        const leftUrl = embedUrl.includes('?') ? `${embedUrl}&page=1#page=1#slide=id.p1` : `${embedUrl}?page=1#page=1#slide=id.p1`;
+        const rightUrl = embedUrl.includes('?') ? `${embedUrl}&page=2#page=2#slide=id.p2` : `${embedUrl}?page=2#page=2#slide=id.p2`;
+
         body.innerHTML = `
           <div class="side-by-side-container" style="height:80vh; min-height:600px;">
             <div class="side-page">
-              <div class="page-header">Left View</div>
-              <iframe id="iframe-view-left" class="page-content-iframe" src="${embedUrl}"></iframe>
+              <div class="page-header" id="left-page-header">Page 1</div>
+              <iframe id="iframe-view-left" class="page-content-iframe" src="${leftUrl}"></iframe>
             </div>
             <div class="side-page">
-              <div class="page-header">Right View</div>
-              <iframe id="iframe-view-right" class="page-content-iframe" src="${embedUrl}"></iframe>
+              <div class="page-header" id="right-page-header">Page 2</div>
+              <iframe id="iframe-view-right" class="page-content-iframe" src="${rightUrl}"></iframe>
             </div>
           </div>
         `;
@@ -2514,18 +2528,56 @@
     }
 
     // 2-page search & jump logic
-    window.searchInsideViewer = function() {
-      const search = document.getElementById('viewer-search-input').value.trim();
-      if (!search) {
-        showToast('Please type a search query.', true);
+    window.turnSideBySidePage = function(offset) {
+      if (currentViewerItemIndex === -1 || viewerItemsList.length === 0) return;
+      const item = viewerItemsList[currentViewerItemIndex];
+      let embedUrl = item.file_url;
+
+      // Transform domain URL if needed
+      if (embedUrl.includes('drive.google.com') || embedUrl.includes('docs.google.com')) {
+        if (item.file_type === 'doc') {
+          embedUrl = transformGDriveDocUrl(embedUrl);
+        } else if (item.file_type === 'slide') {
+          embedUrl = transformGDriveSlideUrl(embedUrl);
+        }
+      }
+
+      const nextLeft = currentSideBySideLeftPage + offset;
+      if (nextLeft < 1) {
+        showToast('You are already on the first page.', true);
         return;
       }
-      showToast(`Searching for "${search}" inside document...`);
-    };
 
-    window.jumpToViewerPage = function() {
-      const pNum = parseInt(document.getElementById('viewer-page-input').value) || 1;
-      showToast(`Jumping views to page ${pNum}`);
+      currentSideBySideLeftPage = nextLeft;
+      const nextRight = currentSideBySideLeftPage + 1;
+
+      // Update indicators
+      const pageInd = document.getElementById('side-by-side-page-indicator');
+      if (pageInd) {
+        pageInd.textContent = `Pages ${currentSideBySideLeftPage} - ${nextRight}`;
+      }
+
+      const headerLeft = document.getElementById('left-page-header');
+      const headerRight = document.getElementById('right-page-header');
+      if (headerLeft) headerLeft.textContent = `Page ${currentSideBySideLeftPage}`;
+      if (headerRight) headerRight.textContent = `Page ${nextRight}`;
+
+      // Update Left View iframe src with new page parameters
+      const iframeLeft = document.getElementById('iframe-view-left');
+      if (iframeLeft) {
+        // Build URL
+        iframeLeft.src = embedUrl.includes('?') 
+          ? `${embedUrl}&page=${currentSideBySideLeftPage}#page=${currentSideBySideLeftPage}#slide=id.p${currentSideBySideLeftPage}` 
+          : `${embedUrl}?page=${currentSideBySideLeftPage}#page=${currentSideBySideLeftPage}#slide=id.p${currentSideBySideLeftPage}`;
+      }
+
+      // Update Right View iframe src with new page parameters
+      const iframeRight = document.getElementById('iframe-view-right');
+      if (iframeRight) {
+        iframeRight.src = embedUrl.includes('?') 
+          ? `${embedUrl}&page=${nextRight}#page=${nextRight}#slide=id.p${nextRight}` 
+          : `${embedUrl}?page=${nextRight}#page=${nextRight}#slide=id.p${nextRight}`;
+      }
     };
 
     // Helper functions for modal overlay transition conformity
