@@ -138,8 +138,18 @@
       </div>
 
       <!-- Upload All Components Photo -->
-      <div style="display:flex; flex-direction:column; gap:0.5rem; margin-bottom:1.5rem;">
+      <div style="display:flex; flex-direction:column; gap:0.75rem; margin-bottom:1.5rem;">
         <label style="font-size:0.82rem; font-weight:700; color:var(--text-primary);">Upload All Components (1 image all parts in one photo)</label>
+        
+        <!-- Video Element for Camera Stream -->
+        <div id="qa-camera-container" style="display:none; position:relative; width:100%; aspect-ratio:4/3; background:#000; border-radius:8px; overflow:hidden; border:1px solid var(--border);">
+          <video id="qa-camera-stream" autoplay playsinline style="width:100%; height:100%; object-fit:cover;"></video>
+          <button type="button" class="btn btn-cyan" onclick="captureQaCameraPhoto()" style="position:absolute; bottom:12px; left:50%; transform:translateX(-50%); border-radius:20px; padding:6px 16px; font-size:0.8rem; box-shadow:0 4px 12px rgba(0,0,0,0.3);">
+            Capture Photo
+          </button>
+        </div>
+
+        <!-- Preview / Upload Dropzone -->
         <div id="qa-upload-area" style="border:2px dashed var(--border); border-radius:8px; padding:2rem; text-align:center; cursor:pointer; background:var(--bg-base); position:relative; transition: border-color 0.25s;" onclick="document.getElementById('qa-photo-input').click()">
           <input type="file" id="qa-photo-input" accept="image/*" style="display:none;" onchange="window.handleQaPhotoSelected(event)" />
           <div id="qa-upload-placeholder">
@@ -150,6 +160,20 @@
             <img id="qa-upload-preview" style="max-height:180px; max-width:100%; border-radius:6px; object-fit:contain; border:1px solid var(--border);" />
             <button type="button" onclick="event.stopPropagation(); window.removeQaPhoto()" style="background:none; border:none; cursor:pointer; color:var(--red, #ef4444); font-size:0.75rem; font-weight:600;">Delete Image</button>
           </div>
+        </div>
+
+        <!-- Action Buttons for Uploading/Camera -->
+        <div style="display:flex; gap:0.75rem; margin-top:0.25rem;">
+          <!-- Camera Button -->
+          <button type="button" id="btn-qa-open-camera" class="btn btn-outline" style="flex:1; font-size:0.82rem; height:36px; display:inline-flex; align-items:center; justify-content:center; gap:0.4rem;" onclick="startQaCamera()">
+            <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+            Use Camera
+          </button>
+          <!-- Upload/Select Button -->
+          <button type="button" class="btn btn-outline" style="flex:1; font-size:0.82rem; height:36px; display:inline-flex; align-items:center; justify-content:center; gap:0.4rem;" onclick="document.getElementById('qa-photo-input').click()">
+            <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            Upload Photo
+          </button>
         </div>
       </div>
 
@@ -1045,6 +1069,7 @@
     let qaInspectTxId = null;
     let qaInspectSku = null;
     let qaPhotoBlob = null;
+    let qaCameraStream = null;
 
     function blobToBase64(blob) {
       return new Promise((resolve, reject) => {
@@ -1058,25 +1083,128 @@
       });
     }
 
-    window.handleQaPhotoSelected = function(e) {
+    function compressPackedImage(fileOrBlob) {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            let width = img.width;
+            let height = img.height;
+            const max = 1200;
+            if (width > max || height > max) {
+              if (width > height) {
+                height = Math.round((height * max) / width);
+                width = max;
+              } else {
+                width = Math.round((width * max) / height);
+                height = max;
+              }
+            }
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+            canvas.toBlob((blob) => {
+              resolve(blob);
+            }, 'image/jpeg', 0.8);
+          };
+          img.src = e.target.result;
+        };
+        reader.readAsDataURL(fileOrBlob);
+      });
+    }
+
+    function isMobilePhone() {
+      return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 
+             (navigator.maxTouchPoints > 0 && window.innerWidth <= 768);
+    }
+
+    window.startQaCamera = async function() {
+      try {
+        qaCameraStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment' },
+          audio: false
+        });
+        const video = document.getElementById('qa-camera-stream');
+        video.srcObject = qaCameraStream;
+        
+        document.getElementById('qa-upload-area').style.display = 'none';
+        document.getElementById('qa-camera-container').style.display = 'block';
+        document.getElementById('btn-qa-open-camera').style.display = 'none';
+      } catch (err) {
+        console.error('Camera access failed:', err);
+        showToast('Camera access failed: ' + err.message, true);
+      }
+    };
+
+    window.captureQaCameraPhoto = function() {
+      const video = document.getElementById('qa-camera-stream');
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth || 640;
+      canvas.height = video.videoHeight || 480;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      
+      if (qaCameraStream) {
+        qaCameraStream.getTracks().forEach(t => t.stop());
+        qaCameraStream = null;
+      }
+      
+      canvas.toBlob(async (blob) => {
+        try {
+          const compressed = await compressPackedImage(blob);
+          qaPhotoBlob = compressed;
+          const url = URL.createObjectURL(compressed);
+          
+          document.getElementById('qa-upload-preview').src = url;
+          document.getElementById('qa-upload-preview').style.display = 'block';
+          document.getElementById('qa-upload-placeholder').style.display = 'none';
+          document.getElementById('qa-camera-container').style.display = 'none';
+          document.getElementById('qa-upload-area').style.display = 'block';
+          document.getElementById('qa-upload-preview-container').style.display = 'flex';
+          document.getElementById('btn-qa-open-camera').style.display = 'inline-flex';
+          
+          const confirmBtn = document.getElementById('btn-confirm-qa-inspect-upload');
+          if (confirmBtn) {
+            confirmBtn.disabled = false;
+            confirmBtn.style.opacity = '1';
+            confirmBtn.style.pointerEvents = 'auto';
+          }
+        } catch (err) {
+          console.error(err);
+          showToast('Image processing failed: ' + err.message, true);
+        }
+      }, 'image/jpeg', 0.8);
+    };
+
+    window.handleQaPhotoSelected = async function(e) {
       const file = e.target.files[0];
       if (!file) return;
-      qaPhotoBlob = file;
 
-      const reader = new FileReader();
-      reader.onload = function(evt) {
-        document.getElementById('qa-upload-preview').src = evt.target.result;
-        document.getElementById('qa-upload-placeholder').style.display = 'none';
-        document.getElementById('qa-upload-preview-container').style.display = 'flex';
-        
-        const confirmBtn = document.getElementById('btn-confirm-qa-inspect-upload');
-        if (confirmBtn) {
-          confirmBtn.disabled = false;
-          confirmBtn.style.opacity = '1';
-          confirmBtn.style.pointerEvents = 'auto';
-        }
-      };
-      reader.readAsDataURL(file);
+      try {
+        const compressed = await compressPackedImage(file);
+        qaPhotoBlob = compressed;
+
+        const reader = new FileReader();
+        reader.onload = function(evt) {
+          document.getElementById('qa-upload-preview').src = evt.target.result;
+          document.getElementById('qa-upload-placeholder').style.display = 'none';
+          document.getElementById('qa-upload-preview-container').style.display = 'flex';
+          
+          const confirmBtn = document.getElementById('btn-confirm-qa-inspect-upload');
+          if (confirmBtn) {
+            confirmBtn.disabled = false;
+            confirmBtn.style.opacity = '1';
+            confirmBtn.style.pointerEvents = 'auto';
+          }
+        };
+        reader.readAsDataURL(compressed);
+      } catch (err) {
+        console.error(err);
+        showToast('Image processing failed: ' + err.message, true);
+      }
     };
 
     window.removeQaPhoto = function() {
@@ -1278,6 +1406,11 @@
 
       window.removeQaPhoto();
 
+      if (qaCameraStream) {
+        qaCameraStream.getTracks().forEach(t => t.stop());
+        qaCameraStream = null;
+      }
+
       try {
         const txs = activeTransactions.filter(t => 
           t.reference_id === qaInspectRefId && 
@@ -1294,6 +1427,12 @@
         document.getElementById('qa-order-sku').textContent = skus.join(', ');
         document.getElementById('qa-order-customer').textContent = txs[0]?.customer_name || 'N/A';
 
+        // Camera visibility check
+        const showCamera = isMobilePhone() && !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+        document.getElementById('btn-qa-open-camera').style.display = showCamera ? 'inline-flex' : 'none';
+        document.getElementById('qa-camera-container').style.display = 'none';
+        document.getElementById('qa-upload-area').style.display = 'block';
+
         const step2Modal = document.getElementById('qa-photo-upload-modal');
         step2Modal.style.display = 'flex';
         step2Modal.offsetHeight;
@@ -1305,6 +1444,11 @@
     };
 
     window.closeQaPhotoUploadModal = function() {
+      if (qaCameraStream) {
+        qaCameraStream.getTracks().forEach(t => t.stop());
+        qaCameraStream = null;
+      }
+
       const step2Modal = document.getElementById('qa-photo-upload-modal');
       step2Modal.classList.remove('open');
       setTimeout(() => {
