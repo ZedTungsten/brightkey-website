@@ -993,8 +993,14 @@
         } else {
           // If grid mode and image, try to load a small, low-quality thumbnail from Supabase Storage
           if (explorerViewMode === 'grid' && ['png', 'jpg', 'jpeg'].includes(item.file_type) && item.file_url.includes('storage/v1/object/public/brightkey-assets/')) {
-            const thumbUrl = item.file_url.replace('/storage/v1/object/public/', '/storage/v1/render/image/public/') + '?width=200&quality=60';
-            iconHtml = `<img src="${thumbUrl}" style="width:100%; height:100%; object-fit:cover; border-radius:6px;" />`;
+            const relativePath = item.file_url.substring(item.file_url.indexOf('brightkey-assets/') + 'brightkey-assets/'.length);
+            const { data } = sb.storage.from('brightkey-assets').getPublicUrl(relativePath, {
+              transform: {
+                width: 200,
+                quality: 60
+              }
+            });
+            iconHtml = `<img src="${data.publicUrl}" style="width:100%; height:100%; object-fit:cover; border-radius:6px;" />`;
           } else {
             // File icons depending on file_type
             if (item.file_type === 'pdf') {
@@ -1667,9 +1673,14 @@
         // Optimize image rendering speed by requesting low quality (~70% quality, width limit) via Supabase Storage transform parameters if it is an uploaded file
         let displayUrl = embedUrl;
         if (embedUrl.includes('storage/v1/object/public/brightkey-assets/')) {
-          // Standard Supabase storage URL: [base]/storage/v1/object/public/brightkey-assets/[path]
-          // Transformation URL: [base]/storage/v1/render/image/public/brightkey-assets/[path]
-          displayUrl = embedUrl.replace('/storage/v1/object/public/', '/storage/v1/render/image/public/') + '?width=1200&quality=70';
+          const relativePath = embedUrl.substring(embedUrl.indexOf('brightkey-assets/') + 'brightkey-assets/'.length);
+          const { data } = sb.storage.from('brightkey-assets').getPublicUrl(relativePath, {
+            transform: {
+              width: 1200,
+              quality: 70
+            }
+          });
+          displayUrl = data.publicUrl;
         }
 
         // View full height of file naturally by letting it take vertical height and scrolling the .viewer-body wrapper
