@@ -724,11 +724,20 @@
         </button>
       </div>
       <div class="modal-body" style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem; font-size: 0.88rem; line-height: 1.55; color: var(--text-secondary, #52525b);">
+        <div id="corp-event-desc" style="white-space: pre-wrap; word-break: break-word; color: var(--text-primary); line-height: 1.55;"></div>
+        
+        <hr style="border: 0; border-top: 1px solid var(--border); margin: 0.25rem 0;" />
+        
         <div style="font-weight: 700; color: var(--cyan-light); font-size: 0.82rem; display: flex; align-items: center; gap: 0.35rem;">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
           <span id="corp-event-datetime"></span>
         </div>
-        <div id="corp-event-desc" style="white-space: pre-wrap; word-break: break-word; color: var(--text-primary); line-height: 1.55;"></div>
+
+        <!-- Email Template Content Section -->
+        <div id="corp-event-email-preview-wrap" style="display: none; flex-direction: column; gap: 0.75rem; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; margin-top: 0.25rem; font-family: inherit;">
+          <div style="font-size: 0.76rem; text-transform: uppercase; color: var(--text-muted); font-weight: 700; border-bottom: 1px solid var(--border); padding-bottom: 0.4rem; margin-bottom: 0.25rem;">Email Message Detail</div>
+          <div id="corp-event-email-content" style="display: flex; flex-direction: column; gap: 0.5rem;"></div>
+        </div>
         
         <!-- Attendance Collection Section -->
         <div id="corp-event-attendance-wrap" style="display: none; flex-direction: column; gap: 0.75rem; border-top: 1px dashed var(--border); padding-top: 1rem; margin-top: 0.5rem;">
@@ -1506,13 +1515,14 @@
           return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
         };
 
-        let dateText = formatDate(ev.date_from);
+        let datePart = formatDate(ev.date_from);
         if (ev.is_date_range && ev.date_to) {
-          dateText += ` to ${formatDate(ev.date_to)}`;
+          datePart += ` to ${formatDate(ev.date_to)}`;
         }
 
+        let timePart = '';
         if (ev.is_whole_day) {
-          dateText += ' (Whole day)';
+          timePart = ' (Whole day)';
         } else if (ev.time_start) {
           const formatTime = (timeStr) => {
             const [h, m] = timeStr.split(':').map(Number);
@@ -1521,13 +1531,38 @@
             const displayMin = String(m).padStart(2, '0');
             return `${displayHour}:${displayMin} ${ampm}`;
           };
-          dateText += ` — ${formatTime(ev.time_start)}`;
+          timePart = ` — ${formatTime(ev.time_start)}`;
           if (ev.time_end) {
-            dateText += ` to ${formatTime(ev.time_end)}`;
+            timePart += ` to ${formatTime(ev.time_end)}`;
           }
         }
 
-        datetimeEl.textContent = dateText;
+        datetimeEl.innerHTML = `<span style="font-weight: 700; color: var(--cyan-light);">${esc(datePart)}</span><span style="font-weight: 400; color: var(--text-secondary);">${esc(timePart)}</span>`;
+
+        // Render Email Template Preview if exists
+        const emailWrap = document.getElementById('corp-event-email-preview-wrap');
+        const emailContent = document.getElementById('corp-event-email-content');
+        if (emailWrap && emailContent) {
+          if (ev.email_body_json && Array.isArray(ev.email_body_json) && ev.email_body_json.length > 0) {
+            emailWrap.style.display = 'flex';
+            
+            let emailHtml = '';
+            ev.email_body_json.forEach(block => {
+              if (block.type === 'header') {
+                emailHtml += `<div style="font-size: 1.05rem; font-weight: 700; color: var(--text-primary); margin-top: 0.25rem;">${formatTextWithLinks(block.value)}</div>`;
+              } else if (block.type === 'subheader') {
+                emailHtml += `<div style="font-size: 0.88rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.25rem;">${formatTextWithLinks(block.value)}</div>`;
+              } else if (block.type === 'body') {
+                emailHtml += `<div style="font-size: 0.82rem; color: var(--text-primary); white-space: pre-wrap; line-height: 1.5; margin-bottom: 0.25rem;">${formatTextWithLinks(block.value)}</div>`;
+              } else if (block.type === 'signature') {
+                emailHtml += `<div style="font-size: 0.8rem; color: var(--text-muted); white-space: pre-wrap; margin-top: 0.5rem; border-top: 1px dashed var(--border); padding-top: 0.5rem; font-style: italic;">${formatTextWithLinks(block.value)}</div>`;
+              }
+            });
+            emailContent.innerHTML = emailHtml;
+          } else {
+            emailWrap.style.display = 'none';
+          }
+        }
 
         // Reset Response UI
         const responseWrap = document.getElementById('corp-event-attendance-wrap');
