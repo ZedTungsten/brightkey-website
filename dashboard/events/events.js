@@ -49,6 +49,7 @@ window.EventsApp = {
       if (!this.companyId) return;
 
       await this.loadData();
+      await this.loadVisibilityOptions();
 
       // Setup global delegate listeners for template autocomplete dropdown in email builder
       const builderModal = document.getElementById('email-builder-modal');
@@ -172,6 +173,119 @@ window.EventsApp = {
   },
 
   /* ── Modal helpers ── */
+  loadedDepartments: [],
+  loadedTeams: [],
+  loadedEmployees: [],
+
+  toggleVisibilityType(type) {
+    const types = ['level', 'department', 'team', 'employee'];
+    types.forEach(t => {
+      const el = document.getElementById(`vis-container-${t}`);
+      if (el) el.style.display = t === type ? 'block' : 'none';
+    });
+  },
+
+  async loadVisibilityOptions() {
+    try {
+      const { data: emps, error } = await getSb()
+        .from('employees')
+        .select('id, first_name, last_name, department, position')
+        .eq('employment_status', 'Active')
+        .order('first_name');
+
+      if (error) throw error;
+
+      this.loadedEmployees = emps || [];
+      
+      const depts = new Set();
+      const teams = new Set();
+      this.loadedEmployees.forEach(e => {
+        if (e.department) depts.add(e.department);
+        if (e.position) teams.add(e.position);
+      });
+
+      this.loadedDepartments = Array.from(depts).sort();
+      this.loadedTeams = Array.from(teams).sort();
+
+      const deptList = document.getElementById('vis-list-departments');
+      const teamList = document.getElementById('vis-list-teams');
+      const empList = document.getElementById('vis-list-employees');
+
+      if (deptList) {
+        deptList.innerHTML = this.loadedDepartments.map(d => `
+          <label style="display:flex;align-items:center;gap:0.4rem;font-size:0.82rem;color:var(--text-secondary);cursor:pointer;margin-bottom:2px;">
+            <input type="checkbox" class="vis-dept-checkbox" value="${esc(d)}" />
+            <span>${esc(d)}</span>
+          </label>
+        `).join('') || '<div style="font-size:0.8rem;color:var(--text-muted);">No departments found</div>';
+      }
+
+      if (teamList) {
+        teamList.innerHTML = this.loadedTeams.map(t => `
+          <label style="display:flex;align-items:center;gap:0.4rem;font-size:0.82rem;color:var(--text-secondary);cursor:pointer;margin-bottom:2px;">
+            <input type="checkbox" class="vis-team-checkbox" value="${esc(t)}" />
+            <span>${esc(t)}</span>
+          </label>
+        `).join('') || '<div style="font-size:0.8rem;color:var(--text-muted);">No teams found</div>';
+      }
+
+      if (empList) {
+        empList.innerHTML = this.loadedEmployees.map(e => `
+          <label style="display:flex;align-items:center;gap:0.4rem;font-size:0.82rem;color:var(--text-secondary);cursor:pointer;margin-bottom:2px;">
+            <input type="checkbox" class="vis-emp-checkbox" value="${e.id}" />
+            <span>${esc(e.first_name)} ${esc(e.last_name)} (${esc(e.department || 'No Dept')})</span>
+          </label>
+        `).join('') || '<div style="font-size:0.8rem;color:var(--text-muted);">No employees found</div>';
+      }
+    } catch (err) {
+      console.error('Failed to load visibility checklist options:', err);
+    }
+  },
+
+  populateVisibilityForm(ev) {
+    const radios = document.querySelectorAll('input[name="event-visibility-type"]');
+    const activeType = ev?.visibility_type || 'level';
+    radios.forEach(r => {
+      r.checked = r.value === activeType;
+    });
+
+    document.getElementById('event-level').value = String(ev?.visibility_level || 1);
+
+    document.querySelectorAll('.vis-dept-checkbox, .vis-team-checkbox, .vis-emp-checkbox').forEach(cb => {
+      cb.checked = false;
+    });
+
+    this.toggleVisibilityType(activeType);
+
+    if (ev) {
+      if (ev.visibility_type === 'department' && ev.visibility_departments) {
+        let depts = [];
+        try {
+          depts = typeof ev.visibility_departments === 'string' ? JSON.parse(ev.visibility_departments) : (ev.visibility_departments || []);
+        } catch(e) {}
+        document.querySelectorAll('.vis-dept-checkbox').forEach(cb => {
+          if (depts.includes(cb.value)) cb.checked = true;
+        });
+      } else if (ev.visibility_type === 'team' && ev.visibility_teams) {
+        let teams = [];
+        try {
+          teams = typeof ev.visibility_teams === 'string' ? JSON.parse(ev.visibility_teams) : (ev.visibility_teams || []);
+        } catch(e) {}
+        document.querySelectorAll('.vis-team-checkbox').forEach(cb => {
+          if (teams.includes(cb.value)) cb.checked = true;
+        });
+      } else if (ev.visibility_type === 'employee' && ev.visibility_employees) {
+        let emps = [];
+        try {
+          emps = typeof ev.visibility_employees === 'string' ? JSON.parse(ev.visibility_employees) : (ev.visibility_employees || []);
+        } catch(e) {}
+        document.querySelectorAll('.vis-emp-checkbox').forEach(cb => {
+          if (emps.includes(cb.value)) cb.checked = true;
+        });
+      }
+    }
+  },
+
   openCreateModal() {
     this.editingId = null;
     this.duplicateSourceEvent = null;
@@ -179,7 +293,7 @@ window.EventsApp = {
     document.getElementById('modal-save-btn').textContent = 'Create';
     document.getElementById('event-title').value = '';
     document.getElementById('event-description').value = '';
-    document.getElementById('event-level').value = '1';
+    this.populateVisibilityForm(null);
     document.getElementById('is-date-range').checked = false;
     document.getElementById('event-date').value = '';
     document.getElementById('event-date-from').value = '';
@@ -189,7 +303,6 @@ window.EventsApp = {
     document.getElementById('duration-display').textContent = '';
     document.getElementById('is-whole-day').checked = false;
     
-    // Clear red borders if any
     const inputs = ['event-date', 'event-date-from', 'event-date-to', 'event-time-start', 'event-time-end'];
     inputs.forEach(id => {
       const el = document.getElementById(id);
@@ -208,7 +321,7 @@ window.EventsApp = {
     document.getElementById('modal-save-btn').textContent = 'Save Changes';
     document.getElementById('event-title').value = ev.title || '';
     document.getElementById('event-description').value = ev.description || '';
-    document.getElementById('event-level').value = String(ev.visibility_level || 1);
+    this.populateVisibilityForm(ev);
     document.getElementById('is-date-range').checked = !!ev.is_date_range;
 
     if (ev.is_date_range) {
@@ -222,7 +335,6 @@ window.EventsApp = {
     document.getElementById('event-time-end').value = ev.time_end || '';
     document.getElementById('is-whole-day').checked = !!ev.is_whole_day;
 
-    // Clear red borders if any
     const inputs = ['event-date', 'event-date-from', 'event-date-to', 'event-time-start', 'event-time-end'];
     inputs.forEach(id => {
       const el = document.getElementById(id);
@@ -242,14 +354,12 @@ window.EventsApp = {
     document.getElementById('modal-title').textContent = 'Duplicate Event';
     document.getElementById('modal-save-btn').textContent = 'Duplicate';
     
-    // Copy info fields
     document.getElementById('event-title').value = (ev.title || '') + ' (Copy)';
     document.getElementById('event-description').value = ev.description || '';
-    document.getElementById('event-level').value = String(ev.visibility_level || 1);
+    this.populateVisibilityForm(ev);
     document.getElementById('is-date-range').checked = !!ev.is_date_range;
     document.getElementById('is-whole-day').checked = !!ev.is_whole_day;
 
-    // LEAVE date & time fields blank
     document.getElementById('event-date').value = '';
     document.getElementById('event-date-from').value = '';
     document.getElementById('event-date-to').value = '';
@@ -325,11 +435,29 @@ window.EventsApp = {
   async saveEvent() {
     const title = document.getElementById('event-title').value.trim();
     const description = document.getElementById('event-description').value.trim() || null;
-    const visibilityLevel = parseInt(document.getElementById('event-level').value, 10);
     const isRange = document.getElementById('is-date-range').checked;
     const isWhole = document.getElementById('is-whole-day').checked;
     const timeStart = document.getElementById('event-time-start').value || null;
     const timeEnd   = document.getElementById('event-time-end').value || null;
+
+    const visibilityType = document.querySelector('input[name="event-visibility-type"]:checked').value;
+    let visibilityLevel = 1;
+    let visibilityDepartments = [];
+    let visibilityTeams = [];
+    let visibilityEmployees = [];
+
+    if (visibilityType === 'level') {
+      visibilityLevel = parseInt(document.getElementById('event-level').value, 10);
+    } else if (visibilityType === 'department') {
+      const checked = document.querySelectorAll('.vis-dept-checkbox:checked');
+      visibilityDepartments = Array.from(checked).map(c => c.value);
+    } else if (visibilityType === 'team') {
+      const checked = document.querySelectorAll('.vis-team-checkbox:checked');
+      visibilityTeams = Array.from(checked).map(c => c.value);
+    } else if (visibilityType === 'employee') {
+      const checked = document.querySelectorAll('.vis-emp-checkbox:checked');
+      visibilityEmployees = Array.from(checked).map(c => c.value);
+    }
 
     let dateFrom, dateTo = null;
     if (isRange) {
@@ -358,6 +486,10 @@ window.EventsApp = {
       title,
       description,
       visibility_level: visibilityLevel,
+      visibility_type: visibilityType,
+      visibility_departments: JSON.stringify(visibilityDepartments),
+      visibility_teams: JSON.stringify(visibilityTeams),
+      visibility_employees: JSON.stringify(visibilityEmployees),
       is_date_range: isRange,
       is_whole_day: isWhole,
       date_from: dateFrom,
@@ -2288,5 +2420,7 @@ window.EventsApp = {
     }, 200);
   }
 };
+
+window.EventsApp = EventsApp;
 
 document.addEventListener('DOMContentLoaded', () => EventsApp.init());

@@ -896,7 +896,7 @@
           this.companyId = co?.id;
           if (!this.companyId) return;
 
-          const { data: emp } = await BKAuth.sb.from('employees').select('id, first_name, last_name, level, department, reporting_to, cover_photo_link, cover_text_color, status_text, shift_time_1, shift_time_2, notes').eq('email', this.currentUser.email).limit(1).maybeSingle();
+          const { data: emp } = await BKAuth.sb.from('employees').select('id, first_name, last_name, level, department, position, reporting_to, cover_photo_link, cover_text_color, status_text, shift_time_1, shift_time_2, notes').eq('email', this.currentUser.email).limit(1).maybeSingle();
           this.employeeId = emp?.id;
           if (!this.employeeId) return;
 
@@ -906,6 +906,7 @@
           this.firstName = emp?.first_name || '';
           this.lastName = emp?.last_name || '';
           this.department = emp?.department || '';
+          this.position = emp?.position || '';
           this.reportingTo = emp?.reporting_to || '';
 
           this.shiftTime1 = emp?.shift_time_1 || null;
@@ -1326,11 +1327,7 @@
         const isOwnerOrAdmin = ['owner', 'admin'].includes(userRole);
         const empLevel = parseInt(this.employeeLevel || 1, 10);
 
-        const visibleEvents = (this.companyEvents || []).filter(ev => {
-          if (isOwnerOrAdmin) return true;
-          const eventVisLevel = parseInt(ev.visibility_level || 1, 10);
-          return empLevel >= eventVisLevel;
-        });
+        const visibleEvents = (this.companyEvents || []).filter(ev => this.checkEventVisibility(ev));
 
         visibleEvents.forEach(ev => {
           const key = ev.date_from; // date_from is YYYY-MM-DD
@@ -1394,11 +1391,7 @@
         const isOwnerOrAdmin = ['owner', 'admin'].includes(userRole);
         const empLevel = parseInt(this.employeeLevel || 1, 10);
 
-        const visibleEvents = (this.companyEvents || []).filter(ev => {
-          if (isOwnerOrAdmin) return true;
-          const eventVisLevel = parseInt(ev.visibility_level || 1, 10);
-          return empLevel >= eventVisLevel;
-        });
+        const visibleEvents = (this.companyEvents || []).filter(ev => this.checkEventVisibility(ev));
 
         visibleEvents.forEach(ev => {
           const dateParts = ev.date_from.split('-').map(Number);
@@ -1643,6 +1636,42 @@
         setTimeout(() => {
           modal.style.display = 'none';
         }, 150);
+      },
+
+      checkEventVisibility(ev) {
+        const roleInfo = this.userRoleInfo || null;
+        const userRole = roleInfo?.role || null;
+        const isOwnerOrAdmin = ['owner', 'admin'].includes(userRole);
+        if (isOwnerOrAdmin) return true;
+
+        const type = ev.visibility_type || 'level';
+        if (type === 'level') {
+          const eventVisLevel = parseInt(ev.visibility_level || 1, 10);
+          const empLevel = parseInt(this.employeeLevel || 1, 10);
+          return empLevel >= eventVisLevel;
+        } else if (type === 'department') {
+          if (!this.department) return false;
+          let depts = [];
+          try {
+            depts = typeof ev.visibility_departments === 'string' ? JSON.parse(ev.visibility_departments) : (ev.visibility_departments || []);
+          } catch(e) {}
+          return depts.includes(this.department);
+        } else if (type === 'team') {
+          if (!this.position) return false;
+          let teams = [];
+          try {
+            teams = typeof ev.visibility_teams === 'string' ? JSON.parse(ev.visibility_teams) : (ev.visibility_teams || []);
+          } catch(e) {}
+          return teams.includes(this.position);
+        } else if (type === 'employee') {
+          if (!this.employeeId) return false;
+          let emps = [];
+          try {
+            emps = typeof ev.visibility_employees === 'string' ? JSON.parse(ev.visibility_employees) : (ev.visibility_employees || []);
+          } catch(e) {}
+          return emps.includes(this.employeeId);
+        }
+        return false;
       },
 
       toggleCorpEventResponseUpdate() {
