@@ -456,10 +456,44 @@
     .viewer-body {
       flex: 1;
       display: flex;
-      align-items: center;
+      align-items: flex-start; /* View full height of file naturally */
       justify-content: center;
       padding: 1.5rem;
-      overflow: auto;
+      overflow-y: auto;
+      position: relative;
+    }
+
+    /* Paging overlay buttons */
+    .viewer-nav-btn {
+      position: fixed;
+      top: 50%;
+      transform: translateY(-50%);
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      cursor: pointer;
+      z-index: 3500;
+      transition: background-color 0.2s, transform 0.2s;
+    }
+
+    .viewer-nav-btn:hover {
+      background: var(--cyan);
+      border-color: var(--cyan);
+      transform: translateY(-50%) scale(1.1);
+    }
+
+    .viewer-nav-btn.prev {
+      left: 2rem;
+    }
+
+    .viewer-nav-btn.next {
+      right: 2rem;
     }
 
     /* 2-page side-by-side mode */
@@ -728,6 +762,14 @@
     <div class="viewer-body" id="viewer-container-body">
       <!-- Injected viewer element -->
     </div>
+
+    <!-- Paging navigation arrows -->
+    <button class="viewer-nav-btn prev" id="viewer-prev-btn" onclick="window.navigateViewerFile(-1)" title="Previous File">
+      <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2.5" fill="none"><polyline points="15 18 9 12 15 6"></polyline></svg>
+    </button>
+    <button class="viewer-nav-btn next" id="viewer-next-btn" onclick="window.navigateViewerFile(1)" title="Next File">
+      <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2.5" fill="none"><polyline points="9 18 15 12 9 6"></polyline></svg>
+    </button>
 
     <!-- Sheet Tabs footer -->
     <div class="sheet-tabs-container" id="sheet-tabs-footer" style="display:none;">
@@ -1443,12 +1485,28 @@
     };
 
     // ── Fullscreen View Engine ──
+    // Global state to track currently viewed item index for next/prev paging
+    let currentViewerItemIndex = -1;
+    let viewerItemsList = [];
+
     window.viewFileResource = function(item) {
       const overlay = document.getElementById('file-viewer-overlay');
       const title = document.getElementById('viewer-file-title');
       const body = document.getElementById('viewer-container-body');
       const ctrlBar = document.getElementById('side-by-side-controls');
       const sheetFooter = document.getElementById('sheet-tabs-footer');
+
+      // Build a flat list of files (excluding folders) in current folder/search view for navigation paging
+      viewerItemsList = displayedResources.filter(r => r.type !== 'folder');
+      currentViewerItemIndex = viewerItemsList.findIndex(r => r.id === item.id);
+
+      // Toggle next/prev buttons visibility
+      const prevBtn = document.getElementById('viewer-prev-btn');
+      const nextBtn = document.getElementById('viewer-next-btn');
+      if (prevBtn && nextBtn) {
+        prevBtn.style.display = currentViewerItemIndex > 0 ? 'flex' : 'none';
+        nextBtn.style.display = (currentViewerItemIndex >= 0 && currentViewerItemIndex < viewerItemsList.length - 1) ? 'flex' : 'none';
+      }
 
       title.textContent = item.name;
       body.innerHTML = '';
@@ -1473,15 +1531,23 @@
 
       if (item.file_type === 'pdf') {
         // Embed PDF preview natively
-        body.innerHTML = `<iframe src="${embedUrl}" style="width:100%; height:100%; border:none; background:#fff; border-radius:8px;"></iframe>`;
+        body.innerHTML = `<iframe src="${embedUrl}" style="width:100%; height:80vh; min-height:600px; border:none; background:#fff; border-radius:8px;"></iframe>`;
       } else if (['png', 'jpg', 'jpeg'].includes(item.file_type)) {
-        // Embed image viewer (no scaling down unless it overflows screen)
-        body.innerHTML = `<div style="overflow:auto; max-width:100%; max-height:100%;"><img src="${embedUrl}" style="max-width:100%; object-fit:contain; border-radius:6px; box-shadow:0 12px 32px rgba(0,0,0,0.5);" /></div>`;
+        // Optimize image rendering speed by requesting low quality (~70% quality, width limit) via Supabase Storage transform parameters if it is an uploaded file
+        let displayUrl = embedUrl;
+        if (embedUrl.includes('storage/v1/object/public/brightkey-assets/')) {
+          const relativePath = embedUrl.substring(embedUrl.indexOf('brightkey-assets/') + 'brightkey-assets/'.length);
+          // Append Supabase Storage transformation parameters (width=1200, quality=70)
+          displayUrl = `${sb.storageUrl}/render/image/public/brightkey-assets/${relativePath}?width=1200&quality=70`;
+        }
+
+        // View full height of file naturally by letting it take vertical height and scrolling the .viewer-body wrapper
+        body.innerHTML = `<div style="width:100%; display:flex; justify-content:center; align-items:flex-start; min-height:100%;"><img src="${displayUrl}" style="max-width:min(900px, 100%); height:auto; border-radius:6px; box-shadow:0 12px 32px rgba(0,0,0,0.5); display:block; margin:0 auto;" /></div>`;
       } else if (item.file_type === 'doc' || item.file_type === 'slide') {
         // Doc or Slides — Render side-by-side 2-page preview with custom search and navigation controls
         ctrlBar.style.display = 'flex';
         body.innerHTML = `
-          <div class="side-by-side-container">
+          <div class="side-by-side-container" style="height:80vh; min-height:600px;">
             <div class="side-page">
               <div class="page-header">Left View</div>
               <iframe id="iframe-view-left" class="page-content-iframe" src="${embedUrl}"></iframe>
@@ -1499,7 +1565,7 @@
       } else if (item.file_type === 'music') {
         // Music Player View
         body.innerHTML = `
-          <div style="background:var(--bg-surface); border:1px solid var(--border); border-radius:12px; padding:2rem; width:min(400px, 100%); text-align:center; display:flex; flex-direction:column; gap:1.25rem;">
+          <div style="background:var(--bg-surface); border:1px solid var(--border); border-radius:12px; padding:2rem; width:min(400px, 100%); text-align:center; display:flex; flex-direction:column; gap:1.25rem; margin-top:5vh;">
             <div style="color:var(--cyan);"><svg viewBox="0 0 24 24" width="48" height="48" stroke="currentColor" stroke-width="1.5" fill="none"><path d="M9 18V5l12-2v13"></path><circle cx="6.5" cy="18" r="2.5"></circle><circle cx="18.5" cy="16" r="2.5"></circle></svg></div>
             <div style="font-weight:700; color:var(--text-primary); font-size:0.95rem; word-break:break-all;">${escFulfillment(item.name)}</div>
             <audio controls autoplay src="${embedUrl}" style="width:100%; margin-top:0.5rem;"></audio>
@@ -1508,11 +1574,20 @@
       } else if (item.file_type === 'video') {
         // Video Player View
         body.innerHTML = `
-          <video controls autoplay style="max-width:min(800px, 100%); max-height:85%; border-radius:8px; border:1px solid var(--border); background:#000;" src="${embedUrl}"></video>
+          <video controls autoplay style="max-width:min(800px, 100%); max-height:80vh; border-radius:8px; border:1px solid var(--border); background:#000; margin-top:2vh;" src="${embedUrl}"></video>
         `;
       } else {
         // Generic iframe
-        body.innerHTML = `<iframe src="${embedUrl}" style="width:100%; height:100%; border:none; background:#fff; border-radius:8px;"></iframe>`;
+        body.innerHTML = `<iframe src="${embedUrl}" style="width:100%; height:80vh; min-height:600px; border:none; background:#fff; border-radius:8px;"></iframe>`;
+      }
+    };
+
+    // Paging helper navigation
+    window.navigateViewerFile = function(direction) {
+      if (currentViewerItemIndex === -1 || viewerItemsList.length === 0) return;
+      const targetIndex = currentViewerItemIndex + direction;
+      if (targetIndex >= 0 && targetIndex < viewerItemsList.length) {
+        viewFileResource(viewerItemsList[targetIndex]);
       }
     };
 
