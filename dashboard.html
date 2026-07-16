@@ -657,7 +657,7 @@
   <div class="modal-overlay" id="confirm-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(9, 9, 11, 0.4); backdrop-filter: blur(4px); z-index: 1000; align-items: center; justify-content: center;">
     <div class="modal-card" style="background: var(--bg-surface, #ffffff); border: 1px solid var(--border, #e4e4e7); border-radius: 12px; width: 420px; max-width: 90%; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04); overflow: hidden; display: flex; flex-direction: column;">
       <div class="modal-header" style="padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border, #e4e4e7); display: flex; justify-content: space-between; align-items: center;">
-        <div class="modal-title" style="font-size: 1rem; font-weight: 700; color: var(--text-primary, #09090b);">Confirm Shift Action</div>
+        <div class="modal-title" style="font-size: 1rem; font-weight: 700; color: var(--text-primary, #09090b);" id="confirm-modal-title">Confirm Action</div>
       </div>
       <div class="modal-body" style="padding: 1.5rem; color: var(--text-secondary, #52525b); font-size: 0.88rem; line-height: 1.5;" id="confirm-modal-message">
         Do you want to action?
@@ -1984,15 +1984,20 @@
         }
       },
 
-      showConfirmModal(message, onConfirm) {
+      showConfirmModal(message, onConfirm, title = "Confirm Shift Action") {
         const modal = document.getElementById('confirm-modal');
+        const titleEl = document.getElementById('confirm-modal-title');
         const msgEl = document.getElementById('confirm-modal-message');
         const okBtn = document.getElementById('confirm-modal-ok');
         const cancelBtn = document.getElementById('confirm-modal-cancel');
         
         if (!modal || !msgEl || !okBtn || !cancelBtn) return;
         
+        if (titleEl) titleEl.textContent = title;
         msgEl.textContent = message;
+        cancelBtn.style.display = 'inline-block';
+        okBtn.textContent = 'Confirm';
+        
         modal.style.display = 'flex';
         modal.offsetHeight; // force reflow
         modal.classList.add('open');
@@ -2011,6 +2016,38 @@
           onConfirm();
         };
         cancelBtn.onclick = () => {
+          close();
+        };
+      },
+
+      showAlertModal(title, message) {
+        const modal = document.getElementById('confirm-modal');
+        const titleEl = document.getElementById('confirm-modal-title');
+        const msgEl = document.getElementById('confirm-modal-message');
+        const okBtn = document.getElementById('confirm-modal-ok');
+        const cancelBtn = document.getElementById('confirm-modal-cancel');
+        
+        if (!modal || !msgEl || !okBtn || !cancelBtn) return;
+        
+        if (titleEl) titleEl.textContent = title;
+        msgEl.textContent = message;
+        cancelBtn.style.display = 'none';
+        okBtn.textContent = 'OK';
+        
+        modal.style.display = 'flex';
+        modal.offsetHeight; // force reflow
+        modal.classList.add('open');
+        
+        const close = () => {
+          modal.classList.remove('open');
+          setTimeout(() => {
+            modal.style.display = 'none';
+          }, 150);
+          okBtn.onclick = null;
+          cancelBtn.onclick = null;
+        };
+        
+        okBtn.onclick = () => {
           close();
         };
       },
@@ -2044,6 +2081,16 @@
 
           const timeIns = todayLogs.filter(l => l.status === 'available').length;
           const timeOuts = todayLogs.filter(l => l.status === 'offline').length;
+          const hasOnlyOneShift = this.shiftTime1 && !this.shiftTime2;
+
+          // If they have only 1 shift and have already timed out today, block them
+          if (hasOnlyOneShift && timeOuts >= 1) {
+            this.showAlertModal(
+              "You Have Already Ended Your Shift",
+              "You cannot time in again because you have already timed out for today."
+            );
+            return;
+          }
 
           if (timeIns === 0) {
             // First time in today (Shift 1)
@@ -2063,7 +2110,10 @@
             if (timeOuts >= 1) {
               // Second time in today. User must have 2 shifts (shiftTime2)
               if (!this.shiftTime2) {
-                toast('Cannot time in: You have already completed your shift for today.', 'error');
+                this.showAlertModal(
+                  "You Have Already Ended Your Shift",
+                  "You cannot time in again because you have already timed out for today."
+                );
                 return;
               }
               const shiftStart2 = this.parseShiftStartTime(this.shiftTime2);
@@ -2085,6 +2135,12 @@
         
         // Check for 30 mins early or more from end shift when going offline
         if (status === 'offline') {
+          const hasOnlyOneShift = this.shiftTime1 && !this.shiftTime2;
+          if (hasOnlyOneShift) {
+            this.showConfirmModal("Are you sure to end your shift today?", () => this.executeSetStatus(status));
+            return;
+          }
+
           const todayStart = new Date();
           todayStart.setHours(0, 0, 0, 0);
 
