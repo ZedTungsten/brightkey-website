@@ -356,6 +356,29 @@
       color: var(--cyan);
     }
 
+    /* Fullscreen drag-over overlay styling */
+    .fullscreen-drop-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(9, 9, 11, 0.85);
+      backdrop-filter: blur(4px);
+      z-index: 5000;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 1.5rem;
+      border: 4px dashed var(--cyan);
+      margin: 1.5rem;
+      border-radius: 16px;
+      pointer-events: none; /* Let event bubble down */
+      transition: opacity 0.25s ease;
+    }
+
+    .fullscreen-drop-overlay.active {
+      display: flex;
+    }
+
     /* ── Fullscreen File Viewer Overlay ── */
     .viewer-overlay {
       display: none;
@@ -615,7 +638,12 @@
     </div>
   </div>
 
-  <!-- Fullscreen File Viewer Overlay -->
+  <!-- Fullscreen drag-over dropzone overlay -->
+  <div class="fullscreen-drop-overlay" id="fullscreen-drag-overlay">
+    <svg viewBox="0 0 24 24" width="72" height="72" stroke="currentColor" stroke-width="1.25" fill="none" style="color:var(--cyan);"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+    <div style="font-weight: 800; font-size: 1.5rem; color: #fff;">Drop files to upload into this folder</div>
+    <div style="font-size: 0.95rem; color: rgba(255, 255, 255, 0.65);">Release your mouse to add resources.</div>
+  </div>
   <div class="viewer-overlay" id="file-viewer-overlay">
     <div class="viewer-header">
       <span class="viewer-title" id="viewer-file-title">File Viewer</span>
@@ -1019,9 +1047,40 @@
     document.addEventListener("DOMContentLoaded", () => {
       const dropZone = document.getElementById('drop-zone');
       const fileInput = document.getElementById('file-uploader');
+      const fullscreenOverlay = document.getElementById('fullscreen-drag-overlay');
 
-      if (!dropZone || !fileInput) return;
+      if (!dropZone || !fileInput || !fullscreenOverlay) return;
 
+      // Fullscreen drag detection
+      window.addEventListener('dragenter', (e) => {
+        e.preventDefault();
+        // Detect if dragging files (external) rather than internal elements
+        if (e.dataTransfer.types.includes('Files')) {
+          fullscreenOverlay.classList.add('active');
+        }
+      });
+
+      window.addEventListener('dragover', (e) => {
+        e.preventDefault();
+      });
+
+      fullscreenOverlay.addEventListener('dragleave', (e) => {
+        fullscreenOverlay.classList.remove('active');
+      });
+
+      // Handle file drop on the screen
+      window.addEventListener('drop', (e) => {
+        e.preventDefault();
+        fullscreenOverlay.classList.remove('active');
+        
+        if (e.dataTransfer.files.length > 0) {
+          fileInput.files = e.dataTransfer.files;
+          handleFileSelect(fileInput);
+          openUploadFileModal();
+        }
+      });
+
+      // Modal specific drop-zone
       ['dragenter', 'dragover'].forEach(eventName => {
         dropZone.addEventListener(eventName, (e) => {
           e.preventDefault();
