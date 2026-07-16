@@ -1672,19 +1672,28 @@
       } else if (['png', 'jpg', 'jpeg'].includes(item.file_type)) {
         // Optimize image rendering speed by requesting low quality (~70% quality, width limit) via Supabase Storage transform parameters if it is an uploaded file
         let displayUrl = embedUrl;
+        console.log('[FileViewer] Original embedUrl:', embedUrl);
         if (embedUrl.includes('storage/v1/object/public/brightkey-assets/')) {
-          const relativePath = embedUrl.substring(embedUrl.indexOf('brightkey-assets/') + 'brightkey-assets/'.length);
-          const { data } = sb.storage.from('brightkey-assets').getPublicUrl(relativePath, {
-            transform: {
-              width: 1200,
-              quality: 70
-            }
-          });
-          displayUrl = data.publicUrl;
+          try {
+            const relativePath = embedUrl.substring(embedUrl.indexOf('brightkey-assets/') + 'brightkey-assets/'.length);
+            console.log('[FileViewer] Resolving relativePath for transformation:', relativePath);
+            const { data, error } = sb.storage.from('brightkey-assets').getPublicUrl(relativePath, {
+              transform: {
+                width: 1200,
+                quality: 70
+              }
+            });
+            if (error) throw error;
+            displayUrl = data.publicUrl;
+            console.log('[FileViewer] Transformed publicUrl:', displayUrl);
+          } catch (e) {
+            console.error('[FileViewer] Image transformation failed, falling back to original URL:', e);
+            displayUrl = embedUrl;
+          }
         }
 
         // View full height of file naturally by letting it take vertical height and scrolling the .viewer-body wrapper
-        body.innerHTML = `<div style="width:100%; display:flex; justify-content:center; align-items:flex-start; min-height:100%;"><img src="${displayUrl}" style="max-width:min(900px, 100%); height:auto; border-radius:6px; box-shadow:0 12px 32px rgba(0,0,0,0.5); display:block; margin:0 auto;" /></div>`;
+        body.innerHTML = `<div style="width:100%; display:flex; justify-content:center; align-items:flex-start; min-height:100%;"><img src="${displayUrl}" style="max-width:min(900px, 100%); height:auto; border-radius:6px; box-shadow:0 12px 32px rgba(0,0,0,0.5); display:block; margin:0 auto;" onerror="console.error('[FileViewer] Image failed to load src:', this.src); this.src='${embedUrl}';" /></div>`;
       } else if (item.file_type === 'doc' || item.file_type === 'slide') {
         // Doc or Slides — Render side-by-side 2-page preview with custom search and navigation controls
         ctrlBar.style.display = 'flex';
