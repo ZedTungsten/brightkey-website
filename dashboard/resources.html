@@ -149,6 +149,17 @@
       margin-bottom: 0.25rem;
     }
 
+    .item-card.dragging {
+      opacity: 0.4;
+      border-color: var(--cyan);
+    }
+
+    .item-card.dragover-target {
+      border-color: var(--cyan);
+      background: rgba(6, 182, 212, 0.06);
+      transform: scale(1.03);
+    }
+
     .item-meta {
       font-size: 0.72rem;
       color: var(--text-muted);
@@ -788,6 +799,59 @@
             </div>
           </div>
         `;
+
+        // Drag and Drop folder-movement features
+        card.setAttribute('draggable', 'true');
+        card.setAttribute('data-id', item.id);
+        card.setAttribute('data-type', item.type);
+
+        card.addEventListener('dragstart', (e) => {
+          e.dataTransfer.setData('text/plain', item.id);
+          card.classList.add('dragging');
+        });
+
+        card.addEventListener('dragend', () => {
+          card.classList.remove('dragging');
+        });
+
+        // Only folders can receive dropped items
+        if (item.type === 'folder') {
+          card.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            // Prevent dragging a folder onto itself
+            const draggedId = e.dataTransfer.types.includes('text/plain') ? 'valid' : '';
+            if (draggedId) {
+              card.classList.add('dragover-target');
+            }
+          });
+
+          card.addEventListener('dragleave', () => {
+            card.classList.remove('dragover-target');
+          });
+
+          card.addEventListener('drop', async (e) => {
+            e.preventDefault();
+            card.classList.remove('dragover-target');
+            const draggedId = e.dataTransfer.getData('text/plain');
+            
+            // Safety constraints
+            if (!draggedId || draggedId === item.id) return;
+
+            try {
+              // Perform moving parent_id update in Supabase
+              const { error } = await sb.from('sales_resources')
+                .update({ parent_id: item.id, updated_at: new Date().toISOString() })
+                .eq('id', draggedId);
+
+              if (error) throw error;
+              showToast('Item moved successfully.');
+              await loadResources();
+            } catch (err) {
+              console.error(err);
+              showToast('Failed to move item: ' + err.message, true);
+            }
+          });
+        }
 
         card.addEventListener('click', (e) => {
           if (e.target.closest('.card-actions-trigger') || e.target.closest('.card-dropdown')) {
