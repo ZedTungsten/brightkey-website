@@ -323,6 +323,28 @@
       outline: none;
     }
 
+    /* ── Drag & Drop Upload Zone ── */
+    .drag-drop-zone {
+      border: 2px dashed var(--border);
+      border-radius: 8px;
+      padding: 2rem 1.5rem;
+      text-align: center;
+      background: var(--bg-elevated);
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: border-color 0.2s, background-color 0.2s;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .drag-drop-zone.dragover {
+      border-color: var(--cyan);
+      background: rgba(6, 182, 212, 0.04);
+      color: var(--cyan);
+    }
+
     /* ── Fullscreen File Viewer Overlay ── */
     .viewer-overlay {
       display: none;
@@ -552,8 +574,13 @@
 
       <!-- File upload field -->
       <div class="form-group" id="file-upload-field">
-        <label class="form-label" for="file-uploader">Choose File (.pdf, .doc, .png, .jpg)</label>
-        <input type="file" id="file-uploader" class="form-input" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg" style="padding-top:6px;" />
+        <label class="form-label">Upload File</label>
+        <div class="drag-drop-zone" id="drop-zone" onclick="document.getElementById('file-uploader').click()">
+          <svg viewBox="0 0 24 24" width="28" height="28" stroke="currentColor" stroke-width="2" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+          <span style="font-size:0.82rem; font-weight:700; color:var(--text-primary);" id="drag-drop-text">Drag & Drop file here or click to browse</span>
+          <span style="font-size:0.72rem; color:var(--text-muted);">Supports PDF, DOC, DOCX, PNG, JPG (Max 50MB)</span>
+          <input type="file" id="file-uploader" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg" style="display:none;" onchange="handleFileSelect(this)" />
+        </div>
       </div>
 
       <!-- Google Drive Link field -->
@@ -900,9 +927,62 @@
       document.getElementById('file-uploader').value = "";
       document.getElementById('file-gdrive-url').value = "";
       document.getElementById('file-source-type').value = "upload";
+      
+      // Reset drop zone state
+      const zoneText = document.getElementById('drag-drop-text');
+      if (zoneText) zoneText.textContent = "Drag & Drop file here or click to browse";
+      const zone = document.getElementById('drop-zone');
+      if (zone) zone.classList.remove('dragover');
+
       toggleFileSourceFields('upload');
       openModal('upload-file-modal');
     };
+
+    window.handleFileSelect = function(input) {
+      const file = input.files[0];
+      if (file) {
+        document.getElementById('drag-drop-text').textContent = `Selected: ${file.name}`;
+        // Auto-fill Resource Name with file name (without extension) if empty
+        const nameInput = document.getElementById('file-name-input');
+        if (nameInput && !nameInput.value.trim()) {
+          const baseName = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
+          nameInput.value = baseName;
+        }
+      }
+    };
+
+    // Wire up Drag & Drop event listeners after DOMContentLoaded
+    document.addEventListener("DOMContentLoaded", () => {
+      const dropZone = document.getElementById('drop-zone');
+      const fileInput = document.getElementById('file-uploader');
+
+      if (!dropZone || !fileInput) return;
+
+      ['dragenter', 'dragover'].forEach(eventName => {
+        dropZone.addEventListener(eventName, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          dropZone.classList.add('dragover');
+        }, false);
+      });
+
+      ['dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          dropZone.classList.remove('dragover');
+        }, false);
+      });
+
+      dropZone.addEventListener('drop', (e) => {
+        const dt = e.dataTransfer;
+        const files = dt.files;
+        if (files.length > 0) {
+          fileInput.files = files;
+          handleFileSelect(fileInput);
+        }
+      }, false);
+    });
 
     window.toggleFileSourceFields = function(source) {
       const uploadField = document.getElementById('file-upload-field');
