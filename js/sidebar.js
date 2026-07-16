@@ -135,6 +135,83 @@
     }
   };
 
+  async function checkPendingWarehouse(companyId) {
+    if (!companyId) return;
+    const sb = window.BKAuth?.sb;
+    if (!sb) return;
+
+    try {
+      // 1. Load active transactions and delivery bookings for the tenant
+      const [txRes, dbRes] = await Promise.all([
+        sb.from('inventory_transactions')
+          .select('id, type, status, reference_id')
+          .eq('company_id', companyId),
+        sb.from('delivery_bookings')
+          .select('reference_id')
+          .eq('company_id', companyId)
+      ]);
+
+      if (txRes.error || dbRes.error) return;
+
+      const txs = txRes.data || [];
+      const deliveryBookings = dbRes.data || [];
+
+      // 2. Calculate inspectCount
+      const inspectCount = new Set(
+        txs.filter(t => t.status === 'reserved' && t.type === 'customer_order').map(t => t.reference_id)
+      ).size;
+
+      // 3. Calculate packCount
+      const packCount = new Set(
+        txs.filter(t => t.status === 'inspect' && t.type === 'customer_order').map(t => t.reference_id)
+      ).size;
+
+      // 4. Calculate dispatchCount
+      const dispatchCount = txs.filter(t => {
+        if (t.status !== 'packed') return false;
+        if (t.reference_id) {
+          const hasUnpacked = txs.some(other =>
+            other.reference_id === t.reference_id &&
+            ['reserved', 'inspect'].includes(other.status)
+          );
+          if (hasUnpacked) return false;
+        }
+        return true;
+      }).length;
+
+      // 5. Calculate receiveCount
+      const receiveCount = txs.filter(t => {
+        if (!['ordered', 'returned', 'cancelled'].includes(t.status)) return false;
+        const isIncoming = (t.reference_id && (t.reference_id.startsWith('RCV-') || t.reference_id.startsWith('SUP-')));
+        if (isIncoming) {
+          const isBooked = deliveryBookings.some(db => db.reference_id === t.reference_id);
+          return isBooked;
+        }
+        return t.type !== 'supplier_order';
+      }).length;
+
+      const hasWarehousePending = (inspectCount > 0 || packCount > 0 || dispatchCount > 0 || receiveCount > 0);
+
+      const warehouseBadge = document.getElementById('warehouse-badge-dot');
+      if (warehouseBadge) {
+        warehouseBadge.style.display = hasWarehousePending ? 'inline-block' : 'none';
+      }
+
+      window.BKWarehousePending = hasWarehousePending;
+      updateLogisticsBadgeVisibility();
+    } catch (e) {
+      console.error('Error checking warehouse pending state:', e);
+    }
+  }
+
+  function updateLogisticsBadgeVisibility() {
+    const logisticsBadge = document.getElementById('logistics-badge-dot');
+    if (logisticsBadge) {
+      const showLogisticsDot = window.BKShipmentsPending || window.BKWarehousePending;
+      logisticsBadge.style.display = showLogisticsDot ? 'inline-block' : 'none';
+    }
+  }
+
   async function checkPendingShipments(companyId) {
     if (!companyId) return;
     const sb = window.BKAuth?.sb;
@@ -184,13 +261,11 @@
 
       const hasPending = sendCount > 0 || receiveCount > 0;
 
-      // Toggle red dots on sidebar
-      const logisticsBadge = document.getElementById('logistics-badge-dot');
       const shipBadge = document.getElementById('ship-badge-dot');
-      if (logisticsBadge) logisticsBadge.style.display = hasPending ? 'inline-block' : 'none';
       if (shipBadge) shipBadge.style.display = hasPending ? 'inline-block' : 'none';
 
       window.BKShipmentsPending = hasPending;
+      updateLogisticsBadgeVisibility();
     } catch (e) {
       console.error('Error checking pending shipments:', e);
     }
@@ -199,6 +274,7 @@
   window.BKRefreshShipmentsBadge = function() {
     if (activeCompanyId) {
       checkPendingShipments(activeCompanyId);
+      checkPendingWarehouse(activeCompanyId);
     }
   };
 
@@ -351,7 +427,10 @@
           <svg class="dash-nav-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
         </button>
         <div class="dash-nav-children">
-          <a href="/dashboard/warehouse/inspect" class="dash-nav-child" data-role="logistics">Warehouse</a>
+          <a href="/dashboard/warehouse/inspect" class="dash-nav-child" data-role="logistics" style="display: flex; align-items: center; justify-content: space-between;">
+            <span>Warehouse</span>
+            <span id="warehouse-badge-dot" style="display: none; width: 6px; height: 6px; border-radius: 50%; background-color: #ef4444;"></span>
+          </a>
           <a href="/dashboard/ship/send" class="dash-nav-child" data-role="logistics" style="display: flex; align-items: center; justify-content: space-between;">
             <span>Ship</span>
             <span id="ship-badge-dot" style="display: none; width: 6px; height: 6px; border-radius: 50%; background-color: #ef4444;"></span>
@@ -757,6 +836,7 @@
                 setTimeout(() => {
                   checkIncompleteCommissions(activeCompanyId);
                   checkPendingShipments(activeCompanyId);
+                  checkPendingWarehouse(activeCompanyId);
                 }, 2000);
               }
             } catch (coErr) {
