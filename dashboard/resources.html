@@ -246,8 +246,105 @@
     }
 
     .card-actions-trigger:hover {
-      background: var(--bg-elevated);
       color: var(--text-primary);
+    }
+
+    /* Multi-select Checkboxes styling */
+    .card-checkbox-wrapper {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      z-index: 10;
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+
+    /* Keep active/selected visible */
+    .item-card:hover .card-checkbox-wrapper,
+    .item-card.is-selected .card-checkbox-wrapper {
+      opacity: 1;
+    }
+
+    .card-checkbox {
+      width: 16px;
+      height: 16px;
+      accent-color: var(--cyan);
+      cursor: pointer;
+    }
+
+    .item-card.is-selected {
+      border-color: var(--cyan) !important;
+      background: rgba(6, 182, 212, 0.04) !important;
+    }
+
+    /* List view active: Swap file icon on hover with Checkbox */
+    .explorer-grid.list-view-active .item-card .card-checkbox-wrapper {
+      display: none;
+    }
+
+    .explorer-grid.list-view-active .item-card .list-checkbox-wrapper {
+      display: none;
+      width: 32px;
+      height: 32px;
+      align-items: center;
+      justify-content: center;
+      margin-right: 0;
+      flex-shrink: 0;
+    }
+
+    .explorer-grid.list-view-active .item-card:hover .item-icon-wrapper,
+    .explorer-grid.list-view-active .item-card.is-selected .item-icon-wrapper {
+      display: none;
+    }
+
+    .explorer-grid.list-view-active .item-card:hover .list-checkbox-wrapper,
+    .explorer-grid.list-view-active .item-card.is-selected .list-checkbox-wrapper {
+      display: flex;
+    }
+
+    .list-checkbox {
+      width: 16px;
+      height: 16px;
+      accent-color: var(--cyan);
+      cursor: pointer;
+    }
+
+    /* Multi-select actions bar replacing breadcrumbs */
+    .selection-actions-bar {
+      display: flex;
+      align-items: center;
+      gap: 1.25rem;
+      font-size: 0.88rem;
+    }
+
+    .selection-count {
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .selection-btn {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      transition: color 0.15s, background-color 0.15s;
+    }
+
+    .selection-btn:hover {
+      background: var(--bg-elevated);
+      color: var(--cyan-light);
+    }
+
+    .selection-btn.danger:hover {
+      background: rgba(239, 68, 68, 0.08);
+      color: var(--danger);
     }
 
     .card-dropdown {
@@ -685,6 +782,22 @@
               <span class="breadcrumb-item" onclick="navigateToFolder(null)">Resources</span>
             </div>
 
+            <!-- Selection Actions Bar (Replaces breadcrumbs when items are selected) -->
+            <div class="selection-actions-bar" id="selection-actions-bar" style="display:none;">
+              <span class="selection-count" id="selection-count-label">Selected (0) items</span>
+              <button class="selection-btn" onclick="triggerBulkMove()">
+                <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                Move
+              </button>
+              <button class="selection-btn danger" onclick="triggerBulkDelete()">
+                <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                Delete
+              </button>
+              <button class="selection-btn" onclick="clearResourceSelection()">
+                Cancel Selection
+              </button>
+            </div>
+
             <!-- Search & View Toggles -->
             <div style="display:flex; align-items:center; gap:0.75rem;">
               <div class="search-wrap">
@@ -756,6 +869,31 @@
       </div>
       <div class="modal-body" id="upload-progress-panel" style="display:flex; flex-direction:column; gap:0.75rem;">
         <!-- Uploading files dynamically show here -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Move Target Selector -->
+  <div class="modal-overlay" id="move-target-modal">
+    <div class="modal-card" style="width: min(500px, 100%); display:flex; flex-direction:column; max-height:80vh;">
+      <div class="modal-header">
+        <span>Move to...</span>
+        <button type="button" class="btn btn-outline" style="border:none; background:none; padding:0; font-size:1.25rem;" onclick="closeModal('move-target-modal')">&times;</button>
+      </div>
+      
+      <!-- Move Breadcrumbs -->
+      <div class="breadcrumb-nav" id="move-breadcrumb-nav" style="padding:0.75rem 1rem; border-bottom:1px solid var(--border); font-size:0.8rem; background:var(--bg-elevated);">
+        <span class="breadcrumb-item" onclick="navigateMoveSelectorFolder(null)">Resources</span>
+      </div>
+
+      <!-- Folders List Container -->
+      <div class="modal-body" id="move-folders-list" style="flex:1; overflow-y:auto; padding:0.5rem 0; min-height:220px; display:flex; flex-direction:column; gap:0.25rem;">
+        <!-- Folders populated dynamically -->
+      </div>
+
+      <div class="modal-footer" style="border-top:1px solid var(--border); padding-top:1rem;">
+        <button type="button" class="btn btn-outline" onclick="closeModal('move-target-modal')">Cancel Move</button>
+        <button type="button" class="btn btn-primary" id="btn-confirm-move" onclick="executeBulkMove()">Move Here</button>
       </div>
     </div>
   </div>
@@ -876,6 +1014,8 @@
     let searchFilter = "";
     let folderEditingId = null;
     let explorerViewMode = 'grid'; // Default layout is grid
+    let selectedResourceIds = []; // Stores IDs of selected resources for bulk operations
+    let currentMoveModalFolderId = null; // Tracks folder directory state within Move modal
 
     window.setResourceViewMode = function(mode) {
       explorerViewMode = mode;
@@ -1076,7 +1216,26 @@
           metaHtml = `<span class="item-meta">${item.type === 'folder' ? 'Folder' : String(item.file_type).toUpperCase()}</span>`;
         }
 
+        const isSel = selectedResourceIds.includes(item.id);
+        if (isSel) {
+          card.classList.add('is-selected');
+        }
+
+        // Checkbox wrappers
+        const cardCheckboxHtml = `
+          <div class="card-checkbox-wrapper" onclick="event.stopPropagation();">
+            <input type="checkbox" class="card-checkbox" ${isSel ? 'checked' : ''} onchange="toggleSelectResource(event, '${item.id}')" />
+          </div>
+        `;
+        const listCheckboxHtml = `
+          <div class="list-checkbox-wrapper" onclick="event.stopPropagation();">
+            <input type="checkbox" class="list-checkbox" ${isSel ? 'checked' : ''} onchange="toggleSelectResource(event, '${item.id}')" />
+          </div>
+        `;
+
         card.innerHTML = `
+          ${cardCheckboxHtml}
+          ${listCheckboxHtml}
           <div class="item-icon-wrapper">${iconHtml}</div>
           <span class="item-name">${escFulfillment(displayName)}</span>
           ${metaHtml}
@@ -1151,7 +1310,7 @@
         }
 
         card.addEventListener('click', (e) => {
-          if (e.target.closest('.card-actions-trigger') || e.target.closest('.card-dropdown')) {
+          if (e.target.closest('.card-actions-trigger') || e.target.closest('.card-dropdown') || e.target.closest('.card-checkbox-wrapper') || e.target.closest('.list-checkbox-wrapper')) {
             return;
           }
           if (item.type === 'folder') {
@@ -1187,6 +1346,7 @@
       currentFolderId = id;
       searchFilter = "";
       document.getElementById('resource-search').value = "";
+      clearResourceSelection();
       renderExplorer();
     };
 
@@ -1216,6 +1376,266 @@
         `;
       });
     }
+
+    // ── Multi-Select Checkboxes Handlers ──
+    window.toggleSelectResource = function(e, id) {
+      if (e.target.checked) {
+        if (!selectedResourceIds.includes(id)) {
+          selectedResourceIds.push(id);
+        }
+      } else {
+        selectedResourceIds = selectedResourceIds.filter(x => x !== id);
+      }
+      
+      // Update UI highlights
+      const cards = document.querySelectorAll('.item-card');
+      cards.forEach(c => {
+        const cardId = c.getAttribute('data-id');
+        if (cardId === id) {
+          if (e.target.checked) {
+            c.classList.add('is-selected');
+          } else {
+            c.classList.remove('is-selected');
+          }
+          // Sync list & grid check states
+          const cbGrid = c.querySelector('.card-checkbox');
+          const cbList = c.querySelector('.list-checkbox');
+          if (cbGrid) cbGrid.checked = e.target.checked;
+          if (cbList) cbList.checked = e.target.checked;
+        }
+      });
+
+      updateSelectionBar();
+    };
+
+    window.updateSelectionBar = function() {
+      const bar = document.getElementById('selection-actions-bar');
+      const breadcrumbs = document.getElementById('breadcrumb-nav');
+      const countLabel = document.getElementById('selection-count-label');
+
+      if (selectedResourceIds.length > 0) {
+        if (bar) bar.style.display = 'flex';
+        if (breadcrumbs) breadcrumbs.style.display = 'none';
+        if (countLabel) countLabel.textContent = `Selected (${selectedResourceIds.length}) files`;
+      } else {
+        if (bar) bar.style.display = 'none';
+        if (breadcrumbs) breadcrumbs.style.display = 'flex';
+      }
+    };
+
+    window.clearResourceSelection = function() {
+      selectedResourceIds = [];
+      document.querySelectorAll('.item-card').forEach(c => {
+        c.classList.remove('is-selected');
+        const cbGrid = c.querySelector('.card-checkbox');
+        const cbList = c.querySelector('.list-checkbox');
+        if (cbGrid) cbGrid.checked = false;
+        if (cbList) cbList.checked = false;
+      });
+      updateSelectionBar();
+    };
+
+    window.triggerBulkDelete = async function() {
+      if (selectedResourceIds.length === 0) return;
+      const count = selectedResourceIds.length;
+      const confirmed = await window.confirmAction(`Are you sure you want to delete (${count}) files?`);
+      if (!confirmed) return;
+
+      let successCount = 0;
+      let failCount = 0;
+
+      // Disable buttons during deletion
+      const barBtns = document.querySelectorAll('#selection-actions-bar button');
+      barBtns.forEach(b => b.disabled = true);
+
+      try {
+        for (const id of selectedResourceIds) {
+          try {
+            // 1. Fetch file details to clean up Storage files
+            const { data: item } = await sb.from('sales_resources')
+              .select('type, file_url, thumbnail_url')
+              .eq('id', id)
+              .maybeSingle();
+
+            if (item && item.type === 'file') {
+              const filesToRemove = [];
+              if (item.file_url && item.file_url.includes('storage/v1/object/public/brightkey-assets/')) {
+                filesToRemove.push(item.file_url.substring(item.file_url.indexOf('brightkey-assets/') + 'brightkey-assets/'.length));
+              }
+              if (item.thumbnail_url && item.thumbnail_url.includes('storage/v1/object/public/brightkey-assets/')) {
+                filesToRemove.push(item.thumbnail_url.substring(item.thumbnail_url.indexOf('brightkey-assets/') + 'brightkey-assets/'.length));
+              }
+              if (filesToRemove.length > 0) {
+                await sb.storage.from('brightkey-assets').remove(filesToRemove);
+              }
+            }
+
+            // 2. Delete database entry
+            const { error } = await sb.from('sales_resources')
+              .delete()
+              .eq('id', id);
+
+            if (error) throw error;
+            successCount++;
+          } catch (itemErr) {
+            console.error('[Bulk Delete Item Failed] ID:', id, itemErr);
+            failCount++;
+          }
+        }
+
+        if (successCount > 0) {
+          showToast(`Successfully deleted ${successCount} resource(s).`);
+        }
+        if (failCount > 0) {
+          showToast(`Failed to delete ${failCount} resource(s).`, true);
+        }
+
+        clearResourceSelection();
+        await loadResources();
+      } catch (err) {
+        console.error(err);
+        showToast('Bulk delete failed: ' + err.message, true);
+      } finally {
+        barBtns.forEach(b => b.disabled = false);
+      }
+    };
+
+    window.triggerBulkMove = function() {
+      if (selectedResourceIds.length === 0) return;
+      currentMoveModalFolderId = null;
+      openModal('move-target-modal');
+      renderMoveBreadcrumbs();
+      loadMoveFolders();
+    };
+
+    async function loadMoveFolders() {
+      const container = document.getElementById('move-folders-list');
+      container.innerHTML = `
+        <div style="display:flex; align-items:center; justify-content:center; padding:2rem 0; gap:0.5rem;">
+          <div class="spinner-cyan" style="width:18px; height:18px; border-width:2px;"></div>
+          <span style="font-size:0.8rem; color:var(--text-muted);">Loading folders...</span>
+        </div>
+      `;
+
+      try {
+        // Query folders in current company context
+        const { data, error } = await sb.from('sales_resources')
+          .select('id, name, parent_id')
+          .eq('company_id', currentCompanyId)
+          .eq('type', 'folder')
+          .order('name', { ascending: true });
+
+        if (error) throw error;
+
+        // Filter folders for current directory level inside move selector modal
+        const folders = data.filter(f => f.parent_id === currentMoveModalFolderId);
+        
+        // Safety constraint: Prevent moving selected items inside themselves if they are folders
+        const cleanFolders = folders.filter(f => !selectedResourceIds.includes(f.id));
+
+        container.innerHTML = '';
+        if (cleanFolders.length === 0) {
+          container.innerHTML = `
+            <div style="text-align:center; padding:2rem 1rem; font-size:0.8rem; color:var(--text-muted);">
+              No subfolders available in this folder.
+            </div>
+          `;
+          return;
+        }
+
+        cleanFolders.forEach(folder => {
+          const row = document.createElement('div');
+          row.style.cssText = 'display:flex; align-items:center; padding:0.6rem 1rem; border-radius:6px; border:1px solid transparent; cursor:pointer; font-size:0.82rem; font-weight:600; color:var(--text-secondary); transition: background-color 0.1s;';
+          row.innerHTML = `
+            <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" style="margin-right:8px; color:var(--text-muted);"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+            <span style="flex-grow:1; text-align:left;">${escFulfillment(folder.name)}</span>
+            <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none" style="color:var(--text-muted);"><polyline points="9 18 15 12 9 6"></polyline></svg>
+          `;
+
+          row.addEventListener('click', () => {
+            navigateMoveSelectorFolder(folder.id);
+          });
+          row.addEventListener('mouseenter', () => {
+            row.style.background = 'var(--bg-elevated)';
+            row.style.borderColor = 'var(--border)';
+          });
+          row.addEventListener('mouseleave', () => {
+            row.style.background = 'none';
+            row.style.borderColor = 'transparent';
+          });
+
+          container.appendChild(row);
+        });
+      } catch (err) {
+        console.error(err);
+        container.innerHTML = `
+          <div style="text-align:center; padding:2rem 1rem; font-size:0.8rem; color:var(--danger);">
+            Failed to load directories: ${escFulfillment(err.message)}
+          </div>
+        `;
+      }
+    }
+
+    window.navigateMoveSelectorFolder = function(id) {
+      currentMoveModalFolderId = id;
+      renderMoveBreadcrumbs();
+      loadMoveFolders();
+    };
+
+    function renderMoveBreadcrumbs() {
+      const nav = document.getElementById('move-breadcrumb-nav');
+      nav.innerHTML = `<span class="breadcrumb-item" onclick="navigateMoveSelectorFolder(null)">Resources</span>`;
+
+      if (!currentMoveModalFolderId) return;
+
+      const path = [];
+      let tempId = currentMoveModalFolderId;
+      
+      while (tempId) {
+        const folder = allResources.find(r => r.id === tempId);
+        if (folder) {
+          path.unshift(folder);
+          tempId = folder.parent_id;
+        } else {
+          break;
+        }
+      }
+
+      path.forEach(folder => {
+        nav.innerHTML += `
+          <span class="breadcrumb-separator">/</span>
+          <span class="breadcrumb-item" onclick="navigateMoveSelectorFolder('${folder.id}')">${escFulfillment(folder.name)}</span>
+        `;
+      });
+    }
+
+    window.executeBulkMove = async function() {
+      if (selectedResourceIds.length === 0) return;
+
+      const btn = document.getElementById('btn-confirm-move');
+      btn.disabled = true;
+      btn.textContent = "Moving...";
+
+      try {
+        // Perform bulk move parent_id updates in Supabase
+        const { error } = await sb.from('sales_resources')
+          .update({ parent_id: currentMoveModalFolderId, updated_at: new Date().toISOString() })
+          .in('id', selectedResourceIds);
+
+        if (error) throw error;
+
+        showToast(`Successfully moved ${selectedResourceIds.length} item(s).`);
+        closeModal('move-target-modal');
+        clearResourceSelection();
+        await loadResources();
+      } catch (err) {
+        console.error(err);
+        showToast('Bulk move failed: ' + err.message, true);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Move Here";
+      }
+    };
 
     // ── Search Handler ──
     window.handleSearch = function(val) {
