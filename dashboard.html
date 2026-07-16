@@ -1321,35 +1321,82 @@
           });
         }
 
-        // 2. Add corporate events (filtered by visibility level)
-        const roleInfo = this.userRoleInfo || null;
-        const userRole = roleInfo?.role || null;
-        const isOwnerOrAdmin = ['owner', 'admin'].includes(userRole);
-        const empLevel = parseInt(this.employeeLevel || 1, 10);
-
+        // 2. Add corporate events (filtered by visibility level & recurrence)
         const visibleEvents = (this.companyEvents || []).filter(ev => this.checkEventVisibility(ev));
 
-        visibleEvents.forEach(ev => {
-          const key = ev.date_from; // date_from is YYYY-MM-DD
-          if (!this.calendarEvents[key]) {
-            this.calendarEvents[key] = {
-              name: ev.title,
-              description: ev.description || 'No description provided.',
-              isBirthday: false,
-              color: 'var(--cyan)',
-              eventId: ev.id,
-              event: ev
-            };
-          } else {
-            this.calendarEvents[key].name += ", " + ev.title;
-            this.calendarEvents[key].description += ` | Event: ${ev.title}`;
-            // If it merged, let's keep track of corporate event details too
-            if (!this.calendarEvents[key].eventId) {
-              this.calendarEvents[key].eventId = ev.id;
-              this.calendarEvents[key].event = ev;
+        // Get the range of dates in our calendar view (42 days)
+        const year = this.calendarDate.getFullYear();
+        const month = this.calendarDate.getMonth();
+        const firstDay = new Date(year, month, 1);
+        const startDate = new Date(year, month, 1 - firstDay.getDay());
+
+        for (let i = 0; i < 42; i++) {
+          const date = new Date(startDate);
+          date.setDate(startDate.getDate() + i);
+          const key = this.getCalendarKey(date);
+
+          visibleEvents.forEach(ev => {
+            let isMatch = false;
+
+            if (!ev.is_recurring) {
+              // Single instance match
+              isMatch = (ev.date_from === key);
+              if (ev.is_date_range && ev.date_to) {
+                isMatch = (key >= ev.date_from && key <= ev.date_to);
+              }
+            } else {
+              // Recurring match
+              const pattern = ev.recurrence_pattern;
+              let days = [];
+              try {
+                days = typeof ev.recurrence_days === 'string' ? JSON.parse(ev.recurrence_days) : (ev.recurrence_days || []);
+              } catch(e) {}
+
+              if (pattern === 'weekly') {
+                const weekdayNames = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+                const currentDayName = weekdayNames[date.getDay()];
+                isMatch = (Array.isArray(days) && days.includes(currentDayName));
+              } else if (pattern === 'monthly') {
+                const dayVal = Array.isArray(days) ? days[0] : days;
+                if (dayVal === 'last') {
+                  const lastDayOfMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+                  isMatch = (date.getDate() === lastDayOfMonth);
+                } else if (dayVal) {
+                  const targetDay = parseInt(dayVal, 10);
+                  const lastDayOfMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+                  const actualMatchDay = Math.min(targetDay, lastDayOfMonth);
+                  isMatch = (date.getDate() === actualMatchDay);
+                }
+              } else if (pattern === 'annual') {
+                const targetMonth = days?.month;
+                const targetDay = days?.day;
+                isMatch = (targetMonth !== undefined && targetDay !== undefined && date.getMonth() === targetMonth && date.getDate() === targetDay);
+              }
             }
-          }
-        });
+
+            if (isMatch) {
+              if (!this.calendarEvents[key]) {
+                this.calendarEvents[key] = {
+                  name: ev.title,
+                  description: ev.description || 'No description provided.',
+                  isBirthday: false,
+                  color: 'var(--cyan)',
+                  eventId: ev.id,
+                  event: ev
+                };
+              } else {
+                if (!this.calendarEvents[key].name.includes(ev.title)) {
+                  this.calendarEvents[key].name += ", " + ev.title;
+                  this.calendarEvents[key].description += ` | Event: ${ev.title}`;
+                  if (!this.calendarEvents[key].eventId) {
+                    this.calendarEvents[key].eventId = ev.id;
+                    this.calendarEvents[key].event = ev;
+                  }
+                }
+              }
+            }
+          });
+        }
       },
 
       renderUpcomingEvents() {
@@ -1385,20 +1432,60 @@
           });
         }
 
-        // 2. Corporate Events (filtered by visibility level)
-        const roleInfo = this.userRoleInfo || null;
-        const userRole = roleInfo?.role || null;
-        const isOwnerOrAdmin = ['owner', 'admin'].includes(userRole);
-        const empLevel = parseInt(this.employeeLevel || 1, 10);
+        // Helper to find next recurrence date
+        const getNextOccurrence = (ev, todayDate) => {
+          if (!ev.is_recurring) {
+            const dateParts = ev.date_from.split('-').map(Number);
+            const d = new Date(dateParts[0], dateParts[1] - 1, dateParts[2]);
+            d.setHours(0, 0, 0, 0);
+            return d;
+          }
 
+          const pattern = ev.recurrence_pattern;
+          let days = [];
+          try {
+            days = typeof ev.recurrence_days === 'string' ? JSON.parse(ev.recurrence_days) : (ev.recurrence_days || []);
+          } catch(e) {}
+
+          for (let i = 0; i < 366; i++) {
+            const testDate = new Date(todayDate);
+            testDate.setDate(todayDate.getDate() + i);
+
+            let matches = false;
+            if (pattern === 'weekly') {
+              const weekdayNames = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+              const dayName = weekdayNames[testDate.getDay()];
+              matches = (Array.isArray(days) && days.includes(dayName));
+            } else if (pattern === 'monthly') {
+              const dayVal = Array.isArray(days) ? days[0] : days;
+              if (dayVal === 'last') {
+                const lastDay = new Date(testDate.getFullYear(), testDate.getMonth() + 1, 0).getDate();
+                matches = (testDate.getDate() === lastDay);
+              } else if (dayVal) {
+                const targetDay = parseInt(dayVal, 10);
+                const lastDay = new Date(testDate.getFullYear(), testDate.getMonth() + 1, 0).getDate();
+                const actualDay = Math.min(targetDay, lastDay);
+                matches = (testDate.getDate() === actualDay);
+              }
+            } else if (pattern === 'annual') {
+              const targetMonth = days?.month;
+              const targetDay = days?.day;
+              matches = (targetMonth !== undefined && targetDay !== undefined && testDate.getMonth() === targetMonth && testDate.getDate() === targetDay);
+            }
+
+            if (matches) {
+              return testDate;
+            }
+          }
+          return null;
+        };
+
+        // 2. Corporate Events (filtered by visibility level)
         const visibleEvents = (this.companyEvents || []).filter(ev => this.checkEventVisibility(ev));
 
         visibleEvents.forEach(ev => {
-          const dateParts = ev.date_from.split('-').map(Number);
-          const eventDate = new Date(dateParts[0], dateParts[1] - 1, dateParts[2]);
-          eventDate.setHours(0, 0, 0, 0);
-
-          if (eventDate >= today || (ev.is_date_range && ev.date_to && new Date(ev.date_to) >= today)) {
+          const eventDate = getNextOccurrence(ev, today);
+          if (eventDate) {
             upcoming.push({
               type: 'event',
               title: ev.title,
@@ -1454,8 +1541,9 @@
               </div>
             `;
           } else {
+            const dateStr = `${item.date.getFullYear()}-${String(item.date.getMonth() + 1).padStart(2, '0')}-${String(item.date.getDate()).padStart(2, '0')}`;
             html += `
-              <div style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; width: 100%;" onclick="App.openCorpEventModal('${esc(item.event.id)}')">
+              <div style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; width: 100%;" onclick="App.openCorpEventModal('${esc(item.event.id)}', '${dateStr}')">
                 ${calendarSvg}
                 <div style="display: flex; align-items: center; justify-content: space-between; flex: 1; width: 100%;">
                   <span style="font-weight: 400; color: var(--cyan-light, #22d3ee); font-size: 0.82rem; text-decoration: underline;">${esc(item.title)}</span>
@@ -1475,7 +1563,7 @@
         
         // Redirect to corporate event modal if it is a corporate event!
         if (event && event.eventId && !event.isBirthday) {
-          this.openCorpEventModal(event.eventId);
+          this.openCorpEventModal(event.eventId, dateKey);
           return;
         }
 
@@ -1509,7 +1597,7 @@
         }, 150);
       },
 
-      async openCorpEventModal(eventId) {
+      async openCorpEventModal(eventId, clickedDateKey = null) {
         const ev = (this.companyEvents || []).find(e => e.id === eventId);
         if (!ev) return;
 
@@ -1532,8 +1620,8 @@
           return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
         };
 
-        let datePart = formatDate(ev.date_from);
-        if (ev.is_date_range && ev.date_to) {
+        let datePart = formatDate(clickedDateKey || ev.date_from);
+        if (!ev.is_recurring && ev.is_date_range && ev.date_to) {
           datePart += ` to ${formatDate(ev.date_to)}`;
         }
 

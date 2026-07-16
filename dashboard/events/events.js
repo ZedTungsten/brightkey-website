@@ -98,78 +98,156 @@ window.EventsApp = {
   async loadData() {
     document.getElementById('month-label').textContent = `${MONTH_NAMES[this.currentMonth]} ${this.currentYear}`;
     const tbody = document.getElementById('events-table-body');
-    tbody.innerHTML = '<tr class="shimmer-row"><td>Loading...</td><td></td><td></td><td></td><td></td><td></td><td></td></tr>';
+    const recurTbody = document.getElementById('recurring-events-table-body');
+    if (tbody) tbody.innerHTML = '<tr class="shimmer-row"><td>Loading...</td><td></td><td></td><td></td><td></td><td></td><td></td></tr>';
+    if (recurTbody) recurTbody.innerHTML = '<tr class="shimmer-row"><td>Loading...</td><td></td><td></td><td></td><td></td><td></td><td></td></tr>';
 
     const startDate = `${this.currentYear}-${String(this.currentMonth + 1).padStart(2,'0')}-01`;
     const lastDay   = new Date(this.currentYear, this.currentMonth + 1, 0).getDate();
     const endDate   = `${this.currentYear}-${String(this.currentMonth + 1).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
 
     try {
-      // Fetch events whose date_from falls within the selected month
+      // Fetch all events for the company
       const { data, error } = await getSb()
         .from('company_events')
         .select('*')
         .eq('company_id', this.companyId)
-        .gte('date_from', startDate)
-        .lte('date_from', endDate)
         .order('date_from', { ascending: true })
         .order('created_at', { ascending: true });
 
       if (error) throw error;
-      this.renderTable(data || []);
+      this.renderTable(data || [], startDate, endDate);
     } catch (err) {
       console.error(err);
-      tbody.innerHTML = `<tr><td colspan="7" style="color:var(--danger);text-align:center;padding:2rem;">Failed to load: ${esc(err.message)}</td></tr>`;
+      if (tbody) tbody.innerHTML = `<tr><td colspan="7" style="color:var(--danger);text-align:center;padding:2rem;">Failed to load: ${esc(err.message)}</td></tr>`;
+      if (recurTbody) recurTbody.innerHTML = `<tr><td colspan="7" style="color:var(--danger);text-align:center;padding:2rem;">Failed to load: ${esc(err.message)}</td></tr>`;
     }
   },
 
-  renderTable(events) {
+  renderTable(events, startDate, endDate) {
     const tbody = document.getElementById('events-table-body');
-    if (!events.length) {
-      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);font-style:italic;padding:2rem;">No events for this month.</td></tr>';
-      return;
+    const recurTbody = document.getElementById('recurring-events-table-body');
+
+    // 1. Separate single instance and recurring
+    const singleEvents = events.filter(ev => !ev.is_recurring && ev.date_from >= startDate && ev.date_from <= endDate);
+    const recurringEvents = events.filter(ev => ev.is_recurring);
+
+    // 2. Render Single Instance Table
+    if (tbody) {
+      if (!singleEvents.length) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);font-style:italic;padding:2rem;">No events for this month.</td></tr>';
+      } else {
+        tbody.innerHTML = singleEvents.map(ev => {
+          const createdAt = ev.created_at ? new Date(ev.created_at).toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' }) : '—';
+          const toDate    = ev.is_date_range && ev.date_to ? fmtDate(ev.date_to) : '—';
+
+          return `<tr>
+            <td style="color:var(--text-muted);font-size:9pt;">${createdAt}</td>
+            <td style="font-weight:600;">${esc(ev.title)}</td>
+            <td style="color:var(--text-secondary);font-size:9pt;">${esc(ev.description || '—')}</td>
+            <td class="num-col"><span class="level-badge">${esc(ev.visibility_level)}</span></td>
+            <td>${fmtDate(ev.date_from)}</td>
+            <td>${toDate}</td>
+            <td class="action-col">
+              <div style="display:inline-flex;gap:0.3rem;">
+                <button class="action-btn" title="Send Email" onclick="EventsApp.openEmailBuilder('${esc(ev.id)}')">
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                </button>
+                <button class="action-btn" title="Attendees" onclick="EventsApp.openAttendeesModal('${esc(ev.id)}')">
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                    <circle cx="9" cy="7" r="4"></circle>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                  </svg>
+                </button>
+                <button class="action-btn" title="Edit" onclick="EventsApp.openEditModal(${JSON.stringify(ev).replace(/"/g,'&quot;')})">
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                </button>
+                <button class="action-btn" title="Duplicate" onclick="EventsApp.duplicateEvent(${JSON.stringify(ev).replace(/"/g,'&quot;')})">
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                  </svg>
+                </button>
+                <button class="action-btn danger" title="Delete" onclick="EventsApp.openConfirm('${esc(ev.id)}', '${esc(ev.title)}')">
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                </button>
+              </div>
+            </td>
+          </tr>`;
+        }).join('');
+      }
     }
 
-    tbody.innerHTML = events.map(ev => {
-      const createdAt = ev.created_at ? new Date(ev.created_at).toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' }) : '—';
-      const toDate    = ev.is_date_range && ev.date_to ? fmtDate(ev.date_to) : '—';
+    // 3. Render Recurring Table
+    if (recurTbody) {
+      if (!recurringEvents.length) {
+        recurTbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);font-style:italic;padding:2rem;">No recurring events.</td></tr>';
+      } else {
+        recurTbody.innerHTML = recurringEvents.map(ev => {
+          const createdAt = ev.created_at ? new Date(ev.created_at).toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' }) : '—';
+          
+          let detailsText = '—';
+          const pattern = ev.recurrence_pattern || 'weekly';
+          let days = [];
+          try {
+            days = typeof ev.recurrence_days === 'string' ? JSON.parse(ev.recurrence_days) : (ev.recurrence_days || []);
+          } catch(e) {}
 
-      return `<tr>
-        <td style="color:var(--text-muted);font-size:9pt;">${createdAt}</td>
-        <td style="font-weight:600;">${esc(ev.title)}</td>
-        <td style="color:var(--text-secondary);font-size:9pt;">${esc(ev.description || '—')}</td>
-        <td class="num-col"><span class="level-badge">${esc(ev.visibility_level)}</span></td>
-        <td>${fmtDate(ev.date_from)}</td>
-        <td>${toDate}</td>
-        <td class="action-col">
-          <div style="display:inline-flex;gap:0.3rem;">
-            <button class="action-btn" title="Send Email" onclick="EventsApp.openEmailBuilder('${esc(ev.id)}')">
-              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
-            </button>
-            <button class="action-btn" title="Attendees" onclick="EventsApp.openAttendeesModal('${esc(ev.id)}')">
-              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-                <circle cx="9" cy="7" r="4"></circle>
-                <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-              </svg>
-            </button>
-            <button class="action-btn" title="Edit" onclick="EventsApp.openEditModal(${JSON.stringify(ev).replace(/"/g,'&quot;')})">
-              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-            </button>
-            <button class="action-btn" title="Duplicate" onclick="EventsApp.duplicateEvent(${JSON.stringify(ev).replace(/"/g,'&quot;')})">
-              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-              </svg>
-            </button>
-            <button class="action-btn danger" title="Delete" onclick="EventsApp.openConfirm('${esc(ev.id)}', '${esc(ev.title)}')">
-              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
-            </button>
-          </div>
-        </td>
-      </tr>`;
-    }).join('');
+          if (pattern === 'weekly') {
+            const dayLabels = { mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu', fri: 'Fri', sat: 'Sat', sun: 'Sun' };
+            detailsText = 'Every ' + (Array.isArray(days) ? days.map(d => dayLabels[d] || d).join(', ') : '—');
+          } else if (pattern === 'monthly') {
+            const dayVal = Array.isArray(days) ? days[0] : days;
+            detailsText = dayVal === 'last' ? 'End of Month' : `Every ${dayVal}${dayVal === '1' ? 'st' : dayVal === '2' ? 'nd' : dayVal === '3' ? 'rd' : 'th'}`;
+          } else if (pattern === 'annual') {
+            const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            const month = days?.month;
+            const day = days?.day;
+            detailsText = (month !== undefined && day !== undefined) ? `Every ${monthNames[month]} ${day}` : '—';
+          }
+
+          const patternLabel = pattern.charAt(0).toUpperCase() + pattern.slice(1);
+
+          return `<tr>
+            <td style="color:var(--text-muted);font-size:9pt;">${createdAt}</td>
+            <td style="font-weight:600;">${esc(ev.title)}</td>
+            <td style="color:var(--text-secondary);font-size:9pt;">${esc(ev.description || '—')}</td>
+            <td class="num-col"><span class="level-badge">${esc(ev.visibility_level)}</span></td>
+            <td style="font-weight:600;color:var(--cyan-light);">${patternLabel}</td>
+            <td>${esc(detailsText)}</td>
+            <td class="action-col">
+              <div style="display:inline-flex;gap:0.3rem;">
+                <button class="action-btn" title="Send Email" onclick="EventsApp.openEmailBuilder('${esc(ev.id)}')">
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                </button>
+                <button class="action-btn" title="Attendees" onclick="EventsApp.openAttendeesModal('${esc(ev.id)}')">
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                    <circle cx="9" cy="7" r="4"></circle>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                  </svg>
+                </button>
+                <button class="action-btn" title="Edit" onclick="EventsApp.openEditModal(${JSON.stringify(ev).replace(/"/g,'&quot;')})">
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                </button>
+                <button class="action-btn" title="Duplicate" onclick="EventsApp.duplicateEvent(${JSON.stringify(ev).replace(/"/g,'&quot;')})">
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                  </svg>
+                </button>
+                <button class="action-btn danger" title="Delete" onclick="EventsApp.openConfirm('${esc(ev.id)}', '${esc(ev.title)}')">
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                </button>
+              </div>
+            </td>
+          </tr>`;
+        }).join('');
+      }
+    }
   },
 
   /* ── Modal helpers ── */
@@ -286,6 +364,69 @@ window.EventsApp = {
     }
   },
 
+  toggleEventType(type) {
+    const singleWrap = document.getElementById('single-instance-fields-wrap');
+    const rangeWrap = document.getElementById('single-instance-range-wrap');
+    const recurWrap = document.getElementById('recurring-settings-wrap');
+
+    if (singleWrap) singleWrap.style.display = type === 'single' ? 'flex' : 'none';
+    if (rangeWrap) rangeWrap.style.display = type === 'single' ? 'block' : 'none';
+    if (recurWrap) recurWrap.style.display = type === 'recurring' ? 'flex' : 'none';
+  },
+
+  toggleRecurrencePattern(pattern) {
+    const patterns = ['weekly', 'monthly', 'annual'];
+    patterns.forEach(p => {
+      const el = document.getElementById(`recur-${p}-wrap`);
+      if (el) el.style.display = p === pattern ? 'block' : 'none';
+    });
+  },
+
+  populateRecurrenceForm(ev) {
+    const isRecur = !!ev?.is_recurring;
+    const typeRadios = document.querySelectorAll('input[name="event-type"]');
+    typeRadios.forEach(r => {
+      r.checked = r.value === (isRecur ? 'recurring' : 'single');
+    });
+    this.toggleEventType(isRecur ? 'recurring' : 'single');
+
+    const patternSelect = document.getElementById('recurrence-pattern');
+    if (patternSelect) patternSelect.value = ev?.recurrence_pattern || 'weekly';
+    this.toggleRecurrencePattern(ev?.recurrence_pattern || 'weekly');
+
+    document.querySelectorAll('.weekly-day-cb').forEach(cb => {
+      cb.checked = false;
+    });
+
+    const monthlySelect = document.getElementById('recur-monthly-day');
+    if (monthlySelect) monthlySelect.value = '1';
+
+    const annualMonthSelect = document.getElementById('recur-annual-month');
+    const annualDaySelect = document.getElementById('recur-annual-day');
+    if (annualMonthSelect) annualMonthSelect.value = '0';
+    if (annualDaySelect) annualDaySelect.value = '1';
+
+    if (isRecur && ev) {
+      const pattern = ev.recurrence_pattern || 'weekly';
+      let days = [];
+      try {
+        days = typeof ev.recurrence_days === 'string' ? JSON.parse(ev.recurrence_days) : (ev.recurrence_days || []);
+      } catch(e) {}
+
+      if (pattern === 'weekly') {
+        document.querySelectorAll('.weekly-day-cb').forEach(cb => {
+          if (Array.isArray(days) && days.includes(cb.value)) cb.checked = true;
+        });
+      } else if (pattern === 'monthly') {
+        const dayVal = Array.isArray(days) ? days[0] : days;
+        if (monthlySelect) monthlySelect.value = String(dayVal || '1');
+      } else if (pattern === 'annual') {
+        if (annualMonthSelect && days?.month !== undefined) annualMonthSelect.value = String(days.month);
+        if (annualDaySelect && days?.day !== undefined) annualDaySelect.value = String(days.day);
+      }
+    }
+  },
+
   openCreateModal() {
     this.editingId = null;
     this.duplicateSourceEvent = null;
@@ -294,6 +435,7 @@ window.EventsApp = {
     document.getElementById('event-title').value = '';
     document.getElementById('event-description').value = '';
     this.populateVisibilityForm(null);
+    this.populateRecurrenceForm(null);
     document.getElementById('is-date-range').checked = false;
     document.getElementById('event-date').value = '';
     document.getElementById('event-date-from').value = '';
@@ -322,6 +464,7 @@ window.EventsApp = {
     document.getElementById('event-title').value = ev.title || '';
     document.getElementById('event-description').value = ev.description || '';
     this.populateVisibilityForm(ev);
+    this.populateRecurrenceForm(ev);
     document.getElementById('is-date-range').checked = !!ev.is_date_range;
 
     if (ev.is_date_range) {
@@ -357,6 +500,7 @@ window.EventsApp = {
     document.getElementById('event-title').value = (ev.title || '') + ' (Copy)';
     document.getElementById('event-description').value = ev.description || '';
     this.populateVisibilityForm(ev);
+    this.populateRecurrenceForm(ev);
     document.getElementById('is-date-range').checked = !!ev.is_date_range;
     document.getElementById('is-whole-day').checked = !!ev.is_whole_day;
 
@@ -435,10 +579,7 @@ window.EventsApp = {
   async saveEvent() {
     const title = document.getElementById('event-title').value.trim();
     const description = document.getElementById('event-description').value.trim() || null;
-    const isRange = document.getElementById('is-date-range').checked;
-    const isWhole = document.getElementById('is-whole-day').checked;
-    const timeStart = document.getElementById('event-time-start').value || null;
-    const timeEnd   = document.getElementById('event-time-end').value || null;
+    const eventType = document.querySelector('input[name="event-type"]:checked').value;
 
     const visibilityType = document.querySelector('input[name="event-visibility-type"]:checked').value;
     let visibilityLevel = 1;
@@ -459,16 +600,52 @@ window.EventsApp = {
       visibilityEmployees = Array.from(checked).map(c => c.value);
     }
 
-    let dateFrom, dateTo = null;
-    if (isRange) {
-      dateFrom = document.getElementById('event-date-from').value;
-      dateTo   = document.getElementById('event-date-to').value || null;
-    } else {
-      dateFrom = document.getElementById('event-date').value;
-    }
-
     if (!title) { window.Toast?.error?.('Title is required.'); return; }
-    if (!dateFrom) { window.Toast?.error?.('Date is required.'); return; }
+
+    let isRecurring = false;
+    let recurrencePattern = null;
+    let recurrenceDays = null;
+    let isRange = false;
+    let isWhole = document.getElementById('is-whole-day').checked;
+    let timeStart = document.getElementById('event-time-start').value || null;
+    let timeEnd   = document.getElementById('event-time-end').value || null;
+    let dateFrom = null;
+    let dateTo = null;
+
+    if (eventType === 'single') {
+      isRange = document.getElementById('is-date-range').checked;
+      if (isRange) {
+        dateFrom = document.getElementById('event-date-from').value;
+        dateTo   = document.getElementById('event-date-to').value || null;
+      } else {
+        dateFrom = document.getElementById('event-date').value;
+      }
+      if (!dateFrom) { window.Toast?.error?.('Date is required.'); return; }
+    } else {
+      // Recurring Event
+      isRecurring = true;
+      recurrencePattern = document.getElementById('recurrence-pattern').value;
+      
+      // Default dummy date for DB NOT NULL constraints
+      dateFrom = '2020-01-01';
+
+      if (recurrencePattern === 'weekly') {
+        const checked = document.querySelectorAll('.weekly-day-cb:checked');
+        const days = Array.from(checked).map(c => c.value);
+        if (days.length === 0) {
+          window.Toast?.error?.('Please select at least one day of the week.');
+          return;
+        }
+        recurrenceDays = days;
+      } else if (recurrencePattern === 'monthly') {
+        const dayVal = document.getElementById('recur-monthly-day').value;
+        recurrenceDays = [dayVal];
+      } else if (recurrencePattern === 'annual') {
+        const monthVal = parseInt(document.getElementById('recur-annual-month').value, 10);
+        const dayVal = parseInt(document.getElementById('recur-annual-day').value, 10);
+        recurrenceDays = { month: monthVal, day: dayVal };
+      }
+    }
 
     if (!isWhole && timeStart && timeEnd) {
       const [sh, sm] = timeStart.split(':').map(Number);
@@ -490,10 +667,13 @@ window.EventsApp = {
       visibility_departments: JSON.stringify(visibilityDepartments),
       visibility_teams: JSON.stringify(visibilityTeams),
       visibility_employees: JSON.stringify(visibilityEmployees),
+      is_recurring: isRecurring,
+      recurrence_pattern: recurrencePattern,
+      recurrence_days: recurrenceDays ? JSON.stringify(recurrenceDays) : null,
       is_date_range: isRange,
       is_whole_day: isWhole,
       date_from: dateFrom,
-      date_to: isRange ? dateTo : null,
+      date_to: dateTo,
       time_start: timeStart,
       time_end: timeEnd,
     };
