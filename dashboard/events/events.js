@@ -95,6 +95,117 @@ window.EventsApp = {
     this.loadData();
   },
 
+  async archivePastOccurrences(events) {
+    const recurringEvents = events.filter(ev => ev.is_recurring);
+    if (!recurringEvents.length) return false;
+
+    let archivedSomething = false;
+
+    for (const ev of recurringEvents) {
+      const start = new Date(ev.created_at || '2026-07-01');
+      start.setHours(0, 0, 0, 0);
+      const end = new Date();
+      const pastDates = [];
+
+      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+        let matches = false;
+        const pattern = ev.recurrence_pattern;
+        let days = [];
+        try {
+          days = typeof ev.recurrence_days === 'string' ? JSON.parse(ev.recurrence_days) : (ev.recurrence_days || []);
+        } catch (e) {}
+
+        if (pattern === 'weekly') {
+          const weekdayNames = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+          matches = (Array.isArray(days) && days.includes(weekdayNames[d.getDay()]));
+        } else if (pattern === 'monthly') {
+          const dayVal = Array.isArray(days) ? days[0] : days;
+          if (dayVal === 'last') {
+            const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+            matches = (d.getDate() === lastDay);
+          } else if (dayVal) {
+            const targetDay = parseInt(dayVal, 10);
+            const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+            matches = (d.getDate() === Math.min(targetDay, lastDay));
+          }
+        } else if (pattern === 'annual') {
+          matches = (d.getMonth() === days?.month && d.getDate() === days?.day);
+        }
+
+        if (matches) {
+          const occurrenceEnd = new Date(d);
+          if (ev.time_end) {
+            const [h, m] = ev.time_end.split(':').map(Number);
+            occurrenceEnd.setHours(h, m, 0, 0);
+          } else {
+            occurrenceEnd.setHours(23, 59, 59, 999);
+          }
+
+          if (occurrenceEnd < new Date()) {
+            pastDates.push(d.toISOString().split('T')[0]);
+          }
+        }
+      }
+
+      for (const dateStr of pastDates) {
+        const alreadyArchived = events.some(e => e.recurring_source_id === ev.id && e.date_from === dateStr);
+        if (alreadyArchived) continue;
+
+        try {
+          const archivePayload = {
+            company_id: ev.company_id,
+            title: ev.title,
+            description: ev.description,
+            visibility_level: ev.visibility_level,
+            visibility_type: ev.visibility_type,
+            visibility_departments: ev.visibility_departments,
+            visibility_teams: ev.visibility_teams,
+            visibility_employees: ev.visibility_employees,
+            is_recurring: false,
+            recurring_source_id: ev.id,
+            is_date_range: false,
+            is_whole_day: ev.is_whole_day,
+            date_from: dateStr,
+            date_to: null,
+            time_start: ev.time_start,
+            time_end: ev.time_end,
+            created_by: ev.created_by,
+            email_subject: ev.email_subject,
+            email_preheader: ev.email_preheader,
+            email_attendee_response: ev.email_attendee_response,
+            email_body_json: ev.email_body_json,
+            email_settings: ev.email_settings
+          };
+
+          const { data: newEv, error: insertError } = await getSb()
+            .from('company_events')
+            .insert(archivePayload)
+            .select()
+            .maybeSingle();
+
+          if (insertError) {
+            if (insertError.code === '23505') continue;
+            throw insertError;
+          }
+
+          if (newEv) {
+            const { error: updateError } = await getSb()
+              .from('company_event_attendees')
+              .update({ event_id: newEv.id })
+              .eq('event_id', ev.id);
+
+            if (updateError) throw updateError;
+            archivedSomething = true;
+          }
+        } catch (err) {
+          console.error(`Failed to archive occurrence ${dateStr} of recurring event ${ev.id}:`, err);
+        }
+      }
+    }
+
+    return archivedSomething;
+  },
+
   async loadData() {
     document.getElementById('month-label').textContent = `${MONTH_NAMES[this.currentMonth]} ${this.currentYear}`;
     const tbody = document.getElementById('events-table-body');
@@ -107,7 +218,6 @@ window.EventsApp = {
     const endDate   = `${this.currentYear}-${String(this.currentMonth + 1).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
 
     try {
-      // Fetch all events for the company
       const { data, error } = await getSb()
         .from('company_events')
         .select('*')
@@ -116,6 +226,12 @@ window.EventsApp = {
         .order('created_at', { ascending: true });
 
       if (error) throw error;
+
+      const didArchive = await this.archivePastOccurrences(data || []);
+      if (didArchive) {
+        return this.loadData();
+      }
+
       this.renderTable(data || [], startDate, endDate);
     } catch (err) {
       console.error(err);
