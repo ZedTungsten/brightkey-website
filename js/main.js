@@ -424,3 +424,75 @@ window.showTheaterImage = function(url) {
     img.style.transform = 'scale(1)';
   }, 10);
 };
+
+// ── Hybrid Stale Session Autorefresh (Visibility change + Idle timer) ──
+(function initStaleSessionAutorefresh() {
+  // Only activate on dashboard path urls
+  if (!window.location.pathname.includes('/dashboard')) return;
+
+  let lastInteractionTime = Date.now();
+  const idleRefreshThreshold = 10 * 60 * 1000; // 10 minutes of complete inactivity
+  const idleCheckInterval = 30 * 1000; // Check every 30 seconds
+
+  // List of events indicating user activity
+  const activityEvents = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
+  activityEvents.forEach(evtName => {
+    document.addEventListener(evtName, () => {
+      lastInteractionTime = Date.now();
+    }, { passive: true });
+  });
+
+  // 1. Visibility change handler: Immediately refresh when tab is focused/opened
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      triggerPageRefresh();
+    }
+  });
+
+  // 2. Window focus handler: Refresh when user switches back to the browser window
+  window.addEventListener('focus', () => {
+    triggerPageRefresh();
+  });
+
+  // 3. Background interval loop: Auto-refresh if user has been completely idle
+  setInterval(() => {
+    const idleDuration = Date.now() - lastInteractionTime;
+    if (idleDuration >= idleRefreshThreshold) {
+      // Check if user is currently typing/editing an input field
+      const activeEl = document.activeElement;
+      const isUserEditing = activeEl && (
+        activeEl.tagName === 'INPUT' ||
+        activeEl.tagName === 'TEXTAREA' ||
+        activeEl.tagName === 'SELECT' ||
+        activeEl.isContentEditable
+      );
+
+      if (!isUserEditing) {
+        triggerPageRefresh();
+      }
+    }
+  }, idleCheckInterval);
+
+  // Helper function to safely execute page-level refresh routines
+  function triggerPageRefresh() {
+    // Reset idle timer to avoid repeating multiple queries immediately
+    lastInteractionTime = Date.now();
+
+    // Context-dependent refresh functions
+    if (window.refreshDashboard && typeof window.refreshDashboard === 'function') {
+      window.refreshDashboard();
+    } else if (window.WarehousePage && typeof window.WarehousePage.runAutoSyncInBackground === 'function') {
+      window.WarehousePage.runAutoSyncInBackground();
+    } else if (window.DeliveryApp && typeof window.DeliveryApp.loadData === 'function') {
+      window.DeliveryApp.loadData();
+    } else if (window.BookkeepingApp && typeof window.BookkeepingApp.loadTransactions === 'function') {
+      window.BookkeepingApp.loadTransactions();
+    } else if (window.AttendanceApp && typeof window.AttendanceApp.loadData === 'function') {
+      window.AttendanceApp.loadData();
+    } else if (window.App && typeof window.App.loadData === 'function') {
+      window.App.loadData();
+    } else if (window.BKRefreshShipmentsBadge && typeof window.BKRefreshShipmentsBadge === 'function') {
+      window.BKRefreshShipmentsBadge();
+    }
+  }
+})();
