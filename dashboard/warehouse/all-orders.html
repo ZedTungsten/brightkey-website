@@ -866,7 +866,34 @@
         return;
       }
 
-      tbody.innerHTML = orders.map(t => {
+      // Consolidate same SKU with their Qty in 1 order number, date created, customer / source, movement stats, they're all the same order
+      const groupedOrders = {};
+      orders.forEach(t => {
+        const refId = t.reference_id || t.id;
+        if (!groupedOrders[refId]) {
+          groupedOrders[refId] = {
+            id: t.id,
+            reference_id: t.reference_id,
+            created_at: t.created_at,
+            customer_name: t.customer_name,
+            customer_city: t.customer_city,
+            type: t.type,
+            status: t.status,
+            timestamp_reserved: t.timestamp_reserved,
+            timestamp_inspect: t.timestamp_inspect,
+            timestamp_packed: t.timestamp_packed,
+            timestamp_dispatched: t.timestamp_dispatched,
+            timestamp_received: t.timestamp_received,
+            items: []
+          };
+        }
+        groupedOrders[refId].items.push(t);
+      });
+
+      const consolidatedList = Object.values(groupedOrders);
+
+      tbody.innerHTML = consolidatedList.map(group => {
+        const t = group.items[0]; // representative transaction
         const dateCreated = t.created_at ? new Date(t.created_at).toLocaleString() : '—';
         
         // Show proper supplier PO or reference if no customer name exists
@@ -887,8 +914,10 @@
           }
         }
         if (!city) city = '—';
-        const sku = t.sku || '—';
-        const qty = t.quantity || 0;
+
+        // Consolidate unique SKUs and total quantity
+        const uniqueSkus = Array.from(new Set(group.items.map(x => x.sku || '—'))).join(', ');
+        const qty = group.items.reduce((sum, item) => sum + (item.quantity || 0), 0);
 
         const tsReserved = t.timestamp_reserved ? new Date(t.timestamp_reserved).toLocaleString() : '—';
         const tsInspect = t.timestamp_inspect ? new Date(t.timestamp_inspect).toLocaleString() : '—';
@@ -912,9 +941,10 @@
           </button>
         `;
 
+        const allIds = group.items.map(x => x.id).join(',');
         const checkboxCell = isBulkEditMode ? `
           <td style="text-align: center;">
-            <input type="checkbox" data-bulk-checkbox="${t.id}" data-sku="${sku}" data-qty="${qty}" data-status="${t.status}" onchange="window.updateBulkSelectedCount()" style="width: 16px; height: 16px; cursor: pointer;" />
+            <input type="checkbox" data-bulk-checkbox="${allIds}" data-group-items='${JSON.stringify(group.items.map(x => ({ id: x.id, sku: x.sku, qty: x.quantity, status: x.status })))}' onchange="window.updateBulkSelectedCount()" style="width: 16px; height: 16px; cursor: pointer;" />
           </td>
         ` : '';
 
@@ -925,7 +955,7 @@
             <td>${escFulfillment(dateCreated)}</td>
             <td class="order-client-cell" style="cursor:pointer;" onclick="window.showOrderDetailsModal('${t.id}')" title="Click to view details & proofs"><strong>${escFulfillment(client)}</strong></td>
             <td>${escFulfillment(city)}</td>
-            <td><code>${escFulfillment(sku)}</code></td>
+            <td><code>${escFulfillment(uniqueSkus)}</code></td>
             <td class="text-center"><strong>${qty}</strong></td>
             <td>${statsHtml}</td>
             <td>${actionHtml}</td>
@@ -1001,8 +1031,6 @@
 
     window.saveTxFromModal = async function() {
       const id = document.getElementById('edit-tx-id').value;
-      const sku = document.getElementById('edit-tx-sku').value;
-      const qty = parseInt(document.getElementById('edit-tx-qty').value) || 0;
       const oldStatus = document.getElementById('edit-tx-oldstatus').value;
       const newStatus = document.getElementById('edit-tx-status').value;
 
@@ -1033,14 +1061,12 @@
         timestamp_received: tsReceived
       };
 
-      // If status changed and we didn't manually input a timestamp for the new status, default to now
       if (newStatus !== oldStatus) {
         const timestampCol = `timestamp_${newStatus}`;
         if (!updateData[timestampCol]) {
           updateData[timestampCol] = new Date().toISOString();
         }
 
-        // Clear later stage timestamps if moving back to an earlier stage
         const clearTimestamps = {
           'reserved': ['timestamp_inspect', 'timestamp_packed', 'timestamp_dispatched', 'timestamp_received', 'timestamp_cancelled', 'timestamp_returned'],
           'inspect': ['timestamp_packed', 'timestamp_dispatched', 'timestamp_received', 'timestamp_cancelled', 'timestamp_returned'],
@@ -1057,38 +1083,55 @@
       }
 
       try {
-        // 1. If status changed, adjust stock columns
+        const representativeTx = activeTransactions.find(x => x.id === id);
+        if (!representativeTx) throw new Error('Transaction not found');
+
+        const orderTxs = activeTransactions.filter(x => 
+          (representativeTx.reference_id && x.reference_id === representativeTx.reference_id) || 
+          (!representativeTx.reference_id && x.id === representativeTx.id)
+        );
+
+        // 1. If status changed, adjust stock columns for each item in the order
         if (newStatus !== oldStatus) {
           const oldCol = statusToCol[oldStatus];
           const newCol = statusToCol[newStatus];
 
-          let invQ = sb.from('inventory').select('*').eq('sku', sku);
-          if (activeWarehouseId) invQ = invQ.eq('warehouse_id', activeWarehouseId);
-          else invQ = invQ.is('warehouse_id', null);
-          const { data: invRow, error: invErr } = await invQ;
-          if (invErr) throw invErr;
+          for (const itemTx of orderTxs) {
+            let invQ = sb.from('inventory').select('*').eq('sku', itemTx.sku);
+            if (activeWarehouseId) invQ = invQ.eq('warehouse_id', activeWarehouseId);
+            else invQ = invQ.is('warehouse_id', null);
+            const { data: invRow, error: invErr } = await invQ;
+            if (invErr) throw invErr;
 
-          if (invRow && invRow.length > 0) {
-            const inv = invRow[0];
-            const updates = {};
-            if (oldCol && oldCol in inv) {
-              updates[oldCol] = Math.max(0, (inv[oldCol] || 0) - qty);
-            }
-            if (newCol && newCol in inv) {
-              updates[newCol] = (inv[newCol] || 0) + qty;
-            }
-            if (Object.keys(updates).length > 0) {
-              const { error: updErr } = await sb.from('inventory').update(updates).eq('id', inv.id);
-              if (updErr) throw updErr;
+            if (invRow && invRow.length > 0) {
+              const inv = invRow[0];
+              const updates = {};
+              if (oldCol && oldCol in inv) {
+                updates[oldCol] = Math.max(0, (inv[oldCol] || 0) - itemTx.quantity);
+              }
+              if (newCol && newCol in inv) {
+                updates[newCol] = (inv[newCol] || 0) + itemTx.quantity;
+              }
+              if (Object.keys(updates).length > 0) {
+                const { error: updErr } = await sb.from('inventory').update(updates).eq('id', inv.id);
+                if (updErr) throw updErr;
+              }
             }
           }
         }
 
-        // 2. Save the transaction update
-        const { error: txErr } = await sb.from('inventory_transactions').update(updateData).eq('id', id);
+        // 2. Save the transaction update across all transactions in this order
+        let txQuery = sb.from('inventory_transactions').update(updateData);
+        if (representativeTx.reference_id) {
+          txQuery = txQuery.eq('reference_id', representativeTx.reference_id);
+        } else {
+          txQuery = txQuery.eq('id', id);
+        }
+        
+        const { error: txErr } = await txQuery;
         if (txErr) throw txErr;
 
-        showToast('Transaction saved successfully.');
+        showToast('Order saved successfully.');
         closeEditTxModal();
         await refreshDashboard();
       } catch (err) {
@@ -1211,7 +1254,12 @@
 
       document.getElementById('odetail-order-no').textContent = t.reference_id || '—';
       document.getElementById('odetail-customer-name').textContent = t.customer_name || '—';
-      document.getElementById('odetail-sku-qty').textContent = `[${t.sku || '—'}] x${t.quantity || 0}`;
+      const allTxForOrder = activeTransactions.filter(x => 
+        (t.reference_id && x.reference_id === t.reference_id) || 
+        (!t.reference_id && x.id === t.id)
+      );
+      const skuQtyListStr = allTxForOrder.map(x => `[${x.sku || '—'}] x${x.quantity || 0}`).join(', ');
+      document.getElementById('odetail-sku-qty').textContent = skuQtyListStr;
       document.getElementById('odetail-status').textContent = t.status || '—';
       document.getElementById('odetail-booking-date').textContent = bookingDateStr;
       document.getElementById('odetail-install-date').textContent = installDate;
@@ -1631,55 +1679,57 @@
         const newStatus = action;
         const newCol = statusToCol[newStatus];
 
-        const promises = checkedBoxes.map(async (chk) => {
-          const id = chk.getAttribute('data-bulk-checkbox');
-          const sku = chk.getAttribute('data-sku');
-          const qty = parseInt(chk.getAttribute('data-qty') || '0', 10);
-          const oldStatus = chk.getAttribute('data-status');
+        const promises = [];
+        checkedBoxes.forEach(chk => {
+          const groupItems = JSON.parse(chk.getAttribute('data-group-items') || '[]');
+          
+          groupItems.forEach(item => {
+            if (item.status === newStatus) return;
 
-          if (oldStatus === newStatus) return;
+            const oldCol = statusToCol[item.status];
+            const updateData = { status: newStatus };
+            const timestampCol = `timestamp_${newStatus}`;
+            updateData[timestampCol] = now;
 
-          const oldCol = statusToCol[oldStatus];
+            const clearTimestamps = {
+              'reserved': ['timestamp_inspect', 'timestamp_packed', 'timestamp_dispatched', 'timestamp_cancelled', 'timestamp_returned'],
+              'inspect': ['timestamp_packed', 'timestamp_dispatched', 'timestamp_cancelled', 'timestamp_returned'],
+              'packed': ['timestamp_dispatched', 'timestamp_cancelled', 'timestamp_returned'],
+              'dispatched': ['timestamp_cancelled', 'timestamp_returned'],
+              'received': [],
+              'cancelled': [],
+              'returned': []
+            };
+            const colsToClear = clearTimestamps[newStatus] || [];
+            colsToClear.forEach(col => {
+              updateData[col] = null;
+            });
 
-          const updateData = { status: newStatus };
-          const timestampCol = `timestamp_${newStatus}`;
-          updateData[timestampCol] = now;
+            promises.push((async () => {
+              const { error: txErr } = await sb.from('inventory_transactions').update(updateData).eq('id', item.id);
+              if (txErr) throw txErr;
 
-          const clearTimestamps = {
-            'reserved': ['timestamp_inspect', 'timestamp_packed', 'timestamp_dispatched', 'timestamp_cancelled', 'timestamp_returned'],
-            'inspect': ['timestamp_packed', 'timestamp_dispatched', 'timestamp_cancelled', 'timestamp_returned'],
-            'packed': ['timestamp_dispatched', 'timestamp_cancelled', 'timestamp_returned'],
-            'dispatched': ['timestamp_cancelled', 'timestamp_returned'],
-            'cancelled': [],
-            'returned': []
-          };
-          const colsToClear = clearTimestamps[newStatus] || [];
-          colsToClear.forEach(col => {
-            updateData[col] = null;
+              let invQ = sb.from('inventory').select('*').eq('sku', item.sku);
+              if (activeWarehouseId) invQ = invQ.eq('warehouse_id', activeWarehouseId);
+              else invQ = invQ.is('warehouse_id', null);
+              const { data: invRow, error: invErr } = await invQ;
+              if (invErr) throw invErr;
+              if (invRow && invRow.length > 0) {
+                const inv = invRow[0];
+                const updates = {};
+                if (oldCol && oldCol in inv) {
+                  updates[oldCol] = Math.max(0, (inv[oldCol] || 0) - item.qty);
+                }
+                if (newCol && newCol in inv) {
+                  updates[newCol] = (inv[newCol] || 0) + item.qty;
+                }
+                if (Object.keys(updates).length > 0) {
+                  const { error: updErr } = await sb.from('inventory').update(updates).eq('id', inv.id);
+                  if (updErr) throw updErr;
+                }
+              }
+            })());
           });
-
-          const { error: txErr } = await sb.from('inventory_transactions').update(updateData).eq('id', id);
-          if (txErr) throw txErr;
-
-          let invQ = sb.from('inventory').select('*').eq('sku', sku);
-          if (activeWarehouseId) invQ = invQ.eq('warehouse_id', activeWarehouseId);
-          else invQ = invQ.is('warehouse_id', null);
-          const { data: invRow, error: invErr } = await invQ;
-          if (invErr) throw invErr;
-          if (invRow && invRow.length > 0) {
-            const inv = invRow[0];
-            const updates = {};
-            if (oldCol && oldCol in inv) {
-              updates[oldCol] = Math.max(0, (inv[oldCol] || 0) - qty);
-            }
-            if (newCol && newCol in inv) {
-              updates[newCol] = (inv[newCol] || 0) + qty;
-            }
-            if (Object.keys(updates).length > 0) {
-              const { error: updErr } = await sb.from('inventory').update(updates).eq('id', inv.id);
-              if (updErr) throw updErr;
-            }
-          }
         });
 
         await Promise.all(promises);
@@ -1747,28 +1797,30 @@
           'returned': 'returned'
         };
 
-        const promises = checkedBoxes.map(async (chk) => {
-          const sku = chk.getAttribute('data-sku');
-          const qty = parseInt(chk.getAttribute('data-qty') || '0', 10);
-          const status = chk.getAttribute('data-status');
-          const col = statusToCol[status];
-
-          if (col) {
-            let invQ = sb.from('inventory').select('*').eq('sku', sku);
-            if (activeWarehouseId) invQ = invQ.eq('warehouse_id', activeWarehouseId);
-            else invQ = invQ.is('warehouse_id', null);
-            const { data: invRow, error: invErr } = await invQ;
-            if (invErr) throw invErr;
-            if (invRow && invRow.length > 0) {
-              const inv = invRow[0];
-              if (col in inv) {
-                const { error: updErr } = await sb.from('inventory').update({
-                  [col]: Math.max(0, (inv[col] || 0) - qty)
-                }).eq('id', inv.id);
-                if (updErr) throw updErr;
-              }
+        const promises = [];
+        checkedBoxes.forEach(chk => {
+          const groupItems = JSON.parse(chk.getAttribute('data-group-items') || '[]');
+          groupItems.forEach(item => {
+            const col = statusToCol[item.status];
+            if (col) {
+              promises.push((async () => {
+                let invQ = sb.from('inventory').select('*').eq('sku', item.sku);
+                if (activeWarehouseId) invQ = invQ.eq('warehouse_id', activeWarehouseId);
+                else invQ = invQ.is('warehouse_id', null);
+                const { data: invRow, error: invErr } = await invQ;
+                if (invErr) throw invErr;
+                if (invRow && invRow.length > 0) {
+                  const inv = invRow[0];
+                  if (col in inv) {
+                    const { error: updErr } = await sb.from('inventory').update({
+                      [col]: Math.max(0, (inv[col] || 0) - item.qty)
+                    }).eq('id', inv.id);
+                    if (updErr) throw updErr;
+                  }
+                }
+              })());
             }
-          }
+          });
         });
 
         await Promise.all(promises);
