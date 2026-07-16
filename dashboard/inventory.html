@@ -660,7 +660,7 @@
 
                 </div>
               </div>
-              <div class="inventory-pager-bar">
+              <div class="inventory-pager-bar" style="display: none;">
                 <div class="inventory-pager-info" id="inventory-page-info">Loading products...</div>
                 <div class="inventory-pager" id="inventory-pager"></div>
               </div>
@@ -1488,37 +1488,24 @@
         query = query ? applyInventorySearchFilter(query) : null;
 
         if (!query) {
-          tbody.innerHTML = `<tr><td colspan="11" class="text-center">No products match the selected filters.</td></tr>`;
+          tbody.innerHTML = `<tr><td colspan="6" class="text-center">No products match the selected filters.</td></tr>`;
           updateSortIndicators();
-          renderInventoryPager(0, 1);
           return;
         }
 
-        const startIndex = (inventoryPage - 1) * inventoryPageSize;
-        const endIndex = startIndex + inventoryPageSize - 1;
-        const { data, error, count } = await query
-          .order(querySortCol, { ascending, nullsFirst: false })
-          .range(startIndex, endIndex);
+        const { data, error } = await query
+          .order(querySortCol, { ascending, nullsFirst: false });
 
         if (error) throw error;
         if (renderSeq !== inventoryRenderSeq) return;
 
         allProducts = data || [];
-        const totalItems = count || 0;
-        const totalPages = Math.max(1, Math.ceil(totalItems / inventoryPageSize));
-        if (inventoryPage > totalPages) {
-          inventoryPage = totalPages;
-          renderInventorySummary();
-          return;
-        }
-        if (inventoryPage < 1) inventoryPage = 1;
 
         tbody.innerHTML = '';
 
         if (allProducts.length === 0) {
           tbody.innerHTML = `<tr><td colspan="6" class="text-center">No products match the selected filters.</td></tr>`;
           updateSortIndicators();
-          renderInventoryPager(0, 1);
           return;
         }
 
@@ -1530,12 +1517,10 @@
           });
         }
 
-        renderInventoryPager(totalItems, totalPages);
         allProducts.forEach(p => appendInventoryRow(tbody, p));
       } catch (err) {
-        console.error('Error loading paged inventory products:', err);
+        console.error('Error loading inventory products:', err);
         tbody.innerHTML = `<tr><td colspan="6" class="text-center" style="color:var(--danger);">Failed to load products: ${escFulfillment(err.message || 'Unknown error')}</td></tr>`;
-        renderInventoryPager(0, 1);
       }
 
       tbody.innerHTML += `<tr class="table-spacer-row" style="height: auto; border: none; background: transparent !important;"><td colspan="6" style="padding: 0; border: none; background: transparent !important; pointer-events: none;"></td></tr>`;
