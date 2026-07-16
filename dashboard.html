@@ -824,6 +824,33 @@
       });
     }
 
+    function formatRichText(text, appInstance) {
+      if (!text) return '';
+      let out = String(text)
+        .replace(/\{\{firstname\}\}/gi, appInstance.firstName || '')
+        .replace(/\{\{lastname\}\}/gi, appInstance.lastName || '')
+        .replace(/\{\{email\}\}/gi, appInstance.currentUser?.email || '')
+        .replace(/\{\{workemail\}\}/gi, appInstance.currentUser?.email || '')
+        .replace(/\{\{department\}\}/gi, appInstance.department || '')
+        .replace(/\{\{reportingto\}\}/gi, appInstance.reportingTo || '');
+      
+      out = esc(out);
+      out = out
+        .replace(/&lt;u&gt;/g, '<u>')
+        .replace(/&lt;\/u&gt;/g, '</u>');
+
+      out = out
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/_(.+?)_/g, '<em>$1</em>');
+        
+      const urlRegex = /(https?:\/\/[^\s]+)/g;
+      out = out.replace(urlRegex, (url) => {
+        return `<a href="${url}" target="_blank" style="color:var(--cyan-light); text-decoration:none; font-weight:600;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">${url}</a>`;
+      });
+
+      return out.replace(/\n/g, '<br/>');
+    }
+
     const App = {
       currentUser: null,
       companyId: null,
@@ -1506,7 +1533,7 @@
         if (!modal || !titleEl || !datetimeEl || !descEl) return;
 
         titleEl.textContent = ev.title;
-        descEl.innerHTML = formatTextWithLinks(ev.description || 'No description provided.');
+        descEl.innerHTML = formatRichText(ev.description || 'No description provided.', this);
 
         // Format Date/Time
         const formatDate = (dateStr) => {
@@ -1549,13 +1576,13 @@
             let emailHtml = '';
             ev.email_body_json.forEach(block => {
               if (block.type === 'header') {
-                emailHtml += `<div style="font-size: 1.05rem; font-weight: 700; color: var(--text-primary); margin-top: 0.25rem;">${formatTextWithLinks(block.value)}</div>`;
+                emailHtml += `<div style="font-size: 1.05rem; font-weight: 700; color: var(--text-primary); margin-top: 0.25rem;">${formatRichText(block.value, this)}</div>`;
               } else if (block.type === 'subheader') {
-                emailHtml += `<div style="font-size: 0.88rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.25rem;">${formatTextWithLinks(block.value)}</div>`;
+                emailHtml += `<div style="font-size: 0.88rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.25rem;">${formatRichText(block.value, this)}</div>`;
               } else if (block.type === 'body') {
-                emailHtml += `<div style="font-size: 0.82rem; color: var(--text-primary); white-space: pre-wrap; line-height: 1.5; margin-bottom: 0.25rem;">${formatTextWithLinks(block.value)}</div>`;
+                emailHtml += `<div style="font-size: 0.82rem; color: var(--text-primary); white-space: pre-wrap; line-height: 1.5; margin-bottom: 0.25rem;">${formatRichText(block.value, this)}</div>`;
               } else if (block.type === 'signature') {
-                emailHtml += `<div style="font-size: 0.8rem; color: var(--text-muted); white-space: pre-wrap; margin-top: 0.5rem; border-top: 1px dashed var(--border); padding-top: 0.5rem; font-style: italic;">${formatTextWithLinks(block.value)}</div>`;
+                emailHtml += `<div style="font-size: 0.8rem; color: var(--text-muted); white-space: pre-wrap; margin-top: 0.5rem; border-top: 1px dashed var(--border); padding-top: 0.5rem; font-style: italic;">${formatRichText(block.value, this)}</div>`;
               }
             });
             emailContent.innerHTML = emailHtml;
