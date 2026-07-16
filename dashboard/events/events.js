@@ -189,7 +189,7 @@ window.EventsApp = {
     try {
       const { data: emps, error } = await getSb()
         .from('employees')
-        .select('id, first_name, last_name, department, position')
+        .select('id, first_name, last_name, department, title')
         .eq('employment_status', 'Active')
         .order('first_name');
 
@@ -201,7 +201,7 @@ window.EventsApp = {
       const teams = new Set();
       this.loadedEmployees.forEach(e => {
         if (e.department) depts.add(e.department);
-        if (e.position) teams.add(e.position);
+        if (e.title) teams.add(e.title);
       });
 
       this.loadedDepartments = Array.from(depts).sort();
