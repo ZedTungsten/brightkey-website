@@ -1702,6 +1702,41 @@
       if (!confirmed) return;
 
       try {
+        // 1. Fetch file details to clean up Storage files
+        const { data: item, error: fetchErr } = await sb.from('sales_resources')
+          .select('type, file_url, thumbnail_url')
+          .eq('id', id)
+          .maybeSingle();
+
+        if (fetchErr) throw fetchErr;
+
+        if (item && item.type === 'file') {
+          const filesToRemove = [];
+          
+          // Original file path resolution
+          if (item.file_url && item.file_url.includes('storage/v1/object/public/brightkey-assets/')) {
+            const fileRelativePath = item.file_url.substring(item.file_url.indexOf('brightkey-assets/') + 'brightkey-assets/'.length);
+            filesToRemove.push(fileRelativePath);
+          }
+
+          // Thumbnail path resolution
+          if (item.thumbnail_url && item.thumbnail_url.includes('storage/v1/object/public/brightkey-assets/')) {
+            const thumbRelativePath = item.thumbnail_url.substring(item.thumbnail_url.indexOf('brightkey-assets/') + 'brightkey-assets/'.length);
+            filesToRemove.push(thumbRelativePath);
+          }
+
+          // Remove files from Supabase Storage Bucket 'brightkey-assets'
+          if (filesToRemove.length > 0) {
+            const { error: storageErr } = await sb.storage
+              .from('brightkey-assets')
+              .remove(filesToRemove);
+            if (storageErr) {
+              console.warn('[Storage Cleanup] Failed to remove some storage files:', storageErr);
+            }
+          }
+        }
+
+        // 2. Delete database entry
         const { error } = await sb.from('sales_resources')
           .delete()
           .eq('id', id);
