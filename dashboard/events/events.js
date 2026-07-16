@@ -1113,6 +1113,7 @@ window.EventsApp = {
         .select(`
           status,
           opened,
+          responded_via,
           updated_at,
           employees (
             first_name,
@@ -1130,7 +1131,8 @@ window.EventsApp = {
         return;
       }
 
-      let sentCount = records.length;
+      let sentCount = records.filter(r => r.responded_via !== 'calendar').length;
+      let calendarCount = records.filter(r => r.responded_via === 'calendar').length;
       let openedCount = 0;
       let attendingCount = 0;
       let declinedCount = 0;
@@ -1143,6 +1145,11 @@ window.EventsApp = {
         if (r.opened) openedCount++;
         if (r.status === 'attending') attendingCount++;
         else if (r.status === 'not_attending') declinedCount++;
+
+        // Responded Via badge
+        const respondedViaBadge = r.responded_via === 'calendar'
+          ? `<span style="display:inline-block;padding:2px 6px;font-size:0.68rem;font-weight:700;border-radius:4px;background:#e0f2fe;color:#0369a1;">Calendar</span>`
+          : `<span style="display:inline-block;padding:2px 6px;font-size:0.68rem;font-weight:700;border-radius:4px;background:#f5f3ff;color:#6d28d9;">Email</span>`;
 
         // Opened badge
         const openedBadge = r.opened 
@@ -1167,6 +1174,7 @@ window.EventsApp = {
           <tr>
             <td style="font-weight:600;">${esc(fullName)}</td>
             <td>${esc(dept)}</td>
+            <td style="text-align:center;">${respondedViaBadge}</td>
             <td style="text-align:center;">${openedBadge}</td>
             <td style="text-align:center;">${rsvpBadge}</td>
             <td style="text-align:center;color:var(--text-muted);font-size:0.75rem;">${lastResponse}</td>
@@ -1176,12 +1184,13 @@ window.EventsApp = {
 
       document.getElementById('stat-sent-count').textContent = sentCount;
       document.getElementById('stat-opened-count').textContent = openedCount;
+      document.getElementById('stat-calendar-count').textContent = calendarCount;
       document.getElementById('stat-attending-count').textContent = attendingCount;
       document.getElementById('stat-declined-count').textContent = declinedCount;
 
     } catch (e) {
       console.error(e);
-      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--red);">Failed to load analytics tracking data.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--red);">Failed to load analytics tracking data.</td></tr>';
     }
   },
 
