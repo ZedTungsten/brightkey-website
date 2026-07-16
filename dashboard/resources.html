@@ -991,16 +991,23 @@
         if (item.type === 'folder') {
           iconHtml = `<svg viewBox="0 0 24 24" width="32" height="32" stroke="currentColor" stroke-width="2" fill="none"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>`;
         } else {
-          // If grid mode and image, try to load a small, low-quality thumbnail from Supabase Storage
-          if (explorerViewMode === 'grid' && ['png', 'jpg', 'jpeg'].includes(item.file_type) && item.file_url.includes('storage/v1/object/public/brightkey-assets/')) {
-            const relativePath = item.file_url.substring(item.file_url.indexOf('brightkey-assets/') + 'brightkey-assets/'.length);
-            const { data } = sb.storage.from('brightkey-assets').getPublicUrl(relativePath, {
-              transform: {
-                width: 200,
-                quality: 60
+          // If grid mode and image, load the pre-generated small thumbnail, or fall back to transformation, then original file
+          if (explorerViewMode === 'grid' && ['png', 'jpg', 'jpeg'].includes(item.file_type)) {
+            let thumbUrl = item.thumbnail_url;
+            if (!thumbUrl && item.file_url.includes('storage/v1/object/public/brightkey-assets/')) {
+              try {
+                const relativePath = item.file_url.substring(item.file_url.indexOf('brightkey-assets/') + 'brightkey-assets/'.length);
+                const { data } = sb.storage.from('brightkey-assets').getPublicUrl(relativePath, {
+                  transform: { width: 200, quality: 60 }
+                });
+                thumbUrl = data.publicUrl;
+              } catch (e) {
+                console.warn('[Thumbnail Fallback] Transform failed:', e);
               }
-            });
-            iconHtml = `<img src="${data.publicUrl}" style="width:100%; height:100%; object-fit:cover; border-radius:6px;" onerror="this.onerror=null; this.src='${item.file_url}';" />`;
+            }
+            // If both fail, fall back to default vector icon instead of full resolution file to avoid bandwidth spikes
+            const fallbackIcon = `<svg viewBox="0 0 24 24" width="30" height="30" stroke="currentColor" stroke-width="2" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>`;
+            iconHtml = `<img src="${thumbUrl || item.file_url}" style="width:100%; height:100%; object-fit:cover; border-radius:6px;" onerror="this.outerHTML='${fallbackIcon}';" />`;
           } else {
             // File icons depending on file_type
             if (item.file_type === 'pdf') {
@@ -1445,6 +1452,26 @@
             .from('brightkey-assets')
             .getPublicUrl(filePath);
 
+          // Pre-generate client-side thumbnail if file is an image
+          let thumbUrl = null;
+          if (['png', 'jpg', 'jpeg'].includes(ext)) {
+            try {
+              const thumbBlob = await generateImageThumbnail(file);
+              const thumbPath = `companies/${currentCompanyId}/sales-resources/thumbs/${Date.now()}_thumb_${file.name.replace(/\.[^/.]+$/, "")}.jpg`;
+              const { data: tData, error: tErr } = await sb.storage
+                .from('brightkey-assets')
+                .upload(thumbPath, thumbBlob, { cacheControl: '604800', upsert: false });
+              if (!tErr) {
+                const { data: { publicUrl: resolvedThumb } } = sb.storage
+                  .from('brightkey-assets')
+                  .getPublicUrl(thumbPath);
+                thumbUrl = resolvedThumb;
+              }
+            } catch (thumbErr) {
+              console.warn('[Thumbnail Generator] Failed to generate thumbnail:', thumbErr);
+            }
+          }
+
           // Save Database Entry
           const { error: dbErr } = await sb.from('sales_resources').insert([{
             company_id: currentCompanyId,
@@ -1453,6 +1480,7 @@
             file_type: fileType,
             file_url: publicUrl,
             file_size: file.size,
+            thumbnail_url: thumbUrl,
             parent_id: currentFolderId
           }]);
 
@@ -1557,6 +1585,26 @@
         // Strip file extension to get resource name
         const baseName = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
 
+        // Pre-generate client-side thumbnail if file is an image
+        let thumbUrl = null;
+        if (['png', 'jpg', 'jpeg'].includes(ext)) {
+          try {
+            const thumbBlob = await generateImageThumbnail(file);
+            const thumbPath = `companies/${currentCompanyId}/sales-resources/thumbs/${Date.now()}_thumb_${file.name.replace(/\.[^/.]+$/, "")}.jpg`;
+            const { data: tData, error: tErr } = await sb.storage
+              .from('brightkey-assets')
+              .upload(thumbPath, thumbBlob, { cacheControl: '604800', upsert: false });
+            if (!tErr) {
+              const { data: { publicUrl: resolvedThumb } } = sb.storage
+                .from('brightkey-assets')
+                .getPublicUrl(thumbPath);
+              thumbUrl = resolvedThumb;
+            }
+          } catch (thumbErr) {
+            console.warn('[Thumbnail Generator] Failed to generate thumbnail:', thumbErr);
+          }
+        }
+
         const { error: dbErr } = await sb.from('sales_resources').insert([{
           company_id: currentCompanyId,
           name: baseName,
@@ -1564,6 +1612,7 @@
           file_type: fileType,
           file_url: publicUrl,
           file_size: file.size,
+          thumbnail_url: thumbUrl,
           parent_id: currentFolderId
         }]);
 
@@ -1792,6 +1841,30 @@
       btn.classList.add('active');
       showToast(`Switched spreadsheet view to Tab ${tabIndex}`);
     };
+
+    // Client-side canvas utility to generate a 200px width compressed image thumbnail blob
+    async function generateImageThumbnail(file) {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          const img = new Image();
+          img.onload = function() {
+            const canvas = document.createElement('canvas');
+            const maxW = 200;
+            const scale = maxW / img.width;
+            canvas.width = maxW;
+            canvas.height = img.height * scale;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            canvas.toBlob((blob) => {
+              resolve(blob);
+            }, 'image/jpeg', 0.7); // 70% quality jpeg thumbnail
+          };
+          img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+      });
+    }
 
     // 2-page search & jump logic
     window.searchInsideViewer = function() {
