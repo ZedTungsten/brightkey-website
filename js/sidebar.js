@@ -403,6 +403,7 @@
             <span id="commissions-badge-dot" style="display: none; width: 6px; height: 6px; border-radius: 50%; background-color: #ef4444;"></span>
           </a>
           <a href="/dashboard/sales-stocks" class="dash-nav-child" data-role="sales">Stocks</a>
+          <a href="/dashboard/resources" class="dash-nav-child" data-role="sales">Resources</a>
         </div>
       </div>
 
