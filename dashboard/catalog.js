@@ -577,7 +577,7 @@
     // Load features
     if (p && p.business && FEATURE_DEFS[p.business]) {
       const featureDef = FEATURE_DEFS[p.business];
-      const { data: fData } = await sbClient.from(featureDef.table).select('*').eq('product_id', id).single();
+      const { data: fData } = await sbClient.from(featureDef.table).select('*').eq('product_id', id).maybeSingle();
       if (fData) {
         editingFeatureId = fData.id;
         fillFeatures(p.business, fData);
@@ -1433,7 +1433,7 @@
           if (featureDef) {
             const featData = collectFeatures(business);
             for (const productId of selectedProductIds) {
-              const { data: existing } = await sbClient.from(featureDef.table).select('id').eq('product_id', productId).single();
+              const { data: existing } = await sbClient.from(featureDef.table).select('id').eq('product_id', productId).maybeSingle();
               if (existing) {
                 await sbClient.from(featureDef.table).update(featData).eq('id', existing.id);
               } else {
@@ -1484,7 +1484,7 @@
           await sbClient.from(featureDef.table).update(featData).eq('id', editingFeatureId);
         } else {
           // Check if a features row already exists
-          const { data: existing } = await sbClient.from(featureDef.table).select('id').eq('product_id', productId).single();
+          const { data: existing } = await sbClient.from(featureDef.table).select('id').eq('product_id', productId).maybeSingle();
           if (existing) {
             await sbClient.from(featureDef.table).update(featData).eq('id', existing.id);
           } else {
@@ -1557,7 +1557,7 @@
 
     if (p && p.business && FEATURE_DEFS[p.business]) {
       const featureDef = FEATURE_DEFS[p.business];
-      const { data: fData } = await sbClient.from(featureDef.table).select('*').eq('product_id', id).single();
+      const { data: fData } = await sbClient.from(featureDef.table).select('*').eq('product_id', id).maybeSingle();
       if (fData) {
         fillFeatures(p.business, fData);
       }
@@ -2367,11 +2367,15 @@
             if (editingFeatureId) {
               await sbClient.from(featureDef.table).update(featData).eq('id', editingFeatureId);
             } else {
-              const { data: existing } = await sbClient.from(featureDef.table).select('id').eq('product_id', editingId).single();
+              const { data: existing } = await sbClient.from(featureDef.table).select('id').eq('product_id', editingId).maybeSingle();
               if (existing) {
                 await sbClient.from(featureDef.table).update(featData).eq('id', existing.id);
+                editingFeatureId = existing.id;
               } else {
-                await sbClient.from(featureDef.table).insert(featData);
+                const { data: newFeat } = await sbClient.from(featureDef.table).insert(featData).select('id').maybeSingle();
+                if (newFeat) {
+                  editingFeatureId = newFeat.id;
+                }
               }
             }
           }
