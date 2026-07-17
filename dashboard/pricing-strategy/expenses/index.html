@@ -492,13 +492,23 @@
     async function saveSettingsToDb() {
       setSaveStatus('saving');
       try {
+        let latestValue = {};
+        const { data: globalSet } = await sb.from('global_settings')
+          .select('value')
+          .eq('key', 'pricing_strategy_settings')
+          .eq('company_id', companyId)
+          .maybeSingle();
+        if (globalSet?.value) {
+          latestValue = globalSet.value;
+        }
+
+        latestValue.selected_business = selectedBusiness;
+        latestValue.checked_months = checkedMonths;
+
         await sb.from('global_settings').upsert({
           company_id: companyId,
           key: 'pricing_strategy_settings',
-          value: {
-            selected_business: selectedBusiness,
-            checked_months: checkedMonths
-          }
+          value: latestValue
         }, { onConflict: 'company_id,key' });
         setSaveStatus('saved');
       } catch (err) {
