@@ -518,11 +518,19 @@
     const prevBtn = document.getElementById('drawer-prev');
     const nextBtn = document.getElementById('drawer-next');
     const titleEl = document.getElementById('drawer-title');
+    const saveBtn = document.getElementById('drawer-save');
 
     if (isBatchEditing) {
       titleEl.textContent = `Batch Edit (${selectedProductIds.length} Products)`;
       if (prevBtn) prevBtn.style.display = 'none';
       if (nextBtn) nextBtn.style.display = 'none';
+      if (saveBtn) {
+        saveBtn.style.display = 'inline-flex';
+        saveBtn.innerHTML = `
+          <svg viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+          Save Changes
+        `;
+      }
       return;
     }
 
@@ -530,7 +538,18 @@
       titleEl.textContent = 'Add Product';
       if (prevBtn) prevBtn.style.display = 'none';
       if (nextBtn) nextBtn.style.display = 'none';
+      if (saveBtn) {
+        saveBtn.style.display = 'inline-flex';
+        saveBtn.innerHTML = `
+          <svg viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+          Create Product
+        `;
+      }
       return;
+    }
+
+    if (saveBtn) {
+      saveBtn.style.display = 'none';
     }
 
     const currentIndex = filtered.findIndex(x => x.id === editingId);
