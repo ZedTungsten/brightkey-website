@@ -200,15 +200,15 @@
       }
 
       tr.innerHTML = `
-        <td style="font-weight: 600; color: var(--text-secondary);">${formatLogDate(dateString)}</td>
+        <td class="cell-date">${formatLogDate(dateString)}</td>
+        <td style="text-align: center; vertical-align: middle;">
+          <div class="user-badge" id="user-badge-${dateString}" style="${initials ? '' : 'display: none;'}">${initials}</div>
+        </td>
         <td>
           <textarea rows="1" class="cell-textarea" onblur="saveCell('${dateString}', 'item', this.value)" oninput="autoResizeTextarea(this)">${esc(log.item)}</textarea>
         </td>
         <td>
           <textarea rows="1" class="cell-textarea" onblur="saveCell('${dateString}', 'change_desc', this.value)" oninput="autoResizeTextarea(this)">${esc(log.change_desc)}</textarea>
-        </td>
-        <td style="text-align: center; vertical-align: middle;">
-          <div class="user-badge" id="user-badge-${dateString}" style="${initials ? '' : 'display: none;'}">${initials}</div>
         </td>
         <td>
           <textarea rows="1" class="cell-textarea" onblur="saveCell('${dateString}', 'reason', this.value)" oninput="autoResizeTextarea(this)">${esc(log.reason)}</textarea>
