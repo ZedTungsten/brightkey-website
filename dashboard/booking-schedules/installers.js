@@ -180,7 +180,7 @@
       }
 
       const hasServiceProduct = doorProducts.some(p => {
-        const prod = dbProducts.find(dbP => dbP.sku && dbP.sku.toUpperCase() === p.sku.toUpperCase());
+        const prod = dbProductsBySku.get(String(p.sku || '').toUpperCase());
         return prod && prod.category === 'Service';
       });
 
@@ -411,7 +411,7 @@
         showBookingDetails(selectedBooking.id);
       } catch (err) {
         console.error('Failed to update booking installers:', err);
-        showToast('Failed to update installers: ' + err.message);
+        showToast('The installer assignments could not be updated. Please check the selections and try again.', true);
       }
     };
 

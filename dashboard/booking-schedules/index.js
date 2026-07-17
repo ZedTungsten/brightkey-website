@@ -55,6 +55,7 @@
     let dbTransactionsMap = new Map();
     let dbEmployees = [];
     let dbProducts = [];
+    let dbProductsBySku = new Map();
     let bookingMediaRequirements = [];
     let bookingChecklist = [];
     let filteredBookings = [];
@@ -162,10 +163,15 @@
         const [employeesRes, assignmentsRes, productsRes] = await Promise.all([
           sb.from('employees').select('id, employee_number, first_name, last_name, title, department, assignment'),
           sb.from('employee_assignments').select('id, name, visibility').eq('company_id', currentCompanyId || ''),
-          sb.from('products').select('sku, category')
+          sb.from('products').select('id, sku, category')
         ]);
 
         dbProducts = productsRes?.data || [];
+        dbProductsBySku = new Map(
+          dbProducts
+            .filter(product => product.sku)
+            .map(product => [String(product.sku).toUpperCase(), product])
+        );
         dbEmployees = employeesRes.data || [];
 
         window._installerAssignmentNames = (assignmentsRes.data || [])
@@ -182,10 +188,9 @@
             .maybeSingle();
           bookingMediaRequirements = (mediaReqsRes?.value && Array.isArray(mediaReqsRes.value))
             ? mediaReqsRes.value : [];
-          localStorage.setItem('bk_booking_media_requirements', JSON.stringify(bookingMediaRequirements));
         } catch (mediaErr) {
           console.error('Error loading media requirements:', mediaErr);
-          try { bookingMediaRequirements = JSON.parse(localStorage.getItem('bk_booking_media_requirements') || '[]'); } catch(_) {}
+          bookingMediaRequirements = [];
         }
 
         // Booking checklist
@@ -198,10 +203,9 @@
             .maybeSingle();
           bookingChecklist = (checklistSetting?.value && Array.isArray(checklistSetting.value))
             ? checklistSetting.value : [];
-          localStorage.setItem('bk_booking_checklist', JSON.stringify(bookingChecklist));
         } catch (checklistErr) {
           console.error('Error loading checklist:', checklistErr);
-          try { bookingChecklist = JSON.parse(localStorage.getItem('bk_booking_checklist') || '[]'); } catch(_) {}
+          bookingChecklist = [];
         }
       } catch (err) {
         console.error('Failed to load static data:', err);
@@ -401,7 +405,8 @@
 
     window.deleteBookingFromDb = async function(id) {
       if (!window.BKDialog) {
-        if (!confirm('Are you sure you want to permanently delete this booking?')) return;
+        showToast('The confirmation dialog is unavailable. Please refresh the page and try again.', true);
+        return;
       } else {
         const ok = await window.BKDialog.ask({
           title: 'Delete Booking',
@@ -421,7 +426,7 @@
         if (error) throw error;
 
         showToast('Booking deleted successfully.');
-        await loadData();
+        await loadMonthBookings();
       } catch (err) {
         console.error('Failed to delete booking:', err);
         showToast('Failed to delete booking: ' + err.message, true);
@@ -611,6 +616,5 @@
         cellsContainer.insertAdjacentHTML('beforeend', cellHtml);
       }
     }
-
 
 

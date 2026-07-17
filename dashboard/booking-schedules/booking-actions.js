@@ -395,7 +395,7 @@
 
         showToast(`${eventTypeName} created successfully.`);
         toggleDayEventsModal(false);
-        await loadData();
+        await loadMonthBookings();
       } catch (err) {
         console.error('Failed to create event:', err);
         showToast('Failed to create event: ' + err.message, true);

@@ -131,7 +131,9 @@
       if (wr) { wr.style.padding='0'; wr.style.background='#ffffff'; }
       if (el) { el.style.margin='0'; }
       const btn = document.querySelector('.btn-save');
-      const orig = btn.innerHTML; btn.innerHTML='⌛ Compiling...'; btn.disabled=true;
+      const orig = btn.innerHTML;
+      btn.textContent='Compiling...';
+      btn.disabled=true;
       try {
         await html2pdf().set({
           margin:[0,-1.3,0,1.3], filename:'${orderNo}.pdf',
