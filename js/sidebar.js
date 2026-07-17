@@ -354,7 +354,7 @@
         </button>
         <div class="dash-nav-children">
           <a href="/dashboard/business" class="dash-nav-child" data-role="business">Overview</a>
-          <a href="/dashboard/pricing-strategy" class="dash-nav-child" data-role="business">Pricing Strategy</a>
+          <a href="/dashboard/pricing-strategy/expenses" class="dash-nav-child" data-role="business">Pricing Strategy</a>
         </div>
       </div>
 
@@ -742,6 +742,7 @@
         (href === '/dashboard/warehouse/inspect' && currentPath.startsWith('/dashboard/warehouse/')) ||
         (href === '/dashboard/inventory' && currentPath === '/dashboard/inventory') ||
         (href === '/dashboard/ship/send' && currentPath.startsWith('/dashboard/ship/')) ||
+        (href === '/dashboard/pricing-strategy/expenses' && currentPath.startsWith('/dashboard/pricing-strategy/')) ||
         (href === '/dashboard/payout-tracker/payout/' && currentPath.startsWith('/dashboard/payout-tracker/'))
       )) {
         link.classList.add('active');
