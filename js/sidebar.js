@@ -354,6 +354,7 @@
         </button>
         <div class="dash-nav-children">
           <a href="/dashboard/business" class="dash-nav-child" data-role="business">Overview</a>
+          <a href="/dashboard/pricing-strategy" class="dash-nav-child" data-role="business">Pricing Strategy</a>
         </div>
       </div>
 
