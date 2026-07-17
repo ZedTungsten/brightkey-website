@@ -2967,16 +2967,18 @@
             sku = attachedSkusList.join(', ') || 'N/A';
             const doorTitles = attachedSkusList.map(itemSku => {
               const pMatch = productsArr.find(p => p.sku === itemSku);
+              let t = itemSku;
               if (pMatch) {
-                return pMatch.name || pMatch.title || itemSku;
+                t = pMatch.name || pMatch.title || itemSku;
+              } else {
+                const idx = skus.indexOf(itemSku);
+                if (idx !== -1) {
+                  t = names[idx] || itemSku;
+                }
               }
-              const idx = skus.indexOf(itemSku);
-              if (idx !== -1) {
-                return names[idx] || itemSku;
-              }
-              return itemSku;
+              return `<strong>${escapeHtml(itemSku)}</strong> - ${escapeHtml(t)}`;
             });
-            titleHtml = doorTitles.map(t => `<div style="font-size:0.8rem; color:var(--text-secondary); margin-bottom:0.4rem;">${escapeHtml(t)}</div>`).join('');
+            titleHtml = doorTitles.map(tHtml => `<div style="font-size:0.8rem; color:var(--text-secondary); margin-bottom:0.4rem;">${tHtml}</div>`).join('');
             isCancelled = attachedSkusList.length > 0 && attachedSkusList.every(itemSku => {
               const pMatch = productsArr.find(p => p.sku === itemSku);
               return pMatch?.cancelled || false;
@@ -2986,18 +2988,30 @@
             const allSkusList = hardwareProducts.length > 0 ? hardwareProducts.map(p => p.sku) : hardwareSkus;
             sku = allSkusList.join(', ') || 'N/A';
             
-            const doorTitles = hardwareProducts.length > 0 
-              ? hardwareProducts.map(p => p.title || p.name || p.sku) 
-              : hardwareNames;
+            const doorTitles = allSkusList.map(itemSku => {
+              const pMatch = productsArr.find(p => p.sku === itemSku);
+              let t = itemSku;
+              if (pMatch) {
+                t = pMatch.title || pMatch.name || itemSku;
+              } else {
+                const idx = skus.indexOf(itemSku);
+                if (idx !== -1) {
+                  t = names[idx] || itemSku;
+                }
+              }
+              return `<strong>${escapeHtml(itemSku)}</strong> - ${escapeHtml(t)}`;
+            });
             
-            titleHtml = doorTitles.map(t => `<div style="font-size:0.8rem; color:var(--text-secondary); margin-bottom:0.4rem;">${escapeHtml(t)}</div>`).join('');
+            titleHtml = doorTitles.map(tHtml => `<div style="font-size:0.8rem; color:var(--text-secondary); margin-bottom:0.4rem;">${tHtml}</div>`).join('');
             isCancelled = hardwareProducts.length > 0 && hardwareProducts.every(p => p.cancelled || false);
           } else {
             const currentSku = hardwareProducts[i]?.sku || hardwareSkus[i] || 'N/A';
             sku = currentSku;
-            const currentTitle = hardwareProducts[i]?.title || hardwareNames[i] || 'N/A';
-            const showTitle = currentTitle && currentTitle.trim().toLowerCase() !== currentSku.trim().toLowerCase();
-            titleHtml = showTitle ? `<div style="font-size:0.8rem; color:var(--text-secondary); margin-bottom:0.4rem;">${escapeHtml(currentTitle)}</div>` : '';
+            let currentTitle = hardwareProducts[i]?.title || hardwareNames[i] || 'N/A';
+            if (currentTitle === 'N/A' || currentTitle === currentSku) {
+              currentTitle = '';
+            }
+            titleHtml = `<div style="font-size:0.8rem; color:var(--text-secondary); margin-bottom:0.4rem;"><strong>${escapeHtml(sku)}</strong>${currentTitle ? ` - ${escapeHtml(currentTitle)}` : ''}</div>`;
             isCancelled = hardwareProducts[i]?.cancelled || false;
           }
 
