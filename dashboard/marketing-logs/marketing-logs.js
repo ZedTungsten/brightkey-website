@@ -201,9 +201,7 @@
 
       tr.innerHTML = `
         <td class="cell-date">${formatLogDate(dateString)}</td>
-        <td style="text-align: center; vertical-align: middle;">
-          <div class="user-badge" id="user-badge-${dateString}" style="${initials ? '' : 'display: none;'}">${initials}</div>
-        </td>
+        <td class="cell-user"><div class="user-badge" id="user-badge-${dateString}" style="${initials ? '' : 'display: none;'}">${initials}</div></td>
         <td>
           <textarea rows="1" class="cell-textarea" onblur="saveCell('${dateString}', 'item', this.value)" oninput="autoResizeTextarea(this)">${esc(log.item)}</textarea>
         </td>
