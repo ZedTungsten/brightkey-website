@@ -21,6 +21,15 @@
               .replace(/'/g, '&#39;');
   }
 
+  // Toast notification helper using main.js notification engine
+  function showToast(message, isError = false) {
+    if (window.Toast) {
+      window.Toast.show(message, isError ? 'error' : 'success');
+    } else {
+      console.log((isError ? 'ERROR: ' : 'INFO: ') + message);
+    }
+  }
+
   // Format date like: Oct 24, 2026 FRI
   function formatLogDate(dateStr) {
     if (!dateStr) return '';
