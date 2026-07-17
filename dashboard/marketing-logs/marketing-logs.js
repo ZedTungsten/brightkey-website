@@ -278,11 +278,14 @@
         // Do not insert a record if the user just blurred an empty cell
         if (!newVal) return;
 
-        // Insert new record
+        // Insert new record with default empty strings for the other non-null columns
         const payload = {
           company_id: companyId,
           date: dateString,
-          [field]: newVal,
+          item: field === 'item' ? newVal : '',
+          change_desc: field === 'change_desc' ? newVal : '',
+          reason: field === 'reason' ? newVal : '',
+          learning: field === 'learning' ? newVal : '',
           employee_id: currentEmployee?.id || null
         };
 
