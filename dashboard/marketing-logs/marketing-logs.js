@@ -252,26 +252,24 @@
 
     try {
       if (existing) {
-        // Update existing record
-        const payload = {
-          [field]: newVal,
-          employee_id: currentEmployee?.id || null,
-          updated_at: new Date().toISOString()
-        };
+        // Update local object property first so we can check the complete row state
+        existing[field] = newVal;
 
-        // Check if all text fields are now empty and it's not starred, we can clean up by deleting
-        const wouldBeEmpty = !newVal &&
-          (field === 'item' ? true : !existing.item) &&
-          (field === 'change_desc' ? true : !existing.change_desc) &&
-          (field === 'reason' ? true : !existing.reason) &&
-          (field === 'learning' ? true : !existing.learning) &&
-          !existing.starred;
+        // If all fields are empty and not starred, delete the row
+        const wouldBeEmpty = !existing.item && !existing.change_desc && !existing.reason && !existing.learning && !existing.starred;
 
         if (wouldBeEmpty) {
           const { error } = await sb.from('marketing_logs').delete().eq('id', existing.id);
           if (error) throw error;
           showToast('Log entry cleared.');
+          // Remove from local logs list immediately
+          logsList = logsList.filter(l => l.id !== existing.id);
         } else {
+          const payload = {
+            [field]: newVal,
+            employee_id: currentEmployee?.id || null,
+            updated_at: new Date().toISOString()
+          };
           const { error } = await sb.from('marketing_logs').update(payload).eq('id', existing.id);
           if (error) throw error;
           showToast('Cell saved.');
@@ -323,17 +321,19 @@
       if (error) throw error;
       logsList = data || [];
       
-      // Update User badges initials and row highlight classes without losing input focus
+      // Hide and clear all user badges first to clean up cleared rows
+      document.querySelectorAll('.user-badge').forEach(b => {
+        b.style.display = 'none';
+        b.textContent = '';
+      });
+
+      // Update active User badges initials
       logsList.forEach(log => {
         const badge = document.getElementById(`user-badge-${log.date}`);
-        if (badge) {
-          if (log.employees) {
-            const initials = ((log.employees.first_name || '').charAt(0) + (log.employees.last_name || '').charAt(0)).toUpperCase();
-            badge.textContent = initials;
-            badge.style.display = 'inline-flex';
-          } else {
-            badge.style.display = 'none';
-          }
+        if (badge && log.employees) {
+          const initials = ((log.employees.first_name || '').charAt(0) + (log.employees.last_name || '').charAt(0)).toUpperCase();
+          badge.textContent = initials;
+          badge.style.display = 'inline-flex';
         }
       });
     } catch (err) {
