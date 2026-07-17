@@ -3916,14 +3916,8 @@
       if (!selectedBooking) return;
 
       let originalSkus = [];
-      let productsArr = [];
-      if (typeof selectedBooking.products === 'string') {
-        try { productsArr = JSON.parse(selectedBooking.products); } catch(_) {}
-      } else if (Array.isArray(selectedBooking.products)) {
-        productsArr = selectedBooking.products;
-      }
-      if (productsArr.length > 0) {
-        originalSkus = productsArr.map(p => p.sku).filter(sku => sku !== 'ADD-ON LABOR');
+      if (tempEditProducts.length > 0) {
+        originalSkus = tempEditProducts.filter(p => !p.cancelled).map(p => p.sku).filter(sku => sku !== 'ADD-ON LABOR');
       } else if (selectedBooking.sku) {
         originalSkus = selectedBooking.sku.split(' | ').filter(sku => sku !== 'ADD-ON LABOR');
       }
