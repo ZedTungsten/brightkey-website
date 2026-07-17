@@ -143,7 +143,12 @@ function renderExplorer() {
 
   // Apply Search Filter if any
   if (searchFilter) {
-    filtered = allResources.filter(r => r.name.toLowerCase().includes(searchFilter.toLowerCase()));
+    const q = searchFilter.toLowerCase();
+    filtered = allResources.filter(r => {
+      const nameMatch = r.name.toLowerCase().includes(q);
+      const tagMatch = r.tags && r.tags.some(tag => tag.toLowerCase().includes(q));
+      return nameMatch || tagMatch;
+    });
   }
 
   displayedResources = filtered;
@@ -320,14 +325,6 @@ function renderExplorer() {
       </div>
     ` : '';
 
-    const tags = item.tags || [];
-    let tagsHtml = '';
-    if (tags.length > 0) {
-      tagsHtml = `<div class="item-tags-container">` + 
-        tags.map(t => `<span class="tag-pill">${escFulfillment(t)}</span>`).join('') +
-        `</div>`;
-    }
-
     card.innerHTML = `
       ${cardCheckboxHtml}
       ${listCheckboxHtml}
@@ -337,10 +334,7 @@ function renderExplorer() {
         ${shortcutBadgeHtml}
         ${iconHtml}
       </div>
-      <div class="item-name-tags-wrapper">
-        <span class="item-name">${escFulfillment(displayName)}</span>
-        ${tagsHtml}
-      </div>
+      <span class="item-name">${escFulfillment(displayName)}</span>
       ${metaHtml}
       ${actionMenuHtml}
     `;
