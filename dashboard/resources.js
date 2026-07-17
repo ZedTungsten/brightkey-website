@@ -1954,8 +1954,26 @@ window.openEditTagsModal = function(e, id) {
   }, 50);
 };
 
+window.triggerBulkEditTags = function() {
+  if (selectedResourceIds.length === 0) return;
+  tagEditingId = null;
+  const tagsInput = document.getElementById('tags-input');
+
+  if (selectedResourceIds.length === 1) {
+    const item = allResources.find(r => r.id === selectedResourceIds[0]);
+    tagsInput.value = item && item.tags ? item.tags.join(', ') : '';
+  } else {
+    tagsInput.value = '';
+  }
+
+  openModal('edit-tags-modal');
+  setTimeout(() => {
+    tagsInput.focus();
+  }, 50);
+};
+
 window.saveTags = async function() {
-  if (!tagEditingId) return;
+  if (!tagEditingId && selectedResourceIds.length === 0) return;
   if (!currentUserCanEdit) {
     showToast('Permission denied: Only Owner, Admin, and Sales Manager can manage tags.', true);
     return;
@@ -1972,19 +1990,31 @@ window.saveTags = async function() {
   btn.textContent = "Saving...";
 
   try {
-    const { error } = await sb.from('sales_resources')
-      .update({ tags: tagsArray, updated_at: new Date().toISOString() })
-      .eq('id', tagEditingId);
+    let query = sb.from('sales_resources')
+      .update({ tags: tagsArray, updated_at: new Date().toISOString() });
 
+    if (tagEditingId) {
+      query = query.eq('id', tagEditingId);
+    } else {
+      query = query.in('id', selectedResourceIds);
+    }
+
+    const { error } = await query;
     if (error) throw error;
     showToast('Tags updated successfully.');
     
-    const item = allResources.find(r => r.id === tagEditingId);
-    if (item) {
-      item.tags = tagsArray;
+    if (tagEditingId) {
+      const item = allResources.find(r => r.id === tagEditingId);
+      if (item) item.tags = tagsArray;
+    } else {
+      selectedResourceIds.forEach(id => {
+        const item = allResources.find(r => r.id === id);
+        if (item) item.tags = tagsArray;
+      });
     }
 
     closeModal('edit-tags-modal');
+    clearResourceSelection();
     renderExplorer();
   } catch (err) {
     console.error(err);
