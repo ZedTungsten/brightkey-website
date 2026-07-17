@@ -588,7 +588,12 @@
     
     updateDrawerNavigation();
     
-    document.getElementById('drawer-status').textContent = 'Loading…';
+    const statusEl = document.getElementById('drawer-status');
+    if (statusEl) {
+      statusEl.textContent = 'Loading…';
+      statusEl.style.color = 'var(--text-secondary)';
+      statusEl.style.fontWeight = 'normal';
+    }
     document.getElementById('product-drawer').classList.add('open');
     document.getElementById('drawer-overlay').classList.add('open');
     switchTab(activeTab || 'basic');
@@ -789,7 +794,12 @@
       const featureDef = FEATURE_DEFS[business];
       renderFeaturesTab(business);
 
-      document.getElementById('drawer-status').textContent = 'Loading features…';
+      const statusEl = document.getElementById('drawer-status');
+      if (statusEl) {
+        statusEl.textContent = 'Loading features…';
+        statusEl.style.color = 'var(--text-secondary)';
+        statusEl.style.fontWeight = 'normal';
+      }
       try {
         const { data: featsData } = await sbClient.from(featureDef.table).select('*').in('product_id', selectedProductIds);
         if (featsData && featsData.length > 0) {
@@ -1578,7 +1588,12 @@
     updateDrawerNavigation();
     document.getElementById('drawer-title').textContent = 'Duplicate Product';
     
-    document.getElementById('drawer-status').textContent = 'Loading…';
+    const statusEl = document.getElementById('drawer-status');
+    if (statusEl) {
+      statusEl.textContent = 'Loading…';
+      statusEl.style.color = 'var(--text-secondary)';
+      statusEl.style.fontWeight = 'normal';
+    }
     document.getElementById('product-drawer').classList.add('open');
     document.getElementById('drawer-overlay').classList.add('open');
     switchTab('basic');
