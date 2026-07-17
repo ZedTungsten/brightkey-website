@@ -193,19 +193,19 @@
       tr.innerHTML = `
         <td style="font-weight: 600; color: var(--text-secondary);">${formatLogDate(dateString)}</td>
         <td>
-          <textarea class="cell-textarea" placeholder="Item..." onblur="saveCell('${dateString}', 'item', this.value)" oninput="autoResizeTextarea(this)">${esc(log.item)}</textarea>
+          <textarea class="cell-textarea" onblur="saveCell('${dateString}', 'item', this.value)" oninput="autoResizeTextarea(this)">${esc(log.item)}</textarea>
         </td>
         <td>
-          <textarea class="cell-textarea" placeholder="Change..." onblur="saveCell('${dateString}', 'change_desc', this.value)" oninput="autoResizeTextarea(this)">${esc(log.change_desc)}</textarea>
+          <textarea class="cell-textarea" onblur="saveCell('${dateString}', 'change_desc', this.value)" oninput="autoResizeTextarea(this)">${esc(log.change_desc)}</textarea>
         </td>
         <td style="text-align: center; vertical-align: middle;">
           <div class="user-badge" id="user-badge-${dateString}" style="${initials ? '' : 'display: none;'}">${initials}</div>
         </td>
         <td>
-          <textarea class="cell-textarea" placeholder="Reason..." onblur="saveCell('${dateString}', 'reason', this.value)" oninput="autoResizeTextarea(this)">${esc(log.reason)}</textarea>
+          <textarea class="cell-textarea" onblur="saveCell('${dateString}', 'reason', this.value)" oninput="autoResizeTextarea(this)">${esc(log.reason)}</textarea>
         </td>
         <td class="cell-learning">
-          <textarea class="cell-textarea" placeholder="Learning..." onblur="saveCell('${dateString}', 'learning', this.value)" oninput="autoResizeTextarea(this)">${esc(log.learning)}</textarea>
+          <textarea class="cell-textarea" onblur="saveCell('${dateString}', 'learning', this.value)" oninput="autoResizeTextarea(this)">${esc(log.learning)}</textarea>
         </td>
         <td>
           <div class="action-btn-group">
