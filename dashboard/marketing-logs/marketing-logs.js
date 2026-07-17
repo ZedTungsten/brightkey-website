@@ -72,7 +72,7 @@
       // Fetch employee info for logged-in user
       const { data: emp, error: empErr } = await sb.from('employees')
         .select('id, first_name, last_name')
-        .eq('email_address', authInfo.user.email)
+        .eq('email', authInfo.user.email)
         .limit(1)
         .maybeSingle();
 
