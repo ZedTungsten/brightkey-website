@@ -1942,8 +1942,13 @@ let modalTags = [];
 
 const TAG_HUES = [0, 36, 72, 108, 144, 180, 216, 252, 288, 324];
 
-function getPastelColorByIndex(idx) {
-  const hue = TAG_HUES[idx % TAG_HUES.length];
+function getPastelColorByTag(tag) {
+  let hash = 0;
+  const cleaned = String(tag).trim().toLowerCase();
+  for (let i = 0; i < cleaned.length; i++) {
+    hash = cleaned.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const hue = TAG_HUES[Math.abs(hash) % TAG_HUES.length];
   return {
     bg: `hsl(${hue}, 85%, 94%)`,
     text: `hsl(${hue}, 85%, 26%)`,
@@ -1960,7 +1965,7 @@ function renderInteractiveTags() {
     const pill = document.createElement('div');
     pill.className = 'interactive-tag-pill';
     
-    const colors = getPastelColorByIndex(idx);
+    const colors = getPastelColorByTag(tag);
     pill.style.backgroundColor = colors.bg;
     pill.style.color = colors.text;
     pill.style.borderColor = colors.border;
