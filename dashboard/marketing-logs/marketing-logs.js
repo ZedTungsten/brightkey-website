@@ -219,6 +219,15 @@
       tbody.appendChild(tr);
     }
 
+    // Append auto-height spacer row to prevent browser stretching rows to fill 100% min-height
+    const spacerTr = document.createElement('tr');
+    spacerTr.className = 'table-spacer-row';
+    spacerTr.style.height = 'auto';
+    spacerTr.style.border = 'none';
+    spacerTr.style.background = 'transparent';
+    spacerTr.innerHTML = `<td colspan="7" style="padding: 0; border: none; background: transparent; pointer-events: none;"></td>`;
+    tbody.appendChild(spacerTr);
+
     // Trigger autoResize on all rendered textareas
     setTimeout(() => {
       document.querySelectorAll('.cell-textarea').forEach(textarea => {
