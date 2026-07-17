@@ -381,6 +381,7 @@
         </button>
         <div class="dash-nav-children">
           <a href="/dashboard/global-promo" class="dash-nav-child" data-role="marketing">Promos</a>
+          <a href="/dashboard/marketing-logs" class="dash-nav-child" data-role="marketing">Logs Tracker</a>
           <a class="dash-nav-child" data-role="marketing" style="opacity: 0.5; cursor: not-allowed;">Campaigns</a>
           <a class="dash-nav-child" data-role="marketing" style="opacity: 0.5; cursor: not-allowed;">Affiliates</a>
           <a class="dash-nav-child" data-role="marketing" style="opacity: 0.5; cursor: not-allowed;">Social Media Calendar</a>
