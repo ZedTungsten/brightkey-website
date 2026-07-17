@@ -276,5 +276,14 @@ We use two distinct patterns for modal overlays. Do NOT mix them:
 >       key: 'your_settings_key',
 >       value: { ...yourSettingsMap }
 >     }, { onConflict: 'company_id,key' });
->     ```
+> ---
+
+## 20. Proper Use of HTML Placeholder Attributes
+> [!IMPORTANT]
+> When rendering inputs or textareas with default placeholder text (such as "New Competitor", "Select option...", etc.):
+> - **Use Placeholder Attributes**: Never set the default descriptive placeholder text as the actual database value or `value` attribute of the input. Doing so forces the user to manually highlight and delete the text when typing.
+> - **Input Value Binding**: Always bind the value attribute to an empty string if the underlying record matches the default placeholder representation:
+>   ```html
+>   <input type="text" value="${record.name === 'New Record' ? '' : record.name}" placeholder="New Record" />
+>   ```
 
