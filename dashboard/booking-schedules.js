@@ -487,11 +487,27 @@
           }
 
           const allocatedSkus = new Set();
-          doorsArr.forEach(d => {
-            if (d.products) {
-              d.products.forEach(sku => allocatedSkus.add(sku));
+          const anyDoorHasProducts = doorsArr.some(d => Array.isArray(d.products) && d.products.length > 0);
+          if (anyDoorHasProducts) {
+            doorsArr.forEach(d => {
+              if (d.products) {
+                d.products.forEach(sku => allocatedSkus.add(sku));
+              }
+            });
+          } else {
+            const isSingleDoor = (doorsArr.length === 1 && productsArr.length > 0);
+            if (isSingleDoor) {
+              productsArr.forEach(p => {
+                if (p.sku !== 'ADD-ON LABOR') allocatedSkus.add(p.sku);
+              });
+            } else {
+              doorsArr.forEach((d, idx) => {
+                if (productsArr[idx]) {
+                  allocatedSkus.add(productsArr[idx].sku);
+                }
+              });
             }
-          });
+          }
 
           const hasUnallocatedActiveLocks = productsArr.some(p => {
             if (p.cancelled) return false;
