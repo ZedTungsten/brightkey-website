@@ -270,9 +270,20 @@
             employee_id: currentEmployee?.id || null,
             updated_at: new Date().toISOString()
           };
-          const { error } = await sb.from('marketing_logs').update(payload).eq('id', existing.id);
+          const { data, error } = await sb.from('marketing_logs')
+            .update(payload)
+            .eq('id', existing.id)
+            .select('*, employees(first_name, last_name)')
+            .single();
+
           if (error) throw error;
           showToast('Cell saved.');
+
+          // Update local logsList item
+          const idx = logsList.findIndex(l => l.id === existing.id);
+          if (idx !== -1) {
+            logsList[idx] = data;
+          }
         }
       } else {
         // Do not insert a record if the user just blurred an empty cell
@@ -289,59 +300,47 @@
           employee_id: currentEmployee?.id || null
         };
 
-        const { error } = await sb.from('marketing_logs').insert([payload]);
+        const { data, error } = await sb.from('marketing_logs')
+          .insert([payload])
+          .select('*, employees(first_name, last_name)')
+          .single();
+
         if (error) throw error;
         showToast('Log created.');
+        logsList.push(data);
       }
 
-      // Reload logs silently to sync local logsList and re-render Initials/states
-      await loadLogsSilently();
+      // Sync user badges UI instantly without database race conditions
+      updateUserBadges();
     } catch (err) {
       console.error(err);
       showToast('Save failed: ' + err.message, true);
     }
   };
 
-  async function loadLogsSilently() {
-    try {
-      const y = currentDate.getFullYear();
-      const m = currentDate.getMonth();
-      const startOfMonth = new Date(y, m, 1).toISOString().split('T')[0];
-      const endOfMonth = new Date(y, m + 1, 0).toISOString().split('T')[0];
+  function updateUserBadges() {
+    // Hide and clear all user badges first to clean up cleared rows
+    document.querySelectorAll('.user-badge').forEach(b => {
+      b.style.display = 'none';
+      b.textContent = '';
+    });
 
-      const { data, error } = await sb.from('marketing_logs')
-        .select(`
-          *,
-          employees (
-            first_name,
-            last_name
-          )
-        `)
-        .eq('company_id', companyId)
-        .gte('date', startOfMonth)
-        .lte('date', endOfMonth);
-
-      if (error) throw error;
-      logsList = data || [];
-      
-      // Hide and clear all user badges first to clean up cleared rows
-      document.querySelectorAll('.user-badge').forEach(b => {
-        b.style.display = 'none';
-        b.textContent = '';
-      });
-
-      // Update active User badges initials
-      logsList.forEach(log => {
-        const badge = document.getElementById(`user-badge-${log.date}`);
-        if (badge && log.employees) {
-          const initials = ((log.employees.first_name || '').charAt(0) + (log.employees.last_name || '').charAt(0)).toUpperCase();
+    // Update active User badges initials from logsList
+    logsList.forEach(log => {
+      const badge = document.getElementById(`user-badge-${log.date}`);
+      if (badge) {
+        let initials = '';
+        if (log.employees) {
+          initials = ((log.employees.first_name || '').charAt(0) + (log.employees.last_name || '').charAt(0)).toUpperCase();
+        } else if (log.employee_id === currentEmployee?.id) {
+          initials = employeeInitials;
+        }
+        if (initials) {
           badge.textContent = initials;
           badge.style.display = 'inline-flex';
         }
-      });
-    } catch (err) {
-      console.error('Silent reload failed:', err);
-    }
+      }
+    });
   }
 
   window.toggleStarRow = async function(e, dateString, currentStarredState) {
