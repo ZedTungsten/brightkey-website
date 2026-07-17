@@ -200,6 +200,50 @@
     .expenses-list-table tr:hover td {
       background: var(--bg-base);
     }
+
+    /* ── Excel-like Competitors Table ── */
+    .logs-table th,
+    .logs-table td {
+      border: 1px solid var(--border);
+      padding: 0;
+      vertical-align: middle;
+      white-space: pre-wrap !important;
+      word-wrap: break-word;
+    }
+    .logs-table th {
+      background: var(--bg-elevated);
+      color: var(--text-secondary);
+      font-weight: 600;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 0.4rem 0.6rem;
+    }
+    .cell-textarea {
+      width: 100%;
+      min-height: 28px;
+      background: transparent;
+      border: none;
+      outline: none;
+      resize: none;
+      font-family: inherit;
+      font-size: 0.85rem;
+      color: inherit;
+      padding: 6px 8px;
+      margin: 0;
+      box-sizing: border-box;
+      transition: background 0.15s;
+      overflow: hidden;
+      display: block;
+    }
+    .cell-textarea:focus {
+      background: transparent !important;
+      box-shadow: none !important;
+      outline: none !important;
+    }
+    .competitor-row-active td {
+      background: rgba(6, 182, 212, 0.04) !important;
+    }
   </style>
 </head>
 <body>
@@ -262,7 +306,6 @@
 
           <!-- Expenses Panel -->
           <div class="tab-panel active" id="panel-expenses">
-
             <!-- Metrics Cards Grid -->
             <div class="metrics-grid">
               <!-- COGS per Order -->
@@ -332,13 +375,42 @@
                  </div>
               </div>
             </div>
-
           </div>
 
-          <!-- Competitors Panel (Blank) -->
+          <!-- Competitors Panel -->
           <div class="tab-panel" id="panel-competitors">
-            <div style="color: var(--text-muted); padding: 3rem 0; text-align: center;">
-              Competitors pricing and feature matrix will be rendered here.
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+              <h2 style="font-size: 1.1rem; font-weight: 700; color: var(--text-primary); margin: 0;">Competitor Price Matrix</h2>
+              <span id="competitors-last-updated" style="font-size: 0.82rem; color: var(--text-secondary); font-weight: 500;">Last updated: —</span>
+            </div>
+
+            <div class="card" style="padding: 1.25rem; margin-bottom: 1.5rem;">
+              <div style="overflow-x: auto;">
+                <table class="logs-table" style="width: 100%; border-collapse: collapse;">
+                  <thead>
+                    <tr>
+                      <th style="width: 30%; text-align: left;">Competitor</th>
+                      <th style="width: 45%; text-align: left;">Products</th>
+                      <th style="width: 25%; text-align: right; padding-right: 0.8rem;">Base Price</th>
+                    </tr>
+                  </thead>
+                  <tbody id="competitors-tbody">
+                    <!-- Populated dynamically -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Actions Row Below Table -->
+            <div style="display: flex; gap: 0.75rem;">
+              <button class="btn btn-outline" onclick="addNewCompetitor()" style="height: 36px; display: flex; align-items: center; gap: 0.5rem; font-weight: 600;">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                Add Competitor
+              </button>
+              <button class="btn btn-primary" onclick="addNewProductToSelected()" style="height: 36px; display: flex; align-items: center; gap: 0.5rem; font-weight: 600;">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                Add Product
+              </button>
             </div>
           </div>
 
@@ -361,6 +433,11 @@
     let checkedMonths = [];
     let allProducts = [];
     let allBookings = [];
+
+    // Competitor tracking
+    let competitorList = [];
+    let competitorProducts = [];
+    let selectedCompetitorId = null;
 
     // Dropdown toggles
     function toggleSnapshotDropdown() {
@@ -388,6 +465,10 @@
       });
       const targetPanel = document.getElementById('panel-' + tabId);
       if (targetPanel) targetPanel.classList.add('active');
+
+      if (tabId === 'competitors') {
+        loadCompetitors();
+      }
     }
 
     document.addEventListener('DOMContentLoaded', async () => {
@@ -479,6 +560,12 @@
     function onBusinessChange() {
       selectedBusiness = document.getElementById('business-select').value;
       calculateExpenses();
+      
+      // If we are currently on competitors tab, reload the competitors data
+      const activeTab = document.querySelector('.tab-btn.active');
+      if (activeTab && activeTab.textContent.toLowerCase() === 'competitors') {
+        loadCompetitors();
+      }
     }
 
     function calculateExpenses() {
@@ -577,8 +664,8 @@
             if (b.product_skus) skusArr = b.product_skus.split(' | ').filter(Boolean);
             if (b.product_qtys) qtysArr = b.product_qtys.split(' | ').map(Number);
 
-            let bookingBizRevenue = 0;
             let bookingBizSupplierCost = 0;
+            let bookingBizRevenue = 0;
 
             skusArr.forEach((sku, idx) => {
               const qty = qtysArr[idx] || 0;
@@ -733,6 +820,276 @@
 
     function formatPHP(val) {
       return '₱' + val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    /* ── Competitors Dynamic CRUD & Rendering ── */
+    async function loadCompetitors() {
+      const tbody = document.getElementById('competitors-tbody');
+      tbody.innerHTML = `<tr><td colspan="3" style="text-align: center; color: var(--text-muted); padding: 2rem;">Loading competitor pricing...</td></tr>`;
+
+      try {
+        const bizName = selectedBusiness || 'All';
+
+        // 1. Fetch competitors
+        const { data: comps, error: compErr } = await sb.from('competitors')
+          .select('*')
+          .eq('company_id', companyId)
+          .eq('business_name', bizName)
+          .order('created_at', { ascending: true });
+
+        if (compErr) throw compErr;
+        competitorList = comps || [];
+
+        // 2. Fetch products
+        let prods = [];
+        if (competitorList.length > 0) {
+          const compIds = competitorList.map(c => c.id);
+          const { data: prodData, error: prodErr } = await sb.from('competitor_products')
+            .select('*')
+            .in('competitor_id', compIds)
+            .order('created_at', { ascending: true });
+          if (prodErr) throw prodErr;
+          prods = prodData || [];
+        }
+        competitorProducts = prods;
+
+        // 3. Fallback: If no records exist, show exactly 1 empty row of competitor
+        if (competitorList.length === 0) {
+          // Auto-insert a placeholder competitor and product in Supabase
+          const { data: newComp, error: newCompErr } = await sb.from('competitors')
+            .insert({
+              company_id: companyId,
+              business_name: bizName,
+              name: 'New Competitor'
+            })
+            .select()
+            .single();
+
+          if (newCompErr) throw newCompErr;
+
+          const { data: newProd, error: newProdErr } = await sb.from('competitor_products')
+            .insert({
+              competitor_id: newComp.id,
+              product_name: '',
+              base_price: ''
+            })
+            .select()
+            .single();
+
+          if (newProdErr) throw newProdErr;
+
+          competitorList = [newComp];
+          competitorProducts = [newProd];
+        }
+
+        if (!selectedCompetitorId && competitorList.length > 0) {
+          selectedCompetitorId = competitorList[0].id;
+        }
+
+        renderCompetitors();
+      } catch (err) {
+        console.error('Error loading competitors:', err);
+        tbody.innerHTML = `<tr><td colspan="3" style="text-align: center; color: var(--danger); padding: 2rem;">Failed to load competitor pricing: ${err.message}</td></tr>`;
+      }
+    }
+
+    function renderCompetitors() {
+      const tbody = document.getElementById('competitors-tbody');
+      tbody.innerHTML = '';
+
+      let latestDate = null;
+
+      // Group products by competitor_id
+      const productsMap = {};
+      competitorProducts.forEach(p => {
+        if (!productsMap[p.competitor_id]) {
+          productsMap[p.competitor_id] = [];
+        }
+        productsMap[p.competitor_id].push(p);
+
+        // Find latest update date
+        const pDate = new Date(p.updated_at || p.created_at);
+        if (!latestDate || pDate > latestDate) {
+          latestDate = pDate;
+        }
+      });
+
+      competitorList.forEach(comp => {
+        const cDate = new Date(comp.updated_at || comp.created_at);
+        if (!latestDate || cDate > latestDate) {
+          latestDate = cDate;
+        }
+
+        const prods = productsMap[comp.id] || [{ id: null, product_name: '', base_price: '' }];
+        const numProds = prods.length;
+
+        prods.forEach((prod, index) => {
+          const tr = document.createElement('tr');
+          tr.setAttribute('onclick', `selectCompetitor('${comp.id}')`);
+          
+          if (selectedCompetitorId === comp.id) {
+            tr.className = 'competitor-row-active';
+          }
+
+          let competitorCellHtml = '';
+          if (index === 0) {
+            // First product row has the competitor name spanning all its product rows
+            competitorCellHtml = `
+              <td rowspan="${numProds}" style="border-right: 1px solid var(--border); vertical-align: top;">
+                <textarea class="cell-textarea" onblur="saveCompetitorName('${comp.id}', this.value)" style="font-weight: 600;">${escapeHtml(comp.name)}</textarea>
+              </td>
+            `;
+          }
+
+          tr.innerHTML = `
+            ${competitorCellHtml}
+            <td>
+              <textarea class="cell-textarea" onblur="saveCompetitorProduct('${prod.id}', 'product_name', this.value)">${escapeHtml(prod.product_name)}</textarea>
+            </td>
+            <td>
+              <textarea class="cell-textarea" onblur="saveCompetitorProduct('${prod.id}', 'base_price', this.value)" style="text-align: right; padding-right: 1.5rem;">${escapeHtml(prod.base_price)}</textarea>
+            </td>
+          `;
+
+          tbody.appendChild(tr);
+        });
+      });
+
+      // Update Last Updated Date (Mmm DD, YYYY)
+      const lastUpdatedEl = document.getElementById('competitors-last-updated');
+      if (latestDate) {
+        const options = { month: 'short', day: '2-digit', year: 'numeric' };
+        lastUpdatedEl.textContent = `Last updated: ${latestDate.toLocaleDateString('en-US', options)}`;
+      } else {
+        lastUpdatedEl.textContent = 'Last updated: —';
+      }
+    }
+
+    function selectCompetitor(compId) {
+      selectedCompetitorId = compId;
+      
+      // Update highlights in DOM
+      document.querySelectorAll('#competitors-tbody tr').forEach(tr => {
+        tr.classList.remove('competitor-row-active');
+      });
+      // Add active highlight to rows associated with selected competitor id
+      // Since competitor id is resolved dynamically, reload is cleaner or select locally:
+      loadLocalRowHighlights(compId);
+    }
+
+    function loadLocalRowHighlights(compId) {
+      const tbody = document.getElementById('competitors-tbody');
+      let prodIndex = 0;
+      competitorList.forEach(comp => {
+        const prods = competitorProducts.filter(p => p.competitor_id === comp.id);
+        const count = prods.length > 0 ? prods.length : 1;
+        for (let i = 0; i < count; i++) {
+          const tr = tbody.children[prodIndex];
+          if (tr && comp.id === compId) {
+            tr.classList.add('competitor-row-active');
+          }
+          prodIndex++;
+        }
+      });
+    }
+
+    async function saveCompetitorName(id, val) {
+      const comp = competitorList.find(c => c.id === id);
+      if (!comp || comp.name === val.trim()) return;
+
+      try {
+        const { error } = await sb.from('competitors')
+          .update({ name: val.trim(), updated_at: new Date().toISOString() })
+          .eq('id', id);
+
+        if (error) throw error;
+        showToast('Competitor name saved.');
+        await loadCompetitors();
+      } catch (err) {
+        console.error(err);
+        showToast('Save failed: ' + err.message, true);
+      }
+    }
+
+    async function saveCompetitorProduct(prodId, field, val) {
+      if (!prodId || prodId === 'null') return;
+      const prod = competitorProducts.find(p => p.id === prodId);
+      if (!prod || prod[field] === val.trim()) return;
+
+      try {
+        const { error } = await sb.from('competitor_products')
+          .update({ [field]: val.trim(), updated_at: new Date().toISOString() })
+          .eq('id', prodId);
+
+        if (error) throw error;
+        showToast('Price matrix saved.');
+        await loadCompetitors();
+      } catch (err) {
+        console.error(err);
+        showToast('Save failed: ' + err.message, true);
+      }
+    }
+
+    async function addNewCompetitor() {
+      const bizName = selectedBusiness || 'All';
+      try {
+        showToast('Adding competitor...');
+        const { data: newComp, error: compErr } = await sb.from('competitors')
+          .insert({
+            company_id: companyId,
+            business_name: bizName,
+            name: 'New Competitor'
+          })
+          .select()
+          .single();
+
+        if (compErr) throw compErr;
+
+        const { error: prodErr } = await sb.from('competitor_products')
+          .insert({
+            competitor_id: newComp.id,
+            product_name: '',
+            base_price: ''
+          });
+
+        if (prodErr) throw prodErr;
+
+        selectedCompetitorId = newComp.id;
+        showToast('Competitor added.');
+        await loadCompetitors();
+      } catch (err) {
+        console.error(err);
+        showToast('Failed to add competitor: ' + err.message, true);
+      }
+    }
+
+    async function addNewProductToSelected() {
+      if (!selectedCompetitorId) {
+        showToast('Please select a competitor row first.', true);
+        return;
+      }
+
+      try {
+        showToast('Adding product...');
+        const { error } = await sb.from('competitor_products')
+          .insert({
+            competitor_id: selectedCompetitorId,
+            product_name: '',
+            base_price: ''
+          });
+
+        if (error) throw error;
+        showToast('Product row added.');
+        await loadCompetitors();
+      } catch (err) {
+        console.error(err);
+        showToast('Failed to add product: ' + err.message, true);
+      }
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
     }
   </script>
 </body>
