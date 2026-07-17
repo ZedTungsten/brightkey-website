@@ -497,9 +497,24 @@
       // Load business list
       const { data: bizData } = await sb.from('tenant_businesses').select('id, name').eq('company_id', companyId).order('name', { ascending: true });
       businessList = bizData || [];
-      
-      // Restore selected business from localStorage
-      selectedBusiness = localStorage.getItem('pricing_strategy_selected_business') || "";
+
+      // Restore settings from global_settings (cross-device database store)
+      let savedSettings = { selected_business: "", checked_months: [] };
+      try {
+        const { data: globalSet } = await sb.from('global_settings')
+          .select('value')
+          .eq('key', 'pricing_strategy_settings')
+          .eq('company_id', companyId)
+          .maybeSingle();
+        if (globalSet?.value) {
+          savedSettings = globalSet.value;
+        }
+      } catch (err) {
+        console.warn('Failed to load pricing strategy settings from global_settings:', err);
+      }
+
+      selectedBusiness = savedSettings.selected_business || "";
+      checkedMonths = savedSettings.checked_months || [];
 
       const bizSelect = document.getElementById('business-select');
       businessList.forEach(biz => {
@@ -521,10 +536,6 @@
       // Load locked snapshots
       const { data: lockedRes } = await sb.from('locked_profit_loss_statements').select('month, statement_data').eq('company_id', companyId).order('month', { ascending: false });
       lockedStatements = lockedRes || [];
-
-      // Restore checked months from localStorage
-      const cachedMonths = localStorage.getItem('pricing_strategy_checked_months');
-      checkedMonths = cachedMonths ? JSON.parse(cachedMonths) : [];
 
       renderSnapshotDropdown();
       updateDropdownTriggerLabel();
@@ -571,7 +582,22 @@
       }
     }
 
-    function onSnapshotSelectChange(checkbox) {
+    async function saveSettingsToDb() {
+      try {
+        await sb.from('global_settings').upsert({
+          company_id: companyId,
+          key: 'pricing_strategy_settings',
+          value: {
+            selected_business: selectedBusiness,
+            checked_months: checkedMonths
+          }
+        }, { onConflict: 'company_id,key' });
+      } catch (err) {
+        console.error('Failed to save pricing settings:', err);
+      }
+    }
+
+    async function onSnapshotSelectChange(checkbox) {
       if (checkbox.checked) {
         if (!checkedMonths.includes(checkbox.value)) {
           checkedMonths.push(checkbox.value);
@@ -580,20 +606,20 @@
         checkedMonths = checkedMonths.filter(m => m !== checkbox.value);
       }
 
-      // Save to localStorage
-      localStorage.setItem('pricing_strategy_checked_months', JSON.stringify(checkedMonths));
-
       updateDropdownTriggerLabel();
       calculateExpenses();
+      
+      // Save state to database
+      await saveSettingsToDb();
     }
 
-    function onBusinessChange() {
+    async function onBusinessChange() {
       selectedBusiness = document.getElementById('business-select').value;
       
-      // Save to localStorage
-      localStorage.setItem('pricing_strategy_selected_business', selectedBusiness);
-
       calculateExpenses();
+      
+      // Save state to database
+      await saveSettingsToDb();
       
       // If we are currently on competitors tab, reload the competitors data
       const activeTab = document.querySelector('.tab-btn.active');
