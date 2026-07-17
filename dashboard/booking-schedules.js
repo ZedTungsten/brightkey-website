@@ -1010,10 +1010,22 @@
             </div>
           ` : escapeHtml(generalInstallersHtml);
 
+          const skuUpper = sku.toUpperCase();
+          const isLock = sku !== 'ADD-ON LABOR' &&
+                         !skuUpper.includes('BRACELET') &&
+                         !skuUpper.includes('BASEPLATE') &&
+                         !skuUpper.includes('LABOR') &&
+                         !skuUpper.includes('KEY');
+          const isUnallocatedLock = isLock && !isCancelled;
+
+          const textStyle = isUnallocatedLock ? 'color: #EF4444; font-weight: 700;' : 'color: var(--text-secondary);';
+          const skuStyle = isUnallocatedLock ? 'color: #EF4444; font-weight: 800;' : '';
+          const badgeHtml = isUnallocatedLock ? '<span style="background: rgba(239, 68, 68, 0.1); color: #EF4444; font-size: 0.65rem; font-weight: 700; padding: 2px 6px; border-radius: 9999px; margin-left: 0.35rem; text-transform: uppercase;">unallocated</span>' : '';
+
           tbody.insertAdjacentHTML('beforeend', `
             <tr ${trStyle}>
               <td>
-                <strong>${escapeHtml(sku)}</strong> - <span style="color: var(--text-secondary);">${escapeHtml(title)}</span>
+                <strong style="${skuStyle}">${escapeHtml(sku)}</strong> - <span style="${textStyle}">${escapeHtml(title)}</span>${badgeHtml}
                 ${isCancelled ? '<br/><span style="color:var(--danger);font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;">Cancelled</span>' : ''}
               </td>
               <td>N/A</td>
@@ -1021,28 +1033,6 @@
               <td>${instCellHtml}</td>
             </tr>
           `);
-        }
-      }
-
-      // Display unallocated products warning if any active locks are not allocated to a door
-      const warningEl = document.getElementById('unallocated-products-warning');
-      if (warningEl) {
-        const unallocatedActiveLocks = productsArr.filter(p => {
-          if (p.cancelled) return false;
-          const skuUpper = p.sku.toUpperCase();
-          return !renderedProductSkus.has(p.sku) &&
-                 skuUpper !== 'ADD-ON LABOR' &&
-                 !skuUpper.includes('BRACELET') &&
-                 !skuUpper.includes('BASEPLATE') &&
-                 !skuUpper.includes('LABOR') &&
-                 !skuUpper.includes('KEY');
-        });
-
-        if (unallocatedActiveLocks.length > 0) {
-          warningEl.style.display = 'block';
-          warningEl.innerHTML = `<strong>Unallocated Locks Detected</strong>: The product${unallocatedActiveLocks.length > 1 ? 's' : ''} <strong>${unallocatedActiveLocks.map(p => p.sku).join(', ')}</strong> ${unallocatedActiveLocks.length > 1 ? 'are' : 'is'} not allocated to any door. Click <strong>Edit doors</strong> above to allocate them so installers can perform checks and upload media.`;
-        } else {
-          warningEl.style.display = 'none';
         }
       }
 
