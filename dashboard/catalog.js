@@ -264,6 +264,7 @@
     }
     allProducts = data || [];
     updateParentSkuDatalist();
+    updateRelatedSkuDatalist();
     updateStats();
     populateCategoryFilter();
     applyFilters();
@@ -282,6 +283,25 @@
     if (!dl) return;
     const allSkus = [...new Set(allProducts.filter(p => p.sku).map(p => p.sku))];
     dl.innerHTML = allSkus.map(sku => `<option value="${esc(sku)}"></option>`).join('');
+  }
+
+  function updateRelatedSkuDatalist() {
+    const input = document.getElementById('f-related');
+    const dl = document.getElementById('related-skus-list');
+    if (!input || !dl) return;
+
+    const val = input.value;
+    const parts = val.split(',');
+    const prefixParts = parts.slice(0, -1).map(p => p.trim());
+    const lastPart = parts[parts.length - 1].trim();
+
+    const allSkus = [...new Set(allProducts.filter(p => p.sku).map(p => p.sku))];
+    const prefixStr = prefixParts.length > 0 ? prefixParts.join(', ') + ', ' : '';
+
+    dl.innerHTML = allSkus
+      .filter(sku => sku.toLowerCase().includes(lastPart.toLowerCase()) && !prefixParts.includes(sku))
+      .map(sku => `<option value="${esc(prefixStr + sku)}"></option>`)
+      .join('');
   }
 
   function applyFilters() {
@@ -2053,6 +2073,9 @@
         e.target.style.boxShadow = '0 0 0 3px rgba(220, 38, 38, 0.15)';
       }
     });
+
+    document.getElementById('f-related').addEventListener('input', updateRelatedSkuDatalist);
+    document.getElementById('f-related').addEventListener('focus', updateRelatedSkuDatalist);
 
     document.getElementById('drawer-prev').addEventListener('click', () => {
       if (!editingId) return;
