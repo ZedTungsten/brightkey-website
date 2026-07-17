@@ -1940,8 +1940,10 @@ function escFulfillment(str) {
 
 let modalTags = [];
 
-function getPastelColors() {
-  const hue = Math.floor(Math.random() * 360);
+const TAG_HUES = [0, 36, 72, 108, 144, 180, 216, 252, 288, 324];
+
+function getPastelColorByIndex(idx) {
+  const hue = TAG_HUES[idx % TAG_HUES.length];
   return {
     bg: `hsl(${hue}, 85%, 94%)`,
     text: `hsl(${hue}, 85%, 26%)`,
@@ -1958,7 +1960,7 @@ function renderInteractiveTags() {
     const pill = document.createElement('div');
     pill.className = 'interactive-tag-pill';
     
-    const colors = getPastelColors();
+    const colors = getPastelColorByIndex(idx);
     pill.style.backgroundColor = colors.bg;
     pill.style.color = colors.text;
     pill.style.borderColor = colors.border;
