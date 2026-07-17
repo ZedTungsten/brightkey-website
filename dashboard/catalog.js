@@ -1497,11 +1497,16 @@
       await fetchProducts();
       if (!editingId && productId) {
         editingId = productId;
-      }
-      if (editingId) {
         await openDrawerEdit(editingId);
       } else {
         updateDrawerNavigation();
+        // Resolve editingFeatureId in case it was a new insert
+        if (featureDef) {
+          const { data: fData } = await sbClient.from(featureDef.table).select('id').eq('product_id', productId).maybeSingle();
+          if (fData) {
+            editingFeatureId = fData.id;
+          }
+        }
       }
 
     } catch (err) {
