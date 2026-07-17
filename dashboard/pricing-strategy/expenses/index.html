@@ -550,11 +550,13 @@
         }
       });
 
+      // Filtered calculation outputs
       let totalCogs = 0;
       let totalOpex = 0;
       let totalRevenue = 0;
       let totalOrders = 0;
 
+      // Grouped COGS categories
       const consolidatedCogsMap = {
         'Supplier Cost': 0,
         'Installations': 0,
@@ -567,12 +569,14 @@
 
       const numMonths = checkedMonths.length;
 
+      // 1. Calculate orders count for selected months
       const filteredBookings = allBookings.filter(b => {
         if (!b.scheduled_date) return false;
         const monthKey = b.scheduled_date.slice(0, 7);
         return checkedMonths.includes(monthKey);
       });
 
+      // If a business is selected, only count orders containing that business's products
       if (selectedBusiness) {
         filteredBookings.forEach(b => {
           let hasBusinessProduct = false;
@@ -591,18 +595,22 @@
         totalOrders = filteredBookings.length;
       }
 
+      // 2. Loop through selected snapshots to build COGS & OPEX
       checkedMonths.forEach(mKey => {
         const stmt = lockedStatements.find(ls => ls.month === mKey);
         if (!stmt) return;
 
         const data = stmt.statement_data;
 
+        // If a business is selected, we calculate business-specific values dynamically
         if (selectedBusiness) {
+          // Calculate dynamically for this business in this month
           let bizRevenue = 0;
           let bizSupplierCost = 0;
           let bizCommissions = 0;
           let bizInstallations = 0;
 
+          // Filter bookings in this specific month
           const monthBookings = filteredBookings.filter(b => b.scheduled_date && b.scheduled_date.slice(0, 7) === mKey);
 
           monthBookings.forEach(b => {
@@ -611,161 +619,156 @@
             if (b.product_skus) skusArr = b.product_skus.split(' | ').filter(Boolean);
             if (b.product_qtys) qtysArr = b.product_qtys.split(' | ').map(Number);
 
+            let bookingBizSupplierCost = 0;
+            let bookingBizRevenue = 0;
+
             skusArr.forEach((sku, idx) => {
+              const qty = qtysArr[idx] || 0;
               const prod = bizProductMap[sku.toLowerCase()];
               if (prod && prod.business === selectedBusiness) {
-                const qty = qtysArr[idx] || 1;
-                const dealerVal = Number(prod.dealer_price) || 0;
-                bizSupplierCost += dealerVal * qty;
+                // Approximate SKU proportional revenue or direct cost
+                const dPrice = prod.dealer_price || 0;
+                bookingBizSupplierCost += (qty * dPrice);
               }
             });
 
-            let hasBusinessProduct = false;
-            let orderTotal = b.grand_total || 0;
-            let orderDeposit = b.deposit_amount || 0;
-            let orderCommission = 0;
-            let orderInstallation = 0;
+            // Calculate proportional revenue for this business from this booking
+            if (bookingBizSupplierCost > 0 && b.order_no && b.order_no.startsWith('ORD-')) {
+              // Calculate total booking cost
+              let totalBookingCost = 0;
+              skusArr.forEach((sku, idx) => {
+                const qty = qtysArr[idx] || 0;
+                const prod = bizProductMap[sku.toLowerCase()];
+                const dPrice = prod ? prod.dealer_price : 0;
+                totalBookingCost += (qty * dPrice);
+              });
 
-            skusArr.forEach(sku => {
-              const prod = bizProductMap[sku.toLowerCase()];
-              if (prod && prod.business === selectedBusiness) {
-                hasBusinessProduct = true;
-              }
-            });
-
-            if (hasBusinessProduct) {
-              bizRevenue += orderTotal;
-
+              const grandTotal = parseInt(b.grand_total) || 0;
+              const balanceDue = parseInt(b.balance_due) || 0;
+              let depositCentavos = parseInt(b.deposit_amount) || 0;
               if (b.deduction_labels && b.deduction_values) {
-                const labels = b.deduction_labels.split(' | ').filter(Boolean);
-                const values = b.deduction_values.split(' | ').map(Number);
-                labels.forEach((lbl, idx) => {
-                  const val = values[idx] || 0;
-                  const labelLower = lbl.toLowerCase();
-                  if (labelLower.includes('commission') || labelLower.includes('sales')) {
-                    orderCommission += val;
-                  } else if (labelLower.includes('install') || labelLower.includes('labor')) {
-                    orderInstallation += val;
+                const dLabels = b.deduction_labels.split('|').map(s => s.trim().toLowerCase());
+                const dValues = b.deduction_values.split('|').map(s => s.trim());
+                dLabels.forEach((label, idx) => {
+                  if (label.includes('deposit')) {
+                    depositCentavos += Math.round((parseFloat(dValues[idx]) || 0) * 100);
                   }
                 });
               }
+              const absDepositCentavos = Math.abs(depositCentavos);
+              const orderGrandTotal = grandTotal > 0 ? grandTotal : (balanceDue + absDepositCentavos);
+              const totalBookingRev = (orderGrandTotal + absDepositCentavos);
 
-              bizCommissions += orderCommission;
-              bizInstallations += orderInstallation;
+              if (totalBookingCost > 0) {
+                const ratio = bookingBizSupplierCost / totalBookingCost;
+                bookingBizRevenue = Math.round(totalBookingRev * ratio);
+              }
             }
+
+            bizRevenue += bookingBizRevenue;
+            bizSupplierCost += bookingBizSupplierCost;
           });
 
-          totalRevenue += bizRevenue;
-          totalCogs += (bizSupplierCost + bizCommissions + bizInstallations);
+          // Proportional allocation of commissions & installations based on business products
+          const totalCommissions = data.commissions || 0;
+          const totalInstallations = data.installations || 0;
+          const totalSupplierCost = data.supplierCost || 0;
+
+          if (totalSupplierCost > 0) {
+            const bizRatio = bizSupplierCost / totalSupplierCost;
+            bizCommissions = Math.round(totalCommissions * bizRatio);
+            bizInstallations = Math.round(totalInstallations * bizRatio);
+          }
+
+          // Add business-specific COGS
           consolidatedCogsMap['Supplier Cost'] += bizSupplierCost;
-          consolidatedCogsMap['Commissions'] += bizCommissions;
           consolidatedCogsMap['Installations'] += bizInstallations;
+          consolidatedCogsMap['Commissions'] += bizCommissions;
+          
+          // Shipping, Gas, and Packaging are shared, so we allocate them by business ratio
+          const sharedRatio = totalSupplierCost > 0 ? (bizSupplierCost / totalSupplierCost) : 0;
+          consolidatedCogsMap['Shipping'] += Math.round((data.shipping || 0) * sharedRatio);
+          consolidatedCogsMap['Gas Allowance'] += Math.round((data.gasAllowance || 0) * sharedRatio);
+          consolidatedCogsMap['Packaging Supplies'] += Math.round((data.packagingSupplies || 0) * sharedRatio);
 
-          const ratio = data.revenue > 0 ? bizRevenue / data.revenue : 0;
-          if (data.cogsDetail) {
-            Object.entries(data.cogsDetail).forEach(([cName, cVal]) => {
-              const cValNum = Number(cVal) || 0;
-              const normalizedName = cName.toLowerCase();
-              if (normalizedName.includes('supplier') || normalizedName.includes('commission') || normalizedName.includes('install')) {
-                return;
-              }
-              const allocated = cValNum * ratio;
-              totalCogs += allocated;
-
-              if (normalizedName.includes('shipping')) {
-                consolidatedCogsMap['Shipping'] += allocated;
-              } else if (normalizedName.includes('gas') || normalizedName.includes('fuel')) {
-                consolidatedCogsMap['Gas Allowance'] += allocated;
-              } else if (normalizedName.includes('package') || normalizedName.includes('supplies')) {
-                consolidatedCogsMap['Packaging Supplies'] += allocated;
-              } else {
-                otherCogsMap[cName] = (otherCogsMap[cName] || 0) + allocated;
-              }
-            });
-          }
-
-          if (data.opexDetail) {
-            Object.entries(data.opexDetail).forEach(([oName, oVal]) => {
-              const oValNum = Number(oVal) || 0;
-              const allocated = oValNum * ratio;
-              totalOpex += allocated;
-            });
-          }
-
+          totalRevenue += bizRevenue;
+          totalCogs += (bizSupplierCost + bizInstallations + bizCommissions + Math.round((data.shipping || 0) * sharedRatio) + Math.round((data.gasAllowance || 0) * sharedRatio) + Math.round((data.packagingSupplies || 0) * sharedRatio));
         } else {
-          totalRevenue += (Number(data.revenue) || 0);
-          totalCogs += (Number(data.cogs) || 0);
-          totalOpex += (Number(data.opex) || 0);
+          // Use complete company-wide P&L snapshot data directly
+          consolidatedCogsMap['Supplier Cost'] += (data.supplierCost || 0);
+          consolidatedCogsMap['Installations'] += (data.installations || 0);
+          consolidatedCogsMap['Commissions'] += (data.commissions || 0);
+          consolidatedCogsMap['Shipping'] += (data.shipping || 0);
+          consolidatedCogsMap['Gas Allowance'] += (data.gasAllowance || 0);
+          consolidatedCogsMap['Packaging Supplies'] += (data.packagingSupplies || 0);
 
-          if (data.cogsDetail) {
-            Object.entries(data.cogsDetail).forEach(([cName, cVal]) => {
-              const cValNum = Number(cVal) || 0;
-              const nameLower = cName.toLowerCase();
-
-              if (nameLower.includes('supplier') || nameLower.includes('cost of goods')) {
-                consolidatedCogsMap['Supplier Cost'] += cValNum;
-              } else if (nameLower.includes('install') || nameLower.includes('labor')) {
-                consolidatedCogsMap['Installations'] += cValNum;
-              } else if (nameLower.includes('commission') || nameLower.includes('sales')) {
-                consolidatedCogsMap['Commissions'] += cValNum;
-              } else if (nameLower.includes('shipping')) {
-                consolidatedCogsMap['Shipping'] += cValNum;
-              } else if (nameLower.includes('gas') || nameLower.includes('fuel')) {
-                consolidatedCogsMap['Gas Allowance'] += cValNum;
-              } else if (nameLower.includes('package') || nameLower.includes('supplies')) {
-                consolidatedCogsMap['Packaging Supplies'] += cValNum;
-              } else {
-                otherCogsMap[cName] = (otherCogsMap[cName] || 0) + cValNum;
-              }
+          // Add other Cogs dynamically
+          if (data.otherCogs) {
+            Object.keys(data.otherCogs).forEach(key => {
+              otherCogsMap[key] = (otherCogsMap[key] || 0) + data.otherCogs[key];
+              totalCogs += data.otherCogs[key];
             });
           }
+
+          const monthCogs = (data.supplierCost || 0) + (data.installations || 0) + (data.commissions || 0) + (data.shipping || 0) + (data.gasAllowance || 0) + (data.packagingSupplies || 0) + Object.values(data.otherCogs || {}).reduce((a, b) => a + b, 0);
+
+          totalCogs += monthCogs;
+          totalRevenue += (data.revenueBooking || 0);
         }
+
+        // OPEX is always company-wide overhead
+        const opexTotal = (data.salaries || 0) + (data.adjustments || 0) + (data.softwareApps || 0) + (data.admin?.total || 0) + (data.marketingSales?.total || 0) + (data.operationsSupport?.total || 0);
+        totalOpex += opexTotal;
       });
 
-      const avgRevenue = totalRevenue / numMonths;
-      const avgOpex = totalOpex / numMonths;
-      const avgCogs = totalCogs / numMonths;
+      // 3. Format & Render Results
+      const avgRevenue = totalRevenue / numMonths / 100;
+      const avgCogs = totalCogs / numMonths / 100;
+      const avgOpex = totalOpex / numMonths / 100;
+      const avgGrossProfit = avgRevenue - avgCogs;
 
-      const cogsPerOrder = totalOrders > 0 ? totalCogs / totalOrders : 0;
-      const grossProfit = totalRevenue - totalCogs;
-      const avgGrossProfit = grossProfit / numMonths;
-      const gpMargin = totalRevenue > 0 ? (grossProfit / totalRevenue) : 0;
+      const gpMargin = avgRevenue > 0 ? (avgGrossProfit / avgRevenue) : 0;
+      const gpMarginPercent = gpMargin * 100;
 
-      const breakevenRevenue = gpMargin > 0 ? (avgOpex / gpMargin) : 0;
+      const breakevenVal = gpMargin > 0 ? (avgOpex / gpMargin) : 0;
+      const cogsPerOrder = totalOrders > 0 ? (totalCogs / totalOrders / 100) : 0;
 
+      // Render Cards
       document.getElementById('card-cogs-per-order').textContent = formatPHP(cogsPerOrder);
       document.getElementById('sub-cogs-per-order').textContent = `Based on ${totalOrders} order${totalOrders === 1 ? '' : 's'}`;
       document.getElementById('card-opex-average').textContent = formatPHP(avgOpex);
-      document.getElementById('card-breakeven').textContent = formatPHP(breakevenRevenue);
+      document.getElementById('card-breakeven').textContent = formatPHP(breakevenVal);
+      document.getElementById('sub-breakeven').textContent = `Required monthly revenue at ${gpMarginPercent.toFixed(2)}% GP Margin`;
 
+      // Render OPEX Side Panel
       document.getElementById('opex-summary-revenue').textContent = formatPHP(avgRevenue);
       document.getElementById('opex-summary-gp').textContent = formatPHP(avgGrossProfit);
       document.getElementById('opex-summary-total').textContent = formatPHP(avgOpex);
-      document.getElementById('opex-summary-gpmargin').textContent = (gpMargin * 100).toFixed(2) + '%';
+      document.getElementById('opex-summary-gpmargin').textContent = `${gpMarginPercent.toFixed(2)}%`;
 
+      // Render Table Rows
       tbody.innerHTML = '';
-
-      Object.entries(consolidatedCogsMap).forEach(([name, totalVal]) => {
-        const avgVal = totalVal / numMonths;
-        if (avgVal > 0) {
-          const tr = document.createElement('tr');
-          tr.innerHTML = `
-            <td>${name}</td>
-            <td>${formatPHP(avgVal)}</td>
+      Object.keys(consolidatedCogsMap).forEach(key => {
+        const val = consolidatedCogsMap[key] / numMonths / 100;
+        if (val > 0) {
+          const row = document.createElement('tr');
+          row.innerHTML = `
+            <td>${key}</td>
+            <td>${formatPHP(val)}</td>
           `;
-          tbody.appendChild(tr);
+          tbody.appendChild(row);
         }
       });
 
-      Object.entries(otherCogsMap).forEach(([name, totalVal]) => {
-        const avgVal = totalVal / numMonths;
-        if (avgVal > 0) {
-          const tr = document.createElement('tr');
-          tr.innerHTML = `
-            <td>${name}</td>
-            <td>${formatPHP(avgVal)}</td>
+      Object.keys(otherCogsMap).forEach(key => {
+        const val = otherCogsMap[key] / numMonths / 100;
+        if (val > 0) {
+          const row = document.createElement('tr');
+          row.innerHTML = `
+            <td>${key}</td>
+            <td>${formatPHP(val)}</td>
           `;
-          tbody.appendChild(tr);
+          tbody.appendChild(row);
         }
       });
 
