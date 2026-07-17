@@ -114,6 +114,36 @@
       cursor: pointer;
     }
 
+    /* ── Metrics Cards Grid ── */
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 1.25rem;
+      margin-bottom: 1.5rem;
+    }
+    .metric-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.25rem;
+      box-shadow: var(--shadow-sm);
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+    .metric-lbl {
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-secondary);
+    }
+    .metric-val {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--cyan-light);
+    }
+
     /* ── Excel-like Pricing Table ── */
     .logs-table {
       table-layout: fixed;
@@ -233,33 +263,20 @@
             </div>
           </div>
 
-          <div class="card" style="padding: 1.25rem; margin-bottom: 1.5rem;">
-            <div style="overflow-x: auto;">
-              <table class="logs-table" style="width: 100%; border-collapse: collapse;">
-                <colgroup>
-                  <col style="width: 15%;" />
-                  <col style="width: 33%;" />
-                  <col style="width: 13%;" />
-                  <col style="width: 13%;" />
-                  <col style="width: 13%;" />
-                  <col style="width: 13%;" />
-                </colgroup>
-                <thead>
-                  <tr>
-                    <th style="text-align: left;">SKU</th>
-                    <th style="text-align: left;">Product Name</th>
-                    <th style="text-align: right; padding-right: 0.8rem;">Dealer Price</th>
-                    <th style="text-align: right; padding-right: 0.8rem;">Install Price</th>
-                    <th style="text-align: right; padding-right: 0.8rem;">Profit Margin</th>
-                    <th style="text-align: right; padding-right: 0.8rem;">Product Profit</th>
-                  </tr>
-                </thead>
-                <tbody id="dealer-tbody">
-                  <!-- Populated dynamically -->
-                </tbody>
-              </table>
+          <!-- KPI Metrics Grid -->
+          <div class="metrics-grid" id="dealer-metrics-grid">
+            <div class="metric-card">
+              <span class="metric-lbl">Average Profit Margin</span>
+              <span class="metric-val" id="metric-avg-margin">0.00%</span>
+            </div>
+            <div class="metric-card">
+              <span class="metric-lbl">Average Profit Value</span>
+              <span class="metric-val" id="metric-avg-profit">₱0.00</span>
             </div>
           </div>
+
+          <!-- Category Tables Container -->
+          <div id="dealer-tables-container"></div>
         </main>
       </div>
     </div>
@@ -361,8 +378,8 @@
     async function loadProducts() {
       if (!companyId) return;
 
-      const tbody = document.getElementById('dealer-tbody');
-      tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 2rem;">Loading products...</td></tr>`;
+      const container = document.getElementById('dealer-tables-container');
+      container.innerHTML = `<div class="card" style="padding: 2rem; text-align: center; color: var(--text-muted);">Loading products...</div>`;
 
       try {
         // Fetch products ordered by SKU alphabetically
@@ -378,13 +395,15 @@
         renderTable();
       } catch (err) {
         console.error('Error loading products:', err);
-        tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--danger); padding: 2rem;">Failed to load products: ${err.message}</td></tr>`;
+        container.innerHTML = `<div class="card" style="padding: 2rem; text-align: center; color: var(--danger);">Failed to load products: ${err.message}</div>`;
       }
     }
 
     function renderTable() {
-      const tbody = document.getElementById('dealer-tbody');
-      tbody.innerHTML = '';
+      const container = document.getElementById('dealer-tables-container');
+      const avgMarginEl = document.getElementById('metric-avg-margin');
+      const avgProfitEl = document.getElementById('metric-avg-profit');
+      container.innerHTML = '';
 
       // Normalize selectedBusiness value for filtering
       let filterBiz = "";
@@ -400,14 +419,21 @@
       });
 
       if (filtered.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 2rem;">No products found for this query.</td></tr>`;
+        container.innerHTML = `
+          <div class="card" style="padding: 2.5rem; text-align: center; border-radius: 8px;">
+            <div style="color: var(--text-muted); font-size: 0.95rem;">No products found for this query.</div>
+          </div>
+        `;
+        avgMarginEl.textContent = '0.00%';
+        avgProfitEl.textContent = '₱0.00';
         return;
       }
 
-      let sumDealer = 0;
-      let sumInstall = 0;
-      let sumProfit = 0;
-      let sumMargin = 0;
+      // 1. Calculate overall averages for KPI cards
+      let totalDealer = 0;
+      let totalInstall = 0;
+      let totalProfit = 0;
+      let totalMargin = 0;
       let countValidMargin = 0;
 
       filtered.forEach(p => {
@@ -416,48 +442,118 @@
         const profit = install - dealer;
         const margin = install > 0 ? (profit / install) : 0;
 
-        sumDealer += dealer;
-        sumInstall += install;
-        sumProfit += profit;
+        totalDealer += dealer;
+        totalInstall += install;
+        totalProfit += profit;
         if (install > 0) {
-          sumMargin += margin;
+          totalMargin += margin;
           countValidMargin++;
         }
-
-        const tr = document.createElement('tr');
-        tr.style.height = '28px';
-        tr.innerHTML = `
-          <td style="width: 15%; vertical-align: middle;"><div class="static-cell" style="font-weight: 600;">${escapeHtml(p.sku)}</div></td>
-          <td style="width: 33%; vertical-align: middle;"><div class="static-cell">${escapeHtml(p.title)}</div></td>
-          <td style="width: 13%; vertical-align: middle;">
-            <input type="text" class="cell-input" style="text-align: right;" value="${dealer > 0 ? dealer.toFixed(2) : ''}" placeholder="0.00" onblur="saveProductPrice('${p.id}', 'dealer_price', this.value)" />
-          </td>
-          <td style="width: 13%; vertical-align: middle;">
-            <input type="text" class="cell-input" style="text-align: right;" value="${install > 0 ? install.toFixed(2) : ''}" placeholder="0.00" onblur="saveProductPrice('${p.id}', 'installation_price', this.value)" />
-          </td>
-          <td style="width: 13%; vertical-align: middle; text-align: right; padding-right: 8px;"><div class="static-cell" style="text-align: right; font-weight: 500; color: ${margin >= 0.3 ? 'var(--cyan-light)' : 'inherit'};">${(margin * 100).toFixed(2)}%</div></td>
-          <td style="width: 13%; vertical-align: middle; text-align: right; padding-right: 8px;"><div class="static-cell" style="text-align: right; font-weight: 500;">${formatCurrency(profit)}</div></td>
-        `;
-        tbody.appendChild(tr);
       });
 
-      // Compute averages
-      const avgDealer = sumDealer / filtered.length;
-      const avgInstall = sumInstall / filtered.length;
-      const avgProfit = sumProfit / filtered.length;
-      const avgMargin = countValidMargin > 0 ? (sumMargin / countValidMargin) : 0;
+      const overallAvgMargin = countValidMargin > 0 ? (totalMargin / countValidMargin) : 0;
+      const overallAvgProfit = totalProfit / filtered.length;
 
-      // Bottom Row Row Average
-      const trAvg = document.createElement('tr');
-      trAvg.className = 'avg-row';
-      trAvg.innerHTML = `
-        <td colspan="2" style="vertical-align: middle;"><div class="static-cell">Average</div></td>
-        <td style="vertical-align: middle; text-align: right; padding-right: 8px;"><div class="static-cell" style="text-align: right;">${formatCurrency(avgDealer)}</div></td>
-        <td style="vertical-align: middle; text-align: right; padding-right: 8px;"><div class="static-cell" style="text-align: right;">${formatCurrency(avgInstall)}</div></td>
-        <td style="vertical-align: middle; text-align: right; padding-right: 8px;"><div class="static-cell" style="text-align: right;">${(avgMargin * 100).toFixed(2)}%</div></td>
-        <td style="vertical-align: middle; text-align: right; padding-right: 8px;"><div class="static-cell" style="text-align: right;">${formatCurrency(avgProfit)}</div></td>
-      `;
-      tbody.appendChild(trAvg);
+      avgMarginEl.textContent = `${(overallAvgMargin * 100).toFixed(2)}%`;
+      avgProfitEl.textContent = formatCurrency(overallAvgProfit);
+
+      // 2. Group by category and render tables
+      const grouped = {};
+      filtered.forEach(p => {
+        const catName = p.category || 'Uncategorized';
+        if (!grouped[catName]) grouped[catName] = [];
+        grouped[catName].push(p);
+      });
+
+      const catNames = Object.keys(grouped).sort((a, b) => {
+        if (a === 'Uncategorized') return 1;
+        if (b === 'Uncategorized') return -1;
+        return a.localeCompare(b);
+      });
+
+      catNames.forEach(catName => {
+        const prods = grouped[catName];
+        
+        let catSumDealer = 0;
+        let catSumInstall = 0;
+        let catSumProfit = 0;
+        let catSumMargin = 0;
+        let catCountValidMargin = 0;
+
+        const tableRowsHtml = prods.map(p => {
+          const dealer = (p.dealer_price || 0) / 100;
+          const install = (p.installation_price || 0) / 100;
+          const profit = install - dealer;
+          const margin = install > 0 ? (profit / install) : 0;
+
+          catSumDealer += dealer;
+          catSumInstall += install;
+          catSumProfit += profit;
+          if (install > 0) {
+            catSumMargin += margin;
+            catCountValidMargin++;
+          }
+
+          return `
+            <tr style="height: 28px;">
+              <td style="width: 15%; vertical-align: middle;"><div class="static-cell" style="font-weight: 600;">${escapeHtml(p.sku)}</div></td>
+              <td style="width: 33%; vertical-align: middle;"><div class="static-cell">${escapeHtml(p.title)}</div></td>
+              <td style="width: 13%; vertical-align: middle;">
+                <input type="text" class="cell-input" style="text-align: right;" value="${dealer > 0 ? dealer.toFixed(2) : ''}" placeholder="0.00" onblur="saveProductPrice('${p.id}', 'dealer_price', this.value)" />
+              </td>
+              <td style="width: 13%; vertical-align: middle;">
+                <input type="text" class="cell-input" style="text-align: right;" value="${install > 0 ? install.toFixed(2) : ''}" placeholder="0.00" onblur="saveProductPrice('${p.id}', 'installation_price', this.value)" />
+              </td>
+              <td style="width: 13%; vertical-align: middle; text-align: right; padding-right: 8px;"><div class="static-cell" style="text-align: right; font-weight: 500; color: ${margin >= 0.3 ? 'var(--cyan-light)' : 'inherit'};">${(margin * 100).toFixed(2)}%</div></td>
+              <td style="width: 13%; vertical-align: middle; text-align: right; padding-right: 8px;"><div class="static-cell" style="text-align: right; font-weight: 500;">${formatCurrency(profit)}</div></td>
+            </tr>
+          `;
+        }).join('');
+
+        const catAvgDealer = catSumDealer / prods.length;
+        const catAvgInstall = catSumInstall / prods.length;
+        const catAvgProfit = catSumProfit / prods.length;
+        const catAvgMargin = catCountValidMargin > 0 ? (catSumMargin / catCountValidMargin) : 0;
+
+        const cardHtml = `
+          <div class="card" style="padding: 1.25rem; margin-bottom: 1.5rem;">
+            <h3 style="font-size: 0.92rem; font-weight: 700; color: var(--text-primary); margin-top: 0; margin-bottom: 1rem;">${escapeHtml(catName)}</h3>
+            <div style="overflow-x: auto;">
+              <table class="logs-table" style="width: 100%; border-collapse: collapse;">
+                <colgroup>
+                  <col style="width: 15%;" />
+                  <col style="width: 33%;" />
+                  <col style="width: 13%;" />
+                  <col style="width: 13%;" />
+                  <col style="width: 13%;" />
+                  <col style="width: 13%;" />
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th style="text-align: left;">SKU</th>
+                    <th style="text-align: left;">Product Name</th>
+                    <th style="text-align: right; padding-right: 0.8rem;">Dealer Price</th>
+                    <th style="text-align: right; padding-right: 0.8rem;">Install Price</th>
+                    <th style="text-align: right; padding-right: 0.8rem;">Profit Margin</th>
+                    <th style="text-align: right; padding-right: 0.8rem;">Product Profit</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${tableRowsHtml}
+                  <tr class="avg-row">
+                    <td colspan="2" style="vertical-align: middle;"><div class="static-cell">Average</div></td>
+                    <td style="vertical-align: middle; text-align: right; padding-right: 8px;"><div class="static-cell" style="text-align: right;">${formatCurrency(catAvgDealer)}</div></td>
+                    <td style="vertical-align: middle; text-align: right; padding-right: 8px;"><div class="static-cell" style="text-align: right;">${formatCurrency(catAvgInstall)}</div></td>
+                    <td style="vertical-align: middle; text-align: right; padding-right: 8px;"><div class="static-cell" style="text-align: right;">${(catAvgMargin * 100).toFixed(2)}%</div></td>
+                    <td style="vertical-align: middle; text-align: right; padding-right: 8px;"><div class="static-cell" style="text-align: right;">${formatCurrency(catAvgProfit)}</div></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `;
+        container.insertAdjacentHTML('beforeend', cardHtml);
+      });
     }
 
     async function saveProductPrice(prodId, field, value) {
