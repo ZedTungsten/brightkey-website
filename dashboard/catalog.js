@@ -1481,14 +1481,18 @@
         featData.product_id = productId;
 
         if (editingFeatureId) {
-          await sbClient.from(featureDef.table).update(featData).eq('id', editingFeatureId);
+          const { error: fErr } = await sbClient.from(featureDef.table).update(featData).eq('id', editingFeatureId);
+          if (fErr) throw fErr;
         } else {
           // Check if a features row already exists
-          const { data: existing } = await sbClient.from(featureDef.table).select('id').eq('product_id', productId).maybeSingle();
+          const { data: existing, error: existErr } = await sbClient.from(featureDef.table).select('id').eq('product_id', productId).maybeSingle();
+          if (existErr) throw existErr;
           if (existing) {
-            await sbClient.from(featureDef.table).update(featData).eq('id', existing.id);
+            const { error: fErr } = await sbClient.from(featureDef.table).update(featData).eq('id', existing.id);
+            if (fErr) throw fErr;
           } else {
-            await sbClient.from(featureDef.table).insert(featData);
+            const { error: fErr } = await sbClient.from(featureDef.table).insert(featData);
+            if (fErr) throw fErr;
           }
         }
       }
@@ -2370,14 +2374,18 @@
             featData.product_id = editingId;
 
             if (editingFeatureId) {
-              await sbClient.from(featureDef.table).update(featData).eq('id', editingFeatureId);
+              const { error: fErr } = await sbClient.from(featureDef.table).update(featData).eq('id', editingFeatureId);
+              if (fErr) throw fErr;
             } else {
-              const { data: existing } = await sbClient.from(featureDef.table).select('id').eq('product_id', editingId).maybeSingle();
+              const { data: existing, error: existErr } = await sbClient.from(featureDef.table).select('id').eq('product_id', editingId).maybeSingle();
+              if (existErr) throw existErr;
               if (existing) {
-                await sbClient.from(featureDef.table).update(featData).eq('id', existing.id);
+                const { error: fErr } = await sbClient.from(featureDef.table).update(featData).eq('id', existing.id);
+                if (fErr) throw fErr;
                 editingFeatureId = existing.id;
               } else {
-                const { data: newFeat } = await sbClient.from(featureDef.table).insert(featData).select('id').maybeSingle();
+                const { data: newFeat, error: fErr } = await sbClient.from(featureDef.table).insert(featData).select('id').maybeSingle();
+                if (fErr) throw fErr;
                 if (newFeat) {
                   editingFeatureId = newFeat.id;
                 }
