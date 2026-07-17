@@ -1985,21 +1985,10 @@ window.openEditTagsModal = function(e, id) {
   modalTags = [...(item.tags || [])];
   renderInteractiveTags();
 
-  const cardEl = document.querySelector(`[data-id="${id}"]`);
   const modal = document.getElementById('edit-tags-modal');
-  const card = modal.querySelector('.modal-card');
-  
   modal.style.display = 'flex';
   modal.offsetHeight; // reflow
   modal.classList.add('open');
-
-  if (cardEl) {
-    const rect = cardEl.getBoundingClientRect();
-    card.style.position = 'absolute';
-    card.style.margin = '0';
-    card.style.top = (rect.bottom + window.scrollY + 8) + 'px';
-    card.style.left = Math.max(10, Math.min(window.innerWidth - 320, rect.left + window.scrollX - 90)) + 'px';
-  }
   
   setTimeout(() => {
     const field = document.getElementById('tags-input-field');
@@ -2023,21 +2012,10 @@ window.triggerBulkEditTags = function(e) {
   
   renderInteractiveTags();
 
-  const btnEl = e.currentTarget;
   const modal = document.getElementById('edit-tags-modal');
-  const card = modal.querySelector('.modal-card');
-  
   modal.style.display = 'flex';
   modal.offsetHeight; // reflow
   modal.classList.add('open');
-
-  if (btnEl) {
-    const rect = btnEl.getBoundingClientRect();
-    card.style.position = 'absolute';
-    card.style.margin = '0';
-    card.style.top = (rect.bottom + window.scrollY + 8) + 'px';
-    card.style.left = Math.max(10, Math.min(window.innerWidth - 320, rect.left + window.scrollX)) + 'px';
-  }
   
   setTimeout(() => {
     const field = document.getElementById('tags-input-field');
@@ -2065,8 +2043,10 @@ window.saveTags = async function() {
   }
 
   const btn = document.getElementById('btn-save-tags');
-  btn.disabled = true;
-  btn.textContent = "Saving...";
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Saving...";
+  }
 
   try {
     let query = sb.from('sales_resources')
@@ -2099,8 +2079,10 @@ window.saveTags = async function() {
     console.error(err);
     showToast('Failed to update tags: ' + err.message, true);
   } finally {
-    btn.disabled = false;
-    btn.textContent = "Update";
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "Update";
+    }
   }
 };
 
