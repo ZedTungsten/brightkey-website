@@ -497,11 +497,16 @@
       // Load business list
       const { data: bizData } = await sb.from('tenant_businesses').select('id, name').eq('company_id', companyId).order('name', { ascending: true });
       businessList = bizData || [];
+      
+      // Restore selected business from localStorage
+      selectedBusiness = localStorage.getItem('pricing_strategy_selected_business') || "";
+
       const bizSelect = document.getElementById('business-select');
       businessList.forEach(biz => {
         const opt = document.createElement('option');
         opt.value = biz.name;
         opt.textContent = biz.name;
+        if (biz.name === selectedBusiness) opt.selected = true;
         bizSelect.appendChild(opt);
       });
 
@@ -517,7 +522,13 @@
       const { data: lockedRes } = await sb.from('locked_profit_loss_statements').select('month, statement_data').eq('company_id', companyId).order('month', { ascending: false });
       lockedStatements = lockedRes || [];
 
+      // Restore checked months from localStorage
+      const cachedMonths = localStorage.getItem('pricing_strategy_checked_months');
+      checkedMonths = cachedMonths ? JSON.parse(cachedMonths) : [];
+
       renderSnapshotDropdown();
+      updateDropdownTriggerLabel();
+      calculateExpenses();
     });
 
     function renderSnapshotDropdown() {
@@ -534,26 +545,21 @@
         const [year, month] = stmt.month.split('-');
         const dateObj = new Date(year, parseInt(month) - 1, 1);
         const label = dateObj.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+        const isChecked = checkedMonths.includes(stmt.month);
 
         const item = document.createElement('label');
         item.className = 'dropdown-check-item';
         item.innerHTML = `
-          <input type="checkbox" value="${stmt.month}" onchange="onSnapshotSelectChange(this)" />
+          <input type="checkbox" value="${stmt.month}" onchange="onSnapshotSelectChange(this)" ${isChecked ? 'checked' : ''} />
           <span>${label}</span>
         `;
         menu.appendChild(item);
       });
     }
 
-    function onSnapshotSelectChange(checkbox) {
-      if (checkbox.checked) {
-        checkedMonths.push(checkbox.value);
-      } else {
-        checkedMonths = checkedMonths.filter(m => m !== checkbox.value);
-      }
-
-      // Update trigger label text
+    function updateDropdownTriggerLabel() {
       const labelEl = document.getElementById('dropdown-trigger-label');
+      if (!labelEl) return;
       if (checkedMonths.length === 0) {
         labelEl.textContent = 'Select snapshots...';
       } else if (checkedMonths.length === 1) {
@@ -563,12 +569,30 @@
       } else {
         labelEl.textContent = `${checkedMonths.length} snapshots selected`;
       }
+    }
 
+    function onSnapshotSelectChange(checkbox) {
+      if (checkbox.checked) {
+        if (!checkedMonths.includes(checkbox.value)) {
+          checkedMonths.push(checkbox.value);
+        }
+      } else {
+        checkedMonths = checkedMonths.filter(m => m !== checkbox.value);
+      }
+
+      // Save to localStorage
+      localStorage.setItem('pricing_strategy_checked_months', JSON.stringify(checkedMonths));
+
+      updateDropdownTriggerLabel();
       calculateExpenses();
     }
 
     function onBusinessChange() {
       selectedBusiness = document.getElementById('business-select').value;
+      
+      // Save to localStorage
+      localStorage.setItem('pricing_strategy_selected_business', selectedBusiness);
+
       calculateExpenses();
       
       // If we are currently on competitors tab, reload the competitors data
