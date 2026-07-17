@@ -498,6 +498,9 @@
             const skuUpper = p.sku.toUpperCase();
             return !allocatedSkus.has(p.sku) &&
                    skuUpper !== 'ADD-ON LABOR' &&
+                   skuUpper !== 'BACKJOB' &&
+                   skuUpper !== 'OCULAR' &&
+                   skuUpper !== 'DAY OFF' &&
                    !skuUpper.includes('BRACELET') &&
                    !skuUpper.includes('BASEPLATE') &&
                    !skuUpper.includes('LABOR') &&
@@ -1012,6 +1015,9 @@
 
           const skuUpper = sku.toUpperCase();
           const isLock = sku !== 'ADD-ON LABOR' &&
+                         skuUpper !== 'BACKJOB' &&
+                         skuUpper !== 'OCULAR' &&
+                         skuUpper !== 'DAY OFF' &&
                          !skuUpper.includes('BRACELET') &&
                          !skuUpper.includes('BASEPLATE') &&
                          !skuUpper.includes('LABOR') &&
@@ -3929,7 +3935,17 @@
         }
       });
 
-      const missingLocks = originalSkus.filter(sku => !allocatedSkus.includes(sku) && !sku.toUpperCase().includes('BRACELET') && !sku.toUpperCase().includes('BASEPLATE') && !sku.toUpperCase().includes('LABOR') && !sku.toUpperCase().includes('KEY'));
+      const missingLocks = originalSkus.filter(sku => {
+        const skuUpper = sku.toUpperCase();
+        return !allocatedSkus.includes(sku) &&
+               skuUpper !== 'BACKJOB' &&
+               skuUpper !== 'OCULAR' &&
+               skuUpper !== 'DAY OFF' &&
+               !skuUpper.includes('BRACELET') &&
+               !skuUpper.includes('BASEPLATE') &&
+               !skuUpper.includes('LABOR') &&
+               !skuUpper.includes('KEY');
+      });
       if (missingLocks.length > 0) {
         showDragWarning('Incomplete Allocation', `Please allocate all purchased lock units to doors. Unallocated locks: ${missingLocks.join(', ')}`);
         return;
