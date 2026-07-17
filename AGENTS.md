@@ -256,3 +256,25 @@ We use two distinct patterns for modal overlays. Do NOT mix them:
 > [!IMPORTANT]
 > Because Vercel serves clean URLs without extensions (e.g. rewriting `/dashboard/marketing-logs/index.html` to `/dashboard/marketing-logs`), relative resource paths like `marketing-logs.css` or `marketing-logs.js` declared in HTML files will fail to resolve. The browser treats the active path context as `/dashboard/` instead of `/dashboard/marketing-logs/`.
 > - **Always Use Root-Relative Absolute Paths**: For all stylesheet links, script tags, images, or custom assets loaded inside nested subdirectory modules, declare paths using a leading slash (e.g. `/dashboard/marketing-logs/marketing-logs.css` instead of `marketing-logs.css`). This guarantees paths resolve correctly regardless of URL rewrite structures.
+
+---
+
+## 19. Global Settings for Persistent Configurations & User Preferences
+> [!IMPORTANT]
+> Whenever implementing dashboard states, user selection filters, toggle switches, or preferences that need to be remembered across page loads and page refreshes:
+> - **Never Use Local Storage**: Avoid `localStorage` or `sessionStorage` since preferences must synchronize across devices and platforms.
+> - **Always Use `global_settings` Database Table**: Save and retrieve settings asynchronously using the `global_settings` table (scoped to `company_id` and identified by a unique `key`).
+> - **Database Schema Pattern**:
+>   * Read: Query the `global_settings` table for a specific `key` and retrieve the JSON value:
+>     ```javascript
+>     const { data } = await sb.from('global_settings').select('value').eq('key', 'your_settings_key').eq('company_id', companyId).maybeSingle();
+>     ```
+>   * Write: Perform a PostgREST `upsert` using the unique composite index constraint (`company_id, key`):
+>     ```javascript
+>     await sb.from('global_settings').upsert({
+>       company_id: companyId,
+>       key: 'your_settings_key',
+>       value: { ...yourSettingsMap }
+>     }, { onConflict: 'company_id,key' });
+>     ```
+
