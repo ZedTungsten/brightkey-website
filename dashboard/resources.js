@@ -1938,37 +1938,113 @@ function escFulfillment(str) {
             .replace(/'/g, '&#39;');
 }
 
+let modalTags = [];
+
+function getPastelColors() {
+  const hue = Math.floor(Math.random() * 360);
+  return {
+    bg: `hsl(${hue}, 85%, 94%)`,
+    text: `hsl(${hue}, 85%, 26%)`,
+    border: `hsl(${hue}, 85%, 82%)`
+  };
+}
+
+function renderInteractiveTags() {
+  const container = document.getElementById('tags-pills-list');
+  if (!container) return;
+  container.innerHTML = '';
+  
+  modalTags.forEach((tag, idx) => {
+    const pill = document.createElement('div');
+    pill.className = 'interactive-tag-pill';
+    
+    const colors = getPastelColors();
+    pill.style.backgroundColor = colors.bg;
+    pill.style.color = colors.text;
+    pill.style.borderColor = colors.border;
+    
+    pill.innerHTML = `
+      <span>${escFulfillment(tag)}</span>
+      <span class="interactive-tag-close" onclick="removeInteractiveTag(${idx})">&times;</span>
+    `;
+    container.appendChild(pill);
+  });
+}
+
+window.removeInteractiveTag = function(idx) {
+  modalTags.splice(idx, 1);
+  renderInteractiveTags();
+};
+
 window.openEditTagsModal = function(e, id) {
   e.stopPropagation();
   tagEditingId = id;
   const item = allResources.find(r => r.id === id);
   if (!item) return;
 
-  const tagsInput = document.getElementById('tags-input');
-  const currentTags = item.tags || [];
-  tagsInput.value = currentTags.join(', ');
+  modalTags = [...(item.tags || [])];
+  renderInteractiveTags();
+
+  const cardEl = document.querySelector(`[data-id="${id}"]`);
+  const modal = document.getElementById('edit-tags-modal');
+  const card = modal.querySelector('.modal-card');
   
-  openModal('edit-tags-modal');
+  modal.style.display = 'flex';
+  modal.offsetHeight; // reflow
+  modal.classList.add('open');
+
+  if (cardEl) {
+    const rect = cardEl.getBoundingClientRect();
+    card.style.position = 'absolute';
+    card.style.margin = '0';
+    card.style.top = (rect.bottom + window.scrollY + 8) + 'px';
+    card.style.left = Math.max(10, Math.min(window.innerWidth - 320, rect.left + window.scrollX - 90)) + 'px';
+  }
+  
   setTimeout(() => {
-    tagsInput.focus();
+    const field = document.getElementById('tags-input-field');
+    if (field) {
+      field.value = '';
+      field.focus();
+    }
   }, 50);
 };
 
-window.triggerBulkEditTags = function() {
+window.triggerBulkEditTags = function(e) {
   if (selectedResourceIds.length === 0) return;
   tagEditingId = null;
-  const tagsInput = document.getElementById('tags-input');
 
   if (selectedResourceIds.length === 1) {
     const item = allResources.find(r => r.id === selectedResourceIds[0]);
-    tagsInput.value = item && item.tags ? item.tags.join(', ') : '';
+    modalTags = [...(item.tags || [])];
   } else {
-    tagsInput.value = '';
+    modalTags = [];
   }
+  
+  renderInteractiveTags();
 
-  openModal('edit-tags-modal');
+  const btnEl = e.currentTarget;
+  const modal = document.getElementById('edit-tags-modal');
+  const card = modal.querySelector('.modal-card');
+  
+  modal.style.display = 'flex';
+  modal.offsetHeight; // reflow
+  modal.classList.add('open');
+
+  if (btnEl) {
+    const rect = btnEl.getBoundingClientRect();
+    card.style.position = 'absolute';
+    card.style.margin = '0';
+    card.style.top = (rect.bottom + window.scrollY + 8) + 'px';
+    card.style.left = Math.max(10, Math.min(window.innerWidth - 320, rect.left + window.scrollX)) + 'px';
+  }
+  
   setTimeout(() => {
-    tagsInput.focus();
+    const field = document.getElementById('tags-input-field');
+    if (field) {
+      field.value = '';
+      field.focus();
+    }
   }, 50);
 };
 
@@ -1979,11 +2055,14 @@ window.saveTags = async function() {
     return;
   }
 
-  const tagsInput = document.getElementById('tags-input');
-  const tagsArray = tagsInput.value
-    .split(',')
-    .map(t => t.trim())
-    .filter(t => t.length > 0);
+  const inputField = document.getElementById('tags-input-field');
+  if (inputField && inputField.value.trim()) {
+    const val = inputField.value.trim().replace(/,/g, '');
+    if (val && !modalTags.includes(val)) {
+      modalTags.push(val);
+    }
+    inputField.value = '';
+  }
 
   const btn = document.getElementById('btn-save-tags');
   btn.disabled = true;
@@ -1991,7 +2070,7 @@ window.saveTags = async function() {
 
   try {
     let query = sb.from('sales_resources')
-      .update({ tags: tagsArray, updated_at: new Date().toISOString() });
+      .update({ tags: modalTags, updated_at: new Date().toISOString() });
 
     if (tagEditingId) {
       query = query.eq('id', tagEditingId);
@@ -2005,11 +2084,11 @@ window.saveTags = async function() {
     
     if (tagEditingId) {
       const item = allResources.find(r => r.id === tagEditingId);
-      if (item) item.tags = tagsArray;
+      if (item) item.tags = [...modalTags];
     } else {
       selectedResourceIds.forEach(id => {
         const item = allResources.find(r => r.id === id);
-        if (item) item.tags = tagsArray;
+        if (item) item.tags = [...modalTags];
       });
     }
 
@@ -2021,6 +2100,32 @@ window.saveTags = async function() {
     showToast('Failed to update tags: ' + err.message, true);
   } finally {
     btn.disabled = false;
-    btn.textContent = "Save Tags";
+    btn.textContent = "Update";
   }
 };
+
+document.addEventListener('DOMContentLoaded', () => {
+  const inputField = document.getElementById('tags-input-field');
+  if (inputField) {
+    inputField.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ',') {
+        e.preventDefault();
+        const val = inputField.value.trim().replace(/,/g, '');
+        if (val && !modalTags.includes(val)) {
+          modalTags.push(val);
+          renderInteractiveTags();
+        }
+        inputField.value = '';
+      }
+    });
+
+    inputField.addEventListener('blur', () => {
+      const val = inputField.value.trim().replace(/,/g, '');
+      if (val && !modalTags.includes(val)) {
+        modalTags.push(val);
+        renderInteractiveTags();
+      }
+      inputField.value = '';
+    });
+  }
+});
