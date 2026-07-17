@@ -486,7 +486,25 @@
             }
           }
 
-          const isDone = doorsArr.length > 0 && doorsArr.every(d => {
+          const allocatedSkus = new Set();
+          doorsArr.forEach(d => {
+            if (d.products) {
+              d.products.forEach(sku => allocatedSkus.add(sku));
+            }
+          });
+
+          const hasUnallocatedActiveLocks = productsArr.some(p => {
+            if (p.cancelled) return false;
+            const skuUpper = p.sku.toUpperCase();
+            return !allocatedSkus.has(p.sku) &&
+                   skuUpper !== 'ADD-ON LABOR' &&
+                   !skuUpper.includes('BRACELET') &&
+                   !skuUpper.includes('BASEPLATE') &&
+                   !skuUpper.includes('LABOR') &&
+                   !skuUpper.includes('KEY');
+          });
+
+          const isDone = !hasUnallocatedActiveLocks && doorsArr.length > 0 && doorsArr.every(d => {
             const attachedSkus = d.products || [];
             const allProductsCancelled = attachedSkus.length > 0 && attachedSkus.every(sku => {
               const matchedProd = productsArr.find(p => p.sku === sku);
@@ -499,14 +517,14 @@
           const isDayOff = b.product_skus && b.product_skus.toLowerCase().includes('day off');
           const isDayOffPassed = isDayOff && (b.scheduled_date <= todayStr);
 
-          const hasMedia = isDayOffPassed || (doorsArr.length > 0 && doorsArr.every(d => {
+          const hasMedia = !hasUnallocatedActiveLocks && (isDayOffPassed || (doorsArr.length > 0 && doorsArr.every(d => {
             const attachedSkus = d.products || [];
             const allProductsCancelled = attachedSkus.length > 0 && attachedSkus.every(sku => {
               const matchedProd = productsArr.find(p => p.sku === sku);
               return matchedProd ? !!matchedProd.cancelled : false;
             });
             return (d.media_urls && d.media_urls.length > 0) || allProductsCancelled;
-          }));
+          })));
 
           const noInstallers = !b.installer_id && (!b.installers || b.installers.length === 0);
           const noDoorsAssigned = doorsArr.length === 0 || doorsArr.every(d => {
@@ -1003,6 +1021,28 @@
               <td>${instCellHtml}</td>
             </tr>
           `);
+        }
+      }
+
+      // Display unallocated products warning if any active locks are not allocated to a door
+      const warningEl = document.getElementById('unallocated-products-warning');
+      if (warningEl) {
+        const unallocatedActiveLocks = productsArr.filter(p => {
+          if (p.cancelled) return false;
+          const skuUpper = p.sku.toUpperCase();
+          return !renderedProductSkus.has(p.sku) &&
+                 skuUpper !== 'ADD-ON LABOR' &&
+                 !skuUpper.includes('BRACELET') &&
+                 !skuUpper.includes('BASEPLATE') &&
+                 !skuUpper.includes('LABOR') &&
+                 !skuUpper.includes('KEY');
+        });
+
+        if (unallocatedActiveLocks.length > 0) {
+          warningEl.style.display = 'block';
+          warningEl.innerHTML = `<strong>Unallocated Locks Detected</strong>: The product${unallocatedActiveLocks.length > 1 ? 's' : ''} <strong>${unallocatedActiveLocks.map(p => p.sku).join(', ')}</strong> ${unallocatedActiveLocks.length > 1 ? 'are' : 'is'} not allocated to any door. Click <strong>Edit doors</strong> above to allocate them so installers can perform checks and upload media.`;
+        } else {
+          warningEl.style.display = 'none';
         }
       }
 
