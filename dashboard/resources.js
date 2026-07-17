@@ -10,6 +10,7 @@ let allResources = [];
 let displayedResources = [];
 let searchFilter = "";
 let folderEditingId = null;
+let tagEditingId = null;
 let explorerViewMode = localStorage.getItem('bk_resources_view_mode') || 'grid'; // Remember view mode
 let selectedResourceIds = []; // Stores IDs of selected resources for bulk operations
 let currentMoveModalFolderId = null; // Tracks folder directory state within Move modal
@@ -268,6 +269,10 @@ function renderExplorer() {
           <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="2" fill="none"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
           Rename
         </div>
+        <div class="card-dropdown-item" onclick="openEditTagsModal(event, '${item.id}')">
+          <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="2" fill="none"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line></svg>
+          Edit Tags
+        </div>
         <div class="card-dropdown-item danger" onclick="deleteResource(event, '${item.id}')">
           <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="2" fill="none"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
           Delete
@@ -315,6 +320,14 @@ function renderExplorer() {
       </div>
     ` : '';
 
+    const tags = item.tags || [];
+    let tagsHtml = '';
+    if (tags.length > 0) {
+      tagsHtml = `<div class="item-tags-container">` + 
+        tags.map(t => `<span class="tag-pill">${escFulfillment(t)}</span>`).join('') +
+        `</div>`;
+    }
+
     card.innerHTML = `
       ${cardCheckboxHtml}
       ${listCheckboxHtml}
@@ -324,7 +337,10 @@ function renderExplorer() {
         ${shortcutBadgeHtml}
         ${iconHtml}
       </div>
-      <span class="item-name">${escFulfillment(displayName)}</span>
+      <div class="item-name-tags-wrapper">
+        <span class="item-name">${escFulfillment(displayName)}</span>
+        ${tagsHtml}
+      </div>
       ${metaHtml}
       ${actionMenuHtml}
     `;
@@ -1927,3 +1943,60 @@ function escFulfillment(str) {
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#39;');
 }
+
+window.openEditTagsModal = function(e, id) {
+  e.stopPropagation();
+  tagEditingId = id;
+  const item = allResources.find(r => r.id === id);
+  if (!item) return;
+
+  const tagsInput = document.getElementById('tags-input');
+  const currentTags = item.tags || [];
+  tagsInput.value = currentTags.join(', ');
+  
+  openModal('edit-tags-modal');
+  setTimeout(() => {
+    tagsInput.focus();
+  }, 50);
+};
+
+window.saveTags = async function() {
+  if (!tagEditingId) return;
+  if (!currentUserCanEdit) {
+    showToast('Permission denied: Only Owner, Admin, and Sales Manager can manage tags.', true);
+    return;
+  }
+
+  const tagsInput = document.getElementById('tags-input');
+  const tagsArray = tagsInput.value
+    .split(',')
+    .map(t => t.trim())
+    .filter(t => t.length > 0);
+
+  const btn = document.getElementById('btn-save-tags');
+  btn.disabled = true;
+  btn.textContent = "Saving...";
+
+  try {
+    const { error } = await sb.from('sales_resources')
+      .update({ tags: tagsArray, updated_at: new Date().toISOString() })
+      .eq('id', tagEditingId);
+
+    if (error) throw error;
+    showToast('Tags updated successfully.');
+    
+    const item = allResources.find(r => r.id === tagEditingId);
+    if (item) {
+      item.tags = tagsArray;
+    }
+
+    closeModal('edit-tags-modal');
+    renderExplorer();
+  } catch (err) {
+    console.error(err);
+    showToast('Failed to update tags: ' + err.message, true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Save Tags";
+  }
+};
