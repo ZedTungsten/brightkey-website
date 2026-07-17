@@ -112,6 +112,7 @@
       letter-spacing: 0.05em;
     }
     .payout-status-badge.unlocked { color: var(--success); }
+    .payout-status-badge.ongoing { color: var(--warning); }
     .payout-status-badge.locked { color: var(--text-muted); }
     
     .payout-status-dot {
@@ -121,6 +122,7 @@
       display: inline-block;
     }
     .payout-status-badge.unlocked .payout-status-dot { background-color: var(--success); }
+    .payout-status-badge.ongoing .payout-status-dot { background-color: var(--warning); }
     .payout-status-badge.locked .payout-status-dot { background-color: var(--text-muted); }
 
     .payout-actions {
@@ -382,6 +384,20 @@
         return scheds.every(day => {
           return state[`${this.employee.id}_${day}`] === true;
         });
+      },
+
+      isMonthOngoing(year, monthIndex) {
+        if (!this.employee) return false;
+        const monthKey = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
+        
+        const state = this.regularPayoutState[monthKey];
+        if (!state) return false;
+
+        const scheds = this.payoutSchedules.length > 0 ? this.payoutSchedules : [15, 30];
+        const someChecked = scheds.some(day => state[`${this.employee.id}_${day}`] === true);
+        const allChecked = scheds.every(day => state[`${this.employee.id}_${day}`] === true);
+        
+        return someChecked && !allChecked;
       },
 
       getAssignedDoorsForBookingAndEmployee(b, empId) {
@@ -688,25 +704,63 @@
         // Loop through 12 months (latest first)
         for (let m = 11; m >= 0; m--) {
           const unlocked = this.isMonthUnlocked(this.selectedYear, m);
+          const ongoing = this.isMonthOngoing(this.selectedYear, m);
           const monthLabel = `${this.MONTH_NAMES[m]} ${this.selectedYear}`;
           const monthKey = `${this.selectedYear}-${String(m + 1).padStart(2, '0')}`;
+
+          const hireDateStr = this.employee.date_hired;
+          let isPreceding = false;
+          if (hireDateStr) {
+            const hireParts = hireDateStr.split('-');
+            const hireYear = parseInt(hireParts[0], 10);
+            const hireMonth = parseInt(hireParts[1], 10);
+            if (this.selectedYear < hireYear || (this.selectedYear === hireYear && (m + 1) < hireMonth)) {
+              isPreceding = true;
+            }
+          }
+
+          let statusHtml = '';
+          let buttonsHtml = '';
+
+          if (isPreceding) {
+            statusHtml = '';
+            buttonsHtml = '';
+          } else {
+            let statusClass = 'locked';
+            let statusText = 'Pending Payment';
+            if (unlocked) {
+              statusClass = 'unlocked';
+              statusText = 'Available';
+            } else if (ongoing) {
+              statusClass = 'ongoing';
+              statusText = 'Ongoing';
+            }
+
+            statusHtml = `
+              <div class="payout-status-badge ${statusClass}">
+                <span class="payout-status-dot"></span>
+                <span>${statusText}</span>
+              </div>
+            `;
+
+            buttonsHtml = `
+              <button class="btn btn-outline btn-sm" onclick="PayoutsApp.viewPayslip('${monthKey}')" ${unlocked ? '' : 'disabled'} style="font-size:0.78rem; padding:0.4rem 0.85rem;">
+                View
+              </button>
+              <button class="btn btn-cyan btn-sm" onclick="PayoutsApp.downloadPayslip('${monthKey}')" ${unlocked ? '' : 'disabled'} style="font-size:0.78rem; padding:0.4rem 0.85rem;">
+                Download
+              </button>
+            `;
+          }
 
           html += `
             <div class="payout-item-card">
               <div class="payout-meta">
                 <div class="payout-month">${monthLabel}</div>
-                <div class="payout-status-badge ${unlocked ? 'unlocked' : 'locked'}">
-                  <span class="payout-status-dot"></span>
-                  <span>${unlocked ? 'Available' : 'Pending Payment'}</span>
-                </div>
+                ${statusHtml}
               </div>
               <div class="payout-actions">
-                <button class="btn btn-outline btn-sm" onclick="PayoutsApp.viewPayslip('${monthKey}')" ${unlocked ? '' : 'disabled'} style="font-size:0.78rem; padding:0.4rem 0.85rem;">
-                  View
-                </button>
-                <button class="btn btn-cyan btn-sm" onclick="PayoutsApp.downloadPayslip('${monthKey}')" ${unlocked ? '' : 'disabled'} style="font-size:0.78rem; padding:0.4rem 0.85rem;">
-                  Download
-                </button>
+                ${buttonsHtml}
               </div>
             </div>
           `;
