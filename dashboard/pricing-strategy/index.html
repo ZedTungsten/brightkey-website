@@ -227,25 +227,35 @@
       padding: 0 0.5rem;
       height: 28px;
     }
-    .cell-textarea {
+    .cell-textarea,
+    .cell-input,
+    .cell-select {
       width: 100%;
-      min-height: 18px;
+      height: 26px;
       background: transparent;
       border: none;
       outline: none;
       resize: none;
       font-family: inherit;
       font-size: 0.8rem;
-      line-height: 1.2;
+      line-height: 0.3 !important;
       color: inherit;
-      padding: 3px 5px;
+      padding: 0 8px;
       margin: 0;
       box-sizing: border-box;
       transition: background 0.15s;
       overflow: hidden;
       display: block;
+      vertical-align: middle !important;
     }
-    .cell-textarea:focus {
+    .cell-select {
+      cursor: pointer;
+      appearance: none;
+      -webkit-appearance: none;
+    }
+    .cell-textarea:focus,
+    .cell-input:focus,
+    .cell-select:focus {
       background: transparent !important;
       box-shadow: none !important;
       outline: none !important;
@@ -1009,19 +1019,28 @@
           if (index === 0) {
             // First product row has the competitor name spanning all its product rows
             competitorCellHtml = `
-              <td rowspan="${numProds}" style="border-right: 1px solid var(--border); vertical-align: top;">
-                <textarea class="cell-textarea" onblur="saveCompetitorName('${comp.id}', this.value)" style="font-weight: 600;">${escapeHtml(comp.name)}</textarea>
+              <td rowspan="${numProds}" style="border-right: 1px solid var(--border); vertical-align: middle;">
+                <input type="text" class="cell-input" onblur="saveCompetitorName('${comp.id}', this.value)" value="${escapeHtml(comp.name)}" style="font-weight: 600;" />
               </td>
             `;
           }
 
+          // Build product dropdown options dynamically from catalog SKUs
+          const productOptions = allProducts.map(p => {
+            if (!p.sku) return '';
+            return `<option value="${escapeHtml(p.sku)}" ${p.sku === prod.product_name ? 'selected' : ''}>${escapeHtml(p.sku)}</option>`;
+          }).join('');
+
           tr.innerHTML = `
             ${competitorCellHtml}
             <td>
-              <textarea class="cell-textarea" onblur="saveCompetitorProduct('${prod.id}', 'product_name', this.value)">${escapeHtml(prod.product_name)}</textarea>
+              <select class="cell-select" onchange="saveCompetitorProduct('${prod.id}', 'product_name', this.value)">
+                <option value="">Select SKU...</option>
+                ${productOptions}
+              </select>
             </td>
             <td>
-              <textarea class="cell-textarea" onblur="saveCompetitorProduct('${prod.id}', 'base_price', this.value)" style="text-align: right; padding-right: 1.5rem;">${escapeHtml(prod.base_price)}</textarea>
+              <input type="text" class="cell-input" onblur="saveCompetitorProduct('${prod.id}', 'base_price', this.value)" value="${escapeHtml(prod.base_price)}" style="text-align: right; padding-right: 1.5rem;" />
             </td>
           `;
 
