@@ -345,6 +345,18 @@
         </div>
       </div>
 
+      <!-- Business -->
+      <div class="dash-nav-group" id="nav-group-business" style="display: none;">
+        <button class="dash-nav-parent" onclick="toggleSubmenu(this)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+          <span class="dash-nav-text">Business</span>
+          <svg class="dash-nav-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div class="dash-nav-children">
+          <a href="/dashboard/business" class="dash-nav-child" data-role="business">Overview</a>
+        </div>
+      </div>
+
       <!-- Products -->
       <div class="dash-nav-group" id="nav-group-products" style="display: none;">
         <button class="dash-nav-parent" onclick="toggleSubmenu(this)">
@@ -759,6 +771,7 @@
 
         // Filter top-level groups based on dynamic role modules
         const GROUP_MODULE_MAP = {
+          'nav-group-business': 'Business',
           'nav-group-products': 'Products',
           'nav-group-operations': 'Operations',
           'nav-group-marketing': 'Marketing',
