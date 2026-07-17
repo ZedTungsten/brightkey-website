@@ -278,6 +278,8 @@ We use two distinct patterns for modal overlays. Do NOT mix them:
 >     }, { onConflict: 'company_id,key' });
 > ---
 
+---
+
 ## 20. Proper Use of HTML Placeholder Attributes
 > [!IMPORTANT]
 > When rendering inputs or textareas with default placeholder text (such as "New Competitor", "Select option...", etc.):
@@ -286,4 +288,22 @@ We use two distinct patterns for modal overlays. Do NOT mix them:
 >   ```html
 >   <input type="text" value="${record.name === 'New Record' ? '' : record.name}" placeholder="New Record" />
 >   ```
+
+---
+
+## 21. Toast Notification Implementation Pattern
+> [!IMPORTANT]
+> When displaying notifications, success messages, or non-blocking alerts to the user inside dashboard pages:
+> - **Never Call Undeclared Toast Functions**: Always verify if a `showToast()` function is declared locally in your script block before calling it.
+> - **Toast Binding Standard**: Define `showToast()` locally to hook into `window.Toast` to prevent `ReferenceError: showToast is not defined` exceptions:
+>   ```javascript
+>   function showToast(message, isError = false) {
+>     if (window.Toast) {
+>       window.Toast.show(message, isError ? 'error' : 'success');
+>     } else {
+>       console.log((isError ? 'ERROR: ' : 'INFO: ') + message);
+>     }
+>   }
+>   ```
+
 
