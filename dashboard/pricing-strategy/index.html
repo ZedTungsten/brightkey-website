@@ -289,6 +289,12 @@
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
           </div>
         </div>
+
+        <!-- Save Status Indicator -->
+        <span id="save-status" style="font-size: 0.82rem; color: var(--text-secondary); margin-left: 1.25rem; font-weight: 500; display: inline-flex; align-items: center; gap: 0.4rem; min-width: 140px; transition: opacity 0.2s;">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="var(--cyan)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle;"><polyline points="20 6 9 17 4 12"/></svg>
+          <span id="save-status-text">All changes saved</span>
+        </span>
       </div>
 
       <div class="content-area">
@@ -461,6 +467,30 @@
         console.log((isError ? 'ERROR: ' : 'INFO: ') + message);
       }
     }
+
+    function setSaveStatus(status) {
+      const statusText = document.getElementById('save-status-text');
+      const statusIcon = document.querySelector('#save-status svg');
+      const statusWrapper = document.getElementById('save-status');
+      if (!statusText || !statusIcon || !statusWrapper) return;
+
+      if (status === 'saving') {
+        statusWrapper.style.opacity = '0.6';
+        statusText.textContent = 'Saving...';
+        statusIcon.style.stroke = 'var(--text-muted)';
+        statusIcon.style.display = 'none';
+      } else if (status === 'saved') {
+        statusWrapper.style.opacity = '1';
+        statusText.textContent = 'All changes saved';
+        statusIcon.style.stroke = 'var(--cyan)';
+        statusIcon.style.display = 'inline-block';
+      } else if (status === 'error') {
+        statusWrapper.style.opacity = '1';
+        statusText.textContent = 'Save failed';
+        statusIcon.style.stroke = 'var(--danger)';
+        statusIcon.style.display = 'inline-block';
+      }
+    }
     let lockedStatements = [];
     let checkedMonths = [];
     let allProducts = [];
@@ -620,6 +650,7 @@
     }
 
     async function saveSettingsToDb() {
+      setSaveStatus('saving');
       try {
         await sb.from('global_settings').upsert({
           company_id: companyId,
@@ -629,8 +660,10 @@
             checked_months: checkedMonths
           }
         }, { onConflict: 'company_id,key' });
+        setSaveStatus('saved');
       } catch (err) {
         console.error('Failed to save pricing settings:', err);
+        setSaveStatus('error');
       }
     }
 
@@ -1114,6 +1147,7 @@
 
       if (comp.name === finalVal) return;
 
+      setSaveStatus('saving');
       try {
         const nowStr = new Date().toISOString();
         const { error } = await sb.from('competitors')
@@ -1129,8 +1163,10 @@
         // Update last updated timestamp locally in DOM
         const options = { month: 'short', day: '2-digit', year: 'numeric' };
         document.getElementById('competitors-last-updated').textContent = `Last updated: ${new Date(nowStr).toLocaleDateString('en-US', options)}`;
+        setSaveStatus('saved');
       } catch (err) {
         console.error(err);
+        setSaveStatus('error');
         showToast('Save failed: ' + err.message, true);
       }
     }
@@ -1140,6 +1176,7 @@
       const prod = competitorProducts.find(p => p.id === prodId);
       if (!prod || prod[field] === val.trim()) return;
 
+      setSaveStatus('saving');
       try {
         const nowStr = new Date().toISOString();
         const { error } = await sb.from('competitor_products')
@@ -1155,14 +1192,17 @@
         // Update last updated timestamp locally in DOM
         const options = { month: 'short', day: '2-digit', year: 'numeric' };
         document.getElementById('competitors-last-updated').textContent = `Last updated: ${new Date(nowStr).toLocaleDateString('en-US', options)}`;
+        setSaveStatus('saved');
       } catch (err) {
         console.error(err);
+        setSaveStatus('error');
         showToast('Save failed: ' + err.message, true);
       }
     }
 
     async function addNewCompetitor() {
       const bizName = selectedBusiness || 'All';
+      setSaveStatus('saving');
       try {
         const { data: newComp, error: compErr } = await sb.from('competitors')
           .insert({
@@ -1186,8 +1226,10 @@
 
         selectedCompetitorId = newComp.id;
         await loadCompetitors();
+        setSaveStatus('saved');
       } catch (err) {
         console.error(err);
+        setSaveStatus('error');
         showToast('Failed to add competitor: ' + err.message, true);
       }
     }
@@ -1198,6 +1240,7 @@
         return;
       }
 
+      setSaveStatus('saving');
       try {
         const { error } = await sb.from('competitor_products')
           .insert({
@@ -1208,8 +1251,10 @@
 
         if (error) throw error;
         await loadCompetitors();
+        setSaveStatus('saved');
       } catch (err) {
         console.error(err);
+        setSaveStatus('error');
         showToast('Failed to add product: ' + err.message, true);
       }
     }
