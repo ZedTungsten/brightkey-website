@@ -78,6 +78,13 @@ We enforce rigorous practices to prevent SQL injections (SQLi) and Cross-Site Sc
 >   const { data: co } = await getSb().from('companies').select('id').eq('tenant_id', authInfo.tenantId).limit(1).maybeSingle();
 >   const companyId = co?.id || null;
 >   ```
+> - **Guarding Against Null/Blank UUID Queries**:
+>   When passing UUID parameters into database filters (e.g., `.eq('company_id', companyId)` or `.in('competitor_id', compIds)`), always verify that they are not `null`, `undefined`, or `"null"` strings before running the query. If the values are not yet resolved, defer execution or handle it gracefully to avoid throwing a `22P02: invalid input syntax for type uuid: "null"` error:
+>   ```javascript
+>   if (!companyId || companyId === 'null') {
+>     return; // Defer or handle gracefully
+>   }
+>   ```
 
 ---
 
