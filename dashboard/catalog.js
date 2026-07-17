@@ -596,7 +596,7 @@
     // Load features
     if (p && p.business && FEATURE_DEFS[p.business]) {
       const featureDef = FEATURE_DEFS[p.business];
-      const { data: fData } = await sbClient.from(featureDef.table).select('*').eq('product_id', id).maybeSingle();
+      const { data: fData } = await sbClient.from(featureDef.table).select('*').eq('product_id', id).limit(1).maybeSingle();
       if (fData) {
         editingFeatureId = fData.id;
         fillFeatures(p.business, fData);
@@ -1452,7 +1452,7 @@
           if (featureDef) {
             const featData = collectFeatures(business);
             for (const productId of selectedProductIds) {
-              const { data: existing } = await sbClient.from(featureDef.table).select('id').eq('product_id', productId).maybeSingle();
+              const { data: existing } = await sbClient.from(featureDef.table).select('id').eq('product_id', productId).limit(1).maybeSingle();
               if (existing) {
                 await sbClient.from(featureDef.table).update(featData).eq('id', existing.id);
               } else {
@@ -1504,7 +1504,7 @@
           if (fErr) throw fErr;
         } else {
           // Check if a features row already exists
-          const { data: existing, error: existErr } = await sbClient.from(featureDef.table).select('id').eq('product_id', productId).maybeSingle();
+          const { data: existing, error: existErr } = await sbClient.from(featureDef.table).select('id').eq('product_id', productId).limit(1).maybeSingle();
           if (existErr) throw existErr;
           if (existing) {
             const { error: fErr } = await sbClient.from(featureDef.table).update(featData).eq('id', existing.id);
@@ -1525,7 +1525,7 @@
         updateDrawerNavigation();
         // Resolve editingFeatureId in case it was a new insert
         if (featureDef) {
-          const { data: fData } = await sbClient.from(featureDef.table).select('id').eq('product_id', productId).maybeSingle();
+          const { data: fData } = await sbClient.from(featureDef.table).select('id').eq('product_id', productId).limit(1).maybeSingle();
           if (fData) {
             editingFeatureId = fData.id;
           }
@@ -1585,7 +1585,7 @@
 
     if (p && p.business && FEATURE_DEFS[p.business]) {
       const featureDef = FEATURE_DEFS[p.business];
-      const { data: fData } = await sbClient.from(featureDef.table).select('*').eq('product_id', id).maybeSingle();
+      const { data: fData } = await sbClient.from(featureDef.table).select('*').eq('product_id', id).limit(1).maybeSingle();
       if (fData) {
         fillFeatures(p.business, fData);
       }
@@ -2396,7 +2396,7 @@
               const { error: fErr } = await sbClient.from(featureDef.table).update(featData).eq('id', editingFeatureId);
               if (fErr) throw fErr;
             } else {
-              const { data: existing, error: existErr } = await sbClient.from(featureDef.table).select('id').eq('product_id', editingId).maybeSingle();
+              const { data: existing, error: existErr } = await sbClient.from(featureDef.table).select('id').eq('product_id', editingId).limit(1).maybeSingle();
               if (existErr) throw existErr;
               if (existing) {
                 const { error: fErr } = await sbClient.from(featureDef.table).update(featData).eq('id', existing.id);
