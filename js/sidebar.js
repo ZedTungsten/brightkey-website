@@ -562,6 +562,13 @@
 
     sidebarContainer.innerHTML = sidebarHTML;
 
+    // Breakout of iframe for sidebar link navigation
+    if (window.self !== window.top) {
+      sidebarContainer.querySelectorAll('a').forEach(a => {
+        a.setAttribute('target', '_top');
+      });
+    }
+
     // Setup Search Bar event listeners
     const searchInput = document.getElementById('sidebar-search-input');
     const searchIcon = document.getElementById('sidebar-search-icon');
