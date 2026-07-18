@@ -163,49 +163,23 @@
 
       <div class="content-area">
         <main class="main-panel" style="padding: 1.5rem;">
-          <!-- Competitors Panel -->
+          <!-- Competitors Panel Header -->
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
             <h2 style="font-size: 1.1rem; font-weight: 700; color: var(--text-primary); margin: 0;">Competitor Price Matrix</h2>
             <span id="competitors-last-updated" style="font-size: 0.82rem; color: var(--text-secondary); font-weight: 500;">Last updated: —</span>
           </div>
 
-          <div class="card" style="padding: 1.25rem; margin-bottom: 1.5rem;">
-            <div style="overflow-x: auto;">
-              <table class="logs-table" style="width: 100%; border-collapse: collapse;">
-                <colgroup>
-                  <col style="width: 30%;" />
-                  <col style="width: 45%;" />
-                  <col style="width: 25%;" />
-                </colgroup>
-                <thead>
-                  <tr>
-                    <th style="width: 30%; text-align: left;">Competitor</th>
-                    <th style="width: 45%; text-align: left;">Products</th>
-                    <th style="width: 25%; text-align: right; padding-right: 0.8rem;">Base Price</th>
-                  </tr>
-                </thead>
-                <tbody id="competitors-tbody">
-                  <!-- Populated dynamically -->
-                </tbody>
-                <tfoot>
-                  <tr>
-                    <td style="width: 30%; border: none; text-align: center; padding: 0.75rem 0;">
-                      <button class="btn btn-primary" onclick="addNewCompetitor()" style="height: 28px; padding: 0 0.75rem; font-size: 0.75rem; display: inline-flex; align-items: center; gap: 0.4rem; font-weight: 600; margin: 0 auto;">
-                        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                        Add Competitor
-                      </button>
-                    </td>
-                    <td style="width: 45%; border: none; text-align: center; padding: 0.75rem 0;">
-                      <button class="btn btn-outline" onclick="addNewProductToSelected()" style="height: 28px; padding: 0 0.75rem; font-size: 0.75rem; display: inline-flex; align-items: center; gap: 0.4rem; font-weight: 600; margin: 0 auto;">
-                        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                        Add Product
-                      </button>
-                    </td>
-                    <td style="width: 25%; border: none;"></td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
+          <!-- Competitors Cards Container -->
+          <div id="competitors-container">
+            <!-- Populated dynamically with separate cards/containers -->
+          </div>
+
+          <!-- Add Competitor Button (Center Aligned at bottom, outside all containers) -->
+          <div style="text-align: center; margin-top: 2rem; margin-bottom: 2rem;">
+            <button class="btn btn-primary" onclick="addNewCompetitor()" style="height: 32px; padding: 0 1.25rem; font-size: 0.8rem; display: inline-flex; align-items: center; gap: 0.5rem; font-weight: 600; margin: 0 auto; box-shadow: var(--shadow-sm);">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+              Add Competitor
+            </button>
           </div>
         </main>
       </div>
@@ -313,9 +287,9 @@
     async function loadCompetitors(isInitial = false) {
       if (!companyId) return;
 
-      const tbody = document.getElementById('competitors-tbody');
-      if (isInitial || tbody.children.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="3" style="text-align: center; color: var(--text-muted); padding: 2rem;">Loading competitor pricing...</td></tr>`;
+      const container = document.getElementById('competitors-container');
+      if (isInitial || container.children.length === 0) {
+        container.innerHTML = `<div style="text-align: center; color: var(--text-muted); padding: 3rem;">Loading competitor pricing...</div>`;
       }
 
       try {
@@ -372,22 +346,17 @@
           competitorProducts = [newProd];
         }
 
-        if (!selectedCompetitorId && competitorList.length > 0) {
-          selectedCompetitorId = competitorList[0].id;
-        }
-
         renderCompetitors();
       } catch (err) {
         console.error('Error loading competitors:', err);
-        tbody.innerHTML = `<tr><td colspan="3" style="text-align: center; color: var(--danger); padding: 2rem;">Failed to load competitor pricing: ${err.message}</td></tr>`;
+        container.innerHTML = `<div style="text-align: center; color: var(--danger); padding: 3rem;">Failed to load competitor pricing: ${err.message}</div>`;
       }
     }
 
     function renderCompetitors() {
-      const tbody = document.getElementById('competitors-tbody');
-      tbody.innerHTML = '';
+      const container = document.getElementById('competitors-container');
+      container.innerHTML = '';
 
-      let lastCompId = null;
       let maxUpdated = null;
 
       competitorList.forEach(comp => {
@@ -404,13 +373,59 @@
           if (nameB === '' && nameA !== '') return -1;
           return nameA.localeCompare(nameB);
         });
-        const productsMap = {};
-        productsMap[comp.id] = prods;
 
-        const rowCount = prods.length > 0 ? prods.length : 1;
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.style.padding = '1.25rem';
+        card.style.marginBottom = '1.5rem';
+        card.setAttribute('data-comp-id', comp.id);
+
+        const competitorNameVal = comp.name === 'New Competitor' ? '' : comp.name;
+
+        // Card Header
+        const headerDiv = document.createElement('div');
+        headerDiv.style.display = 'flex';
+        headerDiv.style.justifyContent = 'space-between';
+        headerDiv.style.alignItems = 'center';
+        headerDiv.style.marginBottom = '1rem';
+        headerDiv.style.borderBottom = '1px solid var(--border)';
+        headerDiv.style.paddingBottom = '0.5rem';
+
+        headerDiv.innerHTML = `
+          <input type="text" class="cell-input" style="font-weight: 700; font-size: 0.95rem; background: transparent; border: none; padding: 0; flex-grow: 1;" value="${escapeHtml(competitorNameVal)}" placeholder="New Competitor" onblur="saveCompetitorName('${comp.id}', this.value)" />
+          <button class="btn-icon danger" onclick="deleteCompetitor('${comp.id}', '${escapeHtml(comp.name)}')" title="Delete Competitor" style="border: none; background: transparent; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; height: 26px; width: 26px;">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+          </button>
+        `;
+        card.appendChild(headerDiv);
+
+        // Table
+        const tableWrapper = document.createElement('div');
+        tableWrapper.style.overflowX = 'auto';
+
+        const table = document.createElement('table');
+        table.className = 'logs-table';
+        table.style.width = '100%';
+        table.style.borderCollapse = 'collapse';
+        table.innerHTML = `
+          <colgroup>
+            <col style="width: 65%;" />
+            <col style="width: 25%;" />
+            <col style="width: 10%;" />
+          </colgroup>
+          <thead>
+            <tr>
+              <th style="width: 65%; text-align: left; height: 28px; padding-left: 0.5rem;">Product SKU</th>
+              <th style="width: 25%; text-align: right; padding-right: 0.8rem; height: 28px;">Base Price</th>
+              <th style="width: 10%; text-align: center; height: 28px;"></th>
+            </tr>
+          </thead>
+        `;
+
+        const tbody = document.createElement('tbody');
         const productsList = prods.length > 0 ? prods : [{ id: null, product_name: '', base_price: '' }];
 
-        productsList.forEach((prod, index) => {
+        productsList.forEach(prod => {
           if (prod.updated_at) {
             const d = new Date(prod.updated_at);
             if (!maxUpdated || d > maxUpdated) maxUpdated = d;
@@ -418,58 +433,51 @@
 
           const tr = document.createElement('tr');
           tr.style.height = '28px';
-          tr.setAttribute('data-comp-id', comp.id);
 
-          // Highlight row if clicked
-          tr.onclick = (e) => {
-            // Prevent select triggers from refocus logic
-            if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') {
-              selectedCompetitorId = comp.id;
-              highlightCompetitorRowsLocally(comp.id);
-              return;
-            }
-            selectedCompetitorId = comp.id;
-            highlightCompetitorRowsLocally(comp.id);
-          };
-
-          if (selectedCompetitorId === comp.id) {
-            tr.classList.add('competitor-row-active');
-          }
-
-          // Competitor Column (Merged vertically)
-          if (index === 0) {
-            const competitorNameVal = comp.name === 'New Competitor' ? '' : comp.name;
-            tr.innerHTML += `
-              <td rowspan="${rowCount}" style="width: 30%; border-right: 1px solid var(--border); vertical-align: middle;">
-                <input type="text" class="cell-input" style="font-weight: 600;" value="${escapeHtml(competitorNameVal)}" placeholder="New Competitor" onblur="saveCompetitorName('${comp.id}', this.value)" />
-              </td>
-            `;
-          }
-
-          // Products SKU Dropdown
+          // SKU Dropdown Options
           let skuOptions = `<option value="">Select SKU...</option>`;
           allProducts.forEach(ap => {
             const isSelected = (prod.product_name || '') === ap.sku;
             skuOptions += `<option value="${escapeHtml(ap.sku)}" ${isSelected ? 'selected' : ''}>${escapeHtml(ap.sku)}</option>`;
           });
 
-          tr.innerHTML += `
-            <td style="width: 45%; border-right: 1px solid var(--border); vertical-align: middle;">
+          tr.innerHTML = `
+            <td style="width: 65%; border-right: 1px solid var(--border); vertical-align: middle;">
               <select class="cell-select" onchange="saveCompetitorProduct('${prod.id}', 'product_name', this.value)">
                 ${skuOptions}
               </select>
             </td>
-          `;
-
-          // Base Price
-          tr.innerHTML += `
-            <td style="width: 25%; vertical-align: middle;">
+            <td style="width: 25%; border-right: 1px solid var(--border); vertical-align: middle;">
               <input type="text" class="cell-input" style="text-align: right; font-weight: 500;" value="${escapeHtml(prod.base_price || '')}" placeholder="0" onblur="saveCompetitorProduct('${prod.id}', 'base_price', this.value)" />
             </td>
+            <td style="width: 10%; text-align: center; vertical-align: middle;">
+              ${prod.id ? `
+              <button class="btn-icon danger" onclick="deleteProductRow('${prod.id}')" title="Delete Product" style="border: none; background: transparent; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; height: 26px; width: 26px;">
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+              </button>
+              ` : ''}
+            </td>
           `;
-
           tbody.appendChild(tr);
         });
+
+        table.appendChild(tbody);
+        tableWrapper.appendChild(table);
+        card.appendChild(tableWrapper);
+
+        // Center-aligned Add Product Button
+        const addProdDiv = document.createElement('div');
+        addProdDiv.style.textAlign = 'center';
+        addProdDiv.style.marginTop = '1rem';
+        addProdDiv.innerHTML = `
+          <button class="btn btn-outline" onclick="addNewProductTo('${comp.id}')" style="height: 28px; padding: 0 0.75rem; font-size: 0.75rem; display: inline-flex; align-items: center; gap: 0.4rem; font-weight: 600; margin: 0 auto;">
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            Add Product
+          </button>
+        `;
+        card.appendChild(addProdDiv);
+
+        container.appendChild(card);
       });
 
       if (maxUpdated) {
@@ -480,28 +488,48 @@
       }
     }
 
-    function highlightCompetitorRowsLocally(compId) {
-      const tbody = document.getElementById('competitors-tbody');
-      Array.from(tbody.children).forEach(tr => {
-        tr.classList.remove('competitor-row-active');
-      });
-      loadLocalRowHighlights(compId);
+    async function deleteCompetitor(id, name) {
+      if (!companyId) return;
+
+      const confirmBox = document.getElementById('confirm-modal');
+      const confirmTitle = document.getElementById('confirm-title');
+      const confirmBody = document.getElementById('confirm-body');
+
+      confirmTitle.textContent = 'Delete Competitor?';
+      confirmBody.textContent = `Are you sure you want to delete competitor "${name}" and all their pricing data?`;
+
+      document.getElementById('confirm-ok').onclick = async () => {
+        confirmBox.classList.remove('open');
+        setSaveStatus('saving');
+        try {
+          const { error } = await sb.from('competitors').delete().eq('id', id);
+          if (error) throw error;
+          showToast('Competitor deleted successfully.');
+          await loadCompetitors();
+          setSaveStatus('saved');
+        } catch (err) {
+          console.error(err);
+          setSaveStatus('error');
+          showToast('Failed to delete competitor: ' + err.message, true);
+        }
+      };
+
+      confirmBox.classList.add('open');
     }
 
-    function loadLocalRowHighlights(compId) {
-      const tbody = document.getElementById('competitors-tbody');
-      let prodIndex = 0;
-      competitorList.forEach(comp => {
-        const prods = competitorProducts.filter(p => p.competitor_id === comp.id);
-        const count = prods.length > 0 ? prods.length : 1;
-        for (let i = 0; i < count; i++) {
-          const tr = tbody.children[prodIndex];
-          if (tr && comp.id === compId) {
-            tr.classList.add('competitor-row-active');
-          }
-          prodIndex++;
-        }
-      });
+    async function deleteProductRow(prodId) {
+      setSaveStatus('saving');
+      try {
+        const { error } = await sb.from('competitor_products').delete().eq('id', prodId);
+        if (error) throw error;
+        showToast('Product removed.');
+        await loadCompetitors();
+        setSaveStatus('saved');
+      } catch (err) {
+        console.error(err);
+        setSaveStatus('error');
+        showToast('Failed to remove product: ' + err.message, true);
+      }
     }
 
     async function saveCompetitorName(id, val) {
@@ -550,7 +578,7 @@
         });
         if (hasDuplicate) {
           showToast('Duplicate SKU: This competitor already has this product.', true);
-          renderTable();
+          await loadCompetitors();
           return;
         }
       }
@@ -601,7 +629,6 @@
 
         if (prodErr) throw prodErr;
 
-        selectedCompetitorId = newComp.id;
         await loadCompetitors();
         setSaveStatus('saved');
       } catch (err) {
@@ -611,17 +638,12 @@
       }
     }
 
-    async function addNewProductToSelected() {
-      if (!selectedCompetitorId) {
-        showToast('Please select a competitor row first.', true);
-        return;
-      }
-
+    async function addNewProductTo(compId) {
       setSaveStatus('saving');
       try {
         const { error } = await sb.from('competitor_products')
           .insert({
-            competitor_id: selectedCompetitorId,
+            competitor_id: compId,
             product_name: '',
             base_price: ''
           });
@@ -673,6 +695,31 @@
       if (!str) return '';
       return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
     }
+
+    // Bind confirm modal actions
+    document.getElementById('confirm-cancel').onclick = () => {
+      document.getElementById('confirm-modal').classList.remove('open');
+    };
   </script>
+
+  <!-- Confirm Delete Modal (Pattern A compliant) -->
+  <div class="modal-overlay" id="confirm-modal" style="display: none; position: fixed; inset: 0; z-index: 1000; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.4);">
+    <div class="modal-box" style="background: var(--bg-surface); animation: modalSlide 0.2s forwards; padding: 1.5rem; border-radius: 8px; max-width: 400px; width: 90%; box-shadow: var(--shadow-lg); border: 1px solid var(--border);">
+      <div class="modal-title" id="confirm-title" style="font-size: 1.1rem; font-weight: 700; margin-bottom: 0.5rem; color: var(--text-primary);">Delete Competitor?</div>
+      <div class="modal-body" id="confirm-body" style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1.5rem;">This will permanently delete this competitor.</div>
+      <div class="modal-actions" style="display: flex; justify-content: flex-end; gap: 0.75rem;">
+        <button class="btn btn-outline" id="confirm-cancel-modal" onclick="document.getElementById('confirm-modal').classList.remove('open')" style="height: 32px; padding: 0 1rem; font-size: 0.8rem; font-weight: 600;">Cancel</button>
+        <button class="btn btn-danger" id="confirm-ok" style="height: 32px; padding: 0 1rem; font-size: 0.8rem; font-weight: 600; background: var(--danger); color: #fff; border: none; border-radius: 6px; cursor: pointer;">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <style>
+  @keyframes modalSlide {
+    from { transform: translateY(15px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+  .modal-overlay.open { display: flex !important; }
+  </style>
 </body>
 </html>
