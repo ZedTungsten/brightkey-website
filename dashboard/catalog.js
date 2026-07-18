@@ -485,7 +485,7 @@
 
       const uploadedDate = p.created_at ? new Date(p.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
 
-      return `<tr class="${isChild ? 'row-child' : ''}">
+      return `<tr class="${isChild ? 'row-child' : ''} ${selectedProductIds.includes(p.id) ? 'row-selected' : ''}">
         <td style="text-align: center; vertical-align: middle;"><input type="checkbox" class="row-checkbox" data-id="${p.id}" style="cursor: pointer;" ${selectedProductIds.includes(p.id) ? 'checked' : ''} /></td>
         <td class="cell-sku"><span class="sku-badge">${esc(p.sku || 'NO-SKU')}</span>${parentWarningHtml}</td>
         <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${titleHtml}</td>
@@ -2037,10 +2037,13 @@
       productsBody.addEventListener('change', (e) => {
         if (e.target.classList.contains('row-checkbox')) {
           const id = e.target.dataset.id;
+          const tr = e.target.closest('tr');
           if (e.target.checked) {
             if (!selectedProductIds.includes(id)) selectedProductIds.push(id);
+            if (tr) tr.classList.add('row-selected');
           } else {
             selectedProductIds = selectedProductIds.filter(x => x !== id);
+            if (tr) tr.classList.remove('row-selected');
           }
           updateBatchEditUI();
         }
@@ -2093,6 +2096,8 @@
         }
         document.querySelectorAll('.row-checkbox').forEach(cb => {
           cb.checked = checked;
+          const tr = cb.closest('tr');
+          if (tr) tr.classList.toggle('row-selected', checked);
         });
         updateBatchEditUI();
       });
