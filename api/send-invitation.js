@@ -105,8 +105,11 @@ export default async function handler(req, res) {
     }
 
     let emailSent = false;
+    const isPlaceholder = email.toLowerCase().trim().endsWith('@placeholder.brightkey.com');
 
-    if (smtpUser && smtpPass) {
+    if (isPlaceholder) {
+      emailSent = true; // Link only, skip email dispatch
+    } else if (smtpUser && smtpPass) {
       // Send via SMTP (Gmail)
       try {
         const transporter = nodemailer.createTransport({

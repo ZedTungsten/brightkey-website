@@ -196,6 +196,131 @@
         document.getElementById('invite-modal-overlay').classList.remove('open');
       },
 
+      openInviteLinkModal() {
+        // Reset inputs
+        document.getElementById('link-invite-email').value = '';
+        document.getElementById('link-invite-name').value = '';
+        document.getElementById('link-invite-output-container').style.display = 'none';
+        document.getElementById('link-invite-output-url').value = '';
+        
+        const select = document.getElementById('link-invite-role');
+        if (select) {
+          select.innerHTML = `
+            <option value="admin">Admin</option>
+            <option value="custom">User</option>
+          `;
+          select.value = 'admin';
+        }
+        
+        this.handleLinkInviteRoleChange('admin');
+        document.getElementById('link-invite-modal-overlay').classList.add('open');
+      },
+
+      closeInviteLinkModal() {
+        document.getElementById('link-invite-modal-overlay').classList.remove('open');
+      },
+
+      handleLinkInviteRoleChange(role) {
+        const customContainer = document.getElementById('link-invite-custom-access-container');
+        if (customContainer) {
+          customContainer.style.display = (role === 'custom') ? 'flex' : 'none';
+        }
+        if (role === 'admin') {
+          document.querySelectorAll('.link-invite-custom-access').forEach(cb => cb.checked = true);
+        } else {
+          document.querySelectorAll('.link-invite-custom-access').forEach(cb => cb.checked = false);
+        }
+      },
+
+      async submitInviteLink(e) {
+        e.preventDefault();
+        let email = document.getElementById('link-invite-email').value.trim();
+        const name = document.getElementById('link-invite-name').value.trim();
+        const roleSelect = document.getElementById('link-invite-role');
+        const btn = document.getElementById('btn-submit-link-invite');
+        const outputContainer = document.getElementById('link-invite-output-container');
+        const outputUrl = document.getElementById('link-invite-output-url');
+
+        let isLinkOnly = false;
+        if (!email) {
+          // Generate a unique placeholder email
+          email = `invite-${Math.random().toString(36).substring(2, 15)}@placeholder.brightkey.com`;
+          isLinkOnly = true;
+        }
+
+        const origText = btn.innerText;
+        btn.innerText = isLinkOnly ? 'Generating link...' : 'Sending invitation...';
+        btn.disabled = true;
+
+        let role = roleSelect.value;
+        if (role === 'custom') {
+          const checkedModules = Array.from(document.querySelectorAll('.link-invite-custom-access:checked')).map(cb => cb.value);
+          if (checkedModules.length === 0) {
+            toast('Please check at least one access module for Custom role.', 'error');
+            btn.disabled = false;
+            btn.innerText = origText;
+            return;
+          }
+          role = 'access:' + checkedModules.join(',');
+        }
+
+        try {
+          const { data: { session } } = await getSb().auth.getSession();
+          const token = session?.access_token;
+
+          const res = await fetch('/api/send-invitation', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+              tenant_id: this.tenantId,
+              company_id: this.companyId,
+              email: email,
+              full_name: name,
+              role: role,
+              invite_type: 'full'
+            })
+          });
+
+          const data = await res.json();
+          if (!res.ok) {
+            toast(data.error || 'Invitation failed.', 'error');
+            btn.disabled = false;
+            btn.innerText = origText;
+            return;
+          }
+
+          if (isLinkOnly) {
+            outputUrl.value = data.fallback_link || '';
+            outputContainer.style.display = 'flex';
+            toast('Invitation link generated!', 'success');
+            btn.disabled = false;
+            btn.innerText = 'Regenerate Link';
+          } else {
+            toast(`Invitation email sent successfully to ${email}!`, 'success');
+            this.closeInviteLinkModal();
+            btn.disabled = false;
+            btn.innerText = origText;
+            await this.load();
+          }
+        } catch (err) {
+          console.error('Invitation error:', err);
+          toast('Failed to process invitation. Please try again.', 'error');
+          btn.disabled = false;
+          btn.innerText = origText;
+        }
+      },
+
+      copyInviteLink() {
+        const input = document.getElementById('link-invite-output-url');
+        if (input && input.value) {
+          navigator.clipboard.writeText(input.value);
+          toast('Invitation link copied to clipboard!', 'success');
+        }
+      },
+
       handleInviteRoleChange(role) {
         const customContainer = document.getElementById('invite-custom-access-container');
         if (customContainer) {

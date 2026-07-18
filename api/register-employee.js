@@ -71,11 +71,18 @@ export default async function handler(req, res) {
       }
     }
 
+    // Define activeEmail, resolving placeholders if needed
+    let activeEmail = email.toLowerCase().trim();
+    const isPlaceholder = activeEmail.endsWith('@placeholder.brightkey.com');
+    if (isPlaceholder && employee_payload && (employee_payload.email_address || employee_payload.email)) {
+      activeEmail = (employee_payload.email_address || employee_payload.email).toLowerCase().trim();
+    }
+
     // 1c. Fetch existing employee by email to reuse their information if they exist
     const { data: existingEmp, error: empFetchErr } = await supabase
       .from('employees')
       .select('*')
-      .eq('email_address', email.toLowerCase().trim())
+      .eq('email_address', activeEmail)
       .maybeSingle();
 
     let firstName = 'N/A';
@@ -93,7 +100,7 @@ export default async function handler(req, res) {
     const { data: { users }, error: listError } = await supabase.auth.admin.listUsers();
     let existingAuthUser = null;
     if (!listError && users) {
-      existingAuthUser = users.find(u => u.email.toLowerCase() === email.toLowerCase().trim());
+      existingAuthUser = users.find(u => u.email.toLowerCase() === activeEmail);
     }
 
     let userId = null;
@@ -115,7 +122,7 @@ export default async function handler(req, res) {
     } else {
       // 2. Create auth user with service role client and the user's chosen password
       const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-        email: email,
+        email: activeEmail,
         password: password,
         email_confirm: true,
         user_metadata: {
@@ -149,7 +156,7 @@ export default async function handler(req, res) {
       user_id: userId,
       role: memberRole,
       accessible_modules: memberModules,
-      user_email: email,
+      user_email: activeEmail,
       full_name: fullName
     });
 
@@ -216,12 +223,15 @@ export default async function handler(req, res) {
 
       const finalEmployeePayload = employee_payload ? {
         ...employee_payload,
+        email: activeEmail,
+        email_address: activeEmail,
         employee_number: employeeNumber,
         id: userId
       } : {
         id: userId,
         company_id: company_id,
-        email: email.toLowerCase().trim(),
+        email: activeEmail,
+        email_address: activeEmail,
         first_name: firstName,
         last_name: lastName,
         employee_number: employeeNumber,
@@ -260,8 +270,8 @@ export default async function handler(req, res) {
           },
           body: JSON.stringify({
             from: EMAIL_FROM,
-            to: email,
-            subject: 'Welcome to BrightKey Solutions - Account Activated',
+            to: activeEmail,
+            subject: 'Welcome to Brightkey Solutions - Account Activated',
             html: `
               <div style="font-family: sans-serif; padding: 20px; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 8px;">
                 <h2 style="color: #0891b2; font-weight: bold; margin-bottom: 20px;">Welcome to BrightKey Solutions!</h2>
