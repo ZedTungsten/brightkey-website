@@ -130,6 +130,7 @@
   let editingId = null;      // null = new product, uuid = editing existing
   let editingFeatureId = null; // id in the features table
   let deleteCallback = null;
+  let isAutosaving = false;
 
   let lastPublishedAt = null;
   let hasUnpublishedChanges = false;
@@ -836,7 +837,43 @@
     document.getElementById('drawer-overlay').classList.add('open');
   }
 
+  function setAutosavingState(state) {
+    isAutosaving = state;
+    const prevBtn = document.getElementById('drawer-prev');
+    const nextBtn = document.getElementById('drawer-next');
+    const closeBtn = document.getElementById('drawer-close');
+    const cancelBtn = document.getElementById('drawer-cancel');
+
+    if (isAutosaving) {
+      if (prevBtn) prevBtn.disabled = true;
+      if (nextBtn) nextBtn.disabled = true;
+      if (closeBtn) {
+        closeBtn.disabled = true;
+        closeBtn.style.pointerEvents = 'none';
+        closeBtn.style.opacity = '0.5';
+      }
+      if (cancelBtn) {
+        cancelBtn.disabled = true;
+        cancelBtn.style.pointerEvents = 'none';
+        cancelBtn.style.opacity = '0.5';
+      }
+    } else {
+      if (closeBtn) {
+        closeBtn.disabled = false;
+        closeBtn.style.pointerEvents = 'auto';
+        closeBtn.style.opacity = '1';
+      }
+      if (cancelBtn) {
+        cancelBtn.disabled = false;
+        cancelBtn.style.pointerEvents = 'auto';
+        cancelBtn.style.opacity = '1';
+      }
+      updateDrawerNavigation();
+    }
+  }
+
   function closeDrawer() {
+    if (isAutosaving) return;
     const ts = document.querySelector('.table-responsive');
     const savedScroll = ts ? ts.scrollTop : 0;
     document.getElementById('product-drawer').classList.remove('open');
@@ -2121,6 +2158,7 @@
     document.getElementById('f-related').addEventListener('focus', updateRelatedSkuDatalist);
 
     document.getElementById('drawer-prev').addEventListener('click', () => {
+      if (isAutosaving) return;
       if (!editingId) return;
       const currentIndex = filtered.findIndex(x => x.id === editingId);
       if (currentIndex > 0) {
@@ -2129,6 +2167,7 @@
     });
 
     document.getElementById('drawer-next').addEventListener('click', () => {
+      if (isAutosaving) return;
       if (!editingId) return;
       const currentIndex = filtered.findIndex(x => x.id === editingId);
       if (currentIndex !== -1 && currentIndex < filtered.length - 1) {
@@ -2386,6 +2425,8 @@
 
       if (autosaveTimeout) clearTimeout(autosaveTimeout);
 
+      setAutosavingState(true);
+
       const statusEl = document.getElementById('drawer-status');
       if (statusEl) {
         statusEl.textContent = 'Autosaving...';
@@ -2395,7 +2436,10 @@
       autosaveTimeout = setTimeout(async () => {
         try {
           const payload = collectForm();
-          if (!payload.sku || !payload.title || !payload.business) return;
+          if (!payload.sku || !payload.title || !payload.business) {
+            setAutosavingState(false);
+            return;
+          }
 
           payload.id = editingId;
           const { error } = await sbClient.from('products').update(payload).eq('id', editingId);
@@ -2430,6 +2474,8 @@
           // Quietly refresh list
           await fetchProducts();
 
+          setAutosavingState(false);
+
           if (statusEl) {
             statusEl.textContent = 'Saved!';
             statusEl.style.color = 'var(--success)';
@@ -2439,6 +2485,7 @@
           }
         } catch (err) {
           console.error('Autosave failed:', err);
+          setAutosavingState(false);
           if (statusEl) {
             statusEl.textContent = `Autosave failed: ${err.message}`;
             statusEl.style.color = 'var(--danger)';
