@@ -707,8 +707,54 @@
     // Initialize Page
     document.addEventListener('DOMContentLoaded', async () => {
       try {
-        // Enforce Authentication and check roles
-        const authInfo = await window.BKAuth.checkRoleGate(['HR'], '../admin.html');
+        // Check if loading as view-only
+        let isIframe = false;
+        try {
+          isIframe = window.self !== window.top;
+        } catch (e) {
+          isIframe = true;
+        }
+        const isViewOnly = isIframe || 
+                           window.location.search.includes('view=only') || 
+                           window.location.pathname.includes('organization-map');
+
+        let authInfo;
+        if (isViewOnly) {
+          authInfo = await window.BKAuth.checkRoleGate(['Sales', 'Operations', 'Logistics', 'Finance', 'HR', 'Products', 'Marketing', 'Customer Service'], '../admin.html');
+          
+          // Inject view-only styles dynamically
+          const style = document.createElement('style');
+          style.innerHTML = `
+            .employee-pool-panel { display: none !important; }
+            .drag-handle { display: none !important; }
+            .btn-dept-delete, .btn-subteam-delete, .btn-emp-action, .btn-add-subteam { display: none !important; }
+            .dept-title-input, .subteam-title-input, .subteam-desc-input {
+              pointer-events: none !important;
+              border: none !important;
+              background: transparent !important;
+              padding: 0 !important;
+              font-weight: inherit !important;
+              color: inherit !important;
+              text-align: center;
+            }
+            .dept-title-input { font-weight: 700 !important; font-size: 0.95rem !important; }
+            .subteam-title-input { font-weight: 700 !important; font-size: 0.85rem !important; }
+            .subteam-desc-input { font-size: 0.72rem !important; color: var(--text-secondary) !important; }
+            .dept-manager-dropzone .employee-card.is-manager { background: var(--bg-surface) !important; }
+            .employee-card { cursor: default !important; }
+            .dept-manager-dropzone, .manager-dropzone, .colleagues-dropzone, .subteams-row, .branch-item { pointer-events: none !important; }
+            .zoom-controls, .zoom-controls *, .top-bar, .top-bar *, .canvas-wrap, .canvas-wrap * { pointer-events: auto !important; }
+          `;
+          document.head.appendChild(style);
+
+          // Hide add/save buttons from top-bar if they exist
+          const addDeptBtn = document.querySelector('button[onclick="createDepartment()"]');
+          const saveBtn = document.querySelector('button[onclick="saveStructure()"]');
+          if (addDeptBtn) addDeptBtn.style.display = 'none';
+          if (saveBtn) saveBtn.style.display = 'none';
+        } else {
+          authInfo = await window.BKAuth.checkRoleGate(['HR'], '../admin.html');
+        }
         if (!authInfo) return;
 
         // Fetch company ID for RLS and settings lookup
