@@ -2429,7 +2429,7 @@
 
       const statusEl = document.getElementById('drawer-status');
       if (statusEl) {
-        statusEl.textContent = 'Autosaving...';
+        statusEl.textContent = 'Saving...';
         statusEl.style.color = 'var(--text-secondary)';
       }
 
@@ -2477,11 +2477,8 @@
           setAutosavingState(false);
 
           if (statusEl) {
-            statusEl.textContent = 'Saved!';
+            statusEl.textContent = 'Saved Changes!';
             statusEl.style.color = 'var(--success)';
-            setTimeout(() => {
-              if (statusEl.textContent === 'Saved!') statusEl.textContent = '';
-            }, 1500);
           }
         } catch (err) {
           console.error('Autosave failed:', err);
