@@ -582,6 +582,7 @@
   async function openDrawerEdit(id) {
     isLoadingDrawer = true;
     editingId = id;
+    editingFeatureId = null;
     isBatchEditing = false;
     touchedFields.clear();
     clearForm();
