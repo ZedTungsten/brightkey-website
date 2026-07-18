@@ -2506,6 +2506,11 @@
     if (drawerEl) {
       const handleAutosaveEvent = (e) => {
         if (!e.target) return;
+        if (e.type === 'change') {
+          const isSelect = e.target.tagName === 'SELECT';
+          const isCheckboxOrRadio = e.target.type === 'checkbox' || e.target.type === 'radio';
+          if (!isSelect && !isCheckboxOrRadio) return;
+        }
         if (e.target.matches('input, textarea, select')) {
           if (e.target.id.startsWith('f-') || e.target.classList.contains('promo-tag-checkbox') || e.target.classList.contains('feature-input') || e.target.closest('.comparison-block') || e.target.closest('.aplus-block')) {
             triggerAutosave();
