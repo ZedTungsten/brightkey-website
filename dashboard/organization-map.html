@@ -1,0 +1,1611 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Organization Map — Brightkey HR</title>
+  <link rel="preconnect" href="https://fonts.bunny.net" />
+  <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg?v=2" />
+
+  <style>
+    /* ── Layout & Canvas ── */
+    .canvas-wrap {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      height: calc(100vh - 56px);
+      position: relative;
+      overflow: hidden;
+      background: var(--bg-base);
+    }
+
+    /* ── Zoom Controls ── */
+    .zoom-controls {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.75rem 0.5rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.75rem;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+      z-index: 60;
+    }
+
+    .btn-zoom {
+      width: 28px;
+      height: 28px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: var(--text-primary);
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .btn-zoom:hover {
+      background: var(--text-primary);
+      color: var(--bg-surface);
+      border-color: var(--text-primary);
+    }
+
+    .zoom-slider-wrap {
+      height: 100px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.25rem 0;
+    }
+
+    #zoom-slider {
+      writing-mode: vertical-lr;
+      direction: rtl;
+      width: 8px;
+      height: 100px;
+      background: var(--border);
+      outline: none;
+    }
+
+    .zoom-pct {
+      font-size: 0.68rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      width: 36px;
+      text-align: center;
+    }
+
+    .canvas-toolbar {
+      padding: 0.75rem 1.5rem;
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      z-index: 10;
+    }
+
+    .structure-canvas {
+      flex: 1;
+      /* generous padding gives scrollbars leeway to reveal all edges */
+      padding: 2rem;
+      overflow: auto;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start; /* NOT center — centering clips left overflow and makes it unreachable */
+      min-height: 0;
+      position: relative;
+    }
+
+    /* ── Employee Pool (Lower Left) ── */
+    .employee-pool-panel {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      width: 300px;
+      max-height: 400px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.08);
+      display: flex;
+      flex-direction: column;
+      z-index: 50;
+      overflow: hidden;
+      transition: height 0.2s, width 0.2s;
+    }
+
+    .employee-pool-panel.minimized {
+      height: auto;
+      min-height: 48px;
+      width: 200px;
+    }
+
+    .employee-pool-panel.minimized .pool-list {
+      display: none;
+    }
+
+    .pool-header {
+      padding: 0.75rem 1rem;
+      background: var(--bg-elevated);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .pool-title {
+      font-size: 0.8rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-primary);
+    }
+
+    .pool-badge {
+      background: var(--cyan);
+      color: #fff;
+      font-size: 0.7rem;
+      font-weight: 700;
+      padding: 0.15rem 0.4rem;
+      border-radius: 20px;
+    }
+
+    .pool-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 0.75rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      min-height: 100px;
+      background: var(--bg-surface);
+    }
+
+    /* ── Draggable Employee Card ── */
+    .employee-card {
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+      padding: 0.5rem 0.75rem;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      cursor: grab;
+      user-select: none;
+      transition: border-color 0.15s, box-shadow 0.15s, opacity 0.15s;
+      position: relative;
+    }
+
+    .employee-card:active {
+      cursor: grabbing;
+    }
+
+    .employee-card.dragging {
+      opacity: 0.4;
+      border-style: dashed;
+    }
+
+    .emp-avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      object-fit: cover;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: var(--text-secondary);
+    }
+
+    .emp-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .emp-name {
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .emp-role-tag {
+      font-size: 0.65rem;
+      color: var(--text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .emp-actions {
+      display: flex;
+      gap: 0.25rem;
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+
+    .employee-card:hover .emp-actions {
+      opacity: 1;
+    }
+
+    .btn-emp-action {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--text-muted);
+      padding: 2px;
+      border-radius: 3px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: color 0.15s, background 0.15s;
+    }
+
+    .btn-emp-action:hover {
+      background: var(--bg-elevated);
+      color: var(--text-primary);
+    }
+
+    .btn-emp-action.manager-crown:hover {
+      color: #EAB308; /* Yellow/Gold */
+    }
+
+    .employee-card.is-manager {
+      background: rgba(254, 240, 138, 0.18);
+    }
+
+    /* ── Tree Structure Styles ── */
+    .company-root {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      /* min-width:max-content lets the tree grow beyond the viewport;
+         margin:0 auto centers it when it fits, allows scroll when it doesn't */
+      min-width: max-content;
+      width: max-content;
+      margin: 0 auto;
+    }
+
+    .root-node {
+      background: var(--text-primary);
+      color: var(--bg-surface);
+      padding: 0.65rem 1.5rem;
+      border-radius: 6px;
+      font-weight: 800;
+      font-size: 0.9rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      margin-bottom: 2rem;
+      position: relative;
+    }
+
+    .root-node::after {
+      content: '';
+      position: absolute;
+      bottom: -2rem;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 2px;
+      height: 2rem;
+      background: var(--border);
+    }
+
+    /* Horizontal branch container */
+    .branches-row {
+      display: flex;
+      flex-shrink: 0;
+      min-width: max-content;
+      width: max-content;
+      gap: 3rem;
+      justify-content: center;
+      align-items: flex-start;
+      position: relative;
+      padding-top: 1.5rem;
+    }
+
+    /* Horizontal branch connecting lines */
+    .branches-row::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 1.5rem;
+      right: 1.5rem;
+      height: 2px;
+      background: var(--border);
+    }
+
+    /* Vertical branch connector line drop */
+    .branch-item {
+      display: flex;
+      flex-shrink: 0;
+      flex-direction: column;
+      align-items: center;
+      position: relative;
+      padding-top: 1rem;
+    }
+
+    .branch-item::before {
+      content: '';
+      position: absolute;
+      top: -1.5rem;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 2px;
+      height: 2.5rem;
+      background: var(--border);
+    }
+
+    /* ── Department Box ── */
+    .department-box {
+      min-width: 320px;
+      width: max-content;
+      max-width: 1020px;
+      flex-shrink: 0;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.03);
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+
+    .dept-header {
+      padding: 0.85rem 1rem;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-elevated);
+      border-top-left-radius: 7px;
+      border-top-right-radius: 7px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .dept-title-input {
+      background: transparent;
+      border: none;
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      width: 70%;
+      outline: none;
+    }
+
+    .dept-title-input:focus {
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--cyan);
+    }
+
+    .btn-dept-delete {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 0.8rem;
+    }
+
+    .btn-dept-delete:hover {
+      color: var(--danger);
+    }
+
+    /* Subteams layout inside Department (Horizontal branches) */
+    .subteams-row {
+      display: flex;
+      flex-shrink: 0;
+      flex-wrap: wrap;
+      max-width: 1000px;
+      justify-content: center;
+      gap: 1.5rem;
+      padding: 1.25rem 1rem;
+      overflow-x: visible;
+      background: var(--bg-surface);
+      border-bottom-left-radius: 8px;
+      border-bottom-right-radius: 8px;
+      min-height: 180px;
+    }
+
+    /* ── Subteam Container ── */
+    .subteam-container {
+      flex: 1;
+      flex-shrink: 0;
+      min-width: 220px;
+      background: #FAFAFA;
+      border: 1px dashed var(--border);
+      border-radius: 6px;
+      display: flex;
+      flex-direction: column;
+      padding: 0.5rem;
+      position: relative;
+    }
+
+    .subteam-container.dragover {
+      border-color: var(--cyan);
+      background: var(--cyan-dim);
+    }
+
+    .subteam-meta {
+      margin-bottom: 0.5rem;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 0.4rem;
+    }
+
+    .subteam-title-input {
+      background: transparent;
+      border: none;
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      width: 100%;
+      outline: none;
+      margin-bottom: 0.15rem;
+    }
+
+    .subteam-desc-input {
+      background: transparent;
+      border: none;
+      font-size: 0.68rem;
+      color: var(--text-muted);
+      width: 100%;
+      outline: none;
+    }
+
+    .subteam-desc-input::placeholder {
+      font-style: italic;
+    }
+
+    /* vertical slots */
+    .subteam-slot {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+      min-height: 80px;
+    }
+
+    .slot-label {
+      font-size: 0.6rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-top: 0.25rem;
+      margin-bottom: 0.15rem;
+    }
+
+    .manager-dropzone {
+      border: 1px dashed rgba(234,179,8,0.4);
+      border-radius: 4px;
+      min-height: 44px;
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+      margin-bottom: 0.5rem;
+      background: rgba(234,179,8,0.01);
+    }
+
+    .manager-dropzone.dragover {
+      background: rgba(234,179,8,0.08);
+      border-color: #EAB308;
+    }
+
+    .dept-manager-dropzone {
+      border: 1px dashed rgba(234,179,8,0.4);
+      border-radius: 4px;
+      min-height: 44px;
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+      margin: 0.5rem 1rem;
+      background: rgba(234,179,8,0.01);
+    }
+
+    .dept-manager-dropzone.dragover {
+      background: rgba(234,179,8,0.08);
+      border-color: #EAB308;
+    }
+
+    .colleagues-dropzone {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+      min-height: 60px;
+    }
+
+    .btn-add-subteam {
+      align-self: center;
+      margin: 0.5rem;
+      font-size: 0.72rem;
+      padding: 0.25rem 0.5rem;
+    }
+
+    .subteam-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .btn-subteam-delete {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 0.72rem;
+      padding: 0 2px;
+    }
+
+    .btn-subteam-delete:hover {
+      color: var(--danger);
+    }
+
+    /* Lightbox modal overlay for connection errors */
+    .toast-save {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: var(--text-primary);
+      color: var(--bg-surface);
+      padding: 0.75rem 1.5rem;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      z-index: 1000;
+      opacity: 0;
+      transform: translateY(-10px);
+      transition: opacity 0.3s, transform 0.3s;
+      pointer-events: none;
+    }
+    .toast-save.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* ── Draggable Headers grab styles ── */
+    .drag-handle {
+      cursor: grab;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2px 4px;
+      color: var(--text-muted);
+      border-radius: 4px;
+      transition: background 0.15s, color 0.15s;
+    }
+    .drag-handle:active {
+      cursor: grabbing;
+    }
+    .drag-handle:hover {
+      background: var(--bg-elevated);
+      color: var(--text-primary);
+    }
+
+    .branch-item.dragover {
+      outline: 2px dashed var(--cyan);
+      outline-offset: 4px;
+      border-radius: 8px;
+    }
+    .subteam-container.dragging-subteam, .branch-item.dragging-dept {
+      opacity: 0.5;
+    }
+
+    /* View-only overrides */
+    .employee-pool-panel {
+      display: none !important;
+    }
+    .drag-handle {
+      display: none !important;
+    }
+    .btn-dept-delete, .btn-subteam-delete, .btn-emp-action, .btn-add-subteam {
+      display: none !important;
+    }
+    .dept-title-input, .subteam-title-input, .subteam-desc-input {
+      pointer-events: none !important;
+      border: none !important;
+      background: transparent !important;
+      padding: 0 !important;
+      font-weight: inherit !important;
+      color: inherit !important;
+      text-align: center;
+    }
+    .dept-title-input {
+      font-weight: 700 !important;
+      font-size: 0.95rem !important;
+    }
+    .subteam-title-input {
+      font-weight: 700 !important;
+      font-size: 0.85rem !important;
+    }
+    .subteam-desc-input {
+      font-size: 0.72rem !important;
+      color: var(--text-secondary) !important;
+    }
+    .dept-manager-dropzone .employee-card.is-manager {
+      background: var(--bg-surface) !important;
+    }
+    .employee-card {
+      cursor: default !important;
+    }
+    .dept-manager-dropzone, .manager-dropzone, .colleagues-dropzone, .subteams-row, .branch-item {
+      pointer-events: none !important;
+    }
+    .zoom-controls, .zoom-controls *, .top-bar, .top-bar *, .canvas-wrap, .canvas-wrap * {
+      pointer-events: auto !important;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="dash-layout">
+    <!-- Sidebar -->
+    <aside class="dash-sidebar" id="dash-sidebar"></aside>
+
+    <!-- Main Content -->
+    <div class="dash-main">
+
+      <!-- Top Bar -->
+      <div class="top-bar">
+        <span class="top-bar-title">Organization Map</span>
+      </div>
+
+      <!-- Canvas Wrap -->
+      <div class="canvas-wrap">
+        <!-- Zoom Controls (Upper Right) -->
+        <div class="zoom-controls">
+          <button class="btn-zoom" onclick="zoomIn()" title="Zoom In">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+          <div class="zoom-slider-wrap">
+            <input type="range" id="zoom-slider" min="0.3" max="2" step="0.05" value="1" oninput="setZoom(this.value)" style="writing-mode: vertical-lr; direction: rtl;" />
+          </div>
+          <button class="btn-zoom" onclick="zoomOut()" title="Zoom Out">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+          <div class="zoom-pct" id="zoom-pct">100%</div>
+        </div>
+
+        <!-- Structure Tree Canvas -->
+        <div class="structure-canvas" id="canvas">
+          <div class="company-root">
+            <div class="root-node" id="company-name-node">Brightkey Solutions</div>
+            <div class="branches-row" id="departments-container">
+              <!-- Departments and horizontal branches rendered here -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Employee Pool (Lower Left) -->
+        <div class="employee-pool-panel" id="employee-pool">
+          <div class="pool-header" onclick="togglePoolMin()">
+            <span class="pool-title">Unassigned Employees</span>
+            <div style="display:flex; gap:0.5rem; align-items:center;">
+              <span class="pool-badge" id="pool-count">0</span>
+              <svg id="pool-chevron" viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none" style="transition:transform 0.2s;"><polyline points="6 9 12 15 18 9"/></svg>
+            </div>
+          </div>
+          <div class="pool-list" id="pool-list" ondragover="allowDrop(event)" ondrop="handlePoolDrop(event)">
+            <!-- Unassigned employee cards rendered here -->
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="toast-save" id="save-toast">Autosaved</div>
+
+  <!-- Custom UI Dialog Box Modal -->
+  <div class="confirm-overlay" id="custom-dialog-overlay" role="dialog" aria-modal="true" style="display:none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 1000; align-items: center; justify-content: center;">
+    <div class="confirm-box" style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px; width: 400px; max-width: 90vw; padding: 1.5rem; box-shadow: 0 10px 25px rgba(0,0,0,0.15); display: flex; flex-direction: column; gap: 1rem;">
+      <div id="dialog-title" style="font-size: 0.95rem; font-weight: 700; color: var(--text-primary);">Dialog Title</div>
+      <div id="dialog-body" style="font-size: 0.82rem; color: var(--text-secondary);">
+        <!-- Content injected here -->
+      </div>
+      <div style="display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 0.5rem;">
+        <button class="btn btn-outline btn-sm" id="dialog-btn-cancel">Cancel</button>
+        <button class="btn btn-primary btn-sm" id="dialog-btn-confirm" style="background:var(--cyan); border-color:var(--cyan); color:#fff;">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/sidebar.js"></script>
+  <script src="../js/main.js"></script>
+
+  <script>
+    'use strict';
+
+    let getSb = () => window.BKAuth.sb;
+    let currentCompanyId = null;
+
+    let employeesList = [];
+    let companyStructure = {
+      departments: []
+    };
+
+    // Initialize Page
+    document.addEventListener('DOMContentLoaded', async () => {
+      try {
+        // Enforce Authentication and check roles
+        const authInfo = await window.BKAuth.checkRoleGate(['Sales', 'Operations', 'Logistics', 'Finance', 'HR', 'Products', 'Marketing', 'Customer Service'], '../admin.html');
+        if (!authInfo) return;
+
+        // Fetch company ID for RLS and settings lookup
+        try {
+          const { data: co } = await getSb().from('companies').select('id').eq('tenant_id', authInfo.tenantId).limit(1).maybeSingle();
+          currentCompanyId = co?.id || null;
+        } catch (e) {
+          currentCompanyId = null;
+        }
+
+        if (!currentCompanyId) {
+          throw new Error('No company found for your tenant.');
+        }
+
+        // Fetch company detail to populate root node
+        const { data: comp } = await getSb().from('companies').select('name').eq('id', currentCompanyId).single();
+        if (comp && comp.name) {
+          document.getElementById('company-name-node').textContent = comp.name;
+        }
+
+        // Fetch all active employees in the directory
+        const { data: emps, error: empsErr } = await getSb()
+          .from('employees')
+          .select('*')
+          .eq('company_id', currentCompanyId)
+          .eq('employment_status', 'Active');
+        
+        if (empsErr) throw empsErr;
+        employeesList = emps || [];
+
+        // Fetch saved company structure from global settings
+        const { data: settings } = await getSb()
+          .from('global_settings')
+          .select('value')
+          .eq('key', 'company_structure')
+          .eq('company_id', currentCompanyId)
+          .maybeSingle();
+
+        if (settings && settings.value) {
+          companyStructure = settings.value;
+          // Ensure structure compatibility
+          if (!companyStructure.departments) {
+            companyStructure = { departments: [] };
+          }
+        }
+
+        renderStructure();
+        _initialRenderDone = true; // mark initial load complete so autosave starts firing
+        renderEmployeePool();
+
+      } catch (err) {
+        console.error('Initialization error:', err);
+        showToast('Error loading company data: ' + err.message);
+      }
+    });
+
+    // ── Autosave ──
+    let _autosaveTimer = null;
+    let _initialRenderDone = false;
+    function scheduleAutosave() {
+      if (!_initialRenderDone) return; // skip first render (page load)
+      clearTimeout(_autosaveTimer);
+      _autosaveTimer = setTimeout(saveStructure, 800);
+    }
+
+    // ── Render Tree & Canvas ──
+    function renderStructure() {
+      const container = document.getElementById('departments-container');
+      container.innerHTML = '';
+      scheduleAutosave();
+
+      if (companyStructure.departments.length === 0) {
+        container.innerHTML = `<div style="color:var(--text-muted); font-size:0.85rem; padding: 2rem;">No departments created yet. Click "Add Department" to start.</div>`;
+        return;
+      }
+
+      companyStructure.departments.forEach((dept, deptIdx) => {
+        const deptNode = document.createElement('div');
+        deptNode.className = 'branch-item';
+        deptNode.setAttribute('ondragover', 'allowDeptDrop(event)');
+        deptNode.setAttribute('ondragleave', 'clearDragOver(event)');
+        deptNode.setAttribute('ondrop', `handleDeptDrop(event, ${deptIdx})`);
+        
+        // Render Department structure
+        deptNode.innerHTML = `
+          <div class="department-box">
+            <div class="dept-header">
+              <div style="display:flex; align-items:center; gap:0.35rem; flex:1;">
+                <div class="drag-handle dept-drag-handle" draggable="true" ondragstart="handleDeptDragStart(event, ${deptIdx})" ondragend="handleDeptDragEnd(event)" title="Drag to reorder department">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="pointer-events: none;"><circle cx="9" cy="5" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="9" cy="19" r="1.5"/><circle cx="15" cy="5" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="15" cy="19" r="1.5"/></svg>
+                </div>
+                <input type="text" class="dept-title-input" value="${esc(dept.name)}" onchange="updateDeptName(${deptIdx}, this.value)" placeholder="Department Name" style="width:100%" />
+              </div>
+              <button class="btn-dept-delete" onclick="deleteDepartment(${deptIdx})" title="Delete Department"><svg aria-hidden="true" viewBox="0 0 24 24" style="width:1em;height:1em;display:block;fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+            </div>
+            <div class="slot-label" style="margin: 0.5rem 1rem 0 1rem;">Department Head / Manager</div>
+            <div class="dept-manager-dropzone" id="drop-dept-mgr-${deptIdx}" ondragover="allowDrop(event)" ondragleave="clearDragOver(event)" ondrop="handleDeptManagerDrop(event, ${deptIdx})">
+              <!-- Manager Card here -->
+            </div>
+            <div class="subteams-row" id="subteams-${deptIdx}" ondragover="allowSubteamDrop(event)" ondragleave="clearDragOver(event)" ondrop="handleSubteamsRowDrop(event, ${deptIdx})">
+              <!-- Subteams go here -->
+            </div>
+            <button class="btn btn-outline btn-sm btn-add-subteam" onclick="createSubteam(${deptIdx})">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14" /></svg> Add Subteam
+            </button>
+          </div>
+        `;
+
+        container.appendChild(deptNode);
+
+        // Populate Department Head
+        const deptMgrZone = document.getElementById(`drop-dept-mgr-${deptIdx}`);
+        if (dept.managerId) {
+          const emp = employeesList.find(e => e.id === dept.managerId);
+          if (emp) {
+            deptMgrZone.appendChild(createEmployeeCardNode(emp, deptIdx, null, 'dept_manager'));
+          }
+        }
+
+        // Render Subteams within this Department
+        const subteamsContainer = document.getElementById(`subteams-${deptIdx}`);
+        subteamsContainer.innerHTML = '';
+
+        if (!dept.subteams || dept.subteams.length === 0) {
+          subteamsContainer.innerHTML = `<div style="color:var(--text-muted); font-size:0.75rem; text-align:center; width:100%; display:flex; align-items:center; justify-content:center; padding: 1rem;">No subteams.</div>`;
+        } else {
+          dept.subteams.forEach((sub, subIdx) => {
+            const subteamNode = document.createElement('div');
+            subteamNode.className = 'subteam-container';
+            subteamNode.setAttribute('ondragover', 'allowSubteamDrop(event)');
+            subteamNode.setAttribute('ondragleave', 'clearDragOver(event)');
+            subteamNode.setAttribute('ondrop', `handleSubteamDrop(event, ${deptIdx}, ${subIdx})`);
+            subteamNode.innerHTML = `
+              <div class="subteam-meta">
+                <div class="subteam-header">
+                  <div style="display:flex; align-items:center; gap:0.25rem; flex:1;">
+                    <div class="drag-handle subteam-drag-handle" draggable="true" ondragstart="handleSubteamDragStart(event, ${deptIdx}, ${subIdx})" ondragend="handleSubteamDragEnd(event)" title="Drag to move subteam">
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="pointer-events: none;"><circle cx="9" cy="5" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="9" cy="19" r="1.5"/><circle cx="15" cy="5" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="15" cy="19" r="1.5"/></svg>
+                    </div>
+                    <input type="text" class="subteam-title-input" value="${esc(sub.name)}" onchange="updateSubteamName(${deptIdx}, ${subIdx}, this.value)" placeholder="Subteam Name" style="width:100%" />
+                  </div>
+                  <button class="btn-subteam-delete" onclick="deleteSubteam(${deptIdx}, ${subIdx})" title="Delete Subteam"><svg aria-hidden="true" viewBox="0 0 24 24" style="width:1em;height:1em;display:block;fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+                </div>
+                <input type="text" class="subteam-desc-input" value="${esc(sub.description)}" onchange="updateSubteamDesc(${deptIdx}, ${subIdx}, this.value)" placeholder="Add short desc..." maxlength="50" />
+              </div>
+              <div class="slot-label">Manager / Lead</div>
+              <div class="manager-dropzone" id="drop-mgr-${deptIdx}-${subIdx}" ondragover="allowDrop(event)" ondragleave="clearDragOver(event)" ondrop="handleMemberDrop(event, ${deptIdx}, ${subIdx}, 'manager')">
+                <!-- Manager Card here -->
+              </div>
+              <div class="slot-label">Colleagues</div>
+              <div class="colleagues-dropzone" id="drop-col-${deptIdx}-${subIdx}" ondragover="allowDrop(event)" ondragleave="clearDragOver(event)" ondrop="handleMemberDrop(event, ${deptIdx}, ${subIdx}, 'colleague')">
+                <!-- Colleague Cards stack vertically here -->
+              </div>
+            `;
+
+            subteamsContainer.appendChild(subteamNode);
+
+            // Populate Manager
+            const mgrZone = document.getElementById(`drop-mgr-${deptIdx}-${subIdx}`);
+            if (sub.managerId) {
+              const emp = employeesList.find(e => e.id === sub.managerId);
+              if (emp) {
+                mgrZone.appendChild(createEmployeeCardNode(emp, deptIdx, subIdx, 'manager'));
+              }
+            }
+
+            // Populate Colleagues
+            const colZone = document.getElementById(`drop-col-${deptIdx}-${subIdx}`);
+            if (sub.colleagueIds && Array.isArray(sub.colleagueIds)) {
+              sub.colleagueIds.forEach(id => {
+                const emp = employeesList.find(e => e.id === id);
+                if (emp) {
+                  colZone.appendChild(createEmployeeCardNode(emp, deptIdx, subIdx, 'colleague'));
+                }
+              });
+            }
+          });
+        }
+      });
+    }
+
+    // ── Render Employee Pool ──
+    function renderEmployeePool() {
+      const poolList = document.getElementById('pool-list');
+      poolList.innerHTML = '';
+
+      // Collect all assigned employee IDs
+      const assignedIds = new Set();
+      companyStructure.departments.forEach(dept => {
+        if (dept.managerId) assignedIds.add(dept.managerId);
+        if (dept.subteams) {
+          dept.subteams.forEach(sub => {
+            if (sub.managerId) assignedIds.add(sub.managerId);
+            if (sub.colleagueIds) {
+              sub.colleagueIds.forEach(id => assignedIds.add(id));
+            }
+          });
+        }
+      });
+
+      // Filter unassigned active employees
+      const unassigned = employeesList.filter(e => !assignedIds.has(e.id) && e.employment_status !== 'Terminated');
+
+      document.getElementById('pool-count').textContent = unassigned.length;
+
+      if (unassigned.length === 0) {
+        poolList.innerHTML = `<div style="color:var(--text-muted); font-size:0.75rem; text-align:center; padding: 1.5rem 0;">All employees assigned!</div>`;
+        const panel = document.getElementById('employee-pool');
+        const chevron = document.getElementById('pool-chevron');
+        if (panel && !panel.classList.contains('minimized')) {
+          panel.classList.add('minimized');
+          if (chevron) chevron.style.transform = 'rotate(-180deg)';
+        }
+        return;
+      }
+
+      unassigned.forEach(emp => {
+        poolList.appendChild(createEmployeeCardNode(emp, null, null, null));
+      });
+    }
+
+    // ── Card DOM Creation ──
+    function createEmployeeCardNode(emp, deptIdx, subIdx, role) {
+      const card = document.createElement('div');
+      card.className = 'employee-card';
+      if (role === 'manager' || role === 'dept_manager') card.classList.add('is-manager');
+      card.draggable = true;
+      card.dataset.id = emp.id;
+
+      // Handle initials fallback
+      const initials = (emp.first_name?.[0] || '') + (emp.last_name?.[0] || '');
+      const avatarHtml = emp.picture_link 
+         ? `<img class="emp-avatar" src="${emp.picture_link}" alt="${esc(emp.first_name)}" />`
+         : `<div class="emp-avatar">${initials.toUpperCase()}</div>`;
+
+      const formattedName = `${emp.first_name} ${emp.last_name ? emp.last_name[0] + '.' : ''}`;
+
+      card.innerHTML = `
+        ${avatarHtml}
+        <div class="emp-info">
+          <div class="emp-name">${esc(formattedName)}</div>
+          <div class="emp-role-tag">${esc(emp.title || 'Employee')}</div>
+        </div>
+        <div class="emp-actions">
+          ${role ? `
+            <button class="btn-emp-action" onclick="unassignEmployee('${emp.id}')" title="Remove Assignment">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          ` : ''}
+        </div>
+      `;
+
+      // Drag and Drop Listeners
+      card.addEventListener('dragstart', (e) => {
+        card.classList.add('dragging');
+        e.dataTransfer.setData('text/plain', emp.id);
+        // If moving from a slot, store previous position data
+        if (role) {
+          e.dataTransfer.setData('prev-role', role);
+          e.dataTransfer.setData('prev-dept', String(deptIdx));
+          if (subIdx !== null && subIdx !== undefined) {
+            e.dataTransfer.setData('prev-sub', String(subIdx));
+          }
+        }
+      });
+
+      card.addEventListener('dragend', () => {
+        card.classList.remove('dragging');
+      });
+
+      return card;
+    }
+
+    // ── Drag & Drop Event Handlers ──
+    window.allowDrop = function(e) {
+      e.preventDefault();
+      const dropzone = e.currentTarget;
+      dropzone.classList.add('dragover');
+    };
+
+    window.clearDragOver = function(e) {
+      e.currentTarget.classList.remove('dragover');
+    };
+
+    window.handleMemberDrop = function(e, deptIdx, subIdx, role) {
+      e.preventDefault();
+      const dropzone = e.currentTarget;
+      dropzone.classList.remove('dragover');
+
+      const empId = e.dataTransfer.getData('text/plain');
+      const prevRole = e.dataTransfer.getData('prev-role');
+      const prevDept = e.dataTransfer.getData('prev-dept');
+      const prevSub = e.dataTransfer.getData('prev-sub');
+
+      if (!empId) return;
+
+      // 1. Remove from previous position if existing
+      if (prevRole) {
+        removeEmpFromStructure(empId, parseInt(prevDept), (prevSub && prevSub !== 'undefined' && prevSub !== 'null') ? parseInt(prevSub) : null, prevRole);
+      }
+
+      // 2. Assign to new subteam position
+      const sub = companyStructure.departments[deptIdx].subteams[subIdx];
+      if (role === 'manager') {
+        // If there is already a manager, demote them to colleague
+        if (sub.managerId) {
+          const oldManager = sub.managerId;
+          sub.managerId = empId;
+          if (!sub.colleagueIds) sub.colleagueIds = [];
+          if (!sub.colleagueIds.includes(oldManager)) {
+            sub.colleagueIds.push(oldManager);
+          }
+        } else {
+          sub.managerId = empId;
+        }
+      } else if (role === 'colleague') {
+        if (!sub.colleagueIds) sub.colleagueIds = [];
+        if (!sub.colleagueIds.includes(empId)) {
+          sub.colleagueIds.push(empId);
+        }
+      }
+
+      renderStructure();
+      renderEmployeePool();
+    };
+
+    window.handleDeptManagerDrop = function(e, deptIdx) {
+      e.preventDefault();
+      const dropzone = e.currentTarget;
+      dropzone.classList.remove('dragover');
+
+      const empId = e.dataTransfer.getData('text/plain');
+      const prevRole = e.dataTransfer.getData('prev-role');
+      const prevDept = e.dataTransfer.getData('prev-dept');
+      const prevSub = e.dataTransfer.getData('prev-sub');
+
+      if (!empId) return;
+
+      // 1. Remove from previous position if existing
+      if (prevRole) {
+        removeEmpFromStructure(empId, parseInt(prevDept), (prevSub && prevSub !== 'undefined' && prevSub !== 'null') ? parseInt(prevSub) : null, prevRole);
+      }
+
+      // 2. Assign to department manager position
+      const dept = companyStructure.departments[deptIdx];
+      dept.managerId = empId;
+
+      renderStructure();
+      renderEmployeePool();
+    };
+
+    // ── Department & Subteam Drag & Drop Handlers ──
+    window.handleDeptDragStart = function(e, deptIdx) {
+      e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'department', deptIdx }));
+      e.dataTransfer.effectAllowed = 'move';
+      e.currentTarget.closest('.branch-item')?.classList.add('dragging-dept');
+    };
+
+    window.handleDeptDragEnd = function(e) {
+      e.currentTarget.closest('.branch-item')?.classList.remove('dragging-dept');
+    };
+
+    window.allowDeptDrop = function(e) {
+      e.preventDefault();
+      e.currentTarget.classList.add('dragover');
+    };
+
+    window.handleDeptDrop = function(e, targetDeptIdx) {
+      e.preventDefault();
+      e.currentTarget.classList.remove('dragover');
+      try {
+        const raw = e.dataTransfer.getData('text/plain');
+        if (!raw) return;
+        const dragData = JSON.parse(raw);
+        if (dragData && dragData.type === 'department') {
+          const sourceDeptIdx = dragData.deptIdx;
+          if (sourceDeptIdx === targetDeptIdx) return;
+
+          const depts = companyStructure.departments;
+          const [movedDept] = depts.splice(sourceDeptIdx, 1);
+          depts.splice(targetDeptIdx, 0, movedDept);
+
+          renderStructure();
+          renderEmployeePool();
+        }
+      } catch (err) {
+        // Not a department drag
+      }
+    };
+
+    window.handleSubteamDragStart = function(e, deptIdx, subIdx) {
+      e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'subteam', deptIdx, subIdx }));
+      e.dataTransfer.effectAllowed = 'move';
+      e.currentTarget.closest('.subteam-container')?.classList.add('dragging-subteam');
+    };
+
+    window.handleSubteamDragEnd = function(e) {
+      e.currentTarget.closest('.subteam-container')?.classList.remove('dragging-subteam');
+    };
+
+    window.allowSubteamDrop = function(e) {
+      e.preventDefault();
+      e.currentTarget.classList.add('dragover');
+    };
+
+    window.handleSubteamDrop = function(e, targetDeptIdx, targetSubIdx) {
+      e.preventDefault();
+      e.currentTarget.classList.remove('dragover');
+      try {
+        const raw = e.dataTransfer.getData('text/plain');
+        if (!raw) return;
+        const dragData = JSON.parse(raw);
+        if (dragData && dragData.type === 'subteam') {
+          const sourceDeptIdx = dragData.deptIdx;
+          const sourceSubIdx = dragData.subIdx;
+
+          const sourceDept = companyStructure.departments[sourceDeptIdx];
+          const targetDept = companyStructure.departments[targetDeptIdx];
+
+          const [movedSubteam] = sourceDept.subteams.splice(sourceSubIdx, 1);
+          if (!targetDept.subteams) targetDept.subteams = [];
+          targetDept.subteams.splice(targetSubIdx, 0, movedSubteam);
+
+          renderStructure();
+          renderEmployeePool();
+        }
+      } catch (err) {
+        // Not a subteam drag
+      }
+    };
+
+    window.handleSubteamsRowDrop = function(e, targetDeptIdx) {
+      if (e.target !== e.currentTarget) return;
+      e.preventDefault();
+      e.currentTarget.classList.remove('dragover');
+      try {
+        const raw = e.dataTransfer.getData('text/plain');
+        if (!raw) return;
+        const dragData = JSON.parse(raw);
+        if (dragData && dragData.type === 'subteam') {
+          const sourceDeptIdx = dragData.deptIdx;
+          const sourceSubIdx = dragData.subIdx;
+
+          const sourceDept = companyStructure.departments[sourceDeptIdx];
+          const targetDept = companyStructure.departments[targetDeptIdx];
+
+          const [movedSubteam] = sourceDept.subteams.splice(sourceSubIdx, 1);
+          if (!targetDept.subteams) targetDept.subteams = [];
+          targetDept.subteams.push(movedSubteam);
+
+          renderStructure();
+          renderEmployeePool();
+        }
+      } catch (err) {
+        // Not a subteam drag
+      }
+    };
+
+    window.handlePoolDrop = function(e) {
+      e.preventDefault();
+      const dropzone = e.currentTarget;
+      dropzone.classList.remove('dragover');
+
+      const empId = e.dataTransfer.getData('text/plain');
+      const prevRole = e.dataTransfer.getData('prev-role');
+      const prevDept = e.dataTransfer.getData('prev-dept');
+      const prevSub = e.dataTransfer.getData('prev-sub');
+
+      if (!empId) return;
+
+      // Remove from structure to place back into pool
+      if (prevRole) {
+        removeEmpFromStructure(empId, parseInt(prevDept), (prevSub && prevSub !== 'undefined' && prevSub !== 'null') ? parseInt(prevSub) : null, prevRole);
+      }
+
+      renderStructure();
+      renderEmployeePool();
+    };
+
+    function removeEmpFromStructure(empId, deptIdx, subIdx, role) {
+      if (role === 'dept_manager') {
+        const dept = companyStructure.departments[deptIdx];
+        if (dept && dept.managerId === empId) {
+          dept.managerId = null;
+        }
+      } else {
+        const sub = companyStructure.departments[deptIdx]?.subteams?.[subIdx];
+        if (!sub) return;
+        if (role === 'manager') {
+          if (sub.managerId === empId) {
+            sub.managerId = null;
+          }
+        } else if (role === 'colleague') {
+          if (sub.colleagueIds) {
+            sub.colleagueIds = sub.colleagueIds.filter(id => id !== empId);
+          }
+        }
+      }
+    }
+
+    // ── Custom UI Dialog Modals Helper Functions ──
+    function showCustomConfirm(title, message, onConfirm) {
+      const overlay = document.getElementById('custom-dialog-overlay');
+      const titleEl = document.getElementById('dialog-title');
+      const bodyEl = document.getElementById('dialog-body');
+      const btnCancel = document.getElementById('dialog-btn-cancel');
+      const btnConfirm = document.getElementById('dialog-btn-confirm');
+
+      titleEl.textContent = title;
+      bodyEl.innerHTML = `<p style="line-height:1.4;">${esc(message)}</p>`;
+      
+      btnCancel.style.display = 'inline-flex';
+      btnConfirm.textContent = 'Confirm';
+      overlay.style.display = 'flex';
+
+      const cleanup = () => {
+        overlay.style.display = 'none';
+        btnConfirm.onclick = null;
+        btnCancel.onclick = null;
+      };
+
+      btnConfirm.onclick = () => {
+        cleanup();
+        onConfirm();
+      };
+      btnCancel.onclick = () => {
+        cleanup();
+      };
+    }
+
+    function showCustomPrompt(title, fields, onConfirm) {
+      const overlay = document.getElementById('custom-dialog-overlay');
+      const titleEl = document.getElementById('dialog-title');
+      const bodyEl = document.getElementById('dialog-body');
+      const btnCancel = document.getElementById('dialog-btn-cancel');
+      const btnConfirm = document.getElementById('dialog-btn-confirm');
+
+      titleEl.textContent = title;
+      
+      let html = '<div style="display:flex; flex-direction:column; gap:0.75rem;">';
+      fields.forEach(f => {
+        html += `
+          <div style="display:flex; flex-direction:column; gap:0.25rem;">
+            <label style="font-size:0.75rem; font-weight:600; color:var(--text-muted);">${esc(f.label)}</label>
+            <input id="prompt-input-${f.id}" type="${f.type || 'text'}" class="form-input" placeholder="${esc(f.placeholder || '')}" value="${esc(f.value || '')}" ${f.maxLength ? `maxlength="${f.maxLength}"` : ''} style="width:100%; font-size:0.82rem; padding:0.4rem 0.75rem; border:1px solid var(--border); border-radius:6px; background:var(--bg-surface); color:var(--text-primary); outline:none;" />
+          </div>
+        `;
+      });
+      html += '</div>';
+      bodyEl.innerHTML = html;
+
+      btnCancel.style.display = 'inline-flex';
+      btnConfirm.textContent = 'Confirm';
+      overlay.style.display = 'flex';
+
+      setTimeout(() => {
+        document.getElementById(`prompt-input-${fields[0].id}`)?.focus();
+      }, 50);
+
+      const cleanup = () => {
+        overlay.style.display = 'none';
+        btnConfirm.onclick = null;
+        btnCancel.onclick = null;
+      };
+
+      btnConfirm.onclick = () => {
+        const results = {};
+        let valid = true;
+        fields.forEach(f => {
+          const inp = document.getElementById(`prompt-input-${f.id}`);
+          const val = inp.value.trim();
+          if (f.required && !val) {
+            valid = false;
+            inp.style.borderColor = 'var(--danger)';
+          } else {
+            results[f.id] = val;
+          }
+        });
+        if (!valid) return;
+
+        cleanup();
+        onConfirm(results);
+      };
+
+      btnCancel.onclick = () => {
+        cleanup();
+      };
+    }
+
+    function showCustomAlert(title, message) {
+      const overlay = document.getElementById('custom-dialog-overlay');
+      const titleEl = document.getElementById('dialog-title');
+      const bodyEl = document.getElementById('dialog-body');
+      const btnCancel = document.getElementById('dialog-btn-cancel');
+      const btnConfirm = document.getElementById('dialog-btn-confirm');
+
+      titleEl.textContent = title;
+      bodyEl.innerHTML = `<p style="line-height:1.4;">${esc(message)}</p>`;
+      
+      btnCancel.style.display = 'none';
+      btnConfirm.textContent = 'OK';
+      overlay.style.display = 'flex';
+
+      const cleanup = () => {
+        overlay.style.display = 'none';
+        btnConfirm.onclick = null;
+      };
+
+      btnConfirm.onclick = () => {
+        cleanup();
+      };
+    }
+
+    // ── Interactive Buttons Operations ──
+    window.createDepartment = function() {
+      showCustomPrompt('Add Department', [
+        { id: 'name', label: 'Department Name', placeholder: 'e.g. Operations', required: true }
+      ], (res) => {
+        companyStructure.departments.push({
+          name: res.name,
+          subteams: []
+        });
+        renderStructure();
+      });
+    };
+
+    window.updateDeptName = function(deptIdx, name) {
+      if (companyStructure.departments[deptIdx]) {
+        companyStructure.departments[deptIdx].name = name;
+      }
+    };
+
+    window.deleteDepartment = function(deptIdx) {
+      const dept = companyStructure.departments[deptIdx];
+      showCustomConfirm('Delete Department', `Delete department "${dept.name}" and all of its subteams?`, () => {
+        companyStructure.departments.splice(deptIdx, 1);
+        renderStructure();
+        renderEmployeePool();
+      });
+    };
+
+    window.createSubteam = function(deptIdx) {
+      showCustomPrompt('Add Subteam', [
+        { id: 'name', label: 'Subteam Name', placeholder: 'e.g. Technical Support', required: true },
+        { id: 'desc', label: 'Description (50 chars max)', placeholder: 'Short team summary...', maxLength: 50 }
+      ], (res) => {
+        const dept = companyStructure.departments[deptIdx];
+        if (!dept.subteams) dept.subteams = [];
+        dept.subteams.push({
+          name: res.name,
+          description: res.desc || '',
+          managerId: null,
+          colleagueIds: []
+        });
+        renderStructure();
+      });
+    };
+
+    window.updateSubteamName = function(deptIdx, subIdx, name) {
+      const dept = companyStructure.departments[deptIdx];
+      if (dept && dept.subteams && dept.subteams[subIdx]) {
+        dept.subteams[subIdx].name = name;
+      }
+    };
+
+    window.updateSubteamDesc = function(deptIdx, subIdx, desc) {
+      if (desc && desc.length > 50) {
+        showCustomAlert('Invalid Input', 'Description must be 50 characters or less.');
+        renderStructure();
+        return;
+      }
+      const dept = companyStructure.departments[deptIdx];
+      if (dept && dept.subteams && dept.subteams[subIdx]) {
+        dept.subteams[subIdx].description = desc;
+      }
+    };
+
+    window.deleteSubteam = function(deptIdx, subIdx) {
+      const sub = companyStructure.departments[deptIdx].subteams[subIdx];
+      showCustomConfirm('Delete Subteam', `Delete subteam "${sub.name}"?`, () => {
+        companyStructure.departments[deptIdx].subteams.splice(subIdx, 1);
+        renderStructure();
+        renderEmployeePool();
+      });
+    };
+
+    window.unassignEmployee = function(empId) {
+      // Find where they are assigned and unassign
+      companyStructure.departments.forEach((dept, deptIdx) => {
+        if (dept.managerId === empId) {
+          dept.managerId = null;
+        }
+        if (dept.subteams) {
+          dept.subteams.forEach((sub, subIdx) => {
+            if (sub.managerId === empId) {
+              sub.managerId = null;
+            }
+            if (sub.colleagueIds) {
+              sub.colleagueIds = sub.colleagueIds.filter(id => id !== empId);
+            }
+          });
+        }
+      });
+      renderStructure();
+      renderEmployeePool();
+    };
+
+    // ── Minimize Employee Pool ──
+    window.togglePoolMin = function() {
+      const panel = document.getElementById('employee-pool');
+      const chevron = document.getElementById('pool-chevron');
+      panel.classList.toggle('minimized');
+      if (panel.classList.contains('minimized')) {
+        chevron.style.transform = 'rotate(-180deg)';
+      } else {
+        chevron.style.transform = 'rotate(0deg)';
+      }
+    };
+
+    window.saveStructure = async function() {
+      try {
+        const { error } = await getSb()
+          .from('global_settings')
+          .upsert({
+            key: 'company_structure',
+            company_id: currentCompanyId,
+            value: companyStructure
+          });
+        if (error) throw error;
+
+        // Build mapping of employee ID to department name from companyStructure
+        const empDeptMap = {};
+        companyStructure.departments.forEach(dept => {
+          const deptName = dept.name || '';
+          if (dept.managerId) {
+            empDeptMap[dept.managerId] = deptName;
+          }
+          if (dept.subteams) {
+            dept.subteams.forEach(sub => {
+              if (sub.managerId) {
+                empDeptMap[sub.managerId] = deptName;
+              }
+              if (sub.colleagueIds) {
+                sub.colleagueIds.forEach(id => {
+                  empDeptMap[id] = deptName;
+                });
+              }
+            });
+          }
+        });
+
+        // Batch update employees whose department has changed
+        const updates = employeesList.map(emp => {
+          const newDept = empDeptMap[emp.id] || null;
+          if (emp.department !== newDept) {
+            emp.department = newDept; // Update local cache
+            return getSb()
+              .from('employees')
+              .update({ department: newDept })
+              .eq('id', emp.id);
+          }
+          return null;
+        }).filter(Boolean);
+
+        if (updates.length > 0) {
+          await Promise.all(updates);
+        }
+
+        showSaveToast();
+      } catch (err) {
+        console.error('Failed to save structure:', err);
+      }
+    };
+
+    function showSaveToast() {
+      const toast = document.getElementById('save-toast');
+      toast.classList.add('show');
+      setTimeout(() => {
+        toast.classList.remove('show');
+      }, 3000);
+    }
+
+    function showToast(msg) {
+      showCustomAlert('Error', msg);
+    }
+
+    function esc(s) {
+      return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    // ── Zoom and Pan Canvas Functionality ──
+    let currentZoom = 1;
+
+    function applyZoom() {
+      const rootNode = document.querySelector('.company-root');
+      if (rootNode) {
+        // Use CSS zoom (not transform:scale) so the layout/scroll range
+        // expands with the visual size — scrollbars reach all content.
+        rootNode.style.zoom = currentZoom;
+        rootNode.style.transform = '';
+        rootNode.style.transformOrigin = '';
+      }
+      const slider = document.getElementById('zoom-slider');
+      if (slider) slider.value = (0.3 + 2.0) - currentZoom;
+      const pct = document.getElementById('zoom-pct');
+      if (pct) pct.textContent = `${Math.round(currentZoom * 100)}%`;
+    }
+
+    window.zoomIn = function() {
+      currentZoom = Math.min(2, currentZoom + 0.1);
+      applyZoom();
+    };
+
+    window.zoomOut = function() {
+      currentZoom = Math.max(0.3, currentZoom - 0.1);
+      applyZoom();
+    };
+
+    window.setZoom = function(val) {
+      currentZoom = (0.3 + 2.0) - parseFloat(val);
+      applyZoom();
+    };
+
+    // Drag to pan setup
+    document.addEventListener('DOMContentLoaded', () => {
+      const canvasViewport = document.getElementById('canvas');
+      let isPanning = false;
+      let startX, startY, scrollLeft, scrollTop;
+
+      canvasViewport.addEventListener('mousedown', (e) => {
+        if (e.target.closest('.employee-card') || e.target.closest('input') || e.target.closest('button')) {
+          return;
+        }
+        isPanning = true;
+        canvasViewport.style.cursor = 'grabbing';
+        startX = e.pageX - canvasViewport.offsetLeft;
+        startY = e.pageY - canvasViewport.offsetTop;
+        scrollLeft = canvasViewport.scrollLeft;
+        scrollTop = canvasViewport.scrollTop;
+      });
+
+      canvasViewport.addEventListener('mouseleave', () => {
+        isPanning = false;
+        canvasViewport.style.cursor = 'default';
+      });
+
+      canvasViewport.addEventListener('mouseup', () => {
+        isPanning = false;
+        canvasViewport.style.cursor = 'default';
+      });
+
+      canvasViewport.addEventListener('mousemove', (e) => {
+        if (!isPanning) return;
+        e.preventDefault();
+        const x = e.pageX - canvasViewport.offsetLeft;
+        const y = e.pageY - canvasViewport.offsetTop;
+        const walkX = (x - startX);
+        const walkY = (y - startY);
+        canvasViewport.scrollLeft = scrollLeft - walkX;
+        canvasViewport.scrollTop = scrollTop - walkY;
+      });
+    });
+  </script>
+</body>
+</html>
