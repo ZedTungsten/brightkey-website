@@ -1069,6 +1069,7 @@
           ${cell(emp.level, 'level')}
           ${cell(emp.job_description, 'job_description')}
           ${cellDate(emp.date_hired, 'date_hired')}
+          ${cellDate(emp.date_inactive, 'date_inactive')}
           ${statusCell()}
           ${salaryCell()}
           ${assignmentCell()}
@@ -1129,6 +1130,28 @@
             const field = inp.dataset.field;
             if (!this.dirty[id]) this.dirty[id] = {};
             this.dirty[id][field] = inp.value;
+
+            // Automatically set date_inactive if status changes from Active to Inactive/Terminated/Resigned
+            if (field === 'employment_status') {
+              const emp = this.allEmployees.find(e => e.id === id);
+              const currentStatus = emp ? (emp.employment_status || 'Active') : 'Active';
+              const newStatus = inp.value;
+              if (currentStatus === 'Active' && (newStatus === 'Inactive' || newStatus === 'Terminated' || newStatus === 'Resigned')) {
+                const today = new Date().toISOString().split('T')[0];
+                this.dirty[id]['date_inactive'] = today;
+                const dateInactiveInput = document.querySelector(`input[data-id="${id}"][data-field="date_inactive"]`);
+                if (dateInactiveInput) {
+                  dateInactiveInput.value = today;
+                }
+              } else if (newStatus === 'Active') {
+                this.dirty[id]['date_inactive'] = '';
+                const dateInactiveInput = document.querySelector(`input[data-id="${id}"][data-field="date_inactive"]`);
+                if (dateInactiveInput) {
+                  dateInactiveInput.value = '';
+                }
+              }
+            }
+
             const row = document.querySelector(`tr[data-id="${id}"]`);
             if (row) row.classList.add('row-dirty');
             this.updateDirtyInfo();
@@ -1262,7 +1285,7 @@
               const { id: _, isNewRow: __, ...insertBody } = merged;
               // Only null out UUID/date/numeric columns when empty — text columns stay as ''
               // to satisfy NOT NULL constraints on the table
-              const nullIfEmpty = ['reporting_to', 'date_of_birth', 'date_hired', 'salary', 'level'];
+              const nullIfEmpty = ['reporting_to', 'date_of_birth', 'date_hired', 'date_inactive', 'salary', 'level'];
               for (const key of nullIfEmpty) {
                 if (insertBody[key] === '' || insertBody[key] === undefined) insertBody[key] = null;
               }
@@ -1301,7 +1324,7 @@
               for (const key in changes) {
                 if (key !== 'id' && key !== 'isNewRow') {
                   let val = changes[key];
-                  if (key === 'reporting_to' || key === 'date_of_birth' || key === 'date_hired' || key === 'salary' || key === 'level') {
+                  if (key === 'reporting_to' || key === 'date_of_birth' || key === 'date_hired' || key === 'date_inactive' || key === 'salary' || key === 'level') {
                     if (val === '' || val === undefined) val = null;
                   }
                   if (key === 'level' && val !== null) {
@@ -1516,7 +1539,7 @@
           const cols = [
             ['employee_number', 'Emp #'], ['department', 'Department'], ['team', 'Team'], ['title', 'Title'],
             ['reporting_to', 'Reporting To'], ['level', 'Level'], ['job_description', 'Job Description'],
-            ['date_hired', 'Date Hired'], ['employment_status', 'Status'], ['salary', 'Salary'],
+            ['date_hired', 'Date Hired'], ['date_inactive', 'Date Inactive'], ['employment_status', 'Status'], ['salary', 'Salary'],
             ['first_name', 'First Name'], ['middle_name', 'Middle Name'], ['last_name', 'Last Name'],
             ['date_of_birth', 'Date of Birth'], ['address', 'Street Address'], ['city', 'City'], ['province', 'Province'],
             ['contact_number', 'Contact #'], ['emergency_contact_number', 'Emergency Contact'],
