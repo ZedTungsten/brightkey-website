@@ -131,6 +131,7 @@
   let editingFeatureId = null; // id in the features table
   let deleteCallback = null;
   let isAutosaving = false;
+  let isLoadingDrawer = false;
 
   let lastPublishedAt = null;
   let hasUnpublishedChanges = false;
@@ -579,6 +580,7 @@
   }
 
   async function openDrawerEdit(id) {
+    isLoadingDrawer = true;
     editingId = id;
     isBatchEditing = false;
     touchedFields.clear();
@@ -599,16 +601,20 @@
     document.getElementById('drawer-overlay').classList.add('open');
     switchTab(activeTab || 'basic');
 
-    // Load features
-    if (p && p.business && FEATURE_DEFS[p.business]) {
-      const featureDef = FEATURE_DEFS[p.business];
-      const { data: fData } = await sbClient.from(featureDef.table).select('*').eq('product_id', id).limit(1).maybeSingle();
-      if (fData) {
-        editingFeatureId = fData.id;
-        fillFeatures(p.business, fData);
+    try {
+      // Load features
+      if (p && p.business && FEATURE_DEFS[p.business]) {
+        const featureDef = FEATURE_DEFS[p.business];
+        const { data: fData } = await sbClient.from(featureDef.table).select('*').eq('product_id', id).limit(1).maybeSingle();
+        if (fData) {
+          editingFeatureId = fData.id;
+          fillFeatures(p.business, fData);
+        }
       }
+    } finally {
+      document.getElementById('drawer-status').textContent = '';
+      isLoadingDrawer = false;
     }
-    document.getElementById('drawer-status').textContent = '';
   }
 
   async function openDrawerBatchEdit() {
@@ -1607,6 +1613,7 @@
   // Duplicate Product
   // ─────────────────────────────────────────────────────
   async function duplicateProduct(id) {
+    isLoadingDrawer = true;
     editingId = null;
     editingFeatureId = null;
     isBatchEditing = false;
@@ -1635,14 +1642,18 @@
     document.getElementById('drawer-overlay').classList.add('open');
     switchTab('basic');
 
-    if (p && p.business && FEATURE_DEFS[p.business]) {
-      const featureDef = FEATURE_DEFS[p.business];
-      const { data: fData } = await sbClient.from(featureDef.table).select('*').eq('product_id', id).limit(1).maybeSingle();
-      if (fData) {
-        fillFeatures(p.business, fData);
+    try {
+      if (p && p.business && FEATURE_DEFS[p.business]) {
+        const featureDef = FEATURE_DEFS[p.business];
+        const { data: fData } = await sbClient.from(featureDef.table).select('*').eq('product_id', id).limit(1).maybeSingle();
+        if (fData) {
+          fillFeatures(p.business, fData);
+        }
       }
+    } finally {
+      document.getElementById('drawer-status').textContent = '';
+      isLoadingDrawer = false;
     }
-    document.getElementById('drawer-status').textContent = '';
   }
 
   // ─────────────────────────────────────────────────────
@@ -2421,7 +2432,7 @@
     // ─────────────────────────────────────────────────────
     let autosaveTimeout = null;
     function triggerAutosave() {
-      if (!editingId || isBatchEditing) return;
+      if (isLoadingDrawer || !editingId || isBatchEditing) return;
 
       if (autosaveTimeout) clearTimeout(autosaveTimeout);
 
