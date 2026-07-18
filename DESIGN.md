@@ -412,3 +412,12 @@ This means the typical approach of adding `border-right` and `box-shadow` to a s
 >      modal.style.display = 'none';
 >    }, 150);
 >    ```
+
+---
+
+## 17. Color Standardization for Action Controls & Buttons
+
+* **Danger / Delete / Destructive / Negative Actions**:
+  * Always use **red** color styling for action buttons and SVGs (e.g. `color: var(--danger) !important;` or direct red color tokens) to signal risk or irreversible changes.
+* **Confirm / Good / Proceed / Positive Actions**:
+  * Always use **green** color styling for action buttons and SVGs (e.g. `color: var(--success) !important;` or direct green color tokens) to signal validation, creation, or confirmation success.
