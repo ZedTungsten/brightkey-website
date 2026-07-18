@@ -342,7 +342,6 @@
           <a href="/dashboard/team" class="dash-nav-child" id="nav-item-team">Team</a>
           <a href="/dashboard/attendance" class="dash-nav-child" id="nav-item-attendance">Attendance</a>
           <a href="/dashboard/payouts" class="dash-nav-child" id="nav-item-payouts">Payouts</a>
-          <a href="/dashboard/organization-map" class="dash-nav-child" id="nav-item-organization-map">Organization</a>
         </div>
       </div>
 
@@ -466,7 +465,7 @@
         </button>
         <div class="dash-nav-children">
           <a href="/dashboard/employee-directory" class="dash-nav-child" data-role="hr">Directory</a>
-          <a href="/dashboard/hr-organization-map" class="dash-nav-child" data-role="hr">Org Map</a>
+          <a href="/dashboard/organization-map.html" class="dash-nav-child" data-role="hr">Org Map</a>
           <a href="/dashboard/attendance-leaves" class="dash-nav-child" data-role="hr">Attendance & Leaves</a>
           <a href="/dashboard/events" class="dash-nav-child" data-role="hr">Events</a>
           <a href="/dashboard/payout-tracker/payout/" class="dash-nav-child" data-role="hr" style="display: flex; justify-content: space-between; align-items: center;">
@@ -850,35 +849,6 @@
               const company = await window.BKAuth.getCompany(roleInfo.tenantId);
               activeCompanyId = company?.id || null;
               if (activeCompanyId) {
-                // Fetch company logo and set it on the sidebar logo
-                try {
-                  const { data: coProfile } = await window.BKAuth.getSb()
-                    .from('global_settings')
-                    .select('value')
-                    .eq('key', 'company_profile')
-                    .eq('company_id', activeCompanyId)
-                    .maybeSingle();
-
-                  if (coProfile && coProfile.value && coProfile.value.logoDark) {
-                    const logoImg = document.querySelector('.logo-extended');
-                    if (logoImg) {
-                      logoImg.src = coProfile.value.logoDark;
-                      logoImg.style.maxHeight = '24px';
-                      logoImg.style.height = 'auto';
-                      logoImg.style.objectFit = 'contain';
-                    }
-                    const logoContr = document.querySelector('.logo-contracted');
-                    if (logoContr) {
-                      logoContr.src = coProfile.value.logoDark;
-                      logoContr.style.maxHeight = '24px';
-                      logoContr.style.height = 'auto';
-                      logoContr.style.objectFit = 'contain';
-                    }
-                  }
-                } catch (logoErr) {
-                  console.error('Error fetching company logo for sidebar:', logoErr);
-                }
-
                 // Move expensive badge checks off the initial-load path (delay by 2s)
                 setTimeout(() => {
                   checkIncompleteCommissions(activeCompanyId);
