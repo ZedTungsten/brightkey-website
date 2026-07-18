@@ -702,6 +702,8 @@
       departments: []
     };
 
+    let isViewOnly = false;
+
     // Initialize Page
     document.addEventListener('DOMContentLoaded', async () => {
       try {
@@ -712,10 +714,10 @@
         } catch (e) {
           isIframe = true;
         }
-        const isViewOnly = isIframe || 
-                           window.location.search.includes('view=only') || 
-                           window.location.pathname.endsWith('/organization') ||
-                           window.location.pathname.endsWith('/organization.html');
+        isViewOnly = isIframe || 
+                     window.location.search.includes('view=only') || 
+                     window.location.pathname.endsWith('/organization') ||
+                     window.location.pathname.endsWith('/organization.html');
 
         let authInfo;
         if (isViewOnly) {
@@ -727,6 +729,8 @@
             .employee-pool-panel { display: none !important; }
             .drag-handle { display: none !important; }
             .btn-dept-delete, .btn-subteam-delete, .btn-emp-action, .btn-add-subteam { display: none !important; }
+            .dept-header, .subteam-meta { border-bottom: none !important; }
+            .subteam-meta { padding-bottom: 0 !important; margin-bottom: 0.25rem !important; }
             .dept-title-input, .subteam-title-input, .subteam-desc-input {
               pointer-events: none !important;
               border: none !important;
@@ -913,6 +917,8 @@
             subteamNode.setAttribute('ondragleave', 'clearDragOver(event)');
             subteamNode.setAttribute('ondrop', `handleSubteamDrop(event, ${deptIdx}, ${subIdx})`);
             subteamNode.innerHTML = `
+            const showManagerSlot = !isViewOnly || sub.managerId;
+            subteamNode.innerHTML = `
               <div class="subteam-meta">
                 <div class="subteam-header">
                   <div style="display:flex; align-items:center; gap:0.25rem; flex:1;">
@@ -925,10 +931,12 @@
                 </div>
                 <input type="text" class="subteam-desc-input" value="${esc(sub.description)}" onchange="updateSubteamDesc(${deptIdx}, ${subIdx}, this.value)" placeholder="Add short desc..." maxlength="50" />
               </div>
-              <div class="slot-label">Manager / Lead</div>
-              <div class="manager-dropzone" id="drop-mgr-${deptIdx}-${subIdx}" ondragover="allowDrop(event)" ondragleave="clearDragOver(event)" ondrop="handleMemberDrop(event, ${deptIdx}, ${subIdx}, 'manager')">
-                <!-- Manager Card here -->
-              </div>
+              ${showManagerSlot ? `
+                <div class="slot-label">Manager / Lead</div>
+                <div class="manager-dropzone" id="drop-mgr-${deptIdx}-${subIdx}" ondragover="allowDrop(event)" ondragleave="clearDragOver(event)" ondrop="handleMemberDrop(event, ${deptIdx}, ${subIdx}, 'manager')">
+                  <!-- Manager Card here -->
+                </div>
+              ` : ''}
               <div class="slot-label">Members</div>
               <div class="colleagues-dropzone" id="drop-col-${deptIdx}-${subIdx}" ondragover="allowDrop(event)" ondragleave="clearDragOver(event)" ondrop="handleMemberDrop(event, ${deptIdx}, ${subIdx}, 'colleague')">
                 <!-- Colleague Cards stack vertically here -->
@@ -938,11 +946,13 @@
             subteamsContainer.appendChild(subteamNode);
 
             // Populate Manager
-            const mgrZone = document.getElementById(`drop-mgr-${deptIdx}-${subIdx}`);
-            if (sub.managerId) {
-              const emp = employeesList.find(e => e.id === sub.managerId);
-              if (emp) {
-                mgrZone.appendChild(createEmployeeCardNode(emp, deptIdx, subIdx, 'manager'));
+            if (showManagerSlot) {
+              const mgrZone = document.getElementById(`drop-mgr-${deptIdx}-${subIdx}`);
+              if (sub.managerId && mgrZone) {
+                const emp = employeesList.find(e => e.id === sub.managerId);
+                if (emp) {
+                  mgrZone.appendChild(createEmployeeCardNode(emp, deptIdx, subIdx, 'manager'));
+                }
               }
             }
 
