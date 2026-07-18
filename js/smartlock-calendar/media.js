@@ -264,7 +264,7 @@ async function uploadSlotFile(idx) {
     await saveCurrentMediaState();
   } catch (err) {
     console.error(`Upload error for slot ${idx}:`, err);
-    showToast(`Upload failed for ${file.name}: ${err.message}`, true);
+    showToast(`The file ${file.name} could not be uploaded. Please try again.`, true);
     delete slotFiles[idx];
     renderRequiredMediaChecklist();
     validateAndToggleSubmit();
@@ -412,7 +412,7 @@ async function uploadOtherFile(file, otherIdx) {
     await saveCurrentMediaState();
   } catch (err) {
     console.error(`Upload error for other file ${otherIdx}:`, err);
-    showToast(`Upload failed for ${file.name}: ${err.message}`, true);
+    showToast(`The file ${file.name} could not be uploaded. Please try again.`, true);
     otherFiles.splice(otherIdx, 1);
     renderOtherMediaList();
     validateAndToggleSubmit();
@@ -511,6 +511,6 @@ async function saveCurrentMediaState() {
     validateAndToggleSubmit();
   } catch (err) {
     console.error('Failed to auto-save media state to database:', err);
-    showToast('Auto-save failed: ' + err.message, true);
+    showToast('Your media changes could not be saved. Your previous data is still safe. Please try again.', true);
   }
 };

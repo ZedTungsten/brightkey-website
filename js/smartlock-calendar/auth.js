@@ -36,8 +36,19 @@ async function handleLogin(e) {
     });
 
     if (matchingInstaller) {
-      currentInstaller = matchingInstaller;
-      localStorage.setItem('bk_active_installer', JSON.stringify(matchingInstaller));
+      currentInstaller = {
+        id: matchingInstaller.id,
+        first_name: matchingInstaller.first_name,
+        last_name: matchingInstaller.last_name,
+        contact_number: matchingInstaller.contact_number,
+        company_id: matchingInstaller.company_id,
+        assignment: matchingInstaller.assignment,
+        email: matchingInstaller.email,
+        department: matchingInstaller.department,
+        title: matchingInstaller.title,
+        employment_status: matchingInstaller.employment_status
+      };
+      localStorage.setItem('bk_active_installer', JSON.stringify(currentInstaller));
       document.getElementById('display-installer-name').innerText = `${currentInstaller.first_name} ${currentInstaller.last_name}`;
       populateProfile();
       populateTrackerMonthSelect();

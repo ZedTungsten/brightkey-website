@@ -48,7 +48,7 @@ window.promptAddLabor = async function(doorIdx) {
   try {
     const { data: products, error } = await sb
       .from('products')
-      .select('installation_price, company_id')
+      .select('id, installation_price, company_id')
       .eq('sku', 'ADD-ON LABOR');
 
     if (error) throw error;
@@ -74,7 +74,7 @@ window.promptAddLabor = async function(doorIdx) {
     });
   } catch (err) {
     console.error(err);
-    showToast(err.message, true);
+    showToast('The labor item could not be loaded. Please check your connection and try again.', true);
   } finally {
     if (btn) {
       btn.innerText = originalText;
@@ -179,7 +179,7 @@ window.performAddLabor = async function(pricePhp, doorIdx) {
     openDetailsModal(selectedBooking.id);
   } catch (err) {
     console.error('Failed to add ADD-ON LABOR:', err);
-    showToast('Failed to add labor: ' + err.message, true);
+    showToast('The labor item could not be added. Please try again.', true);
   }
 };
 

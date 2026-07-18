@@ -40,7 +40,7 @@ function openDetailsModal(bookingId) {
 
   const mapPinEl = document.getElementById('det-map-pin');
   if (b.google_map_pin_url) {
-    mapPinEl.innerHTML = `<a href="${b.google_map_pin_url}" target="_blank">Open Google Maps Pin ↗</a>`;
+    mapPinEl.innerHTML = `<a href="${b.google_map_pin_url}" target="_blank" rel="noopener noreferrer">Open Google Maps Pin</a>`;
   } else {
     mapPinEl.innerText = 'No link provided';
   }

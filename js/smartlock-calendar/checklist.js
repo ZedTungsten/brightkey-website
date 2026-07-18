@@ -184,7 +184,7 @@ window.markEventDoorDone = async function(doorIndex, buttonEl) {
     drawAgenda(); // Refresh lists
   } catch (err) {
     console.error('Failed to complete event:', err);
-    showToast('Failed to complete: ' + err.message, true);
+    showToast('The job could not be completed. Your previous data is still safe. Please try again.', true);
     if (buttonEl) {
       buttonEl.disabled = false;
       buttonEl.innerText = 'Done';
@@ -402,7 +402,7 @@ window.submitChecklist = async function() {
     }, 800);
   } catch (err) {
     console.error('Failed to submit done verification:', err);
-    showToast('Submission failed: ' + err.message, true);
+    showToast('The checklist could not be submitted. Your previous data is still safe. Please try again.', true);
     submitBtn.disabled = false;
     submitBtn.innerHTML = 'Submit';
     submitBtn.style.background = 'var(--success)';

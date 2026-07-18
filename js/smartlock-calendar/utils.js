@@ -44,8 +44,7 @@ function formatInstallerName(nameStr) {
 }
 
 function escapeHtml(str) {
-  if (!str) return '';
-  return String(str)
+  return String(str ?? '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')

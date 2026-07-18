@@ -56,7 +56,7 @@ async function syncData() {
     // Fetch fresh installer record
     const { data: freshEmp } = await sb
       .from('employees')
-      .select('id, first_name, last_name, contact_number, emergency_contact_number, company_id, assignment, email, department, title, employment_status')
+      .select('id, first_name, last_name, contact_number, company_id, assignment, email, department, title, employment_status')
       .eq('id', currentInstaller.id)
       .maybeSingle();
     if (freshEmp) {
