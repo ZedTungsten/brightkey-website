@@ -769,10 +769,31 @@
           throw new Error('No company found for your tenant.');
         }
 
-        // Fetch company detail to populate root node
-        const { data: comp } = await getSb().from('companies').select('name').eq('id', currentCompanyId).single();
-        if (comp && comp.name) {
-          document.getElementById('company-name-node').textContent = comp.name;
+        // Fetch company detail / logo to populate root node
+        try {
+          const { data: coProfile } = await getSb()
+            .from('global_settings')
+            .select('value')
+            .eq('key', 'company_profile_config')
+            .eq('company_id', currentCompanyId)
+            .maybeSingle();
+
+          const node = document.getElementById('company-name-node');
+          if (coProfile && coProfile.value && coProfile.value.logoDark) {
+            if (node) {
+              node.innerHTML = `<img src="${coProfile.value.logoDark}" alt="Logo" style="max-height: 48px; max-width: 180px; display: block; object-fit: contain; margin: 0 auto;" />`;
+              node.style.background = 'transparent';
+              node.style.boxShadow = 'none';
+              node.style.padding = '0';
+            }
+          } else {
+            const { data: comp } = await getSb().from('companies').select('name').eq('id', currentCompanyId).single();
+            if (comp && comp.name && node) {
+              node.textContent = comp.name;
+            }
+          }
+        } catch (e) {
+          console.error("Failed to load company profile logo:", e);
         }
 
         // Fetch all active employees in the directory
