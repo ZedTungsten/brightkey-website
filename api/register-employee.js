@@ -183,23 +183,54 @@ export default async function handler(req, res) {
         return res.status(500).json({ error: `Database Error (linking employee): ${empUpdateErr.message}` });
       }
     } else {
+      // Fetch employee prefix from global_settings
+      let employeePrefix = 'BK';
+      try {
+        const { data: hrConf } = await supabase
+          .from('global_settings')
+          .select('value')
+          .eq('key', 'hr_configuration')
+          .eq('company_id', company_id)
+          .maybeSingle();
+
+        if (hrConf && hrConf.value && hrConf.value.employee_prefix) {
+          employeePrefix = hrConf.value.employee_prefix.toUpperCase().trim();
+        }
+      } catch (e) {
+        console.warn('Failed to fetch HR prefix settings, using default "BK":', e);
+      }
+
+      // Fetch all existing employee numbers for this company to calculate max sequence
+      let nextNum = 1;
+      try {
+        const { data: emps } = await supabase
+          .from('employees')
+          .select('employee_number')
+          .eq('company_id', company_id);
+
+        if (emps && emps.length > 0) {
+          let maxNum = 0;
+          const regex = new RegExp(`^${employeePrefix}-(\\d+)`);
+          emps.forEach(emp => {
+            const numStr = emp.employee_number || '';
+            const match = numStr.match(regex) || numStr.match(/^[A-Z]{1,3}-(\d+)/);
+            if (match) {
+              const val = parseInt(match[1], 10);
+              if (val > maxNum) maxNum = val;
+            }
+          });
+          nextNum = maxNum + 1;
+        }
+      } catch (e) {
+        console.warn('Failed to calculate next employee number sequence:', e);
+      }
+
       let employeeNumber = '';
       let isUnique = false;
       let attempts = 0;
 
       while (!isUnique && attempts < 100) {
-        attempts++;
-        const { data: numData, error: seqError } = await supabase.rpc('generate_employee_number');
-        let potentialNum = '';
-        if (!seqError && numData) {
-          potentialNum = numData;
-        } else {
-          console.warn('generate_employee_number RPC failed, falling back to count check:', seqError);
-          const { count } = await supabase
-            .from('employees')
-            .select('*', { count: 'exact', head: true });
-          potentialNum = 'BK-' + String((count ?? 0) + attempts).padStart(4, '0');
-        }
+        let potentialNum = `${employeePrefix}-${String(nextNum + attempts).padStart(4, '0')}`;
 
         // Check if this employee number already exists in the database
         const { data: existing, error: existError } = await supabase
@@ -212,6 +243,7 @@ export default async function handler(req, res) {
           employeeNumber = potentialNum;
           isUnique = true;
         }
+        attempts++;
       }
 
       if (!employeeNumber) {
