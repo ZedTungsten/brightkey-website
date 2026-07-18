@@ -213,13 +213,16 @@ We use two distinct patterns for modal overlays. Do NOT mix them:
 ## 13. Strict Database Schema Validation (Anti-Hallucination Policy)
 > [!CRITICAL]
 > **VERIFY DATABASE SCHEMA BEFORE CODING**:
-> Never guess database column names, primary keys, or relationships when writing SQL queries or front-end data bindings. 
-> - **First Action**: Query the target table using a scratch script, check existing migrations, or check existing query files in the codebase (e.g. `booking-schedules.js`) to confirm exactly what fields are present.
+> Never guess database column names, primary keys, or relationships when writing SQL queries or front-end data bindings. Local migration files can deviate from the live database, so do NOT trust them as the single source of truth.
+> - **First Action**: Always inspect the live table columns by running:
+>   `node scripts/db-inspect.js <table_name>`
 > - **Common Mismatches to Avoid**:
+>   * `employees` uses `email` (NOT `email_address`).
 >   * `installation_bookings` uses `scheduled_date` (NOT `schedule_date`).
 >   * `installation_bookings` uses `order_no` (NOT `booking_number`).
 >   * Currency fields are stored in centavos (integers) rather than decimals.
 > Doing this check proactively prevents back-and-forth debugging from column mismatches and ensures immediate functionality.
+
 
 ---
 
