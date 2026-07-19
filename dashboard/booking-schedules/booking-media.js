@@ -241,9 +241,45 @@
       const requirement = bookingMediaRequirements[idx];
       const lowerName = file.name.toLowerCase();
 
+      // 0-byte file check
+      if (file.size === 0) {
+        showToast(`"${file.name}" is empty or corrupted (0 bytes).`, true);
+        event.target.value = '';
+        return;
+      }
+
+      // HEIC/HEIF check & conversion
+      let finalFile = file;
+      if (lowerName.endsWith('.heic') || lowerName.endsWith('.heif') || file.type === 'image/heic' || file.type === 'image/heif') {
+        if (typeof heic2any !== 'undefined') {
+          showToast('Converting HEIC image to JPEG, please wait...', false);
+          try {
+            const conversionResult = await heic2any({
+              blob: file,
+              toType: "image/jpeg"
+            });
+            const blob = Array.isArray(conversionResult) ? conversionResult[0] : conversionResult;
+            finalFile = new File([blob], file.name.replace(/\.(heic|heif)$/i, '.jpg'), {
+              type: "image/jpeg"
+            });
+          } catch (e) {
+            console.error("HEIC/HEIF conversion failed:", e);
+            showToast(`HEIC conversion failed for "${file.name}". Please convert manually.`, true);
+            event.target.value = '';
+            return;
+          }
+        } else {
+          showToast(`HEIC files are not natively supported. Please convert "${file.name}" to JPG/PNG manually.`, true);
+          event.target.value = '';
+          return;
+        }
+      }
+
+      const cleanLowerName = finalFile.name.toLowerCase();
+
       // Type checking
       if (requirement.type === 'image') {
-        const isImg = file.type.startsWith('image/') || lowerName.endsWith('.png') || lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg');
+        const isImg = finalFile.type.startsWith('image/') || cleanLowerName.endsWith('.png') || cleanLowerName.endsWith('.jpg') || cleanLowerName.endsWith('.jpeg');
         if (!isImg) {
           showToast('Invalid file format. Image required.', true);
           event.target.value = '';
@@ -259,10 +295,10 @@
       }
 
       // Video duration check (max 60 seconds)
-      if (file.type.startsWith('video/') || lowerName.endsWith('.mp4') || lowerName.endsWith('.mov')) {
+      if (finalFile.type.startsWith('video/') || cleanLowerName.endsWith('.mp4') || cleanLowerName.endsWith('.mov')) {
         const checkDuration = () => {
           return new Promise((resolve) => {
-            const url = URL.createObjectURL(file);
+            const url = URL.createObjectURL(finalFile);
             const tempVideo = document.createElement('video');
             tempVideo.preload = 'metadata';
             tempVideo.src = url;
@@ -282,7 +318,7 @@
       }
 
       // Create local slot info and render progress immediately
-      slotFiles[idx] = { file: file, progress: 0 };
+      slotFiles[idx] = { file: finalFile, progress: 0 };
       renderRequiredMediaChecklist();
       validateAndToggleSubmit();
 
@@ -401,18 +437,51 @@
         }
 
         const lowerName = file.name.toLowerCase();
-        const isAllowed = file.type.startsWith('image/') || file.type.startsWith('video/') ||
-                          allowedTypes.some(ext => lowerName.endsWith(ext));
 
-        if (!isAllowed) {
-          showToast(`${file.name} format is not supported.`, true);
+        // 0-byte file check
+        if (file.size === 0) {
+          showToast(`"${file.name}" is empty or corrupted (0 bytes).`, true);
           continue;
         }
 
-        if (file.type.startsWith('video/') || lowerName.endsWith('.mp4') || lowerName.endsWith('.mov')) {
+        // HEIC/HEIF check & conversion
+        let finalFile = file;
+        if (lowerName.endsWith('.heic') || lowerName.endsWith('.heif') || file.type === 'image/heic' || file.type === 'image/heif') {
+          if (typeof heic2any !== 'undefined') {
+            showToast('Converting HEIC image to JPEG, please wait...', false);
+            try {
+              const conversionResult = await heic2any({
+                blob: file,
+                toType: "image/jpeg"
+              });
+              const blob = Array.isArray(conversionResult) ? conversionResult[0] : conversionResult;
+              finalFile = new File([blob], file.name.replace(/\.(heic|heif)$/i, '.jpg'), {
+                type: "image/jpeg"
+              });
+            } catch (e) {
+              console.error("HEIC/HEIF conversion failed:", e);
+              showToast(`HEIC conversion failed for "${file.name}". Please convert manually.`, true);
+              continue;
+            }
+          } else {
+            showToast(`HEIC files are not natively supported. Please convert "${file.name}" to JPG/PNG manually.`, true);
+            continue;
+          }
+        }
+
+        const cleanLowerName = finalFile.name.toLowerCase();
+        const isAllowed = finalFile.type.startsWith('image/') || finalFile.type.startsWith('video/') ||
+                          allowedTypes.some(ext => cleanLowerName.endsWith(ext));
+
+        if (!isAllowed) {
+          showToast(`${finalFile.name} format is not supported.`, true);
+          continue;
+        }
+
+        if (finalFile.type.startsWith('video/') || cleanLowerName.endsWith('.mp4') || cleanLowerName.endsWith('.mov')) {
           const checkDuration = () => {
             return new Promise((resolve) => {
-              const url = URL.createObjectURL(file);
+              const url = URL.createObjectURL(finalFile);
               const tempVideo = document.createElement('video');
               tempVideo.preload = 'metadata';
               tempVideo.src = url;
@@ -425,17 +494,17 @@
 
           const isValidDuration = await checkDuration();
           if (!isValidDuration) {
-            showToast(`${file.name} exceeds 30 seconds limit for other videos.`, true);
+            showToast(`${finalFile.name} exceeds 30 seconds limit for other videos.`, true);
             continue;
           }
         }
 
         const otherIdx = otherFiles.length;
-        otherFiles.push({ name: file.name, progress: 0 });
+        otherFiles.push({ name: finalFile.name, progress: 0 });
         renderOtherMediaList();
         validateAndToggleSubmit();
 
-        uploadOtherFile(file, otherIdx);
+        uploadOtherFile(finalFile, otherIdx);
       }
     };
 
