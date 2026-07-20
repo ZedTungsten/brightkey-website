@@ -727,7 +727,7 @@
                 </div>
 
               </div>
-              <div class="inventory-pager-bar">
+              <div class="inventory-pager-bar" style="display: none;">
                 <div class="inventory-pager-info" id="stats-page-info">Loading products...</div>
                 <div class="inventory-pager" id="stats-pager"></div>
               </div>
@@ -2486,25 +2486,17 @@
           }
         }
 
-        const startIndex = (statsPage - 1) * statsPageSize;
-        const endIndex = startIndex + statsPageSize - 1;
-
         const productSortCols = new Set(['sku', 'title', 'category', 'business']);
         const querySortCol = productSortCols.has(statsSortCol) ? statsSortCol : 'sku';
         const ascending = productSortCols.has(statsSortCol) ? statsSortDir === 'asc' : true;
 
-        const { data: products, error: prodErr, count } = await prodQuery
-          .order(querySortCol, { ascending, nullsFirst: false })
-          .range(startIndex, endIndex);
+        const { data: products, error: prodErr } = await prodQuery
+          .order(querySortCol, { ascending, nullsFirst: false });
 
         if (prodErr) throw prodErr;
 
-        const totalItems = count || 0;
-        const totalPages = Math.max(1, Math.ceil(totalItems / statsPageSize));
-
-        if (products.length === 0) {
+        if (!products || products.length === 0) {
           tbody.innerHTML = `<tr><td colspan="9" class="text-center">No products found.</td></tr>`;
-          renderStatsPager(0, 1);
           updateStatsSortIndicators();
           return;
         }
@@ -2518,8 +2510,7 @@
         let txQuery = sb.from('inventory_transactions')
           .select('sku, quantity, status, timestamp_reserved, timestamp_dispatched, timestamp_returned, timestamp_cancelled')
           .in('sku', targetSkus)
-          .gte('created_at', startDate)
-          .lt('created_at', endDate);
+          .or(`created_at.gte.${startDate},updated_at.gte.${startDate},timestamp_reserved.gte.${startDate},timestamp_dispatched.gte.${startDate},timestamp_returned.gte.${startDate},timestamp_cancelled.gte.${startDate}`);
 
         if (activeWarehouseId) {
           txQuery = txQuery.eq('warehouse_id', activeWarehouseId);
@@ -2530,16 +2521,25 @@
         const { data: txs, error: txErr } = await txQuery;
         if (txErr) throw txErr;
 
-        // Group transaction sums by sku & status
+        // Group transaction sums by sku & status using transition timestamps
         const statsMap = {};
         targetSkus.forEach(sku => {
           statsMap[sku] = { reserved: 0, dispatched: 0, returned: 0, cancelled: 0 };
         });
 
         (txs || []).forEach(tx => {
-          const status = tx.status;
-          if (statsMap[tx.sku] && ['reserved', 'dispatched', 'returned', 'cancelled'].includes(status)) {
-            statsMap[tx.sku][status] += (tx.quantity || 0);
+          const qty = tx.quantity || 0;
+          if (tx.timestamp_reserved && tx.timestamp_reserved >= startDate && tx.timestamp_reserved < endDate) {
+            if (statsMap[tx.sku]) statsMap[tx.sku].reserved += qty;
+          }
+          if (tx.timestamp_dispatched && tx.timestamp_dispatched >= startDate && tx.timestamp_dispatched < endDate) {
+            if (statsMap[tx.sku]) statsMap[tx.sku].dispatched += qty;
+          }
+          if (tx.timestamp_returned && tx.timestamp_returned >= startDate && tx.timestamp_returned < endDate) {
+            if (statsMap[tx.sku]) statsMap[tx.sku].returned += qty;
+          }
+          if (tx.timestamp_cancelled && tx.timestamp_cancelled >= startDate && tx.timestamp_cancelled < endDate) {
+            if (statsMap[tx.sku]) statsMap[tx.sku].cancelled += qty;
           }
         });
 
@@ -2582,7 +2582,6 @@
           `;
         });
 
-        renderStatsPager(totalItems, totalPages);
         updateStatsSortIndicators();
       } catch (err) {
         console.error('Error rendering stats summary:', err);

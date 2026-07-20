@@ -355,7 +355,7 @@
         </button>
         <div class="dash-nav-children">
           <a href="/dashboard/business" class="dash-nav-child" data-role="business">Overview</a>
-          <a href="/dashboard/pricing-strategy/expenses" class="dash-nav-child" data-role="business">Pricing Strategy</a>
+          <a href="/dashboard/pricing-strategy/calculator" class="dash-nav-child" data-role="business">Pricing Strategy</a>
         </div>
       </div>
 
@@ -451,6 +451,7 @@
             <span>Ship</span>
             <span id="ship-badge-dot" style="display: none; width: 6px; height: 6px; border-radius: 50%; background-color: #ef4444;"></span>
           </a>
+          <a href="/dashboard/logistics-calendar/calendar" class="dash-nav-child" data-role="logistics">Calendar</a>
           <a href="/dashboard/inventory" class="dash-nav-child" data-role="logistics">Inventory</a>
           <a href="/dashboard/qa-guide" class="dash-nav-child" data-role="logistics">QA Guide</a>
           <a href="/dashboard/shipping-rates" class="dash-nav-child" data-role="logistics">Shipping Rates</a>
@@ -750,8 +751,9 @@
         (href === '/dashboard/warehouse/inspect' && currentPath.startsWith('/dashboard/warehouse/')) ||
         (href === '/dashboard/inventory' && currentPath === '/dashboard/inventory') ||
         (href === '/dashboard/ship/send' && currentPath.startsWith('/dashboard/ship/')) ||
-        (href === '/dashboard/pricing-strategy/expenses' && currentPath.startsWith('/dashboard/pricing-strategy/')) ||
-        (href === '/dashboard/payout-tracker/payout/' && currentPath.startsWith('/dashboard/payout-tracker/'))
+        (href === '/dashboard/pricing-strategy/calculator' && currentPath.startsWith('/dashboard/pricing-strategy/')) ||
+        (href === '/dashboard/payout-tracker/payout/' && currentPath.startsWith('/dashboard/payout-tracker/')) ||
+        (href === '/dashboard/logistics-calendar/calendar' && currentPath.startsWith('/dashboard/logistics-calendar/'))
       )) {
         link.classList.add('active');
         const group = link.closest('.dash-nav-group');

@@ -17,7 +17,7 @@
     .main-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
     
     .scroll-area { flex: 1; overflow: auto; padding: 2rem; display: flex; flex-direction: column; }
-    .delivery-container { max-width: 1200px; width: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: 2rem; }
+    .delivery-container { max-width: 100%; width: 100%; margin: 0; display: flex; flex-direction: column; gap: 2rem; }
 
     /* ── Tabs Navigation ── */
     .drawer-tabs {
@@ -229,6 +229,7 @@
                           <th>City</th>
                           <th>SKU</th>
                           <th>Qty</th>
+                          <th>Scheduled</th>
                           <th>Receive by</th>
                           <th>Action</th>
                         </tr>
@@ -521,6 +522,35 @@
     </div>
   </div>
 
+  <!-- Schedule Pickup Modal -->
+  <div id="schedule-pickup-modal" class="modal-overlay">
+    <div class="modal-content" style="max-width: 400px; gap: 1rem;">
+      <h3 class="modal-title">Schedule Pickup</h3>
+      <div style="font-size: 0.82rem; color: var(--text-secondary); line-height: 1.5; background: var(--bg-elevated); padding: 0.75rem; border-radius: 6px; border: 1px solid var(--border);">
+        <div><strong>Order No:</strong> <span id="schedule-order-no" style="color: var(--text-primary);"></span></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="pickup-date">Pickup Date</label>
+        <input type="date" id="pickup-date" class="form-input" required />
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="pickup-time-slot">Time Slot</label>
+        <select id="pickup-time-slot" class="form-input" required>
+          <option value="Morning">Morning - 8AM</option>
+          <option value="Afternoon">Afternoon - 1PM</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="pickup-notes">Notes</label>
+        <textarea id="pickup-notes" class="form-input" rows="2" style="resize: none;" placeholder="Add pickup notes..."></textarea>
+      </div>
+      <div style="display: flex; justify-content: flex-end; gap: 0.75rem; border-top: 1px solid var(--border); padding-top: 1rem; margin-top: 0.25rem;">
+        <button type="button" class="btn btn-outline" onclick="DeliveryApp.closeSchedulePickupModal()">Cancel</button>
+        <button type="button" id="btn-submit-pickup-schedule" class="btn btn-primary" onclick="DeliveryApp.submitSchedulePickup()">Save Schedule</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Lightbox Modal -->
   <div id="lightbox-modal" class="modal-overlay" onclick="closeLightbox()" style="background: rgba(0,0,0,0.85); cursor: zoom-out;">
     <div style="position: relative; max-width: 90vw; max-height: 90vh;">
@@ -557,6 +587,8 @@
       deliveryPhotoBlob: null,
       currentPageSendOut: 1,
       itemsPerPage: 10,
+      pickupSchedules: {},
+      selectedPickupRefId: null,
 
       async init() {
         if (!window.BKAuth) return;
@@ -615,6 +647,18 @@
             .order('name');
           if (wErr) throw wErr;
           this.warehouses = wData || [];
+
+          // Load pickup schedules from global_settings
+          const { data: gsData, error: gsErr } = await sb.from('global_settings')
+            .select('value')
+            .eq('key', 'pickup_schedules')
+            .eq('company_id', this.companyId)
+            .maybeSingle();
+          if (gsErr) {
+            console.error('Failed to load pickup schedules:', gsErr);
+          } else {
+            this.pickupSchedules = gsData?.value || {};
+          }
 
           this.updateBadgeCounts();
           this.renderSendOutQueue();
@@ -700,7 +744,7 @@
         });
 
         if (dispatchQueue.length === 0) {
-          tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:3rem; color:var(--text-muted);">No packed orders ready for delivery.</td></tr>`;
+          tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:3rem; color:var(--text-muted);">No packed orders ready for delivery.</td></tr>`;
           this.renderPagination(0, this.currentPageSendOut, 'sendout-pagination');
           return;
         }
@@ -744,6 +788,23 @@
             ? new Date(booking.scheduled_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) 
             : new Date(group.items[0].created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
+          const sched = this.pickupSchedules[group.reference_id];
+          let scheduledHtml = '<span style="color:var(--text-muted);">—</span>';
+          let schedBtnText = 'Schedule Pickup';
+          if (sched && sched.date) {
+            const parts = sched.date.split('-');
+            let dateFormatted = sched.date;
+            if (parts.length === 3) {
+              const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+              const year = parts[0];
+              const month = months[parseInt(parts[1], 10) - 1] || parts[1];
+              const day = parseInt(parts[2], 10);
+              dateFormatted = `${month} ${day}, ${year}`;
+            }
+            scheduledHtml = `<strong style="color:var(--cyan-light);">${dateFormatted} ${sched.slot || 'Morning'}</strong>`;
+            schedBtnText = 'Reschedule';
+          }
+
           let photoHtml = '—';
           if (group.packed_photo_url) {
             photoHtml = `<img src="${group.packed_photo_url}" alt="Packed Proof" style="width:80px; height:50px; object-fit:cover; border-radius:6px; border:1px solid var(--border); cursor:pointer;" onclick="maximizePhoto('${esc(group.packed_photo_url)}')" />`;
@@ -757,11 +818,17 @@
             <td>${esc(group.customer_city)}</td>
             <td>${skusHtml}</td>
             <td>${qtysHtml}</td>
+            <td>${scheduledHtml}</td>
             <td><strong>${dateFriendly}</strong></td>
             <td>
-              <button class="btn btn-cyan btn-sm" onclick="DeliveryApp.openBookingModal('${group.reference_id}')">
-                Book Delivery
-              </button>
+              <div style="display:flex; flex-direction:column; gap:0.4rem; max-width:120px;">
+                <button class="btn btn-outline btn-sm" onclick="DeliveryApp.openSchedulePickupModal('${group.reference_id}')" style="justify-content:center;">
+                  ${schedBtnText}
+                </button>
+                <button class="btn btn-cyan btn-sm" onclick="DeliveryApp.openBookingModal('${group.reference_id}')" style="justify-content:center;">
+                  Book Delivery
+                </button>
+              </div>
             </td>
           `;
           tbody.appendChild(tr);
@@ -851,6 +918,78 @@
         document.getElementById('btn-confirm-booking').disabled = true;
 
         document.getElementById('booking-modal').classList.add('open');
+      },
+
+      openSchedulePickupModal(referenceId) {
+        this.selectedPickupRefId = referenceId;
+        document.getElementById('schedule-order-no').textContent = referenceId;
+
+        const existing = this.pickupSchedules[referenceId];
+        if (existing) {
+          document.getElementById('pickup-date').value = existing.date || '';
+          document.getElementById('pickup-time-slot').value = existing.slot || 'Morning';
+          document.getElementById('pickup-notes').value = existing.notes || '';
+        } else {
+          document.getElementById('pickup-date').value = '';
+          document.getElementById('pickup-time-slot').value = 'Morning';
+          document.getElementById('pickup-notes').value = '';
+        }
+
+        const modal = document.getElementById('schedule-pickup-modal');
+        if (modal) modal.classList.add('open');
+      },
+
+      closeSchedulePickupModal() {
+        const modal = document.getElementById('schedule-pickup-modal');
+        if (modal) modal.classList.remove('open');
+      },
+
+      async submitSchedulePickup() {
+        const btn = document.getElementById('btn-submit-pickup-schedule');
+        if (btn.disabled || !this.selectedPickupRefId) return;
+
+        const date = document.getElementById('pickup-date').value;
+        const slot = document.getElementById('pickup-time-slot').value;
+        const notes = document.getElementById('pickup-notes').value.trim();
+
+        if (!date) {
+          Toast.error('Please select a date.');
+          return;
+        }
+
+        btn.disabled = true;
+        const originalText = btn.textContent;
+        btn.innerHTML = `<span class="bk-spinner" style="width:12px; height:12px; border-width:2px; display:inline-block; vertical-align:middle; margin-right:6px;"></span>Saving...`;
+
+        try {
+          const sb = window.BKAuth.sb;
+          
+          // Update local schedule mapping
+          const newSchedules = {
+            ...this.pickupSchedules,
+            [this.selectedPickupRefId]: { date, slot, notes }
+          };
+
+          // Save to database
+          const { error } = await sb.from('global_settings').upsert({
+            company_id: this.companyId,
+            key: 'pickup_schedules',
+            value: newSchedules
+          }, { onConflict: 'company_id,key' });
+
+          if (error) throw error;
+
+          this.pickupSchedules = newSchedules;
+          Toast.success('Pickup schedule saved successfully.');
+          this.closeSchedulePickupModal();
+          this.renderSendOutQueue();
+        } catch (err) {
+          console.error(err);
+          Toast.error('Failed to save pickup schedule: ' + err.message);
+        } finally {
+          btn.disabled = false;
+          btn.textContent = originalText;
+        }
       },
 
       openCreateShipmentModal() {

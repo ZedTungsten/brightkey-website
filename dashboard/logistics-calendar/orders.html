@@ -7,8 +7,8 @@
   
   <link rel="preconnect" href="https://fonts.bunny.net" />
   <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="../../css/style.css" />
-  <link rel="icon" type="image/svg+xml" href="../../assets/favicon.svg?v=2" />
+  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg?v=2" />
   
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 
@@ -283,7 +283,7 @@
         
         <!-- Top Bar -->
         <div class="top-bar">
-          <span class="top-bar-title">Warehouse & Inventory Ledger</span>
+          <span class="top-bar-title">Logistics Calendar &amp; Orders</span>
           <div style="flex:1;"></div>
           <div style="display:flex; gap:0.5rem; align-items:center;">
             <select id="wh-select-dropdown" class="wh-select-dropdown" style="display:none;" onchange="switchWarehouse(this.value)"></select>
@@ -300,15 +300,9 @@
           <div class="main-workspace">
 
             <!-- Level-2 Operation Tab Bar -->
-                    <div class="drawer-tabs">
-          <a class="tab-btn " href="/dashboard/warehouse/inspect">Inspect <span id="badge-count-inspect" style="display:none; background:var(--cyan); color:white; font-size:0.75rem; padding:1px 6px; border-radius:10px; margin-left:4px;">0</span></a>
-          <a class="tab-btn " href="/dashboard/warehouse/pack">Pack <span id="badge-count-pack" style="display:none; background:var(--cyan); color:white; font-size:0.75rem; padding:1px 6px; border-radius:10px; margin-left:4px;">0</span></a>
-          <a class="tab-btn " href="/dashboard/warehouse/dispatch">Dispatch <span id="badge-count-dispatch" style="display:none; background:var(--cyan); color:white; font-size:0.75rem; padding:1px 6px; border-radius:10px; margin-left:4px;">0</span></a>
-          <span class="tab-separator" style="display:flex; align-items:center; padding:0 0.5rem; color:var(--border); font-size:0.85rem; font-weight:normal; user-select:none;">|</span>
-          <a class="tab-btn " href="/dashboard/warehouse/receive">Receive <span id="badge-count-receive" style="display:none; background:var(--cyan); color:white; font-size:0.75rem; padding:1px 6px; border-radius:10px; margin-left:4px;">0</span></a>
-          <a class="tab-btn " href="/dashboard/warehouse/transfer">Transfer</a>
-          <a class="tab-btn " href="/dashboard/warehouse/order">Order</a>
-          <a class="tab-btn active" href="/dashboard/warehouse/all-orders">All Orders</a>
+        <div class="drawer-tabs">
+          <a class="tab-btn" href="/dashboard/logistics-calendar/calendar">Calendar</a>
+          <a class="tab-btn active" href="/dashboard/logistics-calendar/orders">All Orders</a>
         </div>
 
             <!-- Table Scroll workspace -->
@@ -549,10 +543,10 @@
     </div>
   </div>
 
-  <script src="../../js/auth.js"></script>
-  <script src="../../js/sidebar.js"></script>
-  <script src="../../js/main.js"></script>
-  <script src="shared.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/sidebar.js"></script>
+  <script src="/js/main.js"></script>
+  <script src="/dashboard/warehouse/shared.js"></script>
   <script>
     'use strict';
 
@@ -1233,6 +1227,50 @@
     }
 
     window.showOrderDetailsModal = function(txId) {
+      // Clear/Reset all modal DOM elements to prevent stale data leaking from previously viewed modals
+      document.getElementById('odetail-order-no').textContent = '—';
+      document.getElementById('odetail-customer-name').textContent = '—';
+      document.getElementById('odetail-sku-qty').textContent = '—';
+      document.getElementById('odetail-status').textContent = '—';
+      document.getElementById('odetail-booking-date').textContent = '—';
+      document.getElementById('odetail-install-date').textContent = '—';
+      document.getElementById('odetail-address').textContent = '—';
+
+      const qImg = document.getElementById('proof-qa-img');
+      const qPlaceholder = document.getElementById('proof-qa-placeholder');
+      const qDate = document.getElementById('proof-qa-date');
+      if (qImg) { qImg.src = ''; qImg.style.display = 'none'; }
+      if (qPlaceholder) qPlaceholder.style.display = 'flex';
+      if (qDate) qDate.textContent = '—';
+
+      const pImg = document.getElementById('proof-packed-img');
+      const pPlaceholder = document.getElementById('proof-packed-placeholder');
+      const pDate = document.getElementById('proof-packed-date');
+      if (pImg) { pImg.src = ''; pImg.style.display = 'none'; }
+      if (pPlaceholder) pPlaceholder.style.display = 'flex';
+      if (pDate) pDate.textContent = '—';
+
+      const bImg = document.getElementById('proof-booking-img');
+      const bPlaceholder = document.getElementById('proof-booking-placeholder');
+      const bDate = document.getElementById('proof-booking-date');
+      if (bImg) { bImg.src = ''; bImg.style.display = 'none'; }
+      if (bPlaceholder) bPlaceholder.style.display = 'flex';
+      if (bDate) bDate.textContent = '—';
+
+      const pickImg = document.getElementById('proof-pickup-img');
+      const pickPlaceholder = document.getElementById('proof-pickup-placeholder');
+      const pickDate = document.getElementById('proof-pickup-date');
+      if (pickImg) { pickImg.src = ''; pickImg.style.display = 'none'; }
+      if (pickPlaceholder) pickPlaceholder.style.display = 'flex';
+      if (pickDate) pickDate.textContent = '—';
+
+      const delImg = document.getElementById('proof-delivery-img');
+      const delPlaceholder = document.getElementById('proof-delivery-placeholder');
+      const delDate = document.getElementById('proof-delivery-date');
+      if (delImg) { delImg.src = ''; delImg.style.display = 'none'; }
+      if (delPlaceholder) delPlaceholder.style.display = 'flex';
+      if (delDate) delDate.textContent = '—';
+
       const t = activeTransactions.find(x => x.id === txId);
       if (!t) return;
 
@@ -1265,9 +1303,6 @@
       document.getElementById('odetail-address').textContent = address;
 
       // 0. QA Inspection Proof
-      const qImg = document.getElementById('proof-qa-img');
-      const qPlaceholder = document.getElementById('proof-qa-placeholder');
-      const qDate = document.getElementById('proof-qa-date');
       qDate.textContent = t.timestamp_inspect ? formatMmmDdYyyy(t.timestamp_inspect, true) : '—';
       if (t.qa_photo_url) {
         qImg.src = t.qa_photo_url;
@@ -1283,9 +1318,6 @@
       }
 
       // 1. Packed Proof
-      const pImg = document.getElementById('proof-packed-img');
-      const pPlaceholder = document.getElementById('proof-packed-placeholder');
-      const pDate = document.getElementById('proof-packed-date');
       pDate.textContent = t.timestamp_packed ? formatMmmDdYyyy(t.timestamp_packed, true) : '—';
       if (t.packed_photo_url) {
         pImg.src = t.packed_photo_url;
@@ -1343,9 +1375,6 @@
       }
 
       // 2. Booking Screenshot Rendering
-      const bImg = document.getElementById('proof-booking-img');
-      const bPlaceholder = document.getElementById('proof-booking-placeholder');
-      const bDate = document.getElementById('proof-booking-date');
       bDate.textContent = bookedDateStr;
       if (deliveryPhoto) {
         bImg.src = deliveryPhoto;
@@ -1361,9 +1390,6 @@
       }
 
       // 3. Pickup Handover Screenshot Rendering
-      const pickImg = document.getElementById('proof-pickup-img');
-      const pickPlaceholder = document.getElementById('proof-pickup-placeholder');
-      const pickDate = document.getElementById('proof-pickup-date');
       pickDate.textContent = pickedUpDateStr;
       if (pickupPhoto) {
         pickImg.src = pickupPhoto;
@@ -1379,9 +1405,6 @@
       }
 
       // 4. Delivery Proof Screenshot Rendering
-      const delImg = document.getElementById('proof-delivery-img');
-      const delPlaceholder = document.getElementById('proof-delivery-placeholder');
-      const delDate = document.getElementById('proof-delivery-date');
       delDate.textContent = deliveredDateStr;
       if (deliveredPhoto) {
         delImg.src = deliveredPhoto;

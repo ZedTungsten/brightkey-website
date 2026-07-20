@@ -1,0 +1,1039 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Logistics Calendar — Brightkey ERP</title>
+  <link rel="preconnect" href="https://fonts.bunny.net" />
+  <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg?v=2" />
+
+  <style>
+    /* ── Layout ── */
+    .top-bar { flex-shrink: 0; background: var(--bg-surface); border-bottom: 1px solid var(--border); padding: 0 1.5rem; display: flex; align-items: center; gap: 1rem; height: 56px; }
+    .top-bar-title { font-size: 1rem; font-weight: 800; color: var(--text-primary); letter-spacing: -0.03em; }
+    .content-area { display: flex; flex: 1; overflow: hidden; height: calc(100vh - 56px); }
+    .main-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; position: relative; }
+
+    /* ── Loading Overlay ── */
+    .loading-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(250, 250, 250, 0.7);
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1rem;
+      z-index: 100;
+      backdrop-filter: blur(2px);
+      transition: opacity 0.15s ease;
+    }
+    .loading-overlay.active {
+      display: flex;
+    }
+    .bk-spinner {
+      width: 2.25rem;
+      height: 2.25rem;
+      border: 3px solid rgba(0, 0, 0, 0.1);
+      border-top-color: var(--cyan);
+      border-radius: 50%;
+      animation: bk-spin 0.8s linear infinite;
+    }
+    @keyframes bk-spin {
+      to { transform: rotate(360deg); }
+    }
+    .loading-text {
+      font-size: 0.88rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+      letter-spacing: -0.01em;
+    }
+    .scroll-container { flex: 1; overflow: auto; padding: 2rem; display: flex; flex-direction: column; gap: 1.5rem; }
+
+    /* ── Tab Container Bar ── */
+    .drawer-tabs {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      overflow-x: auto;
+      background: var(--bg-surface);
+    }
+
+    /* ── Tab Buttons ── */
+    .tab-btn {
+      padding: 0.9rem 1.25rem;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      border: none;
+      background: none;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      white-space: nowrap;
+      transition: all 0.15s;
+      text-decoration: none;
+    }
+
+    /* ── Active Tab Styling ── */
+    .tab-btn.active {
+      color: var(--cyan-light);
+      border-bottom-color: var(--cyan);
+    }
+
+    /* ── Hover State ── */
+    .tab-btn:hover:not(.active) {
+      color: var(--text-secondary);
+    }
+
+    /* ── Month Navigation ── */
+    .month-nav {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 0.5rem;
+    }
+    .month-title {
+      font-size: 1.1rem;
+      font-weight: 800;
+      color: var(--text-primary);
+      min-width: 140px;
+      text-align: center;
+    }
+
+    /* ── Calendar Grid ── */
+    .calendar-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      grid-template-rows: 38px;
+      grid-auto-rows: minmax(120px, max-content);
+      gap: 2px;
+      background: var(--border);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      width: 100%;
+      min-width: 1000px;
+    }
+    .calendar-day-label {
+      background: var(--bg-elevated);
+      font-weight: 700;
+      text-align: center;
+      padding: 0.6rem 0;
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+    }
+    .calendar-cell {
+      background: var(--bg-surface);
+      min-height: 120px;
+      display: flex;
+      flex-direction: column;
+      border: 1px solid transparent;
+      transition: background 0.15s;
+      min-width: 0;
+    }
+    .calendar-cell:hover {
+      background: var(--bg-elevated);
+    }
+    .calendar-cell-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 4px 6px;
+      background: var(--bg-elevated);
+      border-bottom: 1px solid var(--border);
+    }
+    .calendar-cell-num {
+      font-weight: 700;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+    .calendar-cell.today {
+      border: 2px solid var(--cyan);
+      position: relative;
+      z-index: 2;
+    }
+    .calendar-cell.today .calendar-cell-header {
+      background: rgba(6, 182, 212, 0.08);
+    }
+    .calendar-cell.today .calendar-cell-num {
+      color: var(--cyan);
+    }
+
+    /* ── Half-Day Time Slot Containers ── */
+    .calendar-half {
+      flex: 1 0 auto;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-start;
+      padding: 4px;
+      min-height: 48px;
+      gap: 4px;
+    }
+    .calendar-half.am {
+      border-bottom: 1px dashed var(--border);
+    }
+
+    /* ── Calendar Entry / Slot ── */
+    .calendar-slot {
+      font-size: 0.72rem;
+      padding: 5px 6px;
+      border-radius: 4px;
+      font-weight: 600;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 3px;
+      line-height: 1.25;
+      cursor: pointer;
+      transition: transform 0.1s;
+    }
+    .calendar-slot:hover {
+      transform: translateY(-1px);
+    }
+    .calendar-slot.morning {
+      background: rgba(249, 115, 22, 0.1);
+      color: #ea580c;
+      border-left: 3px solid #f97316;
+    }
+    .calendar-slot.afternoon {
+      background: rgba(37, 99, 235, 0.1);
+      color: #1d4ed8;
+      border-left: 3px solid #3b82f6;
+    }
+
+    /* ── Modal Overlay ── */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(4px);
+      z-index: 9999;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-overlay.open {
+      display: flex;
+    }
+    .modal-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      width: 700px;
+      max-width: 95%;
+      box-shadow: var(--shadow-lg);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      max-height: 90vh;
+      animation: modalSlide 0.2s forwards;
+    }
+    @keyframes modalSlide {
+      from { transform: translateY(15px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+    .modal-header {
+      padding: 1.25rem 1.5rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .modal-title {
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+    .modal-close {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-close:hover {
+      color: var(--text-primary);
+    }
+    .modal-body {
+      padding: 1.5rem;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+    .modal-footer {
+      padding: 1rem 1.5rem;
+      border-top: 1px solid var(--border);
+      background: var(--bg-elevated);
+      display: flex;
+      justify-content: flex-end;
+      gap: 0.75rem;
+    }
+
+    .details-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 1rem;
+    }
+    .details-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
+    }
+    .details-label {
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+    }
+    .details-value {
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+
+    /* ── Products Table ── */
+    .prod-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.8rem;
+    }
+    .prod-table th {
+      background: var(--bg-elevated);
+      color: var(--text-secondary);
+      font-weight: 700;
+      text-align: left;
+      padding: 0.5rem 0.75rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .prod-table td {
+      padding: 0.5rem 0.75rem;
+      border-bottom: 1px solid var(--border);
+      color: var(--text-primary);
+    }
+
+    /* ── Proof Thumbnails ── */
+    .proof-img-container {
+      width: 100%;
+      height: 80px;
+      border-radius: 6px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      background: var(--bg-elevated);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.15s;
+    }
+    .proof-img-container:hover {
+      transform: scale(1.02);
+    }
+    .proof-img-container img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    /* ── Button Helpers ── */
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.35rem; padding: 0.45rem 0.85rem; border-radius: 6px; font-size: 0.8rem; font-weight: 600; cursor: pointer; border: 1px solid transparent; transition: all 0.15s; text-decoration: none; }
+    .btn-primary { background: var(--cyan); color: #fff; border-color: var(--cyan); }
+    .btn-primary:hover { background: var(--cyan-light); border-color: var(--cyan-light); }
+    .btn-outline { background: var(--bg-surface); color: var(--text-secondary); border-color: var(--border); }
+    .btn-outline:hover { border-color: var(--cyan); color: var(--cyan); }
+    .btn-sm { padding: 0.3rem 0.55rem; font-size: 0.75rem; }
+
+    /* Toast styling */
+    .toast-container { position: fixed; top: 1.5rem; right: 1.5rem; z-index: 99999; display: flex; flex-direction: column; gap: 0.5rem; }
+    .toast { padding: 0.75rem 1rem; border-radius: 6px; font-size: 0.82rem; font-weight: 600; color: #fff; min-width: 250px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); animation: slideIn 0.2s ease-out; }
+    .toast-success { background: var(--success); }
+    .toast-error { background: var(--danger); }
+    @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+  </style>
+</head>
+<body>
+
+  <div class="toast-container" id="toast-container"></div>
+
+  <div class="dash-layout">
+    <!-- Sidebar -->
+    <aside class="dash-sidebar" id="dash-sidebar"></aside>
+
+    <!-- Main -->
+    <div class="dash-main">
+      <!-- Top Bar -->
+      <div class="top-bar">
+        <span class="top-bar-title">Logistics Calendar</span>
+        <div style="flex:1;"></div>
+      </div>
+
+      <div class="content-area">
+        <main class="main-panel">
+          <div class="drawer-tabs">
+            <a class="tab-btn active" href="/dashboard/logistics-calendar/calendar">Calendar</a>
+            <a class="tab-btn" href="/dashboard/logistics-calendar/orders">All Orders</a>
+          </div>
+          <div class="scroll-container">
+            
+            <!-- Calendar Month Navigator -->
+            <div class="month-nav" id="calendar-month-navigator">
+              <button class="btn btn-outline btn-sm" onclick="DeliveryCalendar.changeMonth(-1)">◀</button>
+              <span class="month-title" id="calendar-month-title"></span>
+              <button class="btn btn-outline btn-sm" onclick="DeliveryCalendar.changeMonth(1)">▶</button>
+            </div>
+
+            <!-- Calendar Grid -->
+            <div class="calendar-grid">
+              <div class="calendar-day-label">Su</div>
+              <div class="calendar-day-label">Mo</div>
+              <div class="calendar-day-label">Tu</div>
+              <div class="calendar-day-label">We</div>
+              <div class="calendar-day-label">Th</div>
+              <div class="calendar-day-label">Fr</div>
+              <div class="calendar-day-label">Sa</div>
+              <div class="calendar-grid-cells" id="calendar-cells" style="display:contents;">
+                <!-- Dynamic cells will be loaded here -->
+              </div>
+            </div>
+
+          </div>
+          <!-- Loading Overlay -->
+          <div id="calendar-loading-overlay" class="loading-overlay">
+            <span class="bk-spinner"></span>
+            <span class="loading-text">Loading schedules...</span>
+          </div>
+        </main>
+      </div>
+    </div>
+  </div>
+
+  <!-- Booking Details Modal -->
+  <div id="details-modal" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title">Pickup &amp; Delivery Details</h3>
+        <button class="modal-close" onclick="DeliveryCalendar.closeModal()">
+          <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        
+        <!-- Customer Info -->
+        <div>
+          <h4 style="margin: 0 0 0.75rem 0; color: var(--text-primary); font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;">Customer Information</h4>
+          <div class="details-grid">
+            <div class="details-group">
+              <span class="details-label">Order Number</span>
+              <span class="details-value" id="modal-order-no">—</span>
+            </div>
+            <div class="details-group">
+              <span class="details-label">Customer Name</span>
+              <span class="details-value" id="modal-customer-name">—</span>
+            </div>
+            <div class="details-group">
+              <span class="details-label">City</span>
+              <span class="details-value" id="modal-city">—</span>
+            </div>
+            <div class="details-group">
+              <span class="details-label">Full Address</span>
+              <span class="details-value" id="modal-address">—</span>
+            </div>
+            <div class="details-group">
+              <span class="details-label">Booked Date</span>
+              <span class="details-value" id="modal-booked-date">—</span>
+            </div>
+            <div class="details-group">
+              <span class="details-label">Scheduled Pickup Date</span>
+              <span class="details-value" id="modal-pickup-date">—</span>
+            </div>
+            <div class="details-group">
+              <span class="details-label">Install Date</span>
+              <span class="details-value" id="modal-install-date">—</span>
+            </div>
+            <div class="details-group" style="grid-column: span 2;">
+              <span class="details-label">Pickup Notes</span>
+              <span class="details-value" id="modal-pickup-notes">—</span>
+            </div>
+          </div>
+        </div>
+
+        <hr style="border: 0; border-top: 1px solid var(--border);" />
+
+        <!-- SKUs & Product Names -->
+        <div>
+          <h4 style="margin: 0 0 0.75rem 0; color: var(--text-primary); font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;">SKUs &amp; Product Names</h4>
+          <table class="prod-table">
+            <thead>
+              <tr>
+                <th style="width: 30%;">SKU</th>
+                <th style="width: 55%;">Product Name</th>
+                <th style="width: 15%; text-align: center;">Qty</th>
+              </tr>
+            </thead>
+            <tbody id="modal-products-list">
+              <!-- Dynamic rows -->
+            </tbody>
+          </table>
+        </div>
+
+        <hr style="border: 0; border-top: 1px solid var(--border);" />
+
+        <!-- Uploaded Images / Proof -->
+        <div>
+          <h4 style="margin: 0 0 0.75rem 0; color: var(--text-primary); font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;">Uploaded Proofs &amp; Images</h4>
+          <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.75rem;">
+            
+            <div class="proof-card" style="display: flex; flex-direction: column;">
+              <span class="details-label" style="display: flex; align-items: flex-end; justify-content: center; min-height: 2.2rem; margin-bottom: 0.35rem; text-align: center; line-height: 1.1;">QA Proof</span>
+              <div class="proof-img-container" id="proof-qa-container">
+                <!-- Thumbnail -->
+              </div>
+            </div>
+
+            <div class="proof-card" style="display: flex; flex-direction: column;">
+              <span class="details-label" style="display: flex; align-items: flex-end; justify-content: center; min-height: 2.2rem; margin-bottom: 0.35rem; text-align: center; line-height: 1.1;">Packed Proof</span>
+              <div class="proof-img-container" id="proof-packed-container">
+                <!-- Thumbnail -->
+              </div>
+            </div>
+
+            <div class="proof-card" style="display: flex; flex-direction: column;">
+              <span class="details-label" style="display: flex; align-items: flex-end; justify-content: center; min-height: 2.2rem; margin-bottom: 0.35rem; text-align: center; line-height: 1.1;">Booking Screenshot</span>
+              <div class="proof-img-container" id="proof-booking-container">
+                <!-- Thumbnail -->
+              </div>
+            </div>
+
+            <div class="proof-card" style="display: flex; flex-direction: column;">
+              <span class="details-label" style="display: flex; align-items: flex-end; justify-content: center; min-height: 2.2rem; margin-bottom: 0.35rem; text-align: center; line-height: 1.1;">Pickedup Proof</span>
+              <div class="proof-img-container" id="proof-pickedup-container">
+                <!-- Thumbnail/s -->
+              </div>
+            </div>
+
+            <div class="proof-card" style="display: flex; flex-direction: column;">
+              <span class="details-label" style="display: flex; align-items: flex-end; justify-content: center; min-height: 2.2rem; margin-bottom: 0.35rem; text-align: center; line-height: 1.1;">Received Screenshot</span>
+              <div class="proof-img-container" id="proof-received-container">
+                <!-- Thumbnail -->
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <hr style="border: 0; border-top: 1px solid var(--border);" />
+
+        <!-- Costs -->
+        <div>
+          <h4 style="margin: 0 0 0.75rem 0; color: var(--text-primary); font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;">Delivery Costs &amp; Fees</h4>
+          <div class="details-grid" style="grid-template-columns: repeat(4, 1fr);">
+            <div class="details-group">
+              <span class="details-label">Base Fee</span>
+              <span class="details-value" id="modal-base-fee">₱0.00</span>
+            </div>
+            <div class="details-group">
+              <span class="details-label">Tip 1</span>
+              <span class="details-value" id="modal-tip1">₱0.00</span>
+            </div>
+            <div class="details-group">
+              <span class="details-label">Tip 2</span>
+              <span class="details-value" id="modal-tip2">₱0.00</span>
+            </div>
+            <div class="details-group">
+              <span class="details-label">Toll</span>
+              <span class="details-value" id="modal-toll">₱0.00</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="DeliveryCalendar.closeModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Lightbox Modal -->
+  <div id="lightbox-modal" class="modal-overlay" onclick="DeliveryCalendar.closeLightbox()" style="background: rgba(0,0,0,0.85); cursor: zoom-out;">
+    <div style="position: relative; max-width: 90vw; max-height: 90vh;">
+      <img id="lightbox-img" src="" style="max-width: 100%; max-height: 90vh; border-radius: 8px; box-shadow: 0 12px 48px rgba(0,0,0,0.5); object-fit: contain; cursor: default;" onclick="event.stopPropagation()" />
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/sidebar.js"></script>
+  <script src="/js/main.js"></script>
+
+  <script>
+    'use strict';
+
+    function esc(s) {
+      return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    const MONTH_NAMES = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+
+    const DeliveryCalendar = {
+      currentUser: null,
+      companyId: null,
+      pickupSchedules: {},
+      activeTransactions: [],
+      deliveryBookings: [],
+      installationBookings: [],
+      products: [],
+      currentDate: new Date(),
+
+      async init() {
+        if (!window.BKAuth) return;
+
+        const authInfo = await window.BKAuth.checkRoleGate(['owner', 'admin', 'warehouse', 'logistics'], '../admin.html');
+        if (!authInfo) return;
+
+        this.currentUser = authInfo.user;
+        this.companyId = await this.getCompanyId(authInfo.tenantId);
+
+        this.initMonthFromHash();
+
+        if (this.companyId) {
+          await this.loadData();
+        }
+      },
+
+      async getCompanyId(tenantId) {
+        try {
+          const sb = window.BKAuth.sb;
+          const { data } = await sb.from('companies').select('id').eq('tenant_id', tenantId).limit(1).maybeSingle();
+          return data?.id || null;
+        } catch (err) {
+          console.error(err);
+          return null;
+        }
+      },
+
+      initMonthFromHash() {
+        const hash = window.location.hash.replace('#', '');
+        const match = hash.match(/^(\d{2})-(\d{4})$/);
+        if (match) {
+          const m = parseInt(match[1], 10) - 1;
+          const y = parseInt(match[2], 10);
+          if (m >= 0 && m <= 11 && y >= 2000) {
+            this.currentDate = new Date(y, m, 1);
+          }
+        }
+      },
+
+      updateHash() {
+        const mm = String(this.currentDate.getMonth() + 1).padStart(2, '0');
+        const yyyy = this.currentDate.getFullYear();
+        window.location.replace(`#${mm}-${yyyy}`);
+      },
+
+      getMonthDateRange(year, month) {
+        const start = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+        const lastDay = new Date(year, month + 1, 0).getDate();
+        const end = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+        return { start, end };
+      },
+
+      showLoadingOverlay() {
+        const overlay = document.getElementById('calendar-loading-overlay');
+        if (overlay) overlay.classList.add('active');
+      },
+
+      hideLoadingOverlay() {
+        const overlay = document.getElementById('calendar-loading-overlay');
+        if (overlay) overlay.classList.remove('active');
+      },
+
+      async loadData() {
+        this.showLoadingOverlay();
+        this.updateHash();
+        
+        try {
+          const sb = window.BKAuth.sb;
+          const year = this.currentDate.getFullYear();
+          const month = this.currentDate.getMonth();
+          const { start, end } = this.getMonthDateRange(year, month);
+          
+          // 1. Load pickup schedules from global_settings
+          const { data: gsData, error: gsErr } = await sb.from('global_settings')
+            .select('value')
+            .eq('key', 'pickup_schedules')
+            .eq('company_id', this.companyId)
+            .maybeSingle();
+          if (gsErr) throw gsErr;
+          this.pickupSchedules = gsData?.value || {};
+
+          // Filter schedules for the current month to load only relevant transactions/bookings
+          const activeRefIds = Object.entries(this.pickupSchedules)
+            .filter(([refId, sched]) => sched && sched.date && sched.date >= start && sched.date <= end)
+            .map(([refId]) => refId);
+
+          if (activeRefIds.length > 0) {
+            // 2. Load inventory transactions (customer orders) for activeRefIds
+            const { data: txs, error: txErr } = await sb.from('inventory_transactions')
+              .select('*')
+              .eq('type', 'customer_order')
+              .in('reference_id', activeRefIds);
+            if (txErr) throw txErr;
+            this.activeTransactions = txs || [];
+
+            // 3. Load delivery bookings for activeRefIds
+            const { data: dbData, error: dbErr } = await sb.from('delivery_bookings')
+              .select('*')
+              .in('reference_id', activeRefIds);
+            if (dbErr) throw dbErr;
+            this.deliveryBookings = dbData || [];
+
+            // 4. Load installation bookings for activeRefIds
+            const { data: bData, error: bErr } = await sb.from('installation_bookings')
+              .select('*')
+              .in('order_no', activeRefIds);
+            if (bErr) throw bErr;
+            this.installationBookings = bData || [];
+          } else {
+            this.activeTransactions = [];
+            this.deliveryBookings = [];
+            this.installationBookings = [];
+          }
+
+          // 5. Load products (static catalog lookup cache)
+          if (!this.products || this.products.length === 0) {
+            const { data: pData, error: pErr } = await sb.from('products')
+              .select('id, sku, title');
+            if (pErr) throw pErr;
+            this.products = pData || [];
+          }
+
+          this.renderCalendar();
+        } catch (err) {
+          console.error(err);
+          this.showToast('Failed to load data: ' + err.message, true);
+        } finally {
+          this.hideLoadingOverlay();
+        }
+      },
+
+      async changeMonth(dir) {
+        this.currentDate.setMonth(this.currentDate.getMonth() + dir);
+        await this.loadData();
+      },
+
+      getOrderStatus(refId, txs, deliveryBooking) {
+        if (!txs || txs.length === 0) return 'For QA';
+        
+        // Check if any transaction is received (Done)
+        const isReceived = txs.some(t => t.status === 'received');
+        if (isReceived) return 'Done';
+
+        // Check if any transaction is dispatched (In Transit)
+        const isDispatched = txs.some(t => t.status === 'dispatched');
+        if (isDispatched) return 'In Transit';
+
+        // Check if it has a delivery booking or is packed
+        const hasDeliveryBooking = !!deliveryBooking;
+        const isPacked = txs.some(t => t.status === 'packed');
+        if (isPacked) {
+          return hasDeliveryBooking ? 'For Pickup' : 'Packed';
+        }
+
+        // Check if QA is done (status is inspect)
+        const isQADone = txs.some(t => t.status === 'inspect');
+        if (isQADone) return 'QA Done';
+
+        return 'For QA';
+      },
+
+      getStatusBadge(status) {
+        const styles = {
+          'For QA': { bg: '#ef4444', color: '#fff' },
+          'QA Done': { bg: '#a855f7', color: '#fff' },
+          'Packed': { bg: '#f97316', color: '#fff' },
+          'For Pickup': { bg: '#eab308', color: '#000' },
+          'In Transit': { bg: '#06b6d4', color: '#fff' },
+          'Done': { bg: '#22c55e', color: '#fff' }
+        };
+        const style = styles[status] || { bg: 'var(--text-muted)', color: '#fff' };
+        return `<span style="display:inline-block; font-size:0.62rem; font-weight:700; padding:2px 6px; border-radius:4px; margin-top:2px; background:${style.bg}; color:${style.color}; text-transform:uppercase; letter-spacing:0.02em;">${status}</span>`;
+      },
+
+      renderCalendar() {
+        const year = this.currentDate.getFullYear();
+        const month = this.currentDate.getMonth();
+
+        const titleEl = document.getElementById('calendar-month-title');
+        if (titleEl) {
+          titleEl.textContent = `${MONTH_NAMES[month]} ${year}`;
+        }
+
+        const cellsContainer = document.getElementById('calendar-cells');
+        if (!cellsContainer) return;
+        cellsContainer.innerHTML = '';
+
+        const firstDayDate = new Date(year, month, 1);
+        const firstDayIndex = firstDayDate.getDay();
+        const totalDays = new Date(year, month + 1, 0).getDate();
+
+        // 1. Previous month filler cells
+        for (let i = 0; i < firstDayIndex; i++) {
+          cellsContainer.insertAdjacentHTML('beforeend', `
+            <div class="calendar-cell" style="background:var(--bg-elevated); opacity:0.3; pointer-events:none;">
+              <div class="calendar-cell-header"><span class="calendar-cell-num"></span></div>
+              <div class="calendar-half am"></div>
+              <div class="calendar-half pm"></div>
+            </div>
+          `);
+        }
+
+        // 2. Populate days of active month
+        const today = new Date();
+        const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
+        for (let day = 1; day <= totalDays; day++) {
+          const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+          
+          // Find pickup schedules on this date
+          const matches = Object.entries(this.pickupSchedules).filter(([refId, sched]) => sched.date === dateStr);
+
+          let amHtml = '';
+          let pmHtml = '';
+
+          matches.forEach(([refId, sched]) => {
+            const txs = this.activeTransactions.filter(t => t.reference_id === refId);
+            const customerName = txs[0]?.customer_name || 'N/A';
+            
+            let city = 'N/A';
+            if (txs[0]?.customer_city) {
+              const parts = txs[0].customer_city.split(',');
+              city = parts.length >= 2 ? parts[parts.length - 2].trim() : txs[0].customer_city.trim();
+            }
+
+            const db = this.deliveryBookings.find(b => b.reference_id === refId);
+            const status = this.getOrderStatus(refId, txs, db);
+            const badgeHtml = this.getStatusBadge(status);
+
+            const slotClass = (sched.slot || '').toLowerCase() === 'afternoon' ? 'afternoon' : 'morning';
+            const slotHtml = `
+              <div class="calendar-slot ${slotClass}" onclick="DeliveryCalendar.openDetailsModal('${refId}')">
+                <div style="font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; width:100%;">${esc(customerName)} (${esc(city)})</div>
+                <div style="display:flex; align-items:center; gap:0.35rem; margin-top:0.15rem; flex-wrap:wrap;">
+                  <span style="display:inline-block; font-size:0.62rem; font-weight:700; padding:2px 6px; border-radius:4px; margin-top:2px; background:var(--bg-elevated); color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.02em; border:1px solid var(--border);">${slotClass === 'afternoon' ? '1PM' : '8AM'}</span>
+                  ${badgeHtml}
+                </div>
+              </div>
+            `;
+
+            if (slotClass === 'afternoon') {
+              pmHtml += slotHtml;
+            } else {
+              amHtml += slotHtml;
+            }
+          });
+
+          const isToday = (dateStr === todayStr);
+          const cellClass = isToday ? 'calendar-cell today' : 'calendar-cell';
+
+          cellsContainer.insertAdjacentHTML('beforeend', `
+            <div class="${cellClass}">
+              <div class="calendar-cell-header">
+                <span class="calendar-cell-num">${day}</span>
+              </div>
+              <div class="calendar-half am">
+                ${amHtml}
+              </div>
+              <div class="calendar-half pm">
+                ${pmHtml}
+              </div>
+            </div>
+          `);
+        }
+      },
+
+      async openDetailsModal(refId) {
+        // Fallback to local cache initially so the user doesn't wait
+        let txs = this.activeTransactions.filter(t => t.reference_id === refId);
+        let db = this.deliveryBookings.find(b => b.reference_id === refId);
+        let ib = this.installationBookings.find(b => b.order_no === refId);
+        
+        // Open the modal right away with cached data
+        this.renderModalContent(refId, txs, db, ib);
+
+        // Fetch fresh data in the background to ensure it is 100% up-to-date
+        try {
+          const sb = window.BKAuth.sb;
+          const [liveTxsRes, liveDbRes, liveIbRes] = await Promise.all([
+            sb.from('inventory_transactions').select('*').eq('reference_id', refId).eq('type', 'customer_order'),
+            sb.from('delivery_bookings').select('*').eq('reference_id', refId).maybeSingle(),
+            sb.from('installation_bookings').select('*').eq('order_no', refId).maybeSingle()
+          ]);
+
+          if (liveTxsRes.data && liveTxsRes.data.length > 0) {
+            txs = liveTxsRes.data;
+          }
+          if (liveDbRes.data) {
+            db = liveDbRes.data;
+          }
+          if (liveIbRes.data) {
+            ib = liveIbRes.data;
+          }
+
+          // Re-render modal content with fresh data
+          this.renderModalContent(refId, txs, db, ib);
+        } catch (err) {
+          console.warn('Background details refresh failed:', err);
+        }
+      },
+
+      renderModalContent(refId, txs, db, ib) {
+        const sched = this.pickupSchedules[refId];
+
+        // Format dates
+        const bookedDate = txs[0]?.created_at 
+          ? new Date(txs[0].created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+          : '—';
+        const installDate = ib?.scheduled_date
+          ? new Date(ib.scheduled_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+          : '—';
+        let pickupDate = '—';
+        if (sched && sched.date) {
+          const parts = sched.date.split('-');
+          let dateFormatted = sched.date;
+          if (parts.length === 3) {
+            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            const year = parts[0];
+            const month = months[parseInt(parts[1], 10) - 1] || parts[1];
+            const day = parseInt(parts[2], 10);
+            dateFormatted = `${month} ${day}, ${year}`;
+          }
+          pickupDate = `${dateFormatted} (${sched.slot === 'Morning' ? '8AM' : '1PM'})`;
+        }
+
+        // Parse City/Province/Address
+        let customerCity = txs[0]?.customer_city || '—';
+        let customerAddress = '—';
+        if (ib) {
+          customerAddress = ib.customer_address || '—';
+        }
+
+        // Set text content
+        document.getElementById('modal-order-no').textContent = refId;
+        document.getElementById('modal-customer-name').textContent = txs[0]?.customer_name || 'N/A';
+        document.getElementById('modal-city').textContent = customerCity;
+        document.getElementById('modal-address').textContent = customerAddress;
+        document.getElementById('modal-booked-date').textContent = bookedDate;
+        document.getElementById('modal-pickup-date').textContent = pickupDate;
+        document.getElementById('modal-install-date').textContent = installDate;
+        document.getElementById('modal-pickup-notes').textContent = sched?.notes || '—';
+
+        // SKUs and Product Names table
+        const tbody = document.getElementById('modal-products-list');
+        tbody.innerHTML = '';
+        if (txs.length > 0) {
+          txs.forEach(t => {
+            const p = this.products.find(prod => prod.sku === t.sku);
+            const pName = p ? p.title : 'Unknown Product';
+            tbody.insertAdjacentHTML('beforeend', `
+              <tr>
+                <td><code>${esc(t.sku)}</code></td>
+                <td>${esc(pName)}</td>
+                <td style="text-align: center;"><strong>${t.quantity}</strong></td>
+              </tr>
+            `);
+          });
+        } else {
+          tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color:var(--text-muted);">No products found</td></tr>';
+        }
+
+        // Costs
+        const base = db?.base_fee ? `₱${(db.base_fee / 100).toFixed(2)}` : '₱0.00';
+        const tip1 = db?.tip_1 ? `₱${(db.tip_1 / 100).toFixed(2)}` : '₱0.00';
+        const tip2 = db?.tip_2 ? `₱${(db.tip_2 / 100).toFixed(2)}` : '₱0.00';
+        const toll = db?.toll ? `₱${(db.toll / 100).toFixed(2)}` : '₱0.00';
+
+        document.getElementById('modal-base-fee').textContent = base;
+        document.getElementById('modal-tip1').textContent = tip1;
+        document.getElementById('modal-tip2').textContent = tip2;
+        document.getElementById('modal-toll').textContent = toll;
+
+        // Render proof screenshots/photos
+        this.renderProofImage('proof-qa-container', txs[0]?.qa_photo_url);
+        this.renderProofImage('proof-packed-container', txs[0]?.packed_photo_url);
+        this.renderProofImage('proof-booking-container', db?.delivery_photo_url);
+        this.renderProofImage('proof-received-container', db?.received_photo_url);
+
+        // Picked up photos array
+        const pickedupContainer = document.getElementById('proof-pickedup-container');
+        pickedupContainer.innerHTML = '';
+        if (db?.pickup_photos && Array.isArray(db.pickup_photos) && db.pickup_photos.length > 0) {
+          db.pickup_photos.forEach(url => {
+            pickedupContainer.insertAdjacentHTML('beforeend', `
+              <div class="proof-img-container" style="height:100%; width:100%;">
+                <img src="${url}" alt="Picked Up Proof" onclick="DeliveryCalendar.maximizePhoto('${esc(url)}')" style="width:100%; height:100%; object-fit:cover;" />
+              </div>
+            `);
+          });
+        } else {
+          pickedupContainer.innerHTML = '<div style="height: 100%; display: flex; align-items: center; justify-content: center; font-size: 0.7rem; color: var(--text-muted); background: var(--bg-elevated); width: 100%;">No Proof</div>';
+        }
+
+        const modal = document.getElementById('details-modal');
+        if (modal) modal.classList.add('open');
+      },
+
+      renderProofImage(containerId, url) {
+        const container = document.getElementById(containerId);
+        container.innerHTML = '';
+        if (url) {
+          container.innerHTML = `<img src="${url}" alt="Proof" onclick="DeliveryCalendar.maximizePhoto('${esc(url)}')" style="width:100%; height:100%; object-fit:cover;" />`;
+        } else {
+          container.innerHTML = '<div style="height: 100%; display: flex; align-items: center; justify-content: center; font-size: 0.7rem; color: var(--text-muted); background: var(--bg-elevated); width:100%;">No Proof</div>';
+        }
+      },
+
+      closeModal() {
+        const modal = document.getElementById('details-modal');
+        if (modal) modal.classList.remove('open');
+      },
+
+      maximizePhoto(src) {
+        if (!src) return;
+        const modal = document.getElementById('lightbox-modal');
+        const img = document.getElementById('lightbox-img');
+        img.src = src;
+        modal.classList.add('open');
+      },
+
+      closeLightbox() {
+        const modal = document.getElementById('lightbox-modal');
+        modal.classList.remove('open');
+      },
+
+      showToast(msg, isError = false) {
+        const container = document.getElementById('toast-container');
+        if (!container) return;
+        const el = document.createElement('div');
+        el.className = `toast toast-${isError ? 'error' : 'success'}`;
+        el.innerText = msg;
+        container.appendChild(el);
+        setTimeout(() => el.remove(), 3500);
+      }
+    };
+
+    window.DeliveryCalendar = DeliveryCalendar;
+
+    document.addEventListener('DOMContentLoaded', () => {
+      DeliveryCalendar.init();
+    });
+  </script>
+</body>
+</html>
