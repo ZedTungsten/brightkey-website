@@ -10,6 +10,7 @@ let currentInstaller = null; // { id, first_name, last_name, company_id, passwor
 let dbBookings = [];
 let deliveryBookingsMap = {};
 let installerPayoutSettings = null;
+let payoutTrackerData = { config: {}, regularState: {}, specialState: {}, proratedState: {}, adjustments: [], reimbursements: [], payslipRecords: [], companyProfile: {}, payslipConfig: {} };
 
 const defaultChecklist = [
   { text: "Door opens and closes smoothly without obstruction", indent: false },

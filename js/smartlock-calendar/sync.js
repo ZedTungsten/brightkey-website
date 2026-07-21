@@ -56,7 +56,7 @@ async function syncData() {
     // Fetch fresh installer record
     const { data: freshEmp } = await sb
       .from('employees')
-      .select('id, first_name, last_name, contact_number, company_id, assignment, email, department, title, employment_status')
+      .select('id, first_name, last_name, contact_number, company_id, assignment, email, department, title, employment_status, salary, date_hired, shift_days')
       .eq('id', currentInstaller.id)
       .maybeSingle();
     if (freshEmp) {
@@ -127,6 +127,31 @@ async function syncData() {
       localStorage.setItem('bk_installer_payout_settings', JSON.stringify(installerPayoutSettings));
     } catch (payoutSettingsErr) {
       console.error('Error syncing installer payout settings:', payoutSettingsErr);
+    }
+
+    try {
+      const payoutKeys = ['salary_tracker_config', 'regular_payout_state', 'special_payout_state', 'prorated_salary_state', 'company_profile_config', 'payslip_template_config'];
+      const [settingsResult, adjustmentsResult, reimbursementsResult, payslipsResult] = await Promise.all([
+        sb.from('global_settings').select('key, value').eq('company_id', currentInstaller.company_id).in('key', payoutKeys),
+        sb.from('employee_adjustments').select('id, amount, date, label, paid').eq('company_id', currentInstaller.company_id).eq('employee_id', currentInstaller.id),
+        sb.from('employee_reimbursements').select('id, amount, date, label, paid').eq('company_id', currentInstaller.company_id).eq('employee_id', currentInstaller.id),
+        sb.from('payslip_records').select('*').eq('company_id', currentInstaller.company_id).eq('employee_id', currentInstaller.id)
+      ]);
+      const settings = {};
+      (settingsResult.data || []).forEach(row => { settings[row.key] = row.value || {}; });
+      payoutTrackerData = {
+        config: settings.salary_tracker_config || {},
+        regularState: settings.regular_payout_state || {},
+        specialState: settings.special_payout_state || {},
+        proratedState: settings.prorated_salary_state || {},
+        adjustments: adjustmentsResult.data || [],
+        reimbursements: reimbursementsResult.data || [],
+        payslipRecords: payslipsResult.data || [],
+        companyProfile: settings.company_profile_config || {},
+        payslipConfig: settings.payslip_template_config || {}
+      };
+    } catch (payoutDataError) {
+      console.error('Error syncing payout tracker data:', payoutDataError);
     }
 
     // Fetch bookings for this company
@@ -202,6 +227,7 @@ async function syncData() {
     drawCalendar();
     drawAgenda();
     drawJobTracker();
+    drawPayouts();
   } catch (err) {
     console.error('Sync failed:', err);
     updateSyncBanner(true);

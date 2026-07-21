@@ -104,8 +104,6 @@ function getInstallerAssignedSkus(b, myId) {
 
   const anyDoorHasAttachedProducts = doorsArr.some(d => Array.isArray(d.products) && d.products.length > 0);
   const isSingleDoorGrouping = (doorsArr.length === 1 && productsArr.length > 0);
-  const skuOccurrenceCount = new Map();
-
   const bookingHasDoorLevelInstallers = doorsArr.some(d => d && Array.isArray(d.installers) && d.installers.some(inst => inst && (inst.id || inst.name)));
 
   for (let i = 0; i < rowCount; i++) {
@@ -125,12 +123,10 @@ function getInstallerAssignedSkus(b, myId) {
         const attachedSkus = door.products || [];
         attachedSkus.forEach(sku => {
           const matchingProds = productsArr.filter(p => p.sku === sku);
-          const occurrenceIndex = skuOccurrenceCount.get(sku) || 0;
-          const matchedProd = matchingProds[occurrenceIndex];
-          if (matchedProd && !matchedProd.cancelled) {
-            assignedSkus.push(matchedProd.sku);
+          const hasActiveProduct = matchingProds.length === 0 || matchingProds.some(product => !product.cancelled);
+          if (hasActiveProduct) {
+            assignedSkus.push(sku);
           }
-          skuOccurrenceCount.set(sku, occurrenceIndex + 1);
         });
       } else if (isSingleDoorGrouping) {
         productsArr.forEach(p => {
@@ -144,14 +140,6 @@ function getInstallerAssignedSkus(b, myId) {
         } else if (skus[i]) {
           assignedSkus.push(skus[i]);
         }
-      }
-    } else {
-      if (anyDoorHasAttachedProducts && door) {
-        const attachedSkus = door.products || [];
-        attachedSkus.forEach(sku => {
-          const occurrenceIndex = skuOccurrenceCount.get(sku) || 0;
-          skuOccurrenceCount.set(sku, occurrenceIndex + 1);
-        });
       }
     }
   }
@@ -241,8 +229,6 @@ function getInstallerAssignedDoorsForBooking(b, myId) {
   const skus = (b.product_skus || '').split(' | ');
   const anyDoorHasAttachedProducts = doorsArr.some(d => Array.isArray(d.products) && d.products.length > 0);
   const isSingleDoorGrouping = (doorsArr.length === 1 && productsArr.length > 0);
-  const skuOccurrenceCount = new Map();
-
   doorsArr.forEach((door, index) => {
     let isAssignedToThisDoor = false;
     let roles = [];
@@ -281,12 +267,10 @@ function getInstallerAssignedDoorsForBooking(b, myId) {
         const attachedSkus = door.products || [];
         attachedSkus.forEach(sku => {
           const matchingProds = productsArr.filter(p => p.sku === sku);
-          const occurrenceIndex = skuOccurrenceCount.get(sku) || 0;
-          const matchedProd = matchingProds[occurrenceIndex];
-          if (matchedProd && !matchedProd.cancelled) {
-            doorSkus.push(matchedProd.sku);
+          const hasActiveProduct = matchingProds.length === 0 || matchingProds.some(product => !product.cancelled);
+          if (hasActiveProduct) {
+            doorSkus.push(sku);
           }
-          skuOccurrenceCount.set(sku, occurrenceIndex + 1);
         });
       } else if (isSingleDoorGrouping) {
         productsArr.forEach(p => {
@@ -308,14 +292,6 @@ function getInstallerAssignedDoorsForBooking(b, myId) {
         roles: roles,
         skus: doorSkus
       });
-    } else {
-      if (anyDoorHasAttachedProducts && door) {
-        const attachedSkus = door.products || [];
-        attachedSkus.forEach(sku => {
-          const occurrenceIndex = skuOccurrenceCount.get(sku) || 0;
-          skuOccurrenceCount.set(sku, occurrenceIndex + 1);
-        });
-      }
     }
   });
 

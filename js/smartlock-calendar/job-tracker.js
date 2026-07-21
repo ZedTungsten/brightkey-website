@@ -1,9 +1,9 @@
 'use strict';
 
 function populateTrackerMonthSelect() {
-  const select = document.getElementById('tracker-month-select');
-  const paySelect = document.getElementById('payouts-month-select');
-  if (!select && !paySelect) return;
+  const trackerInput = document.getElementById('tracker-month-select');
+  const payoutInput = document.getElementById('payouts-month-select');
+  if (!trackerInput && !payoutInput) return;
   
   const options = [];
   const now = new Date();
@@ -14,25 +14,32 @@ function populateTrackerMonthSelect() {
     options.push({ val: optVal, text: optText });
   }
 
-  if (select) {
-    select.innerHTML = '';
-    options.forEach(o => {
-      const opt = document.createElement('option');
-      opt.value = o.val;
-      opt.textContent = o.text;
-      select.appendChild(opt);
-    });
+  if (trackerInput) {
+    trackerInput.value = options[0].val;
+    const label = document.getElementById('tracker-month-label');
+    if (label) label.textContent = options[0].text;
   }
 
-  if (paySelect) {
-    paySelect.innerHTML = '';
-    options.forEach(o => {
-      const opt = document.createElement('option');
-      opt.value = o.val;
-      opt.textContent = o.text;
-      paySelect.appendChild(opt);
-    });
+  if (payoutInput) {
+    payoutInput.value = options[0].val;
+    const label = document.getElementById('payouts-month-label');
+    if (label) label.textContent = options[0].text;
   }
+}
+
+function changeTrackerMonth(direction) {
+  const trackerInput = document.getElementById('tracker-month-select');
+  if (!trackerInput) return;
+
+  const currentValue = trackerInput.value || formatDateISO(new Date()).slice(0, 7);
+  const [year, month] = currentValue.split('-').map(Number);
+  const targetDate = new Date(year, month - 1 + direction, 1);
+  trackerInput.value = `${targetDate.getFullYear()}-${String(targetDate.getMonth() + 1).padStart(2, '0')}`;
+
+  const label = document.getElementById('tracker-month-label');
+  if (label) label.textContent = `${MONTH_NAMES[targetDate.getMonth()]} ${targetDate.getFullYear()}`;
+
+  drawJobTracker();
 }
 
 function drawJobTracker() {
@@ -152,5 +159,4 @@ function drawJobTracker() {
 
   const elJobList = document.getElementById('tracker-job-list');
   if (elJobList) elJobList.innerHTML = listHtml;
-}
 }

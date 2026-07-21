@@ -1,5 +1,154 @@
 'use strict';
 
+function changePayoutMonth(direction) {
+  const payoutInput = document.getElementById('payouts-month-select');
+  if (!payoutInput) return;
+
+  const currentValue = payoutInput.value || formatDateISO(new Date()).slice(0, 7);
+  const [year, month] = currentValue.split('-').map(Number);
+  const targetDate = new Date(year, month - 1 + direction, 1);
+  payoutInput.value = `${targetDate.getFullYear()}-${String(targetDate.getMonth() + 1).padStart(2, '0')}`;
+
+  const label = document.getElementById('payouts-month-label');
+  if (label) label.textContent = `${MONTH_NAMES[targetDate.getMonth()]} ${targetDate.getFullYear()}`;
+
+  drawPayouts();
+}
+
+function renderSalaryAndAdjustments(monthKey) {
+  const list = document.getElementById('payout-salary-list');
+  const totalElement = document.getElementById('payout-salary-grand-total');
+  if (!list || !totalElement || !currentInstaller) return;
+
+  const config = payoutTrackerData.config || {};
+  const schedules = [...(config.payoutSchedules || [15, 30])].map(Number).sort((a, b) => a - b);
+  const monthState = payoutTrackerData.regularState?.[monthKey] || {};
+  const specialState = payoutTrackerData.specialState?.[monthKey] || {};
+  const rows = [];
+  const salary = Number(currentInstaller.salary) || 0;
+  const [year, month] = monthKey.split('-').map(Number);
+  const selectedForProration = (payoutTrackerData.proratedState?.[monthKey] || []).includes(currentInstaller.id);
+  const hiredDate = String(currentInstaller.date_hired || '').slice(0, 10);
+
+  const salaryAllocation = (cutoffDay, cutoffIndex) => {
+    const regularValue = salary / (schedules.length || 1);
+    if (!selectedForProration || !hiredDate.startsWith(monthKey)) return regularValue;
+    const hireDay = Number(hiredDate.slice(8, 10));
+    const targetIndex = schedules.findIndex(day => day >= hireDay);
+    if (targetIndex === -1 || cutoffIndex < targetIndex) return 0;
+    if (cutoffIndex > targetIndex) return regularValue;
+
+    const shiftValue = String(currentInstaller.shift_days || '').toLowerCase().replace(/\s+/g, '');
+    let workdays = new Set([1, 2, 3, 4, 5]);
+    if (shiftValue.includes('mon-sun')) workdays = new Set([0, 1, 2, 3, 4, 5, 6]);
+    else if (shiftValue.includes('mon-sat')) workdays = new Set([1, 2, 3, 4, 5, 6]);
+    else if (shiftValue === 'sun' || shiftValue === 'sunday') workdays = new Set([0]);
+    const daysInMonth = new Date(year, month, 0).getDate();
+    let totalWorkdays = 0;
+    let eligibleWorkdays = 0;
+    for (let day = 1; day <= daysInMonth; day++) {
+      if (!workdays.has(new Date(year, month - 1, day).getDay())) continue;
+      totalWorkdays++;
+      if (day >= hireDay && day <= Math.min(cutoffDay, daysInMonth)) eligibleWorkdays++;
+    }
+    return totalWorkdays ? salary * (eligibleWorkdays / totalWorkdays) : 0;
+  };
+
+  const addRow = (label, amount, paid, day) => rows.push({ label, amount: Number(amount) || 0, paid: !!paid, day: Number(day) || 0 });
+  schedules.forEach((day, index) => {
+    addRow(`Salary Cutoff — ${MONTH_NAMES[month - 1]} ${day}`, salaryAllocation(day, index), monthState[`${currentInstaller.id}_${day}`], day);
+  });
+
+  (config.specialSchedules || []).filter(item => item.employeeId === currentInstaller.id).forEach(item => {
+    addRow(item.label || `Special Payout — Day ${item.day}`, item.value, specialState[`${currentInstaller.id}_${Number(item.day)}`], item.day);
+  });
+
+  const itemPaidState = item => {
+    if (item.paid) return true;
+    const itemDay = new Date(`${item.date}T00:00:00`).getDate();
+    const cutoff = schedules.find(day => itemDay <= day) || schedules[schedules.length - 1];
+    return !!monthState[`${currentInstaller.id}_${cutoff}`];
+  };
+  (payoutTrackerData.reimbursements || []).filter(item => String(item.date || '').startsWith(monthKey)).forEach(item => addRow(item.label || 'Reimbursement', item.amount, itemPaidState(item), new Date(`${item.date}T00:00:00`).getDate()));
+  (payoutTrackerData.adjustments || []).filter(item => String(item.date || '').startsWith(monthKey)).forEach(item => addRow(item.label || 'Adjustment', item.amount, itemPaidState(item), new Date(`${item.date}T00:00:00`).getDate()));
+
+  rows.sort((a, b) => a.day - b.day);
+
+  const peso = value => `₱${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  list.innerHTML = rows.length ? rows.map(row => `
+    <div style="display:grid; grid-template-columns:minmax(0,1fr) auto; gap:1rem; align-items:center;">
+      <div style="min-width:0;">
+        <div style="font-size:0.84rem; font-weight:700; color:var(--text-primary);">${escapeHtml(row.label)}</div>
+        <div style="font-size:0.78rem; color:var(--text-muted); margin-top:0.15rem;">${peso(row.amount)}</div>
+      </div>
+      <span style="font-size:0.75rem; font-weight:700; color:${row.paid ? 'var(--success)' : 'var(--text-muted)'};">${row.paid ? 'Paid' : 'Unpaid'}</span>
+    </div>
+  `).join('') : '<div style="color:var(--text-muted); font-size:0.82rem;">No salary or adjustment entries for this month.</div>';
+  const salaryAndAdjustmentsTotal = rows.reduce((sum, row) => sum + row.amount, 0);
+  totalElement.textContent = peso(salaryAndAdjustmentsTotal);
+  totalElement.dataset.total = String(salaryAndAdjustmentsTotal);
+}
+
+function getReadyPayslipRecord(monthKey) {
+  const record = (payoutTrackerData.payslipRecords || []).find(item => item.payout_month === monthKey);
+  if (!record || !currentInstaller) return null;
+  const schedules = payoutTrackerData.config?.payoutSchedules || [15, 30];
+  const regularState = payoutTrackerData.regularState?.[monthKey] || {};
+  const allSalaryPaid = schedules.every(day => regularState[`${currentInstaller.id}_${Number(day)}`] === true);
+  const employeeSpecials = (payoutTrackerData.config?.specialSchedules || []).filter(item => item.employeeId === currentInstaller.id);
+  const specialState = payoutTrackerData.specialState?.[monthKey] || {};
+  const allSpecialsPaid = employeeSpecials.every(item => specialState[`${currentInstaller.id}_${Number(item.day)}`] === true);
+  return allSalaryPaid && allSpecialsPaid ? record : null;
+}
+
+function updateInstallerPayslipState(monthKey) {
+  const button = document.getElementById('btn-download-installer-payslip');
+  const status = document.getElementById('installer-payslip-status');
+  if (!button || !status) return;
+  const ready = !!getReadyPayslipRecord(monthKey);
+  button.disabled = !ready;
+  button.style.background = ready ? 'var(--cyan)' : '#d1d5db';
+  button.style.color = ready ? '#fff' : '#6b7280';
+  button.style.cursor = ready ? 'pointer' : 'not-allowed';
+  status.textContent = ready ? 'Ready' : 'Not yet ready';
+  status.style.color = ready ? 'var(--success)' : 'var(--text-muted)';
+}
+
+async function downloadInstallerPayslip() {
+  const monthKey = document.getElementById('payouts-month-select')?.value;
+  const record = getReadyPayslipRecord(monthKey);
+  if (!record || typeof html2pdf !== 'function') return;
+  const [year, month] = monthKey.split('-').map(Number);
+  const monthText = `${MONTH_NAMES[month - 1]} ${year}`;
+  const profile = payoutTrackerData.companyProfile || {};
+  const template = payoutTrackerData.payslipConfig || {};
+  const peso = value => `₱${(Number(value) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const row = (type, description, amount) => `<tr><td style="padding:0.7rem;border-bottom:1px solid #e5e7eb;font-weight:600;">${escapeHtml(type)}</td><td style="padding:0.7rem;border-bottom:1px solid #e5e7eb;color:#4b5563;">${escapeHtml(description)}</td><td style="padding:0.7rem;border-bottom:1px solid #e5e7eb;text-align:right;">${peso(amount)}</td></tr>`;
+  let rows = row(Number(record.basic_paid) !== Number(record.salary) ? 'Prorated Salary' : 'Basic Salary', 'Monthly salary payout', record.basic_paid);
+  (record.special_schedules || []).forEach(item => { rows += row('Special Payout', item.label || `Day ${item.day}`, item.value); });
+  (record.adjustments_list || []).forEach(item => { rows += row('Adjustment', item.label || item.description || 'Adjustment', item.value ?? item.amount); });
+  (record.reimbursements_list || []).forEach(item => { rows += row('Reimbursement', item.label || item.description || 'Reimbursement', item.value ?? item.amount); });
+  if (Number(record.commissions)) rows += row('Commissions', 'Sales commissions', record.commissions);
+  const logoUrl = template.logoStyle === 'dark' ? profile.logoDark : profile.logoLight;
+  const employeeName = [currentInstaller.first_name, currentInstaller.last_name].filter(Boolean).join(' ');
+  const sheet = document.createElement('div');
+  sheet.innerHTML = `<div style="min-height:250mm;box-sizing:border-box;background:#fff;color:#111827;padding:3rem;font-family:Arial,sans-serif;display:flex;flex-direction:column;">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1.5rem;">${logoUrl ? `<img src="${escapeHtml(logoUrl)}" style="max-height:48px;max-width:150px;filter:grayscale(1);">` : '<div></div>'}<div style="text-align:right;font-size:0.72rem;color:#4b5563;"><strong style="display:block;color:#111827;">${escapeHtml(profile.companyName || 'Brightkey Solutions')}</strong>${escapeHtml(profile.companyAddressLine1 || '')}</div></div>
+    <div style="text-align:center;margin-bottom:1.5rem;"><div style="font-size:1.6rem;font-weight:900;text-transform:uppercase;letter-spacing:1px;">Payslip</div><strong style="font-size:0.95rem;color:#4b5563;">${escapeHtml(monthText)}</strong></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;background:#f9fafb;border:1px solid #e5e7eb;padding:0.9rem;border-radius:6px;margin-bottom:1.5rem;"><div><small style="color:#6b7280;text-transform:uppercase;">Employee Name</small><strong style="display:block;">${escapeHtml(employeeName)}</strong></div><div><small style="color:#6b7280;text-transform:uppercase;">Position / Title</small><strong style="display:block;">${escapeHtml(record.position || currentInstaller.title || '—')}</strong></div><div><small style="color:#6b7280;text-transform:uppercase;">Department</small><strong style="display:block;">${escapeHtml(record.department || currentInstaller.department || '—')}</strong></div></div>
+    <div style="font-size:0.8rem;font-weight:700;text-transform:uppercase;margin-bottom:0.5rem;">Earnings &amp; Adjustments Breakdown</div><table style="width:100%;border-collapse:collapse;font-size:0.85rem;"><thead><tr style="background:#f3f4f6;text-align:left;"><th style="padding:0.7rem;">Type</th><th style="padding:0.7rem;">Description</th><th style="padding:0.7rem;text-align:right;">Amount</th></tr></thead><tbody>${rows}</tbody></table>
+    <div style="display:flex;justify-content:space-between;margin:2rem 0 0 auto;width:55%;border-top:2px solid #111827;padding-top:0.8rem;font-weight:900;"><span>TOTAL PAYOUT</span><span>${peso(record.total_payout)}</span></div>
+    <div style="margin-top:auto;display:flex;justify-content:space-between;align-items:flex-end;padding-top:3rem;"><p style="font-size:0.7rem;color:#6b7280;max-width:320px;">This payslip is generated through Brightkey ERP and serves as an official payroll record.</p><div style="width:180px;text-align:center;">${template.signatureUrl ? `<img src="${escapeHtml(template.signatureUrl)}" style="max-height:90px;max-width:170px;">` : '<div style="height:90px;"></div>'}<div style="border-top:1px solid #111827;padding-top:0.25rem;font-weight:700;">${escapeHtml(template.signatoryName || 'Authorized Signatory')}</div><small>Authorized Signatory</small></div></div>
+  </div>`;
+  const button = document.getElementById('btn-download-installer-payslip');
+  button.disabled = true;
+  try {
+    await html2pdf().set({ margin:[10,10,10,10], filename:`Payslip_${employeeName.replace(/\s+/g, '_')}_${monthText.replace(/\s+/g, '_')}.pdf`, image:{type:'jpeg',quality:0.98}, html2canvas:{scale:2,useCORS:true,letterRendering:true}, jsPDF:{unit:'mm',format:'a4',orientation:'portrait'} }).from(sheet).save();
+  } finally {
+    updateInstallerPayslipState(monthKey);
+  }
+}
+
 function drawPayouts() {
   if (!currentInstaller) return;
   const select = document.getElementById('payouts-month-select');
@@ -7,6 +156,8 @@ function drawPayouts() {
   
   const targetMonthKey = select.value;
   const myId = currentInstaller.id;
+  renderSalaryAndAdjustments(targetMonthKey);
+  updateInstallerPayslipState(targetMonthKey);
 
   // Get configuration settings
   const config = installerPayoutSettings || {
@@ -141,7 +292,8 @@ function drawPayouts() {
     thresholdEarningsDetailsHtml = `<div style="font-style:italic; color:var(--text-muted); font-size:0.8rem;">Threshold not reached yet (${totalCredit.toFixed(1)} / ${thresholdVal}).</div>`;
   }
 
-  document.getElementById('payout-extra-total').textContent = `₱${thresholdEarnings.toLocaleString()}`;
+  const peso = value => `₱${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  document.getElementById('payout-extra-total').textContent = peso(thresholdEarnings);
   document.getElementById('payout-extra-details').innerHTML = thresholdEarningsDetailsHtml;
 
   // 3. Render flat services payout
@@ -154,7 +306,7 @@ function drawPayouts() {
       servicesDetailsHtml += `
         <div style="display:flex; justify-content:space-between;">
           <span>${escapeHtml(sku)} (${count} x ₱${rate.toLocaleString()}):</span>
-          <strong>₱${subtotal.toLocaleString()}</strong>
+          <span>₱${subtotal.toLocaleString()}</span>
         </div>
       `;
     });
@@ -162,10 +314,13 @@ function drawPayouts() {
     servicesDetailsHtml = `<div style="font-style:italic; color:var(--text-muted); font-size:0.8rem;">No extra paid services recorded this month.</div>`;
   }
 
-  document.getElementById('payout-services-total').textContent = `₱${serviceEarnings.toLocaleString()}`;
+  document.getElementById('payout-services-total').textContent = peso(serviceEarnings);
   document.getElementById('payout-services-details').innerHTML = servicesDetailsHtml;
 
   // 4. Grand Total
   const grandTotal = thresholdEarnings + serviceEarnings;
-  document.getElementById('payout-grand-total').textContent = `₱${grandTotal.toLocaleString()}`;
+  document.getElementById('payout-grand-total').textContent = peso(grandTotal);
+  const salaryTotal = Number(document.getElementById('payout-salary-grand-total')?.dataset.total) || 0;
+  const overallTotal = document.getElementById('payout-overall-grand-total');
+  if (overallTotal) overallTotal.textContent = peso(salaryTotal + grandTotal);
 }
