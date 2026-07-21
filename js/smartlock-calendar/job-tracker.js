@@ -45,6 +45,7 @@ function drawJobTracker() {
 
   let leadCount = 0;
   let assistCount = 0;
+  let totalCount = 0;
   let listHtml = '';
 
   // Filter from dbBookings
@@ -59,12 +60,21 @@ function drawJobTracker() {
   monthBookings.sort((a, b) => new Date(a.scheduled_date) - new Date(b.scheduled_date));
 
   monthBookings.forEach(b => {
+    const assignmentType = String(b.product_skus || '').trim().toLowerCase();
+    const isDayOff = assignmentType === 'day off' || (b.order_no && b.order_no.startsWith('DO-'));
+    const excludeFromRoleCounts = isDayOff || assignmentType === 'ocular' || assignmentType === 'backjob';
     const assignedDoors = getInstallerAssignedDoorsForBooking(b, myId);
     assignedDoors.forEach(d => {
-      if (d.roles.includes('lead')) {
-        leadCount++;
-      } else if (d.roles.includes('assist')) {
-        assistCount++;
+      if (!isDayOff) {
+        totalCount++;
+      }
+
+      if (!excludeFromRoleCounts) {
+        if (d.roles.includes('lead')) {
+          leadCount++;
+        } else if (d.roles.includes('assist')) {
+          assistCount++;
+        }
       }
 
       const date = new Date(b.scheduled_date);
@@ -85,7 +95,6 @@ function drawJobTracker() {
         roleBadgesHtml += `<span style="font-size:0.68rem; font-weight:700; background:#F3E8FF; color:#7E22CE; padding:0.15rem 0.4rem; border-radius:4px; text-transform:uppercase;">Service</span>`;
       }
 
-      const isDayOff = b.product_skus === 'Day off' || (b.order_no && b.order_no.startsWith('DO-'));
       const displayLabel = isDayOff ? 'Day off' : `${b.customer_name || 'Client'} (${d.doorName})`;
       const skuLabel = d.skus.join(' | ') || 'No Lock';
 
@@ -114,6 +123,6 @@ function drawJobTracker() {
 
   document.getElementById('tracker-lead-count').textContent = leadCount;
   document.getElementById('tracker-assist-count').textContent = assistCount;
-  document.getElementById('tracker-total-count').textContent = leadCount + assistCount;
+  document.getElementById('tracker-total-count').textContent = totalCount;
   document.getElementById('tracker-job-list').innerHTML = listHtml;
 }
