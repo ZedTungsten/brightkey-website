@@ -789,7 +789,26 @@
           }
         });
 
-        const groupList = Object.values(groups);
+        const groupList = Object.values(groups).sort((a, b) => {
+          const bookingA = this.bookings.find(booking => booking.order_no === a.reference_id);
+          const bookingB = this.bookings.find(booking => booking.order_no === b.reference_id);
+          const dateA = bookingA?.scheduled_date ? new Date(bookingA.scheduled_date).getTime() : Number.POSITIVE_INFINITY;
+          const dateB = bookingB?.scheduled_date ? new Date(bookingB.scheduled_date).getTime() : Number.POSITIVE_INFINITY;
+
+          if (dateA !== dateB) return dateA - dateB;
+
+          const timeRank = scheduledTime => {
+            const normalizedTime = String(scheduledTime || '').toLowerCase();
+            if (normalizedTime.includes('morning') || normalizedTime.includes('am')) return 0;
+            if (normalizedTime.includes('afternoon') || normalizedTime.includes('pm')) return 1;
+            return 2;
+          };
+
+          const timeDifference = timeRank(bookingA?.scheduled_time) - timeRank(bookingB?.scheduled_time);
+          if (timeDifference !== 0) return timeDifference;
+
+          return a.reference_id.localeCompare(b.reference_id);
+        });
         const totalItems = groupList.length;
 
         const maxPage = Math.ceil(totalItems / this.itemsPerPage) || 1;
