@@ -45,6 +45,8 @@ function drawJobTracker() {
 
   let leadCount = 0;
   let assistCount = 0;
+  let ocularCount = 0;
+  let backjobCount = 0;
   let totalCount = 0;
   let listHtml = '';
 
@@ -62,14 +64,20 @@ function drawJobTracker() {
   monthBookings.forEach(b => {
     const assignmentType = String(b.product_skus || '').trim().toLowerCase();
     const isDayOff = assignmentType === 'day off' || (b.order_no && b.order_no.startsWith('DO-'));
-    const excludeFromRoleCounts = isDayOff || assignmentType === 'ocular' || assignmentType === 'backjob';
+    const isOcular = assignmentType === 'ocular' || (b.order_no && b.order_no.startsWith('OC-'));
+    const isBackjob = assignmentType === 'backjob' || (b.order_no && b.order_no.startsWith('BJ-'));
+    const excludeFromRoleCounts = isDayOff || isOcular || isBackjob;
     const assignedDoors = getInstallerAssignedDoorsForBooking(b, myId);
     assignedDoors.forEach(d => {
       if (!isDayOff) {
         totalCount++;
       }
 
-      if (!excludeFromRoleCounts) {
+      if (isOcular) {
+        ocularCount++;
+      } else if (isBackjob) {
+        backjobCount++;
+      } else if (!excludeFromRoleCounts) {
         if (d.roles.includes('lead')) {
           leadCount++;
         } else if (d.roles.includes('assist')) {
@@ -121,8 +129,28 @@ function drawJobTracker() {
     listHtml = `<div style="text-align: center; padding: 2rem; color: var(--text-muted); font-size: 0.88rem; font-style: italic;">No job assignments recorded for this month.</div>`;
   }
 
-  document.getElementById('tracker-lead-count').textContent = leadCount;
-  document.getElementById('tracker-assist-count').textContent = assistCount;
-  document.getElementById('tracker-total-count').textContent = totalCount;
-  document.getElementById('tracker-job-list').innerHTML = listHtml;
+  const elLead = document.getElementById('tracker-lead-count');
+  if (elLead) elLead.textContent = leadCount;
+
+  const elAssist = document.getElementById('tracker-assist-count');
+  if (elAssist) elAssist.textContent = assistCount;
+
+  const elTotal = document.getElementById('tracker-total-count');
+  if (elTotal) elTotal.textContent = totalCount;
+
+  const elBkLeads = document.getElementById('tracker-breakdown-leads');
+  if (elBkLeads) elBkLeads.textContent = leadCount;
+
+  const elBkAssists = document.getElementById('tracker-breakdown-assists');
+  if (elBkAssists) elBkAssists.textContent = assistCount;
+
+  const elBkOcular = document.getElementById('tracker-breakdown-ocular');
+  if (elBkOcular) elBkOcular.textContent = ocularCount;
+
+  const elBkBackjobs = document.getElementById('tracker-breakdown-backjobs');
+  if (elBkBackjobs) elBkBackjobs.textContent = backjobCount;
+
+  const elJobList = document.getElementById('tracker-job-list');
+  if (elJobList) elJobList.innerHTML = listHtml;
+}
 }
