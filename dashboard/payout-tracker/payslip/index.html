@@ -218,7 +218,7 @@
         // Employees (all fields needed for payslip rendering)
         try {
           const { data, error } = await sb.from('employees')
-            .select('id, first_name, middle_name, last_name, salary, title, department, employment_status, reporting_to, date_hired, shift_days')
+            .select('id, first_name, middle_name, last_name, salary, title, department, employment_status, reporting_to, date_hired, shift_days, assignment')
             .eq('company_id', this.companyId)
             .eq('employment_status', 'Active');
           if (error) throw error;
@@ -633,6 +633,10 @@
         return `${this.selectedYear}-${String(this.selectedMonth + 1).padStart(2, '0')}`;
       },
 
+      isOwnerEmployee(emp) {
+        return String(emp?.assignment || '').split(',').some(value => value.trim().toLowerCase() === 'owner');
+      },
+
       applyRequestedMonth() {
         const month = new URLSearchParams(window.location.search).get('month');
         const match = /^(\d{4})-(\d{2})$/.exec(month || '');
@@ -837,17 +841,22 @@
 
         const emp = this.employees.find(e => e.id === empId);
         if (!emp) { toast('Employee not found.', 'error'); return; }
+        const isOwner = this.isOwnerEmployee(emp);
 
         const mk         = this.monthKey();
         const monthText  = `${MONTHS[this.selectedMonth]} ${this.selectedYear}`;
         const baseSalary = emp.salary || 0;
-        const empSpecs   = this.specialSchedules.filter(s => s.employeeId === emp.id);
+        const empSpecs   = isOwner ? [] : this.specialSchedules.filter(s => s.employeeId === emp.id);
 
         // Lazy fetch per-employee data for this month
         let adjs = [], empComms = 0, parsedCommAssignments = [];
         try {
           ({ adjs, empComms, parsedCommAssignments } = await this.fetchEmployeeMonthData(empId));
         } catch (e) { console.error(e); }
+        if (isOwner) {
+          empComms = 0;
+          parsedCommAssignments = [];
+        }
 
         const totalAdjs   = adjs.reduce((s, a) => s + (Number(a.amount) || 0), 0);
         const totalSpecs  = empSpecs.reduce((s, x) => s + (Number(x.value) || 0), 0);
@@ -864,7 +873,9 @@
 
         const sortedScheds = [...this.payoutSchedules].sort((a, b) => a - b) || [30];
         const salaryPaid = this.getEmployeeSalaryTotal(emp, sortedScheds, mk);
-        const instPayouts = this.calculateInstallerPayouts(empId, mk, sortedScheds);
+        const instPayouts = isOwner
+          ? { thresholdEarnings: 0, thresholdDescription: '', serviceEarnings: 0, serviceDescription: '', totalInstallationPayout: 0, cutoffPayouts: {} }
+          : this.calculateInstallerPayouts(empId, mk, sortedScheds);
         const thresholdEarnings = instPayouts.thresholdEarnings;
         const thresholdDescription = instPayouts.thresholdDescription;
         const serviceEarnings = instPayouts.serviceEarnings;

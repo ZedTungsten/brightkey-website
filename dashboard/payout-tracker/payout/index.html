@@ -275,7 +275,9 @@
           this.companyId = co?.id || null;
           if (!this.companyId) { toast('Failed to resolve company.', 'error'); return; }
 
+          this.loadMonthFromHash();
           this.updateMonthDisplay();
+          this.syncMonthHash();
           await this.loadData();
           this.render();
           this.bindEvents();
@@ -305,7 +307,7 @@
         // Employees
         try {
           const { data, error } = await sb.from('employees')
-            .select('id, first_name, middle_name, last_name, salary, employment_status, department, title, payout_details, payout_details_image, reporting_to, date_hired, shift_days')
+            .select('id, first_name, middle_name, last_name, salary, employment_status, department, title, payout_details, payout_details_image, reporting_to, date_hired, shift_days, assignment')
             .eq('company_id', this.companyId)
             .eq('employment_status', 'Active');
           if (error) throw error;
@@ -703,6 +705,10 @@
         return `${this.selectedYear}-${String(this.selectedMonth + 1).padStart(2, '0')}`;
       },
 
+      isOwnerEmployee(emp) {
+        return String(emp?.assignment || '').split(',').some(value => value.trim().toLowerCase() === 'owner');
+      },
+
       getShiftWeekdays(shiftDays) {
         const value = String(shiftDays || '').toLowerCase().replace(/\s+/g, '');
         const tokenMap = {
@@ -849,6 +855,20 @@
         if (el) el.textContent = `${MONTHS[this.selectedMonth]} ${this.selectedYear}`;
       },
 
+      loadMonthFromHash() {
+        const match = window.location.hash.match(/^#(0[1-9]|1[0-2])-(\d{4})$/);
+        if (!match) return false;
+        this.selectedMonth = Number(match[1]) - 1;
+        this.selectedYear = Number(match[2]);
+        return true;
+      },
+
+      syncMonthHash() {
+        const hash = `#${String(this.selectedMonth + 1).padStart(2, '0')}-${this.selectedYear}`;
+        if (window.location.hash === hash) return;
+        window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}${hash}`);
+      },
+
       changeMonth(diff) {
         let m = this.selectedMonth + diff;
         let y = this.selectedYear;
@@ -857,6 +877,7 @@
         this.selectedMonth = m;
         this.selectedYear  = y;
         this.updateMonthDisplay();
+        this.syncMonthHash();
         this.render();
       },
 
@@ -866,6 +887,11 @@
         document.getElementById('btn-prorated').addEventListener('click', () => this.openProratedModal());
         document.getElementById('btn-cancel-prorated').addEventListener('click', () => document.getElementById('prorated-modal').classList.remove('open'));
         document.getElementById('btn-apply-prorated').addEventListener('click', () => this.applyProratedSelection());
+        window.addEventListener('hashchange', () => {
+          if (!this.loadMonthFromHash()) return;
+          this.updateMonthDisplay();
+          this.render();
+        });
       },
 
       buildReportingToMap() {
@@ -904,7 +930,11 @@
 
         const grouped = {};
         const unassigned = [];
+        const selectedMonthKey = this.monthKey();
         this.employees.forEach(emp => {
+          const hireMonthKey = String(emp.date_hired || '').slice(0, 7);
+          if (hireMonthKey && hireMonthKey > selectedMonthKey) return;
+
           const dept = empDeptMap[emp.id] || emp.department || '';
           const subs = empSubteamsMap[emp.id] || [];
           if (!dept) { unassigned.push(emp); return; }
@@ -986,6 +1016,7 @@
         let sumGrandTotal = 0;
 
         const renderEmpRow = (emp) => {
+          const isOwner = this.isOwnerEmployee(emp);
           const baseSalary    = emp.salary || 0;
           const positionText  = emp.title || '';
           const detailsText   = emp.payout_details || '';
@@ -1003,11 +1034,11 @@
           if (!detailsHtml) detailsHtml = '—';
 
           // Commission for this month
-          const empComms = this._commissionForEmpMonth(emp.id, mk);
+          const empComms = isOwner ? 0 : this._commissionForEmpMonth(emp.id, mk);
           // Adjustments for this month
           const empAdjs = this.adjustmentsList.filter(a => a.employeeId === emp.id && a.date?.startsWith(mk.substring(0,7))).reduce((s, a) => s + (Number(a.value) || 0), 0);
-          const empGlAdd = this._glAdditionsForEmpMonth(emp.id, mk);
-          const empGlDed = this._glDeductionsForEmpMonth(emp.id, mk);
+          const empGlAdd = isOwner ? 0 : this._glAdditionsForEmpMonth(emp.id, mk);
+          const empGlDed = isOwner ? 0 : this._glDeductionsForEmpMonth(emp.id, mk);
 
           // Add to aggregators
           sumBaseSalary += baseSalary;
@@ -1020,7 +1051,7 @@
           let specialCellsHtml = '';
           let totalSpecials = 0;
           specialDays.forEach(day => {
-            const specVal = this.specialSchedules.filter(s => s.employeeId === emp.id && Number(s.day) === day).reduce((s, x) => s + (Number(x.value) || 0), 0);
+            const specVal = isOwner ? 0 : this.specialSchedules.filter(s => s.employeeId === emp.id && Number(s.day) === day).reduce((s, x) => s + (Number(x.value) || 0), 0);
             totalSpecials += specVal;
             sumSpecialDays[day] += specVal;
             if (specVal > 0) {
@@ -1037,20 +1068,23 @@
 
           // Payout columns
           let payoutCellsHtml = '';
-          const employeeSalaryTotal = this.getEmployeeSalaryTotal(emp, sortedScheds, mk);
-          const instPayouts = this.calculateInstallerPayouts(emp.id, mk, sortedScheds);
+          const instPayouts = isOwner
+            ? { totalInstallationPayout: 0, cutoffPayouts: {} }
+            : this.calculateInstallerPayouts(emp.id, mk, sortedScheds);
+          let employeePayoutDaysTotal = 0;
           sumInstPayouts += instPayouts.totalInstallationPayout;
           
           sortedScheds.forEach((day, sIdx) => {
             const salaryAllocation = this.getProratedSalaryAllocation(emp, day, sortedScheds, mk);
             const salaryPortion = salaryAllocation.value;
             const adjsVal  = this._adjsForSchedule(emp.id, day, mk, sortedScheds);
-            const commsVal  = this._commsForSchedule(emp.id, day, mk, sortedScheds);
+            const commsVal  = isOwner ? 0 : this._commsForSchedule(emp.id, day, mk, sortedScheds);
             const instPortion = instPayouts.cutoffPayouts[day] || 0;
-            const glAddVal = this._glAdditionsForSchedule(emp.id, day, mk, sortedScheds);
-            const glDedVal = this._glDeductionsForSchedule(emp.id, day, mk, sortedScheds);
+            const glAddVal = isOwner ? 0 : this._glAdditionsForSchedule(emp.id, day, mk, sortedScheds);
+            const glDedVal = isOwner ? 0 : this._glDeductionsForSchedule(emp.id, day, mk, sortedScheds);
             
             const totalSchedVal = salaryPortion + adjsVal + commsVal + instPortion + glAddVal - glDedVal;
+            employeePayoutDaysTotal += totalSchedVal;
             sumPayoutDays[day] += totalSchedVal;
             const isPaid = this.regularPayoutState[mk]?.[`${emp.id}_${day}`] || false;
             const isPast = this.isPastDay(day);
@@ -1079,7 +1113,7 @@
             </td>`;
           });
 
-          const grandTotal = employeeSalaryTotal + empComms + empAdjs + totalSpecials + instPayouts.totalInstallationPayout + empGlAdd + empGlDed;
+          const grandTotal = employeePayoutDaysTotal + totalSpecials;
           sumGrandTotal += grandTotal;
 
           return `<tr class="employee-row" data-emp-id="${esc(emp.id)}">
@@ -1390,16 +1424,19 @@
         const allChecked = state && scheds.every(day => state[`${empId}_${day}`] === true);
 
         if (allChecked) {
+          const isOwner = this.isOwnerEmployee(emp);
           const baseSalary   = emp.salary || 0;
           const sortedScheds = [...scheds].sort((a, b) => a - b);
           const salaryPaid   = this.getEmployeeSalaryTotal(emp, sortedScheds, mk);
-          const empComms     = this._commissionForEmpMonth(empId, mk);
+          const empComms     = isOwner ? 0 : this._commissionForEmpMonth(empId, mk);
           const empAdjObjs   = this.adjustmentsList.filter(a => { const d = new Date(a.date); return a.employeeId === empId && `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}` === mk; });
-          const empSpecs     = this.specialSchedules.filter(s => s.employeeId === empId);
+          const empSpecs     = isOwner ? [] : this.specialSchedules.filter(s => s.employeeId === empId);
           const totalAdjs    = empAdjObjs.reduce((s, a) => s + (Number(a.value) || 0), 0);
           const totalSpecs   = empSpecs.reduce((s, x) => s + (Number(x.value) || 0), 0);
 
-          const instPayouts = this.calculateInstallerPayouts(empId, mk, sortedScheds);
+          const instPayouts = isOwner
+            ? { thresholdEarnings: 0, serviceEarnings: 0 }
+            : this.calculateInstallerPayouts(empId, mk, sortedScheds);
           const finalAdjObjs = [...empAdjObjs];
           let finalTotalAdjs = totalAdjs;
           if (instPayouts.thresholdEarnings > 0) {
@@ -1421,8 +1458,8 @@
             finalTotalAdjs += instPayouts.serviceEarnings;
           }
 
-          const empGlAdd = this._glAdditionsForEmpMonth(empId, mk);
-          const empGlDed = this._glDeductionsForEmpMonth(empId, mk);
+          const empGlAdd = isOwner ? 0 : this._glAdditionsForEmpMonth(empId, mk);
+          const empGlDed = isOwner ? 0 : this._glDeductionsForEmpMonth(empId, mk);
           if (empGlAdd > 0) {
             finalAdjObjs.push({
               label: 'Reimbursement',

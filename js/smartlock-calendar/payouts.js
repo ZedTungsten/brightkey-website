@@ -1,5 +1,9 @@
 'use strict';
 
+function isOwnerInstaller() {
+  return String(currentInstaller?.assignment || '').split(',').some(value => value.trim().toLowerCase() === 'owner');
+}
+
 function changePayoutMonth(direction) {
   const payoutInput = document.getElementById('payouts-month-select');
   if (!payoutInput) return;
@@ -59,7 +63,7 @@ function renderSalaryAndAdjustments(monthKey) {
     addRow(`Salary Cutoff — ${MONTH_NAMES[month - 1]} ${day}`, salaryAllocation(day, index), monthState[`${currentInstaller.id}_${day}`], day);
   });
 
-  (config.specialSchedules || []).filter(item => item.employeeId === currentInstaller.id).forEach(item => {
+  (isOwnerInstaller() ? [] : (config.specialSchedules || []).filter(item => item.employeeId === currentInstaller.id)).forEach(item => {
     addRow(item.label || `Special Payout — Day ${item.day}`, item.value, specialState[`${currentInstaller.id}_${Number(item.day)}`], item.day);
   });
 
@@ -69,7 +73,7 @@ function renderSalaryAndAdjustments(monthKey) {
     const cutoff = schedules.find(day => itemDay <= day) || schedules[schedules.length - 1];
     return !!monthState[`${currentInstaller.id}_${cutoff}`];
   };
-  (payoutTrackerData.reimbursements || []).filter(item => String(item.date || '').startsWith(monthKey)).forEach(item => addRow(item.label || 'Reimbursement', item.amount, itemPaidState(item), new Date(`${item.date}T00:00:00`).getDate()));
+  (isOwnerInstaller() ? [] : (payoutTrackerData.reimbursements || []).filter(item => String(item.date || '').startsWith(monthKey))).forEach(item => addRow(item.label || 'Reimbursement', item.amount, itemPaidState(item), new Date(`${item.date}T00:00:00`).getDate()));
   (payoutTrackerData.adjustments || []).filter(item => String(item.date || '').startsWith(monthKey)).forEach(item => addRow(item.label || 'Adjustment', item.amount, itemPaidState(item), new Date(`${item.date}T00:00:00`).getDate()));
 
   rows.sort((a, b) => a.day - b.day);
@@ -95,7 +99,7 @@ function getReadyPayslipRecord(monthKey) {
   const schedules = payoutTrackerData.config?.payoutSchedules || [15, 30];
   const regularState = payoutTrackerData.regularState?.[monthKey] || {};
   const allSalaryPaid = schedules.every(day => regularState[`${currentInstaller.id}_${Number(day)}`] === true);
-  const employeeSpecials = (payoutTrackerData.config?.specialSchedules || []).filter(item => item.employeeId === currentInstaller.id);
+  const employeeSpecials = isOwnerInstaller() ? [] : (payoutTrackerData.config?.specialSchedules || []).filter(item => item.employeeId === currentInstaller.id);
   const specialState = payoutTrackerData.specialState?.[monthKey] || {};
   const allSpecialsPaid = employeeSpecials.every(item => specialState[`${currentInstaller.id}_${Number(item.day)}`] === true);
   return allSalaryPaid && allSpecialsPaid ? record : null;
@@ -123,22 +127,53 @@ async function downloadInstallerPayslip() {
   const profile = payoutTrackerData.companyProfile || {};
   const template = payoutTrackerData.payslipConfig || {};
   const peso = value => `₱${(Number(value) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  const row = (type, description, amount) => `<tr><td style="padding:0.7rem;border-bottom:1px solid #e5e7eb;font-weight:600;">${escapeHtml(type)}</td><td style="padding:0.7rem;border-bottom:1px solid #e5e7eb;color:#4b5563;">${escapeHtml(description)}</td><td style="padding:0.7rem;border-bottom:1px solid #e5e7eb;text-align:right;">${peso(amount)}</td></tr>`;
-  let rows = row(Number(record.basic_paid) !== Number(record.salary) ? 'Prorated Salary' : 'Basic Salary', 'Monthly salary payout', record.basic_paid);
-  (record.special_schedules || []).forEach(item => { rows += row('Special Payout', item.label || `Day ${item.day}`, item.value); });
-  (record.adjustments_list || []).forEach(item => { rows += row('Adjustment', item.label || item.description || 'Adjustment', item.value ?? item.amount); });
-  (record.reimbursements_list || []).forEach(item => { rows += row('Reimbursement', item.label || item.description || 'Reimbursement', item.value ?? item.amount); });
-  if (Number(record.commissions)) rows += row('Commissions', 'Sales commissions', record.commissions);
+  const row = (type, description, amount) => `<tr><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;font-weight:600;vertical-align:top;">${escapeHtml(type)}</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;color:#4b5563;line-height:1.5;vertical-align:top;">${escapeHtml(description)}</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;text-align:right;font-variant-numeric:tabular-nums;width:120px;vertical-align:top;">${peso(amount)}</td></tr>`;
+  const specialSchedules = isOwnerInstaller() ? [] : (payoutTrackerData.config?.specialSchedules || []).filter(item => item.employeeId === currentInstaller.id);
+  const adjustments = (payoutTrackerData.adjustments || []).filter(item => String(item.date || '').startsWith(monthKey));
+  const reimbursements = isOwnerInstaller() ? [] : (payoutTrackerData.reimbursements || []).filter(item => String(item.date || '').startsWith(monthKey));
+  const thresholdEarnings = isOwnerInstaller() ? 0 : Number(document.getElementById('payout-extra-total')?.dataset.total) || 0;
+  const serviceEarnings = isOwnerInstaller() ? 0 : Number(document.getElementById('payout-services-total')?.dataset.total) || 0;
+  const salaryAndAdjustmentsTotal = Number(document.getElementById('payout-salary-grand-total')?.dataset.total) || 0;
+  const totalPayout = salaryAndAdjustmentsTotal + thresholdEarnings + serviceEarnings;
+  const supplementalTotal = [...specialSchedules, ...adjustments, ...reimbursements].reduce((sum, item) => sum + (Number(item.value ?? item.amount) || 0), 0);
+  const liveSalaryPaid = salaryAndAdjustmentsTotal - supplementalTotal;
+  let rows = row(liveSalaryPaid !== Number(record.salary) ? 'Prorated Salary' : 'Basic Salary', liveSalaryPaid !== Number(record.salary) ? 'Based on eligible scheduled workdays' : 'Monthly Basic Salary', liveSalaryPaid);
+  adjustments.forEach(item => { rows += row('Adjustment', item.label || item.description || 'Adjustment', item.value ?? item.amount); });
+  reimbursements.forEach(item => { rows += row('Reimbursement', item.label || item.description || 'Reimbursement', item.value ?? item.amount); });
+  specialSchedules.forEach(item => { rows += row('Special Payout', `${item.label || 'Special Payout'} (Day ${item.day})`, item.value); });
+  if (thresholdEarnings) rows += row('Earnings Past Threshold', 'Extra installation credits above threshold', thresholdEarnings);
+  if (serviceEarnings) rows += row('Service Job Earnings', 'Extra paid service jobs', serviceEarnings);
+  if (Number(record.commissions)) rows += row('Commissions', 'Sales Commissions', record.commissions);
+
+  const schedules = [...(payoutTrackerData.config?.payoutSchedules || [15, 30])].map(Number).sort((a, b) => a - b);
+  const cutoffValues = schedules.map(() => liveSalaryPaid / (schedules.length || 1));
+  const cutoffIndexForDay = day => {
+    const index = schedules.findIndex(cutoff => Number(day) <= cutoff);
+    return index === -1 ? schedules.length - 1 : index;
+  };
+  specialSchedules.forEach(item => { cutoffValues[cutoffIndexForDay(item.day)] += Number(item.value) || 0; });
+  [...adjustments, ...reimbursements].forEach(item => {
+    const itemDay = item.date ? new Date(item.date).getUTCDate() : schedules[schedules.length - 1];
+    cutoffValues[cutoffIndexForDay(itemDay)] += Number(item.value ?? item.amount) || 0;
+  });
+  if (cutoffValues.length) {
+    const allocated = cutoffValues.reduce((sum, value) => sum + value, 0);
+    cutoffValues[cutoffValues.length - 1] += totalPayout - allocated;
+  }
+  const cutoffHtml = schedules.map((day, index) => `<div style="display:flex;justify-content:space-between;padding:0.5rem 0;font-size:0.85rem;border-bottom:1px dashed #e5e7eb;"><span style="font-weight:500;color:#4b5563;">Cutoff Payout (Day ${day})</span><span style="font-weight:700;color:#111827;font-variant-numeric:tabular-nums;margin-right:12px;">${peso(cutoffValues[index])}</span></div>`).join('');
   const logoUrl = template.logoStyle === 'dark' ? profile.logoDark : profile.logoLight;
   const employeeName = [currentInstaller.first_name, currentInstaller.last_name].filter(Boolean).join(' ');
+  const companyAddress = [profile.companyAddressLine1, profile.companyAddressLine2].filter(Boolean).map(escapeHtml).join('<br>');
+  const companyContact = [profile.email, profile.phone].filter(Boolean).map(escapeHtml).join('<br>');
+  const signatureImage = template.signatureUrl ? `<img src="${escapeHtml(template.signatureUrl)}" alt="Signature" style="max-height:100px;max-width:170px;object-fit:contain;display:block;">` : '<div style="height:100px;width:150px;"></div>';
   const sheet = document.createElement('div');
-  sheet.innerHTML = `<div style="min-height:250mm;box-sizing:border-box;background:#fff;color:#111827;padding:3rem;font-family:Arial,sans-serif;display:flex;flex-direction:column;">
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1.5rem;">${logoUrl ? `<img src="${escapeHtml(logoUrl)}" style="max-height:48px;max-width:150px;filter:grayscale(1);">` : '<div></div>'}<div style="text-align:right;font-size:0.72rem;color:#4b5563;"><strong style="display:block;color:#111827;">${escapeHtml(profile.companyName || 'Brightkey Solutions')}</strong>${escapeHtml(profile.companyAddressLine1 || '')}</div></div>
-    <div style="text-align:center;margin-bottom:1.5rem;"><div style="font-size:1.6rem;font-weight:900;text-transform:uppercase;letter-spacing:1px;">Payslip</div><strong style="font-size:0.95rem;color:#4b5563;">${escapeHtml(monthText)}</strong></div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;background:#f9fafb;border:1px solid #e5e7eb;padding:0.9rem;border-radius:6px;margin-bottom:1.5rem;"><div><small style="color:#6b7280;text-transform:uppercase;">Employee Name</small><strong style="display:block;">${escapeHtml(employeeName)}</strong></div><div><small style="color:#6b7280;text-transform:uppercase;">Position / Title</small><strong style="display:block;">${escapeHtml(record.position || currentInstaller.title || '—')}</strong></div><div><small style="color:#6b7280;text-transform:uppercase;">Department</small><strong style="display:block;">${escapeHtml(record.department || currentInstaller.department || '—')}</strong></div></div>
-    <div style="font-size:0.8rem;font-weight:700;text-transform:uppercase;margin-bottom:0.5rem;">Earnings &amp; Adjustments Breakdown</div><table style="width:100%;border-collapse:collapse;font-size:0.85rem;"><thead><tr style="background:#f3f4f6;text-align:left;"><th style="padding:0.7rem;">Type</th><th style="padding:0.7rem;">Description</th><th style="padding:0.7rem;text-align:right;">Amount</th></tr></thead><tbody>${rows}</tbody></table>
-    <div style="display:flex;justify-content:space-between;margin:2rem 0 0 auto;width:55%;border-top:2px solid #111827;padding-top:0.8rem;font-weight:900;"><span>TOTAL PAYOUT</span><span>${peso(record.total_payout)}</span></div>
-    <div style="margin-top:auto;display:flex;justify-content:space-between;align-items:flex-end;padding-top:3rem;"><p style="font-size:0.7rem;color:#6b7280;max-width:320px;">This payslip is generated through Brightkey ERP and serves as an official payroll record.</p><div style="width:180px;text-align:center;">${template.signatureUrl ? `<img src="${escapeHtml(template.signatureUrl)}" style="max-height:90px;max-width:170px;">` : '<div style="height:90px;"></div>'}<div style="border-top:1px solid #111827;padding-top:0.25rem;font-weight:700;">${escapeHtml(template.signatoryName || 'Authorized Signatory')}</div><small>Authorized Signatory</small></div></div>
+  sheet.innerHTML = `<div style="display:flex;flex-direction:column;justify-content:space-between;min-height:250mm;box-sizing:border-box;background:#fff;color:#111827;padding:3rem 3rem 2.5rem 3rem;">
+    <div><div style="display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:1rem;margin-bottom:1.5rem;"><div>${logoUrl ? `<img src="${escapeHtml(logoUrl)}" alt="Logo" style="max-height:48px;max-width:150px;display:block;margin-bottom:0.5rem;filter:grayscale(1);">` : ''}</div><div style="text-align:right;font-size:0.7rem;line-height:1.25;color:#4b5563;"><strong style="display:block;margin-bottom:3px;color:#111827;font-size:0.7rem;font-weight:800;">${escapeHtml(profile.companyName || 'Brightkey Solutions')}</strong>${companyAddress}<br>${companyContact}</div></div>
+    <div style="text-align:center;margin-bottom:1.5rem;"><div style="font-size:1.6rem;font-weight:900;letter-spacing:1px;color:#111827;text-transform:uppercase;">Payslip</div><div style="font-size:0.95rem;color:#4b5563;margin-top:0.1rem;"><strong>${escapeHtml(monthText)}</strong></div></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;background:#f9fafb;padding:0.85rem;border-radius:6px;margin-bottom:1.5rem;border:1px solid #e5e7eb;"><div><div style="margin-bottom:0.4rem;"><span style="font-size:0.65rem;text-transform:uppercase;color:#6b7280;font-weight:600;display:block;">Employee Name</span><strong style="font-size:0.8rem;color:#111827;">${escapeHtml(employeeName)}</strong></div><div><span style="font-size:0.65rem;text-transform:uppercase;color:#6b7280;font-weight:600;display:block;">Department</span><strong style="font-size:0.8rem;color:#111827;">${escapeHtml(record.department || currentInstaller.department || '—')}</strong></div></div><div><div style="margin-bottom:0.4rem;"><span style="font-size:0.65rem;text-transform:uppercase;color:#6b7280;font-weight:600;display:block;">Reporting To</span><strong style="font-size:0.8rem;color:#111827;">—</strong></div><div><span style="font-size:0.65rem;text-transform:uppercase;color:#6b7280;font-weight:600;display:block;">Position / Title</span><strong style="font-size:0.8rem;color:#111827;">${escapeHtml(record.position || currentInstaller.title || '—')}</strong></div></div></div>
+    <div style="margin-bottom:2rem;"><div style="font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:0.5rem;">Earnings &amp; Adjustments Breakdown</div><table style="width:100%;border-collapse:collapse;font-size:0.85rem;"><thead><tr style="background:#f3f4f6;text-align:left;"><th style="padding:0.5rem 0.75rem;border-bottom:1px solid #d1d5db;font-weight:700;">Type</th><th style="padding:0.5rem 0.75rem;border-bottom:1px solid #d1d5db;font-weight:700;">Description</th><th style="padding:0.5rem 0.75rem;border-bottom:1px solid #d1d5db;text-align:right;font-weight:700;width:120px;">Amount</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div style="margin-bottom:2rem;max-width:400px;margin-left:auto;"><div style="font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:0.5rem;border-bottom:1px solid #111827;padding-bottom:0.25rem;">Payout Schedule Allocation</div>${cutoffHtml}<div style="display:flex;justify-content:space-between;padding:0.75rem 0;font-size:1rem;font-weight:800;border-top:2px solid #111827;"><span>TOTAL PAYOUT</span><span style="font-variant-numeric:tabular-nums;margin-right:12px;">${peso(totalPayout)}</span></div></div></div>
+    <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:auto;padding-top:2rem;"><div style="font-size:0.72rem;color:#6b7280;max-width:320px;line-height:1.2;">This payslip is generated through Brightkey ERP and serves as an official payroll record. Any concerns regarding computation should be reported within seven (7) days of issuance.</div><div style="display:flex;flex-direction:column;align-items:center;width:180px;"><div style="height:105px;display:flex;align-items:center;justify-content:center;width:100%;">${signatureImage}</div><div style="font-size:0.85rem;font-weight:700;border-top:1px solid #111827;width:100%;text-align:center;padding-top:0.25rem;margin-top:0.25rem;">${escapeHtml(template.signatoryName || 'Authorized Signatory')}</div><div style="font-size:0.72rem;color:#6b7280;width:100%;text-align:center;">Authorized Signatory</div></div></div>
   </div>`;
   const button = document.getElementById('btn-download-installer-payslip');
   button.disabled = true;
@@ -156,6 +191,7 @@ function drawPayouts() {
   
   const targetMonthKey = select.value;
   const myId = currentInstaller.id;
+  const isOwner = isOwnerInstaller();
   renderSalaryAndAdjustments(targetMonthKey);
   updateInstallerPayslipState(targetMonthKey);
 
@@ -233,7 +269,7 @@ function drawPayouts() {
       weight = assistWeight;
     }
 
-    if (job.roles.includes('service')) {
+    if (!isOwner && job.roles.includes('service')) {
       job.skus.forEach(sku => {
         const matchedService = extraServicesList.find(es => es.sku === sku);
         if (matchedService) {
@@ -245,7 +281,7 @@ function drawPayouts() {
 
     const previousCredit = runningCredit;
     const newCredit = previousCredit + weight;
-    if (newCredit > thresholdVal) {
+    if (!isOwner && newCredit > thresholdVal) {
       const extraCredit = weight;
       thresholdEarnings += extraCredit * leadRateVal;
     }
@@ -294,6 +330,7 @@ function drawPayouts() {
 
   const peso = value => `₱${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   document.getElementById('payout-extra-total').textContent = peso(thresholdEarnings);
+  document.getElementById('payout-extra-total').dataset.total = String(thresholdEarnings);
   document.getElementById('payout-extra-details').innerHTML = thresholdEarningsDetailsHtml;
 
   // 3. Render flat services payout
@@ -315,6 +352,7 @@ function drawPayouts() {
   }
 
   document.getElementById('payout-services-total').textContent = peso(serviceEarnings);
+  document.getElementById('payout-services-total').dataset.total = String(serviceEarnings);
   document.getElementById('payout-services-details').innerHTML = servicesDetailsHtml;
 
   // 4. Grand Total
