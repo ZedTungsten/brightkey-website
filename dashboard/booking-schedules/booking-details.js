@@ -23,6 +23,15 @@
       return `${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
     }
 
+    function getBookingProductDescription(sku, title) {
+      const normalizedSku = String(sku || '').trim();
+      let description = String(title || '').trim();
+      if (normalizedSku && description.toLowerCase().startsWith(normalizedSku.toLowerCase())) {
+        description = description.slice(normalizedSku.length).replace(/^[\s\-–—:|]+/, '').trim();
+      }
+      return description === normalizedSku ? '' : description;
+    }
+
     // Modal helpers
     function navigateBooking(direction) {
       if (!selectedBooking || !filteredBookings || filteredBookings.length === 0) return;
@@ -221,16 +230,15 @@
           } else {
             productCellHtml += doorProducts.map((p, pIdx) => {
               const isCancelled = p.cancelled || false;
-              let title = p.name || p.title || p.sku || 'N/A';
-              if (title.startsWith(p.sku + ' - ')) {
-                title = title.substring(p.sku.length + 3);
-              } else if (title.startsWith(p.sku + '-')) {
-                title = title.substring(p.sku.length + 1);
-              }
+              const title = p.name || p.title || p.sku || 'N/A';
+              const description = getBookingProductDescription(p.sku, title);
               const isExcess = excessProductInstances[`${i}-${pIdx}`];
+              const mismatchBadge = isExcess
+                ? '<span style="background: rgba(239, 68, 68, 0.1); color: #EF4444; font-size: 0.65rem; font-weight: 700; padding: 2px 6px; border-radius: 9999px; margin-left: 0.35rem; text-transform: uppercase;">AR mismatch</span>'
+                : '';
               return `
                 <div style="margin-bottom: 0.25rem; ${isCancelled ? 'opacity: 0.55; text-decoration: line-through;' : ''} ${isExcess ? 'color: var(--danger);' : ''}">
-                  <strong>${escapeHtml(p.sku)}</strong> - <span style="${isExcess ? 'color: var(--danger);' : 'color: var(--text-secondary);'}">${escapeHtml(title)}</span>
+                  <strong>${escapeHtml(p.sku)}</strong>${description ? ` - <span style="${isExcess ? 'color: var(--danger);' : 'color: var(--text-secondary);'}">${escapeHtml(description)}</span>` : ''}${mismatchBadge}
                   ${isCancelled ? '<span style="color:var(--danger);font-size:0.7rem;font-weight:700;text-transform:uppercase;margin-left:0.3rem;text-decoration:none;display:inline-block;">Cancelled</span>' : ''}
                 </div>
               `;

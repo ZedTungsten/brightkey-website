@@ -120,6 +120,15 @@
       }
     };
 
+    function getDoorProductDescription(sku, title) {
+      const normalizedSku = String(sku || '').trim();
+      let description = String(title || '').trim();
+      if (normalizedSku && description.toLowerCase().startsWith(normalizedSku.toLowerCase())) {
+        description = description.slice(normalizedSku.length).replace(/^[\s\-–—:|]+/, '').trim();
+      }
+      return description === normalizedSku ? '' : description;
+    }
+
     function renderEditDoors() {
       const container = document.getElementById('edit-doors-container');
       if (!container) return;
@@ -197,6 +206,7 @@
           doorProducts.forEach((sku, prodIdx) => {
             const catalogItem = productsCatalog.find(p => p.sku === sku);
             const title = catalogItem ? (catalogItem.name || catalogItem.title) : sku;
+            const description = getDoorProductDescription(sku, title);
             const isCancelled = isSkuCancelled(sku, doorIdx, prodIdx);
             const isExcess = excessProductInstances[`${doorIdx}-${prodIdx}`];
             productsHtml += `
@@ -208,7 +218,8 @@
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="5" r="2"></circle><circle cx="9" cy="12" r="2"></circle><circle cx="9" cy="19" r="2"></circle><circle cx="15" cy="5" r="2"></circle><circle cx="15" cy="12" r="2"></circle><circle cx="15" cy="19" r="2"></circle></svg>
                 </div>
                 <div class="drag-product-text">
-                  <strong style="${isExcess ? 'color: var(--danger);' : ''}">${escapeHtml(sku)}</strong> - <span style="${isExcess ? 'color: var(--danger);' : 'color:var(--text-secondary);'}">${escapeHtml(title)}</span>
+                  <strong style="${isExcess ? 'color: var(--danger);' : ''}">${escapeHtml(sku)}</strong>${description ? ` - <span style="${isExcess ? 'color: var(--danger);' : 'color:var(--text-secondary);'}">${escapeHtml(description)}</span>` : ''}
+                  ${isExcess ? '<span style="background: rgba(239, 68, 68, 0.1); color: #EF4444; font-size: 0.65rem; font-weight: 700; padding: 2px 6px; border-radius: 9999px; margin-left: 0.35rem; text-transform: uppercase;">AR mismatch</span>' : ''}
                   ${isCancelled ? `
                     <span style="color:var(--danger); font-size:0.7rem; font-weight:700; text-transform:uppercase; margin-left:0.35rem;">
                       Cancelled
@@ -264,6 +275,7 @@
         tempEditUnassignedProducts.forEach((sku, prodIdx) => {
           const catalogItem = productsCatalog.find(p => p.sku === sku);
           const title = catalogItem ? (catalogItem.name || catalogItem.title) : sku;
+          const description = getDoorProductDescription(sku, title);
           // Is it cancelled?
           const matchingProds = tempEditProducts.filter(p => p.sku === sku);
           const matchedProd = matchingProds[0]; // just grab the first one for unassigned
@@ -277,7 +289,7 @@
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="5" r="2"></circle><circle cx="9" cy="12" r="2"></circle><circle cx="9" cy="19" r="2"></circle><circle cx="15" cy="5" r="2"></circle><circle cx="15" cy="12" r="2"></circle><circle cx="15" cy="19" r="2"></circle></svg>
               </div>
               <div class="drag-product-text">
-                <strong>${escapeHtml(sku)}</strong> - <span style="font-weight:normal; color:var(--text-secondary);">${escapeHtml(title)}</span>
+                <strong>${escapeHtml(sku)}</strong>${description ? ` - <span style="font-weight:normal; color:var(--text-secondary);">${escapeHtml(description)}</span>` : ''}
                 ${isCancelled ? `
                   <span style="color:var(--danger); font-size:0.7rem; font-weight:700; text-transform:uppercase; margin-left:0.35rem;">
                     Cancelled

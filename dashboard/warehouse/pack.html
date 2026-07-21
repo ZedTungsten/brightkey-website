@@ -575,12 +575,13 @@
                       <th>City</th>
                       <th>SKU</th>
                       <th>Qty</th>
-                      <th>Reserved Date</th>
+                      <th>QA Date</th>
+                      <th>Install Date</th>
                       <th>Action</th>
                     </tr>
                   </thead>
                   <tbody id="pack-list">
-                    <tr><td colspan="8" class="text-center text-muted" style="padding:2rem 0;">No items waiting to be packed.</td></tr>
+                    <tr><td colspan="9" class="text-center text-muted" style="padding:2rem 0;">No items waiting to be packed.</td></tr>
                   </tbody>
                 </table>
               </div>
@@ -789,17 +790,26 @@
         ? sb.from('delivery_bookings').select('*')
         : Promise.resolve({ data: [], error: null });
 
+      const bookingsQuery = sb.from('installation_bookings')
+        .select('order_no, scheduled_date, scheduled_time');
+
       const [
         { data: invData, error: invErr },
         { data: txData, error: txErr },
         { data: transData, error: transErr },
-        { data: delivData, error: delivErr }
-      ] = await Promise.all([invQuery, txQuery, transferQuery, deliveryQuery]);
+        { data: delivData, error: delivErr },
+        { data: bData, error: bErr }
+      ] = await Promise.all([invQuery, txQuery, transferQuery, deliveryQuery, bookingsQuery]);
 
       if (invErr) throw invErr;
       if (txErr) throw txErr;
       if (!delivErr) {
         WarehousePage.deliveryBookings = delivData || [];
+      }
+      if (bErr) {
+        console.error('Failed to fetch installation bookings:', bErr);
+      } else {
+        bookings = bData || [];
       }
 
       allInventory = {};
@@ -1160,6 +1170,42 @@
     
 
     // Render Tab 4: Pack
+    function parsePackDate(value) {
+      if (!value) return null;
+      const dateOnly = String(value).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      const parsed = dateOnly
+        ? new Date(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3]))
+        : new Date(value);
+      return Number.isNaN(parsed.getTime()) ? null : parsed;
+    }
+
+    function formatPackDate(value, includeTime = false) {
+      const date = parsePackDate(value);
+      if (!date) return 'N/A';
+      const datePart = date.toLocaleDateString('en-US', {
+        month: 'short',
+        day: '2-digit',
+        year: 'numeric'
+      });
+      if (!includeTime) return datePart;
+      const timePart = date.toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+      });
+      return `${datePart} ${timePart}`;
+    }
+
+    function formatInstallSchedule(dateValue, timeValue) {
+      const date = formatPackDate(dateValue);
+      if (date === 'N/A') return 'N/A';
+      const normalizedTime = String(timeValue || '').toLowerCase();
+      const period = normalizedTime
+        ? (normalizedTime.includes('afternoon') || normalizedTime.includes('pm') ? 'Afternoon' : 'Morning')
+        : 'N/A';
+      return `${date} (${period})`;
+    }
+
     function renderPackTab() { if (!document.getElementById('pack-list')) return;
       const tbody = document.getElementById('pack-list');
       tbody.innerHTML = '';
@@ -1170,7 +1216,7 @@
       );
 
       if (packingQueue.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted" style="padding:2rem 0;">No orders currently in packing queue.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="9" class="text-center text-muted" style="padding:2rem 0;">No orders currently in packing queue.</td></tr>`;
         return;
       }
 
@@ -1198,7 +1244,9 @@
       orderGroups.forEach(group => {
         const skusHtml = group.items.map(t => `<code>${t.sku}</code>`).join('<br/>');
         const qtysHtml = group.items.map(t => `<strong>${t.quantity}</strong>`).join('<br/>');
-        const date = group.timestamp_inspect ? new Date(group.timestamp_inspect).toLocaleString() : 'N/A';
+        const qaDate = formatPackDate(group.timestamp_inspect, true);
+        const installation = bookings.find(booking => booking.order_no === group.reference_id);
+        const installDate = formatInstallSchedule(installation?.scheduled_date, installation?.scheduled_time);
 
         const imagesHtml = group.items.map(t => {
           const p = allProducts.find(prod => prod.sku === t.sku) || { image_main: '' };
@@ -1219,7 +1267,8 @@
             <td>${group.customer_city}</td>
             <td>${skusHtml}</td>
             <td>${qtysHtml}</td>
-            <td>${date}</td>
+            <td style="white-space: nowrap;">${qaDate}</td>
+            <td style="white-space: nowrap;">${installDate}</td>
             <td>
               <button class="btn btn-cyan btn-sm" onclick="window.packOrder(this, '${group.reference_id}', '${group.customer_name.replace(/'/g, "\\'")}', '${group.customer_city.replace(/'/g, "\\'")}')">
                 <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: -2px; margin-right: 6px;"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>Pack Order

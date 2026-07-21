@@ -595,6 +595,39 @@
     </div>
   </div>
 
+  <!-- Add Supplies Modal -->
+  <div id="add-supplies-modal" class="modal-overlay">
+    <div class="modal-content" style="max-width: 680px; gap: 1rem;">
+      <h3 class="modal-title">Add Supplies</h3>
+      <div class="schedule-customer-grid" style="font-size: 0.82rem; color: var(--text-secondary); line-height: 1.6; background: var(--bg-elevated); padding: 0.9rem 1rem; border-radius: 6px; border: 1px solid var(--border); overflow-wrap: anywhere;">
+        <div><strong>Order No:</strong> <span id="supplies-order-no" style="color: var(--text-primary);"></span></div>
+        <div><strong>Name:</strong> <span id="supplies-customer-name" style="color: var(--text-primary);"></span></div>
+        <div><strong>City:</strong> <span id="supplies-customer-city" style="color: var(--text-primary);"></span></div>
+        <div><strong>SKU:</strong> <span id="supplies-order-skus" style="color: var(--text-primary);"></span></div>
+        <div><strong>Install Date:</strong> <span id="supplies-install-date" style="color: var(--text-primary);"></span></div>
+        <div><strong>Install Time:</strong> <span id="supplies-install-time" style="color: var(--text-primary);"></span></div>
+        <div class="full-width"><strong>Address:</strong> <span id="supplies-customer-address" style="color: var(--text-primary);"></span></div>
+      </div>
+      <div style="display:grid; grid-template-columns:minmax(0, 1fr) 120px; gap:0.75rem; align-items:end;">
+        <div class="form-group">
+          <label class="form-label" for="supplies-sku">Supplies SKU</label>
+          <select id="supplies-sku" class="form-input" onchange="DeliveryApp.updateSupplyAvailability()">
+            <option value="">Select a supply...</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="supplies-quantity">QTY</label>
+          <input type="number" id="supplies-quantity" class="form-input" min="1" step="1" value="1" oninput="DeliveryApp.validateSupplyQuantity()" />
+        </div>
+        <span id="supplies-available" style="display:none;">0</span>
+      </div>
+      <div style="display: flex; justify-content: flex-end; gap: 0.75rem; border-top: 1px solid var(--border); padding-top: 1rem; margin-top: 0.25rem;">
+        <button type="button" class="btn btn-outline" onclick="DeliveryApp.closeAddSuppliesModal()">Cancel</button>
+        <button type="button" id="btn-submit-supplies" class="btn btn-primary" onclick="DeliveryApp.submitSupplies()" disabled>Add Supplies</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Lightbox Modal -->
   <div id="lightbox-modal" class="modal-overlay" onclick="closeLightbox()" style="background: rgba(0,0,0,0.85); cursor: zoom-out;">
     <div style="position: relative; max-width: 90vw; max-height: 90vh;">
@@ -621,6 +654,7 @@
       bookings: [],
       deliveryBookings: [],
       allProducts: [],
+      allInventory: [],
       existingCustomers: [],
       warehouses: [],
       cshipPhotoBlob: null,
@@ -632,7 +666,9 @@
       currentPageSendOut: 1,
       itemsPerPage: 10,
       pickupSchedules: {},
+      dispatchSupplies: {},
       selectedPickupRefId: null,
+      selectedSuppliesRefId: null,
 
       async init() {
         if (!window.BKAuth) return;
@@ -683,10 +719,15 @@
           this.deliveryBookings = dbData || [];
 
           const { data: pData, error: pErr } = await sb.from('products')
-            .select('id, sku, title')
+            .select('id, sku, title, category')
             .order('sku');
           if (pErr) throw pErr;
           this.allProducts = pData || [];
+
+          const { data: invData, error: invErr } = await sb.from('inventory')
+            .select('sku, available, warehouse_id');
+          if (invErr) throw invErr;
+          this.allInventory = invData || [];
 
           const { data: wData, error: wErr } = await sb.from('warehouses')
             .select('id, name')
@@ -704,6 +745,17 @@
             console.error('Failed to load pickup schedules:', gsErr);
           } else {
             this.pickupSchedules = gsData?.value || {};
+          }
+
+          const { data: supplyData, error: supplyErr } = await sb.from('global_settings')
+            .select('value')
+            .eq('key', 'dispatch_supplies')
+            .eq('company_id', this.companyId)
+            .maybeSingle();
+          if (supplyErr) {
+            console.error('Failed to load dispatch supplies:', supplyErr);
+          } else {
+            this.dispatchSupplies = supplyData?.value || {};
           }
 
           this.updateBadgeCounts();
@@ -917,6 +969,9 @@
                 <button class="btn btn-outline btn-sm" onclick="DeliveryApp.openSchedulePickupModal('${group.reference_id}')" style="justify-content:center;">
                   ${schedBtnText}
                 </button>
+                <button class="btn btn-sm" onclick="DeliveryApp.openAddSuppliesModal('${group.reference_id}')" style="justify-content:center; background:#FEF3C7; color:#92400E; border:none;">
+                  Add Supplies
+                </button>
                 <button class="btn btn-cyan btn-sm" onclick="DeliveryApp.openBookingModal('${group.reference_id}')" style="justify-content:center;">
                   Book Delivery
                 </button>
@@ -1052,6 +1107,119 @@
       closeSchedulePickupModal() {
         const modal = document.getElementById('schedule-pickup-modal');
         if (modal) modal.classList.remove('open');
+      },
+
+      getSupplyWarehouseId(referenceId) {
+        return this.activeTransactions.find(t => t.reference_id === referenceId && t.status === 'packed')?.warehouse_id || null;
+      },
+
+      getSupplyAvailable(sku, warehouseId) {
+        const stock = this.allInventory
+          .filter(row => row.sku === sku && (warehouseId ? row.warehouse_id === warehouseId : true))
+          .reduce((sum, row) => sum + Number(row.available || 0), 0);
+        const assigned = Object.values(this.dispatchSupplies).flat().filter(item =>
+          item.sku === sku && (warehouseId ? item.warehouse_id === warehouseId : true)
+        ).reduce((sum, item) => sum + Number(item.qty || 0), 0);
+        return Math.max(0, stock - assigned);
+      },
+
+      openAddSuppliesModal(referenceId) {
+        this.selectedSuppliesRefId = referenceId;
+        const matchingItems = this.activeTransactions.filter(t => t.reference_id === referenceId && t.status === 'packed');
+        const matchingTx = matchingItems[0];
+        const booking = this.bookings.find(b => b.order_no === referenceId);
+        const skus = [...new Set(matchingItems.map(item => item.sku).filter(Boolean))].join(', ');
+        const installDate = booking?.scheduled_date
+          ? new Date(booking.scheduled_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+          : 'N/A';
+        const scheduledTime = String(booking?.scheduled_time || '').toLowerCase();
+        const installTime = scheduledTime
+          ? (scheduledTime.includes('afternoon') || scheduledTime.includes('pm') ? 'Afternoon' : 'Morning')
+          : 'N/A';
+
+        document.getElementById('supplies-order-no').textContent = referenceId;
+        document.getElementById('supplies-customer-name').textContent = matchingTx?.customer_name || 'N/A';
+        document.getElementById('supplies-customer-city').textContent = matchingTx?.customer_city || 'N/A';
+        document.getElementById('supplies-customer-address').textContent = booking?.customer_address || 'N/A';
+        document.getElementById('supplies-order-skus').textContent = skus || 'N/A';
+        document.getElementById('supplies-install-date').textContent = installDate;
+        document.getElementById('supplies-install-time').textContent = installTime;
+
+        const warehouseId = this.getSupplyWarehouseId(referenceId);
+        const options = this.allProducts
+          .filter(product => String(product.category || '').toLowerCase() === 'supplies')
+          .map(product => {
+            const remaining = this.getSupplyAvailable(product.sku, warehouseId);
+            return `<option value="${esc(product.sku)}">${esc(product.sku)} — ${esc(product.title)} (${remaining} available)</option>`;
+          }).join('');
+        document.getElementById('supplies-sku').innerHTML = `<option value="">Select a supply...</option>${options}`;
+        document.getElementById('supplies-quantity').value = '1';
+        document.getElementById('supplies-available').textContent = '0';
+        document.getElementById('btn-submit-supplies').disabled = true;
+        document.getElementById('add-supplies-modal').classList.add('open');
+      },
+
+      closeAddSuppliesModal() {
+        document.getElementById('add-supplies-modal')?.classList.remove('open');
+        this.selectedSuppliesRefId = null;
+      },
+
+      updateSupplyAvailability() {
+        const sku = document.getElementById('supplies-sku').value;
+        const warehouseId = this.getSupplyWarehouseId(this.selectedSuppliesRefId);
+        const remaining = sku ? this.getSupplyAvailable(sku, warehouseId) : 0;
+        const qtyInput = document.getElementById('supplies-quantity');
+        qtyInput.max = String(remaining);
+        document.getElementById('supplies-available').textContent = String(remaining);
+        this.validateSupplyQuantity();
+      },
+
+      validateSupplyQuantity() {
+        const sku = document.getElementById('supplies-sku').value;
+        const qty = Number(document.getElementById('supplies-quantity').value || 0);
+        const remaining = Number(document.getElementById('supplies-available').textContent || 0);
+        document.getElementById('btn-submit-supplies').disabled = !sku || !Number.isInteger(qty) || qty < 1 || qty > remaining;
+      },
+
+      async submitSupplies() {
+        const btn = document.getElementById('btn-submit-supplies');
+        if (btn.disabled || !this.selectedSuppliesRefId) return;
+        const sku = document.getElementById('supplies-sku').value;
+        const qty = Number(document.getElementById('supplies-quantity').value || 0);
+        const warehouseId = this.getSupplyWarehouseId(this.selectedSuppliesRefId);
+        const remaining = this.getSupplyAvailable(sku, warehouseId);
+        if (!sku || !Number.isInteger(qty) || qty < 1 || qty > remaining) {
+          Toast.error('Enter a quantity within the available remaining stock.');
+          return;
+        }
+
+        btn.disabled = true;
+        const originalText = btn.textContent;
+        btn.innerHTML = `<span class="bk-spinner" style="width:12px; height:12px; border-width:2px;"></span>Adding...`;
+        try {
+          const existing = [...(this.dispatchSupplies[this.selectedSuppliesRefId] || [])];
+          const existingItem = existing.find(item => item.sku === sku && item.warehouse_id === warehouseId);
+          if (existingItem) existingItem.qty = Number(existingItem.qty || 0) + qty;
+          else existing.push({ sku, qty, warehouse_id: warehouseId });
+
+          const nextSupplies = { ...this.dispatchSupplies, [this.selectedSuppliesRefId]: existing };
+          const { error } = await window.BKAuth.sb.from('global_settings').upsert({
+            company_id: this.companyId,
+            key: 'dispatch_supplies',
+            value: nextSupplies
+          }, { onConflict: 'company_id,key' });
+          if (error) throw error;
+
+          this.dispatchSupplies = nextSupplies;
+          Toast.success('Supplies added to the dispatch order.');
+          this.closeAddSuppliesModal();
+        } catch (err) {
+          console.error(err);
+          Toast.error('Unable to add supplies. Please try again.');
+        } finally {
+          btn.disabled = false;
+          btn.textContent = originalText;
+        }
       },
 
       async submitSchedulePickup() {
