@@ -86,3 +86,11 @@ We use two distinct patterns for modal overlays. Do NOT mix them:
 - **Enable Natural Document Flow**: Override the flexbox constraints using `style="flex: none;"` on the containers so that they expand dynamically based on their actual database content.
 - **Unified Scrolling**: Ensure that the outer `.scroll-area` container handles scrolling for the entire layout as a single document rather than having nested, competing scroll regions.
 - **Floating Button Spacing**: Always ensure the bottom-most list container has enough bottom padding (e.g., `padding-bottom: 3rem;`) to comfortably clear any floating UI components (like the support/chat widget).
+
+## 8. Prohibited Browser Dialogs (alert, confirm, prompt)
+- **No Native Dialogs**: Standard browser dialogs (`alert()`, `confirm()`, `prompt()`) are strictly prohibited in any dashboard module.
+- **Custom Modals Only**: Always use custom-styled HTML overlay modal components or Toast notification handlers (`window.Toast` / local `toast()` helpers) to provide a premium user experience and maintain unified design aesthetics.
+
+## 9. Supabase/PostgREST Batch Upserts & Not-Null Constraints
+- **Provide all `NOT NULL` columns on Upsert**: PostgREST interprets `.upsert(updates)` queries as potential inserts. If the payload is missing any columns that have a `NOT NULL` constraint (such as `sku` or `slug` on the `products` table), the database will throw a `null value in column violates not-null constraint` error *before* it evaluates the primary key conflict resolution.
+- **Spread the existing row**: To prevent this failure when performing pricing or status updates on existing records, always spread the original query record (e.g. `{ ...matchedProduct, sale_price: ... }`) into the updates payload object. This ensures all database columns (nullable and non-nullable) are populated and resolves any constraint violation.

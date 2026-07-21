@@ -331,7 +331,7 @@
         </div>
 
       <!-- Home -->
-      <div class="dash-nav-group expanded" id="nav-group-home">
+      <div class="dash-nav-group" id="nav-group-home">
         <button class="dash-nav-parent" onclick="toggleSubmenu(this)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
           <span class="dash-nav-text">Home</span>
@@ -742,6 +742,11 @@
       }
     }
 
+    // Start collapsed, then expand only the group containing the current page.
+    document.querySelectorAll('.dash-nav-group').forEach(group => {
+      group.classList.remove('expanded');
+    });
+
     // Check sub-links and auto-expand active group
     document.querySelectorAll('.dash-nav-child').forEach(link => {
       const href = link.getAttribute('href');
@@ -807,19 +812,6 @@
             group.style.display = 'none';
           }
         });
-
-        // Prioritize HR if user has access to both HR and Finance
-        const hasHrAccess = isOwnerOrAdmin || accessibleModules.includes('HR');
-        const hasFinanceAccess = isOwnerOrAdmin || accessibleModules.includes('Finance');
-        if (hasHrAccess && hasFinanceAccess) {
-          const financeGroup = document.getElementById('nav-group-finance');
-          if (financeGroup) {
-            const payoutTrackerLink = financeGroup.querySelector('a[href^="/dashboard/payout-tracker/"]');
-            if (payoutTrackerLink) {
-              payoutTrackerLink.style.display = 'none';
-            }
-          }
-        }
 
         // Handle user menu options role filtering
         document.querySelectorAll('#user-menu [data-role]').forEach(el => {

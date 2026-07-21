@@ -180,6 +180,10 @@
       padding-bottom: 0.5rem;
       border-bottom: 1px solid var(--border);
     }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
   </style>
 </head>
 <body>
@@ -196,7 +200,7 @@
       <div class="top-bar">
         <span class="top-bar-title">Pricing Strategy</span>
         <div style="flex:1;"></div>
-        
+
         <!-- Business Selector (Top Right) -->
         <div class="business-select-container">
           <select id="business-select" class="business-select" onchange="onBusinessChange()">
@@ -224,8 +228,17 @@
 
       <div class="content-area">
         <main class="main-panel" style="padding: 1.5rem;">
-          <!-- Snapshot Month Filter Toolbar -->
-          <div style="margin-bottom: 1.5rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem;">
+
+          <!-- Loading State (Not Overlay) -->
+          <div id="calculator-loading" style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 6rem 1rem; color: var(--text-secondary); text-align: center;">
+            <div style="width: 28px; height: 28px; border: 3px solid var(--border); border-top-color: var(--cyan); border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 1rem;"></div>
+            <div style="font-size: 0.85rem; font-weight: 600; color: var(--text-secondary);">Loading calculator and saved values...</div>
+          </div>
+
+          <!-- Main Calculator Content (Hidden initially) -->
+          <div id="calculator-content" style="display: none;">
+            <!-- Snapshot Month Filter Toolbar -->
+          <div style="margin-bottom: 1.5rem; display: flex; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; gap: 1rem;">
             <div>
               <label class="form-label" style="margin-bottom: 0.35rem; display: block; font-size: 0.8rem; font-weight: 600; text-transform: uppercase; color: var(--text-secondary);">Select P&L Snapshots</label>
               <div class="dropdown-check-container" id="snapshot-dropdown-container">
@@ -237,6 +250,12 @@
                   <!-- Populated dynamically -->
                 </div>
               </div>
+            </div>
+            <div>
+              <button type="button" class="tab-btn" onclick="openSavePricesModal()" style="height: 30px; font-size: 0.8rem; font-weight: 700; border: 1px solid var(--cyan); border-radius: 6px; padding: 0 1rem; color: var(--cyan-light); background: var(--bg-surface); cursor: pointer; transition: all 0.15s; display: inline-flex; align-items: center; gap: 0.35rem;" onmouseover="this.style.background='var(--cyan-dim)'" onmouseout="this.style.background='var(--bg-surface)'">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width: 13px; height: 13px;"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                Save New Prices
+              </button>
             </div>
           </div>
 
@@ -297,7 +316,7 @@
                   <option value="top">Top SKUs</option>
                   <option value="custom">Custom</option>
                 </select>
-                
+
                 <div class="dropdown-check-container" id="category-dropdown-container" style="width: auto; min-width: 160px;">
                   <div class="dropdown-check-trigger" onclick="toggleCategoryDropdown(event)">
                     <span id="category-trigger-label">All Categories</span>
@@ -342,6 +361,7 @@
               </button>
             </div>
           </div>
+          <!-- End of calculator-content -->
         </main>
       </div>
     </div>
@@ -387,6 +407,7 @@
     // Competitor data
     let allCompetitors = [];
     let allCompetitorProducts = [];
+    let currentCalculatedRows = [];
 
     // Save timer
     let saveTimeout = null;
@@ -527,9 +548,15 @@
       updateDropdownTriggerLabel();
       runCalculator();
 
-      // Populate Category list for dynamic filter
+       // Populate Category list for dynamic filter
       populateCategories();
       renderSkuTable();
+
+      // Hide loading state and display actual calculator contents
+      const loadingEl = document.getElementById('calculator-loading');
+      const contentEl = document.getElementById('calculator-content');
+      if (loadingEl) loadingEl.style.display = 'none';
+      if (contentEl) contentEl.style.display = 'block';
 
       // Outside click handler for dropdown check
       document.addEventListener('click', (e) => {
@@ -537,7 +564,7 @@
         if (container && !container.contains(e.target)) {
           document.getElementById('snapshot-dropdown-menu').classList.remove('open');
         }
-        
+
         const catContainer = document.getElementById('category-dropdown-container');
         if (catContainer && !catContainer.contains(e.target)) {
           const menu = document.getElementById('category-dropdown-menu');
@@ -554,7 +581,7 @@
     function renderSnapshotDropdown() {
       const menu = document.getElementById('snapshot-dropdown-menu');
       menu.innerHTML = '';
-      
+
       if (lockedStatements.length === 0) {
         menu.innerHTML = `<div style="padding: 0.5rem 0.75rem; font-size: 0.85rem; color: var(--text-muted);">No locked statements found.</div>`;
         return;
@@ -677,7 +704,7 @@
         latestValue.sku_mode = skuMode;
         latestValue.checked_categories = checkedCategories;
         latestValue.sku_limit = skuLimit;
-        
+
         const discountCheckbox = document.getElementById('discount-checkbox');
         latestValue.discount_applied = discountCheckbox ? discountCheckbox.checked : false;
 
@@ -751,7 +778,7 @@
       el.value = id === 'calc-base-orders' ? val.toFixed(1) : formatAmount(val);
     }
 
-    
+
 
     function onFieldInput(field) {
       if (field === 'profit') {
@@ -930,10 +957,10 @@
         P = (manualNetProfitTarget !== null && manualNetProfitTarget !== undefined) ? manualNetProfitTarget : baselineNetProfit;
         O = manualBaseOrders > 0 ? manualBaseOrders : avgOrders;
         S = manualAvgSellingPrice > 0 ? manualAvgSellingPrice : baselineAvgInstall;
-        
+
         // Solve R (Revenue) from S * O
         R = S * O;
-        
+
         // Recalculate Net Profit target to align with solved R if not manual
         if (manualNetProfitTarget === null || manualNetProfitTarget === undefined) {
           P = R * gpMargin - avgOpex;
@@ -943,12 +970,12 @@
           manualNetProfitTarget = P;
           R = gpMargin > 0 ? (P + avgOpex) / gpMargin : 0;
           S = manualAvgSellingPrice > 0 ? manualAvgSellingPrice : (O > 0 ? R / O : 0);
-        } 
+        }
         else if (editedField === 'revenue') {
           P = R * gpMargin - avgOpex;
           manualNetProfitTarget = P;
           S = manualAvgSellingPrice > 0 ? manualAvgSellingPrice : (O > 0 ? R / O : 0);
-        } 
+        }
         else if (editedField === 'price') {
           manualAvgSellingPrice = S;
           O = S > 0 ? R / S : 0;
@@ -985,9 +1012,9 @@
       const menu = document.getElementById('category-dropdown-menu');
       if (!menu) return;
       menu.innerHTML = '';
-      
+
       const categories = [...new Set(allProducts.map(p => p.category).filter(Boolean))].sort();
-      
+
       categories.forEach(cat => {
         const label = document.createElement('label');
         label.className = 'dropdown-check-item';
@@ -996,13 +1023,13 @@
         label.style.gap = '0.5rem';
         label.style.padding = '0.4rem 0.75rem';
         label.style.cursor = 'pointer';
-        
+
         const input = document.createElement('input');
         input.type = 'checkbox';
         input.value = cat;
         input.style.cursor = 'pointer';
         input.checked = checkedCategories.includes(cat);
-        
+
         input.onchange = () => {
           if (input.checked) {
             if (!checkedCategories.includes(cat)) {
@@ -1020,7 +1047,7 @@
         span.textContent = cat;
         span.style.fontSize = '0.79rem';
         span.style.color = 'var(--text-primary)';
-        
+
         label.appendChild(input);
         label.appendChild(span);
         menu.appendChild(label);
@@ -1047,7 +1074,7 @@
       const discountApplied = discountCheckbox ? discountCheckbox.checked : false;
       const discountPercentInput = document.getElementById('discount-percent-input');
       const discountPercent = discountPercentInput ? (parseFloat(discountPercentInput.value) || 0) : 5;
-      
+
       let activeRows = [];
       if (mode === 'top') {
         const counts = {};
@@ -1059,7 +1086,7 @@
 
           const skus = parseBookingSkus(booking);
           const qtys = parseBookingQtys(booking);
-          
+
           if (skus && Array.isArray(skus)) {
             skus.forEach((sku, idx) => {
               const qty = qtys[idx] || 0;
@@ -1143,7 +1170,7 @@
     function onSkuModeChange() {
       const select = document.getElementById('sku-mode-select');
       skuMode = select.value;
-      
+
       if (skuMode === 'custom') {
         customRowsSku = Array(20).fill('');
       }
@@ -1192,7 +1219,7 @@
 
       if (mode === 'top') {
         document.getElementById('category-dropdown-container').style.display = 'inline-block';
-        
+
         // Find top SKUs from P&L dropdown checked months
         const counts = {};
         allBookings.forEach(booking => {
@@ -1203,11 +1230,11 @@
 
           const skus = parseBookingSkus(booking);
           const qtys = parseBookingQtys(booking);
-          
+
           if (skus && Array.isArray(skus)) {
             skus.forEach((sku, idx) => {
               const qty = qtys[idx] || 0;
-              
+
               const prod = allProducts.find(p => p.sku.toLowerCase() === sku.toLowerCase());
               if (!prod) return;
               if (selectedBusiness && prod.business !== selectedBusiness) return;
@@ -1331,6 +1358,8 @@
           competitorPrices
         };
       });
+
+      currentCalculatedRows = activeRows;
 
       // Perform Sort if sortKey is set
       if (sortKey) {
@@ -1583,7 +1612,7 @@
           input.style.height = '26px';
           input.style.padding = '0 0.4rem';
           input.value = formatAmount(row.newPriceVal);
-          
+
           input.oninput = (e) => {
             const rawVal = e.target.value.replace(/,/g, '');
             const floatVal = parseFloat(rawVal);
@@ -1828,6 +1857,167 @@
       // tfoot is fully rebuilt in renderSkuTable; delegate to it
       renderSkuTable();
     }
+
+    let affectedSkusList = [];
+
+    window.openSavePricesModal = function() {
+      affectedSkusList = [];
+      if (!currentCalculatedRows || currentCalculatedRows.length === 0) {
+        showToast('No active calculations or products in the table.', true);
+        return;
+      }
+
+      currentCalculatedRows.forEach(row => {
+        if (!row.sku) return;
+        const p = allProducts.find(item => item.sku === row.sku);
+        if (!p) return;
+
+        const dbInstallPrice = (p.installation_price || p.dealer_price || 0) / 100;
+        const dbCents = p.installation_price || p.dealer_price || 0;
+        const newCents = Math.round(row.newPriceVal * 100);
+
+        if (dbCents !== newCents) {
+          affectedSkusList.push({
+            sku: p.sku,
+            title: p.title || p.sku,
+            oldPrice: dbInstallPrice,
+            newPrice: row.newPriceVal,
+            product: p
+          });
+        }
+      });
+
+      if (affectedSkusList.length === 0) {
+        showToast('No SKU prices have been changed in the calculator.', true);
+        return;
+      }
+
+      document.getElementById('affected-count').textContent = affectedSkusList.length;
+
+      const preview = document.getElementById('affected-skus-preview');
+      preview.innerHTML = affectedSkusList.map(item => `
+        <div style="display: flex; justify-content: space-between; padding: 0.2rem 0.4rem; border-bottom: 1px dashed var(--border);">
+          <span style="font-weight: 600;">${item.sku}</span>
+          <span>₱${formatAmount(item.oldPrice)} → <strong style="color: var(--cyan-light);">₱${formatAmount(item.newPrice)}</strong></span>
+        </div>
+      `).join('');
+
+      const nameInput = document.getElementById('calc-snapshot-name');
+      if (nameInput) nameInput.value = '';
+
+      const modal = document.getElementById('save-prices-modal');
+      modal.style.display = 'flex';
+      modal.offsetHeight; // trigger reflow
+      modal.style.opacity = '1';
+      modal.style.pointerEvents = 'auto';
+    };
+
+    window.closeSavePricesModal = function() {
+      const modal = document.getElementById('save-prices-modal');
+      modal.style.opacity = '0';
+      modal.style.pointerEvents = 'none';
+      setTimeout(() => {
+        modal.style.display = 'none';
+      }, 200);
+    };
+
+    window.submitSavePricesSnapshot = async function() {
+      const nameInput = document.getElementById('calc-snapshot-name');
+      const name = nameInput.value.trim();
+      if (!name) {
+        showToast('Please enter a name for the snapshot.', true);
+        return;
+      }
+
+      if (affectedSkusList.length === 0) return;
+
+      const prices = affectedSkusList.map(item => {
+        const p = item.product;
+        return {
+          sku: p.sku,
+          sale_price: p.sale_price || null,
+          discounted_price: p.discounted_price || null,
+          dealer_price: p.dealer_price || null,
+          installation_price: Math.round(item.newPrice * 100)
+        };
+      });
+
+      try {
+        // 1. Check if there are any existing snapshots for this company
+        const { count, error: countErr } = await sb.from('catalog_price_snapshots')
+          .select('*', { count: 'exact', head: true })
+          .eq('company_id', companyId);
+
+        if (countErr) throw countErr;
+        const isDbEmpty = (count === 0);
+
+        // 2. Insert the new pricing strategy snapshot
+        const { error } = await sb.from('catalog_price_snapshots').insert({
+          company_id: companyId,
+          name: name,
+          prices: prices,
+          source: 'pricing_strategy'
+        });
+
+        if (error) throw error;
+
+        // 3. If RLS/database was empty of snapshots, autocreate the baseline catalog snapshot dated yesterday
+        if (isDbEmpty && allProducts.length > 0) {
+          const yesterday = new Date();
+          yesterday.setDate(yesterday.getDate() - 1);
+          const formattedDate = yesterday.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+          const autoSnapshotName = `${formattedDate} - Catalog Prices`;
+
+          const autoPrices = allProducts.map(p => ({
+            sku: p.sku,
+            sale_price: p.sale_price || null,
+            discounted_price: p.discounted_price || null,
+            dealer_price: p.dealer_price || null,
+            installation_price: p.installation_price || null
+          }));
+
+          const { error: autoErr } = await sb.from('catalog_price_snapshots').insert({
+            company_id: companyId,
+            name: autoSnapshotName,
+            prices: autoPrices,
+            source: 'catalog'
+          });
+
+          if (autoErr) {
+            console.error('Failed to autocreate baseline snapshot:', autoErr);
+          } else {
+            showToast(`Autocreated baseline: "${autoSnapshotName}"`);
+          }
+        }
+
+        showToast('Snapshot saved successfully!');
+        closeSavePricesModal();
+      } catch (err) {
+        console.error('Error saving snapshot from calculator:', err);
+        showToast('Failed to save snapshot: ' + err.message, true);
+      }
+    };
   </script>
+
+  <!-- Save Prices Modal -->
+  <div class="modal-overlay" id="save-prices-modal" style="z-index: 1050; position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: none; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.2s; pointer-events: none;">
+    <div class="modal-box" style="background: var(--bg-surface); padding: 1.5rem; border-radius: 12px; box-shadow: var(--shadow-lg); width: 480px; max-width: 95%; box-sizing: border-box;">
+      <div class="modal-title" style="font-size: 1.05rem; font-weight: 800; color: var(--text-primary); margin-bottom: 0.75rem;">Save New Prices Snapshot</div>
+      <div style="margin-bottom: 1rem;">
+        <label class="form-label" style="display: block; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.35rem;">Snapshot Name</label>
+        <input type="text" id="calc-snapshot-name" placeholder="e.g. Optimized Prices July 2026" style="width: 100%; height: 36px; padding: 0 0.75rem; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 6px; font-size: 0.85rem; color: var(--text-primary); outline: none; box-sizing: border-box;" />
+      </div>
+      <div style="font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 1rem; line-height: 1.45;">
+        This will create a new price snapshot containing only the <span id="affected-count" style="font-weight: 700; color: var(--cyan-light);">0</span> SKUs affected by pricing changes in the table.
+      </div>
+      <div id="affected-skus-preview" style="max-height: 150px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-elevated); padding: 0.5rem; margin-bottom: 1.5rem; font-size: 0.75rem; color: var(--text-primary); display: flex; flex-direction: column; gap: 0.35rem; box-sizing: border-box;">
+        <!-- Preview of affected SKUs -->
+      </div>
+      <div class="modal-actions" style="display: flex; align-items: center; justify-content: flex-end; gap: 0.5rem;">
+        <button type="button" class="tab-btn" onclick="closeSavePricesModal()" style="border: 1px solid var(--border); border-radius: 6px; padding: 0.4rem 1rem; background: none; color: var(--text-secondary); cursor: pointer; font-size: 0.8rem; font-weight: 600;">Cancel</button>
+        <button type="button" class="tab-btn" onclick="submitSavePricesSnapshot()" style="border: 1px solid var(--cyan); border-radius: 6px; padding: 0.4rem 1rem; background: var(--cyan); color: #fff; cursor: pointer; font-size: 0.8rem; font-weight: 700;">Save Snapshot</button>
+      </div>
+    </div>
+  </div>
 </body>
 </html>

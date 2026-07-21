@@ -176,6 +176,7 @@
       reportingToMap: {},
       payoutSchedules: [],
       specialSchedules: [],
+      proratedSalaryState: {},
       payslipConfig: { logoStyle: 'light', signatoryName: 'Authorized Signatory', signatureUrl: '' },
       companyProfileConfig: {},
       // Drilldown caches
@@ -192,9 +193,11 @@
           const { data: co } = await getSb().from('companies').select('id').eq('tenant_id', this.tenantId).limit(1).maybeSingle();
           this.companyId = co?.id || null;
           if (!this.companyId) { toast('Failed to resolve company.', 'error'); return; }
+          this.applyRequestedMonth();
           this.updateMonthDisplay();
           await this.loadInitialData();
           this.populateDrilldown();
+          await this.applyRequestedPreview();
           this.bindEvents();
         } catch (e) {
           console.error(e);
@@ -215,7 +218,7 @@
         // Employees (all fields needed for payslip rendering)
         try {
           const { data, error } = await sb.from('employees')
-            .select('id, first_name, middle_name, last_name, salary, title, department, employment_status, reporting_to')
+            .select('id, first_name, middle_name, last_name, salary, title, department, employment_status, reporting_to, date_hired, shift_days')
             .eq('company_id', this.companyId)
             .eq('employment_status', 'Active');
           if (error) throw error;
@@ -223,15 +226,17 @@
         } catch (e) { this.employees = []; console.error(e); }
 
         // Config — payout schedules + payslip template + company profile
-        const [cfgRes, tplRes, profileRes] = await Promise.allSettled([
+        const [cfgRes, tplRes, profileRes, proratedRes] = await Promise.allSettled([
           sb.from('global_settings').select('value').eq('key', 'salary_tracker_config').eq('company_id', this.companyId).maybeSingle(),
           sb.from('global_settings').select('value').eq('key', 'payslip_template_config').eq('company_id', this.companyId).maybeSingle(),
           sb.from('global_settings').select('value').eq('key', 'company_profile_config').eq('company_id', this.companyId).maybeSingle(),
+          sb.from('global_settings').select('value').eq('key', 'prorated_salary_state').eq('company_id', this.companyId).maybeSingle(),
         ]);
         this.payoutSchedules  = cfgRes.status === 'fulfilled'     ? (cfgRes.value.data?.value?.payoutSchedules || [15, 30]) : [15, 30];
         this.specialSchedules = cfgRes.status === 'fulfilled'     ? (cfgRes.value.data?.value?.specialSchedules || []) : [];
         if (tplRes.status === 'fulfilled' && tplRes.value.data?.value) this.payslipConfig = { ...this.payslipConfig, ...tplRes.value.data.value };
         if (profileRes.status === 'fulfilled' && profileRes.value.data?.value) this.companyProfileConfig = profileRes.value.data.value;
+        if (proratedRes.status === 'fulfilled') this.proratedSalaryState = proratedRes.value.data?.value || {};
 
         // Installation bookings
         try {
@@ -618,11 +623,98 @@
           const name = [e.first_name, e.middle_name, e.last_name].filter(Boolean).join(' ');
           return `<option value="${esc(e.id)}">${esc(name)}</option>`;
         }).join('');
-        this.generatePreview();
+        const requestedEmployee = new URLSearchParams(window.location.search).get('employee');
+        const hasRequestedEmployee = requestedEmployee && [...empSel.options].some(option => option.value === requestedEmployee);
+        if (hasRequestedEmployee) empSel.value = requestedEmployee;
+        else this.generatePreview();
       },
 
       monthKey() {
         return `${this.selectedYear}-${String(this.selectedMonth + 1).padStart(2, '0')}`;
+      },
+
+      applyRequestedMonth() {
+        const month = new URLSearchParams(window.location.search).get('month');
+        const match = /^(\d{4})-(\d{2})$/.exec(month || '');
+        if (!match) return;
+        const monthIndex = Number(match[2]) - 1;
+        if (monthIndex < 0 || monthIndex > 11) return;
+        this.selectedYear = Number(match[1]);
+        this.selectedMonth = monthIndex;
+      },
+
+      async applyRequestedPreview() {
+        const params = new URLSearchParams(window.location.search);
+        const employeeId = params.get('employee');
+        if (!employeeId) return;
+        const employeeSelect = document.getElementById('payslip-employee-select');
+        if (!employeeSelect || ![...employeeSelect.options].some(option => option.value === employeeId)) return;
+
+        employeeSelect.value = employeeId;
+        await this.generatePreview();
+
+        if (params.get('download') === '1') {
+          params.delete('download');
+          const cleanQuery = params.toString();
+          window.history.replaceState({}, '', `${window.location.pathname}${cleanQuery ? `?${cleanQuery}` : ''}`);
+          await this.exportPayslipPDF();
+        }
+      },
+
+      getShiftWeekdays(shiftDays) {
+        const value = String(shiftDays || '').toLowerCase().replace(/\s+/g, '');
+        const tokenMap = {
+          su: 0, sun: 0, sunday: 0,
+          m: 1, mo: 1, mon: 1, monday: 1,
+          t: 2, tu: 2, tue: 2, tuesday: 2,
+          w: 3, we: 3, wed: 3, wednesday: 3,
+          th: 4, thu: 4, thursday: 4,
+          f: 5, fr: 5, fri: 5, friday: 5,
+          s: 6, sa: 6, sat: 6, saturday: 6
+        };
+        const tokens = value.split(',').filter(Boolean);
+        if (tokens.length > 0 && tokens.every(token => tokenMap[token] !== undefined)) {
+          return new Set(tokens.map(token => tokenMap[token]));
+        }
+        if (value.includes('mon-sun') || value.includes('monday-sunday')) return new Set([0, 1, 2, 3, 4, 5, 6]);
+        if (value.includes('mon-sat') || value.includes('monday-saturday')) return new Set([1, 2, 3, 4, 5, 6]);
+        if (value.includes('tue-sat') || value.includes('tuesday-saturday')) return new Set([2, 3, 4, 5, 6]);
+        return new Set([1, 2, 3, 4, 5]);
+      },
+
+      getProratedSalaryAllocation(emp, cutoffDay, sortedScheds, monthKey = this.monthKey()) {
+        const baseSalary = Number(emp.salary) || 0;
+        const regularValue = baseSalary / (sortedScheds.length || 1);
+        const selectedIds = this.proratedSalaryState[monthKey] || [];
+        const hiredDate = String(emp.date_hired || '').slice(0, 10);
+        if (!selectedIds.includes(emp.id) || !hiredDate.startsWith(monthKey)) {
+          return { value: regularValue, isProrated: false };
+        }
+
+        const hireDay = Number(hiredDate.slice(8, 10));
+        const targetIndex = sortedScheds.findIndex(day => Number(day) >= hireDay);
+        const cutoffIndex = sortedScheds.findIndex(day => Number(day) === Number(cutoffDay));
+        if (targetIndex === -1 || cutoffIndex < targetIndex) return { value: 0, isProrated: true };
+        if (cutoffIndex > targetIndex) return { value: regularValue, isProrated: false };
+
+        const daysInMonth = new Date(this.selectedYear, this.selectedMonth + 1, 0).getDate();
+        const periodEnd = cutoffIndex === sortedScheds.length - 1 ? daysInMonth : Math.min(Number(cutoffDay), daysInMonth);
+        const reportingDays = this.getShiftWeekdays(emp.shift_days);
+        let totalScheduledWorkdays = 0;
+        let eligibleScheduledWorkdays = 0;
+        for (let day = 1; day <= daysInMonth; day++) {
+          if (!reportingDays.has(new Date(this.selectedYear, this.selectedMonth, day).getDay())) continue;
+          totalScheduledWorkdays++;
+          if (day >= hireDay && day <= periodEnd) eligibleScheduledWorkdays++;
+        }
+        return {
+          value: totalScheduledWorkdays > 0 ? baseSalary * (eligibleScheduledWorkdays / totalScheduledWorkdays) : 0,
+          isProrated: true
+        };
+      },
+
+      getEmployeeSalaryTotal(emp, sortedScheds, monthKey = this.monthKey()) {
+        return sortedScheds.reduce((sum, day) => sum + this.getProratedSalaryAllocation(emp, day, sortedScheds, monthKey).value, 0);
       },
 
       updateMonthDisplay() {
@@ -771,6 +863,7 @@
         const reportingToName = manager ? [manager.first_name, manager.last_name].filter(Boolean).join(' ') : '—';
 
         const sortedScheds = [...this.payoutSchedules].sort((a, b) => a - b) || [30];
+        const salaryPaid = this.getEmployeeSalaryTotal(emp, sortedScheds, mk);
         const instPayouts = this.calculateInstallerPayouts(empId, mk, sortedScheds);
         const thresholdEarnings = instPayouts.thresholdEarnings;
         const thresholdDescription = instPayouts.thresholdDescription;
@@ -778,7 +871,8 @@
         const serviceDescription = instPayouts.serviceDescription;
 
         // Breakdown rows
-        let breakdownHtml = `<tr><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;font-weight:600;">Basic Salary</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;color:#4b5563;">Monthly Basic Salary</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;text-align:right;font-variant-numeric:tabular-nums;width:120px;">${php(baseSalary)}</td></tr>`;
+        const salaryIsProrated = salaryPaid !== baseSalary;
+        let breakdownHtml = `<tr><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;font-weight:600;">${salaryIsProrated ? 'Prorated Salary' : 'Basic Salary'}</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;color:#4b5563;">${salaryIsProrated ? 'Based on eligible scheduled workdays' : 'Monthly Basic Salary'}</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;text-align:right;font-variant-numeric:tabular-nums;width:120px;">${php(salaryPaid)}</td></tr>`;
         if (thresholdEarnings > 0) {
           breakdownHtml += `<tr><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;font-weight:600;">Earnings Past Threshold</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;color:#4b5563;line-height:1.5;">${esc(thresholdDescription).replace(/\n/g, '<br>')}</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;text-align:right;font-variant-numeric:tabular-nums;width:120px;">${php(thresholdEarnings)}</td></tr>`;
         }
@@ -804,7 +898,7 @@
         // Cutoff schedule rows
         let cutoffHtml = '';
         sortedScheds.forEach((day, sIdx) => {
-          const sp = baseSalary / sortedScheds.length;
+          const sp = this.getProratedSalaryAllocation(emp, day, sortedScheds, mk).value;
           const av = adjs.filter(a => { const d = new Date(a.date); return getSchedDay(d.getUTCDate(), sortedScheds) === day; }).reduce((s, a) => s + (Number(a.amount) || 0), 0);
           const cv = parsedCommAssignments.filter(c => { const d = new Date(c.date); return getSchedDay(d.getUTCDate(), sortedScheds) === day; }).reduce((s, c) => s + c.amount, 0);
           const xv = empSpecs.filter(s => getSchedDay(Number(s.day), sortedScheds) === day).reduce((s, x) => s + (Number(x.value) || 0), 0);
@@ -814,7 +908,7 @@
           const total = sp + av + cv + xv + instPortion;
           cutoffHtml += `<div style="display:flex;justify-content:space-between;padding:0.5rem 0;font-size:0.85rem;border-bottom:1px dashed #e5e7eb;"><span style="font-weight:500;color:#4b5563;">Cutoff Payout (Day ${day})</span><span style="font-weight:700;color:#111827;font-variant-numeric:tabular-nums;margin-right:12px;">${php(total)}</span></div>`;
         });
-        const verifiedTotal = baseSalary + empComms + totalAdjs + totalSpecs + instPayouts.totalInstallationPayout;
+        const verifiedTotal = salaryPaid + empComms + totalAdjs + totalSpecs + instPayouts.totalInstallationPayout;
 
         // Company assets
         const logoUrl     = this.payslipConfig.logoStyle === 'dark' ? this.companyProfileConfig.logoDark : this.companyProfileConfig.logoLight;

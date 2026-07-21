@@ -183,6 +183,22 @@
       font-weight: 600;
       color: var(--text-primary);
     }
+    .schedule-customer-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.5rem 1.25rem;
+    }
+    .schedule-customer-grid .full-width {
+      grid-column: 1 / -1;
+    }
+    @media (max-width: 600px) {
+      .schedule-customer-grid {
+        grid-template-columns: 1fr;
+      }
+      .schedule-customer-grid .full-width {
+        grid-column: auto;
+      }
+    }
   </style>
 </head>
 <body>
@@ -229,8 +245,8 @@
                           <th>City</th>
                           <th>SKU</th>
                           <th>Qty</th>
-                          <th>Scheduled</th>
-                          <th>Receive by</th>
+                          <th>Pickup Date</th>
+                          <th>Install Date / Time</th>
                           <th>Action</th>
                         </tr>
                       </thead>
@@ -524,10 +540,16 @@
 
   <!-- Schedule Pickup Modal -->
   <div id="schedule-pickup-modal" class="modal-overlay">
-    <div class="modal-content" style="max-width: 400px; gap: 1rem;">
+    <div class="modal-content" style="max-width: 680px; gap: 1rem;">
       <h3 class="modal-title">Schedule Pickup</h3>
-      <div style="font-size: 0.82rem; color: var(--text-secondary); line-height: 1.5; background: var(--bg-elevated); padding: 0.75rem; border-radius: 6px; border: 1px solid var(--border);">
+      <div class="schedule-customer-grid" style="font-size: 0.82rem; color: var(--text-secondary); line-height: 1.6; background: var(--bg-elevated); padding: 0.9rem 1rem; border-radius: 6px; border: 1px solid var(--border); overflow-wrap: anywhere;">
         <div><strong>Order No:</strong> <span id="schedule-order-no" style="color: var(--text-primary);"></span></div>
+        <div><strong>Name:</strong> <span id="schedule-customer-name" style="color: var(--text-primary);"></span></div>
+        <div><strong>City:</strong> <span id="schedule-customer-city" style="color: var(--text-primary);"></span></div>
+        <div><strong>SKU:</strong> <span id="schedule-skus" style="color: var(--text-primary);"></span></div>
+        <div><strong>Install Date:</strong> <span id="schedule-install-date" style="color: var(--text-primary);"></span></div>
+        <div><strong>Install Time:</strong> <span id="schedule-install-time" style="color: var(--text-primary);"></span></div>
+        <div class="full-width"><strong>Address:</strong> <span id="schedule-customer-address" style="color: var(--text-primary);"></span></div>
       </div>
       <div class="form-group">
         <label class="form-label" for="pickup-date">Pickup Date</label>
@@ -626,7 +648,7 @@
           this.activeTransactions = txs || [];
 
           const { data: bData, error: bErr } = await sb.from('installation_bookings')
-            .select('order_no, scheduled_date, customer_address, customer_phone');
+            .select('order_no, scheduled_date, scheduled_time, customer_address, customer_phone');
           if (bErr) throw bErr;
           this.bookings = bData || [];
 
@@ -787,6 +809,10 @@
           const dateFriendly = booking?.scheduled_date 
             ? new Date(booking.scheduled_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) 
             : new Date(group.items[0].created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+          const scheduledTime = String(booking?.scheduled_time || '').toLowerCase();
+          const installTime = scheduledTime
+            ? (scheduledTime.includes('afternoon') || scheduledTime.includes('pm') ? 'Afternoon' : 'Morning')
+            : 'N/A';
 
           const sched = this.pickupSchedules[group.reference_id];
           let scheduledHtml = '<span style="color:var(--text-muted);">—</span>';
@@ -819,7 +845,7 @@
             <td>${skusHtml}</td>
             <td>${qtysHtml}</td>
             <td>${scheduledHtml}</td>
-            <td><strong>${dateFriendly}</strong></td>
+            <td><strong>${dateFriendly} ${installTime}</strong></td>
             <td>
               <div style="display:flex; flex-direction:column; gap:0.4rem; max-width:120px;">
                 <button class="btn btn-outline btn-sm" onclick="DeliveryApp.openSchedulePickupModal('${group.reference_id}')" style="justify-content:center;">
@@ -922,7 +948,25 @@
 
       openSchedulePickupModal(referenceId) {
         this.selectedPickupRefId = referenceId;
+        const matchingItems = this.activeTransactions.filter(t => t.reference_id === referenceId && t.status === 'packed');
+        const matchingTx = matchingItems[0];
+        const booking = this.bookings.find(b => b.order_no === referenceId);
+        const skus = [...new Set(matchingItems.map(item => item.sku).filter(Boolean))].join(', ');
+        const installDate = booking?.scheduled_date
+          ? new Date(booking.scheduled_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+          : 'N/A';
+        const scheduledTime = String(booking?.scheduled_time || '').toLowerCase();
+        const installTime = scheduledTime
+          ? (scheduledTime.includes('afternoon') || scheduledTime.includes('pm') ? 'Afternoon' : 'Morning')
+          : 'N/A';
+
         document.getElementById('schedule-order-no').textContent = referenceId;
+        document.getElementById('schedule-customer-name').textContent = matchingTx?.customer_name || 'N/A';
+        document.getElementById('schedule-customer-city').textContent = matchingTx?.customer_city || 'N/A';
+        document.getElementById('schedule-customer-address').textContent = booking?.customer_address || 'N/A';
+        document.getElementById('schedule-skus').textContent = skus || 'N/A';
+        document.getElementById('schedule-install-date').textContent = installDate;
+        document.getElementById('schedule-install-time').textContent = installTime;
 
         const existing = this.pickupSchedules[referenceId];
         if (existing) {

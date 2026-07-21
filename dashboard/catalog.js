@@ -132,6 +132,7 @@
   let deleteCallback = null;
   let isAutosaving = false;
   let isLoadingDrawer = false;
+  let isQuickEditingPrices = false;
 
   let lastPublishedAt = null;
   let hasUnpublishedChanges = false;
@@ -148,7 +149,7 @@
         .maybeSingle();
 
       lastPublishedAt = data?.value?.timestamp ? new Date(data.value.timestamp) : null;
-      
+
       if (!lastPublishedAt) {
         hasUnpublishedChanges = true;
       } else {
@@ -167,7 +168,7 @@
     const btn = document.getElementById('btn-publish');
     const banner = document.getElementById('unpublished-changes-banner');
     if (!btn) return;
-    
+
     if (hasUnpublishedChanges) {
       btn.disabled = false;
       if (banner) banner.style.display = 'flex';
@@ -329,10 +330,10 @@
       if (q && !`${p.sku} ${p.title}`.toLowerCase().includes(q)) return false;
       if (biz && p.business !== biz) return false;
       if (st && p.status !== st) return false;
-      
+
       const cat = p.category || '';
       if (!selectedCategories.has(cat)) return false;
-      
+
       return true;
     });
 
@@ -479,7 +480,7 @@
         ? `<span style="color:var(--danger); font-weight:bold; cursor:help; margin-left:0.25rem; display:inline-flex; vertical-align:middle;" title="Parent SKU '${esc(p.parent_sku)}' does not exist!"><svg aria-hidden="true" viewBox="0 0 24 24" style="width:12px;height:12px;display:block;fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 1 1 5.6 1.5c-.9.9-1.7 1.4-2.7 2.2V14"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>`
         : '';
 
-      const titleHtml = hasPage 
+      const titleHtml = hasPage
         ? `<a href="https://www.brightkeysolutions.com/products/${esc(p.slug)}" target="_blank" style="color:var(--cyan);text-decoration:none;font-weight:600;display:inline-flex;align-items:center;gap:0.25rem;">${esc(p.title || '—')} <svg style="width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:2;" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg></a>`
         : `<span style="color:var(--text-primary);font-weight:500;" title="This product has no public page on ecommerce">${esc(p.title || '—')} <span style="font-size:0.7rem;color:var(--text-muted);font-weight:normal;margin-left:0.25rem;">(Hidden)</span></span>`;
 
@@ -491,10 +492,30 @@
         <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${titleHtml}</td>
         <td><span class="biz-badge ${bizClass}">${esc(biz)}</span></td>
         <td>${esc(p.category || '—')}</td>
-        <td style="text-align:right;font-variant-numeric:tabular-nums">${fmtPHP(p.sale_price)}</td>
-        <td style="text-align:right;font-variant-numeric:tabular-nums">${p.discounted_price > 0 ? fmtPHP(p.discounted_price) : '<span style="color:var(--text-muted)">—</span>'}</td>
-        <td style="text-align:right;font-variant-numeric:tabular-nums">${p.dealer_price > 0 ? fmtPHP(p.dealer_price) : '<span style="color:var(--text-muted)">—</span>'}</td>
-        <td style="text-align:right;font-variant-numeric:tabular-nums">${p.installation_price > 0 ? fmtPHP(p.installation_price) : '<span style="color:var(--text-muted)">—</span>'}</td>
+        <td style="text-align:right;font-variant-numeric:tabular-nums;${isQuickEditingPrices ? 'padding: 0.15rem 0.25rem;' : ''}">
+          ${isQuickEditingPrices
+            ? `<input type="text" class="quick-price-input" data-id="${p.id}" data-field="sale_price" value="${(p.sale_price || 0) / 100}" style="width: 75px; text-align: right; padding: 0.2rem 0.35rem; font-size: 0.8rem; background: #fefdf0; border: none; border-radius: 4px; font-variant-numeric: tabular-nums; outline: none; color: #1e293b;" />`
+            : fmtPHP(p.sale_price)
+          }
+        </td>
+        <td style="text-align:right;font-variant-numeric:tabular-nums;${isQuickEditingPrices ? 'padding: 0.15rem 0.25rem;' : ''}">
+          ${isQuickEditingPrices
+            ? `<input type="text" class="quick-price-input" data-id="${p.id}" data-field="discounted_price" value="${p.discounted_price > 0 ? ((p.discounted_price || 0) / 100) : ''}" placeholder="—" style="width: 75px; text-align: right; padding: 0.2rem 0.35rem; font-size: 0.8rem; background: #fefdf0; border: none; border-radius: 4px; font-variant-numeric: tabular-nums; outline: none; color: #1e293b;" />`
+            : (p.discounted_price > 0 ? fmtPHP(p.discounted_price) : '<span style="color:var(--text-muted)">—</span>')
+          }
+        </td>
+        <td style="text-align:right;font-variant-numeric:tabular-nums;${isQuickEditingPrices ? 'padding: 0.15rem 0.25rem;' : ''}">
+          ${isQuickEditingPrices
+            ? `<input type="text" class="quick-price-input" data-id="${p.id}" data-field="dealer_price" value="${p.dealer_price > 0 ? ((p.dealer_price || 0) / 100) : ''}" placeholder="—" style="width: 75px; text-align: right; padding: 0.2rem 0.35rem; font-size: 0.8rem; background: #fefdf0; border: none; border-radius: 4px; font-variant-numeric: tabular-nums; outline: none; color: #1e293b;" />`
+            : (p.dealer_price > 0 ? fmtPHP(p.dealer_price) : '<span style="color:var(--text-muted)">—</span>')
+          }
+        </td>
+        <td style="text-align:right;font-variant-numeric:tabular-nums;${isQuickEditingPrices ? 'padding: 0.15rem 0.25rem;' : ''}">
+          ${isQuickEditingPrices
+            ? `<input type="text" class="quick-price-input" data-id="${p.id}" data-field="installation_price" value="${p.installation_price > 0 ? ((p.installation_price || 0) / 100) : ''}" placeholder="—" style="width: 75px; text-align: right; padding: 0.2rem 0.35rem; font-size: 0.8rem; background: #fefdf0; border: none; border-radius: 4px; font-variant-numeric: tabular-nums; outline: none; color: #1e293b;" />`
+            : (p.installation_price > 0 ? fmtPHP(p.installation_price) : '<span style="color:var(--text-muted)">—</span>')
+          }
+        </td>
         <td><span class="status-badge ${statusClass}">${esc(p.status)}</span></td>
         <td><span style="color:var(--text-secondary);font-size:0.8rem;">${uploadedDate}</span></td>
         <td>
@@ -586,12 +607,12 @@
     isBatchEditing = false;
     touchedFields.clear();
     clearForm();
-    
+
     const p = allProducts.find(x => x.id === id);
     if (p) fillForm(p);
-    
+
     updateDrawerNavigation();
-    
+
     const statusEl = document.getElementById('drawer-status');
     if (statusEl) {
       statusEl.textContent = 'Loading…';
@@ -918,8 +939,8 @@
      'f-image-main','f-image-1','f-image-2','f-image-3','f-image-4','f-video-1','f-video-2',
      'f-spec-warranty','f-spec-support','f-spec-material','f-spec-voltage','f-spec-dimension',
      'f-display-rating', 'f-display-reviews-count', 'f-display-bought-month'
-    ].forEach(id => { 
-      const el = document.getElementById(id); 
+    ].forEach(id => {
+      const el = document.getElementById(id);
       if(el) {
         el.value = '';
         el.classList.remove('mixed-value');
@@ -950,7 +971,7 @@
     document.getElementById('f-status').value = 'draft';
     document.getElementById('f-status').classList.remove('mixed-value');
     document.getElementById('f-business').classList.remove('mixed-value');
-    
+
     // Remove temporary mixed option if any
     document.querySelectorAll('option[value="__mixed"]').forEach(opt => opt.remove());
 
@@ -980,7 +1001,7 @@
     if (editorEl) {
       updateComparisonFields(editorEl);
     }
-    
+
   }
 
   function fillForm(p) {
@@ -1037,7 +1058,7 @@
     document.getElementById('f-before-price').value = fmtPriceInput(p.before_price);
     document.getElementById('f-install-price').value = fmtPriceInput(p.installation_price);
     document.getElementById('f-dealer-price').value = fmtPriceInput(p.dealer_price);
-    
+
     // Fill promo tags
     const activeTags = p.promo_tags || [];
     document.querySelectorAll('.promo-tag-checkbox').forEach(cb => {
@@ -1047,7 +1068,7 @@
     updatePricePreview();
     updateMediaPreviews();
     renderFeaturesTab(p.business || '');
-    
+
     // Fill A+ Content
     const aplusContainer = document.getElementById('aplus-blocks-container');
     aplusContainer.innerHTML = '';
@@ -1074,7 +1095,7 @@
     document.getElementById('comp-sku-1').value = skus[0] || '';
     document.getElementById('comp-sku-2').value = skus[1] || '';
     document.getElementById('comp-sku-3').value = skus[2] || '';
-    
+
     const editor = document.getElementById('comparison-table-editor');
     updateComparisonFields(editor);
     document.getElementById('comp-focus-pos').value = ct.focusPosition || 1;
@@ -1101,7 +1122,7 @@
     const skus = [sku1, sku2, sku3].filter(Boolean);
     const title = document.getElementById('comp-title-header')?.value?.trim() || '';
     const focusPosition = parseInt(document.getElementById('comp-focus-pos')?.value || '1', 10);
-    
+
     const comparison_table = skus.length > 0 ? {
       title: title,
       skus: skus,
@@ -1278,7 +1299,7 @@
   // ─────────────────────────────────────────────────────
   // A+ Content Builder
   // ─────────────────────────────────────────────────────
-  
+
   window.updateComparisonFields = (blockEl) => {
     const sku1 = blockEl.querySelector('.comparison-sku-1').value;
     const sku2 = blockEl.querySelector('.comparison-sku-2').value;
@@ -1310,7 +1331,7 @@
   function getAPlusTemplate(type, data = {}) {
     const escVal = v => v ? esc(String(v)) : '';
     let inner = '';
-    
+
     if (type === 'text_image' || type === 'image_text') {
       inner = `
         <div style="display:flex; flex-direction:column; gap:0.5rem; margin-bottom:1rem;">
@@ -1520,7 +1541,7 @@
         selectedProductIds = [];
         const thSelectAll = document.getElementById('th-select-all');
         if (thSelectAll) thSelectAll.checked = false;
-        
+
         await fetchProducts();
         closeDrawer();
         isBatchEditing = false;
@@ -1600,7 +1621,12 @@
   // Delete Product
   // ─────────────────────────────────────────────────────
   function confirmDelete(id, title) {
+    document.getElementById('confirm-title').textContent = 'Delete Product?';
     document.getElementById('confirm-body').textContent = `Delete "${title}"? This will also remove all linked features and reviews. This cannot be undone.`;
+    const okBtn = document.getElementById('confirm-ok');
+    okBtn.textContent = 'Delete';
+    okBtn.className = 'btn btn-danger';
+
     deleteCallback = async () => {
       const { error } = await sbClient.from('products').delete().eq('id', id);
       if (error) { toast(`Failed: ${error.message}`, 'error'); return; }
@@ -1626,13 +1652,13 @@
       const pDup = { ...p };
       delete pDup.sku;
       delete pDup.slug;
-      
+
       fillForm(pDup);
     }
-    
+
     updateDrawerNavigation();
     document.getElementById('drawer-title').textContent = 'Duplicate Product';
-    
+
     const statusEl = document.getElementById('drawer-status');
     if (statusEl) {
       statusEl.textContent = 'Loading…';
@@ -1840,7 +1866,7 @@
         const allExisting = getSuggestions();
         const currentVal = textInput.value.trim().toLowerCase();
         const unused = allExisting.filter(t => !tags.includes(normalize(t)));
-        const matches = currentVal 
+        const matches = currentVal
           ? unused.filter(t => t.toLowerCase().includes(currentVal))
           : unused;
 
@@ -1932,12 +1958,12 @@
       if (companyData && companyData.length > 0) {
         currentCompanyId = companyData[0].id;
       }
-      
+
       // Dynamically load feature definitions from the database based on Tenants settings
       if (currentCompanyId) {
         const { data: businesses } = await window.BKAuth.sb.from('tenant_businesses').select('id, name').eq('company_id', currentCompanyId);
         const { data: dbFeatures } = await window.BKAuth.sb.from('business_features').select('business_id, name');
-        
+
         if (businesses && dbFeatures) {
           // Dynamically populate filter-business and f-business dropdowns from tenant_businesses
           const filterBizSelect = document.getElementById('filter-business');
@@ -1968,7 +1994,7 @@
             } else {
               FEATURE_DEFS[key].features = [];
             }
-            
+
             const bizFeats = dbFeatures.filter(f => f.business_id === biz.id);
             bizFeats.forEach(f => {
               // Pretty format matching featureLabel() logic
@@ -1984,7 +2010,7 @@
                 .replace(/\bAbc\b/g, 'ABC')
                 .replace(/\bAi\b/g, 'AI')
                 .replace(/\bMppt\b/g, 'MPPT');
-                
+
               FEATURE_DEFS[key].features.push({
                 col: f.name,
                 label: label
@@ -2009,12 +2035,12 @@
           currentSortCol = col;
           currentSortDir = 'asc';
         }
-        
+
         document.querySelectorAll('thead th.sortable').forEach(el => {
           el.classList.remove('asc', 'desc');
         });
         th.classList.add(currentSortDir);
-        
+
         applyFilters();
       });
     });
@@ -2207,7 +2233,7 @@
       const wrapper = document.createElement('div');
       wrapper.style.display = 'flex';
       wrapper.style.gap = '0.5rem';
-      
+
       input.parentNode.insertBefore(wrapper, input);
       wrapper.appendChild(input);
       input.style.flex = '1';
@@ -2218,7 +2244,7 @@
       btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>';
       btn.title = "Upload to Supabase Storage";
       btn.style.padding = '0 0.75rem';
-      
+
       btn.addEventListener('click', () => {
         const sku = document.getElementById('f-sku')?.value?.trim();
         if (!sku) {
@@ -2226,11 +2252,11 @@
           return;
         }
         currentUploadTarget = input;
-        
+
         if (input.id.includes('image')) uploadInput.accept = 'image/*';
         else if (input.id.includes('video')) uploadInput.accept = 'video/*';
         else uploadInput.accept = '*/*';
-        
+
         uploadInput.click();
       });
 
@@ -2296,7 +2322,7 @@
       const sku = (document.getElementById('f-sku')?.value || '').trim().toUpperCase();
       const btn = currentUploadTarget.nextElementSibling;
       const originalHtml = btn.innerHTML;
-      
+
       try {
         btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 1s linear infinite"><style>@keyframes spin { 100% { transform:rotate(360deg); } }</style><circle cx="12" cy="12" r="10" stroke-opacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round"/></svg>';
         btn.disabled = true;
@@ -2349,7 +2375,7 @@
 
         currentUploadTarget.value = result.url;
         currentUploadTarget.dispatchEvent(new Event('input'));
-        
+
         toast("File uploaded securely!", "success");
       } catch (err) {
         console.error(err);
@@ -2357,7 +2383,7 @@
       } finally {
         btn.innerHTML = originalHtml;
         btn.disabled = false;
-        uploadInput.value = ''; 
+        uploadInput.value = '';
       }
     });
 
@@ -2528,9 +2554,412 @@
     }
   });
 
+  // ─────────────────────────────────────────────────────
+  // Price Snapshot Operations
+  // ─────────────────────────────────────────────────────
+  let loadedSnapshots = [];
+  let selectedSnapshotId = null;
+
+  async function openSnapshotModal() {
+    selectedSnapshotId = null;
+    const loadBtn = document.getElementById('btn-load-snapshot-action');
+    if (loadBtn) loadBtn.disabled = true;
+
+    const nameInput = document.getElementById('new-snapshot-name');
+    if (nameInput) nameInput.value = '';
+
+    switchSnapshotModalTab('save');
+    document.getElementById('snapshot-modal').classList.add('open');
+    await fetchSavedSnapshots();
+  }
+
+  function closeSnapshotModal() {
+    document.getElementById('snapshot-modal').classList.remove('open');
+  }
+
+  function switchSnapshotModalTab(tabName) {
+    const saveTab = document.getElementById('snapshot-tab-save');
+    const loadTab = document.getElementById('snapshot-tab-load');
+    const saveBtn = document.getElementById('tab-btn-save-snapshot');
+    const loadBtn = document.getElementById('tab-btn-load-snapshot');
+
+    if (tabName === 'save') {
+      saveTab.style.display = 'block';
+      loadTab.style.display = 'none';
+      saveBtn.classList.add('active');
+      saveBtn.style.borderBottom = '2px solid var(--cyan)';
+      saveBtn.style.fontWeight = '700';
+      loadBtn.classList.remove('active');
+      loadBtn.style.borderBottom = 'none';
+      loadBtn.style.fontWeight = '600';
+    } else {
+      saveTab.style.display = 'none';
+      loadTab.style.display = 'block';
+      saveBtn.classList.remove('active');
+      saveBtn.style.borderBottom = 'none';
+      saveBtn.style.fontWeight = '600';
+      loadBtn.classList.add('active');
+      loadBtn.style.borderBottom = '2px solid var(--cyan)';
+      loadBtn.style.fontWeight = '700';
+    }
+  }
+
+  async function fetchSavedSnapshots() {
+    const listContainer = document.getElementById('saved-snapshots-list');
+    listContainer.innerHTML = '<div style="padding: 1.5rem; text-align: center; color: var(--text-muted); font-size: 0.8rem;">Loading snapshots...</div>';
+
+    try {
+      const { data, error } = await sbClient
+        .from('catalog_price_snapshots')
+        .select('id, name, prices, created_at')
+        .eq('company_id', currentCompanyId)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      loadedSnapshots = data || [];
+      renderSnapshotsList();
+    } catch (err) {
+      console.error('Error fetching snapshots:', err);
+      listContainer.innerHTML = '<div style="padding: 1.5rem; text-align: center; color: var(--danger); font-size: 0.8rem;">Failed to load snapshots.</div>';
+    }
+  }
+
+  function renderSnapshotsList() {
+    const listContainer = document.getElementById('saved-snapshots-list');
+    if (loadedSnapshots.length === 0) {
+      listContainer.innerHTML = '<div style="padding: 1.5rem; text-align: center; color: var(--text-muted); font-size: 0.8rem;">No snapshots saved yet.</div>';
+      return;
+    }
+
+    listContainer.innerHTML = loadedSnapshots.map(snap => {
+      const isSelected = snap.id === selectedSnapshotId;
+      const borderStyle = isSelected ? 'border: 1px solid var(--cyan); background: var(--cyan-dim);' : 'border-bottom: 1px solid var(--border);';
+      const formattedDate = new Date(snap.created_at).toLocaleString();
+
+      return `
+        <div class="snapshot-item-container" style="border-bottom: 1px solid var(--border); display: flex; flex-direction: column;">
+          <div class="snapshot-item" style="display: flex; justify-content: space-between; align-items: center; padding: 0.6rem 0.85rem; ${isSelected ? 'background: var(--cyan-dim);' : ''} cursor: pointer; transition: background 0.15s;" onclick="selectSnapshot('${snap.id}')">
+            <div style="flex: 1; min-width: 0; text-align: left;">
+              <div style="font-weight: 700; font-size: 0.82rem; color: var(--text-primary); text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">${esc(snap.name)}</div>
+              <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 0.15rem;">Saved: ${formattedDate} (${snap.prices ? snap.prices.length : 0} items)</div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.2rem;">
+              <button type="button" style="background: none; border: none; color: var(--text-secondary); cursor: pointer; padding: 0.3rem; display: flex; align-items: center; justify-content: center; opacity: 0.7; transition: opacity 0.15s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" onclick="toggleSnapshotPricesGlance('${snap.id}', event)" title="View Prices">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+              </button>
+              <button type="button" style="background: none; border: none; color: var(--danger); cursor: pointer; padding: 0.3rem; display: flex; align-items: center; justify-content: center; opacity: 0.7; transition: opacity 0.15s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" onclick="deleteSnapshot('${snap.id}', event)" title="Delete Snapshot">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+              </button>
+            </div>
+          </div>
+          <div id="glance-${snap.id}" class="snapshot-prices-glance" style="display: none; padding: 0.6rem 0.85rem; background: var(--bg-surface); border-top: 1px dashed var(--border); font-size: 0.73rem; overflow-x: auto; box-sizing: border-box;">
+            <!-- Populated dynamically on eye icon click -->
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function selectSnapshot(snapId) {
+    selectedSnapshotId = snapId;
+    renderSnapshotsList();
+    const loadBtn = document.getElementById('btn-load-snapshot-action');
+    if (loadBtn) loadBtn.disabled = false;
+  }
+
+  function toggleSnapshotPricesGlance(snapId, event) {
+    if (event) event.stopPropagation();
+
+    const glanceEl = document.getElementById(`glance-${snapId}`);
+    if (!glanceEl) return;
+
+    if (glanceEl.style.display === 'block') {
+      glanceEl.style.display = 'none';
+      return;
+    }
+
+    // Hide all other glances
+    document.querySelectorAll('.snapshot-prices-glance').forEach(el => {
+      el.style.display = 'none';
+    });
+
+    const snap = loadedSnapshots.find(s => s.id === snapId);
+    if (!snap || !snap.prices || snap.prices.length === 0) {
+      glanceEl.innerHTML = '<div style="color: var(--text-muted); text-align: center; padding: 0.5rem 0;">No prices recorded in this snapshot.</div>';
+      glanceEl.style.display = 'block';
+      return;
+    }
+
+    const rowsHtml = snap.prices.map(item => {
+      const sale = item.sale_price != null ? `₱${(item.sale_price / 100).toLocaleString()}` : '—';
+      const disc = item.discounted_price != null ? `₱${(item.discounted_price / 100).toLocaleString()}` : '—';
+      const dealer = item.dealer_price != null ? `₱${(item.dealer_price / 100).toLocaleString()}` : '—';
+      const install = item.installation_price != null ? `₱${(item.installation_price / 100).toLocaleString()}` : '—';
+
+      return `
+        <tr style="border-bottom: 1px solid var(--border);">
+          <td style="padding: 0.25rem 0.2rem; font-weight: 700; color: var(--text-primary); text-align: left; font-size: 0.68rem;">${esc(item.sku)}</td>
+          <td style="padding: 0.25rem 0.2rem; color: var(--text-muted); text-align: right; font-size: 0.68rem;">${dealer}</td>
+          <td style="padding: 0.25rem 0.2rem; color: var(--text-muted); text-align: right; font-size: 0.68rem;">${sale}</td>
+          <td style="padding: 0.25rem 0.2rem; color: var(--text-muted); text-align: right; font-size: 0.68rem;">${disc}</td>
+          <td style="padding: 0.25rem 0.2rem; font-weight: 600; color: var(--cyan-light); text-align: right; font-size: 0.68rem;">${install}</td>
+        </tr>
+      `;
+    }).join('');
+
+    glanceEl.innerHTML = `
+      <table style="width: 100%; border-collapse: collapse; margin-top: 0.25rem;">
+        <thead>
+          <tr style="border-bottom: 2px solid var(--border); color: var(--text-secondary); font-weight: 700; text-transform: uppercase; font-size: 0.58rem;">
+            <th style="padding: 0.2rem; text-align: left; width: 20%;">SKU</th>
+            <th style="padding: 0.2rem; text-align: right; width: 20%;">Dealer</th>
+            <th style="padding: 0.2rem; text-align: right; width: 20%;">Sale</th>
+            <th style="padding: 0.2rem; text-align: right; width: 20%;">Disc</th>
+            <th style="padding: 0.2rem; text-align: right; width: 20%;">Inst</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rowsHtml}
+        </tbody>
+      </table>
+    `;
+    glanceEl.style.display = 'block';
+  }
+
+  async function saveNewSnapshot() {
+    const nameInput = document.getElementById('new-snapshot-name');
+    const name = nameInput.value.trim();
+    if (!name) {
+      toast('Please enter a name for the snapshot.', 'error');
+      return;
+    }
+
+    if (allProducts.length === 0) {
+      toast('No products available to save.', 'error');
+      return;
+    }
+
+    const prices = allProducts.map(p => ({
+      sku: p.sku,
+      sale_price: p.sale_price || null,
+      discounted_price: p.discounted_price || null,
+      dealer_price: p.dealer_price || null,
+      installation_price: p.installation_price || null
+    }));
+
+    try {
+      const { data, error } = await sbClient.from('catalog_price_snapshots').insert({
+        company_id: currentCompanyId,
+        name: name,
+        prices: prices
+      }).select().single();
+
+      if (error) throw error;
+
+      toast('Snapshot saved successfully!');
+      nameInput.value = '';
+
+      await fetchSavedSnapshots();
+      if (data) {
+        selectSnapshot(data.id);
+      }
+      switchSnapshotModalTab('load');
+    } catch (err) {
+      console.error('Error saving snapshot:', err);
+      toast('Failed to save snapshot: ' + err.message, 'error');
+    }
+  }
+
+  async function loadSelectedSnapshot() {
+    const snapshot = loadedSnapshots.find(s => s.id === selectedSnapshotId);
+    if (!snapshot) {
+      toast('Please select a snapshot to load.', 'error');
+      return;
+    }
+
+    const titleEl = document.getElementById('confirm-title');
+    const bodyEl = document.getElementById('confirm-body');
+    const okBtn = document.getElementById('confirm-ok');
+
+    titleEl.textContent = 'Load Prices?';
+    bodyEl.textContent = `Are you sure you want to load the snapshot "${snapshot.name}"? This will overwrite the prices of all matching products in the catalog.`;
+    okBtn.textContent = 'Load Prices';
+    okBtn.className = 'btn btn-primary';
+
+    deleteCallback = async () => {
+      const updates = [];
+      const isPricingStrategy = snapshot.source === 'pricing_strategy';
+
+      snapshot.prices.forEach(snapItem => {
+        const matchedProd = allProducts.find(p => p.sku === snapItem.sku);
+        if (matchedProd) {
+          if (isPricingStrategy) {
+            updates.push({
+              ...matchedProd,
+              installation_price: snapItem.installation_price || 0
+            });
+          } else {
+            updates.push({
+              ...matchedProd,
+              sale_price: snapItem.sale_price || 0,
+              discounted_price: snapItem.discounted_price || 0,
+              dealer_price: snapItem.dealer_price || 0,
+              installation_price: snapItem.installation_price || 0
+            });
+          }
+        }
+      });
+
+      if (updates.length === 0) {
+        toast('No matching products found in the selected snapshot.', 'error');
+        return;
+      }
+
+      try {
+        toast('Applying snapshot and updating catalog...', 'info');
+
+        const { error } = await sbClient.from('products').upsert(updates);
+        if (error) throw error;
+
+        toast('Prices restored successfully!');
+        closeSnapshotModal();
+        await fetchProducts();
+      } catch (err) {
+        console.error('Error loading snapshot:', err);
+        toast('Failed to load snapshot: ' + err.message, 'error');
+      }
+    };
+
+    document.getElementById('confirm-modal').classList.add('open');
+  }
+
+  async function deleteSnapshot(snapId, event) {
+    if (event) event.stopPropagation();
+
+    const snapshot = loadedSnapshots.find(s => s.id === snapId);
+    if (!snapshot) return;
+
+    const titleEl = document.getElementById('confirm-title');
+    const bodyEl = document.getElementById('confirm-body');
+    const okBtn = document.getElementById('confirm-ok');
+
+    titleEl.textContent = 'Delete Snapshot?';
+    bodyEl.textContent = `Delete snapshot "${snapshot.name}"? This cannot be undone.`;
+    okBtn.textContent = 'Delete';
+    okBtn.className = 'btn btn-danger';
+
+    deleteCallback = async () => {
+      try {
+        const { error } = await sbClient
+          .from('catalog_price_snapshots')
+          .delete()
+          .eq('id', snapId);
+
+        if (error) throw error;
+
+        toast('Snapshot deleted.');
+        await fetchSavedSnapshots();
+
+        if (selectedSnapshotId === snapId) {
+          selectedSnapshotId = null;
+          const loadBtn = document.getElementById('btn-load-snapshot-action');
+          if (loadBtn) loadBtn.disabled = true;
+        }
+      } catch (err) {
+        console.error('Error deleting snapshot:', err);
+        toast('Failed to delete snapshot: ' + err.message, 'error');
+      }
+    };
+
+    document.getElementById('confirm-modal').classList.add('open');
+  }
+
+  async function toggleQuickPriceEdit() {
+    const btn = document.getElementById('btn-quick-edit-prices');
+    const btnText = document.getElementById('quick-edit-btn-text');
+
+    if (!isQuickEditingPrices) {
+      isQuickEditingPrices = true;
+      btnText.textContent = 'Save Price';
+      btn.style.borderColor = 'var(--cyan)';
+      btn.style.color = 'var(--cyan-light)';
+      btn.style.background = 'var(--cyan-dim)';
+      renderTable();
+    } else {
+      await saveQuickPrices();
+    }
+  }
+
+  async function saveQuickPrices() {
+    const inputs = document.querySelectorAll('.quick-price-input');
+    const updatesMap = {};
+
+    inputs.forEach(input => {
+      const prodId = input.getAttribute('data-id');
+      const field = input.getAttribute('data-field');
+      const valRaw = input.value.replace(/,/g, '').trim();
+      const valCents = valRaw === '' ? 0 : Math.round((parseFloat(valRaw) || 0) * 100);
+
+      if (!updatesMap[prodId]) {
+        const p = allProducts.find(x => x.id === prodId);
+        updatesMap[prodId] = {
+          ...p // Spread the original row to satisfy NOT NULL constraints as per Rule 9
+        };
+      }
+      updatesMap[prodId][field] = valCents;
+    });
+
+    const updates = Object.values(updatesMap);
+
+    if (updates.length === 0) {
+      isQuickEditingPrices = false;
+      resetQuickEditButton();
+      renderTable();
+      return;
+    }
+
+    try {
+      toast('Saving price updates...', 'info');
+      const { error } = await sbClient.from('products').upsert(updates);
+      if (error) throw error;
+
+      toast('Prices updated successfully!');
+
+      await fetchProducts();
+
+      isQuickEditingPrices = false;
+      resetQuickEditButton();
+      renderTable();
+    } catch (err) {
+      console.error('Error saving quick prices:', err);
+      toast('Failed to save prices: ' + err.message, 'error');
+    }
+  }
+
+  function resetQuickEditButton() {
+    const btn = document.getElementById('btn-quick-edit-prices');
+    const btnText = document.getElementById('quick-edit-btn-text');
+    if (btnText && btn) {
+      btnText.textContent = 'Edit Price';
+      btn.style.borderColor = '';
+      btn.style.color = '';
+      btn.style.background = '';
+    }
+  }
+
   // Expose for inline onclick
   window.openDrawerEdit = openDrawerEdit;
+  window.toggleQuickPriceEdit = toggleQuickPriceEdit;
   window.confirmDelete = confirmDelete;
   window.duplicateProduct = duplicateProduct;
   window.markFeatureX = markFeatureX;
   window.onFeatureInput = onFeatureInput;
+  window.openSnapshotModal = openSnapshotModal;
+  window.closeSnapshotModal = closeSnapshotModal;
+  window.switchSnapshotModalTab = switchSnapshotModalTab;
+  window.saveNewSnapshot = saveNewSnapshot;
+  window.loadSelectedSnapshot = loadSelectedSnapshot;
+  window.selectSnapshot = selectSnapshot;
+  window.deleteSnapshot = deleteSnapshot;
+  window.toggleSnapshotPricesGlance = toggleSnapshotPricesGlance;

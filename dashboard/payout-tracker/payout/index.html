@@ -82,6 +82,37 @@
       padding-top: 0.5rem !important;
       padding-bottom: 0.5rem !important;
     }
+
+    #payout-loading-overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 110;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #fff;
+    }
+    #summary-table-container { position: relative; }
+    .payout-loading-content {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.75rem;
+      color: var(--text-secondary);
+      font-size: 0.84rem;
+      font-weight: 600;
+    }
+    .payout-loading-spinner {
+      width: 30px;
+      height: 30px;
+      border: 3px solid var(--border);
+      border-top-color: var(--cyan);
+      border-radius: 50%;
+      animation: payoutLoadingSpin 0.75s linear infinite;
+    }
+    @keyframes payoutLoadingSpin {
+      to { transform: rotate(360deg); }
+    }
   </style>
 </head>
 <body>
@@ -115,11 +146,17 @@
               <span id="summary-month-display" style="font-size:0.88rem; font-weight:700; color:var(--text-primary); min-width:140px; text-align:center;"></span>
               <button class="btn btn-outline btn-sm" id="btn-next-month">&gt;</button>
             </div>
-            <button class="btn btn-outline btn-sm" id="btn-clear-all" style="color:var(--danger); border-color:var(--danger);">Clear All</button>
+            <button class="btn btn-outline btn-sm" id="btn-prorated">Prorated</button>
           </div>
 
           <div class="table-card">
             <div class="table-wrap" id="summary-table-container">
+              <div id="payout-loading-overlay" role="status" aria-live="polite" aria-label="Loading payout data">
+                <div class="payout-loading-content">
+                  <span class="payout-loading-spinner" aria-hidden="true"></span>
+                  <span>Loading payout data</span>
+                </div>
+              </div>
               <table class="salary-table" id="summary-table">
                 <thead>
                   <tr id="summary-table-header">
@@ -145,14 +182,25 @@
     </div>
   </div>
 
-  <!-- Clear All Modal -->
-  <div class="modal-overlay" id="clear-all-modal">
-    <div class="modal" style="max-width:400px; padding:2rem;">
-      <h3 style="font-size:1.1rem; font-weight:700; color:var(--text-primary); margin-bottom:0.5rem;">Confirm Action</h3>
-      <p style="font-size:0.88rem; color:var(--text-secondary); margin-bottom:1.5rem; line-height:1.5;">Clear all adjustments, reimbursements, and payout checkboxes?</p>
-      <div style="display:flex; justify-content:flex-end; gap:0.75rem;">
-        <button class="btn btn-outline btn-sm" id="btn-cancel-clear">No</button>
-        <button class="btn btn-sm" id="btn-confirm-clear" style="background:var(--danger); border-color:var(--danger); color:#fff;">Clear</button>
+  <!-- Prorated Salary Modal -->
+  <div class="modal-overlay" id="prorated-modal">
+    <div class="modal" style="max-width:760px; width:min(760px, calc(100vw - 2rem)); padding:1.5rem; max-height:calc(100dvh - 2rem); overflow:hidden; display:flex; flex-direction:column;">
+      <h3 style="font-size:1.1rem; font-weight:700; color:var(--text-primary); margin-bottom:0.35rem;">Prorated Salary</h3>
+      <p id="prorated-modal-description" style="font-size:0.8rem; color:var(--text-secondary); margin-bottom:1rem; line-height:1.5;"></p>
+      <div style="overflow:auto; border:1px solid var(--border); border-radius:8px; flex:1; min-height:0;">
+        <table style="width:100%; border-collapse:collapse; font-size:0.8rem;">
+          <thead>
+            <tr>
+              <th style="text-align:left; padding:0.7rem;">Employee</th>
+              <th style="text-align:left; padding:0.7rem;">Salary Cutoff Preview</th>
+            </tr>
+          </thead>
+          <tbody id="prorated-employee-list"></tbody>
+        </table>
+      </div>
+      <div style="display:flex; justify-content:flex-end; gap:0.75rem; border-top:1px solid var(--border); padding-top:1rem; margin-top:1rem;">
+        <button class="btn btn-outline btn-sm" id="btn-cancel-prorated">Cancel</button>
+        <button class="btn btn-primary btn-sm" id="btn-apply-prorated">Apply Prorated</button>
       </div>
     </div>
   </div>
@@ -208,6 +256,7 @@
       regularPayoutState: {},
       specialPayoutState: {},
       commissionPayoutState: {},
+      proratedSalaryState: {},
       adjustmentsList: [],
       commissionAssignments: [],
       bookingsList: [],
@@ -233,7 +282,14 @@
         } catch (e) {
           console.error(e);
           toast('Initialization failed: ' + e.message, 'error');
+        } finally {
+          this.hideLoadingOverlay();
         }
+      },
+
+      hideLoadingOverlay() {
+        const overlay = document.getElementById('payout-loading-overlay');
+        if (overlay) overlay.style.display = 'none';
       },
 
       async loadData() {
@@ -249,7 +305,7 @@
         // Employees
         try {
           const { data, error } = await sb.from('employees')
-            .select('id, first_name, middle_name, last_name, salary, employment_status, department, title, payout_details, payout_details_image, reporting_to')
+            .select('id, first_name, middle_name, last_name, salary, employment_status, department, title, payout_details, payout_details_image, reporting_to, date_hired, shift_days')
             .eq('company_id', this.companyId)
             .eq('employment_status', 'Active');
           if (error) throw error;
@@ -273,6 +329,11 @@
         this.regularPayoutState   = regData?.value  || {};
         this.specialPayoutState   = specData?.value || {};
         this.commissionPayoutState = commData?.value || {};
+
+        try {
+          const { data } = await sb.from('global_settings').select('value').eq('key', 'prorated_salary_state').eq('company_id', this.companyId).maybeSingle();
+          this.proratedSalaryState = data?.value || {};
+        } catch (_) { this.proratedSalaryState = {}; }
 
         // Adjustments (all months — needed for per-schedule partitioning in summary)
         try {
@@ -642,6 +703,147 @@
         return `${this.selectedYear}-${String(this.selectedMonth + 1).padStart(2, '0')}`;
       },
 
+      getShiftWeekdays(shiftDays) {
+        const value = String(shiftDays || '').toLowerCase().replace(/\s+/g, '');
+        const tokenMap = {
+          su: 0, sun: 0, sunday: 0,
+          m: 1, mo: 1, mon: 1, monday: 1,
+          t: 2, tu: 2, tue: 2, tuesday: 2,
+          w: 3, we: 3, wed: 3, wednesday: 3,
+          th: 4, thu: 4, thursday: 4,
+          f: 5, fr: 5, fri: 5, friday: 5,
+          s: 6, sa: 6, sat: 6, saturday: 6
+        };
+        const tokens = value.split(',').filter(Boolean);
+        if (tokens.length > 0 && tokens.every(token => tokenMap[token] !== undefined)) {
+          return new Set(tokens.map(token => tokenMap[token]));
+        }
+        if (value.includes('mon-sun') || value.includes('monday-sunday')) return new Set([0, 1, 2, 3, 4, 5, 6]);
+        if (value.includes('mon-sat') || value.includes('monday-saturday')) return new Set([1, 2, 3, 4, 5, 6]);
+        if (value.includes('tue-sat') || value.includes('tuesday-saturday')) return new Set([2, 3, 4, 5, 6]);
+        return new Set([1, 2, 3, 4, 5]);
+      },
+
+      getProratedSalaryAllocation(emp, cutoffDay, sortedScheds, monthKey = this.monthKey(), forceSelected = null) {
+        const baseSalary = Number(emp.salary) || 0;
+        const regularValue = baseSalary / (sortedScheds.length || 1);
+        const selectedIds = this.proratedSalaryState[monthKey] || [];
+        const isSelected = forceSelected === null ? selectedIds.includes(emp.id) : forceSelected;
+        const hiredDate = String(emp.date_hired || '').slice(0, 10);
+
+        if (!isSelected || !hiredDate.startsWith(monthKey)) {
+          return { value: regularValue, isProrated: false };
+        }
+
+        const hireDay = Number(hiredDate.slice(8, 10));
+        const targetIndex = sortedScheds.findIndex(day => Number(day) >= hireDay);
+        const cutoffIndex = sortedScheds.findIndex(day => Number(day) === Number(cutoffDay));
+
+        if (targetIndex === -1 || cutoffIndex < targetIndex) {
+          return { value: 0, isProrated: true };
+        }
+        if (cutoffIndex > targetIndex) {
+          return { value: regularValue, isProrated: false };
+        }
+
+        const daysInMonth = new Date(this.selectedYear, this.selectedMonth + 1, 0).getDate();
+        const periodEnd = cutoffIndex === sortedScheds.length - 1
+          ? daysInMonth
+          : Math.min(Number(cutoffDay), daysInMonth);
+        const reportingDays = this.getShiftWeekdays(emp.shift_days);
+        let totalScheduledWorkdays = 0;
+        let payableDays = 0;
+        for (let day = 1; day <= daysInMonth; day++) {
+          const weekday = new Date(this.selectedYear, this.selectedMonth, day).getDay();
+          if (!reportingDays.has(weekday)) continue;
+          totalScheduledWorkdays++;
+          if (day >= hireDay && day <= periodEnd) payableDays++;
+        }
+
+        return {
+          value: totalScheduledWorkdays > 0
+            ? baseSalary * (payableDays / totalScheduledWorkdays)
+            : 0,
+          isProrated: true,
+          payableDays,
+          totalScheduledWorkdays
+        };
+      },
+
+      getEmployeeSalaryTotal(emp, sortedScheds, monthKey = this.monthKey()) {
+        return sortedScheds.reduce((sum, day) => sum + this.getProratedSalaryAllocation(emp, day, sortedScheds, monthKey).value, 0);
+      },
+
+      openProratedModal() {
+        const mk = this.monthKey();
+        const eligible = this.employees.filter(emp => String(emp.date_hired || '').slice(0, 7) === mk);
+        const selected = new Set(this.proratedSalaryState[mk] || []);
+        const sortedScheds = [...this.payoutSchedules].sort((a, b) => a - b);
+        const tbody = document.getElementById('prorated-employee-list');
+        document.getElementById('prorated-modal-description').textContent = `Select employees hired in ${MONTHS[this.selectedMonth]} ${this.selectedYear}. Earlier cutoffs become zero, the first eligible cutoff is prorated, and later cutoffs remain regular.`;
+
+        tbody.innerHTML = eligible.length ? eligible.map(emp => {
+          const name = [emp.first_name, emp.last_name].filter(Boolean).join(' ');
+          const checked = selected.has(emp.id);
+          const preview = sortedScheds.map(day => {
+            const allocation = this.getProratedSalaryAllocation(emp, day, sortedScheds, mk, checked);
+            const label = allocation.isProrated ? 'Pro Sal' : 'Sal';
+            const value = allocation.isProrated && allocation.value === 0 ? '₱0.00' : php(allocation.value);
+            return `<div><strong>Day ${day}:</strong> ${label}: ${esc(value)}</div>`;
+          }).join('');
+          return `<tr style="border-bottom:1px solid var(--border);">
+            <td style="padding:0.75rem; vertical-align:top;">
+              <label style="display:flex; align-items:flex-start; gap:0.55rem; cursor:pointer;">
+                <input type="checkbox" class="prorated-employee-checkbox" value="${esc(emp.id)}" ${checked ? 'checked' : ''} onchange="App.refreshProratedPreview()">
+                <span><strong>${esc(name || 'Unnamed Employee')}</strong><br><span style="font-size:0.72rem;color:var(--text-muted);">Hired ${esc(emp.date_hired || 'N/A')} · ${esc(emp.shift_days || 'Mon-Fri')}</span></span>
+              </label>
+            </td>
+            <td class="prorated-preview" data-emp-id="${esc(emp.id)}" style="padding:0.75rem; vertical-align:top; line-height:1.55; font-variant-numeric:tabular-nums;">${preview}</td>
+          </tr>`;
+        }).join('') : `<tr><td colspan="2" style="padding:2rem;text-align:center;color:var(--text-muted);">No employees were hired in this month.</td></tr>`;
+        document.getElementById('prorated-modal').classList.add('open');
+      },
+
+      refreshProratedPreview() {
+        const mk = this.monthKey();
+        const sortedScheds = [...this.payoutSchedules].sort((a, b) => a - b);
+        document.querySelectorAll('.prorated-preview').forEach(cell => {
+          const emp = this.employees.find(item => item.id === cell.dataset.empId);
+          const checkbox = document.querySelector(`.prorated-employee-checkbox[value="${cell.dataset.empId}"]`);
+          if (!emp || !checkbox) return;
+          cell.innerHTML = sortedScheds.map(day => {
+            const allocation = this.getProratedSalaryAllocation(emp, day, sortedScheds, mk, checkbox.checked);
+            const label = allocation.isProrated ? 'Pro Sal' : 'Sal';
+            const value = allocation.isProrated && allocation.value === 0 ? '₱0.00' : php(allocation.value);
+            return `<div><strong>Day ${day}:</strong> ${label}: ${esc(value)}</div>`;
+          }).join('');
+        });
+      },
+
+      async applyProratedSelection() {
+        const mk = this.monthKey();
+        const selectedIds = [...document.querySelectorAll('.prorated-employee-checkbox:checked')].map(input => input.value);
+        this.proratedSalaryState = { ...this.proratedSalaryState, [mk]: selectedIds };
+        const btn = document.getElementById('btn-apply-prorated');
+        btn.disabled = true;
+        try {
+          const { error } = await getSb().from('global_settings').upsert({
+            company_id: this.companyId,
+            key: 'prorated_salary_state',
+            value: this.proratedSalaryState
+          }, { onConflict: 'company_id,key' });
+          if (error) throw error;
+          document.getElementById('prorated-modal').classList.remove('open');
+          this.render();
+          toast('Prorated salary settings applied.');
+        } catch (error) {
+          console.error(error);
+          toast('Prorated settings could not be saved. Please try again.', 'error');
+        } finally {
+          btn.disabled = false;
+        }
+      },
+
       updateMonthDisplay() {
         const el = document.getElementById('summary-month-display');
         if (el) el.textContent = `${MONTHS[this.selectedMonth]} ${this.selectedYear}`;
@@ -661,9 +863,9 @@
       bindEvents() {
         document.getElementById('btn-prev-month').addEventListener('click', () => this.changeMonth(-1));
         document.getElementById('btn-next-month').addEventListener('click', () => this.changeMonth(1));
-        document.getElementById('btn-clear-all').addEventListener('click', () => document.getElementById('clear-all-modal').classList.add('open'));
-        document.getElementById('btn-cancel-clear').addEventListener('click', () => document.getElementById('clear-all-modal').classList.remove('open'));
-        document.getElementById('btn-confirm-clear').addEventListener('click', () => this.clearAllState());
+        document.getElementById('btn-prorated').addEventListener('click', () => this.openProratedModal());
+        document.getElementById('btn-cancel-prorated').addEventListener('click', () => document.getElementById('prorated-modal').classList.remove('open'));
+        document.getElementById('btn-apply-prorated').addEventListener('click', () => this.applyProratedSelection());
       },
 
       buildReportingToMap() {
@@ -835,12 +1037,13 @@
 
           // Payout columns
           let payoutCellsHtml = '';
-          const numScheds = sortedScheds.length || 1;
-          const salaryPortion = baseSalary / numScheds;
+          const employeeSalaryTotal = this.getEmployeeSalaryTotal(emp, sortedScheds, mk);
           const instPayouts = this.calculateInstallerPayouts(emp.id, mk, sortedScheds);
           sumInstPayouts += instPayouts.totalInstallationPayout;
           
           sortedScheds.forEach((day, sIdx) => {
+            const salaryAllocation = this.getProratedSalaryAllocation(emp, day, sortedScheds, mk);
+            const salaryPortion = salaryAllocation.value;
             const adjsVal  = this._adjsForSchedule(emp.id, day, mk, sortedScheds);
             const commsVal  = this._commsForSchedule(emp.id, day, mk, sortedScheds);
             const instPortion = instPayouts.cutoffPayouts[day] || 0;
@@ -853,7 +1056,8 @@
             const isPast = this.isPastDay(day);
 
             const breakdownItems = [];
-            if (salaryPortion > 0) breakdownItems.push(`Sal: ${php(salaryPortion)}`);
+            if (salaryAllocation.isProrated) breakdownItems.push(`Pro Sal: ${salaryPortion === 0 ? '₱0.00' : php(salaryPortion)}`);
+            else if (salaryPortion > 0) breakdownItems.push(`Sal: ${php(salaryPortion)}`);
             if (commsVal > 0) breakdownItems.push(`Com: ${php(commsVal)}`);
             if (instPortion > 0) breakdownItems.push(`Inst: ${php(instPortion)}`);
             if (adjsVal !== 0) breakdownItems.push(`Adj: ${php(adjsVal)}`);
@@ -875,7 +1079,7 @@
             </td>`;
           });
 
-          const grandTotal = baseSalary + empComms + empAdjs + totalSpecials + instPayouts.totalInstallationPayout + empGlAdd + empGlDed;
+          const grandTotal = employeeSalaryTotal + empComms + empAdjs + totalSpecials + instPayouts.totalInstallationPayout + empGlAdd + empGlDed;
           sumGrandTotal += grandTotal;
 
           return `<tr class="employee-row" data-emp-id="${esc(emp.id)}">
@@ -1187,13 +1391,15 @@
 
         if (allChecked) {
           const baseSalary   = emp.salary || 0;
+          const sortedScheds = [...scheds].sort((a, b) => a - b);
+          const salaryPaid   = this.getEmployeeSalaryTotal(emp, sortedScheds, mk);
           const empComms     = this._commissionForEmpMonth(empId, mk);
           const empAdjObjs   = this.adjustmentsList.filter(a => { const d = new Date(a.date); return a.employeeId === empId && `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}` === mk; });
           const empSpecs     = this.specialSchedules.filter(s => s.employeeId === empId);
           const totalAdjs    = empAdjObjs.reduce((s, a) => s + (Number(a.value) || 0), 0);
           const totalSpecs   = empSpecs.reduce((s, x) => s + (Number(x.value) || 0), 0);
 
-          const instPayouts = this.calculateInstallerPayouts(empId, mk, [...scheds].sort((a, b) => a - b));
+          const instPayouts = this.calculateInstallerPayouts(empId, mk, sortedScheds);
           const finalAdjObjs = [...empAdjObjs];
           let finalTotalAdjs = totalAdjs;
           if (instPayouts.thresholdEarnings > 0) {
@@ -1236,7 +1442,7 @@
             finalTotalAdjs -= empGlDed;
           }
  
-          const grandTotal   = baseSalary + empComms + finalTotalAdjs + totalSpecs;
+          const grandTotal   = salaryPaid + empComms + finalTotalAdjs + totalSpecs;
 
           let resolvedDeptName = emp.department || '—';
           const matchedDept = (this.companyStructure?.departments || []).find(d => d.managerId === empId || (d.subteams || []).some(s => s.managerId === empId || (s.colleagueIds || []).includes(empId)));
@@ -1245,7 +1451,7 @@
           const payload = {
             company_id: this.companyId, employee_id: empId, payout_month: mk,
             department: resolvedDeptName, position: emp.title || '—',
-            salary: baseSalary, basic_paid: baseSalary,
+            salary: baseSalary, basic_paid: salaryPaid,
             commissions: empComms, adjustments: finalTotalAdjs,
             reimbursements: 0, special_payouts: totalSpecs,
             total_payout: grandTotal,
@@ -1262,245 +1468,17 @@
       },
 
       // ── Shortcut PDF save from summary row ──
-      async shortcutSavePayslip(empId) {
+      shortcutSavePayslip(empId) {
         const emp = this.employees.find(e => e.id === empId);
         if (!emp) return;
-        const mk = this.monthKey();
-
-        // Build payslip HTML inline
-        const baseSalary = emp.salary || 0;
-        const empComms   = this._commissionForEmpMonth(empId, mk);
-        let empAdjs      = this.adjustmentsList.filter(a => { const d = new Date(a.date); return a.employeeId === empId && `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}` === mk; });
-        const empSpecs   = this.specialSchedules.filter(s => s.employeeId === empId);
-
-        let thresholdEarnings = 0;
-        let thresholdDescription = '';
-        let serviceEarnings = 0;
-        let serviceDescription = '';
-
-        const thresholdAdj = empAdjs.find(a => a.label === 'Earnings Past Threshold');
-        if (thresholdAdj) {
-          thresholdEarnings = Number(thresholdAdj.value || thresholdAdj.amount || 0);
-          thresholdDescription = thresholdAdj.description || '';
-          empAdjs = empAdjs.filter(a => a.label !== 'Earnings Past Threshold');
-        }
-        const serviceAdj = empAdjs.find(a => a.label === 'Service Job Earnings');
-        if (serviceAdj) {
-          serviceEarnings = Number(serviceAdj.value || serviceAdj.amount || 0);
-          serviceDescription = serviceAdj.description || '';
-          empAdjs = empAdjs.filter(a => a.label !== 'Service Job Earnings');
-        }
-
-        const sortedScheds = [...this.payoutSchedules].sort((a, b) => a - b) || [30];
-        let instPayouts = null;
-
-        if (thresholdEarnings === 0 && serviceEarnings === 0) {
-          instPayouts = this.calculateInstallerPayouts(empId, mk, sortedScheds);
-          thresholdEarnings = instPayouts.thresholdEarnings;
-          thresholdDescription = instPayouts.thresholdDescription;
-          serviceEarnings = instPayouts.serviceEarnings;
-          serviceDescription = instPayouts.serviceDescription;
-        } else {
-          instPayouts = this.calculateInstallerPayouts(empId, mk, sortedScheds);
-        }
-
-        const empGlAdd = this._glAdditionsForEmpMonth(empId, mk);
-        const empGlDed = this._glDeductionsForEmpMonth(empId, mk);
-
-        const totalAdjs   = empAdjs.reduce((s, a) => s + (Number(a.value) || 0), 0);
-        const totalSpecs  = empSpecs.reduce((s, x) => s + (Number(x.value) || 0), 0);
-        const grandTotal  = baseSalary + empComms + totalAdjs + totalSpecs + thresholdEarnings + serviceEarnings + empGlAdd - empGlDed;
-
-        // Fetch payslip config lazily
-        let payslipCfg = { logoStyle: 'light', signatoryName: 'Authorized Signatory', signatureUrl: '' };
-        let compCfg = {};
-        try {
-          const [{ data: pc }, { data: cc }] = await Promise.all([
-            getSb().from('global_settings').select('value').eq('key', 'payslip_template_config').eq('company_id', this.companyId).maybeSingle(),
-            getSb().from('global_settings').select('value').eq('key', 'company_profile_config').eq('company_id', this.companyId).maybeSingle(),
-          ]);
-          payslipCfg = pc?.value || payslipCfg;
-          compCfg    = cc?.value || {};
-        } catch (_) {}
-
-        const logoUrl    = payslipCfg.logoStyle === 'dark' ? compCfg.logoDark : compCfg.logoLight;
-        const compName   = compCfg.companyName || 'Brightkey Solutions';
-        const compAddr   = [compCfg.companyAddressLine1, compCfg.companyAddressLine2].filter(Boolean).join('<br>') || '';
-        const compContact = [compCfg.email, compCfg.phone].filter(Boolean).join('<br>');
-        const monthText  = `${MONTHS[this.selectedMonth]} ${this.selectedYear}`;
-        const empFullName = [emp.first_name, emp.last_name].filter(Boolean).join(' ');
-
-        let breakdownHtml = `<tr><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;font-weight:600;">Basic Salary</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;color:#4b5563;">Monthly Basic Salary</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;text-align:right;font-variant-numeric:tabular-nums;">${php(baseSalary)}</td></tr>`;
-        if (thresholdEarnings > 0) {
-          breakdownHtml += `<tr><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;font-weight:600;">Earnings Past Threshold</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;color:#4b5563;line-height:1.5;">${esc(thresholdDescription).replace(/\n/g, '<br>')}</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;text-align:right;font-variant-numeric:tabular-nums;">${php(thresholdEarnings)}</td></tr>`;
-        }
-        if (serviceEarnings > 0) {
-          breakdownHtml += `<tr><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;font-weight:600;">Service Job Earnings</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;color:#4b5563;line-height:1.5;">${esc(serviceDescription).replace(/\n/g, '<br>')}</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;text-align:right;font-variant-numeric:tabular-nums;">${php(serviceEarnings)}</td></tr>`;
-        }
-        if (empComms > 0) breakdownHtml += `<tr><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;font-weight:600;">Commissions</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;color:#4b5563;">Sales Commissions</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;text-align:right;font-variant-numeric:tabular-nums;">${php(empComms)}</td></tr>`;
-        if (empGlAdd > 0) breakdownHtml += `<tr><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;font-weight:600;">Reimbursement</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;color:#4b5563;">Reimbursement</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;text-align:right;font-variant-numeric:tabular-nums;">${php(empGlAdd)}</td></tr>`;
-        if (empGlDed > 0) breakdownHtml += `<tr><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;font-weight:600;">Cash Advance</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;color:#4b5563;">Cash Advance</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;text-align:right;font-variant-numeric:tabular-nums;">${php(empGlDed)}</td></tr>`;
-
-        empSpecs.forEach(spec => {
-          const val = Number(spec.value) || 0;
-          if (val > 0) {
-            breakdownHtml += `<tr><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;font-weight:600;">${esc(spec.label || 'Special Payout')}</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;color:#4b5563;">Special Payout (Day ${spec.day})</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;text-align:right;font-variant-numeric:tabular-nums;">${php(val)}</td></tr>`;
-          }
+        const params = new URLSearchParams({
+          employee: empId,
+          month: this.monthKey(),
+          download: '1'
         });
-
-        empAdjs.forEach(adj => {
-          const val = Number(adj.value || adj.amount || 0);
-          if (val !== 0) {
-            breakdownHtml += `<tr><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;font-weight:600;">Adjustments</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;color:#4b5563;">${esc(adj.label || adj.description || 'Adjustment')}</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;text-align:right;font-variant-numeric:tabular-nums; color:${val < 0 ? 'var(--danger)' : 'inherit'};">${val < 0 ? '-' : ''}${php(Math.abs(val))}</td></tr>`;
-          }
-        });
-
-        const allocationItems = [];
-
-        sortedScheds.forEach(day => {
-          const sp = baseSalary / sortedScheds.length;
-          const av = empAdjs.filter(a => { const d = new Date(a.date); return this.getScheduleDayForItemDay(d.getUTCDate(), sortedScheds) === day; }).reduce((s, a) => s + (Number(a.value) || 0), 0);
-          const cv = this._commsForSchedule(empId, day, mk, sortedScheds);
-          const glAddVal = this._glAdditionsForSchedule(empId, day, mk, sortedScheds);
-          const glDedVal = this._glDeductionsForSchedule(empId, day, mk, sortedScheds);
-          
-          const instPortion = instPayouts.cutoffPayouts[day] || 0;
-
-          const total = sp + av + cv + instPortion + glAddVal - glDedVal;
-          allocationItems.push({
-            day: Number(day),
-            label: `Cutoff Payout (Day ${day})`,
-            value: total
-          });
-        });
-
-        // Fetch Cash Advances from GL and list them in Payout Schedule Allocation with dates
-        const glCashAdvances = (this.generalJournalEntries || []).filter(r => {
-          const assignedEmpId = this.accountAssignments[r.account_id];
-          if (assignedEmpId !== empId) return false;
-          const accName = (this.glAccountsMap?.[r.account_id] || '').toLowerCase();
-          if (!accName.includes('due from')) return false;
-          const d = new Date(r.date);
-          const entryMonthKey = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
-          return entryMonthKey === mk;
-        });
-
-        glCashAdvances.forEach(r => {
-          const val = (parseFloat(r.debit) || 0) - (parseFloat(r.credit) || 0);
-          if (val > 0) {
-            const d = new Date(r.date);
-            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-            const formattedDate = `${months[d.getUTCMonth()]} ${String(d.getUTCDate()).padStart(2, '0')}, ${d.getUTCFullYear()}`;
-            allocationItems.push({
-              day: d.getUTCDate(),
-              label: `Cash Advance (${formattedDate})`,
-              value: val
-            });
-          }
-        });
-
-        empSpecs.forEach(spec => {
-          const val = Number(spec.value) || 0;
-          if (val > 0) {
-            allocationItems.push({
-              day: Number(spec.day),
-              label: `Special Payout (Day ${spec.day})`,
-              value: val
-            });
-          }
-        });
-
-        allocationItems.sort((a, b) => a.day - b.day);
-
-        let cutoffHtml = '';
-        let verifiedTotal = 0;
-        allocationItems.forEach(item => {
-          verifiedTotal += item.value;
-          cutoffHtml += `<div style="display:flex;justify-content:space-between;padding:0.5rem 0;font-size:0.85rem;border-bottom:1px dashed #e5e7eb;"><span style="font-weight:500;color:#4b5563;">${esc(item.label)}</span><span style="font-weight:700;color:#111827;font-variant-numeric:tabular-nums;margin-right:12px;">${php(item.value)}</span></div>`;
-        });
-
-        const sigImg = payslipCfg.signatureUrl ? `<img src="${payslipCfg.signatureUrl}" alt="Signature" style="max-height:100px;max-width:170px;object-fit:contain;display:block;">` : `<div style="height:100px;width:150px;"></div>`;
-        const logoImg = logoUrl ? `<img src="${esc(logoUrl)}" alt="Logo" style="max-height:48px;max-width:150px;display:block;margin-bottom:0.5rem;filter:grayscale(1);">` : '';
-
-        const sheetHtml = `<div style="display:flex;flex-direction:column;justify-content:space-between;min-height:250mm;padding:3rem 3rem 2.5rem 3rem;box-sizing:border-box;background:#fff;color:#111827;">
-          <div>
-            <div style="display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:1rem;margin-bottom:1.5rem;">
-              <div>${logoImg}</div>
-              <div style="text-align:right;font-size:0.7rem;line-height:1.25;color:#4b5563;"><strong style="display:block;margin-bottom:3px;color:#111827;font-size:0.7rem;font-weight:800;">${esc(compName)}</strong>${compAddr}<br>${compContact}</div>
-            </div>
-            <div style="text-align:center;margin-bottom:1.5rem;"><div style="font-size:1.6rem;font-weight:900;letter-spacing:1px;color:#111827;text-transform:uppercase;">Payslip</div><div style="font-size:0.95rem;color:#4b5563;margin-top:0.1rem;"><strong>${esc(monthText)}</strong></div></div>
-            <div style="background:#f9fafb;padding:0.85rem;border-radius:6px;margin-bottom:1.5rem;border:1px solid #e5e7eb;display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;">
-              <div><span style="font-size:0.65rem;text-transform:uppercase;color:#6b7280;font-weight:600;display:block;">Employee Name</span><strong style="font-size:0.8rem;color:#111827;">${esc(empFullName)}</strong></div>
-              <div><span style="font-size:0.65rem;text-transform:uppercase;color:#6b7280;font-weight:600;display:block;">Position / Title</span><strong style="font-size:0.8rem;color:#111827;">${esc(emp.title || '—')}</strong></div>
-            </div>
-            <div style="margin-bottom:2rem;"><div style="font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:0.5rem;">Earnings Breakdown</div>
-              <table style="width:100%;border-collapse:collapse;font-size:0.85rem;"><thead><tr style="background:#f3f4f6;text-align:left;"><th style="padding:0.5rem 0.75rem;border-bottom:1px solid #d1d5db;font-weight:700;">Type</th><th style="padding:0.5rem 0.75rem;border-bottom:1px solid #d1d5db;font-weight:700;">Description</th><th style="padding:0.5rem 0.75rem;border-bottom:1px solid #d1d5db;text-align:right;font-weight:700;">Amount</th></tr></thead><tbody>${breakdownHtml}</tbody></table>
-            </div>
-            <div style="margin-bottom:2rem;max-width:400px;margin-left:auto;"><div style="font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:0.5rem;border-bottom:1px solid #111827;padding-bottom:0.25rem;">Payout Schedule Allocation</div>${cutoffHtml}<div style="display:flex;justify-content:space-between;padding:0.75rem 0;font-size:1rem;font-weight:800;border-top:2px solid #111827;"><span>TOTAL PAYOUT</span><span style="font-variant-numeric:tabular-nums;margin-right:12px;">${php(verifiedTotal)}</span></div></div>
-          </div>
-          <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:auto;padding-top:2rem;">
-            <div style="font-size:0.72rem;color:#6b7280;max-width:320px;line-height:1.2;">This payslip is generated through Brightkey ERP and serves as an official payroll record.</div>
-            <div style="display:flex;flex-direction:column;align-items:center;width:180px;"><div style="height:105px;display:flex;align-items:center;justify-content:center;width:100%;">${sigImg}</div><div style="font-size:0.85rem;font-weight:700;border-top:1px solid #111827;width:100%;text-align:center;padding-top:0.25rem;margin-top:0.25rem;">${esc(payslipCfg.signatoryName || 'Authorized Signatory')}</div><div style="font-size:0.72rem;color:#6b7280;width:100%;text-align:center;">Authorized Signatory</div></div>
-          </div>
-        </div>`;
-
-        const container = document.getElementById('payslip-a4-sheet');
-        container.innerHTML = sheetHtml;
-
-        const fileName = `Payslip_${empFullName.replace(/\s+/g,'_')}_${monthText.replace(/\s+/g,'_')}.pdf`;
-        const opt = {
-          margin:       [10, 10, 10, 10],
-          filename:     fileName,
-          image:        { type: 'jpeg', quality: 0.98 },
-          html2canvas:  { scale: 2, useCORS: true, letterRendering: true },
-          jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
-        };
-
-        const originalBorder = container.style.border;
-        const originalShadow = container.style.boxShadow;
-        container.style.border = 'none';
-        container.style.boxShadow = 'none';
-
-        try {
-          await html2pdf().set(opt).from(container).save();
-          toast('Payslip PDF saved.', 'success');
-        } catch (err) {
-          console.error(err);
-          toast('PDF export failed: ' + err.message, 'error');
-        } finally {
-          container.style.border = originalBorder;
-          container.style.boxShadow = originalShadow;
-          container.innerHTML = ''; // Clear container
-        }
+        window.location.href = `/dashboard/payout-tracker/payslip?${params.toString()}`;
       },
 
-      // ── Clear All ──
-      async clearAllState() {
-        document.getElementById('clear-all-modal').classList.remove('open');
-        this.adjustmentsList = [];
-        this.regularPayoutState   = {};
-        this.specialPayoutState   = {};
-        this.commissionPayoutState = {};
-        const el = document.getElementById('save-status');
-        if (el) el.textContent = 'Saving changes...';
-        try {
-          const sb = getSb();
-          await Promise.all([
-            sb.from('employee_adjustments').delete().eq('company_id', this.companyId),
-            sb.from('payslip_records').delete().eq('company_id', this.companyId),
-            sb.from('global_settings').upsert({ key: 'regular_payout_state',    company_id: this.companyId, value: {} }),
-            sb.from('global_settings').upsert({ key: 'special_payout_state',    company_id: this.companyId, value: {} }),
-            sb.from('global_settings').upsert({ key: 'commission_payout_state', company_id: this.companyId, value: {} }),
-          ]);
-          toast('All data cleared.');
-          if (el) { el.textContent = 'All changes saved'; setTimeout(() => { if (el.textContent === 'All changes saved') el.textContent = ''; }, 3000); }
-          this.render();
-        } catch (e) {
-          console.error(e);
-          toast('Clear failed: ' + e.message, 'error');
-          if (el) el.textContent = 'Save failed';
-        }
-      },
     };
 
     function checkSkuEligibility(product, eligibilityRules) {

@@ -30,6 +30,10 @@
           <span style="display:inline-block; width:8px; height:8px; background:var(--cyan); border-radius:50%; animation: pulse 2s infinite;"></span>
           <span style="font-weight:600; color:var(--text-primary); font-size:0.85rem;">Unpublished Changes</span>
         </div>
+        <button class="btn btn-outline" id="btn-price-snapshot" onclick="openSnapshotModal()" title="Save or load pricing snapshots" style="margin-right: 0.5rem; gap: 0.35rem;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px;"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+          Price Snapshot
+        </button>
         <button class="btn btn-success" id="btn-publish" title="Trigger Vercel build to regenerate all product pages" disabled>
           <svg viewBox="0 0 24 24"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
           Publish to Live
@@ -93,6 +97,10 @@
           <option value="draft">Draft</option>
         </select>
         <div class="toolbar-gap"></div>
+        <button class="btn btn-outline" id="btn-quick-edit-prices" style="display: inline-flex; align-items: center; gap: 0.4rem; margin-right: 0.5rem;" onclick="toggleQuickPriceEdit()">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+          <span id="quick-edit-btn-text">Edit Price</span>
+        </button>
         <button class="btn btn-outline" id="btn-batch-edit" disabled style="display: inline-flex; align-items: center; gap: 0.4rem; margin-right: 0.5rem;">
           <svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
           Batch Edit (<span id="batch-edit-count">0</span>)
@@ -102,7 +110,7 @@
           Add Product
         </button>
       </div>
- 
+
        <!-- Table -->
        <div class="table-scroll">
          <div class="table-responsive">
@@ -244,7 +252,7 @@
       <div class="form-section">
         <div class="form-section-title">Ecommerce & Inventory Settings</div>
         <div style="display:flex; flex-direction:column; gap:1.25rem;">
-          
+
           <div style="display:flex; align-items:flex-start; gap:0.75rem;">
             <label class="toggle-switch" style="flex-shrink:0; margin-top:2px;">
               <input type="checkbox" id="f-show-on-ecommerce" checked />
@@ -389,13 +397,13 @@
       <div class="form-section" style="margin-top:2rem; border-top:1px solid var(--border); padding-top:2rem;">
         <h3>Comparison Table</h3>
         <p style="color:var(--text-secondary); font-size:0.9rem; margin-bottom:1.5rem;">Configure a product comparison table that highlights this product.</p>
-        
+
         <div id="comparison-table-editor" class="aplus-block" style="background:var(--bg-surface); border:1px solid var(--border); border-radius:var(--radius-md); padding:1rem;">
           <div style="display:flex; flex-direction:column; gap:0.5rem; margin-bottom:1rem;">
             <label class="form-label">Table Title Header</label>
             <input type="text" id="comp-title-header" class="form-input" placeholder="e.g. Compare with similar items" />
           </div>
-          
+
           <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:1rem; margin-bottom:1rem;">
             <div>
               <label class="form-label">Compare SKU 1</label>
@@ -563,13 +571,56 @@
 </div>
 
 <!-- Confirm Delete Modal -->
-<div class="modal-overlay" id="confirm-modal">
+<div class="modal-overlay" id="confirm-modal" style="z-index: 1050;">
   <div class="modal-box">
     <div class="modal-title" id="confirm-title">Delete Product?</div>
     <div class="modal-body" id="confirm-body">This will permanently delete the product and all its linked features.</div>
     <div class="modal-actions">
       <button class="btn btn-outline" id="confirm-cancel">Cancel</button>
       <button class="btn btn-danger" id="confirm-ok">Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- Price Snapshot Modal -->
+<div class="modal-overlay" id="snapshot-modal">
+  <div class="modal-box" style="width: 500px; max-width: 95%;">
+    <div class="modal-title">Price Snapshots</div>
+
+    <!-- Tab navigation -->
+    <div style="display: flex; border-bottom: 1px solid var(--border); margin-bottom: 1.25rem;">
+      <button type="button" id="tab-btn-save-snapshot" class="tab-btn active" style="flex: 1; padding: 0.75rem; text-align: center; font-weight: 700; border-bottom: 2px solid var(--cyan);" onclick="switchSnapshotModalTab('save')">Save Snapshot</button>
+      <button type="button" id="tab-btn-load-snapshot" class="tab-btn" style="flex: 1; padding: 0.75rem; text-align: center; font-weight: 600;" onclick="switchSnapshotModalTab('load')">Load Snapshot</button>
+    </div>
+
+    <!-- SAVE TAB CONTENT -->
+    <div id="snapshot-tab-save">
+      <div style="margin-bottom: 1rem;">
+        <label style="display: block; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.35rem;">Snapshot Name</label>
+        <input type="text" id="new-snapshot-name" placeholder="e.g. July 2026 Promo Baseline" style="width: 100%; height: 36px; padding: 0 0.75rem; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 6px; font-size: 0.85rem; color: var(--text-primary); outline: none; box-sizing: border-box;" />
+      </div>
+      <div style="font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 1.5rem; line-height: 1.45;">
+        Save prices for all products currently in the catalog.
+      </div>
+      <div class="modal-actions" style="margin-top: 1rem; display: flex; justify-content: flex-end; gap: 0.5rem;">
+        <button type="button" class="btn btn-outline" onclick="closeSnapshotModal()">Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="saveNewSnapshot()">Save Snapshot</button>
+      </div>
+    </div>
+
+    <!-- LOAD TAB CONTENT -->
+    <div id="snapshot-tab-load" style="display: none;">
+      <div style="font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 0.85rem; line-height: 1.45;">
+        Select a saved snapshot to restore pricing. <strong style="color: var(--danger);">Warning:</strong> Loading a snapshot will overwrite all current prices in the catalog.
+      </div>
+      <div id="saved-snapshots-list" style="max-height: 220px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-elevated); margin-bottom: 1.5rem; display: flex; flex-direction: column;">
+        <!-- Dynamically populated list of snapshots -->
+        <div style="padding: 1.5rem; text-align: center; color: var(--text-muted); font-size: 0.8rem;">No snapshots saved yet.</div>
+      </div>
+      <div class="modal-actions" style="margin-top: 1rem; display: flex; justify-content: flex-end; gap: 0.5rem;">
+        <button type="button" class="btn btn-outline" onclick="closeSnapshotModal()">Cancel</button>
+        <button type="button" class="btn btn-primary" id="btn-load-snapshot-action" onclick="loadSelectedSnapshot()" disabled>Load Selected</button>
+      </div>
     </div>
   </div>
 </div>
