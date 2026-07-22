@@ -906,19 +906,29 @@
           breakdownHtml += `<tr><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;font-weight:600;vertical-align:top;">Special Payouts</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;color:#4b5563;vertical-align:top;line-height:1.5;">${labels}</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;text-align:right;font-variant-numeric:tabular-nums;vertical-align:top;line-height:1.5;width:120px;">${amounts}</td></tr>`;
         }
 
-        // Cutoff schedule rows
-        let cutoffHtml = '';
-        sortedScheds.forEach((day, sIdx) => {
+        // Payout schedule rows. Special payouts keep their own configured day and
+        // must not be folded into the next regular salary cutoff.
+        const scheduleRows = [];
+        const specialByDay = new Map();
+        empSpecs.forEach(spec => {
+          const day = Number(spec.day) || 1;
+          specialByDay.set(day, (specialByDay.get(day) || 0) + (Number(spec.value) || 0));
+        });
+        specialByDay.forEach((value, day) => {
+          scheduleRows.push({ day, order: 0, label: `Special Payout (Day ${day})`, value });
+        });
+        sortedScheds.forEach(day => {
           const sp = this.getProratedSalaryAllocation(emp, day, sortedScheds, mk).value;
           const av = adjs.filter(a => { const d = new Date(a.date); return getSchedDay(d.getUTCDate(), sortedScheds) === day; }).reduce((s, a) => s + (Number(a.amount) || 0), 0);
           const cv = parsedCommAssignments.filter(c => { const d = new Date(c.date); return getSchedDay(d.getUTCDate(), sortedScheds) === day; }).reduce((s, c) => s + c.amount, 0);
-          const xv = empSpecs.filter(s => getSchedDay(Number(s.day), sortedScheds) === day).reduce((s, x) => s + (Number(x.value) || 0), 0);
-          
           const instPortion = instPayouts.cutoffPayouts[day] || 0;
 
-          const total = sp + av + cv + xv + instPortion;
-          cutoffHtml += `<div style="display:flex;justify-content:space-between;padding:0.5rem 0;font-size:0.85rem;border-bottom:1px dashed #e5e7eb;"><span style="font-weight:500;color:#4b5563;">Cutoff Payout (Day ${day})</span><span style="font-weight:700;color:#111827;font-variant-numeric:tabular-nums;margin-right:12px;">${php(total)}</span></div>`;
+          scheduleRows.push({ day, order: 1, label: `Cutoff Payout (Day ${day})`, value: sp + av + cv + instPortion });
         });
+        const cutoffHtml = scheduleRows
+          .sort((a, b) => a.day - b.day || a.order - b.order)
+          .map(row => `<div style="display:flex;justify-content:space-between;padding:0.5rem 0;font-size:0.85rem;border-bottom:1px dashed #e5e7eb;"><span style="font-weight:500;color:#4b5563;">${row.label}</span><span style="font-weight:700;color:#111827;font-variant-numeric:tabular-nums;margin-right:12px;">${php(row.value)}</span></div>`)
+          .join('');
         const verifiedTotal = salaryPaid + empComms + totalAdjs + totalSpecs + instPayouts.totalInstallationPayout;
 
         // Company assets

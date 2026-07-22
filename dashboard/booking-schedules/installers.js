@@ -470,11 +470,11 @@
         return [...new Set(roles)];
       };
       const bookingCompleted = ['done', 'completed', 'finished'].includes(String(booking.status || '').toLowerCase());
-      if (!doors.length) return bookingAssigned ? [{ roles: getRoles(bookingMatches), completed: bookingCompleted }] : [];
+      if (!doors.length) return bookingAssigned ? [{ roles: getRoles(bookingMatches), completed: bookingCompleted, door: null }] : [];
       return doors.flatMap(door => {
         const matches = (Array.isArray(door?.installers) ? door.installers : []).filter(installer => installer?.id === employeeId);
         if (!matches.length && (hasDoorAssignments || !bookingAssigned)) return [];
-        return [{ roles: getRoles(matches.length ? matches : bookingMatches), completed: Boolean(door?.completed) || bookingCompleted }];
+        return [{ roles: getRoles(matches.length ? matches : bookingMatches), completed: Boolean(door?.completed) || bookingCompleted, door }];
       });
     }
 
@@ -553,4 +553,78 @@
       assignmentBody.innerHTML = summaries.map(s => `<tr><td>${installerSummaryPerson(s.employee)}</td><td>${escapeHtml(s.employee.city || '—')}</td><td>${formatDate(s.lastAssigned)}</td><td class="installer-metric-lead">${metric(s.lead, s.scheduledLead)}</td><td class="installer-metric-assist">${metric(s.assist, s.scheduledAssist)}</td><td class="installer-summary-row-total">${metric(s.installationDone, s.installationScheduled)}</td><td class="installer-metric-ocular">${metric(s.ocular, s.scheduledOcular)}</td><td class="installer-metric-backjob">${metric(s.backjobs, s.scheduledBackjobs)}</td><td class="installer-summary-row-total">${s.total}</td><td><span class="installer-metric-lead">${formatInstallerSummaryCredit(s.credit)}</span><span class="installer-threshold-limit">/${formatInstallerSummaryCredit(threshold)}</span></td><td class="installer-metric-assist">${s.service}</td></tr>`).join('');
       const totals = summaries.reduce((a, s) => ({ lead:a.lead+s.lead, scheduledLead:a.scheduledLead+s.scheduledLead, assist:a.assist+s.assist, scheduledAssist:a.scheduledAssist+s.scheduledAssist, installationDone:a.installationDone+s.installationDone, installationScheduled:a.installationScheduled+s.installationScheduled, ocular:a.ocular+s.ocular, scheduledOcular:a.scheduledOcular+s.scheduledOcular, backjobs:a.backjobs+s.backjobs, scheduledBackjobs:a.scheduledBackjobs+s.scheduledBackjobs, total:a.total+s.total, credit:a.credit+s.credit, service:a.service+s.service, extra:a.extra+s.extra }), { lead:0, scheduledLead:0, assist:0, scheduledAssist:0, installationDone:0, installationScheduled:0, ocular:0, scheduledOcular:0, backjobs:0, scheduledBackjobs:0, total:0, credit:0, service:0, extra:0 });
       document.getElementById('installer-assignment-tfoot').innerHTML = `<tr><td colspan="3">Total</td><td class="installer-metric-lead">${metric(totals.lead, totals.scheduledLead)}</td><td class="installer-metric-assist">${metric(totals.assist, totals.scheduledAssist)}</td><td>${metric(totals.installationDone, totals.installationScheduled)}</td><td class="installer-metric-ocular">${metric(totals.ocular, totals.scheduledOcular)}</td><td class="installer-metric-backjob">${metric(totals.backjobs, totals.scheduledBackjobs)}</td><td>${totals.total}</td><td>—</td><td class="installer-metric-assist">${totals.service}</td></tr>`;
+      window.drawInstallerAssignmentHistory();
     };
+
+    let installerHistorySelectedIds = null;
+
+    function getInstallerHistorySkus(booking, job) {
+      const doorProducts = Array.isArray(job?.door?.products) ? job.door.products : [];
+      let values = doorProducts.map(product => typeof product === 'string' ? product : product?.sku).filter(Boolean);
+      if (!values.length) {
+        const products = Array.isArray(booking.products) ? booking.products : (() => {
+          try { const parsed = JSON.parse(booking.products || '[]'); return Array.isArray(parsed) ? parsed : []; } catch (_) { return []; }
+        })();
+        values = products.map(product => typeof product === 'string' ? product : product?.sku).filter(Boolean);
+      }
+      if (!values.length) values = String(booking.product_skus || '').split(/\s*\|\s*|\s*,\s*/).filter(Boolean);
+      return [...new Set(values)].join(', ') || '—';
+    }
+
+    window.drawInstallerAssignmentHistory = function() {
+      const tbody = document.getElementById('installer-history-tbody');
+      const options = document.getElementById('installer-history-filter-options');
+      if (!tbody || !options) return;
+
+      const configuredNames = new Set((window._installerAssignmentNames || []).map(name => String(name).trim().toLowerCase()));
+      configuredNames.add('installer');
+      configuredNames.add('installers');
+      const installers = dbEmployees.filter(employee => String(employee.assignment || '').split(',')
+        .map(name => name.trim().toLowerCase()).some(name => configuredNames.has(name)));
+
+      const availableIds = new Set(installers.map(employee => employee.id));
+      if (installerHistorySelectedIds === null) installerHistorySelectedIds = new Set(availableIds);
+      else installerHistorySelectedIds = new Set([...installerHistorySelectedIds].filter(id => availableIds.has(id)));
+
+      options.innerHTML = installers.map(employee => {
+        const name = `${employee.first_name || ''} ${employee.last_name || ''}`.trim() || 'Unnamed installer';
+        return `<label class="installer-filter-option"><input type="checkbox" value="${escapeHtml(employee.id)}" ${installerHistorySelectedIds.has(employee.id) ? 'checked' : ''}><span>${escapeHtml(name)}</span></label>`;
+      }).join('');
+      options.querySelectorAll('input[type="checkbox"]').forEach(input => {
+        input.addEventListener('change', () => {
+          if (input.checked) installerHistorySelectedIds.add(input.value);
+          else installerHistorySelectedIds.delete(input.value);
+          renderInstallerHistoryRows(installers);
+        });
+      });
+      renderInstallerHistoryRows(installers);
+    };
+
+    function renderInstallerHistoryRows(installers) {
+      const tbody = document.getElementById('installer-history-tbody');
+      if (!tbody) return;
+      const rows = [];
+      installers.filter(employee => installerHistorySelectedIds.has(employee.id)).forEach(employee => {
+        dbBookings.forEach(booking => {
+          if (String(booking.status || '').toLowerCase() === 'cancelled') return;
+          const type = String(booking.product_skus || '').trim().toLowerCase();
+          const orderNo = String(booking.order_no || '').toUpperCase();
+          const dayOff = type === 'day off' || orderNo.startsWith('DO-');
+          if (dayOff) return;
+          const isOcular = type === 'ocular' || orderNo.startsWith('OC-');
+          const isBackjob = type === 'backjob' || orderNo.startsWith('BJ-');
+          getInstallerSummaryJobs(booking, employee.id).forEach(job => {
+            const roles = isOcular ? ['ocular'] : isBackjob ? ['backjob'] : job.roles.filter(role => role === 'lead' || role === 'assist' || role === 'service');
+            if (!roles.length) return;
+            rows.push({ employee, date: booking.scheduled_date || '', customer: booking.customer_name || '—', sku: getInstallerHistorySkus(booking, job), assignment: roles.map(role => role.charAt(0).toUpperCase() + role.slice(1)).join(', ') });
+          });
+        });
+      });
+      rows.sort((a, b) => a.date.localeCompare(b.date) || a.customer.localeCompare(b.customer));
+      if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="installer-summary-empty">No assignments found for the selected installers.</td></tr>';
+        return;
+      }
+      const formatDate = value => value ? new Date(`${value}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : '—';
+      tbody.innerHTML = rows.map(row => `<tr><td>${installerSummaryPerson(row.employee)}</td><td>${formatDate(row.date)}</td><td>${escapeHtml(row.customer)}</td><td class="installer-history-sku">${escapeHtml(row.sku)}</td><td>${escapeHtml(row.assignment)}</td></tr>`).join('');
+    }

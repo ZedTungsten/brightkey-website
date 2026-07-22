@@ -194,17 +194,25 @@
         });
       }
 
-      await loadStaticData();
-      await loadMonthBookings();
+      await Promise.all([
+        loadStaticData(),
+        loadMonthBookings()
+      ]);
+      // The month can finish before the static installer/configuration batch.
+      // Render once more after both are ready so every subpage has complete data.
+      applyFilterAndRender();
     });
 
     // Fetches employees, products, settings — once per page load
     async function loadStaticData() {
       try {
-        const [employeesRes, assignmentsRes, productsRes] = await Promise.all([
+        const [employeesRes, assignmentsRes, productsRes, payoutRes, mediaRes, checklistRes] = await Promise.all([
           sb.from('employees').select('id, employee_number, first_name, last_name, title, department, assignment, city, picture_link, employment_status'),
           sb.from('employee_assignments').select('id, name, visibility').eq('company_id', currentCompanyId || ''),
-          sb.from('products').select('id, sku, category')
+          sb.from('products').select('id, sku, category'),
+          sb.from('global_settings').select('value').eq('key', 'installer_payout_settings').eq('company_id', currentCompanyId).maybeSingle(),
+          sb.from('global_settings').select('value').eq('key', 'booking_media_requirements').eq('company_id', currentCompanyId).maybeSingle(),
+          sb.from('global_settings').select('value').eq('key', 'booking_checklist').eq('company_id', currentCompanyId).maybeSingle()
         ]);
 
         dbProducts = productsRes?.data || [];
@@ -219,48 +227,16 @@
           .filter(a => String(a.name || '').trim().toLowerCase() === 'installers' || (Array.isArray(a.visibility) && a.visibility.includes('booking.door_specifications')))
           .map(a => a.name);
 
-        try {
-          const { data: payoutSetting } = await sb
-            .from('global_settings')
-            .select('value')
-            .eq('key', 'installer_payout_settings')
-            .eq('company_id', currentCompanyId)
-            .maybeSingle();
-          installerPayoutSettings = payoutSetting?.value || {};
-        } catch (payoutSettingsError) {
-          console.error('Error loading installer payout settings:', payoutSettingsError);
-          installerPayoutSettings = {};
-        }
+        if (employeesRes.error) console.error('Error loading employees:', employeesRes.error);
+        if (assignmentsRes.error) console.error('Error loading assignments:', assignmentsRes.error);
+        if (productsRes.error) console.error('Error loading products:', productsRes.error);
+        if (payoutRes.error) console.error('Error loading installer payout settings:', payoutRes.error);
+        if (mediaRes.error) console.error('Error loading media requirements:', mediaRes.error);
+        if (checklistRes.error) console.error('Error loading checklist:', checklistRes.error);
 
-        // Booking media requirements
-        try {
-          const { data: mediaReqsRes } = await sb
-            .from('global_settings')
-            .select('value')
-            .eq('key', 'booking_media_requirements')
-            .eq('company_id', currentCompanyId)
-            .maybeSingle();
-          bookingMediaRequirements = (mediaReqsRes?.value && Array.isArray(mediaReqsRes.value))
-            ? mediaReqsRes.value : [];
-        } catch (mediaErr) {
-          console.error('Error loading media requirements:', mediaErr);
-          bookingMediaRequirements = [];
-        }
-
-        // Booking checklist
-        try {
-          const { data: checklistSetting } = await sb
-            .from('global_settings')
-            .select('value')
-            .eq('key', 'booking_checklist')
-            .eq('company_id', currentCompanyId)
-            .maybeSingle();
-          bookingChecklist = (checklistSetting?.value && Array.isArray(checklistSetting.value))
-            ? checklistSetting.value : [];
-        } catch (checklistErr) {
-          console.error('Error loading checklist:', checklistErr);
-          bookingChecklist = [];
-        }
+        installerPayoutSettings = payoutRes.data?.value || {};
+        bookingMediaRequirements = Array.isArray(mediaRes.data?.value) ? mediaRes.data.value : [];
+        bookingChecklist = Array.isArray(checklistRes.data?.value) ? checklistRes.data.value : [];
       } catch (err) {
         console.error('Failed to load static data:', err);
         showToast('Failed to load configuration: ' + err.message, true);
