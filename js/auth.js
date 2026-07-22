@@ -27,6 +27,125 @@
   };
 
   /**
+   * Convert technical request/database errors into safe, actionable UI copy.
+   * Full error objects should still be logged to the console by the caller.
+   */
+  function friendlyError(errorOrMessage, fallback = 'Something went wrong. Please try again.') {
+    const raw = String(errorOrMessage?.message || errorOrMessage || '').trim();
+    if (!raw) return fallback;
+    const message = raw.replace(/^Error:\s*/i, '');
+    const lower = message.toLowerCase();
+
+    if (/23505|duplicate key|unique constraint|\b409\b|already exists/.test(lower)) {
+      return 'An item with these details already exists. Review the information and try again.';
+    }
+    if (/23503|foreign key|still referenced|violates.*reference/.test(lower)) {
+      return 'This item is still in use and cannot be removed yet.';
+    }
+    if (/jwt|token.*expired|session.*expired|\b401\b|not authenticated/.test(lower)) {
+      return 'Your session has expired. Sign in again and retry the action.';
+    }
+    if (/42501|row-level security|permission denied|not authorized|forbidden|\b403\b/.test(lower)) {
+      return 'You do not have permission to complete this action. Contact an administrator if you need access.';
+    }
+    if (/payload too large|request body.*large|file.*too large|image.*too large|\b413\b/.test(lower)) {
+      return 'The selected file is too large. Choose a smaller file and try again.';
+    }
+    if (/notallowederror|getusermedia|camera.*permission|microphone.*permission/.test(lower)) {
+      return 'Camera access is blocked. Allow camera permission in your browser settings and try again.';
+    }
+    if (/notreadableerror|camera.*(busy|in use)/.test(lower)) {
+      return 'The camera is currently unavailable or being used by another application.';
+    }
+    if (/storage.*limit|quota.*(reached|exceeded)|insufficient storage/.test(lower)) {
+      return 'The company storage limit has been reached. Remove files or ask an administrator to increase the limit.';
+    }
+    if (/too many requests|rate limit|\b429\b/.test(lower)) {
+      return 'Too many requests were made. Wait a moment and try again.';
+    }
+    if (/failed to fetch|fetch failed|networkerror|network request|connection|offline|econn|timeout|timed out/.test(lower)) {
+      return 'We could not connect to the server. Check your internet connection and try again.';
+    }
+    if (/\b404\b|not found/.test(lower)) {
+      return 'The requested information could not be found. Refresh the page and try again.';
+    }
+    if (/\b5\d\d\b|internal server|service unavailable|bad gateway|gateway timeout/.test(lower)) {
+      return 'The service is temporarily unavailable. Please try again in a moment.';
+    }
+    if (/22p02|23\d{3}|pgrst\d+|invalid input syntax|violates.*constraint|relation .* does not exist|column .* does not exist|database|sql/.test(lower)) {
+      return 'We could not process the submitted information. Review the fields and try again.';
+    }
+    if (/syntaxerror|typeerror|referenceerror|unexpected token|is not defined|cannot read propert|cannot set propert|stack trace|\[object object\]/.test(lower)) {
+      return 'Something went wrong on this page. Refresh it and try again.';
+    }
+
+    // Keep already-actionable validation instructions while removing a generic
+    // "Error:" prefix. These messages do not contain system implementation details.
+    if (/^(please\b|select\b|enter\b|choose\b)|\b(is required|must be|cannot be empty|valid email|valid date)\b/.test(lower)) {
+      return message;
+    }
+
+    // Do not expose arbitrary exception details appended by legacy call sites.
+    // Keep the failed action clear so the message remains useful.
+    const actionMessages = [
+      [/\b(load|fetch|refresh|initialize|initialise)\b/, 'The information could not be loaded. Refresh the page and try again.'],
+      [/\b(upload|photo|image|file)\b/, 'The file could not be uploaded. Check the file and try again.'],
+      [/\b(save|update|autosave|submit|apply|confirm|record)\b/, 'Your changes could not be saved. Review the information and try again.'],
+      [/\b(delete|remove|clear)\b/, 'The item could not be removed. Refresh the page and try again.'],
+      [/\b(add|create)\b/, 'The item could not be created. Review the information and try again.'],
+      [/\b(link|connect)\b/, 'The connection could not be completed. Check the details and try again.'],
+      [/\b(move|transfer)\b/, 'The selected items could not be moved. Refresh the page and try again.']
+    ];
+    if (/^(error|failed|failure|unable|could not|operation failed|submission failed)\b/i.test(message)) {
+      const match = actionMessages.find(([pattern]) => pattern.test(lower));
+      return match ? match[1] : fallback;
+    }
+    return message;
+  }
+
+  window.BKFriendlyError = friendlyError;
+
+  // Local page-specific toast helpers are common in the dashboard. Sanitize
+  // their error output and inline error states as a final safety net even when
+  // they bypass window.Toast.
+  function sanitizeErrorToast(node) {
+    const root = node instanceof Element ? node : node?.parentElement;
+    if (!root) return;
+    const selector = [
+      '.toast',
+      '[class*="toast-"]',
+      '[class*="notification-"]',
+      '.error',
+      '[class*="-error"]',
+      '[class*="error-"]',
+      '[style*="var(--danger)"]'
+    ].join(',');
+    const candidates = [root, ...root.querySelectorAll(selector)];
+    candidates.forEach(candidate => {
+      const classes = String(candidate.className || '').toLowerCase();
+      const style = String(candidate.getAttribute?.('style') || '').toLowerCase();
+      const isToast = classes.includes('toast') || classes.includes('notification');
+      const isErrorState = classes.includes('error') || classes.includes('danger') || style.includes('var(--danger)');
+      if (!isErrorState || (isToast && !classes.includes('error') && !classes.includes('danger'))) return;
+      const safe = friendlyError(candidate.textContent);
+      if (safe && safe !== candidate.textContent) candidate.textContent = safe;
+    });
+  }
+
+  function observeErrorToasts() {
+    if (!document.body || window.__bkErrorToastObserver) return;
+    window.__bkErrorToastObserver = new MutationObserver(mutations => {
+      mutations.forEach(mutation => {
+        mutation.addedNodes.forEach(sanitizeErrorToast);
+        if (mutation.type === 'characterData') sanitizeErrorToast(mutation.target);
+      });
+    });
+    window.__bkErrorToastObserver.observe(document.body, { childList: true, characterData: true, subtree: true });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', observeErrorToasts, { once: true });
+  else observeErrorToasts();
+
+  /**
    * Get the current session user (null if not logged in).
    */
   async function getUser() {

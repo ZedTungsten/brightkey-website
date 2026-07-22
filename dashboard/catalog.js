@@ -112,7 +112,15 @@
   function slugify(s) {
     return s.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');
   }
+
+  function productSlug(title, sku) {
+    const titleWithoutParentheses = String(title || '').replace(/[()]/g, ' ');
+    return slugify(`${titleWithoutParentheses} ${sku || ''}`.trim());
+  }
   function toast(msg, type='success') {
+    if ((type === 'error' || type === 'danger') && window.BKFriendlyError) {
+      msg = window.BKFriendlyError(msg);
+    }
     const el = document.createElement('div');
     el.className = `toast toast-${type}`;
     el.textContent = msg;
@@ -267,7 +275,6 @@
     }
     allProducts = data || [];
     updateParentSkuDatalist();
-    updateRelatedSkuDatalist();
     updateStats();
     populateCategoryFilter();
     applyFilters();
@@ -286,25 +293,6 @@
     if (!dl) return;
     const allSkus = [...new Set(allProducts.filter(p => p.sku).map(p => p.sku))];
     dl.innerHTML = allSkus.map(sku => `<option value="${esc(sku)}"></option>`).join('');
-  }
-
-  function updateRelatedSkuDatalist() {
-    const input = document.getElementById('f-related');
-    const dl = document.getElementById('related-skus-list');
-    if (!input || !dl) return;
-
-    const val = input.value;
-    const parts = val.split(',');
-    const prefixParts = parts.slice(0, -1).map(p => p.trim());
-    const lastPart = parts[parts.length - 1].trim();
-
-    const allSkus = [...new Set(allProducts.filter(p => p.sku).map(p => p.sku))];
-    const prefixStr = prefixParts.length > 0 ? prefixParts.join(', ') + ', ' : '';
-
-    dl.innerHTML = allSkus
-      .filter(sku => sku.toLowerCase().includes(lastPart.toLowerCase()) && !prefixParts.includes(sku))
-      .map(sku => `<option value="${esc(prefixStr + sku)}"></option>`)
-      .join('');
   }
 
   function applyFilters() {
@@ -955,7 +943,8 @@
     const slugInp = document.getElementById('f-slug');
     if (slugInp) {
       slugInp.disabled = false;
-      slugInp.placeholder = 'e.g. a04';
+      slugInp.readOnly = true;
+      slugInp.placeholder = 'Generated automatically';
     }
 
     document.querySelectorAll('#product-drawer input[type="checkbox"]').forEach(cb => {
@@ -1007,7 +996,7 @@
   function fillForm(p) {
     const set = (id, val) => { const el = document.getElementById(id); if(el) el.value = val || ''; };
     set('f-sku', p.sku);
-    set('f-slug', p.slug);
+    set('f-slug', productSlug(p.title, p.sku));
     set('f-title', p.title);
     set('f-description', p.description);
     set('f-category', p.category);
@@ -1108,7 +1097,7 @@
     const tagsRaw = g('f-tags');
     const tagsArr = tagsRaw ? tagsRaw.split(',').map(s=>s.trim().toLowerCase()).filter(Boolean) : [];
 
-    const slugVal = g('f-slug') || slugify(g('f-title') || '');
+    const slugVal = productSlug(g('f-title'), g('f-sku'));
 
     // Collect checked promo tags
     const checkedTags = [];
@@ -1609,7 +1598,9 @@
 
     } catch (err) {
       console.error(err);
-      statusEl.textContent = err.message;
+      statusEl.textContent = window.BKFriendlyError
+        ? window.BKFriendlyError(err, 'The products could not be imported. Check the file and try again.')
+        : 'The products could not be imported. Check the file and try again.';
       toast(`Error: ${err.message}`, 'error');
     } finally {
       saveBtn.disabled = false;
@@ -1709,7 +1700,7 @@
     }
   }
 
-  function createTagInput({ inputId, normalize, placeholder, getSuggestions }) {
+  function createTagInput({ inputId, normalize, placeholder, getSuggestions, allowCustom = true }) {
     const originalInput = document.getElementById(inputId);
     if (!originalInput) return;
 
@@ -1729,6 +1720,20 @@
 
     container.appendChild(tagsWrapper);
     container.appendChild(textInput);
+
+    if (getSuggestions) {
+      const dropdownToggle = document.createElement('button');
+      dropdownToggle.type = 'button';
+      dropdownToggle.className = 'tag-dropdown-toggle';
+      dropdownToggle.setAttribute('aria-label', 'Show available options');
+      dropdownToggle.innerHTML = '<svg aria-hidden="true" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"></polyline></svg>';
+      dropdownToggle.addEventListener('mousedown', (event) => {
+        event.preventDefault();
+        textInput.focus();
+        textInput.dispatchEvent(new Event('input'));
+      });
+      container.appendChild(dropdownToggle);
+    }
 
     let suggBox = null;
     if (getSuggestions) {
@@ -1803,6 +1808,10 @@
 
     function addTag(value) {
       const clean = normalize(value.trim().replace(/,/g, ''));
+      if (!allowCustom) {
+        const available = getSuggestions().map(item => normalize(item));
+        if (!available.includes(clean)) return;
+      }
       if (clean && !tags.includes(clean)) {
         tags.push(clean);
         updateTagsUI();
@@ -1898,6 +1907,7 @@
             addTag(match);
             textInput.value = '';
             textInput.focus();
+            textInput.dispatchEvent(new Event('input'));
           });
 
           suggBox.appendChild(item);
@@ -1915,7 +1925,7 @@
 
       textInput.addEventListener('blur', () => {
         setTimeout(() => {
-          if (textInput.value) {
+          if (allowCustom && textInput.value) {
             addTag(textInput.value);
             textInput.value = '';
           }
@@ -1944,6 +1954,14 @@
       });
     }
     return Array.from(tagsSet);
+  }
+
+  function getAllCatalogSkus() {
+    const currentSku = (document.getElementById('f-sku')?.value || '').trim().toUpperCase();
+    return [...new Set(allProducts
+      .map(product => String(product.sku || '').trim().toUpperCase())
+      .filter(sku => sku && sku !== currentSku))]
+      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
   }
 
   // ─────────────────────────────────────────────────────
@@ -2047,7 +2065,9 @@
     createTagInput({
       inputId: 'f-related',
       normalize: s => s.toUpperCase(),
-      placeholder: 'Type SKU and press comma...'
+      placeholder: 'Select SKUs',
+      getSuggestions: getAllCatalogSkus,
+      allowCustom: false
     });
     createTagInput({
       inputId: 'f-tags',
@@ -2197,9 +2217,6 @@
       }
     });
 
-    document.getElementById('f-related').addEventListener('input', updateRelatedSkuDatalist);
-    document.getElementById('f-related').addEventListener('focus', updateRelatedSkuDatalist);
-
     document.getElementById('drawer-prev').addEventListener('click', () => {
       if (isAutosaving) return;
       if (!editingId) return;
@@ -2263,7 +2280,7 @@
       wrapper.appendChild(btn);
     });
 
-    function compressImageToWebP(file, maxW = 1600, maxH = 1600, quality = 0.82) {
+    function compressImageToWebP(file, maxW = 1400, maxH = 1400, quality = 0.76) {
       return new Promise((resolve) => {
         if (!file.type.startsWith('image/')) return resolve(file);
         const reader = new FileReader();
@@ -2336,6 +2353,13 @@
 
         if (file.type.startsWith('image/')) {
           file = await compressImageToWebP(file);
+          // /api/upload receives JSON Base64, which is about 33% larger than the
+          // original file. Keep the compressed file below 3 MB so the encoded
+          // request remains safely below the serverless request-body limit.
+          const maxImageBytes = 3 * 1024 * 1024;
+          if (file.size > maxImageBytes) {
+            throw new Error('This image is still too large after compression. Please upload a JPG, PNG, or WebP image smaller than 3 MB.');
+          }
         }
 
         const reader = new FileReader();
@@ -2346,10 +2370,17 @@
         reader.readAsDataURL(file);
         const fileBase64 = await base64Promise;
 
+        const { data: sessionData, error: sessionError } = await window.BKAuth.sb.auth.getSession();
+        const accessToken = sessionData?.session?.access_token;
+        if (sessionError || !accessToken) {
+          throw new Error('Your session has expired. Sign in again before uploading.');
+        }
+
         const response = await fetch('/api/upload', {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${accessToken}`
           },
           body: JSON.stringify({
             fileBase64,
@@ -2365,9 +2396,9 @@
           result = await response.json();
         } catch (jsonErr) {
           if (response.status === 413) {
-            throw new Error('File is too large. Please select a smaller file (under 4.5MB).');
+            throw new Error('The file is too large to upload. Please select a smaller image.');
           }
-          throw new Error(`Upload failed with status ${response.status}`);
+          throw new Error('The upload could not be processed. Please try a smaller JPG, PNG, or WebP image.');
         }
         if (!response.ok || !result.success) {
           throw new Error(result.error || 'Upload failed');
@@ -2424,14 +2455,16 @@
       addAPlusBlock(select.value);
     });
 
-    // Auto-generate slug from title
-    document.getElementById('f-title').addEventListener('input', e => {
+    // Slugs are always derived from Title + SKU and cannot be edited independently.
+    const updateGeneratedSlug = () => {
       const slugEl = document.getElementById('f-slug');
-      if (!slugEl.dataset.manual) slugEl.value = slugify(e.target.value);
-    });
-    document.getElementById('f-slug').addEventListener('input', e => {
-      e.target.dataset.manual = e.target.value ? 'true' : '';
-    });
+      slugEl.value = productSlug(
+        document.getElementById('f-title').value,
+        document.getElementById('f-sku').value
+      );
+    };
+    document.getElementById('f-sku').addEventListener('input', updateGeneratedSlug);
+    document.getElementById('f-title').addEventListener('input', updateGeneratedSlug);
 
     // Business change → re-render features tab
     document.getElementById('f-business').addEventListener('change', e => {
@@ -2527,7 +2560,7 @@
           console.error('Autosave failed:', err);
           setAutosavingState(false);
           if (statusEl) {
-            statusEl.textContent = `Autosave failed: ${err.message}`;
+            statusEl.textContent = 'Autosave failed. Review the product details and try again.';
             statusEl.style.color = 'var(--danger)';
           }
         }

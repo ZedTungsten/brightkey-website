@@ -2036,7 +2036,13 @@ function showToast(message, isError = false) {
   if (window.Toast) {
     window.Toast.show(message, isError ? 'error' : 'success');
   } else {
-    alert(message);
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${isError ? 'error' : 'success'}`;
+    toast.textContent = isError && window.BKFriendlyError ? window.BKFriendlyError(message) : message;
+    container.appendChild(toast);
+    setTimeout(() => toast.remove(), 3500);
   }
 }
 

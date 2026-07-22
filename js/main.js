@@ -90,6 +90,9 @@ const Toast = (() => {
   }
 
   function show(message, type = 'success', duration = 3000) {
+    if (type === 'error' || type === 'danger') {
+      message = window.BKFriendlyError ? window.BKFriendlyError(message) : message;
+    }
     const c     = ensureContainer();
     const toast = document.createElement('div');
     toast.className = `toast toast-${type}`;

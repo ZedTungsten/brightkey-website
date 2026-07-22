@@ -80,6 +80,7 @@ window.WarehousePage = {
 
   // 5. Toast
   showToast: function(msg, isError = false) {
+    if (isError && window.BKFriendlyError) msg = window.BKFriendlyError(msg);
     const container = document.getElementById('toast-container');
     if (!container) return;
     const el = document.createElement('div');

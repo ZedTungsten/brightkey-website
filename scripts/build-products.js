@@ -565,6 +565,43 @@ async function buildProducts() {
     return;
   }
 
+  // Resolve each tenant's storefront branding once, then apply it to that
+  // company's generated product pages. The bundled logo remains the fallback.
+  const companyIds = [...new Set(products.map(p => p.company_id).filter(Boolean))];
+  const companyProfiles = {};
+  if (companyIds.length > 0) {
+    const { data: profileRows, error: profileError } = await supabase
+      .from('global_settings')
+      .select('company_id, value')
+      .eq('key', 'company_profile_config')
+      .in('company_id', companyIds);
+
+    if (profileError) {
+      console.warn('Warning: Failed to fetch company branding; using the default logo:', profileError.message);
+    } else {
+      (profileRows || []).forEach(row => {
+        companyProfiles[row.company_id] = row.value || {};
+      });
+
+      const companyLogoDir = path.resolve('./assets/company-logos');
+      await fs.mkdir(companyLogoDir, { recursive: true });
+      await Promise.all(Object.entries(companyProfiles).map(async ([companyId, profile]) => {
+        const logo = profile.logoDark || '';
+        const dataUri = logo.match(/^data:image\/(png|jpe?g|webp|svg\+xml);base64,(.+)$/i);
+        if (!dataUri) {
+          profile.darkLogoSource = logo;
+          return;
+        }
+
+        const extensionMap = { jpeg: 'jpg', jpg: 'jpg', png: 'png', webp: 'webp', 'svg+xml': 'svg' };
+        const extension = extensionMap[dataUri[1].toLowerCase()] || 'png';
+        const fileName = `${companyId}-dark.${extension}`;
+        await fs.writeFile(path.join(companyLogoDir, fileName), Buffer.from(dataUri[2], 'base64'));
+        profile.darkLogoSource = `../assets/company-logos/${fileName}`;
+      }));
+    }
+  }
+
   // 2. Fetch inventory by SKU (single query)
   const skus = products.map(p => p.sku).filter(Boolean);
   const { data: inventoryRows } = await supabase
@@ -663,6 +700,14 @@ async function buildProducts() {
     $('a[href="privacy-policy.html"]').attr('href', '../privacy-policy.html');
     $('a[href="terms-of-use.html"]').attr('href', '../terms-of-use.html');
     $('img[src^="assets/"]').not('[data-template="main-image"]').attr('src', (_i, v) => '../' + v);
+
+    // The dark logo is intended for the light storefront header and footer.
+    const companyProfile = companyProfiles[p.company_id] || {};
+    const companyDarkLogo = companyProfile.darkLogoSource || companyProfile.logoDark || '../assets/logo.svg?v=2';
+    const companyName = companyProfile.companyName || 'Brightkey';
+    $('[data-template="company-dark-logo"]')
+      .attr('src', companyDarkLogo)
+      .attr('alt', `${companyName} logo`);
 
     // Meta tags
     $('[data-template="meta-desc"]').attr('content', descShort);

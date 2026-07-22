@@ -526,7 +526,7 @@
             tabNav.style.display = 'flex';
           }
         } catch (err) {
-          document.getElementById('dir-tbody').innerHTML = `<tr><td colspan="30" class="tbl-state error">Failed to load: ${esc(err.message)}</td></tr>`;
+          document.getElementById('dir-tbody').innerHTML = '<tr><td colspan="30" class="tbl-state error">The employee directory could not be loaded. Refresh the page and try again.</td></tr>';
           toast('Failed to load employees: ' + err.message, 'error');
         }
       },

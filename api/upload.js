@@ -1,10 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://ymjlosnxuhsybkzkoofq.supabase.co';
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
-
-// Create admin client to bypass RLS policies during uploads
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inltamxvc254dWhzeWJremtvb2ZxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ0MDY1MzYsImV4cCI6MjA4OTk4MjUzNn0.srhk9SVvFuZRcfeRGbVDGPr5pYrFhs8vzcOiMK3A91w';
 
 export default async function handler(req, res) {
   // Allow requests from localhost and production
@@ -21,6 +18,23 @@ export default async function handler(req, res) {
   }
 
   try {
+    const authorization = req.headers.authorization || '';
+    const accessToken = authorization.replace(/^Bearer\s+/i, '').trim();
+    if (!accessToken) {
+      return res.status(401).json({ error: 'Your session has expired. Sign in again before uploading.' });
+    }
+
+    // Use the signed-in user's token so tenant-scoped Storage RLS validates the
+    // company path. This also works locally without a service-role secret.
+    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      global: { headers: { Authorization: `Bearer ${accessToken}` } },
+      auth: { persistSession: false, autoRefreshToken: false }
+    });
+    const { data: userData, error: userError } = await supabase.auth.getUser(accessToken);
+    if (userError || !userData?.user) {
+      return res.status(401).json({ error: 'Your session has expired. Sign in again before uploading.' });
+    }
+
     const { fileBase64, fileName, category, refId, type, companyId } = req.body;
 
     if (!fileBase64 || !fileName) {
@@ -39,6 +53,24 @@ export default async function handler(req, res) {
 
     if (!companyId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(companyId)) {
       return res.status(400).json({ error: 'A valid company is required before uploading a file.' });
+    }
+
+    // Catalog media follows the same Products-module authorization as the page.
+    // has_module_access also grants access to tenant owners and administrators.
+    if (category === 'products') {
+      const { data: canUploadProducts, error: accessError } = await supabase
+        .rpc('has_module_access', {
+          p_user_id: userData.user.id,
+          p_company_id: companyId,
+          p_module: 'Products'
+        });
+      if (accessError) {
+        console.error('Product upload access check failed:', accessError);
+        return res.status(503).json({ error: 'Product upload access could not be verified. Please try again.' });
+      }
+      if (!canUploadProducts) {
+        return res.status(403).json({ error: 'Products access is required to upload catalog media.' });
+      }
     }
 
     const { data: quotaRows, error: quotaError } = await supabase
@@ -100,14 +132,16 @@ export default async function handler(req, res) {
     const SENSITIVE_TYPES = ['govid', 'cv', 'id'];
     const isInternal = category === 'employees' && SENSITIVE_TYPES.includes(type);
     const bucketName = isInternal ? 'brightkey-internal' : 'brightkey-assets';
-    const filePath = `${folderPath}/${safeFileName}`;
+    // A unique name keeps uploads on the INSERT policy path. Replacing an
+    // existing Storage object would require a broader UPDATE policy.
+    const filePath = `${folderPath}/${Date.now()}_${safeFileName}`;
 
     // Upload buffer directly to Supabase storage bucket
     const { error } = await supabase.storage
       .from(bucketName)
       .upload(filePath, buffer, {
         contentType: contentType,
-        upsert: true
+        upsert: false
       });
 
     if (error) {
