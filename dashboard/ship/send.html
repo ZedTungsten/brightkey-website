@@ -298,7 +298,12 @@
   <!-- Modal: Create Shipment -->
   <div id="create-shipment-modal" class="modal-overlay">
     <div class="modal-content" style="max-width: 500px; max-height: 90vh; overflow-y: auto; gap: 0.8rem; padding: 1.25rem;">
-      <h3 class="modal-title" style="font-size: 1.05rem;">Create Shipment</h3>
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:1rem;">
+        <h3 class="modal-title" style="font-size: 1.05rem; margin:0;">Create Shipment</h3>
+        <button type="button" onclick="DeliveryApp.closeCreateShipmentModal()" aria-label="Close Create Shipment" style="background:none; border:none; color:var(--text-muted); cursor:pointer; display:inline-flex; align-items:center; justify-content:center; padding:0.2rem;">
+          <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
       
       <!-- Radio group: Send / Receive -->
       <div class="form-group" style="margin-bottom: 0.4rem;">
@@ -402,7 +407,7 @@
 
       <!-- Packed Photo Upload -->
       <div class="form-group" style="margin-bottom: 0.4rem;">
-        <label class="form-label">Packed Photo Proof</label>
+        <label class="form-label">Packed Photo Proof <span style="font-weight:500; color:var(--text-muted); text-transform:none; letter-spacing:normal;">(Optional)</span></label>
         
         <div id="cship-camera-container" style="display:none; position:relative; width:100%; aspect-ratio:16/10; background:#000; border-radius:8px; overflow:hidden; border:1px solid var(--border);">
           <video id="cship-camera-stream" autoplay playsinline style="width:100%; height:100%; object-fit:cover;"></video>
@@ -1275,7 +1280,8 @@
         this.cshipDelPhotoBlob = null;
         document.getElementById('cship-customer-name').value = '';
         document.getElementById('cship-address').value = '';
-        document.getElementById('cship-city-province').value = '';
+        document.getElementById('cship-city').value = '';
+        document.getElementById('cship-province').value = '';
         document.getElementById('cship-is-existing').checked = false;
         document.getElementById('cship-existing-container').style.display = 'none';
         
@@ -1649,10 +1655,6 @@
           Toast.error('Province is required.');
           return;
         }
-        if (!this.cshipPhotoBlob) {
-          Toast.error('Packed photo proof is required.');
-          return;
-        }
         if (!isReceive && !this.cshipDelPhotoBlob) {
           Toast.error('Delivery screenshot details are required.');
           return;
@@ -1690,25 +1692,28 @@
         btn.innerHTML = `<span class="bk-spinner" style="width:12px; height:12px; border-width:2px; display:inline-block; vertical-align:middle; margin-right:6px;"></span>Creating...`;
 
         try {
-          const base64 = await blobToBase64(this.cshipPhotoBlob);
-          const fileName = `packed_${refOrder}_${Date.now()}.jpg`;
+          let photoUrl = null;
+          if (this.cshipPhotoBlob) {
+            const base64 = await blobToBase64(this.cshipPhotoBlob);
+            const fileName = `packed_${refOrder}_${Date.now()}.jpg`;
 
-          const uploadRes = await fetch('/api/upload', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              fileBase64: base64,
-              fileName: fileName,
-              category: 'installations',
-              refId: refOrder,
-              type: 'proof',
-              companyId: this.companyId || 'general'
-            })
-          });
+            const uploadRes = await fetch('/api/upload', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                fileBase64: base64,
+                fileName: fileName,
+                category: 'installations',
+                refId: refOrder,
+                type: 'proof',
+                companyId: this.companyId || 'general'
+              })
+            });
 
-          if (!uploadRes.ok) throw new Error('Photo upload failed');
-          const uploadResult = await uploadRes.json();
-          const photoUrl = uploadResult.url;
+            if (!uploadRes.ok) throw new Error('Photo upload failed');
+            const uploadResult = await uploadRes.json();
+            photoUrl = uploadResult.url;
+          }
 
           const sb = window.BKAuth.sb;
           const now = new Date().toISOString();
@@ -1726,6 +1731,7 @@
             customer_name: customerName,
             customer_city: cityProvince,
             packed_photo_url: photoUrl,
+            timestamp_packed: isReceive ? null : now,
             company_id: this.companyId,
             warehouse_id: warehouseId,
             created_at: now,
@@ -1793,7 +1799,9 @@
           const tip1Val = parseFloat(document.getElementById('cship-tip-1').value) || 0;
           const tip2Val = parseFloat(document.getElementById('cship-tip-2').value) || 0;
 
-          if (!isReceive && (deliveryPhotoUrl || baseFeeVal > 0 || tollVal > 0 || tip1Val > 0 || tip2Val > 0)) {
+          // Incoming shipments need a booking marker to appear directly in Warehouse Receive.
+          // Send-out shipments use the same record for their delivery details.
+          if (isReceive || deliveryPhotoUrl || baseFeeVal > 0 || tollVal > 0 || tip1Val > 0 || tip2Val > 0) {
             const { error: dbErr } = await sb.from('delivery_bookings').insert([{
               company_id: this.companyId,
               reference_id: refOrder,

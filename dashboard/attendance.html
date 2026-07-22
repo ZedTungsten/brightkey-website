@@ -810,8 +810,6 @@
 
           let shift1Start = { hour: 9, minute: 0 };
           let shift1End = { hour: 18, minute: 0 };
-          let shift2Start = null;
-          let shift2End = null;
 
           if (this.employee) {
             if (this.employee.shift_time_1) {
@@ -824,18 +822,6 @@
               } else {
                 const start = parseTimeStr(this.employee.shift_time_1);
                 if (start) shift1Start = start;
-              }
-            }
-            if (this.employee.shift_time_2) {
-              const parts = this.employee.shift_time_2.split('-');
-              if (parts.length === 2) {
-                const start = parseTimeStr(parts[0]);
-                const end = parseTimeStr(parts[1]);
-                if (start) shift2Start = start;
-                if (end) shift2End = end;
-              } else {
-                const start = parseTimeStr(this.employee.shift_time_2);
-                if (start) shift2Start = start;
               }
             }
           }
@@ -905,7 +891,7 @@
           const shiftBadgeWrap = document.getElementById('shift-badge-wrap');
           const shiftBadgeInner = document.getElementById('shift-badge-inner');
           if (shiftBadgeWrap && shiftBadgeInner) {
-            if (this.employee && (this.employee.shift_time_1 || this.employee.shift_time_2 || this.employee.shift_days)) {
+            if (this.employee && (this.employee.shift_time_1 || this.employee.shift_days)) {
               // Format time from parsed hours
               const fmtH = (h, m) => {
                 const ampm = h >= 12 ? 'PM' : 'AM';
@@ -966,137 +952,57 @@
 
             // Sort logs of the day chronologically
             const sortedLogs = dayLogs.slice().sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-            const sessions = [];
-            let currentSession = null;
-
-            sortedLogs.forEach(log => {
-              if (log.status === 'available') {
-                if (currentSession && !currentSession.outLog) {
-                  currentSession = { inLog: log, outLog: null };
-                  sessions.push(currentSession);
-                } else {
-                  currentSession = { inLog: log, outLog: null };
-                  sessions.push(currentSession);
-                }
-              } else if (log.status === 'offline') {
-                if (currentSession && !currentSession.outLog) {
-                  currentSession.outLog = log;
-                } else {
-                  currentSession = { inLog: null, outLog: log };
-                  sessions.push(currentSession);
-                }
-              }
-            });
-
-            // Shift 1
-            const s1 = sessions[0] || null;
-            let s1InText = '—';
-            let s1InRemark = '';
+            const inLog = sortedLogs.find(log => log.status === 'available') || null;
+            const outLog = inLog
+              ? sortedLogs.find(log => log.status === 'offline' && new Date(log.created_at) >= new Date(inLog.created_at)) || null
+              : null;
+            const session = (inLog || outLog) ? { inLog, outLog } : null;
+            let timeInText = '—';
+            let timeInRemark = '';
             
-            let s1OutText = '—';
-            let s1OutRemark = '';
+            let timeOutText = '—';
+            let timeOutRemark = '';
 
-            if (s1) {
-              if (s1.inLog) {
-                const t = new Date(s1.inLog.created_at);
-                s1InText = t.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-                s1InRemark = getLateRemark(t, shift1Start);
+            if (session) {
+              if (session.inLog) {
+                const t = new Date(session.inLog.created_at);
+                timeInText = t.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+                timeInRemark = getLateRemark(t, shift1Start);
               }
-              if (s1.outLog) {
-                const t = new Date(s1.outLog.created_at);
-                s1OutText = t.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-                s1OutRemark = getEarlyOutRemark(t, shift1End);
-              } else if (s1.inLog) {
+              if (session.outLog) {
+                const t = new Date(session.outLog.created_at);
+                timeOutText = t.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+                timeOutRemark = getEarlyOutRemark(t, shift1End);
+              } else if (session.inLog) {
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
                 if (currentDateObj < today) {
-                  s1OutText = '<span style="color: var(--danger, #ef4444); font-weight: 600;">Forced Time-out</span>';
+                  timeOutText = '<span style="color: var(--danger, #ef4444); font-weight: 600;">Forced Time-out</span>';
                 }
-              }
-            }
-
-            // Shift 2
-            const s2 = sessions[1] || null;
-            let s2InText = '—';
-            let s2InRemark = '';
-            
-            let s2OutText = '—';
-            let s2OutRemark = '';
-
-            if (s2) {
-              if (s2.inLog) {
-                const t = new Date(s2.inLog.created_at);
-                s2InText = t.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-                s2InRemark = getLateRemark(t, shift2Start || shift1Start);
-              }
-              if (s2.outLog) {
-                const t = new Date(s2.outLog.created_at);
-                s2OutText = t.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-                s2OutRemark = getEarlyOutRemark(t, shift2End || shift1End);
-              } else if (s2.inLog) {
-                const today = new Date();
-                today.setHours(0, 0, 0, 0);
-                if (currentDateObj < today) {
-                  s2OutText = '<span style="color: var(--danger, #ef4444); font-weight: 600;">Forced Time-out</span>';
-                }
-              }
-            }
-
-            // Calculate Total Hours for Shift 1
-            let hrs1 = '';
-            if (s1 && s1.inLog && s1.outLog) {
-              const checkInTime = new Date(s1.inLog.created_at);
-              const checkOutTime = new Date(s1.outLog.created_at);
-              if (checkOutTime >= checkInTime) {
-                let diffMs = checkOutTime - checkInTime;
-                const totalMins = Math.floor(diffMs / 60000);
-                const h = Math.floor(totalMins / 60);
-                const m = totalMins % 60;
-                hrs1 = `${h}h ${m}m`;
-              }
-            }
-
-            // Calculate Total Hours for Shift 2
-            let hrs2 = '';
-            if (s2 && s2.inLog && s2.outLog) {
-              const checkInTime = new Date(s2.inLog.created_at);
-              const checkOutTime = new Date(s2.outLog.created_at);
-              if (checkOutTime >= checkInTime) {
-                let diffMs = checkOutTime - checkInTime;
-                const totalMins = Math.floor(diffMs / 60000);
-                const h = Math.floor(totalMins / 60);
-                const m = totalMins % 60;
-                hrs2 = `${h}h ${m}m`;
               }
             }
 
             let totalHoursHtml = '—';
-            if (hrs1 && hrs2) {
-              totalHoursHtml = `
-                <div style="display: flex; flex-direction: column; gap: 0.25rem;">
-                  <span style="font-weight:600; color:var(--text-primary);">${hrs1}</span>
-                  <span style="font-weight:600; color:var(--text-muted); font-size:0.75rem;">${hrs2}</span>
-                </div>
-              `;
-            } else if (hrs1) {
-              totalHoursHtml = `<span style="font-weight:600; color:var(--text-primary);">${hrs1}</span>`;
-            } else if (hrs2) {
-              totalHoursHtml = `<span style="font-weight:600; color:var(--text-primary);">${hrs2}</span>`;
+            if (session && session.inLog && session.outLog) {
+              const checkInTime = new Date(session.inLog.created_at);
+              const checkOutTime = new Date(session.outLog.created_at);
+              if (checkOutTime >= checkInTime) {
+                const diffMs = checkOutTime - checkInTime;
+                const totalMins = Math.floor(diffMs / 60000);
+                const h = Math.floor(totalMins / 60);
+                const m = totalMins % 60;
+                totalHoursHtml = `<span style="font-weight:600; color:var(--text-primary);">${h}h ${m}m</span>`;
+              }
             }
 
             currentWeekDays.push({
               dayNum: d,
               dateFriendly: currentDateObj.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }),
               
-              s1InText,
-              s1InRemark,
-              s1OutText,
-              s1OutRemark,
-
-              s2InText,
-              s2InRemark,
-              s2OutText,
-              s2OutRemark,
+              timeInText,
+              timeInRemark,
+              timeOutText,
+              timeOutRemark,
 
               totalHoursHtml
             });
@@ -1127,10 +1033,8 @@
                   <thead>
                     <tr>
                       <th>Date</th>
-                      <th>Time In 1</th>
-                      <th>Time Out 1</th>
-                      <th>Time In 2</th>
-                      <th>Time Out 2</th>
+                      <th>Time In</th>
+                      <th>Time Out</th>
                       <th>Total Hours</th>
                     </tr>
                   </thead>
@@ -1139,28 +1043,16 @@
                       <tr>
                         <td><strong>${r.dateFriendly}</strong></td>
                         
-                        <!-- Time In 1 -->
+                        <!-- Time In -->
                         <td>
-                          <span style="font-weight:600; color:var(--text-primary);">${r.s1InText}</span>
-                          ${formatRemarkHtml(r.s1InRemark, 'in')}
+                          <span style="font-weight:600; color:var(--text-primary);">${r.timeInText}</span>
+                          ${formatRemarkHtml(r.timeInRemark, 'in')}
                         </td>
 
-                        <!-- Time Out 1 -->
+                        <!-- Time Out -->
                         <td>
-                          <span style="font-weight:600; color:var(--text-primary);">${r.s1OutText}</span>
-                          ${formatRemarkHtml(r.s1OutRemark, 'out')}
-                        </td>
-
-                        <!-- Time In 2 -->
-                        <td>
-                          <span style="font-weight:600; color:var(--text-primary);">${r.s2InText}</span>
-                          ${formatRemarkHtml(r.s2InRemark, 'in')}
-                        </td>
-
-                        <!-- Time Out 2 -->
-                        <td>
-                          <span style="font-weight:600; color:var(--text-primary);">${r.s2OutText}</span>
-                          ${formatRemarkHtml(r.s2OutRemark, 'out')}
+                          <span style="font-weight:600; color:var(--text-primary);">${r.timeOutText}</span>
+                          ${formatRemarkHtml(r.timeOutRemark, 'out')}
                         </td>
 
                         <!-- Total Hours -->

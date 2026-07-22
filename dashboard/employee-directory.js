@@ -150,31 +150,6 @@
         mainInput.dispatchEvent(new Event('change', { bubbles: true }));
       },
 
-      showSecondShift(btn, id) {
-        const td = btn.closest('td');
-        const wrap2 = td.querySelector('.second-shift-inputs-wrap');
-        if (wrap2) {
-          wrap2.style.display = 'flex';
-          btn.style.display = 'none';
-        }
-      },
-      
-      hideSecondShift(btn, id) {
-        const td = btn.closest('td');
-        const wrap2 = td.querySelector('.second-shift-inputs-wrap');
-        const mainInput2 = td.querySelector('input.main-time-input[data-field="shift_time_2"]');
-        if (wrap2) {
-          wrap2.style.display = 'none';
-          wrap2.querySelectorAll('select').forEach(sel => sel.value = '');
-          if (mainInput2) {
-            mainInput2.value = '';
-            mainInput2.dispatchEvent(new Event('change', { bubbles: true }));
-          }
-          const addBtn = td.querySelector('.add-shift-btn');
-          if (addBtn) addBtn.style.display = 'inline-flex';
-        }
-      },
-
       openInviteModal(email, name) {
         document.getElementById('invite-email').value = email;
         document.getElementById('invite-name').value = name;
@@ -883,23 +858,15 @@
 
         const shiftTimeCell = () => {
           const val1 = emp.shift_time_1 || '';
-          const val2 = emp.shift_time_2 || '';
           
           if (!isEdit) {
-            if (!val1 && !val2) return `<td class="grp-hr cell-empty">—</td>`;
-            let html = '';
-            if (val1) html += `<div style="font-variant-numeric: tabular-nums;">${esc(val1)}</div>`;
-            if (val2) html += `<div style="font-variant-numeric: tabular-nums;">${esc(val2)}</div>`;
-            return `<td class="grp-hr"><div style="display:flex; flex-direction:column; gap:2px;">${html}</div></td>`;
+            if (!val1) return `<td class="grp-hr cell-empty">—</td>`;
+            return `<td class="grp-hr"><div style="font-variant-numeric: tabular-nums;">${esc(val1)}</div></td>`;
           }
           
           const parts1 = val1.split('-').map(s => s.trim());
           const startParts1 = parseTimeParts(parts1[0] || '');
           const endParts1 = parseTimeParts(parts1[1] || '');
-          
-          const parts2 = val2.split('-').map(s => s.trim());
-          const startParts2 = parseTimeParts(parts2[0] || '');
-          const endParts2 = parseTimeParts(parts2[1] || '');
           
           const renderTimeSelects = (fieldName, prefix, p) => {
             const hrs = ['1','2','3','4','5','6','7','8','9','10','11','12'];
@@ -919,36 +886,15 @@
             `;
           };
           
-          const hasSecondShift = !!val2;
-          
           return `<td class="grp-hr" style="max-width: 480px; min-width: 440px;">
             <div style="display:flex; flex-direction:column; gap:6px; width: 100%;">
-              <!-- Shift 1 -->
               <div class="time-range-wrap" style="gap: 0.25rem; display:flex; align-items:center;">
-                <span style="font-size:0.7rem; font-weight:700; color:var(--text-muted); min-width:40px;">Shift 1:</span>
+                <span style="font-size:0.7rem; font-weight:700; color:var(--text-muted); min-width:40px;">Shift:</span>
                 ${renderTimeSelects('shift_time_1', 'start', startParts1)}
                 <span class="time-range-sep">to</span>
                 ${renderTimeSelects('shift_time_1', 'end', endParts1)}
               </div>
               <input type="hidden" class="cell-input main-time-input" data-id="${esc(id)}" data-field="shift_time_1" value="${esc(val1)}">
-              
-              <!-- Shift 2 Wrap -->
-              <div class="second-shift-inputs-wrap" style="display: ${hasSecondShift ? 'flex' : 'none'}; align-items:center; gap: 0.25rem;">
-                <span style="font-size:0.7rem; font-weight:700; color:var(--text-muted); min-width:40px;">Shift 2:</span>
-                ${renderTimeSelects('shift_time_2', 'start', startParts2)}
-                <span class="time-range-sep">to</span>
-                ${renderTimeSelects('shift_time_2', 'end', endParts2)}
-                <button type="button" class="btn-row btn-delete" onclick="App.hideSecondShift(this, '${esc(id)}')" title="Remove 2nd shift" style="margin-left:4px; padding:2px 4px; height:24px; display:inline-flex; align-items:center; justify-content:center;">
-                  <svg viewBox="0 0 24 24" style="width:12px; height:12px;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                </button>
-              </div>
-              <input type="hidden" class="cell-input main-time-input" data-id="${esc(id)}" data-field="shift_time_2" value="${esc(val2)}">
-              
-              <!-- Add Shift Button -->
-              <button type="button" class="add-shift-btn btn-row" onclick="App.showSecondShift(this, '${esc(id)}')" style="display: ${hasSecondShift ? 'none' : 'inline-flex'}; align-items:center; gap:4px; width:fit-content; color:var(--cyan-light); border-color:var(--cyan-border); background:var(--cyan-dim); padding:0.2rem 0.5rem; font-size:0.72rem; border-radius:4px; cursor:pointer;">
-                <svg viewBox="0 0 24 24" style="width:10px; height:10px;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                Add 2nd shift
-              </button>
             </div>
           </td>`;
         };
@@ -1545,7 +1491,7 @@
             ['contact_number', 'Contact #'], ['emergency_contact_number', 'Emergency Contact'],
             ['email', 'Email'], ['tin', 'TIN'], ['sss', 'SSS'],
             ['pagibig', 'PAG-IBIG'], ['philhealth', 'PhilHealth'],
-            ['work_email', 'Work Email'], ['assignment', 'Assignment'], ['shift_days', 'Shift Days'], ['shift_time_1', 'Shift 1 Range'], ['shift_time_2', 'Shift 2 Range'], ['picture_link', 'Picture Link'], ['gov_id_link', "Gov't ID Link"], ['cv_link', 'CV Link'], ['id_link', 'ID Link'], ['payout_details', 'Payout Details'], ['payout_details_image', 'Payout Details Image'],
+            ['work_email', 'Work Email'], ['assignment', 'Assignment'], ['shift_days', 'Shift Days'], ['shift_time_1', 'Shift Range'], ['picture_link', 'Picture Link'], ['gov_id_link', "Gov't ID Link"], ['cv_link', 'CV Link'], ['id_link', 'ID Link'], ['payout_details', 'Payout Details'], ['payout_details_image', 'Payout Details Image'],
           ];
           const header = cols.map(c => `"${c[1]}"`).join(',');
           const rows = this.filtered.map(emp =>
@@ -1610,7 +1556,7 @@
         tbody.innerHTML = this.pendingRequests.map(r => {
           const emp = r.employees || {};
           const name = `${emp.first_name || ''} ${emp.last_name || ''}`.trim() || 'Unknown Employee';
-          const fields = Object.keys(r.requested_data || {}).map(f => {
+          const fields = Object.keys(r.requested_data || {}).filter(f => f !== 'shift_time_2').map(f => {
             return f.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
           }).join(', ');
 
@@ -1656,7 +1602,7 @@
         const tbody = document.getElementById('review-comparison-tbody');
         const dbEmp = this.allEmployees.find(e => e.id === req.employee_id) || {};
         
-        tbody.innerHTML = Object.keys(req.requested_data || {}).map(field => {
+        tbody.innerHTML = Object.keys(req.requested_data || {}).filter(field => field !== 'shift_time_2').map(field => {
           const label = field.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
           let originalVal = dbEmp[field] ?? '—';
           let requestedVal = req.requested_data[field] ?? '—';
@@ -1746,12 +1692,16 @@
 
         try {
           // 1. Update the employee's official record
-          const { error: empError } = await getSb()
-            .from('employees')
-            .update(req.requested_data)
-            .eq('id', req.employee_id);
+          const approvedData = { ...(req.requested_data || {}) };
+          delete approvedData.shift_time_2;
+          if (Object.keys(approvedData).length > 0) {
+            const { error: empError } = await getSb()
+              .from('employees')
+              .update(approvedData)
+              .eq('id', req.employee_id);
 
-          if (empError) throw empError;
+            if (empError) throw empError;
+          }
 
           // 2. Mark the update request as approved
           const { error: reqError } = await getSb()
@@ -1791,17 +1741,14 @@
         const form = document.getElementById('add-employee-form');
         if (form) form.reset();
 
-        // 3. Reset shift 2 container
-        this.removeModalShift2();
-
-        // 4. Set default values
+        // 3. Set default values
         document.getElementById('new-emp-number').value = formattedNum;
         document.getElementById('new-emp-dob').value = '2000-01-01';
         document.getElementById('new-emp-date-hired').value = new Date().toISOString().split('T')[0];
         document.getElementById('new-emp-email').value = `${formattedNum.toLowerCase()}@brightkey.com`;
         document.getElementById('new-emp-status').value = 'Active';
 
-        // 5. Open modal overlay
+        // 4. Open modal overlay
         const modal = document.getElementById('add-employee-modal');
         if (modal) {
           modal.style.display = 'flex';
@@ -1818,28 +1765,6 @@
             modal.style.display = 'none';
           }, 150);
         }
-      },
-
-      showModalShift2() {
-        const container = document.getElementById('new-emp-shift2-container');
-        const btnWrap = document.getElementById('new-emp-add-shift-btn-wrap');
-        if (container) container.style.display = 'grid';
-        if (btnWrap) btnWrap.style.display = 'none';
-      },
-
-      removeModalShift2() {
-        const container = document.getElementById('new-emp-shift2-container');
-        const btnWrap = document.getElementById('new-emp-add-shift-btn-wrap');
-        if (container) {
-          container.style.display = 'none';
-          document.getElementById('new-emp-shift-time2-start-h').value = '';
-          document.getElementById('new-emp-shift-time2-start-m').value = '';
-          document.getElementById('new-emp-shift-time2-start-p').value = '';
-          document.getElementById('new-emp-shift-time2-end-h').value = '';
-          document.getElementById('new-emp-shift-time2-end-m').value = '';
-          document.getElementById('new-emp-shift-time2-end-p').value = '';
-        }
-        if (btnWrap) btnWrap.style.display = 'flex';
       },
 
       async uploadModalFile(input, targetInputId, docType) {
@@ -1904,7 +1829,6 @@
         };
 
         const shift_time_1 = formatTimeRangeFromSelects('new-emp-shift-time1');
-        const shift_time_2 = formatTimeRangeFromSelects('new-emp-shift-time2');
 
         const insertBody = {
           employee_number: document.getElementById('new-emp-number').value.trim(),
@@ -1940,8 +1864,7 @@
           payout_details_image: document.getElementById('new-emp-payout-image').value.trim(),
           
           shift_days: document.getElementById('new-emp-shift-days').value.trim(),
-          shift_time_1: shift_time_1,
-          shift_time_2: shift_time_2
+          shift_time_1: shift_time_1
         };
 
         // Inject company_id required by RLS policy

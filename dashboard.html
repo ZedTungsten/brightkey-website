@@ -732,13 +732,9 @@
                 Shift Schedule
               </h3>
               <div style="display: flex; flex-direction: column; gap: 0.75rem; font-size: 0.82rem; color: var(--text-secondary);">
-                <div id="shift1-row" style="display: flex; justify-content: space-between;">
-                  <span style="font-weight: 500;">Shift 1:</span>
+                <div style="display: flex; justify-content: space-between;">
+                  <span style="font-weight: 500;">Shift:</span>
                   <span id="shift1-display" style="font-weight: 700; color: var(--text-primary);">None</span>
-                </div>
-                <div id="shift2-row" style="display: none; justify-content: space-between;">
-                  <span style="font-weight: 500;">Shift 2:</span>
-                  <span id="shift2-display" style="font-weight: 700; color: var(--text-primary);">None</span>
                 </div>
               </div>
             </div>
@@ -997,7 +993,7 @@
           this.companyId = co?.id;
           if (!this.companyId) return;
 
-          const { data: emp } = await BKAuth.sb.from('employees').select('id, first_name, last_name, level, department, title, reporting_to, cover_photo_link, cover_text_color, status_text, shift_time_1, shift_time_2, notes').eq('email', this.currentUser.email).limit(1).maybeSingle();
+          const { data: emp } = await BKAuth.sb.from('employees').select('id, first_name, last_name, level, department, title, reporting_to, cover_photo_link, cover_text_color, status_text, shift_time_1, notes').eq('email', this.currentUser.email).limit(1).maybeSingle();
           this.employeeId = emp?.id;
           if (!this.employeeId) return;
 
@@ -1011,22 +1007,10 @@
           this.reportingTo = emp?.reporting_to || '';
 
           this.shiftTime1 = emp?.shift_time_1 || null;
-          this.shiftTime2 = emp?.shift_time_2 || null;
 
-          const s1Row = document.getElementById('shift1-row');
           if (this.shiftTime1) {
             const s1El = document.getElementById('shift1-display');
             if (s1El) s1El.textContent = this.shiftTime1;
-          }
-          if (this.shiftTime2) {
-            if (s1Row) {
-              s1Row.style.borderBottom = '1px dashed var(--border)';
-              s1Row.style.paddingBottom = '0.5rem';
-            }
-            const s2Row = document.getElementById('shift2-row');
-            if (s2Row) s2Row.style.display = 'flex';
-            const s2El = document.getElementById('shift2-display');
-            if (s2El) s2El.textContent = this.shiftTime2;
           }
 
           // Apply cover photo if it exists
@@ -2352,14 +2336,6 @@
         return this.parseTimePart(match[1], match[2], match[3]);
       },
 
-      parseShiftEndTime(rangeStr) {
-        if (!rangeStr) return null;
-        const matches = [...rangeStr.matchAll(/(\d+):(\d+)\s*(AM|PM)/gi)];
-        if (matches.length < 2) return null;
-        const match = matches[1];
-        return this.parseTimePart(match[1], match[2], match[3]);
-      },
-
       parseTimePart(hStr, mStr, ampm) {
         let h = parseInt(hStr, 10);
         const m = parseInt(mStr, 10);
@@ -2458,7 +2434,25 @@
 
         const now = new Date();
 
+        if (status === 'break') {
+          if (this.currentStatus !== 'available') {
+            this.showAlertModal(
+              'Time In Required',
+              'You must time in before starting a break.'
+            );
+            return;
+          }
+          await this.executeSetStatus(status);
+          return;
+        }
+
         if (status === 'available') {
+          // Returning from break changes presence only; it is not another Time In.
+          if (this.currentStatus === 'break') {
+            await this.executeSetStatus(status);
+            return;
+          }
+
           const todayStart = new Date();
           todayStart.setHours(0, 0, 0, 0);
 
@@ -2475,12 +2469,10 @@
             console.error('Error fetching today\'s logs:', e);
           }
 
-          const timeIns = todayLogs.filter(l => l.status === 'available').length;
-          const timeOuts = todayLogs.filter(l => l.status === 'offline').length;
-          const hasOnlyOneShift = this.shiftTime1 && !this.shiftTime2;
+          const hasTimeIn = todayLogs.some(l => l.status === 'available');
+          const hasTimeOut = todayLogs.some(l => l.status === 'offline');
 
-          // If they have only 1 shift and have already timed out today, block them
-          if (hasOnlyOneShift && timeOuts >= 1) {
+          if (hasTimeOut) {
             this.showAlertModal(
               "You Have Already Ended Your Shift",
               "You cannot time in again because you have already timed out for today."
@@ -2488,8 +2480,7 @@
             return;
           }
 
-          if (timeIns === 0) {
-            // First time in today (Shift 1)
+          if (!hasTimeIn) {
             if (this.shiftTime1) {
               const shiftStart = this.parseShiftStartTime(this.shiftTime1);
               if (shiftStart) {
@@ -2502,72 +2493,19 @@
                 }
               }
             }
-          } else if (timeIns === 1) {
-            if (timeOuts >= 1) {
-              // Second time in today. User must have 2 shifts (shiftTime2)
-              if (!this.shiftTime2) {
-                this.showAlertModal(
-                  "You Have Already Ended Your Shift",
-                  "You cannot time in again because you have already timed out for today."
-                );
-                return;
-              }
-              const shiftStart2 = this.parseShiftStartTime(this.shiftTime2);
-              if (shiftStart2) {
-                const diffMins = Math.floor((shiftStart2 - now) / 60000);
-                if (diffMins >= 30) {
-                  const formattedTime = this.formatTimeAway(diffMins);
-                  const msg = `Do you want to time-in for today? You are ${formattedTime} away from your shift.`;
-                  this.showConfirmModal(msg, () => this.executeSetStatus(status));
-                  return;
-                }
-              }
-            }
           } else {
-            toast('Cannot time in: You have already completed your shifts for today.', 'error');
+            this.showAlertModal(
+              'Already Timed In',
+              'Your attendance session is already active for today.'
+            );
             return;
           }
         }
         
         // Check for 30 mins early or more from end shift when going offline
         if (status === 'offline') {
-          const hasOnlyOneShift = this.shiftTime1 && !this.shiftTime2;
-          if (hasOnlyOneShift) {
-            this.showConfirmModal("Are you sure to end your shift today?", () => this.executeSetStatus(status));
-            return;
-          }
-
-          const todayStart = new Date();
-          todayStart.setHours(0, 0, 0, 0);
-
-          let todayLogs = [];
-          try {
-            const { data } = await BKAuth.sb
-              .from('attendance_logs')
-              .select('status')
-              .eq('employee_id', this.employeeId)
-              .gte('created_at', todayStart.toISOString());
-            todayLogs = data || [];
-          } catch (e) {}
-
-          const timeIns = todayLogs.filter(l => l.status === 'available').length;
-          let basisShift = this.shiftTime1;
-          if (timeIns >= 2 && this.shiftTime2) {
-            basisShift = this.shiftTime2;
-          }
-
-          if (basisShift) {
-            const shiftEnd = this.parseShiftEndTime(basisShift);
-            if (shiftEnd) {
-              const diffMins = Math.floor((shiftEnd - now) / 60000);
-              if (diffMins >= 30) {
-                const formattedTime = this.formatTimeAway(diffMins);
-                const msg = `Do you want to time-out for today? You are ${formattedTime} away from your shift.`;
-                this.showConfirmModal(msg, () => this.executeSetStatus(status));
-                return;
-              }
-            }
-          }
+          this.showConfirmModal("Are you sure to end your shift today?", () => this.executeSetStatus(status));
+          return;
         }
 
         await this.executeSetStatus(status);

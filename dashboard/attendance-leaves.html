@@ -1539,7 +1539,7 @@
         try {
           const sb = window.BKAuth.sb;
           const { data, error } = await sb.from('employees')
-            .select('id, first_name, last_name, shift_time_1, shift_time_2, department, title, assignment, vl_load, sl_load')
+            .select('id, first_name, last_name, shift_time_1, department, title, assignment, vl_load, sl_load')
             .order('first_name', { ascending: true });
 
           if (error) throw error;
@@ -1691,8 +1691,6 @@
 
           let shift1Start = { hour: 9, minute: 0 };
           let shift1End = { hour: 18, minute: 0 };
-          let shift2Start = null;
-          let shift2End = null;
 
           if (this.employee) {
             if (this.employee.shift_time_1) {
@@ -1705,18 +1703,6 @@
               } else {
                 const start = parseTimeStr(this.employee.shift_time_1);
                 if (start) shift1Start = start;
-              }
-            }
-            if (this.employee.shift_time_2) {
-              const parts = this.employee.shift_time_2.split('-');
-              if (parts.length === 2) {
-                const start = parseTimeStr(parts[0]);
-                const end = parseTimeStr(parts[1]);
-                if (start) shift2Start = start;
-                if (end) shift2End = end;
-              } else {
-                const start = parseTimeStr(this.employee.shift_time_2);
-                if (start) shift2Start = start;
               }
             }
           }
@@ -1826,103 +1812,49 @@
 
             // Sort logs of the day chronologically
             const sortedLogs = dayLogs.slice().sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-            const sessions = [];
-            let currentSession = null;
+            const inLog = sortedLogs.find(log => log.status === 'available') || null;
+            const outLog = inLog
+              ? sortedLogs.find(log => log.status === 'offline' && new Date(log.created_at) >= new Date(inLog.created_at)) || null
+              : null;
+            const session = (inLog || outLog) ? { inLog, outLog } : null;
 
-            sortedLogs.forEach(log => {
-              if (log.status === 'available') {
-                if (currentSession && !currentSession.outLog) {
-                  currentSession = { inLog: log, outLog: null };
-                  sessions.push(currentSession);
-                } else {
-                  currentSession = { inLog: log, outLog: null };
-                  sessions.push(currentSession);
-                }
-              } else if (log.status === 'offline') {
-                if (currentSession && !currentSession.outLog) {
-                  currentSession.outLog = log;
-                } else {
-                  currentSession = { inLog: null, outLog: log };
-                  sessions.push(currentSession);
-                }
-              }
-            });
-
-            // Shift 1
-            const s1 = sessions[0] || null;
-            let s1InText = '—';
-            let s1InVal = '';
-            let s1InLogId = '';
-            let s1InRemark = '';
+            let timeInText = '—';
+            let timeInVal = '';
+            let timeInLogId = '';
+            let timeInRemark = '';
             
-            let s1OutText = '—';
-            let s1OutVal = '';
-            let s1OutLogId = '';
-            let s1OutRemark = '';
+            let timeOutText = '—';
+            let timeOutVal = '';
+            let timeOutLogId = '';
+            let timeOutRemark = '';
 
-            if (s1) {
-              if (s1.inLog) {
-                const t = new Date(s1.inLog.created_at);
-                s1InText = t.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-                s1InVal = `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`;
-                s1InLogId = s1.inLog.id;
-                s1InRemark = getLateRemark(t, shift1Start, this.attendanceSettings);
+            if (session) {
+              if (session.inLog) {
+                const t = new Date(session.inLog.created_at);
+                timeInText = t.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+                timeInVal = `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`;
+                timeInLogId = session.inLog.id;
+                timeInRemark = getLateRemark(t, shift1Start, this.attendanceSettings);
               }
-              if (s1.outLog) {
-                const t = new Date(s1.outLog.created_at);
-                s1OutText = t.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-                s1OutVal = `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`;
-                s1OutLogId = s1.outLog.id;
-                s1OutRemark = getEarlyOutRemark(t, shift1End, this.attendanceSettings);
-              } else if (s1.inLog) {
+              if (session.outLog) {
+                const t = new Date(session.outLog.created_at);
+                timeOutText = t.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+                timeOutVal = `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`;
+                timeOutLogId = session.outLog.id;
+                timeOutRemark = getEarlyOutRemark(t, shift1End, this.attendanceSettings);
+              } else if (session.inLog) {
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
                 if (currentDateObj < today) {
-                  s1OutText = '<span style="color: var(--danger, #ef4444); font-weight: 600;">Forced Time-out</span>';
+                  timeOutText = '<span style="color: var(--danger, #ef4444); font-weight: 600;">Forced Time-out</span>';
                 }
               }
             }
 
-            // Shift 2
-            const s2 = sessions[1] || null;
-            let s2InText = '—';
-            let s2InVal = '';
-            let s2InLogId = '';
-            let s2InRemark = '';
-            
-            let s2OutText = '—';
-            let s2OutVal = '';
-            let s2OutLogId = '';
-            let s2OutRemark = '';
-
-            if (s2) {
-              if (s2.inLog) {
-                const t = new Date(s2.inLog.created_at);
-                s2InText = t.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-                s2InVal = `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`;
-                s2InLogId = s2.inLog.id;
-                s2InRemark = getLateRemark(t, shift2Start || shift1Start, this.attendanceSettings);
-              }
-              if (s2.outLog) {
-                const t = new Date(s2.outLog.created_at);
-                s2OutText = t.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-                s2OutVal = `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`;
-                s2OutLogId = s2.outLog.id;
-                s2OutRemark = getEarlyOutRemark(t, shift2End || shift1End, this.attendanceSettings);
-              } else if (s2.inLog) {
-                const today = new Date();
-                today.setHours(0, 0, 0, 0);
-                if (currentDateObj < today) {
-                  s2OutText = '<span style="color: var(--danger, #ef4444); font-weight: 600;">Forced Time-out</span>';
-                }
-              }
-            }
-
-            // Calculate Total Hours for Shift 1
-            let hrs1 = '';
-            if (s1 && s1.inLog && s1.outLog) {
-              const checkInTime = new Date(s1.inLog.created_at);
-              const checkOutTime = new Date(s1.outLog.created_at);
+            let totalHoursHtml = '—';
+            if (session && session.inLog && session.outLog) {
+              const checkInTime = new Date(session.inLog.created_at);
+              const checkOutTime = new Date(session.outLog.created_at);
               if (checkOutTime >= checkInTime) {
                 let diffMs = checkOutTime - checkInTime;
                 if (this.isOvertimeAllowed && !this.isOvertimeAllowed(this.employee)) {
@@ -1934,42 +1866,8 @@
                 const totalMins = Math.floor(diffMs / 60000);
                 const h = Math.floor(totalMins / 60);
                 const m = totalMins % 60;
-                hrs1 = `${h}h ${m}m`;
+                totalHoursHtml = `<span style="font-weight:600; color:var(--text-primary);">${h}h ${m}m</span>`;
               }
-            }
-
-            // Calculate Total Hours for Shift 2
-            let hrs2 = '';
-            if (s2 && s2.inLog && s2.outLog) {
-              const checkInTime = new Date(s2.inLog.created_at);
-              const checkOutTime = new Date(s2.outLog.created_at);
-              if (checkOutTime >= checkInTime) {
-                let diffMs = checkOutTime - checkInTime;
-                if (this.isOvertimeAllowed && !this.isOvertimeAllowed(this.employee) && shift2Start && shift2End) {
-                  let regularShiftMins = (shift2End.hour * 60 + shift2End.minute) - (shift2Start.hour * 60 + shift2Start.minute);
-                  if (regularShiftMins < 0) regularShiftMins += 24 * 60;
-                  const regularShiftMs = regularShiftMins * 60000;
-                  if (diffMs > regularShiftMs) diffMs = regularShiftMs;
-                }
-                const totalMins = Math.floor(diffMs / 60000);
-                const h = Math.floor(totalMins / 60);
-                const m = totalMins % 60;
-                hrs2 = `${h}h ${m}m`;
-              }
-            }
-
-            let totalHoursHtml = '—';
-            if (hrs1 && hrs2) {
-              totalHoursHtml = `
-                <div style="display: flex; flex-direction: column; gap: 0.25rem;">
-                  <span style="font-weight:600; color:var(--text-primary);">${hrs1}</span>
-                  <span style="font-weight:600; color:var(--text-muted); font-size:0.75rem;">${hrs2}</span>
-                </div>
-              `;
-            } else if (hrs1) {
-              totalHoursHtml = `<span style="font-weight:600; color:var(--text-primary);">${hrs1}</span>`;
-            } else if (hrs2) {
-              totalHoursHtml = `<span style="font-weight:600; color:var(--text-primary);">${hrs2}</span>`;
             }
 
             currentWeekDays.push({
@@ -1977,23 +1875,14 @@
               dateKey: dateKey,
               dateFriendly: currentDateObj.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }),
               
-              s1InText,
-              s1InVal,
-              s1InLogId,
-              s1InRemark,
-              s1OutText,
-              s1OutVal,
-              s1OutLogId,
-              s1OutRemark,
-
-              s2InText,
-              s2InVal,
-              s2InLogId,
-              s2InRemark,
-              s2OutText,
-              s2OutVal,
-              s2OutLogId,
-              s2OutRemark,
+              timeInText,
+              timeInVal,
+              timeInLogId,
+              timeInRemark,
+              timeOutText,
+              timeOutVal,
+              timeOutLogId,
+              timeOutRemark,
 
               totalHoursHtml
             });
@@ -2024,10 +1913,8 @@
                   <thead>
                     <tr>
                       <th>Date</th>
-                      <th>Time In 1</th>
-                      <th>Time Out 1</th>
-                      <th>Time In 2</th>
-                      <th>Time Out 2</th>
+                      <th>Time In</th>
+                      <th>Time Out</th>
                       <th>Total Hours</th>
                     </tr>
                   </thead>
@@ -2036,44 +1923,24 @@
                       <tr>
                         <td><strong>${r.dateFriendly}</strong></td>
                         
-                        <!-- Time In 1 -->
+                        <!-- Time In -->
                         <td>
                           ${this.editMode ? `
                             <input type="time" class="form-input" style="width: 110px; height: 28px; padding: 0 0.5rem; font-size: 0.82rem; font-weight: 600;"
-                              value="${r.s1InVal}"
-                              onchange="AttendanceLogsApp.saveRowTime('${r.dateKey}', 'available', this.value, '${r.s1InLogId}')" />
-                          ` : `<span style="font-weight:600; color:var(--text-primary);">${r.s1InText}</span>`}
-                          ${formatRemarkHtml(r.s1InRemark, 'in')}
+                              value="${r.timeInVal}"
+                              onchange="AttendanceLogsApp.saveRowTime('${r.dateKey}', 'available', this.value, '${r.timeInLogId}')" />
+                          ` : `<span style="font-weight:600; color:var(--text-primary);">${r.timeInText}</span>`}
+                          ${formatRemarkHtml(r.timeInRemark, 'in')}
                         </td>
 
-                        <!-- Time Out 1 -->
+                        <!-- Time Out -->
                         <td>
                           ${this.editMode ? `
                             <input type="time" class="form-input" style="width: 110px; height: 28px; padding: 0 0.5rem; font-size: 0.82rem; font-weight: 600;"
-                              value="${r.s1OutVal}"
-                              onchange="AttendanceLogsApp.saveRowTime('${r.dateKey}', 'offline', this.value, '${r.s1OutLogId}')" />
-                          ` : `<span style="font-weight:600; color:var(--text-primary);">${r.s1OutText}</span>`}
-                          ${formatRemarkHtml(r.s1OutRemark, 'out')}
-                        </td>
-
-                        <!-- Time In 2 -->
-                        <td>
-                          ${this.editMode ? `
-                            <input type="time" class="form-input" style="width: 110px; height: 28px; padding: 0 0.5rem; font-size: 0.82rem; font-weight: 600;"
-                              value="${r.s2InVal}"
-                              onchange="AttendanceLogsApp.saveRowTime('${r.dateKey}', 'available', this.value, '${r.s2InLogId}')" />
-                          ` : `<span style="font-weight:600; color:var(--text-primary);">${r.s2InText}</span>`}
-                          ${formatRemarkHtml(r.s2InRemark, 'in')}
-                        </td>
-
-                        <!-- Time Out 2 -->
-                        <td>
-                          ${this.editMode ? `
-                            <input type="time" class="form-input" style="width: 110px; height: 28px; padding: 0 0.5rem; font-size: 0.82rem; font-weight: 600;"
-                              value="${r.s2OutVal}"
-                              onchange="AttendanceLogsApp.saveRowTime('${r.dateKey}', 'offline', this.value, '${r.s2OutLogId}')" />
-                          ` : `<span style="font-weight:600; color:var(--text-primary);">${r.s2OutText}</span>`}
-                          ${formatRemarkHtml(r.s2OutRemark, 'out')}
+                              value="${r.timeOutVal}"
+                              onchange="AttendanceLogsApp.saveRowTime('${r.dateKey}', 'offline', this.value, '${r.timeOutLogId}')" />
+                          ` : `<span style="font-weight:600; color:var(--text-primary);">${r.timeOutText}</span>`}
+                          ${formatRemarkHtml(r.timeOutRemark, 'out')}
                         </td>
 
                         <!-- Total Hours -->

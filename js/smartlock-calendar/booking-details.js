@@ -1,5 +1,20 @@
 'use strict';
 
+function formatSmartlockProductLine(sku, title) {
+  const normalizedSku = String(sku || '').trim();
+  let description = String(title || '').trim();
+  if (normalizedSku && description.toLowerCase().startsWith(normalizedSku.toLowerCase())) {
+    description = description.slice(normalizedSku.length).replace(/^[\s\-–—:|]+/, '').trim();
+  }
+  if (description === normalizedSku) description = '';
+  return `<strong>${escapeHtml(normalizedSku)}</strong>${description ? ` - ${escapeHtml(description)}` : ''}`;
+}
+
+function formatMaterialLabel(value) {
+  const label = String(value || 'N/A').trim();
+  return label === 'N/A' ? label : label.charAt(0).toUpperCase() + label.slice(1);
+}
+
 // --- Modal Sheets & Lightbox ---
 function openDetailsModal(bookingId) {
   const b = dbBookings.find(booking => booking.id === bookingId);
@@ -155,7 +170,7 @@ function openDetailsModal(bookingId) {
               t = names[idx] || itemSku;
             }
           }
-          return `<strong>${escapeHtml(itemSku)}</strong> - ${escapeHtml(t)}`;
+          return formatSmartlockProductLine(itemSku, t);
         });
         titleHtml = doorTitles.map(tHtml => `<div style="font-size:0.8rem; color:var(--text-secondary); margin-bottom:0.4rem;">${tHtml}</div>`).join('');
         isCancelled = attachedSkusList.length > 0 && attachedSkusList.every(itemSku => {
@@ -178,7 +193,7 @@ function openDetailsModal(bookingId) {
               t = names[idx] || itemSku;
             }
           }
-          return `<strong>${escapeHtml(itemSku)}</strong> - ${escapeHtml(t)}`;
+          return formatSmartlockProductLine(itemSku, t);
         });
         
         titleHtml = doorTitles.map(tHtml => `<div style="font-size:0.8rem; color:var(--text-secondary); margin-bottom:0.4rem;">${tHtml}</div>`).join('');
@@ -186,16 +201,13 @@ function openDetailsModal(bookingId) {
       } else {
         const currentSku = hardwareProducts[i]?.sku || hardwareSkus[i] || 'N/A';
         sku = currentSku;
-        let currentTitle = hardwareProducts[i]?.title || hardwareNames[i] || 'N/A';
-        if (currentTitle === 'N/A' || currentTitle === currentSku) {
-          currentTitle = '';
-        }
-        titleHtml = `<div style="font-size:0.8rem; color:var(--text-secondary); margin-bottom:0.4rem;"><strong>${escapeHtml(sku)}</strong>${currentTitle ? ` - ${escapeHtml(currentTitle)}` : ''}</div>`;
+        const currentTitle = hardwareProducts[i]?.title || hardwareProducts[i]?.name || hardwareNames[i] || currentSku;
+        titleHtml = `<div style="font-size:0.8rem; color:var(--text-secondary); margin-bottom:0.4rem;">${formatSmartlockProductLine(sku, currentTitle)}</div>`;
         isCancelled = hardwareProducts[i]?.cancelled || false;
       }
 
-      const doorMaterial = door?.doorMaterial || 'N/A';
-      const jambMaterial = door?.jambMaterial || 'N/A';
+      const doorMaterial = formatMaterialLabel(door?.doorMaterial);
+      const jambMaterial = formatMaterialLabel(door?.jambMaterial);
       const swing = door?.swing || 'N/A';
 
       // Photo thumbnails

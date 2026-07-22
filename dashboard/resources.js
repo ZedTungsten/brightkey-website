@@ -207,6 +207,8 @@ function renderExplorer() {
           iconHtml = `<svg viewBox="0 0 24 24" width="30" height="30" stroke="currentColor" stroke-width="2" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="3" x2="9" y2="21"></line><line x1="15" y1="3" x2="15" y2="21"></line><line x1="3" y1="9" x2="21" y2="9"></line><line x1="3" y1="15" x2="21" y2="15"></line></svg>`;
         } else if (item.file_type === 'music') {
           iconHtml = `<svg viewBox="0 0 24 24" width="30" height="30" stroke="currentColor" stroke-width="2" fill="none"><path d="M9 18V5l12-2v13"></path><circle cx="6.5" cy="18" r="2.5"></circle><circle cx="18.5" cy="16" r="2.5"></circle></svg>`;
+        } else if (item.file_type === 'youtube') {
+          iconHtml = `<img src="https://upload.wikimedia.org/wikipedia/commons/0/09/YouTube_full-color_icon_%282017%29.svg" alt="YouTube" style="width:38px; height:auto; display:block;" />`;
         } else if (item.file_type === 'video') {
           iconHtml = `<svg viewBox="0 0 24 24" width="30" height="30" stroke="currentColor" stroke-width="2" fill="none"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"></rect><line x1="7" y1="2" x2="7" y2="22"></line><line x1="17" y1="2" x2="17" y2="22"></line><line x1="2" y1="12" x2="22" y2="12"></line><line x1="2" y1="7" x2="7" y2="7"></line><line x1="2" y1="17" x2="7" y2="17"></line><line x1="17" y1="17" x2="22" y2="17"></line><line x1="17" y1="7" x2="22" y2="7"></line></svg>`;
         } else {
@@ -217,7 +219,7 @@ function renderExplorer() {
 
     // Auto append lowercase extensions to files in Grid view
     let displayName = item.name;
-    if (item.type !== 'folder' && !displayName.toLowerCase().endsWith('.' + String(item.file_type).toLowerCase())) {
+    if (item.type !== 'folder' && item.file_type !== 'youtube' && !displayName.toLowerCase().endsWith('.' + String(item.file_type).toLowerCase())) {
       displayName = displayName + '.' + String(item.file_type).toLowerCase();
     }
 
@@ -346,12 +348,20 @@ function renderExplorer() {
       card.setAttribute('data-type', item.type);
 
       card.addEventListener('dragstart', (e) => {
+        const draggedIds = selectedResourceIds.includes(item.id)
+          ? [...selectedResourceIds]
+          : [item.id];
         e.dataTransfer.setData('text/plain', item.id);
-        card.classList.add('dragging');
+        e.dataTransfer.setData('application/x-brightkey-resource-ids', JSON.stringify(draggedIds));
+        document.querySelectorAll('.item-card').forEach(resourceCard => {
+          if (draggedIds.includes(resourceCard.getAttribute('data-id'))) {
+            resourceCard.classList.add('dragging');
+          }
+        });
       });
 
       card.addEventListener('dragend', () => {
-        card.classList.remove('dragging');
+        document.querySelectorAll('.item-card.dragging').forEach(resourceCard => resourceCard.classList.remove('dragging'));
       });
 
       // Only folders can receive dropped items
@@ -359,8 +369,8 @@ function renderExplorer() {
         card.addEventListener('dragover', (e) => {
           e.preventDefault();
           // Prevent dragging a folder onto itself
-          const draggedId = e.dataTransfer.types.includes('text/plain') ? 'valid' : '';
-          if (draggedId) {
+          const hasResourcePayload = e.dataTransfer.types.includes('application/x-brightkey-resource-ids') || e.dataTransfer.types.includes('text/plain');
+          if (hasResourcePayload) {
             card.classList.add('dragover-target');
           }
         });
@@ -373,22 +383,34 @@ function renderExplorer() {
           e.preventDefault();
           card.classList.remove('dragover-target');
           const draggedId = e.dataTransfer.getData('text/plain');
+          let draggedIds = [draggedId];
+          const multiPayload = e.dataTransfer.getData('application/x-brightkey-resource-ids');
+          if (multiPayload) {
+            try {
+              const parsedIds = JSON.parse(multiPayload);
+              if (Array.isArray(parsedIds)) draggedIds = parsedIds;
+            } catch (_) {}
+          }
+          draggedIds = [...new Set(draggedIds.filter(id => id && id !== item.id))];
           
           // Safety constraints
-          if (!draggedId || draggedId === item.id) return;
+          if (draggedIds.length === 0) return;
 
           try {
-            // Perform moving parent_id update in Supabase
+            // Move the dragged item, or every checked item when dragging a checked resource.
             const { error } = await sb.from('sales_resources')
               .update({ parent_id: item.id, updated_at: new Date().toISOString() })
-              .eq('id', draggedId);
+              .in('id', draggedIds);
 
             if (error) throw error;
-            showToast('Item moved successfully.');
+            showToast(draggedIds.length === 1 ? 'Item moved successfully.' : `${draggedIds.length} selected items moved successfully.`);
+            if (draggedIds.some(id => selectedResourceIds.includes(id))) {
+              clearResourceSelection();
+            }
             await loadResources();
           } catch (err) {
             console.error(err);
-            showToast('Failed to move item: ' + err.message, true);
+            showToast('Unable to move the selected resources. Please try again.', true);
           }
         });
       }
@@ -1039,6 +1061,7 @@ window.openUploadFileModal = function() {
   document.getElementById('file-name-input').value = "";
   document.getElementById('file-uploader').value = "";
   document.getElementById('file-gdrive-url').value = "";
+  document.getElementById('file-youtube-url').value = "";
   document.getElementById('file-source-type').value = "upload";
   
   // Reset drop zone state
@@ -1161,16 +1184,24 @@ document.addEventListener("DOMContentLoaded", () => {
 window.toggleFileSourceFields = function(source) {
   const uploadField = document.getElementById('file-upload-field');
   const gdriveField = document.getElementById('file-gdrive-field');
+  const youtubeField = document.getElementById('file-youtube-field');
   const btn = document.getElementById('btn-save-file');
 
   if (source === 'upload') {
     uploadField.style.display = 'block';
     gdriveField.style.display = 'none';
+    youtubeField.style.display = 'none';
     btn.textContent = "Upload";
-  } else {
+  } else if (source === 'gdrive') {
     uploadField.style.display = 'none';
     gdriveField.style.display = 'block';
+    youtubeField.style.display = 'none';
     btn.textContent = "Link File";
+  } else {
+    uploadField.style.display = 'none';
+    gdriveField.style.display = 'none';
+    youtubeField.style.display = 'block';
+    btn.textContent = "Link Video";
   }
 };
 
@@ -1270,7 +1301,7 @@ window.saveFile = async function() {
 
       if (dbErr) throw dbErr;
       showToast('File uploaded successfully!');
-    } else {
+    } else if (source === 'gdrive') {
       // Google Drive link
       let url = document.getElementById('file-gdrive-url').value.trim();
 
@@ -1309,6 +1340,33 @@ window.saveFile = async function() {
 
       if (driveDbErr) throw driveDbErr;
       showToast('Google Drive link saved.');
+    } else {
+      const url = document.getElementById('file-youtube-url').value.trim();
+      let parsedUrl;
+      try {
+        parsedUrl = new URL(url);
+      } catch (_) {
+        showToast('Please enter a valid YouTube link.', true);
+        return;
+      }
+
+      const host = parsedUrl.hostname.toLowerCase().replace(/^www\./, '');
+      if (!['youtube.com', 'm.youtube.com', 'youtu.be'].includes(host)) {
+        showToast('Please enter a YouTube or youtu.be link.', true);
+        return;
+      }
+
+      const { error: youtubeDbErr } = await sb.from('sales_resources').insert([{
+        company_id: currentCompanyId,
+        name: name,
+        type: 'file',
+        file_type: 'youtube',
+        file_url: url,
+        parent_id: currentFolderId
+      }]);
+
+      if (youtubeDbErr) throw youtubeDbErr;
+      showToast('YouTube link saved.');
     }
 
     closeModal('upload-file-modal');
@@ -1655,6 +1713,13 @@ window.viewFileResource = function(item) {
         <audio controls autoplay src="${embedUrl}" style="width:100%; margin-top:0.5rem;"></audio>
       </div>
     `;
+  } else if (item.file_type === 'youtube') {
+    const youtubeEmbedUrl = getYouTubeEmbedUrl(embedUrl);
+    if (youtubeEmbedUrl) {
+      body.innerHTML = `<iframe src="${youtubeEmbedUrl}" title="${escFulfillment(item.name)}" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen style="width:min(960px, 100%); aspect-ratio:16/9; border:none; border-radius:8px; background:#000; margin-top:2vh;"></iframe>`;
+    } else {
+      body.innerHTML = `<div style="color:var(--text-muted); padding:2rem;">This YouTube link cannot be previewed.</div>`;
+    }
   } else if (item.file_type === 'video') {
     // Video Player View
     body.innerHTML = `
@@ -1665,6 +1730,25 @@ window.viewFileResource = function(item) {
     body.innerHTML = `<iframe src="${embedUrl}" style="width:100%; height:80vh; min-height:600px; border:none; background:#fff; border-radius:8px;"></iframe>`;
   }
 };
+
+function getYouTubeEmbedUrl(url) {
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.toLowerCase().replace(/^www\./, '');
+    let videoId = '';
+    if (host === 'youtu.be') {
+      videoId = parsed.pathname.split('/').filter(Boolean)[0] || '';
+    } else if (['youtube.com', 'm.youtube.com'].includes(host)) {
+      if (parsed.pathname === '/watch') videoId = parsed.searchParams.get('v') || '';
+      else if (parsed.pathname.startsWith('/shorts/') || parsed.pathname.startsWith('/embed/')) {
+        videoId = parsed.pathname.split('/').filter(Boolean)[1] || '';
+      }
+    }
+    return /^[A-Za-z0-9_-]{6,}$/.test(videoId) ? `https://www.youtube.com/embed/${videoId}` : '';
+  } catch (_) {
+    return '';
+  }
+}
 
 // Paging helper navigation
 window.navigateViewerFile = function(direction) {

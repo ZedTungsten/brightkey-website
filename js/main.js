@@ -377,20 +377,8 @@ if (yearEl) yearEl.textContent = new Date().getFullYear();
 (function loadCartScript() {
   if (typeof getCart !== 'undefined') return;
   if (document.querySelector('script[src*="cart.js"]')) return;
-  const pathname = window.location.pathname;
-  let pathPrefix = '';
-  if (pathname.includes('/dashboard/warehouse/')) {
-    pathPrefix = '../../';
-  } else if (pathname.includes('/products/') || pathname.includes('/dashboard/')) {
-    pathPrefix = '../';
-  } else if (pathname.includes('/internal/ecommerce/') || pathname.includes('/internal/web-css/')) {
-    pathPrefix = '../../';
-  } else if (pathname.includes('/internal/')) {
-    pathPrefix = '../';
-  }
-  
   const script = document.createElement('script');
-  script.src = pathPrefix + 'js/cart.js';
+  script.src = '/js/cart.js';
   document.head.appendChild(script);
 })();
 
