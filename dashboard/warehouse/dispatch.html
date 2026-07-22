@@ -865,13 +865,31 @@
         }
       });
 
-      const orderGroups = Object.values(groups);
+      const bookingByOrder = new Map(bookings.map(booking => [booking.order_no, booking]));
+      const installPeriodRank = (value) => {
+        const normalized = String(value || '').toLowerCase();
+        if (normalized.includes('morning') || normalized.includes('am')) return 0;
+        if (normalized.includes('afternoon') || normalized.includes('pm')) return 1;
+        return 2;
+      };
+      const orderGroups = Object.values(groups).sort((a, b) => {
+        const bookingA = bookingByOrder.get(a.reference_id);
+        const bookingB = bookingByOrder.get(b.reference_id);
+        const dateA = parseDispatchDate(bookingA?.scheduled_date)?.getTime() ?? Number.POSITIVE_INFINITY;
+        const dateB = parseDispatchDate(bookingB?.scheduled_date)?.getTime() ?? Number.POSITIVE_INFINITY;
+        if (dateA !== dateB) return dateA - dateB;
+
+        const periodDifference = installPeriodRank(bookingA?.scheduled_time) - installPeriodRank(bookingB?.scheduled_time);
+        if (periodDifference !== 0) return periodDifference;
+
+        return String(a.reference_id).localeCompare(String(b.reference_id));
+      });
 
       orderGroups.forEach(group => {
         const packedDate = formatDispatchDate(group.timestamp_packed, true);
         const pickupSchedule = pickupSchedules[group.reference_id];
         const pickupDate = formatDispatchSchedule(pickupSchedule?.date, pickupSchedule?.slot);
-        const installation = bookings.find(booking => booking.order_no === group.reference_id);
+        const installation = bookingByOrder.get(group.reference_id);
         const installDate = formatDispatchSchedule(installation?.scheduled_date, installation?.scheduled_time);
         const supplies = Array.isArray(dispatchSupplies[group.reference_id]) ? dispatchSupplies[group.reference_id] : [];
         const supplySkuPills = supplies.map(item => `<span style="display:inline-flex; align-items:center; width:max-content; padding:0.2rem 0.45rem; border-radius:999px; background:rgba(6,182,212,0.12); color:var(--cyan-light); font-size:0.72rem; font-weight:700;">${escFulfillment(item.sku)}</span>`).join('');
