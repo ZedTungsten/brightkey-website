@@ -6,10 +6,10 @@
   <title>Installation Schedules — Brightkey Admin</title>
   <link rel="preconnect" href="https://fonts.bunny.net" />
   <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="../css/style.css" />
-  <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg?v=2" />
+  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg?v=2" />
 
-  <link rel="stylesheet" href="/dashboard/booking-schedules.css?v=3">
+  <link rel="stylesheet" href="/dashboard/booking-schedules.css?v=5">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 </head>
 <body>
@@ -32,8 +32,9 @@
         <main class="main-panel">
           <!-- Tabs -->
           <div class="drawer-tabs">
-            <button class="tab-btn active" id="tab-schedules" onclick="switchMainTab('schedules')">Schedules</button>
-            <button class="tab-btn" id="tab-all-bookings" onclick="switchMainTab('all-bookings')">All Bookings</button>
+            <a class="tab-btn" id="tab-calendar" href="/dashboard/booking-schedules/calendar">Calendar</a>
+            <a class="tab-btn" id="tab-all-bookings" href="/dashboard/booking-schedules/all-bookings">All Bookings</a>
+            <a class="tab-btn" id="tab-installers" href="/dashboard/booking-schedules/installers">Installers</a>
           </div>
 
           <div class="scroll-container">
@@ -45,6 +46,7 @@
               <button class="btn btn-outline btn-sm" onclick="changeMonth(1)">▶</button>
             </div>
 
+            <div class="month-bookings-content" id="month-bookings-content">
             <!-- Schedules Tab Panel -->
             <div id="tab-panel-schedules">
               <!-- Calendar View Content Container -->
@@ -89,6 +91,42 @@
                     <!-- Dynamic content -->
                   </tbody>
                 </table>
+              </div>
+            </div>
+
+            <!-- Installers Tab Panel -->
+            <div id="tab-panel-installers" style="display: none; padding-top: 1rem;">
+              <section class="installer-summary-section">
+                <h2 class="installer-summary-title">Jobs</h2>
+                <div class="installer-summary-table-wrap">
+                  <table class="installer-summary-table">
+                    <thead>
+                      <tr>
+                        <th>Installer</th>
+                        <th>City</th>
+                        <th>Last Assigned</th>
+                        <th>Lead</th>
+                        <th>Assist</th>
+                        <th>Total</th>
+                        <th>Ocular</th>
+                        <th>Backjobs</th>
+                        <th>All Jobs</th>
+                        <th>Completed</th>
+                        <th>Service Jobs</th>
+                      </tr>
+                    </thead>
+                    <tbody id="installer-assignment-tbody"></tbody>
+                    <tfoot id="installer-assignment-tfoot"></tfoot>
+                  </table>
+                </div>
+                <p class="installer-summary-legend">Numbers in parentheses are scheduled and upcoming jobs.</p>
+              </section>
+
+            </div>
+
+              <div class="month-loading-overlay" id="month-loading-overlay" aria-hidden="true">
+                <span class="month-loading-spinner" aria-hidden="true"></span>
+                <span>Loading bookings...</span>
               </div>
             </div>
 
@@ -557,15 +595,86 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
-  <script src="../js/auth.js"></script>
-  <script src="../js/sidebar.js"></script>
-  <script src="../js/main.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/sidebar.js"></script>
+  <script src="/js/main.js"></script>
   <script src="/dashboard/booking-schedules/index.js"></script>
   <script src="/dashboard/booking-schedules/booking-details.js"></script>
   <script src="/dashboard/booking-schedules/booking-assets.js"></script>
   <script src="/dashboard/booking-schedules/booking-actions.js"></script>
   <script src="/dashboard/booking-schedules/receipt.js"></script>
-  <script src="/dashboard/booking-schedules/installers.js"></script>
+  <script src="/dashboard/booking-schedules/installers.js?v=2"></script>
+  <script>
+    // Kept inline so the clean nested route can render the summary even when a local static server caches JS assets.
+    window.drawInstallersSummary = function() {
+      const assignmentBody = document.getElementById('installer-assignment-tbody');
+      if (!assignmentBody) return;
+      const names = new Set(['installer', 'installers', ...(window._installerAssignmentNames || []).map(name => String(name).trim().toLowerCase())]);
+      const people = dbEmployees.filter(employee => String(employee.assignment || '').split(',').some(name => names.has(name.trim().toLowerCase())));
+      const threshold = Number(installerPayoutSettings?.installations_before_crediting ?? 15);
+      const leadWeight = Number(installerPayoutSettings?.lead_credit ?? 1);
+      const assistWeight = Number(installerPayoutSettings?.assist_credit ?? 0.5);
+      const parse = value => Array.isArray(value) ? value : (() => { try { const result = JSON.parse(value || '[]'); return Array.isArray(result) ? result : []; } catch (_) { return []; } })();
+      const jobsFor = (booking, id) => {
+        const doors = parse(booking.doors);
+        const bookingInstallers = parse(booking.installers);
+        const legacyIds = String(booking.installer_id || '').split(' | ');
+        const legacyIndex = legacyIds.indexOf(id);
+        const bookingMatches = bookingInstallers.filter(installer => installer?.id === id);
+        const bookingAssigned = bookingMatches.length || legacyIndex >= 0;
+        const hasDoorAssignments = doors.some(door => parse(door?.installers).some(installer => installer?.id || installer?.name));
+        const roles = matches => {
+          const result = matches.map(installer => String(installer.role || 'lead').toLowerCase());
+          if (!result.length && legacyIndex >= 0) result.push(legacyIndex === 0 ? 'lead' : 'assist');
+          return result;
+        };
+        const completed = ['done', 'completed', 'finished'].includes(String(booking.status || '').toLowerCase());
+        if (!doors.length) return bookingAssigned ? [{ roles: roles(bookingMatches), completed }] : [];
+        return doors.flatMap(door => {
+          const matches = parse(door?.installers).filter(installer => installer?.id === id);
+          if (!matches.length && (hasDoorAssignments || !bookingAssigned)) return [];
+          return [{ roles: roles(matches.length ? matches : bookingMatches), completed: Boolean(door?.completed) || completed }];
+        });
+      };
+      const summaries = people.map(employee => {
+        const summary = { employee, lead:0, scheduledLead:0, assist:0, scheduledAssist:0, ocular:0, scheduledOcular:0, backjobs:0, scheduledBackjobs:0, credit:0, service:0, lastAssigned:'' };
+        dbBookings.forEach(booking => {
+          const type = String(booking.product_skus || '').trim().toLowerCase();
+          const order = String(booking.order_no || '').toUpperCase();
+          const dayOff = type === 'day off' || order.startsWith('DO-');
+          const ocular = type === 'ocular' || order.startsWith('OC-');
+          const backjob = type === 'backjob' || order.startsWith('BJ-');
+          const assignedJobs = jobsFor(booking, employee.id);
+          if (!dayOff && assignedJobs.length && booking.scheduled_date && (!summary.lastAssigned || booking.scheduled_date > summary.lastAssigned)) summary.lastAssigned = booking.scheduled_date;
+          assignedJobs.forEach(job => {
+            if (dayOff) return;
+            if (ocular) { summary.ocular++; if (!job.completed) summary.scheduledOcular++; }
+            else if (backjob) { summary.backjobs++; if (!job.completed) summary.scheduledBackjobs++; }
+            else if (job.roles.includes('lead')) { summary.lead++; if (!job.completed) summary.scheduledLead++; }
+            else if (job.roles.includes('assist')) { summary.assist++; if (!job.completed) summary.scheduledAssist++; }
+            if (!job.completed || ocular || backjob) return;
+            if (job.roles.includes('lead')) summary.credit += leadWeight; else if (job.roles.includes('assist')) summary.credit += assistWeight;
+            if (job.roles.includes('service')) summary.service++;
+          });
+        });
+        summary.installationDone = (summary.lead - summary.scheduledLead) + (summary.assist - summary.scheduledAssist);
+        summary.installationScheduled = summary.scheduledLead + summary.scheduledAssist;
+        summary.total = summary.lead + summary.assist + summary.ocular + summary.backjobs;
+        summary.extra = Math.max(0, summary.credit - threshold) + summary.service;
+        return summary;
+      });
+      const person = employee => {
+        const fullName = `${employee.first_name || ''} ${employee.last_name || ''}`.trim();
+        const initials = `${String(employee.first_name || '').charAt(0)}${String(employee.last_name || '').charAt(0)}`.toUpperCase();
+        const avatar = employee.picture_link ? `<img class="installer-summary-avatar" src="${escapeHtml(employee.picture_link)}" alt="">` : `<span class="installer-summary-avatar installer-summary-avatar-fallback">${escapeHtml(initials)}</span>`;
+        return `<div class="installer-summary-person">${avatar}<span>${escapeHtml(fullName)}</span></div>`;
+      };
+      const decimal = value => Number(value || 0).toFixed(1);
+      const date = value => value ? new Date(`${value}T00:00:00`).toLocaleDateString('en-US', { month:'short', day:'2-digit', year:'numeric' }) : '—';
+      const metric = (total, scheduled) => `${total}<span class="installer-scheduled-count"> (${scheduled})</span>`;
+      assignmentBody.innerHTML = summaries.map(s => `<tr><td>${person(s.employee)}</td><td>${escapeHtml(s.employee.city || '—')}</td><td>${date(s.lastAssigned)}</td><td class="installer-metric-lead">${metric(s.lead, s.scheduledLead)}</td><td class="installer-metric-assist">${metric(s.assist, s.scheduledAssist)}</td><td class="installer-summary-row-total">${metric(s.installationDone, s.installationScheduled)}</td><td class="installer-metric-ocular">${metric(s.ocular, s.scheduledOcular)}</td><td class="installer-metric-backjob">${metric(s.backjobs, s.scheduledBackjobs)}</td><td class="installer-summary-row-total">${s.total}</td><td><span class="installer-metric-lead">${decimal(s.credit)}</span><span class="installer-threshold-limit">/${decimal(threshold)}</span></td><td class="installer-metric-assist">${s.service}</td></tr>`).join('');
+    };
+  </script>
   <script src="/dashboard/booking-schedules/booking-media.js"></script>
   <script src="/dashboard/booking-schedules/door-editor.js"></script>
 </body>

@@ -58,6 +58,7 @@
     let dbProductsBySku = new Map();
     let bookingMediaRequirements = [];
     let bookingChecklist = [];
+    let installerPayoutSettings = {};
     let filteredBookings = [];
     let selectedBooking = null;
     let selectedDayDate = '';
@@ -92,6 +93,42 @@
     function updateHash() {
       const mm = String(currentMonth + 1).padStart(2, '0');
       window.location.replace(`#${mm}-${currentYear}`);
+      updateTabLinks();
+    }
+
+    function getCurrentSubpage() {
+      const path = window.location.pathname.replace(/\/$/, '');
+      if (path.endsWith('/all-bookings')) return 'all-bookings';
+      if (path.endsWith('/installers')) return 'installers';
+      return 'calendar';
+    }
+
+    function updateTabLinks() {
+      const monthHash = `#${String(currentMonth + 1).padStart(2, '0')}-${currentYear}`;
+      const calendarTab = document.getElementById('tab-calendar');
+      const allBookingsTab = document.getElementById('tab-all-bookings');
+      const installersTab = document.getElementById('tab-installers');
+      if (calendarTab) calendarTab.href = `/dashboard/booking-schedules/calendar${monthHash}`;
+      if (allBookingsTab) allBookingsTab.href = `/dashboard/booking-schedules/all-bookings${monthHash}`;
+      if (installersTab) installersTab.href = `/dashboard/booking-schedules/installers${monthHash}`;
+    }
+
+    function renderCurrentSubpage() {
+      const currentSubpage = getCurrentSubpage();
+      const tabCalendar = document.getElementById('tab-calendar');
+      const tabAllBookings = document.getElementById('tab-all-bookings');
+      const tabInstallers = document.getElementById('tab-installers');
+      const panelCalendar = document.getElementById('tab-panel-schedules');
+      const panelAllBookings = document.getElementById('tab-panel-all-bookings');
+      const panelInstallers = document.getElementById('tab-panel-installers');
+
+      if (tabCalendar) tabCalendar.classList.toggle('active', currentSubpage === 'calendar');
+      if (tabAllBookings) tabAllBookings.classList.toggle('active', currentSubpage === 'all-bookings');
+      if (tabInstallers) tabInstallers.classList.toggle('active', currentSubpage === 'installers');
+      if (panelCalendar) panelCalendar.style.display = currentSubpage === 'calendar' ? 'block' : 'none';
+      if (panelAllBookings) panelAllBookings.style.display = currentSubpage === 'all-bookings' ? 'block' : 'none';
+      if (panelInstallers) panelInstallers.style.display = currentSubpage === 'installers' ? 'block' : 'none';
+
     }
 
     function getMonthDateRange(year, month) {
@@ -107,9 +144,13 @@
     ];
 
     document.addEventListener("DOMContentLoaded", async () => {
-      renderSkeletons();
+      setMonthBookingsLoading(true);
+      updateTabLinks();
+      renderCurrentSubpage();
+      const monthTitle = document.getElementById('calendar-month-title');
+      if (monthTitle) monthTitle.textContent = `${MONTH_NAMES[currentMonth]} ${currentYear}`;
       if (window.BKAuth) {
-        const authInfo = await window.BKAuth.checkRoleGate(['Operations'], '../admin.html');
+        const authInfo = await window.BKAuth.checkRoleGate(['Operations'], '/admin.html');
         if (!authInfo) return;
         sb = window.BKAuth.sb;
         currentTenantId = authInfo.tenantId;
@@ -161,7 +202,7 @@
     async function loadStaticData() {
       try {
         const [employeesRes, assignmentsRes, productsRes] = await Promise.all([
-          sb.from('employees').select('id, employee_number, first_name, last_name, title, department, assignment'),
+          sb.from('employees').select('id, employee_number, first_name, last_name, title, department, assignment, city, picture_link, employment_status'),
           sb.from('employee_assignments').select('id, name, visibility').eq('company_id', currentCompanyId || ''),
           sb.from('products').select('id, sku, category')
         ]);
@@ -175,8 +216,21 @@
         dbEmployees = employeesRes.data || [];
 
         window._installerAssignmentNames = (assignmentsRes.data || [])
-          .filter(a => Array.isArray(a.visibility) && a.visibility.includes('booking.door_specifications'))
+          .filter(a => String(a.name || '').trim().toLowerCase() === 'installers' || (Array.isArray(a.visibility) && a.visibility.includes('booking.door_specifications')))
           .map(a => a.name);
+
+        try {
+          const { data: payoutSetting } = await sb
+            .from('global_settings')
+            .select('value')
+            .eq('key', 'installer_payout_settings')
+            .eq('company_id', currentCompanyId)
+            .maybeSingle();
+          installerPayoutSettings = payoutSetting?.value || {};
+        } catch (payoutSettingsError) {
+          console.error('Error loading installer payout settings:', payoutSettingsError);
+          installerPayoutSettings = {};
+        }
 
         // Booking media requirements
         try {
@@ -214,8 +268,22 @@
     }
 
     // Fetches only the current month's bookings — re-called on month navigation
+    function setMonthBookingsLoading(isLoading) {
+      const overlay = document.getElementById('month-loading-overlay');
+      const navigator = document.getElementById('calendar-month-navigator');
+      if (overlay) {
+        overlay.classList.toggle('active', isLoading);
+        overlay.setAttribute('aria-hidden', String(!isLoading));
+      }
+      if (navigator) {
+        navigator.querySelectorAll('button').forEach(button => {
+          button.disabled = isLoading;
+        });
+      }
+    }
+
     async function loadMonthBookings() {
-      renderSkeletons();
+      setMonthBookingsLoading(true);
       updateHash();
       const { start, end } = getMonthDateRange(currentYear, currentMonth);
       try {
@@ -272,6 +340,8 @@
       } catch (err) {
         console.error('Failed to load bookings:', err);
         showToast('Failed to load bookings: ' + err.message, true);
+      } finally {
+        setMonthBookingsLoading(false);
       }
     }
 
@@ -306,6 +376,7 @@
 
       drawCalendar();
       drawAllBookingsList();
+      if (typeof window.drawInstallersSummary === 'function') window.drawInstallersSummary();
     }
 
     function changeMonth(direction) {
@@ -319,27 +390,6 @@
       }
       loadMonthBookings();
     }
-
-    window.switchMainTab = function(tab) {
-      const tabSchedules = document.getElementById('tab-schedules');
-      const tabAllBookings = document.getElementById('tab-all-bookings');
-      
-      const panelSchedules = document.getElementById('tab-panel-schedules');
-      const panelAllBookings = document.getElementById('tab-panel-all-bookings');
-
-      if (tab === 'schedules') {
-        if (tabSchedules) tabSchedules.classList.add('active');
-        if (tabAllBookings) tabAllBookings.classList.remove('active');
-        if (panelSchedules) panelSchedules.style.display = 'block';
-        if (panelAllBookings) panelAllBookings.style.display = 'none';
-      } else {
-        if (tabSchedules) tabSchedules.classList.remove('active');
-        if (tabAllBookings) tabAllBookings.classList.add('active');
-        if (panelSchedules) panelSchedules.style.display = 'none';
-        if (panelAllBookings) panelAllBookings.style.display = 'block';
-        drawAllBookingsList();
-      }
-    };
 
     function drawAllBookingsList() {
       const tbody = document.getElementById('all-bookings-tbody');
@@ -616,5 +666,3 @@
         cellsContainer.insertAdjacentHTML('beforeend', cellHtml);
       }
     }
-
-

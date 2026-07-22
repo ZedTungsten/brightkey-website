@@ -809,6 +809,10 @@
                   <div style="font-size: 0.75rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">Revenue per Week</div>
                   <div id="stat-rev-per-week" style="font-size: 1.75rem; font-weight: 700; color: var(--text-primary); margin-top: 0.25rem;">₱0.00</div>
                 </div>
+                <div class="stat-card" style="background: var(--bg-surface); border: 1px solid var(--border); padding: 1.25rem; border-radius: var(--radius-md);">
+                  <div style="font-size: 0.75rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">Revenue per Day</div>
+                  <div id="stat-rev-per-day" style="font-size: 1.75rem; font-weight: 700; color: var(--text-primary); margin-top: 0.25rem;">₱0.00</div>
+                </div>
               </div>
 
               <div style="font-size: 0.85rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 1.25rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">Weekly Distribution (Monday - Sunday)</div>
@@ -1642,9 +1646,10 @@
       const avgValueEl = document.getElementById('stat-avg-value');
       const ordersPerWeekEl = document.getElementById('stat-orders-per-week');
       const revPerWeekEl = document.getElementById('stat-rev-per-week');
+      const revPerDayEl = document.getElementById('stat-rev-per-day');
       const distBarsEl = document.getElementById('weekly-distribution-bars');
 
-      if (!totalOrdersEl || !avgValueEl || !ordersPerWeekEl || !revPerWeekEl || !distBarsEl) return;
+      if (!totalOrdersEl || !avgValueEl || !ordersPerWeekEl || !revPerWeekEl || !revPerDayEl || !distBarsEl) return;
 
       const bookedMonthRange = getStatsBookedMonthRange(currentSelectedMonth);
       const { data: rawBookings, error } = await sb
@@ -1664,6 +1669,7 @@
         avgValueEl.textContent = '₱0.00';
         ordersPerWeekEl.textContent = '0.0';
         revPerWeekEl.textContent = '₱0.00';
+        revPerDayEl.textContent = '₱0.00';
         distBarsEl.innerHTML = `<div style="text-align: center; color: var(--text-muted); font-size: 0.85rem; padding: 1.5rem;">No stats data available.</div>`;
         return;
       }
@@ -1714,23 +1720,27 @@
       const elapsedWeeks = getStatsElapsedWeekCount(currentSelectedMonth);
       const avgOrdersPerWeek = elapsedWeeks > 0 ? totalOrders / elapsedWeeks : 0;
       const avgRevPerWeek = elapsedWeeks > 0 ? totalRevenuePHP / elapsedWeeks : 0;
+      const avgRevPerDay = avgRevPerWeek / 7;
 
       totalOrdersEl.textContent = totalOrders.toLocaleString();
       avgValueEl.textContent = `₱${avgValuePHP.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
       ordersPerWeekEl.textContent = avgOrdersPerWeek.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
       revPerWeekEl.textContent = `₱${avgRevPerWeek.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      revPerDayEl.textContent = `₱${avgRevPerDay.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
       const maxWeeklyRev = Math.max(...weeksData.map(w => w.revenue), 1);
 
       distBarsEl.innerHTML = weeksData.map((w, idx) => {
         const percent = Math.min(100, Math.round((w.revenue / maxWeeklyRev) * 100));
         const weekDatesLabel = getWeekDatesRangeLabel(currentSelectedMonth, idx);
+        const dailyOrderAverage = w.count / 7;
+        const dailyRevenueAverage = w.revenue / 7;
 
         return `
           <div style="display: flex; flex-direction: column; gap: 0.25rem;">
-            <div style="display: flex; justify-content: space-between; font-size: 0.8rem; font-weight: 600;">
+            <div style="display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 0.35rem 1rem; font-size: 0.8rem; font-weight: 600;">
               <span style="color: var(--text-primary);">${w.label} <span style="font-weight: 400; color: var(--text-muted); font-size: 0.75rem; margin-left: 4px;">(${weekDatesLabel})</span></span>
-              <span style="color: var(--text-muted);">${w.count} ${w.count === 1 ? 'order' : 'orders'} • <span style="color: var(--cyan-light); font-weight: 700;">₱${w.revenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></span>
+              <span style="color: var(--text-muted); text-align: right;">${w.count} ${w.count === 1 ? 'order' : 'orders'} • <span style="color: var(--cyan-light); font-weight: 700;">₱${w.revenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span> <span style="font-size: 0.72rem; font-weight: 500;">(${dailyOrderAverage.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} orders • ₱${dailyRevenueAverage.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/day)</span></span>
             </div>
             <div style="background: var(--border); height: 8px; border-radius: 4px; overflow: hidden;">
               <div style="background: linear-gradient(90deg, var(--cyan) 0%, var(--cyan-light) 100%); width: ${percent}%; height: 100%; transition: width 0.4s ease-out; border-radius: 4px;"></div>

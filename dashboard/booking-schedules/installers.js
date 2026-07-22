@@ -39,57 +39,6 @@
       return `${firstName}${initial}`;
     }
 
-    function renderSkeletons() {
-      // Set correct month title immediately so it never shows a stale hardcoded value
-      const titleEl = document.getElementById('calendar-month-title');
-      if (titleEl) titleEl.textContent = `${MONTH_NAMES[currentMonth]} ${currentYear}`;
-
-      // 1. Render Calendar Skeletons
-      const cellsContainer = document.getElementById('calendar-cells');
-      if (cellsContainer) {
-        cellsContainer.innerHTML = '';
-        for (let i = 0; i < 35; i++) {
-          const hasSlot1 = (i % 7 === 1 || i % 7 === 4);
-          const hasSlot2 = (i % 7 === 4);
-          const slotsHtml = `
-            <div class="calendar-half am">
-              ${hasSlot1 ? '<div class="skeleton skeleton-slot"></div>' : ''}
-            </div>
-            <div class="calendar-half pm">
-              ${hasSlot2 ? '<div class="skeleton skeleton-slot"></div>' : ''}
-            </div>
-          `;
-          cellsContainer.insertAdjacentHTML('beforeend', `
-            <div class="calendar-cell" style="opacity: 0.6;">
-              <div class="calendar-cell-header"><span class="calendar-cell-num">${i + 1 <= 30 ? i + 1 : ''}</span></div>
-              ${slotsHtml}
-            </div>
-          `);
-        }
-      }
-
-      // 2. Render List Skeletons
-      const listContainer = document.getElementById('list-schedules-container');
-      if (listContainer) {
-        listContainer.innerHTML = '';
-        for (let i = 0; i < 4; i++) {
-          listContainer.insertAdjacentHTML('beforeend', `
-            <div class="skeleton-card">
-              <div class="skeleton-card-left">
-                <div class="skeleton skeleton-name"></div>
-                <div class="skeleton skeleton-text"></div>
-                <div class="skeleton skeleton-text-short"></div>
-              </div>
-              <div class="skeleton-card-right">
-                <div class="skeleton skeleton-date"></div>
-                <div class="skeleton skeleton-time"></div>
-              </div>
-            </div>
-          `);
-        }
-      }
-    }
-
     // Build <option> HTML for door installer dropdowns
     function buildDoorInstallerOptions(selectedId = '') {
       const installerNames = window._installerAssignmentNames || [];
@@ -500,4 +449,108 @@
         console.error('Failed to update door installers:', err);
         showToast('Failed to update: ' + err.message, true);
       }
+    };
+
+    function getInstallerSummaryJobs(booking, employeeId) {
+      const parseArray = value => {
+        if (Array.isArray(value)) return value;
+        if (typeof value !== 'string' || !value.trim()) return [];
+        try { const parsed = JSON.parse(value); return Array.isArray(parsed) ? parsed : []; } catch (_) { return []; }
+      };
+      const doors = parseArray(booking.doors);
+      const bookingInstallers = parseArray(booking.installers);
+      const legacyIds = String(booking.installer_id || '').split(' | ').filter(Boolean);
+      const legacyIndex = legacyIds.indexOf(employeeId);
+      const bookingMatches = bookingInstallers.filter(installer => installer?.id === employeeId);
+      const bookingAssigned = bookingMatches.length > 0 || legacyIndex !== -1;
+      const hasDoorAssignments = doors.some(door => Array.isArray(door?.installers) && door.installers.some(installer => installer?.id || installer?.name));
+      const getRoles = matches => {
+        const roles = matches.map(installer => String(installer.role || 'lead').toLowerCase());
+        if (!roles.length && legacyIndex !== -1) roles.push(legacyIndex === 0 ? 'lead' : 'assist');
+        return [...new Set(roles)];
+      };
+      const bookingCompleted = ['done', 'completed', 'finished'].includes(String(booking.status || '').toLowerCase());
+      if (!doors.length) return bookingAssigned ? [{ roles: getRoles(bookingMatches), completed: bookingCompleted }] : [];
+      return doors.flatMap(door => {
+        const matches = (Array.isArray(door?.installers) ? door.installers : []).filter(installer => installer?.id === employeeId);
+        if (!matches.length && (hasDoorAssignments || !bookingAssigned)) return [];
+        return [{ roles: getRoles(matches.length ? matches : bookingMatches), completed: Boolean(door?.completed) || bookingCompleted }];
+      });
+    }
+
+    function installerSummaryPerson(employee) {
+      const firstName = String(employee.first_name || '').trim();
+      const lastName = String(employee.last_name || '').trim();
+      const name = `${firstName} ${lastName}`.trim() || 'Unnamed installer';
+      const initials = `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase() || 'I';
+      const avatar = employee.picture_link
+        ? `<img class="installer-summary-avatar" src="${escapeHtml(employee.picture_link)}" alt="" loading="lazy">`
+        : `<span class="installer-summary-avatar installer-summary-avatar-fallback">${escapeHtml(initials)}</span>`;
+      return `<div class="installer-summary-person">${avatar}<span>${escapeHtml(name)}</span></div>`;
+    }
+
+    function formatInstallerSummaryCredit(value) {
+      return Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+    }
+
+    window.drawInstallersSummary = function() {
+      const assignmentBody = document.getElementById('installer-assignment-tbody');
+      if (!assignmentBody) return;
+      const configuredNames = new Set((window._installerAssignmentNames || []).map(name => String(name).trim().toLowerCase()));
+      configuredNames.add('installer');
+      configuredNames.add('installers');
+      const installers = dbEmployees.filter(employee => String(employee.assignment || '').split(',')
+        .map(name => name.trim().toLowerCase()).some(name => configuredNames.has(name)));
+      const threshold = Number(installerPayoutSettings?.installations_before_crediting ?? 15);
+      const leadWeight = Number(installerPayoutSettings?.lead_credit ?? 1);
+      const assistWeight = Number(installerPayoutSettings?.assist_credit ?? 0.5);
+      const summaries = installers.map(employee => {
+        const summary = { employee, lead: 0, scheduledLead: 0, assist: 0, scheduledAssist: 0, ocular: 0, scheduledOcular: 0, backjobs: 0, scheduledBackjobs: 0, credit: 0, service: 0, lastAssigned: '' };
+        dbBookings.forEach(booking => {
+          if (String(booking.status || '').toLowerCase() === 'cancelled') return;
+          const type = String(booking.product_skus || '').trim().toLowerCase();
+          const orderNo = String(booking.order_no || '').toUpperCase();
+          const dayOff = type === 'day off' || orderNo.startsWith('DO-');
+          const ocular = type === 'ocular' || orderNo.startsWith('OC-');
+          const backjob = type === 'backjob' || orderNo.startsWith('BJ-');
+          const assignedJobs = getInstallerSummaryJobs(booking, employee.id);
+          if (!dayOff && assignedJobs.length && booking.scheduled_date && (!summary.lastAssigned || booking.scheduled_date > summary.lastAssigned)) {
+            summary.lastAssigned = booking.scheduled_date;
+          }
+          assignedJobs.forEach(job => {
+            if (dayOff) return;
+            if (ocular) {
+              summary.ocular++;
+              if (!job.completed) summary.scheduledOcular++;
+            } else if (backjob) {
+              summary.backjobs++;
+              if (!job.completed) summary.scheduledBackjobs++;
+            } else if (job.roles.includes('lead')) {
+              summary.lead++;
+              if (!job.completed) summary.scheduledLead++;
+            } else if (job.roles.includes('assist')) {
+              summary.assist++;
+              if (!job.completed) summary.scheduledAssist++;
+            }
+            if (!job.completed || ocular || backjob) return;
+            if (job.roles.includes('lead')) summary.credit += leadWeight;
+            else if (job.roles.includes('assist')) summary.credit += assistWeight;
+            if (job.roles.includes('service')) summary.service++;
+          });
+        });
+        summary.installationDone = (summary.lead - summary.scheduledLead) + (summary.assist - summary.scheduledAssist);
+        summary.installationScheduled = summary.scheduledLead + summary.scheduledAssist;
+        summary.total = summary.lead + summary.assist + summary.ocular + summary.backjobs;
+        summary.extra = Math.max(0, summary.credit - threshold) + summary.service;
+        return summary;
+      });
+      if (!summaries.length) {
+      assignmentBody.innerHTML = '<tr><td colspan="11" class="installer-summary-empty">No employees with the Installer assignment were found.</td></tr>';
+        return;
+      }
+      const formatDate = value => value ? new Date(`${value}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : '—';
+      const metric = (total, scheduled) => `${total}<span class="installer-scheduled-count"> (${scheduled})</span>`;
+      assignmentBody.innerHTML = summaries.map(s => `<tr><td>${installerSummaryPerson(s.employee)}</td><td>${escapeHtml(s.employee.city || '—')}</td><td>${formatDate(s.lastAssigned)}</td><td class="installer-metric-lead">${metric(s.lead, s.scheduledLead)}</td><td class="installer-metric-assist">${metric(s.assist, s.scheduledAssist)}</td><td class="installer-summary-row-total">${metric(s.installationDone, s.installationScheduled)}</td><td class="installer-metric-ocular">${metric(s.ocular, s.scheduledOcular)}</td><td class="installer-metric-backjob">${metric(s.backjobs, s.scheduledBackjobs)}</td><td class="installer-summary-row-total">${s.total}</td><td><span class="installer-metric-lead">${formatInstallerSummaryCredit(s.credit)}</span><span class="installer-threshold-limit">/${formatInstallerSummaryCredit(threshold)}</span></td><td class="installer-metric-assist">${s.service}</td></tr>`).join('');
+      const totals = summaries.reduce((a, s) => ({ lead:a.lead+s.lead, scheduledLead:a.scheduledLead+s.scheduledLead, assist:a.assist+s.assist, scheduledAssist:a.scheduledAssist+s.scheduledAssist, installationDone:a.installationDone+s.installationDone, installationScheduled:a.installationScheduled+s.installationScheduled, ocular:a.ocular+s.ocular, scheduledOcular:a.scheduledOcular+s.scheduledOcular, backjobs:a.backjobs+s.backjobs, scheduledBackjobs:a.scheduledBackjobs+s.scheduledBackjobs, total:a.total+s.total, credit:a.credit+s.credit, service:a.service+s.service, extra:a.extra+s.extra }), { lead:0, scheduledLead:0, assist:0, scheduledAssist:0, installationDone:0, installationScheduled:0, ocular:0, scheduledOcular:0, backjobs:0, scheduledBackjobs:0, total:0, credit:0, service:0, extra:0 });
+      document.getElementById('installer-assignment-tfoot').innerHTML = `<tr><td colspan="3">Total</td><td class="installer-metric-lead">${metric(totals.lead, totals.scheduledLead)}</td><td class="installer-metric-assist">${metric(totals.assist, totals.scheduledAssist)}</td><td>${metric(totals.installationDone, totals.installationScheduled)}</td><td class="installer-metric-ocular">${metric(totals.ocular, totals.scheduledOcular)}</td><td class="installer-metric-backjob">${metric(totals.backjobs, totals.scheduledBackjobs)}</td><td>${totals.total}</td><td>—</td><td class="installer-metric-assist">${totals.service}</td></tr>`;
     };

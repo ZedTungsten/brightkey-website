@@ -674,6 +674,8 @@
       dispatchSupplies: {},
       selectedPickupRefId: null,
       selectedSuppliesRefId: null,
+      modalDataLoaded: false,
+      modalDataPromise: null,
 
       async init() {
         if (!window.BKAuth) return;
@@ -705,63 +707,40 @@
 
         try {
           const sb = window.BKAuth.sb;
-          
-          const { data: txs, error: txErr } = await sb.from('inventory_transactions')
-            .select('*')
-            .in('type', ['customer_order', 'supplier_order']);
+
+          const [transactionsResult, bookingsResult, deliveryBookingsResult, settingsResult] = await Promise.all([
+            sb.from('inventory_transactions')
+              .select('reference_id, sku, quantity, type, status, customer_name, customer_city, packed_photo_url, warehouse_id, created_at')
+              .in('type', ['customer_order', 'supplier_order'])
+              .in('status', ['packed', 'reserved', 'inspect', 'ordered']),
+            sb.from('installation_bookings')
+              .select('order_no, scheduled_date, scheduled_time, customer_address, customer_phone'),
+            sb.from('delivery_bookings')
+              .select('reference_id')
+              .order('created_at', { ascending: false }),
+            sb.from('global_settings')
+              .select('key, value')
+              .eq('company_id', this.companyId)
+              .in('key', ['pickup_schedules', 'dispatch_supplies'])
+          ]);
+
+          const { data: txs, error: txErr } = transactionsResult;
           if (txErr) throw txErr;
           this.activeTransactions = txs || [];
 
-          const { data: bData, error: bErr } = await sb.from('installation_bookings')
-            .select('order_no, scheduled_date, scheduled_time, customer_address, customer_phone');
+          const { data: bData, error: bErr } = bookingsResult;
           if (bErr) throw bErr;
           this.bookings = bData || [];
 
-          const { data: dbData, error: dbErr } = await sb.from('delivery_bookings')
-            .select('*')
-            .order('created_at', { ascending: false });
+          const { data: dbData, error: dbErr } = deliveryBookingsResult;
           if (dbErr) throw dbErr;
           this.deliveryBookings = dbData || [];
 
-          const { data: pData, error: pErr } = await sb.from('products')
-            .select('id, sku, title, category')
-            .order('sku');
-          if (pErr) throw pErr;
-          this.allProducts = pData || [];
-
-          const { data: invData, error: invErr } = await sb.from('inventory')
-            .select('sku, available, warehouse_id');
-          if (invErr) throw invErr;
-          this.allInventory = invData || [];
-
-          const { data: wData, error: wErr } = await sb.from('warehouses')
-            .select('id, name')
-            .order('name');
-          if (wErr) throw wErr;
-          this.warehouses = wData || [];
-
-          // Load pickup schedules from global_settings
-          const { data: gsData, error: gsErr } = await sb.from('global_settings')
-            .select('value')
-            .eq('key', 'pickup_schedules')
-            .eq('company_id', this.companyId)
-            .maybeSingle();
-          if (gsErr) {
-            console.error('Failed to load pickup schedules:', gsErr);
-          } else {
-            this.pickupSchedules = gsData?.value || {};
-          }
-
-          const { data: supplyData, error: supplyErr } = await sb.from('global_settings')
-            .select('value')
-            .eq('key', 'dispatch_supplies')
-            .eq('company_id', this.companyId)
-            .maybeSingle();
-          if (supplyErr) {
-            console.error('Failed to load dispatch supplies:', supplyErr);
-          } else {
-            this.dispatchSupplies = supplyData?.value || {};
-          }
+          const { data: settingsData, error: settingsErr } = settingsResult;
+          if (settingsErr) throw settingsErr;
+          const settingsMap = new Map((settingsData || []).map(setting => [setting.key, setting.value]));
+          this.pickupSchedules = settingsMap.get('pickup_schedules') || {};
+          this.dispatchSupplies = settingsMap.get('dispatch_supplies') || {};
 
           this.updateBadgeCounts();
           this.renderSendOutQueue();
@@ -773,6 +752,40 @@
           }
           Toast.error('Unable to load the dispatch queue. Please refresh and try again.');
         }
+      },
+
+      async ensureModalData() {
+        if (this.modalDataLoaded) return;
+        if (this.modalDataPromise) return this.modalDataPromise;
+
+        this.modalDataPromise = (async () => {
+          const sb = window.BKAuth.sb;
+          const [productsResult, inventoryResult, warehousesResult] = await Promise.all([
+            sb.from('products').select('id, sku, title, category').order('sku'),
+            sb.from('inventory').select('sku, available, warehouse_id'),
+            sb.from('warehouses').select('id, name').order('name')
+          ]);
+
+          if (productsResult.error) throw productsResult.error;
+          if (inventoryResult.error) throw inventoryResult.error;
+          if (warehousesResult.error) throw warehousesResult.error;
+
+          this.allProducts = productsResult.data || [];
+          this.allInventory = inventoryResult.data || [];
+          this.warehouses = warehousesResult.data || [];
+          this.modalDataLoaded = true;
+        })();
+
+        try {
+          await this.modalDataPromise;
+        } finally {
+          this.modalDataPromise = null;
+        }
+      },
+
+      invalidateModalData() {
+        this.modalDataLoaded = false;
+        this.modalDataPromise = null;
       },
 
       renderSendOutLoading() {
@@ -1128,7 +1141,14 @@
         return Math.max(0, stock - assigned);
       },
 
-      openAddSuppliesModal(referenceId) {
+      async openAddSuppliesModal(referenceId) {
+        try {
+          await this.ensureModalData();
+        } catch (err) {
+          console.error(err);
+          Toast.error('Unable to load supplies and inventory. Please try again.');
+          return;
+        }
         this.selectedSuppliesRefId = referenceId;
         const matchingItems = this.activeTransactions.filter(t => t.reference_id === referenceId && t.status === 'packed');
         const matchingTx = matchingItems[0];
@@ -1275,7 +1295,14 @@
         }
       },
 
-      openCreateShipmentModal() {
+      async openCreateShipmentModal() {
+        try {
+          await this.ensureModalData();
+        } catch (err) {
+          console.error(err);
+          Toast.error('Unable to load products and warehouses. Please try again.');
+          return;
+        }
         this.cshipPhotoBlob = null;
         this.cshipDelPhotoBlob = null;
         document.getElementById('cship-customer-name').value = '';
@@ -1816,6 +1843,7 @@
             if (dbErr) throw dbErr;
           }
 
+          this.invalidateModalData();
           await this.loadData();
           this.closeCreateShipmentModal();
           Toast.success('Shipment created successfully.');

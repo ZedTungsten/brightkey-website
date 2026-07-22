@@ -235,6 +235,12 @@ function drawPayouts() {
 
   const doorJobs = [];
   monthBookings.forEach(b => {
+    const assignmentType = String(b.product_skus || '').trim().toLowerCase();
+    const orderNo = String(b.order_no || '').toUpperCase();
+    const isNonCreditableJob = assignmentType === 'day off' || assignmentType === 'ocular' || assignmentType === 'backjob'
+      || orderNo.startsWith('DO-') || orderNo.startsWith('OC-') || orderNo.startsWith('BJ-');
+    if (isNonCreditableJob) return;
+
     const assignedDoors = getInstallerAssignedDoorsForBooking(b, myId);
     assignedDoors.forEach(d => {
       if (d.completed) {

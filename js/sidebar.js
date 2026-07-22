@@ -282,7 +282,7 @@
   const sidebarHTML = `
       <div class="dash-logo-container" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem; flex-shrink: 0; min-height: 32px;">
         <a href="/dashboard" class="dash-logo" style="padding: 0.5rem 0.25rem; display: flex; align-items: center; gap: 0.25rem;">
-          <img src="/assets/logo.svg" class="logo-extended" alt="BrightKey" style="height: 24px; display: block;" />
+          <img src="/assets/logo.svg?v=3" class="logo-extended" alt="BrightKey" style="height: 24px; display: block;" />
           <img src="/assets/favicon.svg" class="logo-contracted" alt="BrightKey" style="height: 24px; display: none;" />
         </a>
         <button id="sidebar-toggle" title="Toggle Sidebar">
@@ -382,7 +382,7 @@
         <div class="dash-nav-children">
           <a href="/dashboard/booking" class="dash-nav-child">Book</a>
           <a href="/dashboard/orders-invoices" class="dash-nav-child">Orders & Invoices</a>
-          <a href="/dashboard/booking-schedules" class="dash-nav-child">Schedules</a>
+          <a href="/dashboard/booking-schedules/calendar" class="dash-nav-child">Calendar</a>
         </div>
       </div>
 
@@ -752,6 +752,7 @@
         (href === '/dashboard/warehouse/inspect' && currentPath.startsWith('/dashboard/warehouse/')) ||
         (href === '/dashboard/inventory' && currentPath === '/dashboard/inventory') ||
         (href === '/dashboard/ship/send' && currentPath.startsWith('/dashboard/ship/')) ||
+        (href === '/dashboard/booking-schedules/calendar' && currentPath.startsWith('/dashboard/booking-schedules/')) ||
         (href === '/dashboard/pricing-strategy/calculator' && currentPath.startsWith('/dashboard/pricing-strategy/')) ||
         (href === '/dashboard/payout-tracker/payout/' && currentPath.startsWith('/dashboard/payout-tracker/')) ||
         (href === '/dashboard/logistics-calendar/calendar' && currentPath.startsWith('/dashboard/logistics-calendar/'))
