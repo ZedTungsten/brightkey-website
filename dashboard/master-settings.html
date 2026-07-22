@@ -727,37 +727,44 @@
       const el = document.getElementById(elementId);
       if (!el) return;
       try {
-        let totalBytes = 0;
-        const buckets = ['brightkey-assets', 'brightkey-internal'];
-        
-        async function traverse(bucket, path) {
-          const { data: files, error } = await sb.storage.from(bucket).list(path, {
-            limit: 100
-          });
-          if (error) {
-            console.warn('Error listing:', path, error);
-            return;
-          }
-          if (!files) return;
-          
-          for (const file of files) {
-            if (file.id === null) {
-              await traverse(bucket, `${path}/${file.name}`);
-            } else {
-              totalBytes += file.metadata?.size || 0;
-            }
-          }
-        }
+        const { data, error } = await sb.rpc('get_company_storage_usage', {
+          p_company_id: companyId
+        });
+        if (error) throw error;
 
-        for (const bucket of buckets) {
-          await traverse(bucket, `companies/${companyId}`);
-        }
+        const usage = Array.isArray(data) ? data[0] : data;
+        if (!usage) throw new Error('No storage usage result was returned.');
 
-        const gb = (totalBytes / (1024 * 1024 * 1024)).toFixed(3);
-        el.textContent = `${gb} GB`;
+        const usedBytes = Number(usage.used_bytes || 0);
+        const limitBytes = Number(usage.limit_bytes || 0);
+        const assetsBytes = Number(usage.assets_bytes || 0);
+        const internalBytes = Number(usage.internal_bytes || 0);
+        const percent = Number(usage.usage_percent || 0);
+
+        const formatStorage = (bytes) => {
+          const mb = bytes / (1024 * 1024);
+          return mb >= 1024 ? `${(mb / 1024).toFixed(3)} GB` : `${mb.toFixed(2)} MB`;
+        };
+
+        el.textContent = '';
+        const primary = document.createElement('div');
+        primary.style.cssText = 'font-size:0.82rem;font-weight:700;color:var(--text-secondary);white-space:nowrap;';
+        primary.textContent = `${formatStorage(usedBytes)} / ${formatStorage(limitBytes)}`;
+
+        const details = document.createElement('div');
+        details.style.cssText = 'margin-top:0.18rem;font-size:0.7rem;font-weight:500;color:var(--text-muted);white-space:nowrap;';
+        details.textContent = `${percent.toFixed(2)}% · ${Number(usage.file_count || 0).toLocaleString()} files`;
+
+        const breakdown = document.createElement('div');
+        breakdown.style.cssText = 'margin-top:0.1rem;font-size:0.66rem;font-weight:500;color:var(--text-muted);white-space:nowrap;';
+        breakdown.textContent = `Public ${formatStorage(assetsBytes)} · Private ${formatStorage(internalBytes)}`;
+
+        el.append(primary, details, breakdown);
+        el.title = `Public assets: ${formatStorage(assetsBytes)} · Private/internal: ${formatStorage(internalBytes)}`;
       } catch (e) {
-        console.error(e);
-        el.textContent = 'Error';
+        console.error('calculateUsage:', e);
+        el.textContent = 'Usage unavailable';
+        el.title = 'Apply the tenant storage quota migration to enable exact usage reporting.';
       }
     }
 
@@ -792,7 +799,7 @@
             </td>
             <td>
               <div style="display:flex;align-items:center;gap:0.4rem;">
-                <input type="number" id="gb-input-${escapeHtml(t.id)}" value="${gbVal}" min="0.5" step="0.5"
+                <input type="number" id="gb-input-${escapeHtml(t.id)}" data-company-id="${co ? escapeHtml(co.id) : ''}" value="${gbVal}" min="0.5" step="0.5"
                   style="width:80px;padding:0.35rem 0.5rem;border:1px solid var(--border);border-radius:5px;font-size:0.82rem;background:var(--bg-base);color:var(--text-primary);" />
                 <span style="font-size:0.8rem;color:var(--text-muted);">GB</span>
               </div>
@@ -831,6 +838,9 @@
         const { error } = await sb.from('tenants').update({ storage_limit_mb: mb }).eq('id', tenantId);
         if (error) throw error;
         showToast(`Storage limit updated to ${gb} GB.`);
+        if (input.dataset.companyId) {
+          await calculateUsage(input.dataset.companyId, `used-loader-${tenantId}`);
+        }
       } catch (err) {
         console.error('saveStorageLimit:', err);
         showToast('Failed to save: ' + err.message, true);

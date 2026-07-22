@@ -179,8 +179,15 @@
         skuSelect.value = 'all';
         
         const products = window.commissionsProductsData || [];
-        const categories = [...new Set(products.filter(p => p.business === biz).map(p => p.category).filter(Boolean))].sort();
-        catSelect.innerHTML = '<option value="all">All Categories</option>' + categories.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+        const unavailableCategories = getUnavailableEligibilityCategories(rowId, biz);
+        const categories = [...new Set(products.filter(p => p.business === biz).map(p => p.category).filter(Boolean))]
+          .filter(category => category === selectedCat || !unavailableCategories.has(category))
+          .sort();
+        const allCategoryUnavailable = isAllEligibilityCategoryUnavailable(rowId, biz);
+        const allCategoryOption = selectedCat === 'all' || !allCategoryUnavailable
+          ? '<option value="all">All Categories</option>'
+          : '';
+        catSelect.innerHTML = allCategoryOption + categories.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
         catSelect.value = selectedCat;
         
         if (selectedCat !== 'all') {
@@ -205,10 +212,53 @@
         skuContainer.style.display = 'block';
         
         const products = window.commissionsProductsData || [];
-        const skus = products.filter(p => p.business === biz && p.category === cat).map(p => p.sku).filter(Boolean).sort();
-        skuSelect.innerHTML = '<option value="all">All SKUs</option>' + skus.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
+        const unavailableSkus = getUnavailableEligibilitySkus(rowId, biz, cat);
+        const skus = products.filter(p => p.business === biz && p.category === cat).map(p => p.sku).filter(Boolean)
+          .filter(sku => sku === selectedSku || !unavailableSkus.has(sku))
+          .sort();
+        const allSkuUnavailable = unavailableSkus.has('all');
+        const allSkuOption = selectedSku === 'all' || !allSkuUnavailable
+          ? '<option value="all">All SKUs</option>'
+          : '';
+        skuSelect.innerHTML = allSkuOption + skus.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
         skuSelect.value = selectedSku;
       }
+    };
+
+    function getOtherEligibilityRows(rowId) {
+      return [...document.querySelectorAll('#eligibility-rows-container .eligibility-row')]
+        .filter(row => row.id !== rowId);
+    }
+
+    function getUnavailableEligibilityCategories(rowId, business) {
+      return new Set(getOtherEligibilityRows(rowId)
+        .filter(row => row.querySelector('.el-row-business-tag')?.value === `biz:${business}`)
+        .filter(row => row.querySelector('.el-row-sku')?.value === 'all')
+        .map(row => row.querySelector('.el-row-category')?.value)
+        .filter(category => category && category !== 'all'));
+    }
+
+    function isAllEligibilityCategoryUnavailable(rowId, business) {
+      return getOtherEligibilityRows(rowId).some(row =>
+        row.querySelector('.el-row-business-tag')?.value === `biz:${business}` &&
+        row.querySelector('.el-row-category')?.value === 'all'
+      );
+    }
+
+    function getUnavailableEligibilitySkus(rowId, business, category) {
+      return new Set(getOtherEligibilityRows(rowId)
+        .filter(row => row.querySelector('.el-row-business-tag')?.value === `biz:${business}`)
+        .filter(row => row.querySelector('.el-row-category')?.value === category)
+        .map(row => row.querySelector('.el-row-sku')?.value)
+        .filter(Boolean));
+    }
+
+    window.refreshEligibilityRowOptions = function(rowId) {
+      const row = document.getElementById(rowId);
+      if (!row) return;
+      const category = row.querySelector('.el-row-category')?.value || 'all';
+      const sku = row.querySelector('.el-row-sku')?.value || 'all';
+      window.onElRowBusinessChange(rowId, category, sku);
     };
 
     window.onAdjRowBusinessChange = function(rowId, selectedCat = 'all', selectedSku = 'all') {
@@ -300,13 +350,13 @@
           </div>
           <div class="form-group el-row-category-container" style="display: none; flex: 1; min-width: 150px; max-width: calc(33.333% - 0.67rem);">
             <label class="form-label" style="font-size: 0.65rem;">Product Category</label>
-            <select class="form-select el-row-category" onchange="onElRowCategoryChange('${rowId}')">
+            <select class="form-select el-row-category" onfocus="refreshEligibilityRowOptions('${rowId}')" onchange="onElRowCategoryChange('${rowId}')">
               <option value="all">All Categories</option>
             </select>
           </div>
           <div class="form-group el-row-sku-container" style="display: none; flex: 1; min-width: 150px; max-width: calc(33.333% - 0.67rem);">
             <label class="form-label" style="font-size: 0.65rem;">SKU</label>
-            <select class="form-select el-row-sku">
+            <select class="form-select el-row-sku" onfocus="refreshEligibilityRowOptions('${rowId}')">
               <option value="all">All SKUs</option>
             </select>
           </div>

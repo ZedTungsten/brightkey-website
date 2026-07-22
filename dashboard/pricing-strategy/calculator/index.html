@@ -181,6 +181,23 @@
       border-bottom: 1px solid var(--border);
     }
 
+    .sku-pricing-scroll {
+      width: 100%;
+      max-width: 100%;
+      overflow-x: auto;
+      overscroll-behavior-x: contain;
+      scrollbar-gutter: stable;
+      -webkit-overflow-scrolling: touch;
+    }
+    .sku-pricing-scroll .sku-pricing-table {
+      width: max-content !important;
+      min-width: 100%;
+    }
+    .sku-pricing-scroll th,
+    .sku-pricing-scroll td {
+      white-space: nowrap;
+    }
+
     @keyframes spin {
       to { transform: rotate(360deg); }
     }
@@ -339,8 +356,15 @@
               </div>
             </div>
 
-            <div class="table-scroll" style="margin-top: 0.5rem; overflow-x: auto;">
-              <table class="table" style="width: 100%; border-collapse: collapse;">
+            <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem; margin: 0 0 0.75rem; padding: 0.55rem 0.65rem; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 6px;">
+              <label for="price-snapshot-select" style="font-size: 0.68rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary);">Install Price Source</label>
+              <select id="price-snapshot-select" class="form-select" style="width: auto; min-width: 220px; max-width: 100%; height: 36px; margin: 0; padding-top: 0; padding-bottom: 0; line-height: normal; font-size: 0.78rem;" onchange="onPriceSnapshotChange(this.value)">
+                <option value="">Current Catalog Prices</option>
+              </select>
+            </div>
+
+            <div class="table-scroll sku-pricing-scroll" style="margin-top: 0.5rem;">
+              <table class="table sku-pricing-table" style="border-collapse: collapse;">
                 <thead id="sku-table-head">
                   <!-- Built dynamically by renderSkuTable -->
                 </thead>
@@ -390,6 +414,9 @@
     let skuLimit = 10;
     let customRowsSku = Array(20).fill('');
     let customInstallPrices = {};
+    let priceSnapshots = [];
+    let loadedPriceSnapshotId = '';
+    let loadedPriceSnapshotPrices = {};
 
     // Sorting state
     let sortKey = null;
@@ -488,6 +515,7 @@
       skuLimit = savedSettings.sku_limit || 10;
       customRowsSku = savedSettings.custom_rows_sku || Array(20).fill('');
       customInstallPrices = savedSettings.custom_new_prices || {};
+      loadedPriceSnapshotId = savedSettings.loaded_price_snapshot_id || '';
 
       // Update inputs from saved settings
       document.getElementById('net-profit-target').value = manualNetProfitTarget !== null ? formatAmount(manualNetProfitTarget) : '';
@@ -521,14 +549,19 @@
       });
 
       // Load products, bookings, and competitor pricing in parallel
-      const [prodRes, bookRes, compRes] = await Promise.all([
+      const [prodRes, bookRes, compRes, priceSnapshotsRes] = await Promise.all([
         sb.from('products').select('id, sku, title, category, business, dealer_price, installation_price').order('sku', { ascending: true }),
         sb.from('installation_bookings').select('scheduled_date, status, product_skus, product_qtys, grand_total, balance_due, deposit_amount, deduction_labels, deduction_values, order_no').eq('company_id', companyId).neq('status', 'cancelled'),
-        sb.from('competitors').select('id, name, business_name').eq('company_id', companyId).order('created_at', { ascending: true })
+        sb.from('competitors').select('id, name, business_name').eq('company_id', companyId).order('created_at', { ascending: true }),
+        sb.from('catalog_price_snapshots').select('id, name, prices, created_at').eq('company_id', companyId).order('created_at', { ascending: false })
       ]);
       allProducts = prodRes.data || [];
       allBookings = bookRes.data || [];
+      priceSnapshots = priceSnapshotsRes.data || [];
       const rawComps = compRes.data || [];
+
+      renderPriceSnapshotOptions();
+      applyPriceSnapshot(loadedPriceSnapshotId, false);
 
       // Fetch competitor products for all competitor IDs
       if (rawComps.length > 0) {
@@ -641,6 +674,75 @@
       triggerSettingsSave();
     }
 
+    function renderPriceSnapshotOptions() {
+      const select = document.getElementById('price-snapshot-select');
+      if (!select) return;
+
+      select.replaceChildren();
+      const currentOption = document.createElement('option');
+      currentOption.value = '';
+      currentOption.textContent = 'Current Catalog Prices';
+      select.appendChild(currentOption);
+
+      priceSnapshots.forEach(snapshot => {
+        const option = document.createElement('option');
+        option.value = snapshot.id;
+        option.textContent = snapshot.name || 'Unnamed Snapshot';
+        select.appendChild(option);
+      });
+    }
+
+    function applyPriceSnapshot(snapshotId, shouldPersist = true) {
+      const snapshot = priceSnapshots.find(item => item.id === snapshotId) || null;
+      loadedPriceSnapshotId = snapshot ? snapshot.id : '';
+      loadedPriceSnapshotPrices = {};
+
+      let prices = snapshot?.prices;
+      if (typeof prices === 'string') {
+        try {
+          prices = JSON.parse(prices);
+        } catch (_) {
+          prices = [];
+        }
+      }
+
+      if (Array.isArray(prices)) {
+        prices.forEach(item => {
+          if (!item?.sku || item.installation_price === null || item.installation_price === undefined) return;
+          const cents = Number(item.installation_price);
+          if (Number.isFinite(cents)) loadedPriceSnapshotPrices[String(item.sku).toLowerCase()] = cents;
+        });
+      }
+
+      const select = document.getElementById('price-snapshot-select');
+      if (select) select.value = loadedPriceSnapshotId;
+
+      renderSkuTable();
+      if (shouldPersist) triggerSettingsSave();
+    }
+
+    window.onPriceSnapshotChange = function(snapshotId) {
+      applyPriceSnapshot(snapshotId, true);
+    };
+
+    function getInstallPriceCents(product) {
+      if (!product) return 0;
+      const snapshotPrice = loadedPriceSnapshotPrices[String(product.sku || '').toLowerCase()];
+      if (snapshotPrice !== undefined) return snapshotPrice;
+      return Number(product.installation_price || product.dealer_price || 0);
+    }
+
+    async function reloadPriceSnapshots() {
+      const { data, error } = await sb.from('catalog_price_snapshots')
+        .select('id, name, prices, created_at')
+        .eq('company_id', companyId)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      priceSnapshots = data || [];
+      renderPriceSnapshotOptions();
+      applyPriceSnapshot(loadedPriceSnapshotId, false);
+    }
+
     async function reloadCompetitors() {
       const bizName = selectedBusiness || 'All';
       try {
@@ -713,6 +815,7 @@
 
         latestValue.custom_rows_sku = customRowsSku;
         latestValue.custom_new_prices = customInstallPrices;
+        latestValue.loaded_price_snapshot_id = loadedPriceSnapshotId;
 
         await sb.from('global_settings').upsert({
           company_id: companyId,
@@ -1255,7 +1358,8 @@
             rawRows.push({
               sku: prod.sku,
               dealerPrice: (prod.dealer_price || 0) / 100,
-              defaultInstallPrice: (prod.installation_price || prod.dealer_price || 0) / 100,
+              catalogInstallPrice: (prod.installation_price || prod.dealer_price || 0) / 100,
+              defaultInstallPrice: getInstallPriceCents(prod) / 100,
               isCustomSelector: false
             });
           }
@@ -1270,7 +1374,8 @@
           rawRows.push({
             sku: rowSku,
             dealerPrice: prod ? ((prod.dealer_price || 0) / 100) : 0,
-            defaultInstallPrice: prod ? (((prod.installation_price || prod.dealer_price || 0) / 100)) : 0,
+            catalogInstallPrice: prod ? ((prod.installation_price || prod.dealer_price || 0) / 100) : 0,
+            defaultInstallPrice: prod ? (getInstallPriceCents(prod) / 100) : 0,
             isCustomSelector: true,
             rowIndex: i
           });
@@ -1325,7 +1430,12 @@
 
         // 5. New Price
         const overrideVal = customInstallPrices[row.sku];
-        const newPriceVal = overrideVal !== undefined ? overrideVal : installPrice;
+        const catalogPriceForNewField = discountApplied
+          ? row.catalogInstallPrice * (1 - discountPercent / 100)
+          : row.catalogInstallPrice;
+        const newPriceVal = overrideVal !== undefined
+          ? overrideVal
+          : (loadedPriceSnapshotId ? catalogPriceForNewField : installPrice);
 
         // 6. Est New Net Profit
         const newGpVal = newPriceVal - row.dealerPrice - nonSupplierCostPerOrder - (newPriceVal * opexRatio);
@@ -1872,15 +1982,15 @@
         const p = allProducts.find(item => item.sku === row.sku);
         if (!p) return;
 
-        const dbInstallPrice = (p.installation_price || p.dealer_price || 0) / 100;
-        const dbCents = p.installation_price || p.dealer_price || 0;
+        const baselineInstallPrice = row.installPrice || 0;
+        const baselineCents = Math.round(baselineInstallPrice * 100);
         const newCents = Math.round(row.newPriceVal * 100);
 
-        if (dbCents !== newCents) {
+        if (baselineCents !== newCents) {
           affectedSkusList.push({
             sku: p.sku,
             title: p.title || p.sku,
-            oldPrice: dbInstallPrice,
+            oldPrice: baselineInstallPrice,
             newPrice: row.newPriceVal,
             product: p
           });
@@ -1990,6 +2100,7 @@
           }
         }
 
+        await reloadPriceSnapshots();
         showToast('Snapshot saved successfully!');
         closeSavePricesModal();
       } catch (err) {

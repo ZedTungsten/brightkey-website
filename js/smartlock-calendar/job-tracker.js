@@ -112,9 +112,10 @@ function drawJobTracker() {
 
       const displayLabel = isDayOff ? 'Day off' : `${b.customer_name || 'Client'} (${d.doorName})`;
       const skuLabel = d.skus.join(' | ') || 'No Lock';
+      const cardBackground = isDayOff ? '#E5E7EB' : 'var(--bg-surface)';
 
       listHtml += `
-        <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0.85rem; display: flex; flex-direction: column; gap: 0.5rem; cursor: pointer;" onclick="openDetailsModal('${b.id}')">
+        <div style="background: ${cardBackground}; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0.85rem; display: flex; flex-direction: column; gap: 0.5rem; cursor: pointer;" onclick="openDetailsModal('${b.id}')">
           <div style="display: flex; justify-content: space-between; align-items: center;">
             <span style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted);">${b.order_no || 'Job'}</span>
             <div style="display: flex; gap: 0.35rem; align-items: center;">

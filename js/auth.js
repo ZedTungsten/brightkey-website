@@ -273,6 +273,35 @@
     return contextCache.statusPromises[employeeId];
   }
 
+  function formatStorageBytes(bytes) {
+    const value = Math.max(Number(bytes) || 0, 0);
+    if (value >= 1024 ** 3) return `${(value / (1024 ** 3)).toFixed(2)} GB`;
+    return `${(value / (1024 ** 2)).toFixed(2)} MB`;
+  }
+
+  async function checkStorageQuota(companyId, incomingFileOrBytes) {
+    const incomingBytes = typeof incomingFileOrBytes === 'number'
+      ? incomingFileOrBytes
+      : Number(incomingFileOrBytes?.size || 0);
+    if (!companyId) throw new Error('A company is required before uploading a file.');
+
+    const { data, error } = await sb.rpc('check_company_storage_quota', {
+      p_company_id: companyId,
+      p_incoming_bytes: incomingBytes
+    });
+    if (error) {
+      console.error('Storage quota check failed:', error);
+      throw new Error('Storage availability could not be verified. Please try the upload again.');
+    }
+
+    const quota = Array.isArray(data) ? data[0] : data;
+    if (!quota?.allowed) {
+      const limit = formatStorageBytes(quota?.limit_bytes);
+      throw new Error(`Storage limit reached (${limit}). Remove files or ask an administrator to increase the tenant storage allocation.`);
+    }
+    return quota;
+  }
+
   // Export everything through window.BKAuth — the only global this file touches
   window.BKAuth = {
     sb,
@@ -288,6 +317,8 @@
     getEmployee,
     getEmployeeById,
     getEmployeeStatus,
+    checkStorageQuota,
+    formatStorageBytes,
     contextCache
   };
 

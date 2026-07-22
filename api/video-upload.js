@@ -42,12 +42,31 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Video file size exceeds the 50MB limit.' });
     }
 
+    if (!companyId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(companyId)) {
+      return res.status(400).json({ error: 'A valid company is required before uploading a video.' });
+    }
+
+    const { data: quotaRows, error: quotaError } = await supabase
+      .rpc('check_company_storage_quota', {
+        p_company_id: companyId,
+        p_incoming_bytes: buffer.length
+      });
+    if (quotaError) {
+      console.error('Storage quota check failed:', quotaError);
+      return res.status(503).json({ error: 'Storage availability could not be verified. Please try the upload again.' });
+    }
+    if (!quotaRows?.[0]?.allowed) {
+      return res.status(413).json({
+        error: 'This company has reached its storage limit. Remove files or increase the tenant storage allocation before uploading.'
+      });
+    }
+
     // Clean safe filename from title
     const safeTitle = title.replace(/[^a-zA-Z0-9.\-_]/g, '_');
     const extension = contentType.split('/').pop() || 'mp4';
     const fileName = safeTitle.endsWith(`.${extension}`) ? safeTitle : `${safeTitle}.${extension}`;
 
-    const safeCompanyId = (companyId || 'general').replace(/[^a-zA-Z0-9.\-_]/g, '_');
+    const safeCompanyId = companyId;
     const bucketName = 'brightkey-assets';
     const filePath = `companies/${safeCompanyId}/videos/${Date.now()}_${fileName}`;
 

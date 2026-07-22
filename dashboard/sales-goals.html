@@ -70,6 +70,32 @@
       position: relative;
     }
 
+    .panel-loading-overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 5;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.65rem;
+      min-height: 140px;
+      border-radius: inherit;
+      background: var(--bg-surface);
+      color: var(--text-muted);
+      font-size: 0.78rem;
+      font-weight: 600;
+    }
+
+    .panel-loading-spinner {
+      width: 26px;
+      height: 26px;
+      border: 3px solid rgba(6, 182, 212, 0.15);
+      border-top-color: var(--cyan);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
     .panel-title {
       font-size: 0.9rem;
       font-weight: 700;
@@ -539,6 +565,7 @@
     }
 
     .tab-btn {
+      display: block;
       padding: 0.9rem 1.25rem;
       font-size: 0.82rem;
       font-weight: 600;
@@ -549,6 +576,7 @@
       border-bottom: 2px solid transparent;
       white-space: nowrap;
       transition: all 0.15s;
+      text-decoration: none;
     }
 
     .tab-btn.active {
@@ -647,6 +675,7 @@
         <div class="drawer-tabs">
           <button class="tab-btn active" id="btn-tab-goals" onclick="switchTab('goals')">Goals</button>
           <button class="tab-btn" id="btn-tab-orders" onclick="switchTab('orders')">Orders</button>
+          <a class="tab-btn" href="/dashboard/sales-goals/commissions">Commissions</a>
           <button class="tab-btn" id="btn-tab-settings" onclick="switchTab('settings')">Settings</button>
         </div>
 
@@ -678,7 +707,7 @@
             <div class="dashboard-grid">
               
               <!-- Left: Sales Goal Shimmer Bar -->
-              <div class="goals-panel">
+              <div class="goals-panel" id="sales-goal-panel">
                 <div class="panel-title">
                   <span>Sales Revenue Goal</span>
                   <span id="txt-percent-complete" style="color: var(--cyan-light); font-weight: 800;">0%</span>
@@ -722,7 +751,7 @@
               </div>
 
               <!-- Right: Commission Leaderboard -->
-              <div class="goals-panel">
+              <div class="goals-panel" id="leaderboard-panel">
                 <div class="panel-title">
                   <span>Top Performers</span>
                 </div>
@@ -737,7 +766,7 @@
             <div class="bottom-section-grid">
               
               <!-- Bottom Left: Top Products row -->
-              <div class="goals-panel">
+              <div class="goals-panel" id="top-products-panel">
                 <div class="panel-title">
                   <span>Top Products to Sell (Last 30 Days)</span>
                 </div>
@@ -747,7 +776,7 @@
               </div>
 
               <!-- Bottom Right: Commission Adjustments list -->
-              <div class="goals-panel">
+              <div class="goals-panel" id="adjustments-panel">
                 <div class="panel-title">
                   <span>Commission Adjustments</span>
                 </div>
@@ -933,6 +962,11 @@
         await loadAllSettings();
         await loadGoalsDashboard();
         await enforceSettingsPermissions(authInfo);
+
+        const requestedTab = window.location.hash.slice(1);
+        if (requestedTab === 'orders' || requestedTab === 'settings') {
+          switchTab(requestedTab);
+        }
       } else {
         showToast('Authentication module missing.', true);
       }
@@ -1000,6 +1034,9 @@
 
     // Toggle navigation tabs
     window.switchTab = function(tabName) {
+      const tabHash = tabName === 'goals' ? '' : `#${tabName}`;
+      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}${tabHash}`);
+
       document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.classList.toggle('active', btn.id === `btn-tab-${tabName}`);
       });
@@ -1263,9 +1300,50 @@
       }
     };
 
+    function setPanelLoading(panelId, isLoading, label = 'Loading data...') {
+      const panel = document.getElementById(panelId);
+      if (!panel) return;
+
+      const existingOverlay = panel.querySelector(':scope > .panel-loading-overlay');
+      if (!isLoading) {
+        if (existingOverlay) existingOverlay.remove();
+        panel.removeAttribute('aria-busy');
+        return;
+      }
+
+      panel.setAttribute('aria-busy', 'true');
+      if (existingOverlay) {
+        const labelEl = existingOverlay.querySelector('.panel-loading-label');
+        if (labelEl) labelEl.textContent = label;
+        return;
+      }
+
+      const overlay = document.createElement('div');
+      overlay.className = 'panel-loading-overlay';
+      const spinner = document.createElement('span');
+      spinner.className = 'panel-loading-spinner';
+      spinner.setAttribute('aria-hidden', 'true');
+      const labelEl = document.createElement('span');
+      labelEl.className = 'panel-loading-label';
+      labelEl.textContent = label;
+      overlay.append(spinner, labelEl);
+      panel.appendChild(overlay);
+    }
+
+    async function loadPanelSection(panelId, label, task) {
+      setPanelLoading(panelId, true, label);
+      try {
+        await task();
+      } finally {
+        setPanelLoading(panelId, false);
+      }
+    }
+
     // Main dashboard loader
     async function loadGoalsDashboard() {
       if (!currentCompanyId) return;
+
+      setPanelLoading('sales-goal-panel', true, 'Loading sales goal...');
 
       // Update UI title
       document.getElementById('dashboard-title-month').textContent = `Sales Goals: ${formatMonthName(currentSelectedMonth)}`;
@@ -1395,21 +1473,21 @@
           }
         }
 
-        // 3. Load top products (Last 30 Days) - 6 total products
-        await loadTopProducts();
+        setPanelLoading('sales-goal-panel', false);
 
-        // 4. Load leaderboard (commissions MTD)
-        await loadLeaderboard(startDate, endDate);
-
-        // 5. Load Commission Adjustments rules (MTD)
-        await loadAdjustmentsDashboard(startDate, endDate);
-
-        // 6. Render Monthly statistics panel
-        await renderStatsPanel();
+        // Load each independent container concurrently with its own loading state.
+        await Promise.all([
+          loadPanelSection('top-products-panel', 'Loading top products...', loadTopProducts),
+          loadPanelSection('leaderboard-panel', 'Loading top performers...', () => loadLeaderboard(startDate, endDate)),
+          loadPanelSection('adjustments-panel', 'Loading commission adjustments...', () => loadAdjustmentsDashboard(startDate, endDate)),
+          loadPanelSection('stats-panel', 'Loading monthly statistics...', renderStatsPanel)
+        ]);
 
       } catch (err) {
         console.error('Error loading dashboard:', err);
         showToast('Error loading sales goals: ' + err.message, true);
+      } finally {
+        setPanelLoading('sales-goal-panel', false);
       }
     }
 
@@ -2205,7 +2283,7 @@
     function formatDateShort(dateStr) {
       const dParts = dateStr.split('-');
       const d = new Date(parseInt(dParts[0]), parseInt(dParts[1]) - 1, parseInt(dParts[2]));
-      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' });
+      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     }
 
     function formatCurrency(val) {

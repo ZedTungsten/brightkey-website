@@ -1254,6 +1254,8 @@ window.saveFile = async function() {
 
        btn.textContent = "Uploading File...";
 
+       await window.BKAuth.checkStorageQuota(currentCompanyId, fileToUpload);
+
        // Upload to Supabase Storage Bucket 'brightkey-assets'
        const filePath = `companies/${currentCompanyId}/sales-resources/${Date.now()}_${uploadName}`;
        const { data: uploadData, error: uploadErr } = await sb.storage
@@ -1273,6 +1275,7 @@ window.saveFile = async function() {
         try {
           const thumbBlob = await generateImageThumbnail(fileToUpload);
           const thumbPath = `companies/${currentCompanyId}/sales-resources/thumbs/${Date.now()}_thumb_${uploadName.replace(/\.[^/.]+$/, "")}.jpg`;
+          await window.BKAuth.checkStorageQuota(currentCompanyId, thumbBlob);
           const { data: tData, error: tErr } = await sb.storage
             .from('brightkey-assets')
             .upload(thumbPath, thumbBlob, { cacheControl: '604800', upsert: false });
@@ -1439,6 +1442,7 @@ async function autoUploadFile(file) {
   }
 
   try {
+    await window.BKAuth.checkStorageQuota(currentCompanyId, fileToUpload);
     const filePath = `companies/${currentCompanyId}/sales-resources/${Date.now()}_${uploadName}`;
     const { data: uploadData, error: uploadErr } = await sb.storage
       .from('brightkey-assets')
@@ -1459,6 +1463,7 @@ async function autoUploadFile(file) {
       try {
         const thumbBlob = await generateImageThumbnail(fileToUpload);
         const thumbPath = `companies/${currentCompanyId}/sales-resources/thumbs/${Date.now()}_thumb_${uploadName.replace(/\.[^/.]+$/, "")}.jpg`;
+        await window.BKAuth.checkStorageQuota(currentCompanyId, thumbBlob);
         const { data: tData, error: tErr } = await sb.storage
           .from('brightkey-assets')
           .upload(thumbPath, thumbBlob, { cacheControl: '604800', upsert: false });

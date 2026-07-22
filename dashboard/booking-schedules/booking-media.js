@@ -337,6 +337,7 @@
       const path = `companies/${currentCompanyId}/reviews/finished_installations/${folderName}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
 
       try {
+        await window.BKAuth.checkStorageQuota(currentCompanyId, file);
         let progress = 0;
         const progressInterval = setInterval(() => {
           if (progress < 90) {
@@ -515,6 +516,7 @@
       const path = `companies/${currentCompanyId}/reviews/finished_installations/${folderName}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
 
       try {
+        await window.BKAuth.checkStorageQuota(currentCompanyId, file);
         let progress = 0;
         const progressInterval = setInterval(() => {
           if (progress < 90) {

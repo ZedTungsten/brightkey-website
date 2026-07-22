@@ -413,10 +413,6 @@
         <div class="dash-nav-children">
           <a href="/dashboard/sales-goals" class="dash-nav-child" data-role="sales">Goals</a>
           <a href="/dashboard/sales-schedule" class="dash-nav-child" data-role="sales">Schedule</a>
-          <a href="/dashboard/sales-commissions" class="dash-nav-child" data-role="sales" style="display: flex; align-items: center; justify-content: space-between;">
-            <span>Commissions</span>
-            <span id="commissions-badge-dot" style="display: none; width: 6px; height: 6px; border-radius: 50%; background-color: #ef4444;"></span>
-          </a>
           <a href="/dashboard/sales-stocks" class="dash-nav-child" data-role="sales">Stocks</a>
           <a href="/dashboard/resources" class="dash-nav-child" data-role="sales">Resources</a>
         </div>

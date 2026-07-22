@@ -37,10 +37,29 @@ export default async function handler(req, res) {
     const base64Data = hasPrefix ? fileBase64.split(';base64,').pop() : fileBase64;
     const buffer = Buffer.from(base64Data, 'base64');
 
+    if (!companyId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(companyId)) {
+      return res.status(400).json({ error: 'A valid company is required before uploading a file.' });
+    }
+
+    const { data: quotaRows, error: quotaError } = await supabase
+      .rpc('check_company_storage_quota', {
+        p_company_id: companyId,
+        p_incoming_bytes: buffer.length
+      });
+    if (quotaError) {
+      console.error('Storage quota check failed:', quotaError);
+      return res.status(503).json({ error: 'Storage availability could not be verified. Please try the upload again.' });
+    }
+    if (!quotaRows?.[0]?.allowed) {
+      return res.status(413).json({
+        error: 'This company has reached its storage limit. Remove files or increase the tenant storage allocation before uploading.'
+      });
+    }
+
     // Clean file name to prevent directory traversal
     const safeFileName = fileName.replace(/[^a-zA-Z0-9.\-_]/g, '_');
     const safeRefId = (refId || 'general').replace(/[^a-zA-Z0-9.\-_]/g, '_');
-    const safeCompanyId = (companyId || 'general').replace(/[^a-zA-Z0-9.\-_]/g, '_');
+    const safeCompanyId = companyId;
 
     // Organize folder layout dynamically based on categorizations (scoped per company)
     let folderPath = '';

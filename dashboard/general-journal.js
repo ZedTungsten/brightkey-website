@@ -626,6 +626,7 @@
               const ext = item.name.split('.').pop().toLowerCase();
               const filename = `${entryLabel}-${String(i + 1).padStart(2, '0')}.${ext}`;
               const path = `companies/${this.companyId}/bookkeeping/${filename}`;
+              await window.BKAuth.checkStorageQuota(this.companyId, item.file);
               
               const { data, error } = await supabaseClient.storage
                 .from('brightkey-internal')
