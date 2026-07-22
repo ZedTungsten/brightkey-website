@@ -161,6 +161,37 @@
                         </div>
                       </div>
                     </div>
+
+                    <!-- Brand Colors -->
+                    <div class="wh-card" style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1.25rem; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px;">
+                      <h3 style="font-size: 0.95rem; font-weight: 700; color: var(--text-primary); border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; margin-bottom: 0.5rem;">Brand Colors</h3>
+
+                      <div style="display: flex; flex-direction: column; gap: 1rem;">
+                        <div class="form-group">
+                          <label class="form-label" for="company-color-primary-hex">Primary</label>
+                          <div style="display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: 0.65rem; align-items: center;">
+                            <input type="color" id="company-color-primary-picker" value="#06B6D4" aria-label="Choose primary brand color" oninput="syncBrandColor('primary', 'picker')" style="width: 48px; height: 38px; padding: 3px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-base); cursor: pointer;" />
+                            <input type="text" id="company-color-primary-hex" class="form-input" value="#06B6D4" maxlength="7" spellcheck="false" autocomplete="off" inputmode="text" aria-label="Primary brand color hex value" oninput="syncBrandColor('primary', 'hex')" onblur="normalizeBrandColor('primary')" />
+                          </div>
+                        </div>
+
+                        <div class="form-group">
+                          <label class="form-label" for="company-color-secondary-hex">Secondary</label>
+                          <div style="display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: 0.65rem; align-items: center;">
+                            <input type="color" id="company-color-secondary-picker" value="#0891B2" aria-label="Choose secondary brand color" oninput="syncBrandColor('secondary', 'picker')" style="width: 48px; height: 38px; padding: 3px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-base); cursor: pointer;" />
+                            <input type="text" id="company-color-secondary-hex" class="form-input" value="#0891B2" maxlength="7" spellcheck="false" autocomplete="off" inputmode="text" aria-label="Secondary brand color hex value" oninput="syncBrandColor('secondary', 'hex')" onblur="normalizeBrandColor('secondary')" />
+                          </div>
+                        </div>
+
+                        <div class="form-group">
+                          <label class="form-label" for="company-color-highlight-hex">Highlight</label>
+                          <div style="display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: 0.65rem; align-items: center;">
+                            <input type="color" id="company-color-highlight-picker" value="#F59E0B" aria-label="Choose highlight brand color" oninput="syncBrandColor('highlight', 'picker')" style="width: 48px; height: 38px; padding: 3px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-base); cursor: pointer;" />
+                            <input type="text" id="company-color-highlight-hex" class="form-input" value="#F59E0B" maxlength="7" spellcheck="false" autocomplete="off" inputmode="text" aria-label="Highlight brand color hex value" oninput="syncBrandColor('highlight', 'hex')" onblur="normalizeBrandColor('highlight')" />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -181,6 +212,44 @@
 
     window.companyLogoLight = '';
     window.companyLogoDark = '';
+
+    const DEFAULT_BRAND_COLORS = {
+      primary: '#06B6D4',
+      secondary: '#0891B2',
+      highlight: '#F59E0B'
+    };
+
+    function validHexColor(value) {
+      return /^#[0-9A-F]{6}$/i.test(String(value || '').trim());
+    }
+
+    function setBrandColor(type, value) {
+      const normalized = validHexColor(value) ? value.trim().toUpperCase() : DEFAULT_BRAND_COLORS[type];
+      const picker = document.getElementById(`company-color-${type}-picker`);
+      const hex = document.getElementById(`company-color-${type}-hex`);
+      if (picker) picker.value = normalized;
+      if (hex) hex.value = normalized;
+    }
+
+    window.syncBrandColor = function(type, source) {
+      const picker = document.getElementById(`company-color-${type}-picker`);
+      const hex = document.getElementById(`company-color-${type}-hex`);
+      if (!picker || !hex) return;
+
+      if (source === 'picker') {
+        hex.value = picker.value.toUpperCase();
+      } else {
+        const digits = hex.value.replace(/^#/, '').replace(/[^0-9A-F]/gi, '').slice(0, 6).toUpperCase();
+        hex.value = digits ? `#${digits}` : '#';
+        if (validHexColor(hex.value)) picker.value = hex.value;
+      }
+    };
+
+    window.normalizeBrandColor = function(type) {
+      const hex = document.getElementById(`company-color-${type}-hex`);
+      if (!hex) return;
+      setBrandColor(type, validHexColor(hex.value) ? hex.value : DEFAULT_BRAND_COLORS[type]);
+    };
 
     window.initSettingsPage = async function() {
       await loadCompanySettings();
@@ -310,6 +379,15 @@
       const phone = document.getElementById('company-phone')?.value || '';
       const website = document.getElementById('company-website')?.value || '';
       const foundingDate = document.getElementById('company-founding-date')?.value || '';
+      const brandColors = {};
+      for (const type of Object.keys(DEFAULT_BRAND_COLORS)) {
+        const value = document.getElementById(`company-color-${type}-hex`)?.value || '';
+        if (!validHexColor(value)) {
+          SettingsPage.showToast(`Enter a valid 6-digit hex value for the ${type} color.`, true);
+          return;
+        }
+        brandColors[type] = value.trim().toUpperCase();
+      }
       
       const socialLinks = [];
       const rows = document.querySelectorAll('.social-link-row');
@@ -335,7 +413,8 @@
             foundingDate: foundingDate,
             socialLinks: socialLinks,
             logoLight: window.companyLogoLight || '',
-            logoDark: window.companyLogoDark || ''
+            logoDark: window.companyLogoDark || '',
+            brandColors: brandColors
           }
         });
         if (error) throw error;
@@ -372,6 +451,12 @@
         if (websiteEl) websiteEl.value = config.website || '';
         const foundingDateEl = document.getElementById('company-founding-date');
         if (foundingDateEl) foundingDateEl.value = config.foundingDate || '';
+
+        const brandColors = config.brandColors || {};
+        if (!brandColors.highlight && brandColors.accent) brandColors.highlight = brandColors.accent;
+        Object.keys(DEFAULT_BRAND_COLORS).forEach(type => {
+          setBrandColor(type, brandColors[type] || DEFAULT_BRAND_COLORS[type]);
+        });
 
         // Clear and populate social links
         const list = document.getElementById('social-links-list');

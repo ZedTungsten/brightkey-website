@@ -29,6 +29,12 @@ function displayPrice(p) {
   return (p.discounted_price > 0) ? p.discounted_price : (p.sale_price || 0);
 }
 
+function validBrandColor(value, fallback) {
+  return /^#[0-9A-F]{6}$/i.test(String(value || '').trim())
+    ? String(value).trim().toUpperCase()
+    : fallback;
+}
+
 /** Get HTML for promotional badges/tags */
 function getPromoTagsHtml(tags) {
   if (!tags || !Array.isArray(tags) || tags.length === 0) return '';
@@ -705,9 +711,20 @@ async function buildProducts() {
     const companyProfile = companyProfiles[p.company_id] || {};
     const companyDarkLogo = companyProfile.darkLogoSource || companyProfile.logoDark || '../assets/logo.svg?v=2';
     const companyName = companyProfile.companyName || 'Brightkey';
+    const savedBrandColors = companyProfile.brandColors || {};
+    const primaryColor = validBrandColor(savedBrandColors.primary, '#06B6D4');
+    const secondaryColor = validBrandColor(savedBrandColors.secondary, '#0891B2');
+    const highlightColor = validBrandColor(savedBrandColors.highlight || savedBrandColors.accent, '#F59E0B');
     $('[data-template="company-dark-logo"]')
       .attr('src', companyDarkLogo)
       .attr('alt', `${companyName} logo`);
+    $('style').first().append(`
+      :root {
+        --brand-primary: ${primaryColor};
+        --brand-secondary: ${secondaryColor};
+        --brand-highlight: ${highlightColor};
+      }
+    `);
 
     // Meta tags
     $('[data-template="meta-desc"]').attr('content', descShort);
