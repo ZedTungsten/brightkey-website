@@ -421,6 +421,7 @@ window.showTheaterImage = function(url) {
   let lastInteractionTime = Date.now();
   const idleRefreshThreshold = 10 * 60 * 1000; // 10 minutes of complete inactivity
   const idleCheckInterval = 30 * 1000; // Check every 30 seconds
+  const skipRefocusRefresh = /^\/dashboard\/ship\/send\/?$/.test(window.location.pathname);
 
   // List of events indicating user activity
   const activityEvents = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
@@ -432,14 +433,14 @@ window.showTheaterImage = function(url) {
 
   // 1. Visibility change handler: Immediately refresh when tab is focused/opened
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') {
+    if (!skipRefocusRefresh && document.visibilityState === 'visible') {
       triggerPageRefresh();
     }
   });
 
   // 2. Window focus handler: Refresh when user switches back to the browser window
   window.addEventListener('focus', () => {
-    triggerPageRefresh();
+    if (!skipRefocusRefresh) triggerPageRefresh();
   });
 
   // 3. Background interval loop: Auto-refresh if user has been completely idle

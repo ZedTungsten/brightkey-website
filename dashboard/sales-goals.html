@@ -761,7 +761,7 @@
             <!-- Stats Panel -->
             <div class="goals-panel" id="stats-panel" style="margin-top: 1.5rem;">
               <div class="panel-title">
-                <span>Monthly Statistics (by Book Date)</span>
+                <span>Month Statistics (Bookings)</span>
               </div>
               <div class="stats-overview-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.25rem; margin-bottom: 1.5rem; margin-top: 0.5rem;">
                 <div class="stat-card" style="background: var(--bg-surface); border: 1px solid var(--border); padding: 1.25rem; border-radius: var(--radius-md);">
@@ -1405,7 +1405,7 @@
         await loadAdjustmentsDashboard(startDate, endDate);
 
         // 6. Render Monthly statistics panel
-        await renderStatsPanel(bookings);
+        await renderStatsPanel();
 
       } catch (err) {
         console.error('Error loading dashboard:', err);
@@ -1559,7 +1559,7 @@
       }
     };
 
-    async function renderStatsPanel(bookings) {
+    async function renderStatsPanel() {
       const totalOrdersEl = document.getElementById('stat-total-orders');
       const avgValueEl = document.getElementById('stat-avg-value');
       const ordersPerWeekEl = document.getElementById('stat-orders-per-week');
@@ -1568,7 +1568,20 @@
 
       if (!totalOrdersEl || !avgValueEl || !ordersPerWeekEl || !revPerWeekEl || !distBarsEl) return;
 
-      if (!bookings || bookings.length === 0) {
+      const bookedMonthRange = getStatsBookedMonthRange(currentSelectedMonth);
+      const { data: rawBookings, error } = await sb
+        .from('installation_bookings')
+        .select('created_at, grand_total, deposit_amount, balance_due, deduction_labels, deduction_values, order_no')
+        .eq('company_id', currentCompanyId)
+        .neq('status', 'cancelled')
+        .gte('created_at', bookedMonthRange.start)
+        .lt('created_at', bookedMonthRange.endExclusive);
+
+      if (error) throw error;
+
+      const bookings = (rawBookings || []).filter(b => b.order_no && b.order_no.startsWith('ORD-'));
+
+      if (bookings.length === 0) {
         totalOrdersEl.textContent = '0';
         avgValueEl.textContent = '₱0.00';
         ordersPerWeekEl.textContent = '0.0';
@@ -1620,9 +1633,9 @@
       const totalRevenuePHP = totalRevenueCentavos / 100;
       const avgValuePHP = totalOrders > 0 ? (totalRevenuePHP / totalOrders) : 0;
 
-      const numWeeks = 5; 
-      const avgOrdersPerWeek = totalOrders / numWeeks;
-      const avgRevPerWeek = totalRevenuePHP / numWeeks;
+      const elapsedWeeks = getStatsElapsedWeekCount(currentSelectedMonth);
+      const avgOrdersPerWeek = elapsedWeeks > 0 ? totalOrders / elapsedWeeks : 0;
+      const avgRevPerWeek = elapsedWeeks > 0 ? totalRevenuePHP / elapsedWeeks : 0;
 
       totalOrdersEl.textContent = totalOrders.toLocaleString();
       avgValueEl.textContent = `₱${avgValuePHP.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -1662,6 +1675,31 @@
       const remainingDays = dayOfMonth - firstSundayDate - 1;
       const weekIndex = 1 + Math.floor(remainingDays / 7);
       return Math.min(weekIndex, 4); // Max Wk 5 (index 4)
+    }
+
+    function getStatsBookedMonthRange(yearMonthStr) {
+      const [year, month] = yearMonthStr.split('-').map(Number);
+      const nextYear = month === 12 ? year + 1 : year;
+      const nextMonth = month === 12 ? 1 : month + 1;
+
+      return {
+        start: `${year}-${String(month).padStart(2, '0')}-01T00:00:00+08:00`,
+        endExclusive: `${nextYear}-${String(nextMonth).padStart(2, '0')}-01T00:00:00+08:00`
+      };
+    }
+
+    function getStatsElapsedWeekCount(yearMonthStr) {
+      const [year, month] = yearMonthStr.split('-').map(Number);
+      const today = new Date();
+      const selectedMonthStart = new Date(year, month - 1, 1);
+      const currentMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+
+      if (selectedMonthStart > currentMonthStart) return 0;
+
+      const referenceDate = selectedMonthStart < currentMonthStart
+        ? new Date(year, month, 0)
+        : today;
+      return getWeekOfMonthIndex(referenceDate) + 1;
     }
 
     function getWeekDatesRangeLabel(yearMonthStr, weekIdx) {
