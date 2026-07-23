@@ -371,7 +371,7 @@
     const url = productUrl(product);
     const price = product._price;
     const compare = Number(product.before_price) / 100;
-    const hasCompare = compare > price;
+    const hasCompare = Number.isFinite(compare) && compare > 0;
     const image = product.image_main;
 
     const media = image

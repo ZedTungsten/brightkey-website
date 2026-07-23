@@ -448,7 +448,7 @@
             <span id="ship-badge-dot" style="display: none; width: 6px; height: 6px; border-radius: 50%; background-color: #ef4444;"></span>
           </a>
           <a href="/dashboard/logistics-calendar/calendar" class="dash-nav-child" data-role="logistics">Calendar</a>
-          <a href="/dashboard/inventory" class="dash-nav-child" data-role="logistics">Inventory</a>
+          <a href="/dashboard/inventory/summary" class="dash-nav-child" data-role="logistics">Inventory</a>
           <a href="/dashboard/qa-guide" class="dash-nav-child" data-role="logistics">QA Guide</a>
           <a href="/dashboard/shipping-rates" class="dash-nav-child" data-role="logistics">Shipping Rates</a>
         </div>
@@ -703,6 +703,75 @@
 
     // Resolve Active State based on current pathname
     const currentPath = window.location.pathname;
+
+    function normalizeSidebarPath(path) {
+      let normalized = String(path || '').split('?')[0].split('#')[0];
+      try {
+        normalized = decodeURIComponent(normalized);
+      } catch (_) {
+        // Keep the original path if it contains a malformed escape sequence.
+      }
+      normalized = normalized.replace(/\/index(?:\.html)?$/i, '');
+      normalized = normalized.replace(/\.html$/i, '');
+      normalized = normalized.replace(/\/+$/, '');
+      return normalized || '/';
+    }
+
+    const sidebarRouteFamilies = {
+      '/dashboard/pricing-strategy/calculator': [
+        '/dashboard/pricing-strategy'
+      ],
+      '/dashboard/booking-schedules/calendar': [
+        '/dashboard/booking-schedules'
+      ],
+      '/dashboard/sales-goals': [
+        '/dashboard/sales-goals',
+        '/dashboard/sales-commissions'
+      ],
+      '/dashboard/warehouse/inspect': [
+        '/dashboard/warehouse'
+      ],
+      '/dashboard/ship/send': [
+        '/dashboard/ship'
+      ],
+      '/dashboard/logistics-calendar/calendar': [
+        '/dashboard/logistics-calendar'
+      ],
+      '/dashboard/inventory/summary': [
+        '/dashboard/inventory'
+      ],
+      '/dashboard/payout-tracker/payout': [
+        '/dashboard/payout-tracker'
+      ],
+      '/dashboard/statements/profit-and-loss': [
+        '/dashboard/statements',
+        '/dashboard/financial-statement'
+      ],
+      '/dashboard/expenses/cogs': [
+        '/dashboard/expenses'
+      ],
+      '/dashboard/ledgers': [
+        '/dashboard/ledgers'
+      ],
+      '/dashboard/receivables': [
+        '/dashboard/receivables'
+      ],
+      '/dashboard/payables': [
+        '/dashboard/payables'
+      ]
+    };
+
+    function isSidebarRouteActive(href, pathname) {
+      const linkPath = normalizeSidebarPath(href);
+      const pagePath = normalizeSidebarPath(pathname);
+
+      if (linkPath === pagePath) return true;
+
+      return (sidebarRouteFamilies[linkPath] || []).some(prefix => {
+        const normalizedPrefix = normalizeSidebarPath(prefix);
+        return pagePath === normalizedPrefix || pagePath.startsWith(normalizedPrefix + '/');
+      });
+    }
     
     // Check main links
     const homeBtn = document.getElementById('nav-item-home');
@@ -746,17 +815,7 @@
     // Check sub-links and auto-expand active group
     document.querySelectorAll('.dash-nav-child').forEach(link => {
       const href = link.getAttribute('href');
-      if (href && (
-        currentPath === href ||
-        currentPath === href + '.html' ||
-        (href === '/dashboard/warehouse/inspect' && currentPath.startsWith('/dashboard/warehouse/')) ||
-        (href === '/dashboard/inventory' && currentPath === '/dashboard/inventory') ||
-        (href === '/dashboard/ship/send' && currentPath.startsWith('/dashboard/ship/')) ||
-        (href === '/dashboard/booking-schedules/calendar' && currentPath.startsWith('/dashboard/booking-schedules/')) ||
-        (href === '/dashboard/pricing-strategy/calculator' && currentPath.startsWith('/dashboard/pricing-strategy/')) ||
-        (href === '/dashboard/payout-tracker/payout/' && currentPath.startsWith('/dashboard/payout-tracker/')) ||
-        (href === '/dashboard/logistics-calendar/calendar' && currentPath.startsWith('/dashboard/logistics-calendar/'))
-      )) {
+      if (href && isSidebarRouteActive(href, currentPath)) {
         link.classList.add('active');
         const group = link.closest('.dash-nav-group');
         if (group) {

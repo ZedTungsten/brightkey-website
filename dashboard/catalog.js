@@ -2407,7 +2407,44 @@
         currentUploadTarget.value = result.url;
         currentUploadTarget.dispatchEvent(new Event('input'));
 
-        toast("File uploaded securely!", "success");
+        // Uploading to Storage and saving the returned URL to the product are
+        // separate operations. Persist the exact media column before reporting
+        // success so reopening or navigating between products cannot discard it.
+        if (editingId && !isBatchEditing) {
+          const mediaColumn = fieldMapping[currentUploadTarget.id];
+          if (!mediaColumn) {
+            throw new Error('The uploaded file could not be linked to this product.');
+          }
+
+          const statusEl = document.getElementById('drawer-status');
+          if (statusEl) {
+            statusEl.textContent = 'Saving uploaded file…';
+            statusEl.style.color = 'var(--text-secondary)';
+          }
+
+          const { error: mediaSaveError } = await sbClient
+            .from('products')
+            .update({ [mediaColumn]: result.url })
+            .eq('id', editingId);
+          if (mediaSaveError) throw mediaSaveError;
+
+          const localProduct = allProducts.find(product => product.id === editingId);
+          if (localProduct) localProduct[mediaColumn] = result.url;
+          hasUnpublishedChanges = true;
+          updatePublishStateUI();
+
+          if (statusEl) {
+            statusEl.textContent = 'Saved Changes!';
+            statusEl.style.color = 'var(--success)';
+          }
+        }
+
+        toast(
+          editingId && !isBatchEditing
+            ? 'File uploaded and saved to the product.'
+            : 'File uploaded securely. Save the product to keep this URL.',
+          'success'
+        );
       } catch (err) {
         console.error(err);
         toast("Upload failed: " + err.message, "error");
