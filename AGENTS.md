@@ -267,6 +267,14 @@ We use two distinct patterns for modal overlays. Do NOT mix them:
 > Because Vercel serves clean URLs without extensions (e.g. rewriting `/dashboard/marketing-logs/index.html` to `/dashboard/marketing-logs`), relative resource paths like `marketing-logs.css` or `marketing-logs.js` declared in HTML files will fail to resolve. The browser treats the active path context as `/dashboard/` instead of `/dashboard/marketing-logs/`.
 > - **Always Use Root-Relative Absolute Paths**: For all stylesheet links, script tags, images, or custom assets loaded inside nested subdirectory modules, declare paths using a leading slash (e.g. `/dashboard/marketing-logs/marketing-logs.css` instead of `marketing-logs.css`). This guarantees paths resolve correctly regardless of URL rewrite structures.
 > - **Never Rewrite a Clean Route to an `.html` Destination**: When `vercel.json` has `"cleanUrls": true`, a rewrite such as `{"source":"/dashboard/booking-schedules/calendar","destination":"/dashboard/booking-schedules.html"}` can cause Vercel to redirect the internal `.html` destination back to its clean URL. If that clean URL also redirects to the source route, it creates a redirect/rewrite cycle that resolves as a production 404. Point rewrites to the clean destination instead: `{"source":"/dashboard/booking-schedules/calendar","destination":"/dashboard/booking-schedules"}`.
+> - **Keep Redirects and Rewrites One-Way**: Redirects are only for legacy incoming URLs. Never use a redirect target as a rewrite source or point a rewrite destination to a route that redirects back to the original source. Before committing `vercel.json`, trace every changed route from public source to final static destination and confirm there is no cycle.
+> - **Mandatory Pre-Deployment Route Audit**: Whenever `vercel.json`, a dashboard route, or a nested page is added or changed, validate all of the following before pushing:
+>   1. `vercel.json` parses as valid JSON.
+>   2. No rewrite destination ends in `.html` while `"cleanUrls": true`.
+>   3. Every rewrite destination resolves to an existing static page or valid handler.
+>   4. No redirect/rewrite pair forms a circular route.
+>   5. Nested pages use root-relative asset URLs.
+> - **Prefer Automated Route Validation**: If a route-validation script is available, it must run as part of the pre-deployment or CI checks and fail the deployment for `.html` rewrite destinations, missing targets, or redirect/rewrite cycles. Documentation review alone is not sufficient protection.
 > - **Verify Production Routes After Deployment**: After changing redirects or rewrites, verify the deployed route directly and confirm it returns HTTP `200`, rather than assuming a valid `vercel.json` guarantees correct production routing.
 
 ---
@@ -317,4 +325,3 @@ We use two distinct patterns for modal overlays. Do NOT mix them:
 >     }
 >   }
 >   ```
-
