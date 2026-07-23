@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Warehouse Returns — Brightkey Admin</title>
+  <link rel="preconnect" href="https://fonts.bunny.net" />
+  <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="stylesheet" href="/dashboard/warehouse/shared.css" />
+  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg?v=2" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+</head>
+<body>
+  <div class="toast-container" id="toast-container"></div>
+  <div class="dash-layout">
+    <aside class="dash-sidebar" id="dash-sidebar"></aside>
+    <div class="dash-main">
+      <div class="page-wrap">
+        <div class="top-bar">
+          <span class="top-bar-title">Warehouse &amp; Inventory Ledger</span>
+          <div style="flex:1;"></div>
+          <div style="display:flex; gap:0.5rem; align-items:center;">
+            <button class="btn btn-outline" type="button" onclick="openIssueReturnModal()">
+              <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 6 6v5"/></svg>Issue Return
+            </button>
+            <select id="wh-select-dropdown" class="wh-select-dropdown" style="display:none;" onchange="WarehousePage.switchWarehouse(this.value)"></select>
+            <button id="btn-sync" class="btn btn-primary" type="button">
+              <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none" aria-hidden="true" style="vertical-align:-2px; margin-right:6px;"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Refresh
+            </button>
+          </div>
+        </div>
+
+        <div class="content-area">
+          <div class="main-workspace">
+            <div class="drawer-tabs">
+              <a class="tab-btn" href="/dashboard/warehouse/inspect">Inspect <span id="badge-count-inspect" style="display:none; background:var(--cyan); color:white; font-size:0.75rem; padding:1px 6px; border-radius:10px; margin-left:4px;">0</span></a>
+              <a class="tab-btn" href="/dashboard/warehouse/pack">Pack <span id="badge-count-pack" style="display:none; background:var(--cyan); color:white; font-size:0.75rem; padding:1px 6px; border-radius:10px; margin-left:4px;">0</span></a>
+              <a class="tab-btn" href="/dashboard/warehouse/dispatch">Dispatch <span id="badge-count-dispatch" style="display:none; background:var(--cyan); color:white; font-size:0.75rem; padding:1px 6px; border-radius:10px; margin-left:4px;">0</span></a>
+              <a class="tab-btn" href="/dashboard/warehouse/receive">Receive <span id="badge-count-receive" style="display:none; background:var(--cyan); color:white; font-size:0.75rem; padding:1px 6px; border-radius:10px; margin-left:4px;">0</span></a>
+              <a class="tab-btn" href="/dashboard/warehouse/transfer">Transfer</a>
+              <a class="tab-btn active" href="/dashboard/warehouse/return">Return</a>
+              <a class="tab-btn" href="/dashboard/warehouse/order">Order</a>
+            </div>
+
+            <div class="table-scroll">
+              <div class="tab-panel active">
+                <div class="panel">
+                  <div class="panel-header">Returned Items</div>
+                  <div class="table-responsive">
+                    <table class="ledger-table">
+                      <thead>
+                        <tr>
+                          <th>Ref Order</th>
+                          <th>Customer Name</th>
+                          <th>City</th>
+                          <th>SKU</th>
+                          <th style="text-align:center;">Qty</th>
+                          <th>Book Date</th>
+                          <th>Return Date</th>
+                          <th>Receive Date</th>
+                          <th>Install Date</th>
+                        </tr>
+                      </thead>
+                      <tbody id="return-list">
+                        <tr><td colspan="9"><div class="loading-wrapper"><div class="spinner-cyan"></div><span>Loading returned items...</span></div></td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="issue-return-modal" aria-hidden="true" onclick="handleIssueReturnBackdrop(event)">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="issue-return-title">
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:1rem; margin-bottom:1.5rem;">
+        <h2 id="issue-return-title" style="font-size:1.2rem; color:var(--text-primary); margin:0;">Issue Return</h2>
+        <button class="btn btn-outline" type="button" onclick="closeIssueReturnModal()" aria-label="Close" style="padding:0.4rem; width:34px; height:34px; justify-content:center;">
+          <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2.2" fill="none" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+
+      <form id="issue-return-form" onsubmit="submitIssueReturn(event)" style="display:flex; flex-direction:column; gap:1rem;">
+        <div class="form-group">
+          <label class="form-label" for="return-month">Month Year</label>
+          <input class="form-input" id="return-month" type="month" required onchange="loadReturnCustomers()" />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="return-customer">Customer Name</label>
+          <select class="form-select" id="return-customer" required onchange="populateReturnProducts()">
+            <option value="">Select a month first</option>
+          </select>
+        </div>
+        <div style="display:grid; grid-template-columns:minmax(0, 1fr) 110px; gap:0.75rem;">
+          <div class="form-group">
+            <label class="form-label" for="return-product">Select Product</label>
+            <select class="form-select" id="return-product" required onchange="updateReturnQuantityLimit()">
+              <option value="">Select a customer first</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="return-quantity">Qty</label>
+            <input class="form-input" id="return-quantity" type="number" min="1" step="1" value="1" required />
+          </div>
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; gap:0.75rem; padding-top:1rem; border-top:1px solid var(--border);">
+          <button class="btn btn-outline" type="button" onclick="closeIssueReturnModal()">Cancel</button>
+          <button class="btn btn-primary" id="btn-submit-return" type="submit">Issue Return</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/js/auth.js"></script>
+  <script src="/js/sidebar.js"></script>
+  <script src="/js/main.js"></script>
+  <script src="/dashboard/warehouse/shared.js"></script>
+  <script>
+    'use strict';
+
+    let returnBookingsByOrder = new Map();
+    let modalBookings = [];
+
+    function formatReturnDate(value) {
+      if (!value) return '—';
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return '—';
+      return date.toLocaleDateString('en-PH', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric'
+      });
+    }
+
+    function parseBookingProducts(booking) {
+      let products = booking?.products || [];
+      if (typeof products === 'string') {
+        try {
+          products = JSON.parse(products);
+        } catch (_) {
+          products = [];
+        }
+      }
+      return Array.isArray(products) ? products : [];
+    }
+
+    function renderReturns() {
+      const tbody = document.getElementById('return-list');
+      const returns = WarehousePage.activeTransactions
+        .filter(transaction => transaction.timestamp_returned)
+        .sort((a, b) => new Date(b.timestamp_returned || b.updated_at || b.created_at) - new Date(a.timestamp_returned || a.updated_at || a.created_at));
+
+      if (!returns.length) {
+        tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted" style="padding:2rem 0;">No returned items for this warehouse.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = returns.map(transaction => {
+        const booking = returnBookingsByOrder.get(transaction.reference_id);
+        return `
+          <tr>
+            <td><strong>${WarehousePage.escFulfillment(transaction.reference_id || '—')}</strong></td>
+            <td>${WarehousePage.escFulfillment(transaction.customer_name || '—')}</td>
+            <td>${WarehousePage.escFulfillment(transaction.customer_city || '—')}</td>
+            <td><code>${WarehousePage.escFulfillment(transaction.sku || '—')}</code></td>
+            <td style="text-align:center;"><strong>${Number(transaction.quantity) || 0}</strong></td>
+            <td>${formatReturnDate(booking?.created_at)}</td>
+            <td>${formatReturnDate(transaction.timestamp_returned)}</td>
+            <td>${formatReturnDate(transaction.timestamp_received)}</td>
+            <td>${formatReturnDate(booking?.scheduled_date)}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    async function refreshDashboard() {
+      const tbody = document.getElementById('return-list');
+      tbody.innerHTML = '<tr><td colspan="9"><div class="loading-wrapper"><div class="spinner-cyan"></div><span>Loading returned items...</span></div></td></tr>';
+
+      let query = WarehousePage.sb
+        .from('inventory_transactions')
+        .select('id, sku, quantity, status, reference_id, customer_name, customer_city, timestamp_returned, timestamp_received, created_at, updated_at, type, warehouse_id')
+        .order('created_at', { ascending: false });
+
+      if (WarehousePage.activeWarehouseId) {
+        query = query.eq('warehouse_id', WarehousePage.activeWarehouseId);
+      } else {
+        query = query.is('warehouse_id', null);
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+      WarehousePage.activeTransactions = data || [];
+
+      const returnOrderNumbers = [...new Set(
+        WarehousePage.activeTransactions
+          .filter(transaction => transaction.timestamp_returned && transaction.reference_id?.startsWith('ORD-'))
+          .map(transaction => transaction.reference_id)
+      )];
+      returnBookingsByOrder = new Map();
+      if (returnOrderNumbers.length) {
+        const { data: bookingRows, error: bookingError } = await WarehousePage.sb
+          .from('installation_bookings')
+          .select('order_no, created_at, scheduled_date')
+          .in('order_no', returnOrderNumbers);
+        if (bookingError) throw bookingError;
+        returnBookingsByOrder = new Map((bookingRows || []).map(booking => [booking.order_no, booking]));
+      }
+
+      renderReturns();
+      WarehousePage.updateBadgeCounts();
+    }
+
+    function openIssueReturnModal() {
+      const modal = document.getElementById('issue-return-modal');
+      const now = new Date();
+      document.getElementById('return-month').value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      document.getElementById('return-product').innerHTML = '<option value="">Select a customer first</option>';
+      document.getElementById('return-quantity').value = '1';
+      modal.style.display = 'grid';
+      modal.offsetHeight;
+      modal.classList.add('open');
+      modal.setAttribute('aria-hidden', 'false');
+      loadReturnCustomers();
+    }
+
+    function closeIssueReturnModal() {
+      const modal = document.getElementById('issue-return-modal');
+      modal.classList.remove('open');
+      modal.setAttribute('aria-hidden', 'true');
+    }
+
+    function handleIssueReturnBackdrop(event) {
+      if (event.target.id === 'issue-return-modal') closeIssueReturnModal();
+    }
+
+    async function loadReturnCustomers() {
+      const monthValue = document.getElementById('return-month').value;
+      const customerSelect = document.getElementById('return-customer');
+      const productSelect = document.getElementById('return-product');
+      customerSelect.innerHTML = '<option value="">Loading customers...</option>';
+      productSelect.innerHTML = '<option value="">Select a customer first</option>';
+      modalBookings = [];
+      if (!monthValue) return;
+
+      const [year, month] = monthValue.split('-').map(Number);
+      const start = new Date(Date.UTC(year, month - 1, 1)).toISOString();
+      const end = new Date(Date.UTC(year, month, 1)).toISOString();
+      const { data, error } = await WarehousePage.sb
+        .from('installation_bookings')
+        .select('id, order_no, customer_name, customer_city, customer_address, created_at, scheduled_date, products')
+        .eq('company_id', WarehousePage.companyId)
+        .gte('created_at', start)
+        .lt('created_at', end)
+        .order('customer_name', { ascending: true });
+
+      if (error) {
+        console.error(error);
+        customerSelect.innerHTML = '<option value="">Customers could not be loaded</option>';
+        WarehousePage.showToast('Customers could not be loaded. Please try again.', true);
+        return;
+      }
+
+      modalBookings = (data || []).filter(booking =>
+        parseBookingProducts(booking).some(product => !product.cancelled && Number(product.qty || 0) > 0)
+      );
+      customerSelect.innerHTML = modalBookings.length
+        ? '<option value="">Select customer</option>' + modalBookings.map(booking =>
+            `<option value="${booking.id}">${WarehousePage.escFulfillment(booking.customer_name || 'Unnamed Customer')} — ${WarehousePage.escFulfillment(booking.order_no)}</option>`
+          ).join('')
+        : '<option value="">No customers booked in this month</option>';
+    }
+
+    function populateReturnProducts() {
+      const bookingId = document.getElementById('return-customer').value;
+      const productSelect = document.getElementById('return-product');
+      const booking = modalBookings.find(item => item.id === bookingId);
+      if (!booking) {
+        productSelect.innerHTML = '<option value="">Select a customer first</option>';
+        return;
+      }
+
+      const quantitiesBySku = new Map();
+      parseBookingProducts(booking).forEach(product => {
+        if (product.cancelled) return;
+        const sku = String(product.sku || '').trim();
+        const quantity = Number(product.qty || 0);
+        if (!sku || quantity < 1) return;
+        quantitiesBySku.set(sku, (quantitiesBySku.get(sku) || 0) + quantity);
+      });
+
+      const previouslyReturned = new Map();
+      WarehousePage.activeTransactions
+        .filter(transaction => transaction.reference_id === booking.order_no && transaction.timestamp_returned)
+        .forEach(transaction => previouslyReturned.set(
+          transaction.sku,
+          (previouslyReturned.get(transaction.sku) || 0) + Number(transaction.quantity || 0)
+        ));
+
+      const options = [...quantitiesBySku.entries()]
+        .map(([sku, purchased]) => ({ sku, remaining: Math.max(0, purchased - (previouslyReturned.get(sku) || 0)) }))
+        .filter(item => item.remaining > 0);
+      const productsBySku = new Map(WarehousePage.allProducts.map(product => [product.sku, product]));
+      productSelect.innerHTML = options.length
+        ? '<option value="">Select product</option>' + options.map(item =>
+            `<option value="${WarehousePage.escFulfillment(item.sku)}" data-max="${item.remaining}">${WarehousePage.escFulfillment(item.sku)} — ${WarehousePage.escFulfillment(productsBySku.get(item.sku)?.title || 'Product')} (${item.remaining} available)</option>`
+          ).join('')
+        : '<option value="">All products already returned</option>';
+      updateReturnQuantityLimit();
+    }
+
+    function updateReturnQuantityLimit() {
+      const option = document.getElementById('return-product').selectedOptions[0];
+      const quantityInput = document.getElementById('return-quantity');
+      const max = Number(option?.dataset.max || 1);
+      quantityInput.max = String(max);
+      if (Number(quantityInput.value) > max) quantityInput.value = String(max);
+    }
+
+    async function submitIssueReturn(event) {
+      event.preventDefault();
+      const button = document.getElementById('btn-submit-return');
+      const booking = modalBookings.find(item => item.id === document.getElementById('return-customer').value);
+      const productSelect = document.getElementById('return-product');
+      const sku = productSelect.value;
+      const quantity = Number(document.getElementById('return-quantity').value);
+      const maxQuantity = Number(productSelect.selectedOptions[0]?.dataset.max || 0);
+
+      if (!booking || !sku || !Number.isInteger(quantity) || quantity < 1 || quantity > maxQuantity) {
+        WarehousePage.showToast('Select a customer, product, and valid return quantity.', true);
+        return;
+      }
+      if (!WarehousePage.activeWarehouseId) {
+        WarehousePage.showToast('Select a warehouse before issuing a return.', true);
+        return;
+      }
+
+      await WarehousePage.wrapActionWithLoading(button, async () => {
+        const { data: inventoryRows, error: inventoryError } = await WarehousePage.sb
+          .from('inventory')
+          .select('id, dispatched, returned')
+          .eq('warehouse_id', WarehousePage.activeWarehouseId)
+          .eq('sku', sku)
+          .limit(1);
+        if (inventoryError) throw inventoryError;
+        const inventory = inventoryRows?.[0];
+        if (!inventory) throw new Error('This product is not configured in the selected warehouse.');
+
+        const now = new Date().toISOString();
+        const city = booking.customer_city || (
+          String(booking.customer_address || '').split(',').slice(-2, -1)[0]?.trim()
+        ) || '';
+        const { data: transaction, error: transactionError } = await WarehousePage.sb
+          .from('inventory_transactions')
+          .insert({
+            company_id: WarehousePage.companyId,
+            warehouse_id: WarehousePage.activeWarehouseId,
+            sku,
+            quantity,
+            type: 'customer_order',
+            status: 'returned',
+            reference_id: booking.order_no,
+            customer_name: booking.customer_name,
+            customer_city: city,
+            timestamp_returned: now
+          })
+          .select('id')
+          .single();
+        if (transactionError) throw transactionError;
+
+        const { error: updateError } = await WarehousePage.sb
+          .from('inventory')
+          .update({
+            dispatched: Math.max(0, Number(inventory.dispatched || 0) - quantity),
+            returned: Number(inventory.returned || 0) + quantity
+          })
+          .eq('id', inventory.id);
+        if (updateError) {
+          await WarehousePage.sb.from('inventory_transactions').delete().eq('id', transaction.id);
+          throw updateError;
+        }
+
+        closeIssueReturnModal();
+        WarehousePage.showToast('Return issued and added to the Receive queue.');
+        await refreshDashboard();
+      });
+    }
+
+    async function init() {
+      try {
+        const authInfo = await BKAuth.checkRoleGate(['Logistics'], '/admin.html');
+        if (!authInfo) return;
+        WarehousePage.sb = BKAuth.sb;
+
+        const { data: company } = await WarehousePage.sb
+          .from('companies')
+          .select('id')
+          .eq('tenant_id', authInfo.tenantId)
+          .limit(1)
+          .maybeSingle();
+        WarehousePage.companyId = company?.id || null;
+
+        await WarehousePage.loadWarehouseTabs(authInfo.tenantId);
+        await WarehousePage.loadCoreData();
+        await refreshDashboard();
+
+        document.getElementById('btn-sync').addEventListener('click', async event => {
+          await WarehousePage.wrapActionWithLoading(event.currentTarget, refreshDashboard);
+        });
+      } catch (error) {
+        console.error(error);
+        WarehousePage.showToast('Returned items could not be loaded. Please try again.', true);
+        document.getElementById('return-list').innerHTML = '<tr><td colspan="8" class="text-center text-muted" style="padding:2rem 0;">Returned items could not be loaded.</td></tr>';
+      }
+    }
+
+    window.refreshDashboard = refreshDashboard;
+    window.openIssueReturnModal = openIssueReturnModal;
+    window.closeIssueReturnModal = closeIssueReturnModal;
+    window.handleIssueReturnBackdrop = handleIssueReturnBackdrop;
+    window.loadReturnCustomers = loadReturnCustomers;
+    window.populateReturnProducts = populateReturnProducts;
+    window.updateReturnQuantityLimit = updateReturnQuantityLimit;
+    window.submitIssueReturn = submitIssueReturn;
+    init();
+  </script>
+</body>
+</html>

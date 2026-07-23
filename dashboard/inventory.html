@@ -7,8 +7,8 @@
   
   <link rel="preconnect" href="https://fonts.bunny.net" />
   <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="../css/style.css" />
-  <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg?v=2" />
+  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg?v=2" />
   
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 
@@ -603,8 +603,8 @@
 
         <!-- Level-2 Operation Tab Bar -->
         <div class="drawer-tabs">
-          <button class="tab-btn active" id="tab-btn-summary" onclick="switchLocalTab('summary')">Summary</button>
-          <button class="tab-btn" id="tab-btn-stats" onclick="switchLocalTab('stats')">Stats</button>
+          <a class="tab-btn" id="tab-btn-summary" href="/dashboard/inventory/summary">Summary</a>
+          <a class="tab-btn" id="tab-btn-stats" href="/dashboard/inventory/stats">Stats</a>
         </div>
 
         <!-- Table Scroll workspace -->
@@ -821,10 +821,10 @@
   
   </div>
 
-  <script src="../js/auth.js"></script>
-  <script src="../js/sidebar.js"></script>
-  <script src="../js/main.js"></script>
-  <script src="warehouse/shared.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/sidebar.js"></script>
+  <script src="/js/main.js"></script>
+  <script src="/dashboard/warehouse/shared.js"></script>
   <script>
     'use strict';
 
@@ -874,7 +874,7 @@
     // Initialize Page
     async function init() {
       try {
-        const authInfo = await BKAuth.checkRoleGate(['Logistics'], '../admin.html');
+        const authInfo = await BKAuth.checkRoleGate(['Logistics'], '/admin.html');
         if (!authInfo) return;
         sb = BKAuth.sb;
 
@@ -1047,8 +1047,11 @@
         whNameEl.textContent = wh ? wh.name : 'All Inventory';
       }
 
-      // Render this page only; subpages carry their own focused render paths.
-      renderInventorySummary();
+      if (getCurrentInventorySubpage() === 'stats') {
+        renderStatsSummary();
+      } else {
+        renderInventorySummary();
+      }
       updateBadgeCounts();
     }
 
@@ -1441,7 +1444,7 @@
 
       let imageSrc = p.image_main;
       if (!imageSrc || !imageSrc.match(/^https?:\/\//)) {
-        imageSrc = '../../assets/og-image.png';
+        imageSrc = '/assets/og-image.png';
       }
 
       tbody.innerHTML += `
@@ -1588,7 +1591,7 @@
         // Image absolute path resolution
         let imageSrc = p.image_main;
         if (!imageSrc || !imageSrc.match(/^https?:\/\//)) {
-          imageSrc = '../../assets/og-image.png'; // local default
+          imageSrc = '/assets/og-image.png'; // local default
         }
 
         const lineTotalText = qty && qty > 0 
@@ -2284,28 +2287,29 @@
       });
     };
 
-    // LOCAL TAB SWITCHER
-    window.switchLocalTab = function(tabName) {
-      document.querySelectorAll('.drawer-tabs .tab-btn').forEach(btn => {
-        btn.classList.remove('active');
-      });
-      document.querySelectorAll('.table-scroll .tab-panel').forEach(panel => {
-        panel.style.display = 'none';
-        panel.classList.remove('active');
-      });
+    function getCurrentInventorySubpage() {
+      const path = window.location.pathname.replace(/\/$/, '');
+      return path.endsWith('/stats') ? 'stats' : 'summary';
+    }
 
-      if (tabName === 'summary') {
-        document.getElementById('tab-btn-summary').classList.add('active');
-        document.getElementById('panel-inventory').style.display = 'block';
-        document.getElementById('panel-inventory').classList.add('active');
-        renderInventorySummary();
-      } else if (tabName === 'stats') {
-        document.getElementById('tab-btn-stats').classList.add('active');
-        document.getElementById('panel-stats').style.display = 'block';
-        document.getElementById('panel-stats').classList.add('active');
-        renderStatsSummary();
+    function renderCurrentInventorySubpage() {
+      const currentSubpage = getCurrentInventorySubpage();
+      const summaryTab = document.getElementById('tab-btn-summary');
+      const statsTab = document.getElementById('tab-btn-stats');
+      const summaryPanel = document.getElementById('panel-inventory');
+      const statsPanel = document.getElementById('panel-stats');
+
+      if (summaryTab) summaryTab.classList.toggle('active', currentSubpage === 'summary');
+      if (statsTab) statsTab.classList.toggle('active', currentSubpage === 'stats');
+      if (summaryPanel) {
+        summaryPanel.style.display = currentSubpage === 'summary' ? 'block' : 'none';
+        summaryPanel.classList.toggle('active', currentSubpage === 'summary');
       }
-    };
+      if (statsPanel) {
+        statsPanel.style.display = currentSubpage === 'stats' ? 'block' : 'none';
+        statsPanel.classList.toggle('active', currentSubpage === 'stats');
+      }
+    }
 
     // STATS STATE & CONTROLS
     let statsYear = 2026;
@@ -2561,7 +2565,7 @@
 
           let imageSrc = p.image_main;
           if (!imageSrc || !imageSrc.match(/^https?:\/\//)) {
-            imageSrc = '../../assets/og-image.png';
+            imageSrc = '/assets/og-image.png';
           }
 
           tbody.innerHTML += `
@@ -2590,6 +2594,7 @@
     }
 
     // Run Initial Load
+    renderCurrentInventorySubpage();
     init();
   </script>
 </body>

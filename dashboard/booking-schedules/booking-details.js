@@ -52,6 +52,27 @@
     }
 
     async function showBookingDetails(id) {
+      // Installer updates can happen after this dashboard page was loaded.
+      // Refresh the selected booking so media, signatures, and completion state are current.
+      if (sb && id) {
+        const { data: latestBooking, error: refreshError } = await sb
+          .from('installation_bookings')
+          .select('*')
+          .eq('id', id)
+          .maybeSingle();
+
+        if (!refreshError && latestBooking) {
+          const bookingIndex = dbBookings.findIndex(booking => booking.id === id);
+          if (bookingIndex >= 0) {
+            dbBookings[bookingIndex] = latestBooking;
+          } else {
+            dbBookings.push(latestBooking);
+          }
+        } else if (refreshError) {
+          console.warn('Could not refresh booking details:', refreshError.message);
+        }
+      }
+
       selectedBooking = dbBookings.find(b => b.id === id);
       if (!selectedBooking) return;
 
@@ -246,7 +267,17 @@
           }
 
           // Gallery strip / Installer uploads section
-          const mediaUrlsList = (door && door.media_urls) || [];
+          // Older installer uploads may only exist in required_media/other_media.
+          // Combine every supported source so the dashboard matches the installer calendar.
+          const mediaUrlsList = [...new Set([
+            ...(Array.isArray(door?.media_urls) ? door.media_urls : []),
+            ...(
+              door?.required_media && typeof door.required_media === 'object'
+                ? Object.values(door.required_media)
+                : []
+            ),
+            ...(Array.isArray(door?.other_media) ? door.other_media : [])
+          ].filter(url => typeof url === 'string' && url.trim()))];
           const mediaThumbs = mediaUrlsList.map(url => {
             const isVid = /\.(mp4|mov|webm)(\?|$)/i.test(url);
             if (isVid) {
