@@ -55,21 +55,35 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'A valid company is required before uploading a file.' });
     }
 
-    // Catalog media follows the same Products-module authorization as the page.
-    // has_module_access also grants access to tenant owners and administrators.
+    // Match upload access to the same modules that gate each dashboard page.
+    // Owners/admins pass through has_module_access; regular members pass when
+    // any assigned accessible_modules entry matches one of these modules.
+    let allowedModules = [];
     if (category === 'products') {
-      const { data: canUploadProducts, error: accessError } = await supabase
-        .rpc('has_module_access', {
+      allowedModules = refId === 'qa_guides' ? ['Logistics'] : ['Products'];
+    } else if (category === 'installations') {
+      allowedModules = ['Operations', 'Logistics'];
+    } else if (category === 'employees') {
+      allowedModules = ['HR'];
+    } else if (category === 'logos') {
+      allowedModules = ['Operations'];
+    }
+
+    if (allowedModules.length > 0) {
+      const accessChecks = await Promise.all(allowedModules.map(moduleName => (
+        supabase.rpc('has_module_access', {
           p_user_id: userData.user.id,
           p_company_id: companyId,
-          p_module: 'Products'
-        });
+          p_module: moduleName
+        })
+      )));
+      const accessError = accessChecks.find(result => result.error)?.error;
       if (accessError) {
-        console.error('Product upload access check failed:', accessError);
-        return res.status(503).json({ error: 'Product upload access could not be verified. Please try again.' });
+        console.error('Upload module access check failed:', accessError);
+        return res.status(503).json({ error: 'Upload access could not be verified. Please try again.' });
       }
-      if (!canUploadProducts) {
-        return res.status(403).json({ error: 'Products access is required to upload catalog media.' });
+      if (!accessChecks.some(result => result.data === true)) {
+        return res.status(403).json({ error: 'Access to this module is required before uploading files here.' });
       }
     }
 
