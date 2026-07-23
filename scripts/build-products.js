@@ -373,12 +373,12 @@ function renderComparisonTable(ct, products = [], allReviews = [], currentProduc
 
   const getColStyle = (prodIndex, focusIndex, isHeader = false, isLastRow = false) => {
     if (prodIndex !== focusIndex) return '';
-    let style = 'background-color: rgba(6, 182, 212, 0.045); border-left: 2px solid var(--cyan); border-right: 2px solid var(--cyan);';
+    let style = 'background-color: color-mix(in srgb, var(--brand-highlight) 4.5%, transparent); border-left: 2px solid var(--brand-highlight); border-right: 2px solid var(--brand-highlight);';
     if (isHeader) {
-      style += ' border-top: 2px solid var(--cyan);';
+      style += ' border-top: 2px solid var(--brand-highlight);';
     }
     if (isLastRow) {
-      style += ' border-bottom: 2px solid var(--cyan);';
+      style += ' border-bottom: 2px solid var(--brand-highlight);';
     }
     return style;
   };

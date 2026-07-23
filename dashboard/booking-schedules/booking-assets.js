@@ -28,7 +28,7 @@
         reader.readAsDataURL(file);
         const fileBase64 = await base64Promise;
 
-        const response = await fetch('/api/upload', {
+        const response = await window.BKAuth.authenticatedFetch('/api/upload', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
@@ -152,7 +152,7 @@
         reader.readAsDataURL(file);
         const fileBase64 = await base64Promise;
 
-        const response = await fetch('/api/upload', {
+        const response = await window.BKAuth.authenticatedFetch('/api/upload', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
@@ -341,7 +341,7 @@
         reader.readAsDataURL(file);
         const fileBase64 = await base64Promise;
 
-        const response = await fetch('/api/upload', {
+        const response = await window.BKAuth.authenticatedFetch('/api/upload', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
@@ -472,7 +472,7 @@
         reader.readAsDataURL(file);
         const fileBase64 = await base64Promise;
 
-        const response = await fetch('/api/upload', {
+        const response = await window.BKAuth.authenticatedFetch('/api/upload', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'

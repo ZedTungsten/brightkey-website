@@ -1166,7 +1166,7 @@
             reader.onerror = rej;
             reader.readAsDataURL(file);
           });
-          const r = await fetch('/api/upload', {
+          const r = await window.BKAuth.authenticatedFetch('/api/upload', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ fileBase64: base64, fileName: file.name, category: 'employees', refId: empId, type: docType, companyId: this.companyId || 'general' })
@@ -1782,7 +1782,7 @@
             reader.readAsDataURL(file);
           });
           const refId = 'new_' + Date.now();
-          const r = await fetch('/api/upload', {
+          const r = await window.BKAuth.authenticatedFetch('/api/upload', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ fileBase64: base64, fileName: file.name, category: 'employees', refId: refId, type: docType, companyId: this.companyId || 'general' })

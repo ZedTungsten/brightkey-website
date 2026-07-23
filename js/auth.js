@@ -421,6 +421,27 @@
     return quota;
   }
 
+  /**
+   * Send a request that requires the current Supabase session. Upload API
+   * routes validate this bearer token so Storage RLS can authorize the
+   * signed-in user against the company-scoped object path.
+   */
+  async function authenticatedFetch(input, init = {}) {
+    const { data, error } = await sb.auth.getSession();
+    const accessToken = data?.session?.access_token;
+    if (error || !accessToken) {
+      throw new Error('Your session has expired. Sign in again before uploading.');
+    }
+
+    const headers = new Headers(init.headers || {});
+    headers.set('Authorization', `Bearer ${accessToken}`);
+
+    return window.fetch(input, {
+      ...init,
+      headers
+    });
+  }
+
   // Export everything through window.BKAuth — the only global this file touches
   window.BKAuth = {
     sb,
@@ -436,6 +457,7 @@
     getEmployee,
     getEmployeeById,
     getEmployeeStatus,
+    authenticatedFetch,
     checkStorageQuota,
     formatStorageBytes,
     contextCache

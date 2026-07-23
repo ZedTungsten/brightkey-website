@@ -2376,7 +2376,7 @@
           throw new Error('Your session has expired. Sign in again before uploading.');
         }
 
-        const response = await fetch('/api/upload', {
+        const response = await window.BKAuth.authenticatedFetch('/api/upload', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
