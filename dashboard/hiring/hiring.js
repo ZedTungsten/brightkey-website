@@ -152,20 +152,20 @@ const HiringApp = {
             <label>
               <span>Move up / down</span>
               <input id="template-image-position" type="range" min="0" max="100" step="1" value="50"
-                oninput="HiringApp.updateTemplateImageSetting('positionY', this.value)"
+                oninput="HiringApp.updateTemplateImageSetting('positionY', this.value); HiringApp.syncTemplateRangeProgress(this)"
                 onchange="HiringApp.saveJobTemplateSettings()" />
             </label>
             <label>
               <span>Zoom</span>
               <input id="template-image-zoom" type="range" min="100" max="200" step="1" value="100"
-                oninput="HiringApp.updateTemplateImageSetting('zoom', this.value)"
+                oninput="HiringApp.updateTemplateImageSetting('zoom', this.value); HiringApp.syncTemplateRangeProgress(this)"
                 onchange="HiringApp.saveJobTemplateSettings()" />
             </label>
             <button class="template-remove-image" type="button" aria-label="Remove header image" title="Remove header image"
               onclick="HiringApp.removeTemplateHeaderImage()">
               <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M3 6h18M8 6V4h8v2m-9 0 1 14h8l1-14M10 10v6m4-6v6"/>
+                <path d="M6 7h12M9 7V4h6v3M8 7l1 13h6l1-13"/>
               </svg>
             </button>
           </div>
@@ -278,6 +278,17 @@ const HiringApp = {
     if (adjustments) adjustments.hidden = !settings.headerImageUrl;
     if (position) position.value = settings.positionY;
     if (zoom) zoom.value = settings.zoom;
+    this.syncTemplateRangeProgress(position);
+    this.syncTemplateRangeProgress(zoom);
+  },
+
+  syncTemplateRangeProgress(input) {
+    if (!input) return;
+    const minimum = Number(input.min) || 0;
+    const maximum = Number(input.max) || 100;
+    const value = Number(input.value) || minimum;
+    const progress = maximum === minimum ? 0 : ((value - minimum) / (maximum - minimum)) * 100;
+    input.style.setProperty('--range-progress', `${Math.min(100, Math.max(0, progress))}%`);
   },
 
   updateTemplateImageSetting(field, value) {
@@ -453,6 +464,22 @@ const HiringApp = {
         ? post.responsibilities[frequency].map(item => typeof item === 'string' ? item : item?.item)
         : [])
       .filter(Boolean);
+    const reportingLabel = {
+      remote: 'Remote',
+      hybrid: 'Hybrid',
+      on_site: 'On-site',
+      online: 'Remote',
+      office: 'On-site'
+    }[post.reporting_mode] || '';
+    const expertiseLabel = {
+      entry_level: 'Entry-level',
+      intermediate: 'Intermediate',
+      expert: 'Expert'
+    }[post.expertise_level] || '';
+    const heroMeta = [
+      reportingLabel,
+      expertiseLabel
+    ].filter(Boolean);
 
     const list = (items) => items.length
       ? `<ul>${items.map(item => `<li>${this.esc(item)}</li>`).join('')}</ul>`
@@ -482,6 +509,10 @@ const HiringApp = {
           <div class="poster-hero-copy">
             <p>We're Hiring</p>
             <h1>${this.esc(post.job_title)}</h1>
+            ${heroMeta.length ? `
+              <div class="poster-hero-meta">
+                ${heroMeta.map(item => `<span>${this.esc(item)}</span>`).join('')}
+              </div>` : ''}
           </div>
         </div>
 
