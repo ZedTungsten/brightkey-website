@@ -116,7 +116,10 @@ const FEATURE_LABELS = {
 };
 
 /** Pretty-print a feature column name: "pin_unlock" → "PIN Unlock" */
-function featureLabel(col) {
+function featureLabel(col, configuredLabels = {}) {
+  if (configuredLabels[col]) {
+    return configuredLabels[col];
+  }
   if (FEATURE_LABELS[col]) {
     return FEATURE_LABELS[col];
   }
@@ -136,7 +139,7 @@ function featureLabel(col) {
 }
 
 /** Render features rows from a flat features object (column → value) */
-function renderFeaturesHtml(featuresRow) {
+function renderFeaturesHtml(featuresRow, configuredLabels = {}) {
   if (!featuresRow) return '';
   // Strip meta columns
   const skip = new Set(['id', 'product_id']);
@@ -145,13 +148,13 @@ function renderFeaturesHtml(featuresRow) {
     if (skip.has(col)) continue;
     if (!val || String(val).trim() === '') continue;
     const valStr = String(val).trim();
-    const label  = featureLabel(col);
+    const label  = featureLabel(col, configuredLabels);
     // If value is 'x' (case-insensitive), just show label. Otherwise show "Label (value)"
     const display = (valStr.toLowerCase() === 'x') ? label : `${label} (${valStr})`;
     html += `
       <li style="display:flex; align-items:center; gap:0.5rem; font-size:0.95rem; color:var(--text-secondary);">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--cyan)" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>
-        ${display}
+        ${escapeHtml(display)}
       </li>
     `;
   }
@@ -345,7 +348,7 @@ const FEATURE_DEFS = {
 };
 
 // ── Comparison Table Renderer ────────────────────────────────────────────────
-function renderComparisonTable(ct, products = [], allReviews = [], currentProduct = null, featuresMap = {}) {
+function renderComparisonTable(ct, products = [], allReviews = [], currentProduct = null, featuresMap = {}, configuredLabels = {}) {
   if (!ct || !currentProduct) return '';
   
   const comparedProducts = (ct.skus || [])
@@ -493,7 +496,7 @@ function renderComparisonTable(ct, products = [], allReviews = [], currentProduc
     return `
       <tr>
         <td style="font-weight:bold; color:var(--text-primary); text-align:center; border-right: 1px solid var(--border); padding: 0.6rem 0.75rem; border-bottom: 1px solid var(--border); vertical-align: middle; font-size: 0.75rem; letter-spacing: 0.03em;">
-          ${feat.label.toUpperCase()}
+          ${escapeHtml(configuredLabels[feat.col] || feat.label).toUpperCase()}
         </td>
         ${tds}
       </tr>
@@ -551,6 +554,27 @@ const FEATURE_TABLE = {
   fire_extinguisher:  'fireextinguisher_features',
 };
 
+const DEFAULT_CATALOG_SPECIFICATIONS = [
+  { label: 'Model', field: 'spec_model', source: 'column' },
+  { label: 'Color', field: 'spec_color', source: 'column' },
+  { label: 'Weight', field: 'spec_weight', source: 'column' },
+  { label: 'Operating Temperature', field: 'spec_operating_temperature', source: 'column' },
+  { label: 'Warranty', field: 'spec_warranty', source: 'column' },
+  { label: 'Technical Support', field: 'spec_support', source: 'column' },
+  { label: 'Material', field: 'spec_material', source: 'column' },
+  { label: 'Voltage', field: 'spec_voltage', source: 'column' },
+  { label: 'Dimension', field: 'spec_dimension', source: 'column' }
+];
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 // ── Main Build ────────────────────────────────────────────────────────────────
 async function buildProducts() {
   console.log('Fetching products from Supabase...');
@@ -575,6 +599,8 @@ async function buildProducts() {
   // company's generated product pages. The bundled logo remains the fallback.
   const companyIds = [...new Set(products.map(p => p.company_id).filter(Boolean))];
   const companyProfiles = {};
+  const companySpecDefinitions = {};
+  const companyFeatureLabels = {};
   if (companyIds.length > 0) {
     const { data: profileRows, error: profileError } = await supabase
       .from('global_settings')
@@ -605,6 +631,56 @@ async function buildProducts() {
         await fs.writeFile(path.join(companyLogoDir, fileName), Buffer.from(dataUri[2], 'base64'));
         profile.darkLogoSource = `../assets/company-logos/${fileName}`;
       }));
+    }
+
+    const { data: specRows, error: specError } = await supabase
+      .from('global_settings')
+      .select('company_id, value')
+      .eq('key', 'catalog_spec_definitions')
+      .in('company_id', companyIds);
+    if (specError) {
+      console.warn('Warning: Failed to fetch catalog specification order; using defaults:', specError.message);
+    } else {
+      (specRows || []).forEach(row => {
+        if (Array.isArray(row.value?.definitions)) {
+          companySpecDefinitions[row.company_id] = row.value.definitions;
+        }
+      });
+    }
+
+    const { data: businessRows, error: businessError } = await supabase
+      .from('tenant_businesses')
+      .select('id, company_id, name')
+      .in('company_id', companyIds);
+    if (businessError) {
+      console.warn('Warning: Failed to fetch business feature labels; using generated labels:', businessError.message);
+    } else {
+      const businessIds = (businessRows || []).map(row => row.id);
+      let featureDefinitionRows = [];
+      if (businessIds.length > 0) {
+        const { data, error: featureDefinitionError } = await supabase
+          .from('business_features')
+          .select('business_id, name, display_name')
+          .in('business_id', businessIds);
+        if (featureDefinitionError) {
+          console.warn('Warning: Failed to fetch feature display labels; using generated labels:', featureDefinitionError.message);
+        } else {
+          featureDefinitionRows = data || [];
+        }
+      }
+
+      (businessRows || []).forEach(business => {
+        const businessKey = business.name.toLowerCase().replace(/[\s_.-]+/g, '_');
+        companyFeatureLabels[business.company_id] ||= {};
+        companyFeatureLabels[business.company_id][businessKey] = {};
+        featureDefinitionRows
+          .filter(feature => feature.business_id === business.id)
+          .forEach(feature => {
+            if (feature.display_name) {
+              companyFeatureLabels[business.company_id][businessKey][feature.name] = feature.display_name;
+            }
+          });
+      });
     }
   }
 
@@ -926,19 +1002,19 @@ async function buildProducts() {
     }
 
     // Specs
-    const specs = (p.show_specs !== false) ? [
-      { label: 'Warranty',           val: p.spec_warranty  },
-      { label: 'Technical Support',  val: p.spec_support   },
-      { label: 'Material',           val: p.spec_material  },
-      { label: 'Voltage',            val: p.spec_voltage   },
-      { label: 'Dimension',          val: p.spec_dimension },
-    ].filter(s => s.val) : [];
+    const specDefinitions = companySpecDefinitions[p.company_id] || DEFAULT_CATALOG_SPECIFICATIONS;
+    const specs = (p.show_specs !== false) ? specDefinitions.map(definition => ({
+      label: definition.label,
+      val: definition.source === 'column'
+        ? p[definition.field]
+        : p.specifications?.[definition.field]
+    })).filter(spec => spec.label && spec.val) : [];
 
     if (specs.length > 0) {
       const specsHtml = specs.map(s => `
         <tr>
-          <td style="padding:0.5rem 1rem 0.5rem 0;font-weight:600;color:var(--text-primary);white-space:nowrap;">${s.label}</td>
-          <td style="padding:0.5rem 0;color:var(--text-secondary);">${s.val}</td>
+          <td style="padding:0.5rem 1rem 0.5rem 0;font-weight:600;color:var(--text-primary);white-space:nowrap;">${escapeHtml(s.label)}</td>
+          <td style="padding:0.5rem 0;color:var(--text-secondary);">${escapeHtml(s.val)}</td>
         </tr>
       `).join('');
       $('[data-template="specs-table"]').html(specsHtml);
@@ -950,7 +1026,8 @@ async function buildProducts() {
 
     // Features
     const featuresRow = featuresMap[p.id] || null;
-    const featuresHtml = (p.show_features !== false) ? renderFeaturesHtml(featuresRow) : '';
+    const configuredFeatureLabels = companyFeatureLabels[p.company_id]?.[p.business] || {};
+    const featuresHtml = (p.show_features !== false) ? renderFeaturesHtml(featuresRow, configuredFeatureLabels) : '';
     if (featuresHtml) {
       $('[data-template="features-list"]').html(featuresHtml);
       $('[data-template="features-tab-btn"]').css('display', 'block');
@@ -1039,7 +1116,7 @@ async function buildProducts() {
       aplusHtml += renderAPlusContent(p.aplus_content, products, allReviews, p);
     }
     if (p.comparison_table) {
-      aplusHtml += renderComparisonTable(p.comparison_table, products, allReviews, p, featuresMap);
+      aplusHtml += renderComparisonTable(p.comparison_table, products, allReviews, p, featuresMap, configuredFeatureLabels);
     }
 
     if (aplusHtml) {

@@ -400,7 +400,7 @@
 
       const bookingsQuery = companyId
         ? sb.from('installation_bookings')
-          .select('order_no, scheduled_date, scheduled_time, status')
+          .select('order_no, scheduled_date, scheduled_time, status, customer_name, customer_city, customer_address')
           .eq('company_id', companyId)
         : Promise.resolve({ data: [], error: null });
 
@@ -889,6 +889,7 @@
       });
 
       const bookingByOrder = new Map(bookings.map(booking => [booking.order_no, booking]));
+      const deliveryByOrder = new Map(dbDeliveryBookings.map(booking => [booking.reference_id, booking]));
       const installPeriodRank = (value) => {
         const normalized = String(value || '').toLowerCase();
         if (normalized.includes('morning') || normalized.includes('am')) return 0;
@@ -913,7 +914,25 @@
         const pickupSchedule = pickupSchedules[group.reference_id];
         const pickupDate = formatDispatchSchedule(pickupSchedule?.date, pickupSchedule?.slot);
         const installation = bookingByOrder.get(group.reference_id);
+        const delivery = deliveryByOrder.get(group.reference_id);
         const installDate = formatDispatchSchedule(installation?.scheduled_date, installation?.scheduled_time);
+        const addressParts = String(installation?.customer_address || '').split(',').map(part => part.trim()).filter(Boolean);
+        const addressCity = addressParts.length >= 2
+          ? addressParts[addressParts.length - 2]
+          : (addressParts[0] || '');
+        const customerName = (
+          (group.customer_name !== 'N/A' && group.customer_name) ||
+          installation?.customer_name ||
+          delivery?.customer_name ||
+          'N/A'
+        );
+        const customerCity = (
+          (group.customer_city !== 'N/A' && group.customer_city) ||
+          installation?.customer_city ||
+          addressCity ||
+          delivery?.customer_city ||
+          'N/A'
+        );
         const supplies = Array.isArray(dispatchSupplies[group.reference_id]) ? dispatchSupplies[group.reference_id] : [];
         const supplySkuPills = supplies.map(item => `<span style="display:inline-flex; align-items:center; width:max-content; padding:0.2rem 0.45rem; border-radius:999px; background:rgba(6,182,212,0.12); color:var(--cyan-light); font-size:0.72rem; font-weight:700;">${escFulfillment(item.sku)}</span>`).join('');
         const supplyQtyPills = supplies.map(item => `<span style="display:inline-flex; align-items:center; justify-content:center; width:max-content; min-width:1.6rem; padding:0.2rem 0.45rem; border-radius:999px; background:rgba(6,182,212,0.12); color:var(--cyan-light); font-size:0.72rem; font-weight:700;">${Number(item.qty || 0)}</span>`).join('');
@@ -927,15 +946,15 @@
           <tr>
             <td>${packedImageHtml}</td>
             <td><strong>${group.reference_id}</strong></td>
-            <td>${group.customer_name}</td>
-            <td>${group.customer_city}</td>
+            <td>${escFulfillment(customerName)}</td>
+            <td>${escFulfillment(customerCity)}</td>
             <td>${skusHtml}</td>
             <td>${qtysHtml}</td>
             <td style="white-space: nowrap;">${packedDate}</td>
             <td style="white-space: nowrap; font-weight: 700; color: var(--cyan-light);">${pickupDate}</td>
             <td style="white-space: nowrap; font-weight: 700; color: var(--text-primary);">${installDate}</td>
             <td style="text-align: center;">
-              <button class="btn btn-primary" onclick="openPickupModal('${group.reference_id}', '${escFulfillment(group.customer_name)}', '${escFulfillment(group.customer_city)}')" style="padding: 0.3rem 0.6rem; font-size: 0.75rem;">
+              <button class="btn btn-primary" onclick="openPickupModal('${escFulfillment(group.reference_id)}', '${escFulfillment(customerName)}', '${escFulfillment(customerCity)}')" style="padding: 0.3rem 0.6rem; font-size: 0.75rem;">
                 Picked up
               </button>
             </td>

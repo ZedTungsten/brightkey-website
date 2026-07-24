@@ -146,6 +146,97 @@
   let hasUnpublishedChanges = false;
   let currentCompanyId = null;
   let activeTab = 'basic';
+  let catalogSpecDefinitions = [];
+
+  const DEFAULT_CATALOG_SPECIFICATIONS = [
+    { id: 'model', label: 'Model', field: 'spec_model', source: 'column', placeholder: 'e.g. A04-TT' },
+    { id: 'color', label: 'Color', field: 'spec_color', source: 'column', placeholder: 'e.g. Matte Black, Silver' },
+    { id: 'weight', label: 'Weight', field: 'spec_weight', source: 'column', placeholder: 'e.g. 2.5 kg' },
+    { id: 'operating_temperature', label: 'Operating Temperature', field: 'spec_operating_temperature', source: 'column', placeholder: 'e.g. -20°C to 60°C' },
+    { id: 'warranty', label: 'Warranty', field: 'spec_warranty', source: 'column', placeholder: 'e.g. 1 Year' },
+    { id: 'support', label: 'Technical Support', field: 'spec_support', source: 'column', placeholder: 'e.g. Lifetime, 2 Years' },
+    { id: 'material', label: 'Material', field: 'spec_material', source: 'column', placeholder: 'e.g. Aluminum Alloy' },
+    { id: 'voltage', label: 'Voltage', field: 'spec_voltage', source: 'column', placeholder: 'e.g. DC 6V' },
+    { id: 'dimension', label: 'Dimension', field: 'spec_dimension', source: 'column', placeholder: 'e.g. 350 x 75 x 30 mm' }
+  ];
+
+  function specificationInputId(definition) {
+    return `f-spec-${definition.id.replace(/_/g, '-')}`;
+  }
+
+  function validSpecificationDefinitions(value) {
+    if (!Array.isArray(value?.definitions)) {
+      return DEFAULT_CATALOG_SPECIFICATIONS.map(definition => ({ ...definition }));
+    }
+    return value.definitions.filter(definition => definition?.id && definition?.label && definition?.field);
+  }
+
+  function renderCatalogSpecificationFields() {
+    const container = document.getElementById('catalog-spec-fields');
+    container.textContent = '';
+
+    catalogSpecDefinitions.forEach(definition => {
+      const group = document.createElement('div');
+      group.className = 'form-group';
+      const label = document.createElement('label');
+      label.className = 'form-label';
+      label.htmlFor = specificationInputId(definition);
+      label.textContent = definition.label;
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'form-input catalog-spec-input';
+      input.id = specificationInputId(definition);
+      input.placeholder = definition.placeholder || `Enter ${definition.label.toLowerCase()}`;
+      input.dataset.specificationField = definition.field;
+      input.dataset.specificationSource = definition.source === 'column' ? 'column' : 'json';
+      group.append(label, input);
+      container.appendChild(group);
+
+      fieldMapping[input.id] = input.dataset.specificationSource === 'column'
+        ? definition.field
+        : 'specifications';
+    });
+  }
+
+  async function loadCatalogSpecificationDefinitions() {
+    const { data, error } = await sbClient
+      .from('global_settings')
+      .select('value')
+      .eq('company_id', currentCompanyId)
+      .eq('key', 'catalog_spec_definitions')
+      .maybeSingle();
+    if (error) console.warn('Failed loading catalog specification order:', error);
+    catalogSpecDefinitions = validSpecificationDefinitions(data?.value);
+    renderCatalogSpecificationFields();
+  }
+
+  function productSpecificationValue(product, definition) {
+    return definition.source === 'column'
+      ? product?.[definition.field]
+      : product?.specifications?.[definition.field];
+  }
+
+  function collectSpecificationPayload() {
+    const currentProduct = editingId ? allProducts.find(product => product.id === editingId) : null;
+    const payload = {};
+    const customDefinitions = catalogSpecDefinitions.filter(definition => definition.source !== 'column');
+    const specifications = { ...(currentProduct?.specifications || {}) };
+
+    catalogSpecDefinitions.forEach(definition => {
+      const value = document.getElementById(specificationInputId(definition))?.value.trim() || '';
+      if (definition.source === 'column') {
+        payload[definition.field] = value;
+      } else if (value) {
+        specifications[definition.field] = value;
+      } else {
+        delete specifications[definition.field];
+      }
+    });
+    if (customDefinitions.length > 0 || currentProduct?.specifications) {
+      payload.specifications = specifications;
+    }
+    return payload;
+  }
 
   async function checkUnpublishedChanges() {
     try {
@@ -399,6 +490,10 @@
     'f-video-1': 'video_1',
     'f-video-2': 'video_2',
     'f-user-manual': 'user_manual',
+    'f-spec-model': 'spec_model',
+    'f-spec-color': 'spec_color',
+    'f-spec-weight': 'spec_weight',
+    'f-spec-operating-temperature': 'spec_operating_temperature',
     'f-spec-warranty': 'spec_warranty',
     'f-spec-support': 'spec_support',
     'f-spec-material': 'spec_material',
@@ -675,11 +770,12 @@
       { id: 'f-video-1', key: 'video_1', type: 'text' },
       { id: 'f-video-2', key: 'video_2', type: 'text' },
       { id: 'f-user-manual', key: 'user_manual', type: 'text' },
-      { id: 'f-spec-warranty', key: 'spec_warranty', type: 'text' },
-      { id: 'f-spec-support', key: 'spec_support', type: 'text' },
-      { id: 'f-spec-material', key: 'spec_material', type: 'text' },
-      { id: 'f-spec-voltage', key: 'spec_voltage', type: 'text' },
-      { id: 'f-spec-dimension', key: 'spec_dimension', type: 'text' },
+      ...catalogSpecDefinitions.map(definition => ({
+        id: specificationInputId(definition),
+        key: definition.field,
+        source: definition.source,
+        type: 'text'
+      })),
       { id: 'f-display-rating', key: 'display_rating', type: 'number' },
       { id: 'f-display-reviews-count', key: 'display_reviews_count', type: 'number' },
       { id: 'f-display-bought-month', key: 'display_bought_month', type: 'text' }
@@ -689,7 +785,7 @@
       const el = document.getElementById(f.id);
       if (!el) return;
 
-      const values = selectedProducts.map(p => p[f.key]);
+      const values = selectedProducts.map(p => f.source === 'json' ? p.specifications?.[f.key] : p[f.key]);
       const uniqueValues = [...new Set(values)];
 
       if (uniqueValues.length === 1) {
@@ -1018,11 +1114,9 @@
     set('f-video-1', p.video_1);
     set('f-video-2', p.video_2);
     set('f-user-manual', p.user_manual);
-    set('f-spec-warranty', p.spec_warranty);
-    set('f-spec-support', p.spec_support);
-    set('f-spec-material', p.spec_material);
-    set('f-spec-voltage', p.spec_voltage);
-    set('f-spec-dimension', p.spec_dimension);
+    catalogSpecDefinitions.forEach(definition => {
+      set(specificationInputId(definition), productSpecificationValue(p, definition));
+    });
     set('f-display-rating', p.display_rating);
     set('f-display-reviews-count', p.display_reviews_count);
     set('f-display-bought-month', p.display_bought_month);
@@ -1116,6 +1210,7 @@
     const skus = [sku1, sku2, sku3].filter(Boolean);
     const title = document.getElementById('comp-title-header')?.value?.trim() || '';
     const focusPosition = parseInt(document.getElementById('comp-focus-pos')?.value || '1', 10);
+    const specificationPayload = collectSpecificationPayload();
 
     const comparison_table = skus.length > 0 ? {
       title: title,
@@ -1148,11 +1243,7 @@
       video_1:           g('f-video-1'),
       video_2:           g('f-video-2'),
       user_manual:       g('f-user-manual'),
-      spec_warranty:     g('f-spec-warranty'),
-      spec_support:      g('f-spec-support'),
-      spec_material:     g('f-spec-material'),
-      spec_voltage:      g('f-spec-voltage'),
-      spec_dimension:    g('f-spec-dimension'),
+      ...specificationPayload,
       display_rating:    g('f-display-rating') ? parseFloat(g('f-display-rating')) : null,
       display_reviews_count: g('f-display-reviews-count') ? parseInt(g('f-display-reviews-count'), 10) : null,
       display_bought_month: g('f-display-bought-month'),
@@ -1504,7 +1595,7 @@
         const updatePayload = {};
         touchedFields.forEach(fieldId => {
           const key = fieldMapping[fieldId];
-          if (key && key !== 'sku' && key !== 'slug') {
+          if (key && key !== 'sku' && key !== 'slug' && key !== 'specifications') {
             updatePayload[key] = payload[key];
           }
         });
@@ -1512,6 +1603,22 @@
         if (Object.keys(updatePayload).length > 0) {
           const { error } = await sbClient.from('products').update(updatePayload).in('id', selectedProductIds);
           if (error) throw error;
+        }
+
+        const touchedCustomSpecs = catalogSpecDefinitions.filter(definition =>
+          definition.source !== 'column' && touchedFields.has(specificationInputId(definition))
+        );
+        if (touchedCustomSpecs.length > 0) {
+          for (const product of selectedProducts) {
+            const specifications = { ...(product.specifications || {}) };
+            touchedCustomSpecs.forEach(definition => {
+              const value = document.getElementById(specificationInputId(definition))?.value.trim() || '';
+              if (value) specifications[definition.field] = value;
+              else delete specifications[definition.field];
+            });
+            const { error } = await sbClient.from('products').update({ specifications }).eq('id', product.id);
+            if (error) throw error;
+          }
         }
 
         // Save features if edited in batch
@@ -1982,10 +2089,14 @@
         currentCompanyId = companyData[0].id;
       }
 
+      if (currentCompanyId) {
+        await loadCatalogSpecificationDefinitions();
+      }
+
       // Dynamically load feature definitions from the database based on Tenants settings
       if (currentCompanyId) {
         const { data: businesses } = await window.BKAuth.sb.from('tenant_businesses').select('id, name').eq('company_id', currentCompanyId);
-        const { data: dbFeatures } = await window.BKAuth.sb.from('business_features').select('business_id, name');
+        const { data: dbFeatures } = await window.BKAuth.sb.from('business_features').select('business_id, name, display_name');
 
         if (businesses && dbFeatures) {
           // Dynamically populate filter-business and f-business dropdowns from tenant_businesses
@@ -2020,19 +2131,22 @@
 
             const bizFeats = dbFeatures.filter(f => f.business_id === biz.id);
             bizFeats.forEach(f => {
-              // Pretty format matching featureLabel() logic
-              let label = f.name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-              label = label
-                .replace(/\bPin\b/g, 'PIN')
-                .replace(/\bRfid\b/g, 'RFID')
-                .replace(/\bUsb\b/g, 'USB')
-                .replace(/\b3d\b/gi, '3D')
-                .replace(/\bWifi\b/g, 'WiFi')
-                .replace(/\bPoe\b/g, 'PoE')
-                .replace(/\bCo2\b/gi, 'CO₂')
-                .replace(/\bAbc\b/g, 'ABC')
-                .replace(/\bAi\b/g, 'AI')
-                .replace(/\bMppt\b/g, 'MPPT');
+              // Prefer the exact customer-facing label configured in Catalog Settings.
+              let label = String(f.display_name || '').trim();
+              if (!label) {
+                label = f.name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                label = label
+                  .replace(/\bPin\b/g, 'PIN')
+                  .replace(/\bRfid\b/g, 'RFID')
+                  .replace(/\bUsb\b/g, 'USB')
+                  .replace(/\b3d\b/gi, '3D')
+                  .replace(/\bWifi\b/g, 'WiFi')
+                  .replace(/\bPoe\b/g, 'PoE')
+                  .replace(/\bCo2\b/gi, 'CO₂')
+                  .replace(/\bAbc\b/g, 'ABC')
+                  .replace(/\bAi\b/g, 'AI')
+                  .replace(/\bMppt\b/g, 'MPPT');
+              }
 
               FEATURE_DEFS[key].features.push({
                 col: f.name,

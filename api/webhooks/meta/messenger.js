@@ -2,6 +2,7 @@ import { getWebhookVerifyToken } from '../../../lib/messenger/config.js';
 import { processMessengerWebhook } from '../../../lib/messenger/event-processor.js';
 import { readRawBody } from '../../../lib/messenger/http.js';
 import { logMessengerError } from '../../../lib/messenger/logger.js';
+import { isValidMessengerSignature } from '../../../lib/messenger/signature.js';
 
 export const config = {
   api: { bodyParser: false }
@@ -26,6 +27,11 @@ async function receiveWebhook(req, res) {
   try {
     const rawBody = await readRawBody(req);
     req.rawBody = rawBody;
+
+    const signature = req.headers?.['x-hub-signature-256'];
+    if (!isValidMessengerSignature(rawBody, signature, process.env.META_APP_SECRET)) {
+      return res.status(401).json({ error: 'Invalid webhook signature' });
+    }
 
     let payload;
     try {
