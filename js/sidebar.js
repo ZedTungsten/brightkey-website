@@ -449,6 +449,7 @@
             <span id="ship-badge-dot" style="display: none; width: 6px; height: 6px; border-radius: 50%; background-color: #ef4444;"></span>
           </a>
           <a href="/dashboard/logistics-calendar/calendar" class="dash-nav-child" data-role="logistics">Calendar</a>
+          <a href="/dashboard/all-orders" class="dash-nav-child" data-role="logistics">All Orders</a>
           <a href="/dashboard/inventory/summary" class="dash-nav-child" data-role="logistics">Inventory</a>
           <a href="/dashboard/qa-guide" class="dash-nav-child" data-role="logistics">QA Guide</a>
           <a href="/dashboard/shipping-rates" class="dash-nav-child" data-role="logistics">Shipping Rates</a>
@@ -738,6 +739,9 @@
       ],
       '/dashboard/logistics-calendar/calendar': [
         '/dashboard/logistics-calendar'
+      ],
+      '/dashboard/all-orders': [
+        '/dashboard/all-orders'
       ],
       '/dashboard/inventory/summary': [
         '/dashboard/inventory'
