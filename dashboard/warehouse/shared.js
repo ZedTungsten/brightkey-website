@@ -174,7 +174,7 @@ window.WarehousePage = {
   },
 
   // 9. Load Core Products & Employees
-  loadCoreData: async function() {
+  loadCoreData: async function(options = {}) {
     const { data: pData, error: pErr } = await this.sb
       .from('products')
       .select('id, sku, title, category, business, image_main, dealer_price, count_inventory')
@@ -186,11 +186,13 @@ window.WarehousePage = {
       window.populateCategoryFilter();
     }
 
-    try {
-      const { data: empData } = await this.sb.from('employees').select('id, first_name, last_name');
-      this.allEmployees = empData || [];
-    } catch (e) {
-      console.warn('Could not load employees:', e);
+    if (options.loadEmployees !== false) {
+      try {
+        const { data: empData } = await this.sb.from('employees').select('id, first_name, last_name');
+        this.allEmployees = empData || [];
+      } catch (e) {
+        console.warn('Could not load employees:', e);
+      }
     }
   },
 
@@ -245,8 +247,8 @@ window.WarehousePage = {
   // 11. AutoSync Bookings Background Launcher
   runAutoSyncInBackground: async function() {
     try {
-      await this.runAutoSync();
-      if (window.refreshDashboard) {
+      const didChange = await this.runAutoSync();
+      if (didChange && window.refreshDashboard) {
         await window.refreshDashboard();
       }
     } catch (err) {
@@ -284,6 +286,7 @@ window.WarehousePage = {
 
   // 13. AutoSync Bookings
   runAutoSync: async function() {
+    let didChange = false;
     const { data: bData, error: bErr } = await this.sb.from('installation_bookings').select('*').neq('status', 'completed');
     if (bErr) throw bErr;
     this.bookings = bData || [];
@@ -315,6 +318,7 @@ window.WarehousePage = {
         const txsToCancel = this.activeTransactions.filter(t => t.reference_id === orderNo && ['reserved', 'packed'].includes(t.status));
         for (const tx of txsToCancel) {
           await this.handleCancellationProcess(tx.id, tx.sku, tx.quantity, tx.status);
+          didChange = true;
         }
         continue;
       }
@@ -325,6 +329,7 @@ window.WarehousePage = {
       for (const tx of wrongCityTxs) {
         await this.sb.from('inventory_transactions').update({ customer_city: city }).eq('id', tx.id);
         tx.customer_city = city;
+        didChange = true;
       }
 
       // Sync customer_name: patch any transaction whose stored name differs from the booking
@@ -336,6 +341,7 @@ window.WarehousePage = {
         for (const tx of wrongNameTxs) {
           await this.sb.from('inventory_transactions').update({ customer_name: bookingName }).eq('id', tx.id);
           tx.customer_name = bookingName;
+          didChange = true;
         }
 
         // Also patch delivery_bookings if the name drifted there
@@ -345,6 +351,7 @@ window.WarehousePage = {
         for (const db of wrongNameDb) {
           await this.sb.from('delivery_bookings').update({ customer_name: bookingName }).eq('id', db.id);
           db.customer_name = bookingName;
+          didChange = true;
         }
       }
 
@@ -380,10 +387,15 @@ window.WarehousePage = {
             warehouse_id: this.activeWarehouseId || null
           };
           const { error: insTxErr } = await this.sb.from('inventory_transactions').insert([txPayload]);
-          if (insTxErr) console.error('Error inserting transaction during sync:', insTxErr);
+          if (insTxErr) {
+            console.error('Error inserting transaction during sync:', insTxErr);
+          } else {
+            didChange = true;
+          }
         }
       }
     }
+    return didChange;
   }
 };
 

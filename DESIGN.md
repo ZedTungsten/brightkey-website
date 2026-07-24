@@ -241,6 +241,38 @@ Instead of scrolling the whole panel, restrict vertical and horizontal scrolling
     </table>
   </div>
 </div>
+```
+
+### Sticky Headers Must Use Opaque Backgrounds
+
+**Rule:** Every sticky table header cell must have a fully opaque background color. Never use `rgba(...)`, `hsla(...)`, `opacity`, or another translucent background on a `position: sticky` header cell.
+
+**Why:** Scrolling table rows pass underneath sticky headers. A translucent header allows row values and borders behind it to show through, making text appear doubled or visually misaligned.
+
+For tinted column headers, use an opaque near-white hex value:
+```css
+/* Correct: opaque tinted sticky headers */
+thead th.price-dealer {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: #FEF1F1;
+}
+
+thead th.price-install {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: #ECFAFC;
+}
+
+/* Incorrect: content underneath will bleed through */
+thead th.price-dealer {
+  background: rgba(239, 68, 68, 0.075);
+}
+```
+
+Translucent colors may still be used for non-sticky body cells. When creating a tinted sticky header, convert the intended tint to its opaque composited hex equivalent and retain a sufficient `z-index`.
 
 ---
 

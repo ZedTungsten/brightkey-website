@@ -870,6 +870,7 @@
     let inventoryRenderSeq = 0;
     let inventorySearch = "";
     let inventorySearchTimer = null;
+    let refreshPromise = null;
 
     // Initialize Page
     async function init() {
@@ -878,15 +879,22 @@
         if (!authInfo) return;
         sb = BKAuth.sb;
 
-        // Resolve company_id using tenant_id
-        const { data: co } = await sb.from('companies').select('id').eq('tenant_id', authInfo.tenantId).limit(1).maybeSingle();
+        // Resolve company and warehouse context together to avoid serial startup waits.
+        const [{ data: co }] = await Promise.all([
+          sb.from('companies').select('id').eq('tenant_id', authInfo.tenantId).limit(1).maybeSingle(),
+          loadWarehouseTabs(authInfo.tenantId)
+        ]);
         companyId = co?.id || null;
 
-        await loadWarehouseTabs(authInfo.tenantId);
         showLoadingState();
         await loadCoreData();
         await refreshDashboard();
-        runAutoSyncInBackground();
+        const startBackgroundSync = () => runAutoSyncInBackground();
+        if ('requestIdleCallback' in window) {
+          window.requestIdleCallback(startBackgroundSync, { timeout: 2000 });
+        } else {
+          window.setTimeout(startBackgroundSync, 0);
+        }
 
         
 
@@ -942,28 +950,15 @@
     };
 
     async function loadCoreData() {
-      await WarehousePage.loadCoreData();
-      await loadProductCategories();
-
-      // Fetch employees
-      try {
-        const { data: empData } = await sb.from('employees').select('id, first_name, last_name');
-        allEmployees = empData || [];
-      } catch (e) {
-        console.warn('Could not load employees:', e);
-      }
-    }
-
-    async function loadProductCategories() {
-      const { data, error } = await sb
-        .from('products')
-        .select('category')
-        .or('count_inventory.is.null,count_inventory.neq.false')
-        .order('category');
-      if (error) throw error;
-
+      await WarehousePage.loadCoreData({ loadEmployees: false });
+      const coreProducts = WarehousePage.allProducts || [];
       const cats = new Set();
-      (data || []).forEach(p => cats.add(p.category || ''));
+      coreProducts
+        .filter(p => p.count_inventory !== false)
+        .forEach(p => {
+          cats.add(p.category || '');
+          productMetaBySku[p.sku] = p;
+        });
       uniqueCategories = Array.from(cats).sort();
       populateCategoryFilter();
     }
@@ -989,6 +984,16 @@
     }
 
     async function refreshDashboard() {
+      if (refreshPromise) return refreshPromise;
+      refreshPromise = performDashboardRefresh();
+      try {
+        return await refreshPromise;
+      } finally {
+        refreshPromise = null;
+      }
+    }
+
+    async function performDashboardRefresh() {
       // 2. Fetch inventory snapshot — scoped to active warehouse
       let invQuery = sb.from('inventory').select('*');
       if (activeWarehouseId) {

@@ -1109,20 +1109,31 @@ async function buildProducts() {
           override_rating: ${!!p.override_rating},
           desc:  \`${descShort.replace(/`/g, "\\`")}\`
         };
-        window.selectVariant = function(sku) {
+        window.selectVariant = function(sku, skipPushState) {
           if (!window.VARIANTS_MAP || !window.VARIANTS_MAP[sku]) return;
           const v = window.VARIANTS_MAP[sku];
-          document.querySelector('[data-template="price"]').innerHTML = v.priceStr;
+          const priceEl = document.querySelector('[data-template="price"]');
+          if (priceEl) priceEl.innerHTML = v.priceStr;
+
           const compareEl = document.querySelector('[data-template="compare-price"]');
-          if (v.beforeStr) { compareEl.innerHTML = v.beforeStr; compareEl.style.display='inline-block'; }
-          else compareEl.style.display = 'none';
-          document.querySelector('[data-template="sku"]').innerText = 'SKU: ' + sku;
-          
+          if (compareEl) {
+            if (v.beforeStr) {
+              compareEl.innerHTML = v.beforeStr;
+              compareEl.style.display = 'inline-block';
+            } else {
+              compareEl.style.display = 'none';
+            }
+          }
+
+          const skuEl = document.querySelector('[data-template="sku"]');
+          if (skuEl) skuEl.innerText = 'SKU: ' + sku;
+
           // Use switchMedia to reset gallery when variant changes
           if (window.switchMedia) {
             window.switchMedia(v.image);
           } else {
-            document.querySelector('[data-template="main-image"]').src = v.image;
+            const mainImg = document.querySelector('[data-template="main-image"]');
+            if (mainImg) mainImg.src = v.image;
           }
 
           const badge  = document.querySelector('[data-template="status-badge"]');
@@ -1154,20 +1165,36 @@ async function buildProducts() {
           }
 
           if (v.available > 0) {
-            badge.innerText = 'In Stock'; badge.className = 'badge badge-cyan';
-            invEl.innerHTML = '<strong style="color:var(--text-primary);">' + v.available + ' available</strong> in our local warehouse. Ready to ship (delivered in ' + leadTimeText + ').';
-            btn.innerText = 'Add to Cart'; btn.disabled = false;
+            if (badge) { badge.innerText = 'In Stock'; badge.className = 'badge badge-cyan'; }
+            if (invEl) invEl.innerHTML = '<strong style="color:var(--text-primary);">' + v.available + ' available</strong> in our local warehouse. Ready to ship (delivered in ' + leadTimeText + ').';
+            if (btn) { btn.innerText = 'Add to Cart'; btn.disabled = false; }
           } else {
-            badge.innerText = 'Backorder'; badge.className = 'badge badge-warning';
-            invEl.innerHTML = '<span style="color:#f59e0b;font-weight:600;">Backorder</span>: Temporarily out of local stock. Fulfillment takes ' + backorderText + '.';
-            btn.innerText = 'Add to Cart (Backorder)'; btn.disabled = false;
+            if (badge) { badge.innerText = 'Backorder'; badge.className = 'badge badge-warning'; }
+            if (invEl) invEl.innerHTML = '<span style="color:#f59e0b;font-weight:600;">Backorder</span>: Temporarily out of local stock. Fulfillment takes ' + backorderText + '.';
+            if (btn) { btn.innerText = 'Add to Cart (Backorder)'; btn.disabled = false; }
           }
           CURRENT_PRODUCT.sku   = sku;
           CURRENT_PRODUCT.price = v.price;
           CURRENT_PRODUCT.image = v.image;
           CURRENT_PRODUCT.slug  = v.slug;
           if (window.initDeliveryEstimate) window.initDeliveryEstimate();
+
+          // Push updated URL with variant slug without reloading page
+          if (!skipPushState && v.slug && window.history && typeof window.history.pushState === 'function') {
+            const targetPath = '/products/' + v.slug;
+            if (window.location.pathname !== targetPath) {
+              window.history.pushState({ sku: sku, slug: v.slug }, '', targetPath);
+            }
+          }
         };
+
+        window.addEventListener('popstate', function(e) {
+          if (e.state && e.state.sku) {
+            const radio = document.querySelector('input[name="product-variant"][value="' + e.state.sku + '"]');
+            if (radio) radio.checked = true;
+            if (window.selectVariant) window.selectVariant(e.state.sku, true);
+          }
+        });
       </script>
     `;
     $('[data-template="js-product-data"]').replaceWith(jsInjection);

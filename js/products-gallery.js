@@ -246,7 +246,7 @@
 
     dom.features.textContent = '';
     const sorted = [...counts.entries()]
-      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+      .sort((a, b) => a[0].localeCompare(b[0], undefined, { sensitivity: 'base', numeric: true }));
 
     if (!sorted.length) {
       const note = document.createElement('p');
@@ -540,7 +540,8 @@
   }
 
   async function start() {
-    document.getElementById('catalog-year').textContent = String(new Date().getFullYear());
+    const yearEl = document.getElementById('catalog-year') || document.getElementById('current-year');
+    if (yearEl) yearEl.textContent = String(new Date().getFullYear());
     bindEvents();
     initInfiniteScroll();
     try {

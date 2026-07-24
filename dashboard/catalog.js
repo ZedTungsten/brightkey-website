@@ -267,10 +267,10 @@
 
   async function fetchProducts() {
     const tbody = document.getElementById('products-body');
-    tbody.innerHTML = `<tr><td colspan="10" style="padding:2rem;text-align:center;color:var(--text-muted)">Loading…</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="13" style="padding:2rem;text-align:center;color:var(--text-muted)">Loading…</td></tr>`;
     const { data, error } = await sbClient.from('products').select('*').order('created_at', { ascending: false });
     if (error) {
-      tbody.innerHTML = `<tr><td colspan="10" style="padding:2rem;text-align:center;color:var(--danger)">Error: ${esc(error.message)}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="13" style="padding:2rem;text-align:center;color:var(--danger)">Error: ${esc(error.message)}</td></tr>`;
       return;
     }
     allProducts = data || [];
@@ -450,15 +450,14 @@
   function renderTable() {
     const tbody = document.getElementById('products-body');
     if (filtered.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="12" style="padding:3rem;text-align:center;color:var(--text-muted)">No products found.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="13" style="padding:3rem;text-align:center;color:var(--text-muted)">No products found.</td></tr>`;
       return;
     }
     tbody.innerHTML = filtered.map(p => {
-      const biz = BIZ_LABELS[p.business] || p.business || '—';
-      const bizClass = `biz-${p.business}`;
       const statusClass = p.status === 'published' ? 'status-published' : 'status-draft';
       const isChild = !!p.parent_sku;
       const hasPage = p.show_on_ecommerce !== false;
+      const mainImage = /^https?:\/\//i.test(p.image_main || '') ? p.image_main : '/assets/og-image.png';
 
       let parentExists = true;
       if (p.parent_sku) {
@@ -476,32 +475,38 @@
 
       return `<tr class="${isChild ? 'row-child' : ''} ${selectedProductIds.includes(p.id) ? 'row-selected' : ''}">
         <td style="text-align: center; vertical-align: middle;"><input type="checkbox" class="row-checkbox" data-id="${p.id}" style="cursor: pointer;" ${selectedProductIds.includes(p.id) ? 'checked' : ''} /></td>
+        <td class="product-image-cell"><img class="product-main-thumb" src="${esc(mainImage)}" alt="${esc(p.sku || 'Product')} main image" loading="lazy" /></td>
         <td class="cell-sku"><span class="sku-badge">${esc(p.sku || 'NO-SKU')}</span>${parentWarningHtml}</td>
         <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${titleHtml}</td>
-        <td><span class="biz-badge ${bizClass}">${esc(biz)}</span></td>
         <td>${esc(p.category || '—')}</td>
-        <td style="text-align:right;font-variant-numeric:tabular-nums;${isQuickEditingPrices ? 'padding: 0.15rem 0.25rem;' : ''}">
-          ${isQuickEditingPrices
-            ? `<input type="text" class="quick-price-input" data-id="${p.id}" data-field="sale_price" value="${(p.sale_price || 0) / 100}" style="width: 75px; text-align: right; padding: 0.2rem 0.35rem; font-size: 0.8rem; background: #fefdf0; border: none; border-radius: 4px; font-variant-numeric: tabular-nums; outline: none; color: #1e293b;" />`
-            : fmtPHP(p.sale_price)
-          }
-        </td>
-        <td style="text-align:right;font-variant-numeric:tabular-nums;${isQuickEditingPrices ? 'padding: 0.15rem 0.25rem;' : ''}">
-          ${isQuickEditingPrices
-            ? `<input type="text" class="quick-price-input" data-id="${p.id}" data-field="discounted_price" value="${p.discounted_price > 0 ? ((p.discounted_price || 0) / 100) : ''}" placeholder="—" style="width: 75px; text-align: right; padding: 0.2rem 0.35rem; font-size: 0.8rem; background: #fefdf0; border: none; border-radius: 4px; font-variant-numeric: tabular-nums; outline: none; color: #1e293b;" />`
-            : (p.discounted_price > 0 ? fmtPHP(p.discounted_price) : '<span style="color:var(--text-muted)">—</span>')
-          }
-        </td>
-        <td style="text-align:right;font-variant-numeric:tabular-nums;${isQuickEditingPrices ? 'padding: 0.15rem 0.25rem;' : ''}">
+        <td class="price-col-dealer" style="text-align:right;font-variant-numeric:tabular-nums;${isQuickEditingPrices ? 'padding: 0.15rem 0.25rem;' : ''}">
           ${isQuickEditingPrices
             ? `<input type="text" class="quick-price-input" data-id="${p.id}" data-field="dealer_price" value="${p.dealer_price > 0 ? ((p.dealer_price || 0) / 100) : ''}" placeholder="—" style="width: 75px; text-align: right; padding: 0.2rem 0.35rem; font-size: 0.8rem; background: #fefdf0; border: none; border-radius: 4px; font-variant-numeric: tabular-nums; outline: none; color: #1e293b;" />`
             : (p.dealer_price > 0 ? fmtPHP(p.dealer_price) : '<span style="color:var(--text-muted)">—</span>')
           }
         </td>
-        <td style="text-align:right;font-variant-numeric:tabular-nums;${isQuickEditingPrices ? 'padding: 0.15rem 0.25rem;' : ''}">
+        <td class="price-col-before" style="text-align:right;font-variant-numeric:tabular-nums;${isQuickEditingPrices ? 'padding: 0.15rem 0.25rem;' : ''}">
+          ${isQuickEditingPrices
+            ? `<input type="text" class="quick-price-input" data-id="${p.id}" data-field="before_price" value="${p.before_price > 0 ? ((p.before_price || 0) / 100) : ''}" placeholder="—" style="width: 75px; text-align: right; padding: 0.2rem 0.35rem; font-size: 0.8rem; background: #fefdf0; border: none; border-radius: 4px; font-variant-numeric: tabular-nums; outline: none; color: #1e293b;" />`
+            : (p.before_price > 0 ? fmtPHP(p.before_price) : '<span style="color:var(--text-muted)">—</span>')
+          }
+        </td>
+        <td class="price-col-install" style="text-align:right;font-variant-numeric:tabular-nums;${isQuickEditingPrices ? 'padding: 0.15rem 0.25rem;' : ''}">
           ${isQuickEditingPrices
             ? `<input type="text" class="quick-price-input" data-id="${p.id}" data-field="installation_price" value="${p.installation_price > 0 ? ((p.installation_price || 0) / 100) : ''}" placeholder="—" style="width: 75px; text-align: right; padding: 0.2rem 0.35rem; font-size: 0.8rem; background: #fefdf0; border: none; border-radius: 4px; font-variant-numeric: tabular-nums; outline: none; color: #1e293b;" />`
             : (p.installation_price > 0 ? fmtPHP(p.installation_price) : '<span style="color:var(--text-muted)">—</span>')
+          }
+        </td>
+        <td class="price-col-sale" style="text-align:right;font-variant-numeric:tabular-nums;${isQuickEditingPrices ? 'padding: 0.15rem 0.25rem;' : ''}">
+          ${isQuickEditingPrices
+            ? `<input type="text" class="quick-price-input" data-id="${p.id}" data-field="sale_price" value="${(p.sale_price || 0) / 100}" style="width: 75px; text-align: right; padding: 0.2rem 0.35rem; font-size: 0.8rem; background: #fefdf0; border: none; border-radius: 4px; font-variant-numeric: tabular-nums; outline: none; color: #1e293b;" />`
+            : fmtPHP(p.sale_price)
+          }
+        </td>
+        <td class="price-col-discounted" style="text-align:right;font-variant-numeric:tabular-nums;${isQuickEditingPrices ? 'padding: 0.15rem 0.25rem;' : ''}">
+          ${isQuickEditingPrices
+            ? `<input type="text" class="quick-price-input" data-id="${p.id}" data-field="discounted_price" value="${p.discounted_price > 0 ? ((p.discounted_price || 0) / 100) : ''}" placeholder="—" style="width: 75px; text-align: right; padding: 0.2rem 0.35rem; font-size: 0.8rem; background: #fefdf0; border: none; border-radius: 4px; font-variant-numeric: tabular-nums; outline: none; color: #1e293b;" />`
+            : (p.discounted_price > 0 ? fmtPHP(p.discounted_price) : '<span style="color:var(--text-muted)">—</span>')
           }
         </td>
         <td><span class="status-badge ${statusClass}">${esc(p.status)}</span></td>
@@ -520,7 +525,7 @@
           </div>
         </td>
       </tr>`;
-    }).join('') + `<tr class="table-spacer-row" style="height: auto; border: none; background: transparent !important;"><td colspan="12" style="padding: 0; border: none; background: transparent !important; pointer-events: none;"></td></tr>`;
+    }).join('') + `<tr class="table-spacer-row" style="height: auto; border: none; background: transparent !important;"><td colspan="13" style="padding: 0; border: none; background: transparent !important; pointer-events: none;"></td></tr>`;
 
     updateBatchEditUI();
   }
