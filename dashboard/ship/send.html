@@ -658,6 +658,8 @@
       activeTransactions: [],
       bookings: [],
       deliveryBookings: [],
+      damagedShipments: [],
+      suppliers: [],
       allProducts: [],
       allInventory: [],
       existingCustomers: [],
@@ -708,7 +710,7 @@
         try {
           const sb = window.BKAuth.sb;
 
-          const [transactionsResult, bookingsResult, deliveryBookingsResult, settingsResult] = await Promise.all([
+          const [transactionsResult, bookingsResult, deliveryBookingsResult, settingsResult, damagedResult, suppliersResult] = await Promise.all([
             sb.from('inventory_transactions')
               .select('reference_id, sku, quantity, type, status, customer_name, customer_city, packed_photo_url, warehouse_id, created_at')
               .in('type', ['customer_order', 'supplier_order'])
@@ -721,7 +723,14 @@
             sb.from('global_settings')
               .select('key, value')
               .eq('company_id', this.companyId)
-              .in('key', ['pickup_schedules', 'dispatch_supplies'])
+              .in('key', ['pickup_schedules', 'dispatch_supplies']),
+            sb.from('damaged_goods')
+              .select('reference_id, supplier_id')
+              .eq('company_id', this.companyId)
+              .is('archived_at', null),
+            sb.from('suppliers')
+              .select('id, name, street_address, city, province, contact_number')
+              .eq('company_id', this.companyId)
           ]);
 
           const { data: txs, error: txErr } = transactionsResult;
@@ -741,6 +750,10 @@
           const settingsMap = new Map((settingsData || []).map(setting => [setting.key, setting.value]));
           this.pickupSchedules = settingsMap.get('pickup_schedules') || {};
           this.dispatchSupplies = settingsMap.get('dispatch_supplies') || {};
+          if (damagedResult.error) throw damagedResult.error;
+          if (suppliersResult.error) throw suppliersResult.error;
+          this.damagedShipments = damagedResult.data || [];
+          this.suppliers = suppliersResult.data || [];
 
           this.updateBadgeCounts();
           this.renderSendOutQueue();
@@ -1036,14 +1049,20 @@
         if (!matchingTx) return;
 
         const booking = this.bookings.find(b => b.order_no === referenceId);
-        const addressParts = (booking?.customer_address || '').split(',');
+        const damaged = this.damagedShipments.find(item => item.reference_id === referenceId);
+        const supplier = damaged ? this.suppliers.find(item => item.id === damaged.supplier_id) : null;
+        const supplierAddress = supplier
+          ? [supplier.street_address, supplier.city, supplier.province].filter(Boolean).join(', ')
+          : '';
+        const deliveryAddress = booking?.customer_address || supplierAddress;
+        const addressParts = deliveryAddress.split(',');
         let city = matchingTx.customer_city || 'N/A';
         let province = 'N/A';
         if (addressParts.length >= 2) {
           city = addressParts[addressParts.length - 2].trim();
           province = addressParts[addressParts.length - 1].trim();
-        } else if (booking?.customer_address) {
-          city = booking.customer_address;
+        } else if (deliveryAddress) {
+          city = deliveryAddress;
         }
 
         this.selectedOrder = {
@@ -1058,10 +1077,10 @@
 
         document.getElementById('modal-order-no').textContent = referenceId;
         document.getElementById('modal-customer-name').textContent = this.selectedOrder.customer_name;
-        document.getElementById('modal-customer-phone').textContent = booking?.customer_phone || 'N/A';
+        document.getElementById('modal-customer-phone').textContent = booking?.customer_phone || supplier?.contact_number || 'N/A';
         document.getElementById('modal-customer-city').textContent = city;
         document.getElementById('modal-customer-province').textContent = province;
-        document.getElementById('modal-customer-address').textContent = booking?.customer_address || 'N/A';
+        document.getElementById('modal-customer-address').textContent = deliveryAddress || 'N/A';
 
         const photoContainer = document.getElementById('modal-packed-photo-container');
         const photoImg = document.getElementById('modal-packed-photo');
@@ -1090,6 +1109,11 @@
         const matchingItems = this.activeTransactions.filter(t => t.reference_id === referenceId && t.status === 'packed');
         const matchingTx = matchingItems[0];
         const booking = this.bookings.find(b => b.order_no === referenceId);
+        const damaged = this.damagedShipments.find(item => item.reference_id === referenceId);
+        const supplier = damaged ? this.suppliers.find(item => item.id === damaged.supplier_id) : null;
+        const supplierAddress = supplier
+          ? [supplier.street_address, supplier.city, supplier.province].filter(Boolean).join(', ')
+          : '';
         const skus = [...new Set(matchingItems.map(item => item.sku).filter(Boolean))].join(', ');
         const installDate = booking?.scheduled_date
           ? new Date(booking.scheduled_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
@@ -1102,7 +1126,7 @@
         document.getElementById('schedule-order-no').textContent = referenceId;
         document.getElementById('schedule-customer-name').textContent = matchingTx?.customer_name || 'N/A';
         document.getElementById('schedule-customer-city').textContent = matchingTx?.customer_city || 'N/A';
-        document.getElementById('schedule-customer-address').textContent = booking?.customer_address || 'N/A';
+        document.getElementById('schedule-customer-address').textContent = booking?.customer_address || supplierAddress || 'N/A';
         document.getElementById('schedule-skus').textContent = skus || 'N/A';
         document.getElementById('schedule-install-date').textContent = installDate;
         document.getElementById('schedule-install-time').textContent = installTime;

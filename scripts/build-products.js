@@ -434,7 +434,7 @@ function renderComparisonTable(ct, products = [], allReviews = [], currentProduc
   const deviceTds = finalProducts.map((prod, pIdx) => {
     const colStyle = getColStyle(pIdx, focusIndex, false, false);
     const isCurrent = prod.sku === currentProduct.sku;
-    const linkHref = isCurrent ? '#' : `${prod.slug}.html`;
+    const linkHref = isCurrent ? '#' : `/products/${prod.slug}`;
     const borderStyle = pIdx > 0 ? 'border-left: 1px solid var(--border);' : '';
 
     return `
@@ -643,6 +643,23 @@ async function buildProducts() {
   // 5. Ensure products output directory exists
   const outDir = path.resolve('./products');
   await fs.mkdir(outDir, { recursive: true });
+
+  // Remove pages whose filenames no longer match a published, public product
+  // slug. This prevents renamed, draft, or hidden product URLs from remaining
+  // live after a rebuild.
+  const publicPageFiles = new Set(products
+    .filter(product => product.show_on_ecommerce !== false && product.slug)
+    .map(product => `${product.slug}.html`));
+  const existingPageFiles = (await fs.readdir(outDir))
+    .filter(fileName => fileName.endsWith('.html'));
+  const stalePageFiles = existingPageFiles
+    .filter(fileName => !publicPageFiles.has(fileName));
+  await Promise.all(stalePageFiles.map(fileName =>
+    fs.unlink(path.join(outDir, fileName))
+  ));
+  if (stalePageFiles.length > 0) {
+    console.log(`Removed ${stalePageFiles.length} stale product page(s).`);
+  }
 
   // 6. Load SSG template
   const templateHtml = await fs.readFile(path.resolve('./dashboard/product-preview.html'), 'utf8');
@@ -1060,7 +1077,7 @@ async function buildProducts() {
 
           relatedHtml += `
             <div class="card product-card card--spotlight" style="position: relative; display:flex; flex-direction:column; padding: 1.25rem; border-radius:var(--radius-md); border:1px solid var(--border); background:var(--bg-surface); transition: transform 0.2s ease;">
-              <a href="${relProduct.slug}.html" style="text-decoration:none; display:flex; flex-direction:column; flex:1; color:inherit;">
+              <a href="/products/${relProduct.slug}" style="text-decoration:none; display:flex; flex-direction:column; flex:1; color:inherit;">
                 <div style="aspect-ratio:1/1; width:100%; border-radius:var(--radius-sm); background:#fff; padding:0.5rem; display:flex; align-items:center; justify-content:center; overflow:hidden; margin-bottom:0.6rem;">
                   <img src="${imgUrl}" alt="${relProduct.title}" style="max-width:100%; max-height:100%; object-fit:contain;" />
                 </div>
@@ -1195,13 +1212,36 @@ async function buildProducts() {
             if (window.selectVariant) window.selectVariant(e.state.sku, true);
           }
         });
+
+        // A variant slug has its own generated URL. Select that variant when
+        // the page is opened directly or refreshed at /products/{variant-slug}.
+        (function selectVariantFromUrl() {
+          const requestedSlug = decodeURIComponent(
+            window.location.pathname.split('/').filter(Boolean).pop() || ''
+          ).replace(/\\.html$/, '');
+          if (!requestedSlug || !window.VARIANTS_MAP) return;
+          const matchedSku = Object.keys(window.VARIANTS_MAP).find(function(sku) {
+            return window.VARIANTS_MAP[sku].slug === requestedSlug;
+          });
+          if (!matchedSku || matchedSku === CURRENT_PRODUCT.sku) return;
+          const radio = document.querySelector('input[name="product-variant"][value="' + matchedSku + '"]');
+          if (radio) radio.checked = true;
+          window.selectVariant(matchedSku, true);
+        })();
       </script>
     `;
     $('[data-template="js-product-data"]').replaceWith(jsInjection);
 
-    // Write file
+    // Write the parent page and a real static alias for every public variant
+    // slug so clean URLs continue to work when opened directly or refreshed.
+    const renderedHtml = $.html();
     const outPath = path.join(outDir, `${p.slug}.html`);
-    await fs.writeFile(outPath, $.html(), 'utf8');
+    await fs.writeFile(outPath, renderedHtml, 'utf8');
+    for (const variant of variants) {
+      if (variant.show_on_ecommerce === false || !variant.slug) continue;
+      const variantOutPath = path.join(outDir, `${variant.slug}.html`);
+      await fs.writeFile(variantOutPath, renderedHtml, 'utf8');
+    }
   }
 
   console.log(`Successfully built ${baseProducts.length} static product pages.`);

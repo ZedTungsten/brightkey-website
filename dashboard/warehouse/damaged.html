@@ -13,8 +13,11 @@
   <style>
     .damaged-panel { height: 100%; display: flex; flex-direction: column; overflow: hidden; }
     .damaged-panel .panel-header { flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+    .damaged-subtabs { display: flex; flex-shrink: 0; gap: 0.25rem; padding: 0.7rem 1.1rem 0; border-bottom: 1px solid var(--border); background: var(--bg-surface); }
+    .damaged-subtab { padding: 0.65rem 0.9rem; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--text-muted); font: inherit; font-size: 0.78rem; font-weight: 700; cursor: pointer; }
+    .damaged-subtab.active { border-bottom-color: var(--cyan); color: var(--cyan-light); }
     .damaged-table-wrap { flex: 1; overflow: auto; overscroll-behavior: contain; }
-    .damaged-table { min-width: 940px; min-height: 100%; }
+    .damaged-table { min-width: 1180px; min-height: 100%; }
     .damaged-table thead th { position: sticky; top: 0; z-index: 3; background: #F4F4F5; }
     .damaged-table tbody tr { height: 1px; }
     .damaged-table .product-thumb { width: 54px !important; height: 54px !important; border-radius: 8px; border: 1px solid var(--border); object-fit: cover; background: var(--bg-elevated); }
@@ -25,6 +28,11 @@
     .table-media-item img, .table-media-item video { width: 100% !important; height: 100% !important; object-fit: cover; }
     .table-video-mark { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(0,0,0,0.28); color: #fff; pointer-events: none; }
     .table-media-empty { color: var(--text-muted); font-size: 0.78rem; font-weight: 600; white-space: nowrap; }
+    .workflow-status { display: inline-flex; align-items: center; padding: 0.25rem 0.55rem; border-radius: 999px; background: var(--bg-elevated); color: var(--text-secondary); font-size: 0.72rem; font-weight: 700; white-space: nowrap; }
+    .workflow-status.packed, .workflow-status.booked { background: var(--cyan-dim); color: var(--cyan-light); }
+    .workflow-status.customer_possession { background: #F3E8FF; color: #7E22CE; }
+    .workflow-status.picked_up { background: #FEF3C7; color: #92400E; }
+    .workflow-status.received { background: #DCFCE7; color: #166534; }
     .action-row { display: flex; align-items: center; gap: 0.75rem; }
     .icon-action { border: 0; background: transparent; padding: 0; color: var(--text-muted); cursor: pointer; line-height: 0; }
     .icon-action:hover { color: var(--cyan-light); }
@@ -97,20 +105,26 @@
                       Issue Damaged Goods
                     </button>
                   </div>
+                  <div class="damaged-subtabs" role="tablist" aria-label="Damaged goods status">
+                    <button class="damaged-subtab active" id="damaged-tab-active" type="button" onclick="switchDamagedTab('active')">Active</button>
+                    <button class="damaged-subtab" id="damaged-tab-archived" type="button" onclick="switchDamagedTab('archived')">Archived</button>
+                  </div>
                   <div class="damaged-table-wrap">
                     <table class="ledger-table damaged-table">
                       <thead>
                         <tr>
+                          <th>Date Created</th>
                           <th>Product Image</th>
                           <th>SKU</th>
                           <th>Product Name</th>
                           <th>Damage Description</th>
                           <th>Media Uploaded</th>
+                          <th>Status</th>
                           <th>Actions</th>
                         </tr>
                       </thead>
                       <tbody id="damaged-list">
-                        <tr><td colspan="6"><div class="loading-wrapper"><div class="spinner-cyan"></div><span>Loading damaged goods...</span></div></td></tr>
+                        <tr><td colspan="8"><div class="loading-wrapper"><div class="spinner-cyan"></div><span>Loading damaged goods...</span></div></td></tr>
                       </tbody>
                     </table>
                   </div>
@@ -136,6 +150,19 @@
           <label class="form-label" for="damage-sku">SKU</label>
           <select class="form-select" id="damage-sku" required>
             <option value="" disabled selected hidden>Select product SKU</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="damage-supplier">Supplier</label>
+          <select class="form-select" id="damage-supplier" required>
+            <option value="" disabled selected hidden>Select supplier</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="damage-status">Status</label>
+          <select class="form-select" id="damage-status" required>
+            <option value="customer_possession">Customer's Possession</option>
+            <option value="unpacked" selected>Unpacked</option>
           </select>
         </div>
         <div class="form-group">
@@ -177,7 +204,9 @@
     let sb;
     let companyId = null;
     let products = [];
+    let suppliers = [];
     let damagedGoods = [];
+    let activeDamageTab = 'active';
     let editingId = null;
     let pendingDeleteId = null;
     let photoSlots = Array(5).fill(null);
@@ -230,14 +259,54 @@
       if (!selectedId) select.value = '';
     }
 
+    function populateSupplierOptions(selectedId = '') {
+      const select = document.getElementById('damage-supplier');
+      select.innerHTML = '<option value="" disabled hidden>Select supplier</option>'
+        + suppliers.map(supplier =>
+          `<option value="${esc(supplier.id)}"${supplier.id === selectedId ? ' selected' : ''}>${esc(supplier.name)}</option>`
+        ).join('');
+      if (!selectedId) select.value = '';
+    }
+
+    function switchDamagedTab(tab) {
+      activeDamageTab = tab === 'archived' ? 'archived' : 'active';
+      document.getElementById('damaged-tab-active').classList.toggle('active', activeDamageTab === 'active');
+      document.getElementById('damaged-tab-archived').classList.toggle('active', activeDamageTab === 'archived');
+      renderDamagedGoods();
+    }
+
+    function formatCreatedDate(value) {
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return '—';
+      return date.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
+    }
+
+    function workflowStatusLabel(status) {
+      const labels = {
+        customer_possession: "Customer's Possession",
+        unpacked: 'Unpacked',
+        packed: 'Packed',
+        booked: 'Booked',
+        picked_up: 'Picked Up',
+        received: 'Received'
+      };
+      return labels[status] || 'Unpacked';
+    }
+
     function renderDamagedGoods() {
       const tbody = document.getElementById('damaged-list');
-      if (!damagedGoods.length) {
-        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted" style="padding:2.5rem 0;">No damaged goods have been recorded.</td></tr>'
-          + '<tr class="table-spacer-row"><td colspan="6"></td></tr>';
+      const visibleRecords = damagedGoods.filter(record =>
+        activeDamageTab === 'archived' ? Boolean(record.archived_at) : !record.archived_at
+      );
+      if (!visibleRecords.length) {
+        const emptyMessage = activeDamageTab === 'archived'
+          ? 'No archived damaged goods.'
+          : 'No active damaged goods have been recorded.';
+        tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted" style="padding:2.5rem 0;">${emptyMessage}</td></tr>`
+          + '<tr class="table-spacer-row"><td colspan="8"></td></tr>';
         return;
       }
-      tbody.innerHTML = damagedGoods.map(record => {
+      tbody.innerHTML = visibleRecords.map(record => {
         const product = productFor(record);
         const photos = Array.isArray(record.photo_urls) ? record.photo_urls : [];
         const image = product.image_main;
@@ -254,6 +323,7 @@
         ].filter(Boolean).join('');
         return `
           <tr>
+            <td style="white-space:nowrap;">${formatCreatedDate(record.created_at)}</td>
             <td>${image
               ? `<img class="product-thumb" src="${esc(image)}" alt="${esc(product.title || record.sku)}" loading="lazy" />`
               : '<div class="product-thumb product-thumb-placeholder"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9" r="1.5"/><path d="m21 15-5-5L5 20"/></svg></div>'
@@ -266,6 +336,7 @@
                 ? `<div class="table-media-previews">${mediaPreviews}</div>`
                 : '<span class="table-media-empty">No media</span>'}
             </td>
+            <td><span class="workflow-status ${esc(record.status || 'unpacked')}">${workflowStatusLabel(record.status)}</span></td>
             <td>
               <div class="action-row">
                 <button class="icon-action" type="button" onclick="editDamage('${esc(record.id)}')" aria-label="Edit damaged goods">
@@ -277,20 +348,83 @@
               </div>
             </td>
           </tr>`;
-      }).join('') + '<tr class="table-spacer-row"><td colspan="6"></td></tr>';
+      }).join('') + '<tr class="table-spacer-row"><td colspan="8"></td></tr>';
     }
 
     async function loadDamagedGoods() {
       const tbody = document.getElementById('damaged-list');
-      tbody.innerHTML = '<tr><td colspan="6"><div class="loading-wrapper"><div class="spinner-cyan"></div><span>Loading damaged goods...</span></div></td></tr>';
+      tbody.innerHTML = '<tr><td colspan="8"><div class="loading-wrapper"><div class="spinner-cyan"></div><span>Loading damaged goods...</span></div></td></tr>';
       const { data, error } = await sb
         .from('damaged_goods')
-        .select('id, company_id, product_id, sku, damage_description, photo_urls, video_url, created_at, updated_at')
+        .select('id, company_id, product_id, supplier_id, inventory_transaction_id, reference_id, sku, damage_description, photo_urls, video_url, status, archived_at, created_at, updated_at')
         .eq('company_id', companyId)
         .order('created_at', { ascending: false });
       if (error) throw error;
       damagedGoods = data || [];
+      await ensurePackTransactions();
       renderDamagedGoods();
+    }
+
+    async function ensurePackTransactions() {
+      if (!WarehousePage.activeWarehouseId) return;
+      const unpackedWithoutTransaction = damagedGoods.filter(record =>
+        !record.archived_at
+        && (record.status || 'unpacked') === 'unpacked'
+        && !record.inventory_transaction_id
+      );
+      if (!unpackedWithoutTransaction.length) return;
+
+      for (const record of unpackedWithoutTransaction) {
+        const supplier = suppliers.find(item => item.id === record.supplier_id);
+        const referenceId = record.reference_id
+          || `SND-DMG-${new Date(record.created_at || Date.now()).toISOString().slice(0, 10).replace(/-/g, '')}-${record.id.slice(0, 6).toUpperCase()}`;
+
+        const { data: existingTransactions, error: existingError } = await sb
+          .from('inventory_transactions')
+          .select('id')
+          .eq('reference_id', referenceId)
+          .limit(1);
+        if (existingError) throw existingError;
+
+        let transactionId = existingTransactions?.[0]?.id || null;
+        if (!transactionId) {
+          const { data: transaction, error: transactionError } = await sb
+            .from('inventory_transactions')
+            .insert({
+              company_id: companyId,
+              warehouse_id: WarehousePage.activeWarehouseId,
+              sku: record.sku,
+              quantity: 1,
+              type: 'customer_order',
+              status: 'inspect',
+              reference_id: referenceId,
+              customer_name: supplier?.name || 'Damaged Goods',
+              customer_city: supplier?.city || supplier?.province || '',
+              timestamp_inspect: new Date().toISOString()
+            })
+            .select('id')
+            .single();
+          if (transactionError) throw transactionError;
+          transactionId = transaction.id;
+        }
+
+        const { error: linkError } = await sb
+          .from('damaged_goods')
+          .update({
+            inventory_transaction_id: transactionId,
+            reference_id: referenceId,
+            status: 'unpacked'
+          })
+          .eq('id', record.id)
+          .eq('company_id', companyId);
+        if (linkError) throw linkError;
+
+        record.inventory_transaction_id = transactionId;
+        record.reference_id = referenceId;
+        record.status = 'unpacked';
+      }
+
+      await loadWarehouseBadges();
     }
 
     async function loadWarehouseBadges() {
@@ -339,7 +473,11 @@
       document.getElementById('damage-form').reset();
       document.getElementById('damage-description').classList.remove('form-error');
       document.getElementById('damage-sku').classList.remove('form-error');
+      document.getElementById('damage-supplier').classList.remove('form-error');
+      document.getElementById('damage-status').disabled = false;
+      document.getElementById('damage-status').value = 'unpacked';
       populateSkuOptions();
+      populateSupplierOptions();
       renderMediaSlots();
     }
 
@@ -356,6 +494,10 @@
       resetDamageForm();
       editingId = id;
       populateSkuOptions(record.product_id);
+      populateSupplierOptions(record.supplier_id);
+      const editableWorkflowStatus = ['customer_possession', 'unpacked'].includes(record.status || 'unpacked');
+      document.getElementById('damage-status').value = editableWorkflowStatus ? (record.status || 'unpacked') : 'unpacked';
+      document.getElementById('damage-status').disabled = !editableWorkflowStatus;
       document.getElementById('damage-description').value = record.damage_description || '';
       document.getElementById('damage-modal-title').textContent = 'Edit Damaged Goods';
       document.getElementById('save-damage-btn').textContent = 'Save Changes';
@@ -571,14 +713,22 @@
     async function saveDamage(event) {
       event.preventDefault();
       const skuSelect = document.getElementById('damage-sku');
+      const supplierSelect = document.getElementById('damage-supplier');
+      const statusSelect = document.getElementById('damage-status');
       const descriptionInput = document.getElementById('damage-description');
+      const existing = damagedGoods.find(item => item.id === editingId);
+      const requestedStatus = statusSelect.disabled && existing
+        ? existing.status
+        : statusSelect.value;
       const product = products.find(item => item.id === skuSelect.value);
+      const supplier = suppliers.find(item => item.id === supplierSelect.value);
       const description = descriptionInput.value.trim();
       skuSelect.classList.toggle('form-error', !product);
+      supplierSelect.classList.toggle('form-error', !supplier);
       descriptionInput.classList.toggle('form-error', !description);
-      if (!product || !description) {
-        showToast('Select a SKU and enter a damage description.', true);
-        (!product ? skuSelect : descriptionInput).scrollIntoView({ behavior: 'smooth', block: 'center' });
+      if (!product || !supplier || !description) {
+        showToast('Select a SKU and supplier, then enter a damage description.', true);
+        (!product ? skuSelect : (!supplier ? supplierSelect : descriptionInput)).scrollIntoView({ behavior: 'smooth', block: 'center' });
         return;
       }
       const uploadsInProgress = [...photoSlots, videoSlot]
@@ -588,12 +738,26 @@
         showToast('Please wait for all media uploads to finish.', true);
         return;
       }
+      if (existing?.inventory_transaction_id && requestedStatus === 'customer_possession') {
+        const { data: linkedTransaction, error: linkedTransactionError } = await sb
+          .from('inventory_transactions')
+          .select('status')
+          .eq('id', existing.inventory_transaction_id)
+          .maybeSingle();
+        if (linkedTransactionError) {
+          showToast('The linked Pack entry could not be checked. Please try again.', true);
+          return;
+        }
+        if (linkedTransaction && linkedTransaction.status !== 'inspect') {
+          showToast("Only an Unpacked item can be moved back to Customer's Possession.", true);
+          return;
+        }
+      }
 
       const button = document.getElementById('save-damage-btn');
       const originalText = button.textContent;
       button.disabled = true;
       button.textContent = 'Saving...';
-      const existing = damagedGoods.find(item => item.id === editingId);
       const uploadedUrls = [];
       try {
         const finalPhotoUrls = [];
@@ -617,8 +781,10 @@
         const payload = {
           company_id: companyId,
           product_id: product.id,
+          supplier_id: supplier.id,
           sku: product.sku,
           damage_description: description,
+          status: requestedStatus,
           photo_urls: finalPhotoUrls,
           video_url: finalVideoUrl,
           updated_at: new Date().toISOString()
@@ -628,9 +794,103 @@
         if (editingId) {
           result = await sb.from('damaged_goods').update(payload).eq('id', editingId).eq('company_id', companyId);
         } else {
-          result = await sb.from('damaged_goods').insert(payload);
+          result = await sb.from('damaged_goods').insert(payload).select('id').single();
         }
         if (result.error) throw result.error;
+
+        if (!editingId && requestedStatus === 'unpacked') {
+          if (!WarehousePage.activeWarehouseId) throw new Error('Select a warehouse before recording damaged goods.');
+          const damageId = result.data.id;
+          const referenceId = `SND-DMG-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${damageId.slice(0, 6).toUpperCase()}`;
+          const now = new Date().toISOString();
+          const { data: transaction, error: transactionError } = await sb
+            .from('inventory_transactions')
+            .insert({
+              company_id: companyId,
+              warehouse_id: WarehousePage.activeWarehouseId,
+              sku: product.sku,
+              quantity: 1,
+              type: 'customer_order',
+              status: 'inspect',
+              reference_id: referenceId,
+              customer_name: supplier.name,
+              customer_city: supplier.city || supplier.province || '',
+              timestamp_inspect: now
+            })
+            .select('id')
+            .single();
+          if (transactionError) {
+            await sb.from('damaged_goods').delete().eq('id', damageId);
+            throw transactionError;
+          }
+          const { error: linkError } = await sb
+            .from('damaged_goods')
+            .update({
+              inventory_transaction_id: transaction.id,
+              reference_id: referenceId,
+              status: 'unpacked'
+            })
+            .eq('id', damageId);
+          if (linkError) {
+            await sb.from('inventory_transactions').delete().eq('id', transaction.id);
+            await sb.from('damaged_goods').delete().eq('id', damageId);
+            throw linkError;
+          }
+        } else if (editingId && requestedStatus === 'customer_possession' && existing?.inventory_transaction_id) {
+          const { error: transactionDeleteError } = await sb
+            .from('inventory_transactions')
+            .delete()
+            .eq('id', existing.inventory_transaction_id);
+          if (transactionDeleteError) throw transactionDeleteError;
+          const { error: unlinkError } = await sb
+            .from('damaged_goods')
+            .update({ inventory_transaction_id: null })
+            .eq('id', editingId);
+          if (unlinkError) throw unlinkError;
+        } else if (existing?.inventory_transaction_id) {
+          const { error: transactionUpdateError } = await sb
+            .from('inventory_transactions')
+            .update({
+              sku: product.sku,
+              customer_name: supplier.name,
+              customer_city: supplier.city || supplier.province || ''
+            })
+            .eq('id', existing.inventory_transaction_id);
+          if (transactionUpdateError) throw transactionUpdateError;
+        } else if (editingId && requestedStatus === 'unpacked') {
+          if (!WarehousePage.activeWarehouseId) throw new Error('Select a warehouse before moving this item to Pack.');
+          const referenceId = existing?.reference_id
+            || `SND-DMG-${new Date(existing?.created_at || Date.now()).toISOString().slice(0, 10).replace(/-/g, '')}-${editingId.slice(0, 6).toUpperCase()}`;
+          const { data: transaction, error: transactionError } = await sb
+            .from('inventory_transactions')
+            .insert({
+              company_id: companyId,
+              warehouse_id: WarehousePage.activeWarehouseId,
+              sku: product.sku,
+              quantity: 1,
+              type: 'customer_order',
+              status: 'inspect',
+              reference_id: referenceId,
+              customer_name: supplier.name,
+              customer_city: supplier.city || supplier.province || '',
+              timestamp_inspect: new Date().toISOString()
+            })
+            .select('id')
+            .single();
+          if (transactionError) throw transactionError;
+          const { error: linkError } = await sb
+            .from('damaged_goods')
+            .update({
+              inventory_transaction_id: transaction.id,
+              reference_id: referenceId,
+              status: 'unpacked'
+            })
+            .eq('id', editingId);
+          if (linkError) {
+            await sb.from('inventory_transactions').delete().eq('id', transaction.id);
+            throw linkError;
+          }
+        }
 
         const retainedUrls = new Set([...finalPhotoUrls, finalVideoUrl].filter(Boolean));
         const replacedUrls = [
@@ -673,6 +933,13 @@
       button.disabled = true;
       button.textContent = 'Deleting...';
       try {
+        if (record.inventory_transaction_id) {
+          const { error: transactionError } = await sb
+            .from('inventory_transactions')
+            .delete()
+            .eq('id', record.inventory_transaction_id);
+          if (transactionError) throw transactionError;
+        }
         const { error } = await sb.from('damaged_goods').delete().eq('id', record.id).eq('company_id', companyId);
         if (error) throw error;
         await removeMedia([...(record.photo_urls || []), record.video_url].filter(Boolean));
@@ -706,21 +973,31 @@
         WarehousePage.companyId = companyId;
         await WarehousePage.loadWarehouseTabs(authInfo.tenantId);
 
-        const { data: productRows, error: productError } = await sb
-          .from('products')
-          .select('id, sku, title, image_main')
-          .eq('company_id', companyId)
-          .order('sku', { ascending: true });
-        if (productError) throw productError;
-        products = productRows || [];
+        const [productsResult, suppliersResult] = await Promise.all([
+          sb
+            .from('products')
+            .select('id, sku, title, image_main')
+            .eq('company_id', companyId)
+            .order('sku', { ascending: true }),
+          sb
+            .from('suppliers')
+            .select('id, name, street_address, city, province, contact_number, email')
+            .eq('company_id', companyId)
+            .order('name', { ascending: true })
+        ]);
+        if (productsResult.error) throw productsResult.error;
+        if (suppliersResult.error) throw suppliersResult.error;
+        products = productsResult.data || [];
+        suppliers = suppliersResult.data || [];
         populateSkuOptions();
+        populateSupplierOptions();
         await Promise.all([
           loadDamagedGoods(),
           loadWarehouseBadges()
         ]);
       } catch (error) {
         console.error(error);
-        document.getElementById('damaged-list').innerHTML = '<tr><td colspan="6" class="text-center text-muted" style="padding:2.5rem 0;">Damaged goods could not be loaded. Please refresh and try again.</td></tr>';
+        document.getElementById('damaged-list').innerHTML = '<tr><td colspan="8" class="text-center text-muted" style="padding:2.5rem 0;">Damaged goods could not be loaded. Please refresh and try again.</td></tr>';
         showToast('Damaged goods could not be loaded. Please refresh and try again.', true);
       }
     }
