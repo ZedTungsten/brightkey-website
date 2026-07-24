@@ -199,14 +199,14 @@ window.WarehousePage = {
   // 10. Update Badge Counts
   updateBadgeCounts: function() {
     const receiveCount = this.activeTransactions.filter(t => {
-      if (!['ordered', 'returned', 'cancelled'].includes(t.status)) return false;
-
       const isIncoming = (t.reference_id && (t.reference_id.startsWith('RCV-') || t.reference_id.startsWith('SUP-')));
       if (isIncoming) {
+        if (!['ordered', 'dispatched'].includes(t.status)) return false;
         const isBooked = (this.deliveryBookings || []).some(db => db.reference_id === t.reference_id);
         return isBooked;
       }
 
+      if (!['ordered', 'returned', 'cancelled'].includes(t.status)) return false;
       return t.type !== 'supplier_order';
     }).length;
     const inspectCount = [...new Set(this.activeTransactions.filter(t => t.status === 'reserved' && t.type === 'customer_order').map(t => t.reference_id))].length;

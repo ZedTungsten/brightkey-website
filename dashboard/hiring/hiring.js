@@ -11,8 +11,14 @@ const HiringApp = {
   jobTemplateSettings: {},
   templateImageDataUrls: {},
   templateHeaderTextMode: 'white',
+  hiringInformation: {
+    email: '',
+    contactNumber: '',
+    hiringPageWebsite: ''
+  },
   editingId: null,
   deletingId: null,
+  previewingId: null,
   draggedQualificationRow: null,
   selectedDays: new Set(),
   tagValues: [],
@@ -50,6 +56,7 @@ const HiringApp = {
     let activeTab = 'job-post';
     if (path.endsWith('/applicants')) activeTab = 'applicants';
     if (path.endsWith('/templates')) activeTab = 'templates';
+    if (path.endsWith('/settings')) activeTab = 'settings';
     this.setActiveTab(activeTab);
 
     if (activeTab === 'job-post') {
@@ -59,6 +66,9 @@ const HiringApp = {
     } else if (activeTab === 'templates') {
       this.renderTemplatesPage();
       await this.loadTemplateData();
+    } else if (activeTab === 'settings') {
+      this.renderSettingsPage();
+      await this.loadHiringInformation();
     }
   },
 
@@ -108,6 +118,134 @@ const HiringApp = {
       </div>`;
   },
 
+  renderSettingsPage() {
+    const content = document.querySelector('.hiring-content');
+    if (!content) return;
+    content.innerHTML = `
+      <div class="hiring-page settings-page">
+        <div class="hiring-page-header">
+          <div>
+            <h2>Settings</h2>
+            <p class="hiring-page-description">Manage the contact details shown with your hiring information.</p>
+          </div>
+        </div>
+        <div class="hiring-panel settings-panel">
+          <div id="hiring-settings-content" class="settings-loading" aria-label="Loading hiring settings">
+            <div class="settings-skeleton settings-skeleton-title"></div>
+            <div class="settings-skeleton settings-skeleton-label"></div>
+            <div class="settings-skeleton settings-skeleton-input"></div>
+            <div class="settings-skeleton settings-skeleton-label"></div>
+            <div class="settings-skeleton settings-skeleton-input"></div>
+            <div class="settings-skeleton settings-skeleton-label"></div>
+            <div class="settings-skeleton settings-skeleton-input"></div>
+          </div>
+        </div>
+      </div>`;
+  },
+
+  renderHiringInformationForm() {
+    const container = document.getElementById('hiring-settings-content');
+    if (!container) return;
+    container.className = 'settings-form-wrap';
+    container.removeAttribute('aria-label');
+    container.innerHTML = `
+      <form id="hiring-information-form" onsubmit="HiringApp.saveHiringInformation(event)" novalidate>
+        <section class="hiring-form-section">
+          <h3 class="hiring-section-title">Hiring Information</h3>
+          <div class="hiring-form-grid">
+            <div class="hiring-field">
+              <label for="hiring-email">Email</label>
+              <input id="hiring-email" name="email" type="email" autocomplete="email" maxlength="254"
+                placeholder="hiring@company.com" required />
+            </div>
+            <div class="hiring-field">
+              <label for="hiring-contact-number">Contact Number</label>
+              <input id="hiring-contact-number" name="contactNumber" type="tel" autocomplete="tel" maxlength="30"
+                placeholder="+63 912 345 6789" required />
+            </div>
+            <div class="hiring-field full">
+              <label for="hiring-page-website">Hiring Page (Website)</label>
+              <input id="hiring-page-website" name="hiringPageWebsite" type="url" autocomplete="url" maxlength="2048"
+                placeholder="https://company.com/careers" required />
+            </div>
+          </div>
+        </section>
+        <div class="settings-actions">
+          <button class="btn btn-primary" id="save-hiring-information" type="submit">Save Changes</button>
+        </div>
+      </form>`;
+
+    document.getElementById('hiring-email').value = this.hiringInformation.email;
+    document.getElementById('hiring-contact-number').value = this.hiringInformation.contactNumber;
+    document.getElementById('hiring-page-website').value = this.hiringInformation.hiringPageWebsite;
+  },
+
+  async loadHiringInformation() {
+    const { data, error } = await this.sb
+      .from('global_settings')
+      .select('value')
+      .eq('company_id', this.companyId)
+      .eq('key', 'hiring_information')
+      .maybeSingle();
+
+    if (error) {
+      console.error('Hiring information load failed:', error);
+      this.showToast('Hiring information could not be loaded. Refresh the page and try again.', true);
+    }
+
+    const value = data?.value && typeof data.value === 'object' ? data.value : {};
+    this.hiringInformation = {
+      email: typeof value.email === 'string' ? value.email : '',
+      contactNumber: typeof value.contactNumber === 'string' ? value.contactNumber : '',
+      hiringPageWebsite: typeof value.hiringPageWebsite === 'string' ? value.hiringPageWebsite : ''
+    };
+    this.renderHiringInformationForm();
+  },
+
+  async saveHiringInformation(event) {
+    event.preventDefault();
+    const emailInput = document.getElementById('hiring-email');
+    const contactInput = document.getElementById('hiring-contact-number');
+    const websiteInput = document.getElementById('hiring-page-website');
+    const saveButton = document.getElementById('save-hiring-information');
+    if (!emailInput || !contactInput || !websiteInput || !saveButton) return;
+
+    [emailInput, contactInput, websiteInput].forEach((input) => input.classList.remove('invalid'));
+    const email = emailInput.value.trim();
+    const contactNumber = contactInput.value.trim();
+    const hiringPageWebsite = websiteInput.value.trim();
+    const invalidInputs = [];
+    if (!email || !emailInput.checkValidity()) invalidInputs.push(emailInput);
+    if (!contactNumber) invalidInputs.push(contactInput);
+    if (!hiringPageWebsite || !websiteInput.checkValidity()) invalidInputs.push(websiteInput);
+
+    if (invalidInputs.length) {
+      invalidInputs.forEach((input) => input.classList.add('invalid'));
+      invalidInputs[0].focus();
+      this.showToast('Enter a valid email address, contact number, and hiring page URL.', true);
+      return;
+    }
+
+    saveButton.disabled = true;
+    saveButton.textContent = 'Saving...';
+    const { error } = await this.sb.from('global_settings').upsert({
+      company_id: this.companyId,
+      key: 'hiring_information',
+      value: { email, contactNumber, hiringPageWebsite }
+    }, { onConflict: 'company_id,key' });
+
+    saveButton.disabled = false;
+    saveButton.textContent = 'Save Changes';
+    if (error) {
+      console.error('Hiring information save failed:', error);
+      this.showToast('Hiring information could not be saved. Check your entries and try again.', true);
+      return;
+    }
+
+    this.hiringInformation = { email, contactNumber, hiringPageWebsite };
+    this.showToast('Hiring information saved.');
+  },
+
   renderTemplatesPage() {
     const content = document.querySelector('.hiring-content');
     if (!content) return;
@@ -116,7 +254,6 @@ const HiringApp = {
         <div class="hiring-page-header template-page-header">
           <div>
             <h2>Job Post Template</h2>
-            <p>Preview and export a ready-to-share A4 job post.</p>
           </div>
           <div class="template-actions">
             <label class="template-select-wrap" for="template-job-select">
@@ -182,7 +319,7 @@ const HiringApp = {
   },
 
   async loadTemplateData() {
-    const [postsResult, profileResult, templateSettingsResult] = await Promise.all([
+    const [postsResult, profileResult, templateSettingsResult, hiringInformationResult] = await Promise.all([
       this.sb
         .from('job_posts')
         .select('*')
@@ -199,6 +336,12 @@ const HiringApp = {
         .select('value')
         .eq('company_id', this.companyId)
         .eq('key', 'job_post_template_config')
+        .maybeSingle(),
+      this.sb
+        .from('global_settings')
+        .select('value')
+        .eq('company_id', this.companyId)
+        .eq('key', 'hiring_information')
         .maybeSingle()
     ]);
 
@@ -214,10 +357,14 @@ const HiringApp = {
     if (templateSettingsResult.error) {
       console.error('Job template settings load failed:', templateSettingsResult.error);
     }
+    if (hiringInformationResult.error) {
+      console.error('Hiring information load failed:', hiringInformationResult.error);
+    }
 
     this.jobPosts = postsResult.data || [];
     this.companyProfile = profileResult.data?.value || {};
     this.jobTemplateSettings = templateSettingsResult.data?.value || {};
+    this.hiringInformation = hiringInformationResult.data?.value || {};
     this.companyLogoDataUrl = await this.toDataUrl(this.companyProfile.logoDark || '');
     this.populateTemplateJobOptions();
   },
@@ -490,6 +637,23 @@ const HiringApp = {
         <div class="poster-section-body">${content}</div>
       </section>`;
     const headerText = this.templateHeaderTextMode === 'theme' ? colors.highlight : '#FFFFFF';
+    const contactItems = [
+      this.hiringInformation.email ? `
+        <span class="poster-contact-item primary">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h18v14H3z"/><path d="m3 6 9 7 9-7"/></svg>
+          ${this.esc(this.hiringInformation.email)}
+        </span>` : '',
+      this.hiringInformation.contactNumber ? `
+        <span class="poster-contact-item primary">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3H4.5A1.5 1.5 0 0 0 3 4.5C3 13.6 10.4 21 19.5 21a1.5 1.5 0 0 0 1.5-1.5V17l-5-1-1.2 3c-4.5-1.9-7.9-5.3-9.8-9.8L8 8Z"/></svg>
+          ${this.esc(this.hiringInformation.contactNumber)}
+        </span>` : '',
+      this.hiringInformation.hiringPageWebsite ? `
+        <span class="poster-contact-item">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 3 14 9-6 2-3 6Z"/><path d="m13 14 5 5"/></svg>
+          ${this.esc(this.formatHiringWebsite(this.hiringInformation.hiringPageWebsite))}
+        </span>` : ''
+    ].filter(Boolean);
 
     shell.innerHTML = `
       <article class="job-poster-sheet" id="job-poster-sheet"
@@ -523,8 +687,10 @@ const HiringApp = {
         </main>
 
         <footer class="poster-footer">
-          <div><strong>Interested?</strong><span>Send your application and tell us why this role fits you.</span></div>
-          <div class="poster-footer-mark">${this.esc(companyName)}</div>
+          <div class="poster-apply">
+            <strong>Join Our Growing Team</strong>
+            ${contactItems.length ? `<div class="poster-contact-list">${contactItems.join('')}</div>` : ''}
+          </div>
         </footer>
       </article>`;
   },
@@ -584,6 +750,12 @@ const HiringApp = {
                       <option value="2">Level 2</option>
                       <option value="3">Level 3</option>
                       <option value="4">Level 4</option>
+                    </select>
+                  </div>
+                  <div class="hiring-field conditional-section employment-dependent" hidden>
+                    <label for="job-hiring-manager">Hiring Manager</label>
+                    <select id="job-hiring-manager" required>
+                      <option value="" disabled selected hidden>Select an employee</option>
                     </select>
                   </div>
                 </div>
@@ -809,6 +981,29 @@ const HiringApp = {
         </div>
       </div>
 
+      <div class="hiring-modal-overlay template-lightbox-overlay" id="template-preview-modal" role="dialog" aria-modal="true" aria-labelledby="template-preview-title">
+        <div class="hiring-modal-card template-lightbox-card">
+          <div class="hiring-modal-header">
+            <div>
+              <span class="template-preview-eyebrow">Template Preview</span>
+              <h3 id="template-preview-title">Job Post</h3>
+            </div>
+            <div class="template-lightbox-actions">
+              <button class="btn btn-primary" id="download-preview-template" type="button" disabled onclick="HiringApp.exportJobTemplatePDF(HiringApp.previewingId, 'download-preview-template')">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14"/></svg>
+                Download PDF
+              </button>
+              <button class="hiring-icon-btn" type="button" aria-label="Close template preview" onclick="HiringApp.closeModal('template-preview-modal')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+              </button>
+            </div>
+          </div>
+          <div class="template-lightbox-body">
+            <div class="template-preview-shell" id="template-preview-shell"></div>
+          </div>
+        </div>
+      </div>
+
       <div class="hiring-modal-overlay" id="delete-job-modal" role="dialog" aria-modal="true" aria-labelledby="delete-job-title">
         <div class="hiring-modal-card compact">
           <div class="hiring-modal-header">
@@ -837,6 +1032,12 @@ const HiringApp = {
         if (event.target === overlay) this.closeModal(overlay.id);
       });
     });
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && document.getElementById('template-preview-modal')?.classList.contains('open')) {
+        this.closeModal('template-preview-modal');
+      }
+    });
   },
 
   async loadEmployees() {
@@ -856,7 +1057,7 @@ const HiringApp = {
 
     if (employeesResult.error) {
       console.error('Hiring employees load failed:', employeesResult.error);
-      this.showToast('Employee options could not be loaded. You can still enter department, team, and position manually.', true);
+      this.showToast('Employee options could not be loaded. Refresh the page before selecting a hiring manager.', true);
       return;
     }
 
@@ -898,6 +1099,21 @@ const HiringApp = {
     ]));
     setOptions('team-options', unique(this.organizationTeams));
 
+    const managerSelect = document.getElementById('job-hiring-manager');
+    if (managerSelect) {
+      const selectedId = managerSelect.value;
+      const placeholder = this.employees.length ? 'Select an employee' : 'No active employees available';
+      managerSelect.innerHTML = `
+        <option value="" disabled hidden${selectedId ? '' : ' selected'}>${placeholder}</option>
+        ${this.employees.map((employee) => {
+          const fullName = [employee.first_name, employee.last_name].filter(Boolean).join(' ').trim();
+          const label = employee.title ? `${fullName} — ${employee.title}` : fullName;
+          return `<option value="${this.esc(employee.id)}">${this.esc(label || 'Unnamed employee')}</option>`;
+        }).join('')}`;
+      if (selectedId && this.employees.some(employee => employee.id === selectedId)) {
+        managerSelect.value = selectedId;
+      }
+    }
   },
 
   async loadJobPosts() {
@@ -958,6 +1174,9 @@ const HiringApp = {
         </td>
         <td>
           <div class="hiring-action-group">
+            <button class="hiring-icon-btn" type="button" title="Preview template" aria-label="Preview template for ${this.esc(post.job_title)}" onclick="HiringApp.openTemplatePreview('${this.esc(post.id)}')">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.5"/></svg>
+            </button>
             <button class="hiring-icon-btn" type="button" title="Edit" aria-label="Edit ${this.esc(post.job_title)}" onclick="HiringApp.openEditModal('${this.esc(post.id)}')">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
             </button>
@@ -994,6 +1213,62 @@ const HiringApp = {
     this.openModal('delete-job-modal');
   },
 
+  async openTemplatePreview(id) {
+    const post = this.jobPosts.find(item => item.id === id);
+    const shell = document.getElementById('template-preview-shell');
+    const title = document.getElementById('template-preview-title');
+    const downloadButton = document.getElementById('download-preview-template');
+    if (!post || !shell || !title) return;
+
+    this.previewingId = id;
+    if (downloadButton) downloadButton.disabled = true;
+    title.textContent = post.job_title;
+    shell.innerHTML = `
+      <div class="template-loading">
+        <span class="spinner-cyan"></span>
+        <span>Preparing job post template</span>
+      </div>`;
+    this.openModal('template-preview-modal');
+
+    const [profileResult, settingsResult, hiringInformationResult] = await Promise.all([
+      this.sb
+        .from('global_settings')
+        .select('value')
+        .eq('company_id', this.companyId)
+        .eq('key', 'company_profile_config')
+        .maybeSingle(),
+      this.sb
+        .from('global_settings')
+        .select('value')
+        .eq('company_id', this.companyId)
+        .eq('key', 'job_post_template_config')
+        .maybeSingle(),
+      this.sb
+        .from('global_settings')
+        .select('value')
+        .eq('company_id', this.companyId)
+        .eq('key', 'hiring_information')
+        .maybeSingle()
+    ]);
+
+    if (profileResult.error) console.error('Job template company profile load failed:', profileResult.error);
+    if (settingsResult.error) console.error('Job template settings load failed:', settingsResult.error);
+    if (hiringInformationResult.error) console.error('Hiring information load failed:', hiringInformationResult.error);
+    this.companyProfile = profileResult.data?.value || {};
+    this.jobTemplateSettings = settingsResult.data?.value || {};
+    this.hiringInformation = hiringInformationResult.data?.value || {};
+    this.companyLogoDataUrl = await this.toDataUrl(this.companyProfile.logoDark || '');
+
+    if (profileResult.error || settingsResult.error || hiringInformationResult.error) {
+      this.showToast('Some template settings could not be loaded. The preview is using available information.', true);
+    }
+
+    if (document.getElementById('template-preview-modal')?.classList.contains('open')) {
+      this.renderJobTemplate(post);
+      if (downloadButton) downloadButton.disabled = false;
+    }
+  },
+
   openModal(id) {
     const modal = document.getElementById(id);
     if (!modal) return;
@@ -1009,6 +1284,7 @@ const HiringApp = {
     setTimeout(() => {
       modal.style.display = 'none';
       if (id === 'delete-job-modal') this.deletingId = null;
+      if (id === 'template-preview-modal') this.previewingId = null;
     }, 150);
   },
 
@@ -1045,6 +1321,7 @@ const HiringApp = {
     value('job-team', post.team_name);
     value('job-position-type', post.position_type);
     value('job-level', post.visibility_level);
+    value('job-hiring-manager', post.assignee_id);
     value('job-title', post.job_title);
     value('job-description', post.job_description);
     value('project-length', post.project_length);
@@ -1378,7 +1655,7 @@ const HiringApp = {
   validateForm() {
     document.querySelectorAll('.invalid').forEach(field => field.classList.remove('invalid'));
     const type = document.getElementById('job-type').value;
-    const required = ['job-position-type', 'job-title', 'job-description'];
+    const required = ['job-position-type', 'job-hiring-manager', 'job-title', 'job-description'];
     if (type === 'regular' && !document.getElementById('salary-confidential').checked) required.push('monthly-salary');
     if (type === 'project_based') required.push('project-length', 'fixed-price');
     if (document.getElementById('location-scope').value === 'specific') {
@@ -1422,7 +1699,7 @@ const HiringApp = {
       position: isRegular ? document.getElementById('job-position').value.trim() || null : null,
       department_name: document.getElementById('job-department').value.trim() || null,
       team_name: document.getElementById('job-team').value.trim() || null,
-      assignee_id: null,
+      assignee_id: document.getElementById('job-hiring-manager').value || null,
       position_type: document.getElementById('job-position-type').value || null,
       visibility_level: document.getElementById('job-level').value ? Number(document.getElementById('job-level').value) : null,
       job_title: document.getElementById('job-title').value.trim(),
@@ -1612,6 +1889,19 @@ const HiringApp = {
     return this.esc(value).replace(/\r?\n/g, '<br>');
   },
 
+  formatHiringWebsite(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    try {
+      const parsed = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : `https://${raw}`);
+      const host = parsed.hostname.replace(/^www\./i, '');
+      const path = parsed.pathname === '/' ? '' : parsed.pathname.replace(/\/+$/, '');
+      return `${host}${path}`;
+    } catch {
+      return raw.replace(/^[a-z][a-z0-9+.-]*:\/\//i, '').replace(/^www\./i, '').replace(/\/+$/, '');
+    }
+  },
+
   async toDataUrl(url) {
     if (!url || String(url).startsWith('data:')) return url || '';
     try {
@@ -1630,12 +1920,12 @@ const HiringApp = {
     }
   },
 
-  async exportJobTemplatePDF() {
+  async exportJobTemplatePDF(postId = '', buttonId = 'download-job-template') {
     const sheet = document.getElementById('job-poster-sheet');
     const select = document.getElementById('template-job-select');
-    const post = this.jobPosts.find(item => item.id === select?.value);
+    const post = this.jobPosts.find(item => item.id === (postId || select?.value));
     if (!sheet || !post) {
-      this.showToast('Select a job post before downloading the PDF.', true);
+      this.showToast(post ? 'The template is still being prepared. Try again in a moment.' : 'Select a job post before downloading the PDF.', true);
       return;
     }
     if (typeof window.html2pdf !== 'function') {
@@ -1643,7 +1933,8 @@ const HiringApp = {
       return;
     }
 
-    const button = document.getElementById('download-job-template');
+    const button = document.getElementById(buttonId);
+    if (!button) return;
     button.disabled = true;
     button.textContent = 'Preparing PDF…';
     const filename = `Job_Post_${post.job_title.replace(/[^a-z0-9]+/gi, '_').replace(/^_|_$/g, '') || 'Template'}.pdf`;

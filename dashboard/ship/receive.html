@@ -1433,9 +1433,9 @@
           const { error: txErr } = await sb.from('inventory_transactions').insert(txRows);
           if (txErr) throw txErr;
 
-          // If Send Out and deliveryPhotoBlob or any fee is provided, insert a delivery booking
+          // Upload delivery proof for both incoming and outgoing shipments.
           let deliveryPhotoUrl = null;
-          if (!isReceive && this.cshipDelPhotoBlob) {
+          if (this.cshipDelPhotoBlob) {
             const base64Del = await blobToBase64(this.cshipDelPhotoBlob);
             const fileNameDel = `delivery_${refOrder}_${Date.now()}.jpg`;
             const uploadResDel = await window.BKAuth.authenticatedFetch('/api/upload', {
@@ -1461,7 +1461,9 @@
           const tip1Val = parseFloat(document.getElementById('cship-tip-1').value) || 0;
           const tip2Val = parseFloat(document.getElementById('cship-tip-2').value) || 0;
 
-          if (!isReceive && (deliveryPhotoUrl || baseFeeVal > 0 || tollVal > 0 || tip1Val > 0 || tip2Val > 0)) {
+          // Incoming shipments always need this linked record so Warehouse Receive
+          // can identify the ordered transaction as ready for physical receipt.
+          if (isReceive || deliveryPhotoUrl || baseFeeVal > 0 || tollVal > 0 || tip1Val > 0 || tip2Val > 0) {
             const { error: dbErr } = await sb.from('delivery_bookings').insert([{
               company_id: this.companyId,
               reference_id: refOrder,
@@ -1481,7 +1483,7 @@
           Toast.success('Shipment created successfully.');
         } catch (err) {
           console.error(err);
-          Toast.error('Failed to create shipment: ' + err.message);
+          Toast.error('The shipment could not be created. Check the photos and shipment details, then try again.');
         } finally {
           btn.disabled = false;
           btn.textContent = originalText;

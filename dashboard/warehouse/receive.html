@@ -745,14 +745,14 @@
       tbody.innerHTML = '';
 
       const pending = activeTransactions.filter(t => {
-        if (!['ordered', 'returned', 'cancelled'].includes(t.status)) return false;
-
         const isIncoming = (t.reference_id && (t.reference_id.startsWith('RCV-') || t.reference_id.startsWith('SUP-')));
         if (isIncoming) {
+          if (!['ordered', 'dispatched'].includes(t.status)) return false;
           const isBooked = deliveryBookings.some(db => db.reference_id === t.reference_id);
           return isBooked;
         }
 
+        if (!['ordered', 'returned', 'cancelled'].includes(t.status)) return false;
         return t.type !== 'supplier_order';
       });
       const incomingTransfers = warehouseTransfers.filter(t => t.status === 'approved' && t.to_warehouse_id === activeWarehouseId);
@@ -766,13 +766,13 @@
         const p = allProducts.find(prod => prod.sku === t.sku) || { title: 'Unknown Product', image_main: '' };
         let sourceLabel = '';
         let badgeClass = '';
-        if (t.status === 'ordered') {
+        if (t.status === 'ordered' || t.status === 'dispatched') {
           if (t.reference_id && t.reference_id.startsWith('RCV-')) {
             sourceLabel = `Incoming Shipment (${t.customer_name || 'Customer'})`;
-            badgeClass = 'badge-ordered';
+            badgeClass = t.status === 'dispatched' ? 'badge-dispatched' : 'badge-ordered';
           } else if (t.reference_id && t.reference_id.startsWith('SUP-')) {
             sourceLabel = `Supplier PO (${t.customer_name || 'Supplier'})`;
-            badgeClass = 'badge-ordered';
+            badgeClass = t.status === 'dispatched' ? 'badge-dispatched' : 'badge-ordered';
           } else {
             sourceLabel = 'Supplier PO';
             badgeClass = 'badge-ordered';
@@ -1378,6 +1378,8 @@
           updates.returned = Math.max(0, inv.returned - qty);
         } else if (prevStatus === 'cancelled') {
           updates.cancelled = Math.max(0, inv.cancelled - qty);
+        } else if (prevStatus === 'dispatched') {
+          updates.dispatched = Math.max(0, (inv.dispatched || 0) - qty);
         }
 
         const { error: updErr } = await sb.from('inventory').update(updates).eq('id', inv.id);

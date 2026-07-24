@@ -181,12 +181,13 @@
 
       // 5. Calculate receiveCount
       const receiveCount = txs.filter(t => {
-        if (!['ordered', 'returned', 'cancelled'].includes(t.status)) return false;
         const isIncoming = (t.reference_id && (t.reference_id.startsWith('RCV-') || t.reference_id.startsWith('SUP-')));
         if (isIncoming) {
+          if (!['ordered', 'dispatched'].includes(t.status)) return false;
           const isBooked = deliveryBookings.some(db => db.reference_id === t.reference_id);
           return isBooked;
         }
+        if (!['ordered', 'returned', 'cancelled'].includes(t.status)) return false;
         return t.type !== 'supplier_order';
       }).length;
 
