@@ -6,8 +6,18 @@
   <title>Sales Goals & Dashboard — Brightkey Sales</title>
   <link rel="preconnect" href="https://fonts.bunny.net" />
   <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="../css/style.css" />
-  <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg?v=2" />
+  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg?v=2" />
+  <script>
+    (() => {
+      const pathTab = window.location.pathname.split('/').filter(Boolean).pop();
+      const hashTab = window.location.hash.slice(1);
+      const tab = ['goals', 'orders', 'settings'].includes(pathTab)
+        ? pathTab
+        : (['goals', 'orders', 'settings'].includes(hashTab) ? hashTab : 'goals');
+      document.documentElement.dataset.salesGoalsTab = tab;
+    })();
+  </script>
 
   <style>
     /* ── Layout & Aesthetics ── */
@@ -616,6 +626,23 @@
       display: block;
     }
 
+    html[data-sales-goals-tab="orders"] #content-goals,
+    html[data-sales-goals-tab="settings"] #content-goals {
+      display: none;
+    }
+
+    html[data-sales-goals-tab="orders"] #content-orders,
+    html[data-sales-goals-tab="settings"] #content-settings {
+      display: block;
+    }
+
+    html[data-sales-goals-tab="goals"] #btn-tab-goals,
+    html[data-sales-goals-tab="orders"] #btn-tab-orders,
+    html[data-sales-goals-tab="settings"] #btn-tab-settings {
+      color: var(--cyan-light);
+      border-bottom-color: var(--cyan);
+    }
+
     /* ── Dynamic Goal Row Styling ── */
     .goal-settings-row {
       display: flex;
@@ -692,10 +719,10 @@
 
         <!-- Navigation Tabs -->
         <div class="drawer-tabs">
-          <button class="tab-btn active" id="btn-tab-goals" onclick="switchTab('goals')">Goals</button>
-          <button class="tab-btn" id="btn-tab-orders" onclick="switchTab('orders')">Orders</button>
+          <a class="tab-btn" id="btn-tab-goals" href="/dashboard/sales-goals/goals">Goals</a>
+          <a class="tab-btn" id="btn-tab-orders" href="/dashboard/sales-goals/orders">Orders</a>
           <a class="tab-btn" href="/dashboard/sales-goals/commissions">Commissions</a>
-          <button class="tab-btn" id="btn-tab-settings" onclick="switchTab('settings')">Settings</button>
+          <a class="tab-btn" id="btn-tab-settings" href="/dashboard/sales-goals/settings">Settings</a>
         </div>
 
         <div class="goals-wrap">
@@ -942,10 +969,18 @@
     </div>
   </div>
 
+  <script>
+    (() => {
+      const activeTab = document.documentElement.dataset.salesGoalsTab || 'goals';
+      document.querySelectorAll('.tab-content').forEach(section => {
+        if (section.id !== `content-${activeTab}`) section.remove();
+      });
+    })();
+  </script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-  <script src="../js/auth.js"></script>
-  <script src="../js/sidebar.js"></script>
-  <script src="../js/main.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/sidebar.js"></script>
+  <script src="/js/main.js"></script>
 
   <script>
     'use strict';
@@ -965,9 +1000,33 @@
     let allEmployees = []; // List of all employees to populate dropdowns
     let isGoalSettingsChangeAllowed = true;
 
+    function getRequestedSalesGoalsTab() {
+      const pathTab = window.location.pathname.split('/').filter(Boolean).pop();
+      if (['goals', 'orders', 'settings'].includes(pathTab)) return pathTab;
+      const hashTab = window.location.hash.slice(1);
+      return ['goals', 'orders', 'settings'].includes(hashTab) ? hashTab : 'goals';
+    }
+
+    function applySalesGoalsTabLayout(tabName) {
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.id === `btn-tab-${tabName}`);
+      });
+      document.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.toggle('active', content.id === `content-${tabName}`);
+      });
+
+      const wrap = document.querySelector('.goals-wrap');
+      if (wrap) {
+        wrap.classList.toggle('wide-container', tabName === 'orders');
+      }
+    }
+
     document.addEventListener("DOMContentLoaded", async () => {
+      const requestedTab = getRequestedSalesGoalsTab();
+      applySalesGoalsTabLayout(requestedTab);
+
       if (window.BKAuth) {
-        const authInfo = await window.BKAuth.checkRoleGate(['Sales', 'Operations', 'Owner', 'Admin'], '../admin.html');
+        const authInfo = await window.BKAuth.checkRoleGate(['Sales', 'Operations', 'Owner', 'Admin'], '/admin.html');
         if (!authInfo) return;
         sb = window.BKAuth.sb;
         currentTenantId = authInfo.tenantId;
@@ -988,12 +1047,12 @@
 
         initMonthsDropdowns();
         await loadAllSettings();
-        await loadGoalsDashboard();
         await enforceSettingsPermissions(authInfo);
 
-        const requestedTab = window.location.hash.slice(1);
         if (requestedTab === 'orders' || requestedTab === 'settings') {
           switchTab(requestedTab);
+        } else {
+          await loadGoalsDashboard();
         }
       } else {
         showToast('Authentication module missing.', true);
@@ -1020,19 +1079,21 @@
       monthsList = months;
 
       // Populate dashboard dropdown
-      dashboardSelect.innerHTML = '';
-      months.forEach(m => {
-        const opt = document.createElement('option');
-        opt.value = m;
-        opt.textContent = formatMonthName(m);
-        dashboardSelect.appendChild(opt);
-      });
+      if (dashboardSelect) {
+        dashboardSelect.innerHTML = '';
+        months.forEach(m => {
+          const opt = document.createElement('option');
+          opt.value = m;
+          opt.textContent = formatMonthName(m);
+          dashboardSelect.appendChild(opt);
+        });
+      }
 
       // Default active month to current month
       const currentMonthStr = getYearMonthStr(d);
       currentSelectedMonth = currentMonthStr;
       
-      dashboardSelect.value = currentSelectedMonth;
+      if (dashboardSelect) dashboardSelect.value = currentSelectedMonth;
       updateGoalsMonthUI();
 
       const ordersSelect = document.getElementById('orders-month-select');
@@ -1062,20 +1123,12 @@
 
     // Toggle navigation tabs
     window.switchTab = function(tabName) {
-      const tabHash = tabName === 'goals' ? '' : `#${tabName}`;
-      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}${tabHash}`);
-
-      document.querySelectorAll('.tab-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.id === `btn-tab-${tabName}`);
-      });
-      document.querySelectorAll('.tab-content').forEach(content => {
-        content.classList.toggle('active', content.id === `content-${tabName}`);
-      });
-
-      const wrap = document.querySelector('.goals-wrap');
-      if (wrap) {
-        wrap.classList.toggle('wide-container', tabName === 'orders');
+      const tabPath = `/dashboard/sales-goals/${tabName}`;
+      if (window.location.pathname !== tabPath) {
+        window.history.replaceState(null, '', `${tabPath}${window.location.search}`);
       }
+
+      applySalesGoalsTabLayout(tabName);
 
       if (tabName === 'settings') {
         renderSettingsGoalRows();
