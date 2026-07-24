@@ -397,14 +397,29 @@
           .maybeSingle()
         : Promise.resolve({ data: null, error: null });
 
+      const bookingsQuery = companyId
+        ? sb.from('installation_bookings')
+          .select('order_no, scheduled_date, scheduled_time, status')
+          .eq('company_id', companyId)
+        : Promise.resolve({ data: [], error: null });
+
       const [
         { data: invData, error: invErr },
         { data: txData, error: txErr },
         { data: transData, error: transErr },
         { data: delivData, error: delivErr },
         { data: pickupData, error: pickupErr },
-        { data: supplyData, error: supplyErr }
-      ] = await Promise.all([invQuery, txQuery, transferQuery, deliveryQuery, pickupSchedulesQuery, dispatchSuppliesQuery]);
+        { data: supplyData, error: supplyErr },
+        { data: bookingData, error: bookingErr }
+      ] = await Promise.all([
+        invQuery,
+        txQuery,
+        transferQuery,
+        deliveryQuery,
+        pickupSchedulesQuery,
+        dispatchSuppliesQuery,
+        bookingsQuery
+      ]);
 
       if (invErr) throw invErr;
       if (txErr) throw txErr;
@@ -415,6 +430,12 @@
       });
       activeTransactions = txData || [];
       dbDeliveryBookings = delivData || [];
+      if (bookingErr) {
+        console.error('Failed to fetch installation schedules:', bookingErr);
+        bookings = [];
+      } else {
+        bookings = bookingData || [];
+      }
       if (pickupErr) {
         console.error('Failed to fetch pickup schedules:', pickupErr);
         pickupSchedules = {};
