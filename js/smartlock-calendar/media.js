@@ -513,4 +513,4 @@ async function saveCurrentMediaState() {
     console.error('Failed to auto-save media state to database:', err);
     showToast('Your media changes could not be saved. Your previous data is still safe. Please try again.', true);
   }
-};
+}

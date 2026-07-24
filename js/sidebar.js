@@ -48,7 +48,7 @@
       });
 
       // Helper to check SKU eligibility
-      function checkSkuEligibility(product, rules) {
+      const checkSkuEligibility = (product, rules) => {
         if (!rules || rules.length === 0) return false;
         for (const rule of rules) {
           if (rule.scope === 'businesses') {
@@ -67,7 +67,7 @@
           }
         }
         return false;
-      }
+      };
 
       let hasIncomplete = false;
 
@@ -729,7 +729,8 @@
       ],
       '/dashboard/sales-goals': [
         '/dashboard/sales-goals',
-        '/dashboard/sales-commissions'
+        '/dashboard/sales-commissions',
+        '/dashboard/sales-goals/commissions'
       ],
       '/dashboard/warehouse/inspect': [
         '/dashboard/warehouse'

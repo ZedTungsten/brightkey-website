@@ -112,7 +112,7 @@
         html = html.replace(/\{\{terms\}\}/g,       termsHtml);
         // Inject html2pdf + action buttons before </body>
         const actionScript = `
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"><\/script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <style>
     .receipt-actions{display:flex;justify-content:center;gap:12px;margin:30px auto;max-width:794px;padding:0 20px;font-family:"Inter",sans-serif;}
     .action-btn{padding:12px 24px;border-radius:8px;font-weight:600;font-size:14px;cursor:pointer;border:none;transition:all 0.2s;display:inline-flex;align-items:center;gap:8px;}
@@ -148,7 +148,7 @@
         setTimeout(()=>{btn.innerHTML=orig;btn.disabled=false;},3000);
       }
     }
-  <\/script>`;
+  </script>`;
         html = html.replace('</body>', actionScript + '\n</body>');
         if (w) { w.document.open(); w.document.write(html); w.document.close(); }
       } else {

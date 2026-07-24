@@ -1983,7 +1983,7 @@
     });
 
     if (getSuggestions) {
-      function showSuggestions() {
+      const showSuggestions = () => {
         const allExisting = getSuggestions();
         const currentVal = textInput.value.trim().toLowerCase();
         const unused = allExisting.filter(t => !tags.includes(normalize(t)));
@@ -2026,11 +2026,11 @@
         });
 
         suggBox.style.display = 'block';
-      }
+      };
 
-      function hideSuggestions() {
+      const hideSuggestions = () => {
         suggBox.style.display = 'none';
-      }
+      };
 
       textInput.addEventListener('focus', showSuggestions);
       textInput.addEventListener('input', showSuggestions);
@@ -2584,7 +2584,7 @@
           let val = el.value.trim();
           if (!val) return;
           // Match standard youtube.com/watch?v=XYZ or youtu.be/XYZ
-          const ytRegex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i;
+          const ytRegex = /(?:youtube\.com\/(?:[^/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?/\s]{11})/i;
           const match = val.match(ytRegex);
           if (match && match[1]) {
             el.value = `https://www.youtube.com/embed/${match[1]}`;

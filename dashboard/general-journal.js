@@ -115,7 +115,6 @@
       entries:   [],
       totalCount: 0,
       page:      1,
-      pageSize:  50,
       activeOrphanId:      null,
       activeOrphanAccount: null,
       companyId: null,

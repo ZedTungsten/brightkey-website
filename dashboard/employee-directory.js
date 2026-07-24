@@ -713,7 +713,7 @@
 
         // Check if there's a pending change request for this field
         const req = this.pendingRequestsByEmployee[id];
-        const isPending = (field) => req && req.requested_data && req.requested_data.hasOwnProperty(field);
+        const isPending = (field) => req && req.requested_data && Object.prototype.hasOwnProperty.call(req.requested_data, field);
 
         // Cell helper: plain or editable
         const cell = (val, field, type = 'text', grpClass = '') => {
