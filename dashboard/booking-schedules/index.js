@@ -334,7 +334,11 @@
           const name = (b.customer_name || '').toLowerCase();
           const address = (b.customer_address || '').toLowerCase();
           const installer = (b.installer_name || '').toLowerCase();
-          return name.includes(searchQuery) || address.includes(searchQuery) || installer.includes(searchQuery);
+          const skus = (b.product_skus || '').toLowerCase();
+          return name.includes(searchQuery)
+            || address.includes(searchQuery)
+            || installer.includes(searchQuery)
+            || skus.includes(searchQuery);
         });
       }
 

@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Damaged Goods — Brightkey Admin</title>
+  <link rel="preconnect" href="https://fonts.bunny.net" />
+  <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="stylesheet" href="/dashboard/warehouse/shared.css" />
+  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg?v=2" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <style>
+    .damaged-panel { height: 100%; display: flex; flex-direction: column; overflow: hidden; }
+    .damaged-panel .panel-header { flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+    .damaged-table-wrap { flex: 1; overflow: auto; overscroll-behavior: contain; }
+    .damaged-table { min-width: 940px; min-height: 100%; }
+    .damaged-table thead th { position: sticky; top: 0; z-index: 3; background: #F4F4F5; }
+    .damaged-table tbody tr { height: 1px; }
+    .damaged-table .product-thumb { width: 54px !important; height: 54px !important; border-radius: 8px; border: 1px solid var(--border); object-fit: cover; background: var(--bg-elevated); }
+    .product-thumb-placeholder { display: grid; place-items: center; color: var(--text-muted); }
+    .damage-copy { max-width: 360px; white-space: pre-wrap; line-height: 1.45; color: var(--text-secondary); }
+    .table-media-previews { display: flex; align-items: center; gap: 0.35rem; min-width: 0; }
+    .table-media-item { position: relative; flex: 0 0 46px; width: 46px; height: 46px; overflow: hidden; border: 1px solid var(--border); border-radius: 7px; background: var(--bg-elevated); }
+    .table-media-item img, .table-media-item video { width: 100% !important; height: 100% !important; object-fit: cover; }
+    .table-video-mark { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(0,0,0,0.28); color: #fff; pointer-events: none; }
+    .table-media-empty { color: var(--text-muted); font-size: 0.78rem; font-weight: 600; white-space: nowrap; }
+    .action-row { display: flex; align-items: center; gap: 0.75rem; }
+    .icon-action { border: 0; background: transparent; padding: 0; color: var(--text-muted); cursor: pointer; line-height: 0; }
+    .icon-action:hover { color: var(--cyan-light); }
+    .icon-action.delete { color: var(--danger); }
+    .icon-action.delete:hover { color: #B91C1C; }
+    .modal-overlay { display: none; }
+    .modal-overlay.open { pointer-events: auto; opacity: 1; }
+    .damaged-modal { width: min(620px, calc(100vw - 2rem)); max-height: calc(100dvh - 2rem); overflow-y: auto; overscroll-behavior: contain; }
+    .form-error { border-color: var(--danger) !important; }
+    .media-upload-section { display: flex; flex-direction: column; gap: 0.6rem; }
+    .upload-help { color: var(--text-muted); font-size: 0.76rem; line-height: 1.4; }
+    .media-slot-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.7rem; }
+    .media-slot { position: relative; aspect-ratio: 1; min-width: 0; overflow: hidden; border: 1px dashed var(--border-hover); border-radius: 8px; background: var(--bg-surface); color: var(--text-muted); cursor: pointer; }
+    .media-slot:hover { border-color: var(--cyan); color: var(--cyan-light); }
+    .media-slot.has-media { border-style: solid; color: #fff; background: #18181B; }
+    .media-slot-preview { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+    .media-slot-shade { position: absolute; inset: 0; background: linear-gradient(to bottom, rgba(0,0,0,0.05), rgba(0,0,0,0.68)); }
+    .media-slot-empty { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.35rem; padding: 0.6rem; text-align: center; }
+    .media-slot-label { font-size: 0.7rem; font-weight: 700; }
+    .media-slot-type { position: absolute; left: 0.55rem; bottom: 0.45rem; max-width: calc(100% - 1.1rem); overflow: hidden; font-size: 0.62rem; font-weight: 700; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; z-index: 2; }
+    .media-slot-remove { position: absolute; top: 0.4rem; right: 0.4rem; z-index: 3; display: grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 50%; background: rgba(220,38,38,0.95); color: #fff; cursor: pointer; }
+    .media-slot-play { position: absolute; inset: 50% auto auto 50%; z-index: 2; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: rgba(0,0,0,0.55); color: #fff; transform: translate(-50%, -50%); pointer-events: none; }
+    .media-slot-progress { position: absolute; inset: 0; z-index: 4; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.45rem; padding: 0.75rem; background: rgba(255,255,255,0.92); color: var(--text-primary); }
+    .media-slot-progress strong { font-size: 0.7rem; }
+    .media-progress-track { width: 100%; height: 5px; overflow: hidden; border-radius: 999px; background: var(--border); }
+    .media-progress-fill { height: 100%; border-radius: inherit; background: var(--cyan); transition: width 0.15s ease; }
+    .modal-footer { display: flex; justify-content: flex-end; gap: 0.75rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+    .confirm-modal { width: min(420px, calc(100vw - 2rem)); }
+    tr.table-spacer-row, tr.table-spacer-row:hover { height: auto !important; background: transparent !important; border: 0 !important; pointer-events: none !important; }
+    tr.table-spacer-row td { border: 0 !important; padding: 0 !important; pointer-events: none !important; }
+    @media (max-width: 700px) {
+      .top-bar { align-items: flex-start; height: auto; min-height: 60px; padding-top: 0.8rem; padding-bottom: 0.8rem; }
+      .damaged-panel .panel-header { align-items: flex-start; flex-direction: column; }
+      .damaged-panel .panel-header .btn { width: 100%; justify-content: center; }
+      .damaged-modal { max-height: calc(100dvh - 1rem); }
+      .media-slot-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+  </style>
+</head>
+<body>
+  <div class="toast-container" id="toast-container"></div>
+  <div class="dash-layout">
+    <aside class="dash-sidebar" id="dash-sidebar"></aside>
+    <div class="dash-main">
+      <div class="page-wrap">
+        <div class="top-bar">
+          <span class="top-bar-title">Warehouse &amp; Inventory Ledger</span>
+          <div style="flex:1;"></div>
+          <select id="wh-select-dropdown" class="wh-select-dropdown" style="display:none;" onchange="switchDamagedWarehouse(this.value)"></select>
+        </div>
+        <div class="content-area">
+          <div class="main-workspace">
+            <div class="drawer-tabs">
+              <a class="tab-btn" href="/dashboard/warehouse/inspect">Inspect <span id="badge-count-inspect" style="display:none; background:var(--cyan); color:white; font-size:0.75rem; padding:1px 6px; border-radius:10px; margin-left:4px;">0</span></a>
+              <a class="tab-btn" href="/dashboard/warehouse/pack">Pack <span id="badge-count-pack" style="display:none; background:var(--cyan); color:white; font-size:0.75rem; padding:1px 6px; border-radius:10px; margin-left:4px;">0</span></a>
+              <a class="tab-btn" href="/dashboard/warehouse/dispatch">Dispatch <span id="badge-count-dispatch" style="display:none; background:var(--cyan); color:white; font-size:0.75rem; padding:1px 6px; border-radius:10px; margin-left:4px;">0</span></a>
+              <a class="tab-btn" href="/dashboard/warehouse/receive">Receive <span id="badge-count-receive" style="display:none; background:var(--cyan); color:white; font-size:0.75rem; padding:1px 6px; border-radius:10px; margin-left:4px;">0</span></a>
+              <a class="tab-btn" href="/dashboard/warehouse/transfer">Transfer</a>
+              <a class="tab-btn" href="/dashboard/warehouse/return">Return</a>
+              <a class="tab-btn active" href="/dashboard/warehouse/damaged">Damaged</a>
+              <a class="tab-btn" href="/dashboard/warehouse/order">Order</a>
+            </div>
+            <div class="table-scroll">
+              <div class="tab-panel active">
+                <div class="panel damaged-panel">
+                  <div class="panel-header">
+                    <span>Damaged Goods</span>
+                    <button class="btn btn-primary" type="button" onclick="openDamageModal()">
+                      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                      Issue Damaged Goods
+                    </button>
+                  </div>
+                  <div class="damaged-table-wrap">
+                    <table class="ledger-table damaged-table">
+                      <thead>
+                        <tr>
+                          <th>Product Image</th>
+                          <th>SKU</th>
+                          <th>Product Name</th>
+                          <th>Damage Description</th>
+                          <th>Media Uploaded</th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody id="damaged-list">
+                        <tr><td colspan="6"><div class="loading-wrapper"><div class="spinner-cyan"></div><span>Loading damaged goods...</span></div></td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="damage-modal" aria-hidden="true" onclick="handleModalBackdrop(event)">
+    <div class="modal damaged-modal" role="dialog" aria-modal="true" aria-labelledby="damage-modal-title">
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:1rem; margin-bottom:1.5rem;">
+        <h2 id="damage-modal-title" style="font-size:1.2rem; color:var(--text-primary); margin:0;">Issue Damaged Goods</h2>
+        <button class="btn btn-outline" type="button" onclick="closeDamageModal()" aria-label="Close" style="padding:0.4rem; width:34px; height:34px; justify-content:center;">
+          <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2.2" fill="none" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <form id="damage-form" onsubmit="saveDamage(event)" style="display:flex; flex-direction:column; gap:1rem;">
+        <div class="form-group">
+          <label class="form-label" for="damage-sku">SKU</label>
+          <select class="form-select" id="damage-sku" required>
+            <option value="" disabled selected hidden>Select product SKU</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="damage-description">Damage Description</label>
+          <textarea class="form-input" id="damage-description" rows="5" required placeholder="Describe the damage in detail..." style="resize:vertical; min-height:120px;"></textarea>
+        </div>
+        <div class="media-upload-section">
+          <label class="form-label">Media</label>
+          <div class="upload-help">Add up to 5 pictures, followed by 1 video up to 25 MB.</div>
+          <div class="media-slot-grid" id="damage-media-grid"></div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline" type="button" onclick="closeDamageModal()">Cancel</button>
+          <button class="btn btn-primary" id="save-damage-btn" type="submit">Save Damaged Goods</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="delete-damage-modal" aria-hidden="true" onclick="handleDeleteBackdrop(event)">
+    <div class="modal confirm-modal" role="dialog" aria-modal="true" aria-labelledby="delete-damage-title">
+      <h2 id="delete-damage-title" style="font-size:1.15rem; color:var(--text-primary); margin:0 0 0.6rem;">Delete damaged goods record?</h2>
+      <p style="color:var(--text-secondary); line-height:1.5; margin:0 0 1.4rem;">This removes the record and its uploaded media. This action cannot be undone.</p>
+      <div class="modal-footer">
+        <button class="btn btn-outline" type="button" onclick="closeDeleteModal()">Cancel</button>
+        <button class="btn btn-danger" id="confirm-delete-btn" type="button" onclick="confirmDeleteDamage()">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/auth.js"></script>
+  <script src="/js/sidebar.js"></script>
+  <script src="/js/main.js"></script>
+  <script src="/dashboard/warehouse/shared.js"></script>
+  <script>
+    'use strict';
+
+    const STORAGE_BUCKET = 'brightkey-assets';
+    let sb;
+    let companyId = null;
+    let products = [];
+    let damagedGoods = [];
+    let editingId = null;
+    let pendingDeleteId = null;
+    let photoSlots = Array(5).fill(null);
+    let videoSlot = null;
+    let mediaSessionId = 0;
+    const pendingUploadUrls = new Set();
+    const MAX_VIDEO_BYTES = 25 * 1024 * 1024;
+
+    function showToast(message, isError = false) {
+      if (window.Toast) window.Toast.show(message, isError ? 'error' : 'success');
+      else console.log((isError ? 'ERROR: ' : 'INFO: ') + message);
+    }
+
+    function esc(value) {
+      return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function openOverlay(id) {
+      const overlay = document.getElementById(id);
+      overlay.style.display = 'grid';
+      overlay.offsetHeight;
+      overlay.classList.add('open');
+      overlay.setAttribute('aria-hidden', 'false');
+    }
+
+    function closeOverlay(id) {
+      const overlay = document.getElementById(id);
+      overlay.classList.remove('open');
+      overlay.setAttribute('aria-hidden', 'true');
+      setTimeout(() => { overlay.style.display = 'none'; }, 150);
+    }
+
+    function productFor(record) {
+      return products.find(product => product.id === record.product_id)
+        || products.find(product => product.sku === record.sku)
+        || {};
+    }
+
+    function populateSkuOptions(selectedId = '') {
+      const select = document.getElementById('damage-sku');
+      select.innerHTML = '<option value="" disabled hidden>Select product SKU</option>'
+        + products.map(product =>
+          `<option value="${esc(product.id)}"${product.id === selectedId ? ' selected' : ''}>${esc(product.sku)} — ${esc(product.title || 'Unnamed Product')}</option>`
+        ).join('');
+      if (!selectedId) select.value = '';
+    }
+
+    function renderDamagedGoods() {
+      const tbody = document.getElementById('damaged-list');
+      if (!damagedGoods.length) {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted" style="padding:2.5rem 0;">No damaged goods have been recorded.</td></tr>'
+          + '<tr class="table-spacer-row"><td colspan="6"></td></tr>';
+        return;
+      }
+      tbody.innerHTML = damagedGoods.map(record => {
+        const product = productFor(record);
+        const photos = Array.isArray(record.photo_urls) ? record.photo_urls : [];
+        const image = product.image_main;
+        const mediaPreviews = [
+          ...photos.slice(0, 5).map((url, index) => `
+            <div class="table-media-item" title="Picture ${index + 1}">
+              <img src="${esc(url)}" alt="Damage picture ${index + 1}" loading="lazy" />
+            </div>`),
+          record.video_url ? `
+            <div class="table-media-item" title="Damage video">
+              <video src="${esc(record.video_url)}" muted preload="metadata"></video>
+              <span class="table-video-mark"><svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><path d="m7 4 12 8-12 8z"/></svg></span>
+            </div>` : ''
+        ].filter(Boolean).join('');
+        return `
+          <tr>
+            <td>${image
+              ? `<img class="product-thumb" src="${esc(image)}" alt="${esc(product.title || record.sku)}" loading="lazy" />`
+              : '<div class="product-thumb product-thumb-placeholder"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9" r="1.5"/><path d="m21 15-5-5L5 20"/></svg></div>'
+            }</td>
+            <td><code>${esc(record.sku)}</code></td>
+            <td><strong>${esc(product.title || '—')}</strong></td>
+            <td><div class="damage-copy">${esc(record.damage_description)}</div></td>
+            <td>
+              ${mediaPreviews
+                ? `<div class="table-media-previews">${mediaPreviews}</div>`
+                : '<span class="table-media-empty">No media</span>'}
+            </td>
+            <td>
+              <div class="action-row">
+                <button class="icon-action" type="button" onclick="editDamage('${esc(record.id)}')" aria-label="Edit damaged goods">
+                  <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+                </button>
+                <button class="icon-action delete" type="button" onclick="openDeleteModal('${esc(record.id)}')" aria-label="Delete damaged goods">
+                  <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v5M14 11v5"/></svg>
+                </button>
+              </div>
+            </td>
+          </tr>`;
+      }).join('') + '<tr class="table-spacer-row"><td colspan="6"></td></tr>';
+    }
+
+    async function loadDamagedGoods() {
+      const tbody = document.getElementById('damaged-list');
+      tbody.innerHTML = '<tr><td colspan="6"><div class="loading-wrapper"><div class="spinner-cyan"></div><span>Loading damaged goods...</span></div></td></tr>';
+      const { data, error } = await sb
+        .from('damaged_goods')
+        .select('id, company_id, product_id, sku, damage_description, photo_urls, video_url, created_at, updated_at')
+        .eq('company_id', companyId)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      damagedGoods = data || [];
+      renderDamagedGoods();
+    }
+
+    async function loadWarehouseBadges() {
+      let transactionsQuery = sb
+        .from('inventory_transactions')
+        .select('reference_id, status, type');
+      if (WarehousePage.activeWarehouseId) {
+        transactionsQuery = transactionsQuery.eq('warehouse_id', WarehousePage.activeWarehouseId);
+      } else {
+        transactionsQuery = transactionsQuery.is('warehouse_id', null);
+      }
+      const [transactionsResult, deliveriesResult] = await Promise.all([
+        transactionsQuery,
+        sb
+          .from('delivery_bookings')
+          .select('reference_id')
+      ]);
+      if (transactionsResult.error) throw transactionsResult.error;
+      if (deliveriesResult.error) throw deliveriesResult.error;
+      WarehousePage.activeTransactions = transactionsResult.data || [];
+      WarehousePage.deliveryBookings = deliveriesResult.data || [];
+      WarehousePage.updateBadgeCounts();
+    }
+
+    async function switchDamagedWarehouse(warehouseId) {
+      WarehousePage.activeWarehouseId = warehouseId;
+      const dropdown = document.getElementById('wh-select-dropdown');
+      if (dropdown && dropdown.value !== warehouseId) dropdown.value = warehouseId;
+      try {
+        await loadWarehouseBadges();
+      } catch (error) {
+        console.error(error);
+        showToast('Warehouse badge counts could not be refreshed.', true);
+      }
+    }
+
+    function resetDamageForm() {
+      editingId = null;
+      mediaSessionId += 1;
+      photoSlots.forEach(slot => {
+        if (slot?.previewUrl) URL.revokeObjectURL(slot.previewUrl);
+      });
+      if (videoSlot?.previewUrl) URL.revokeObjectURL(videoSlot.previewUrl);
+      photoSlots = Array(5).fill(null);
+      videoSlot = null;
+      document.getElementById('damage-form').reset();
+      document.getElementById('damage-description').classList.remove('form-error');
+      document.getElementById('damage-sku').classList.remove('form-error');
+      populateSkuOptions();
+      renderMediaSlots();
+    }
+
+    function openDamageModal() {
+      resetDamageForm();
+      document.getElementById('damage-modal-title').textContent = 'Issue Damaged Goods';
+      document.getElementById('save-damage-btn').textContent = 'Save Damaged Goods';
+      openOverlay('damage-modal');
+    }
+
+    function editDamage(id) {
+      const record = damagedGoods.find(item => item.id === id);
+      if (!record) return;
+      resetDamageForm();
+      editingId = id;
+      populateSkuOptions(record.product_id);
+      document.getElementById('damage-description').value = record.damage_description || '';
+      document.getElementById('damage-modal-title').textContent = 'Edit Damaged Goods';
+      document.getElementById('save-damage-btn').textContent = 'Save Changes';
+      (Array.isArray(record.photo_urls) ? record.photo_urls : []).slice(0, 5).forEach((url, index) => {
+        photoSlots[index] = { url };
+      });
+      videoSlot = record.video_url ? { url: record.video_url } : null;
+      renderMediaSlots();
+      openOverlay('damage-modal');
+    }
+
+    function closeDamageModal() {
+      mediaSessionId += 1;
+      const abandonedUrls = [...pendingUploadUrls];
+      pendingUploadUrls.clear();
+      if (abandonedUrls.length) removeMedia(abandonedUrls);
+      closeOverlay('damage-modal');
+    }
+
+    function handleModalBackdrop(event) {
+      if (event.target.id === 'damage-modal') closeDamageModal();
+    }
+
+    function slotUploadIcon(type) {
+      return type === 'video'
+        ? '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="5" width="14" height="14" rx="2"/><path d="m17 10 4-2v8l-4-2z"/></svg>'
+        : '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9" r="1.5"/><path d="m21 15-5-5L5 20"/></svg>';
+    }
+
+    function renderMediaSlot(slot, index, type) {
+      const isVideo = type === 'video';
+      const inputId = isVideo ? 'damage-video-slot' : `damage-photo-slot-${index}`;
+      const label = isVideo ? 'Video' : `Picture ${index + 1}`;
+      const previewUrl = slot?.previewUrl || slot?.url || '';
+      const filename = slot?.file?.name || (slot?.url ? 'Uploaded media' : label);
+      const progress = Number(slot?.progress);
+      const progressOverlay = Number.isFinite(progress) && progress < 100
+        ? `<div class="media-slot-progress"><strong>Uploading ${Math.max(0, Math.round(progress))}%</strong><div class="media-progress-track"><div class="media-progress-fill" style="width:${Math.max(0, Math.min(100, progress))}%"></div></div></div>`
+        : '';
+      if (!slot) {
+        return `
+          <div class="media-slot" role="button" tabindex="0" aria-label="Upload ${label}" onclick="document.getElementById('${inputId}').click()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();document.getElementById('${inputId}').click();}">
+            <div class="media-slot-empty">${slotUploadIcon(type)}<span class="media-slot-label">Upload ${label}</span></div>
+            <span class="media-slot-type">${isVideo ? 'Video · 25 MB max' : 'Picture'}</span>
+            <input id="${inputId}" type="file" accept="${isVideo ? 'video/*' : 'image/*'}" hidden onclick="event.stopPropagation()" onchange="${isVideo ? 'handleVideoSlotSelect(event)' : `handlePhotoSlotSelect(event, ${index})`}" />
+          </div>`;
+      }
+      return `
+        <div class="media-slot has-media" role="button" tabindex="0" aria-label="Replace ${label}" title="${esc(filename)}" onclick="document.getElementById('${inputId}').click()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();document.getElementById('${inputId}').click();}">
+          ${isVideo
+            ? `<video class="media-slot-preview" src="${esc(previewUrl)}" muted preload="metadata"></video><div class="media-slot-play"><svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><path d="m7 4 12 8-12 8z"/></svg></div>`
+            : `<img class="media-slot-preview" src="${esc(previewUrl)}" alt="${esc(label)} preview" />`
+          }
+          <div class="media-slot-shade"></div>
+          ${progressOverlay}
+          <button class="media-slot-remove" type="button" aria-label="Remove ${label}" onclick="event.stopPropagation(); removeMediaSlot('${type}', ${index})">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </button>
+          <span class="media-slot-type">${esc(filename)}</span>
+          <input id="${inputId}" type="file" accept="${isVideo ? 'video/*' : 'image/*'}" hidden onclick="event.stopPropagation()" onchange="${isVideo ? 'handleVideoSlotSelect(event)' : `handlePhotoSlotSelect(event, ${index})`}" />
+        </div>`;
+    }
+
+    function renderMediaSlots() {
+      const grid = document.getElementById('damage-media-grid');
+      grid.innerHTML = photoSlots.map((slot, index) => renderMediaSlot(slot, index, 'photo')).join('')
+        + renderMediaSlot(videoSlot, 0, 'video');
+    }
+
+    async function handlePhotoSlotSelect(event, index) {
+      const file = event.target.files[0];
+      if (!file) return;
+      if (!file.type.startsWith('image/')) {
+        showToast('Please select an image file.', true);
+        return;
+      }
+      await discardSlotMedia(photoSlots[index]);
+      const sessionId = mediaSessionId;
+      const slot = { file, previewUrl: URL.createObjectURL(file), progress: 0 };
+      photoSlots[index] = slot;
+      renderMediaSlots();
+      await uploadSelectedSlot(slot, 'photos', sessionId, async () => compressToJpeg(file));
+    }
+
+    async function handleVideoSlotSelect(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      if (!file.type.startsWith('video/')) {
+        showToast('Please select a video file.', true);
+        return;
+      }
+      if (file.size > MAX_VIDEO_BYTES) {
+        showToast('The video must be 25 MB or smaller.', true);
+        return;
+      }
+      await discardSlotMedia(videoSlot);
+      const sessionId = mediaSessionId;
+      const slot = { file, previewUrl: URL.createObjectURL(file), progress: 0 };
+      videoSlot = slot;
+      renderMediaSlots();
+      await uploadSelectedSlot(slot, 'videos', sessionId, async () => file);
+    }
+
+    async function discardSlotMedia(slot) {
+      if (!slot) return;
+      if (slot.previewUrl) URL.revokeObjectURL(slot.previewUrl);
+      if (slot.isNew && slot.url) {
+        pendingUploadUrls.delete(slot.url);
+        await removeMedia([slot.url]);
+      }
+    }
+
+    async function uploadSelectedSlot(slot, kind, sessionId, prepareFile) {
+      let progressTimer;
+      try {
+        progressTimer = setInterval(() => {
+          if (slot.progress < 90) {
+            slot.progress += 10;
+            renderMediaSlots();
+          }
+        }, 140);
+        const preparedFile = await prepareFile();
+        const url = await uploadFile(preparedFile, kind);
+        clearInterval(progressTimer);
+        const slotIsCurrent = photoSlots.includes(slot) || videoSlot === slot;
+        if (sessionId !== mediaSessionId || !slotIsCurrent) {
+          await removeMedia([url]);
+          return;
+        }
+        slot.url = url;
+        slot.isNew = true;
+        slot.progress = 100;
+        delete slot.file;
+        pendingUploadUrls.add(url);
+        renderMediaSlots();
+      } catch (error) {
+        clearInterval(progressTimer);
+        console.error(error);
+        if (slot.previewUrl) URL.revokeObjectURL(slot.previewUrl);
+        const currentIndex = photoSlots.indexOf(slot);
+        if (currentIndex >= 0) photoSlots[currentIndex] = null;
+        if (videoSlot === slot) videoSlot = null;
+        renderMediaSlots();
+        showToast('The selected media could not be uploaded. Please try again.', true);
+      }
+    }
+
+    async function removeMediaSlot(type, index) {
+      if (type === 'video') {
+        await discardSlotMedia(videoSlot);
+        videoSlot = null;
+      } else {
+        await discardSlotMedia(photoSlots[index]);
+        photoSlots[index] = null;
+      }
+      renderMediaSlots();
+    }
+
+    function compressToJpeg(file) {
+      return new Promise((resolve, reject) => {
+        const image = new Image();
+        const url = URL.createObjectURL(file);
+        image.onload = () => {
+          URL.revokeObjectURL(url);
+          const maxDimension = 1800;
+          const scale = Math.min(1, maxDimension / Math.max(image.naturalWidth, image.naturalHeight));
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+          canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+          const context = canvas.getContext('2d');
+          context.fillStyle = '#FFFFFF';
+          context.fillRect(0, 0, canvas.width, canvas.height);
+          context.drawImage(image, 0, 0, canvas.width, canvas.height);
+          canvas.toBlob(blob => {
+            if (!blob) {
+              reject(new Error('One of the pictures could not be compressed.'));
+              return;
+            }
+            resolve(new File([blob], `${crypto.randomUUID()}.jpg`, { type: 'image/jpeg' }));
+          }, 'image/jpeg', 0.8);
+        };
+        image.onerror = () => {
+          URL.revokeObjectURL(url);
+          reject(new Error('One of the selected pictures could not be read.'));
+        };
+        image.src = url;
+      });
+    }
+
+    async function uploadFile(file, kind) {
+      const extension = kind === 'photos' ? 'jpg' : (file.name.split('.').pop() || 'mp4').toLowerCase().replace(/[^a-z0-9]/g, '');
+      const path = `companies/${companyId}/damaged-goods/${kind}/${crypto.randomUUID()}.${extension}`;
+      const { error } = await sb.storage.from(STORAGE_BUCKET).upload(path, file, {
+        contentType: file.type,
+        cacheControl: '31536000',
+        upsert: false
+      });
+      if (error) throw error;
+      return sb.storage.from(STORAGE_BUCKET).getPublicUrl(path).data.publicUrl;
+    }
+
+    function storagePathFromUrl(url) {
+      const marker = `/storage/v1/object/public/${STORAGE_BUCKET}/`;
+      const index = String(url || '').indexOf(marker);
+      return index >= 0 ? decodeURIComponent(String(url).slice(index + marker.length)) : null;
+    }
+
+    async function removeMedia(urls) {
+      const paths = urls.map(storagePathFromUrl).filter(Boolean);
+      if (paths.length) await sb.storage.from(STORAGE_BUCKET).remove(paths);
+    }
+
+    async function saveDamage(event) {
+      event.preventDefault();
+      const skuSelect = document.getElementById('damage-sku');
+      const descriptionInput = document.getElementById('damage-description');
+      const product = products.find(item => item.id === skuSelect.value);
+      const description = descriptionInput.value.trim();
+      skuSelect.classList.toggle('form-error', !product);
+      descriptionInput.classList.toggle('form-error', !description);
+      if (!product || !description) {
+        showToast('Select a SKU and enter a damage description.', true);
+        (!product ? skuSelect : descriptionInput).scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
+      const uploadsInProgress = [...photoSlots, videoSlot]
+        .filter(Boolean)
+        .some(slot => Number.isFinite(Number(slot.progress)) && Number(slot.progress) < 100);
+      if (uploadsInProgress) {
+        showToast('Please wait for all media uploads to finish.', true);
+        return;
+      }
+
+      const button = document.getElementById('save-damage-btn');
+      const originalText = button.textContent;
+      button.disabled = true;
+      button.textContent = 'Saving...';
+      const existing = damagedGoods.find(item => item.id === editingId);
+      const uploadedUrls = [];
+      try {
+        const finalPhotoUrls = [];
+        for (const slot of photoSlots) {
+          if (slot?.file) {
+            const compressed = await compressToJpeg(slot.file);
+            const url = await uploadFile(compressed, 'photos');
+            uploadedUrls.push(url);
+            finalPhotoUrls.push(url);
+          } else if (slot?.url) {
+            finalPhotoUrls.push(slot.url);
+          }
+        }
+
+        let finalVideoUrl = videoSlot?.url || null;
+        if (videoSlot?.file) {
+          finalVideoUrl = await uploadFile(videoSlot.file, 'videos');
+          uploadedUrls.push(finalVideoUrl);
+        }
+
+        const payload = {
+          company_id: companyId,
+          product_id: product.id,
+          sku: product.sku,
+          damage_description: description,
+          photo_urls: finalPhotoUrls,
+          video_url: finalVideoUrl,
+          updated_at: new Date().toISOString()
+        };
+
+        let result;
+        if (editingId) {
+          result = await sb.from('damaged_goods').update(payload).eq('id', editingId).eq('company_id', companyId);
+        } else {
+          result = await sb.from('damaged_goods').insert(payload);
+        }
+        if (result.error) throw result.error;
+
+        const retainedUrls = new Set([...finalPhotoUrls, finalVideoUrl].filter(Boolean));
+        const replacedUrls = [
+          ...(existing?.photo_urls || []),
+          existing?.video_url
+        ].filter(url => url && !retainedUrls.has(url));
+        await removeMedia(replacedUrls);
+        pendingUploadUrls.clear();
+        closeDamageModal();
+        showToast(editingId ? 'Damaged goods record updated.' : 'Damaged goods recorded.');
+        await loadDamagedGoods();
+      } catch (error) {
+        console.error(error);
+        await removeMedia(uploadedUrls);
+        showToast('Damaged goods could not be saved. Please try again.', true);
+      } finally {
+        button.disabled = false;
+        button.textContent = originalText;
+      }
+    }
+
+    function openDeleteModal(id) {
+      pendingDeleteId = id;
+      openOverlay('delete-damage-modal');
+    }
+
+    function closeDeleteModal() {
+      pendingDeleteId = null;
+      closeOverlay('delete-damage-modal');
+    }
+
+    function handleDeleteBackdrop(event) {
+      if (event.target.id === 'delete-damage-modal') closeDeleteModal();
+    }
+
+    async function confirmDeleteDamage() {
+      const record = damagedGoods.find(item => item.id === pendingDeleteId);
+      if (!record) return;
+      const button = document.getElementById('confirm-delete-btn');
+      button.disabled = true;
+      button.textContent = 'Deleting...';
+      try {
+        const { error } = await sb.from('damaged_goods').delete().eq('id', record.id).eq('company_id', companyId);
+        if (error) throw error;
+        await removeMedia([...(record.photo_urls || []), record.video_url].filter(Boolean));
+        closeDeleteModal();
+        showToast('Damaged goods record deleted.');
+        await loadDamagedGoods();
+      } catch (error) {
+        console.error(error);
+        showToast('The damaged goods record could not be deleted. Please try again.', true);
+      } finally {
+        button.disabled = false;
+        button.textContent = 'Delete';
+      }
+    }
+
+    async function init() {
+      try {
+        const authInfo = await BKAuth.checkRoleGate(['Logistics'], '/admin.html');
+        if (!authInfo) return;
+        sb = BKAuth.sb;
+        WarehousePage.sb = sb;
+        const { data: company, error: companyError } = await sb
+          .from('companies')
+          .select('id')
+          .eq('tenant_id', authInfo.tenantId)
+          .limit(1)
+          .maybeSingle();
+        if (companyError) throw companyError;
+        companyId = company?.id || null;
+        if (!companyId) throw new Error('Company could not be resolved.');
+        WarehousePage.companyId = companyId;
+        await WarehousePage.loadWarehouseTabs(authInfo.tenantId);
+
+        const { data: productRows, error: productError } = await sb
+          .from('products')
+          .select('id, sku, title, image_main')
+          .eq('company_id', companyId)
+          .order('sku', { ascending: true });
+        if (productError) throw productError;
+        products = productRows || [];
+        populateSkuOptions();
+        await Promise.all([
+          loadDamagedGoods(),
+          loadWarehouseBadges()
+        ]);
+      } catch (error) {
+        console.error(error);
+        document.getElementById('damaged-list').innerHTML = '<tr><td colspan="6" class="text-center text-muted" style="padding:2.5rem 0;">Damaged goods could not be loaded. Please refresh and try again.</td></tr>';
+        showToast('Damaged goods could not be loaded. Please refresh and try again.', true);
+      }
+    }
+
+    document.addEventListener('keydown', event => {
+      if (event.key !== 'Escape') return;
+      if (document.getElementById('delete-damage-modal').classList.contains('open')) closeDeleteModal();
+      else if (document.getElementById('damage-modal').classList.contains('open')) closeDamageModal();
+    });
+    document.addEventListener('DOMContentLoaded', init);
+  </script>
+</body>
+</html>
