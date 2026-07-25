@@ -179,6 +179,8 @@
       proratedSalaryState: {},
       payslipConfig: { logoStyle: 'light', signatoryName: 'Authorized Signatory', signatureUrl: '' },
       companyProfileConfig: {},
+      accountAssignments: {},
+      glAccountsMap: {},
       // Drilldown caches
       payslipEmpDeptMap: {},
       payslipEmpTeamMap: {},
@@ -226,17 +228,25 @@
         } catch (e) { this.employees = []; console.error(e); }
 
         // Config — payout schedules + payslip template + company profile
-        const [cfgRes, tplRes, profileRes, proratedRes] = await Promise.allSettled([
+        const [cfgRes, tplRes, profileRes, proratedRes, accountAssignmentRes, glAccountsRes] = await Promise.allSettled([
           sb.from('global_settings').select('value').eq('key', 'salary_tracker_config').eq('company_id', this.companyId).maybeSingle(),
           sb.from('global_settings').select('value').eq('key', 'payslip_template_config').eq('company_id', this.companyId).maybeSingle(),
           sb.from('global_settings').select('value').eq('key', 'company_profile_config').eq('company_id', this.companyId).maybeSingle(),
           sb.from('global_settings').select('value').eq('key', 'prorated_salary_state').eq('company_id', this.companyId).maybeSingle(),
+          sb.from('global_settings').select('value').eq('key', 'journal_account_employee_assignments').eq('company_id', this.companyId).maybeSingle(),
+          sb.from('journal_accounts').select('id, name').eq('company_id', this.companyId),
         ]);
         this.payoutSchedules  = cfgRes.status === 'fulfilled'     ? (cfgRes.value.data?.value?.payoutSchedules || [15, 30]) : [15, 30];
         this.specialSchedules = cfgRes.status === 'fulfilled'     ? (cfgRes.value.data?.value?.specialSchedules || []) : [];
         if (tplRes.status === 'fulfilled' && tplRes.value.data?.value) this.payslipConfig = { ...this.payslipConfig, ...tplRes.value.data.value };
         if (profileRes.status === 'fulfilled' && profileRes.value.data?.value) this.companyProfileConfig = profileRes.value.data.value;
         if (proratedRes.status === 'fulfilled') this.proratedSalaryState = proratedRes.value.data?.value || {};
+        if (accountAssignmentRes.status === 'fulfilled') this.accountAssignments = accountAssignmentRes.value.data?.value?.assignments || {};
+        if (glAccountsRes.status === 'fulfilled') {
+          (glAccountsRes.value.data || []).forEach(account => {
+            this.glAccountsMap[account.id] = String(account.name || '').toLowerCase();
+          });
+        }
 
         // Installation bookings
         try {
@@ -787,9 +797,10 @@
         const nextY = this.selectedMonth + 1 > 11 ? this.selectedYear + 1 : this.selectedYear;
         const end   = `${nextY}-${String(nextM + 1).padStart(2, '0')}-01`;
 
-        const [adjRes, commRes] = await Promise.allSettled([
+        const [adjRes, commRes, journalRes] = await Promise.allSettled([
           sb.from('employee_adjustments').select('id, amount, date, label').eq('company_id', this.companyId).eq('employee_id', empId).gte('date', start).lt('date', end),
           sb.from('commission_assignments').select('booking_id, product_index, amount').eq('company_id', this.companyId).eq('employee_id', empId),
+          sb.from('general_journal').select('account_id, date, debit, credit').eq('company_id', this.companyId).gte('date', start).lt('date', end).not('account_id', 'is', null),
         ]);
 
         const adjs  = adjRes.status  === 'fulfilled' ? (adjRes.value.data || [])  : [];
@@ -830,8 +841,17 @@
         });
 
         const empComms = parsedCommAssignments.reduce((s, a) => s + a.amount, 0);
+        const glReimbursements = journalRes.status === 'fulfilled'
+          ? (journalRes.value.data || []).filter(entry => {
+            return this.accountAssignments[entry.account_id] === empId
+              && String(this.glAccountsMap[entry.account_id] || '').includes('due to');
+          }).map(entry => ({
+            amount: (Number(entry.credit) || 0) - (Number(entry.debit) || 0),
+            date: entry.date
+          })).filter(entry => entry.amount !== 0)
+          : [];
 
-        return { adjs, empComms, parsedCommAssignments };
+        return { adjs, empComms, parsedCommAssignments, glReimbursements };
       },
 
       async generatePreview() {
@@ -849,9 +869,9 @@
         const empSpecs   = isOwner ? [] : this.specialSchedules.filter(s => s.employeeId === emp.id);
 
         // Lazy fetch per-employee data for this month
-        let adjs = [], empComms = 0, parsedCommAssignments = [];
+        let adjs = [], empComms = 0, parsedCommAssignments = [], glReimbursements = [];
         try {
-          ({ adjs, empComms, parsedCommAssignments } = await this.fetchEmployeeMonthData(empId));
+          ({ adjs, empComms, parsedCommAssignments, glReimbursements } = await this.fetchEmployeeMonthData(empId));
         } catch (e) { console.error(e); }
         if (isOwner) {
           empComms = 0;
@@ -860,6 +880,7 @@
 
         const totalAdjs   = adjs.reduce((s, a) => s + (Number(a.amount) || 0), 0);
         const totalSpecs  = empSpecs.reduce((s, x) => s + (Number(x.value) || 0), 0);
+        const totalGlReimbursements = isOwner ? 0 : glReimbursements.reduce((sum, item) => sum + item.amount, 0);
 
         // Resolve dept and reporting-to
         let resolvedDeptName = emp.department || '—';
@@ -905,6 +926,9 @@
           const amounts = empSpecs.map(s => php(s.value)).join('<br>');
           breakdownHtml += `<tr><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;font-weight:600;vertical-align:top;">Special Payouts</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;color:#4b5563;vertical-align:top;line-height:1.5;">${labels}</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;text-align:right;font-variant-numeric:tabular-nums;vertical-align:top;line-height:1.5;width:120px;">${amounts}</td></tr>`;
         }
+        if (totalGlReimbursements !== 0) {
+          breakdownHtml += `<tr><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;font-weight:600;">GL Reimbursement</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;color:#4b5563;">Employee reimbursement from the general ledger</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;text-align:right;font-variant-numeric:tabular-nums;width:120px;">${php(totalGlReimbursements)}</td></tr>`;
+        }
 
         // Payout schedule rows. Special payouts keep their own configured day and
         // must not be folded into the next regular salary cutoff.
@@ -922,14 +946,18 @@
           const av = adjs.filter(a => { const d = new Date(a.date); return getSchedDay(d.getUTCDate(), sortedScheds) === day; }).reduce((s, a) => s + (Number(a.amount) || 0), 0);
           const cv = parsedCommAssignments.filter(c => { const d = new Date(c.date); return getSchedDay(d.getUTCDate(), sortedScheds) === day; }).reduce((s, c) => s + c.amount, 0);
           const instPortion = instPayouts.cutoffPayouts[day] || 0;
+          const glReimbursement = isOwner ? 0 : glReimbursements.filter(item => {
+            const date = new Date(item.date);
+            return getSchedDay(date.getUTCDate(), sortedScheds) === day;
+          }).reduce((sum, item) => sum + item.amount, 0);
 
-          scheduleRows.push({ day, order: 1, label: `Cutoff Payout (Day ${day})`, value: sp + av + cv + instPortion });
+          scheduleRows.push({ day, order: 1, label: `Cutoff Payout (Day ${day})`, value: sp + av + cv + instPortion + glReimbursement });
         });
         const cutoffHtml = scheduleRows
           .sort((a, b) => a.day - b.day || a.order - b.order)
           .map(row => `<div style="display:flex;justify-content:space-between;padding:0.5rem 0;font-size:0.85rem;border-bottom:1px dashed #e5e7eb;"><span style="font-weight:500;color:#4b5563;">${row.label}</span><span style="font-weight:700;color:#111827;font-variant-numeric:tabular-nums;margin-right:12px;">${php(row.value)}</span></div>`)
           .join('');
-        const verifiedTotal = salaryPaid + empComms + totalAdjs + totalSpecs + instPayouts.totalInstallationPayout;
+        const verifiedTotal = salaryPaid + empComms + totalAdjs + totalSpecs + instPayouts.totalInstallationPayout + totalGlReimbursements;
 
         // Company assets
         const logoUrl     = this.payslipConfig.logoStyle === 'dark' ? this.companyProfileConfig.logoDark : this.companyProfileConfig.logoLight;
