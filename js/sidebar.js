@@ -412,7 +412,7 @@
           <svg class="dash-nav-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
         </button>
         <div class="dash-nav-children">
-          <a href="/dashboard/sales-goals/commissions" class="dash-nav-child" data-role="sales">Commissions</a>
+          <a href="/dashboard/sales-goals/goals" class="dash-nav-child" data-role="sales">Commissions</a>
           <a href="/dashboard/sales-schedule" class="dash-nav-child" data-role="sales">Schedule</a>
           <a href="/dashboard/sales-stocks" class="dash-nav-child" data-role="sales">Stocks</a>
           <a href="/dashboard/resources" class="dash-nav-child" data-role="sales">Resources</a>
