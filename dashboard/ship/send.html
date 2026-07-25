@@ -713,13 +713,18 @@
           const [transactionsResult, bookingsResult, deliveryBookingsResult, settingsResult, damagedResult, suppliersResult] = await Promise.all([
             sb.from('inventory_transactions')
               .select('reference_id, sku, quantity, type, status, customer_name, customer_city, packed_photo_url, warehouse_id, created_at')
+              .eq('company_id', this.companyId)
               .in('type', ['customer_order', 'supplier_order'])
-              .in('status', ['packed', 'reserved', 'inspect', 'ordered']),
+              .in('status', ['packed', 'reserved', 'inspect', 'ordered'])
+              .range(0, 499),
             sb.from('installation_bookings')
-              .select('order_no, scheduled_date, scheduled_time, customer_address, customer_phone'),
+              .select('order_no, scheduled_date, scheduled_time, customer_address, customer_phone')
+              .eq('company_id', this.companyId),
             sb.from('delivery_bookings')
               .select('reference_id')
-              .order('created_at', { ascending: false }),
+              .eq('company_id', this.companyId)
+              .order('created_at', { ascending: false })
+              .range(0, 499),
             sb.from('global_settings')
               .select('key, value')
               .eq('company_id', this.companyId)
@@ -774,7 +779,10 @@
         this.modalDataPromise = (async () => {
           const sb = window.BKAuth.sb;
           const [productsResult, inventoryResult, warehousesResult] = await Promise.all([
-            sb.from('products').select('id, sku, title, category').order('sku'),
+            sb.from('products')
+              .select('id, sku, title, category')
+              .or(`company_id.eq.${this.companyId},company_id.is.null`)
+              .order('sku'),
             sb.from('inventory').select('sku, available, warehouse_id'),
             sb.from('warehouses').select('id, name').order('name')
           ]);

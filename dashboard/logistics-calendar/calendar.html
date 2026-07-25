@@ -682,6 +682,7 @@
             // 2. Load inventory transactions (customer orders) for activeRefIds
             const { data: txs, error: txErr } = await sb.from('inventory_transactions')
               .select('*')
+              .eq('company_id', this.companyId)
               .eq('type', 'customer_order')
               .in('reference_id', activeRefIds);
             if (txErr) throw txErr;
@@ -690,6 +691,7 @@
             // 3. Load delivery bookings for activeRefIds
             const { data: dbData, error: dbErr } = await sb.from('delivery_bookings')
               .select('*')
+              .eq('company_id', this.companyId)
               .in('reference_id', activeRefIds);
             if (dbErr) throw dbErr;
             this.deliveryBookings = dbData || [];
@@ -697,6 +699,7 @@
             // 4. Load installation bookings for activeRefIds
             const { data: bData, error: bErr } = await sb.from('installation_bookings')
               .select('*')
+              .eq('company_id', this.companyId)
               .in('order_no', activeRefIds);
             if (bErr) throw bErr;
             this.installationBookings = bData || [];
@@ -709,7 +712,8 @@
           // 5. Load products (static catalog lookup cache)
           if (!this.products || this.products.length === 0) {
             const { data: pData, error: pErr } = await sb.from('products')
-              .select('id, sku, title');
+              .select('id, sku, title')
+              .or(`company_id.eq.${this.companyId},company_id.is.null`);
             if (pErr) throw pErr;
             this.products = pData || [];
           }

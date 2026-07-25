@@ -12,28 +12,13 @@ async function handleLogin(e) {
   submitBtn.innerText = 'Verifying...';
 
   try {
-    // Fetch all active employees with full details
-    const { data: employees, error } = await sb
-      .from('employees')
-      .select('id, first_name, last_name, contact_number, emergency_contact_number, company_id, assignment, email, department, title, employment_status')
-      .eq('employment_status', 'Active');
+    const { data: matchingInstaller, error } = await sb
+      .rpc('authenticate_installer', {
+        p_password: enteredPass
+      })
+      .maybeSingle();
 
     if (error) throw error;
-
-    // Filter and verify installer password
-    const cleanEntered = enteredPass.trim().toLowerCase();
-    const matchingInstaller = (employees || []).find(emp => {
-      const empAssigns = (emp.assignment || '').split(',').map(s => s.trim().toLowerCase());
-      if (!empAssigns.includes('installer')) return false;
-
-      const firstInit = (emp.first_name || '').trim().charAt(0).toLowerCase();
-      const lastInit = (emp.last_name || '').trim().charAt(0).toLowerCase();
-      const emergencyPhone = (emp.emergency_contact_number || '').replace(/[^0-9]/g, '');
-      const last4 = emergencyPhone.slice(-4);
-
-      const derivedPass = `${firstInit}${lastInit}${last4}`;
-      return cleanEntered === derivedPass;
-    });
 
     if (matchingInstaller) {
       currentInstaller = {

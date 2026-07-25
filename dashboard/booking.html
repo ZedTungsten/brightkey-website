@@ -1045,9 +1045,15 @@
           }
 
           const [productsRes, inventoryRes, employeesRes, assignmentsRes, warehousesRes] = await Promise.all([
-            sb.from('products').select('sku, title, image_main, installation_price, count_inventory'),
-            sb.from('inventory').select('sku, available, warehouse_id'),
-            sb.from('employees').select('id, employee_number, first_name, last_name, title, department, assignment, address'),
+            sb.from('products')
+              .select('id, sku, title, image_main, installation_price, count_inventory')
+              .or(`company_id.eq.${currentCompanyId},company_id.is.null`),
+            sb.from('inventory')
+              .select('sku, available, warehouse_id')
+              .eq('company_id', currentCompanyId),
+            sb.from('employees')
+              .select('id, employee_number, first_name, last_name, title, department, assignment, address')
+              .eq('company_id', currentCompanyId),
             sb.from('employee_assignments').select('id, name, visibility').eq('company_id', currentCompanyId || ''),
             sb.from('warehouses').select('id, name').eq('tenant_id', tenantId).eq('is_active', true).order('created_at', { ascending: true })
           ]);

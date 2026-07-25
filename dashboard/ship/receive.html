@@ -552,6 +552,7 @@
 
     const DeliveryApp = {
       currentUser: null,
+      tenantId: null,
       companyId: null,
       activeTransactions: [],
       bookings: [],
@@ -575,6 +576,7 @@
         if (!authInfo) return;
 
         this.currentUser = authInfo.user;
+        this.tenantId = authInfo.tenantId;
         this.companyId = await this.getCompanyId(authInfo.tenantId);
 
         if (this.companyId) {
@@ -599,34 +601,44 @@
           
           const { data: txs, error: txErr } = await sb.from('inventory_transactions')
             .select('*')
-            .in('type', ['customer_order', 'supplier_order']);
+            .eq('company_id', this.companyId)
+            .in('type', ['customer_order', 'supplier_order'])
+            .in('status', ['packed', 'reserved', 'inspect', 'ordered'])
+            .range(0, 499);
           if (txErr) throw txErr;
           this.activeTransactions = txs || [];
 
           const { data: bData, error: bErr } = await sb.from('installation_bookings')
-            .select('order_no, scheduled_date, customer_address, customer_phone');
+            .select('order_no, scheduled_date, customer_address, customer_phone')
+            .eq('company_id', this.companyId);
           if (bErr) throw bErr;
           this.bookings = bData || [];
 
           const { data: dbData, error: dbErr } = await sb.from('delivery_bookings')
             .select('*')
-            .order('created_at', { ascending: false });
+            .eq('company_id', this.companyId)
+            .order('created_at', { ascending: false })
+            .range(0, 499);
           if (dbErr) throw dbErr;
           this.deliveryBookings = dbData || [];
 
           const { data: pData, error: pErr } = await sb.from('products')
             .select('id, sku, title')
+            .or(`company_id.eq.${this.companyId},company_id.is.null`)
             .order('sku');
           if (pErr) throw pErr;
           this.allProducts = pData || [];
 
           const { data: wData, error: wErr } = await sb.from('warehouses')
             .select('id, name')
+            .eq('tenant_id', this.tenantId)
             .order('name');
           if (wErr) throw wErr;
           this.warehouses = wData || [];
 
-          const { data: supsData, error: supsErr } = await sb.from('suppliers').select('id, name, city');
+          const { data: supsData, error: supsErr } = await sb.from('suppliers')
+            .select('id, name, city')
+            .eq('company_id', this.companyId);
           if (supsErr) throw supsErr;
           this.suppliers = supsData || [];
 

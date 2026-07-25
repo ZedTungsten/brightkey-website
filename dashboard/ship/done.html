@@ -548,18 +548,25 @@
           
           const { data: txs, error: txErr } = await sb.from('inventory_transactions')
             .select('*')
-            .in('type', ['customer_order', 'supplier_order']);
+            .eq('company_id', this.companyId)
+            .in('type', ['customer_order', 'supplier_order'])
+            .in('status', ['packed', 'reserved', 'inspect', 'ordered', 'dispatched', 'received'])
+            .range(0, 499);
           if (txErr) throw txErr;
           this.activeTransactions = txs || [];
 
           const { data: dbData, error: dbErr } = await sb.from('delivery_bookings')
             .select('*')
-            .order('created_at', { ascending: false });
+            .eq('company_id', this.companyId)
+            .order('created_at', { ascending: false })
+            .range(0, 499);
           if (dbErr) throw dbErr;
           this.deliveryBookings = dbData || [];
 
           try {
-            const { data: sups } = await sb.from('suppliers').select('name, city');
+            const { data: sups } = await sb.from('suppliers')
+              .select('name, city')
+              .eq('company_id', this.companyId);
             this.suppliers = sups || [];
           } catch (supErr) {
             console.warn('Could not load suppliers:', supErr);

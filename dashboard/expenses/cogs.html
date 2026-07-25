@@ -396,7 +396,9 @@
 
           try {
             const [productsRes, bookingsRes, accountsRes, journalRes, dispatchedTxRes, deliveryRes, empRes, configRes, payoutSetRes, commRes, allBookingsRes, payslipRes, adjustmentsRes] = await Promise.all([
-              sb.from('products').select('id, sku, title, dealer_price, count_inventory, category'),
+              sb.from('products')
+                .select('id, sku, title, dealer_price, count_inventory, category')
+                .or(`company_id.eq.${this.companyId},company_id.is.null`),
               sb.from('installation_bookings')
                 .select('scheduled_date, order_no, status, product_skus, product_qtys')
                 .eq('company_id', this.companyId)
@@ -413,11 +415,13 @@
                 .lte('date', endDate),
               sb.from('inventory_transactions')
                 .select('reference_id, customer_name, timestamp_dispatched')
+                .eq('company_id', this.companyId)
                 .not('timestamp_dispatched', 'is', null)
                 .gte('timestamp_dispatched', startDate + 'T00:00:00')
                 .lte('timestamp_dispatched', endDate + 'T23:59:59'),
               sb.from('delivery_bookings')
-                .select('reference_id, customer_name, base_fee, tip_1, tip_2, toll'),
+                .select('reference_id, customer_name, base_fee, tip_1, tip_2, toll')
+                .eq('company_id', this.companyId),
               sb.from('employees')
                 .select('id, first_name, last_name, salary, employment_status')
                 .eq('company_id', this.companyId),

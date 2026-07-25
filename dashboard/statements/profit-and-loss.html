@@ -886,7 +886,9 @@
                 deliveryRes,
                 supplierCostAdjustmentsRes
               ] = await Promise.all([
-                sb.from('products').select('id, sku, dealer_price, sale_price'),
+                sb.from('products')
+                  .select('id, sku, dealer_price, sale_price')
+                  .or(`company_id.eq.${this.companyId},company_id.is.null`),
                 sb.from('installation_bookings')
                   .select('id, created_at, scheduled_date, order_no, grand_total, deposit_amount, balance_due, deduction_labels, deduction_values, status, product_skus, product_qtys, doors, installers, installer_id, products')
                   .eq('company_id', this.companyId)
@@ -913,11 +915,13 @@
                 sb.from('global_settings').select('value').eq('key', 'special_payout_state').eq('company_id', this.companyId).maybeSingle(),
                 sb.from('inventory_transactions')
                   .select('reference_id, customer_name, timestamp_dispatched')
+                  .eq('company_id', this.companyId)
                   .not('timestamp_dispatched', 'is', null)
                   .gte('timestamp_dispatched', startRange + 'T00:00:00')
                   .lte('timestamp_dispatched', endRange + 'T23:59:59'),
                 sb.from('delivery_bookings')
-                  .select('reference_id, customer_name, base_fee, tip_1, tip_2, toll'),
+                  .select('reference_id, customer_name, base_fee, tip_1, tip_2, toll')
+                  .eq('company_id', this.companyId),
                 sb.from('supplier_cost_adjustments')
                   .select('*')
                   .eq('company_id', this.companyId)

@@ -694,6 +694,8 @@
       const filterYear = currentDate.getFullYear();
       const filterMonth = currentDate.getMonth() + 1; // 1-indexed
       const selectedMonth = `${filterYear}-${String(filterMonth).padStart(2, '0')}`;
+      const monthStart = new Date(filterYear, filterMonth - 1, 1).toISOString();
+      const monthEnd = new Date(filterYear, filterMonth, 1).toISOString();
 
       let invQuery = sb.from('inventory').select('*');
       if (companyId) invQuery = invQuery.or(`company_id.eq.${companyId},company_id.is.null`);
@@ -705,19 +707,25 @@
 
       let txQuery = sb.from('inventory_transactions').select('*').order('created_at', { ascending: false });
       if (companyId) txQuery = txQuery.or(`company_id.eq.${companyId},company_id.is.null`);
+      txQuery = txQuery.gte('created_at', monthStart).lt('created_at', monthEnd);
       if (activeWarehouseId) {
         txQuery = txQuery.eq('warehouse_id', activeWarehouseId);
       } else {
         txQuery = txQuery.is('warehouse_id', null);
       }
-      txQuery = txQuery.range(0, 999);
+      txQuery = txQuery.range(0, 249);
 
       const deliveryQuery = companyId
-        ? sb.from('delivery_bookings').select('*').eq('company_id', companyId)
+        ? sb.from('delivery_bookings').select('*').eq('company_id', companyId).range(0, 249)
         : Promise.resolve({ data: [], error: null });
 
       const installQuery = companyId
-        ? sb.from('installation_bookings').select('order_no, scheduled_date, customer_address, customer_phone').eq('company_id', companyId)
+        ? sb.from('installation_bookings')
+          .select('order_no, scheduled_date, customer_address, customer_phone')
+          .eq('company_id', companyId)
+          .gte('scheduled_date', monthStart.slice(0, 10))
+          .lt('scheduled_date', monthEnd.slice(0, 10))
+          .range(0, 249)
         : Promise.resolve({ data: [], error: null });
 
       const suppliersQuery = sb.from('suppliers').select('name, city');
