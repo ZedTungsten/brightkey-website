@@ -117,15 +117,13 @@
       '[class*="notification-"]',
       '.error',
       '[class*="-error"]',
-      '[class*="error-"]',
-      '[style*="var(--danger)"]'
+      '[class*="error-"]'
     ].join(',');
     const candidates = [root, ...root.querySelectorAll(selector)];
     candidates.forEach(candidate => {
       const classes = String(candidate.className || '').toLowerCase();
-      const style = String(candidate.getAttribute?.('style') || '').toLowerCase();
       const isToast = classes.includes('toast') || classes.includes('notification');
-      const isErrorState = classes.includes('error') || classes.includes('danger') || style.includes('var(--danger)');
+      const isErrorState = classes.includes('error') || classes.includes('danger');
       if (!isErrorState || (isToast && !classes.includes('error') && !classes.includes('danger'))) return;
       const safe = friendlyError(candidate.textContent);
       if (safe && safe !== candidate.textContent) candidate.textContent = safe;
