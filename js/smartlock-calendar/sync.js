@@ -53,19 +53,6 @@ async function syncData() {
   banner.classList.remove('offline');
 
   try {
-    // Fetch fresh installer record
-    const { data: freshEmp } = await sb
-      .from('employees')
-      .select('id, first_name, last_name, contact_number, company_id, assignment, email, department, title, employment_status, salary, date_hired, shift_days')
-      .eq('id', currentInstaller.id)
-      .maybeSingle();
-    if (freshEmp) {
-      currentInstaller = freshEmp;
-      localStorage.setItem('bk_active_installer', JSON.stringify(freshEmp));
-      document.getElementById('display-installer-name').innerText = `${currentInstaller.first_name} ${currentInstaller.last_name}`;
-      populateProfile();
-    }
-
     // Fetch booking checklist
     const { data: checklistRes } = await sb
       .from('global_settings')
@@ -155,19 +142,18 @@ async function syncData() {
     }
 
     // Fetch bookings for this company
-    const { data, error } = await sb
-      .from('installation_bookings')
-      .select('*')
-      .eq('company_id', currentInstaller.company_id);
+    const { data, error } = await sb.rpc('get_installer_bookings', {
+      p_token: getInstallerSessionToken()
+    });
 
     if (error) throw error;
 
     // Fetch delivery bookings to map order_no/reference_id to status
     try {
       const { data: delivData } = await sb
-        .from('delivery_bookings')
-        .select('reference_id, status')
-        .eq('company_id', currentInstaller.company_id);
+        .rpc('get_installer_delivery_statuses', {
+          p_token: getInstallerSessionToken()
+        });
       deliveryBookingsMap = {};
       if (delivData) {
         delivData.forEach(d => {

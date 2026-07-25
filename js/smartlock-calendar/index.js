@@ -26,6 +26,10 @@ const defaultChecklist = [
 let bookingChecklist = [...defaultChecklist];
 let bookingMediaRequirements = [];
 
+function getInstallerSessionToken() {
+  return sessionStorage.getItem('bk_installer_session');
+}
+
 let selectedBooking = null;
 let activeDate = new Date(); // selected day
 let currentYear = activeDate.getFullYear();
@@ -154,12 +158,14 @@ window.performAddLabor = async function(pricePhp, doorIdx) {
   };
 
   try {
-    const { error } = await sb
-      .from('installation_bookings')
-      .update(updatePayload)
-      .eq('id', selectedBooking.id);
+    const { data: updated, error } = await sb.rpc('update_installer_booking', {
+      p_token: getInstallerSessionToken(),
+      p_booking_id: selectedBooking.id,
+      p_changes: updatePayload
+    });
 
     if (error) throw error;
+    if (!updated) throw new Error('Installer session expired');
 
     // Update local memory states
     const idx = dbBookings.findIndex(b => b.id === selectedBooking.id);
@@ -192,7 +198,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   // 2. Check if installer is already saved in session/local storage
   const savedInstaller = localStorage.getItem('bk_active_installer');
-  if (savedInstaller) {
+  const installerSession = getInstallerSessionToken();
+  if (savedInstaller && installerSession) {
     try {
       currentInstaller = JSON.parse(savedInstaller);
       document.getElementById('display-installer-name').innerText = `${currentInstaller.first_name} ${currentInstaller.last_name}`;
@@ -208,6 +215,9 @@ document.addEventListener("DOMContentLoaded", async () => {
       await syncData();
     } catch (_) {
       localStorage.removeItem('bk_active_installer');
+      sessionStorage.removeItem('bk_installer_session');
     }
+  } else if (savedInstaller) {
+    localStorage.removeItem('bk_active_installer');
   }
 });

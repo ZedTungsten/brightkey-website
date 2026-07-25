@@ -119,20 +119,22 @@ window.markEventDoorDone = async function(doorIndex, buttonEl) {
 
   try {
     // Fetch fresh doors array from DB first to prevent concurrent overwrite
-    const { data: freshBooking, error: fetchErr } = await sb
-      .from('installation_bookings')
-      .select('doors')
-      .eq('id', selectedBooking.id)
-      .single();
+    const { data: freshDoors, error: fetchErr } = await sb.rpc(
+      'get_installer_booking_doors',
+      {
+        p_token: getInstallerSessionToken(),
+        p_booking_id: selectedBooking.id
+      }
+    );
 
     if (fetchErr) throw fetchErr;
 
     let doorsArr = [];
-    if (freshBooking && freshBooking.doors) {
-      if (typeof freshBooking.doors === 'string') {
-        try { doorsArr = JSON.parse(freshBooking.doors); } catch(_) {}
-      } else if (Array.isArray(freshBooking.doors)) {
-        doorsArr = freshBooking.doors;
+    if (freshDoors) {
+      if (typeof freshDoors === 'string') {
+        try { doorsArr = JSON.parse(freshDoors); } catch(_) {}
+      } else if (Array.isArray(freshDoors)) {
+        doorsArr = freshDoors;
       }
     }
 
@@ -161,12 +163,14 @@ window.markEventDoorDone = async function(doorIndex, buttonEl) {
       updatePayload.status = 'completed';
     }
 
-    const { error } = await sb
-      .from('installation_bookings')
-      .update(updatePayload)
-      .eq('id', selectedBooking.id);
+    const { data: updated, error } = await sb.rpc('update_installer_booking', {
+      p_token: getInstallerSessionToken(),
+      p_booking_id: selectedBooking.id,
+      p_changes: updatePayload
+    });
 
     if (error) throw error;
+    if (!updated) throw new Error('Installer session expired');
 
     const idx = dbBookings.findIndex(b => b.id === selectedBooking.id);
     if (idx !== -1) {
@@ -317,20 +321,22 @@ window.submitChecklist = async function() {
 
   try {
     // Fetch fresh doors array from DB first to prevent concurrent overwrite
-    const { data: freshBooking, error: fetchErr } = await sb
-      .from('installation_bookings')
-      .select('doors')
-      .eq('id', selectedBooking.id)
-      .single();
+    const { data: freshDoors, error: fetchErr } = await sb.rpc(
+      'get_installer_booking_doors',
+      {
+        p_token: getInstallerSessionToken(),
+        p_booking_id: selectedBooking.id
+      }
+    );
 
     if (fetchErr) throw fetchErr;
 
     let doorsArr = [];
-    if (freshBooking && freshBooking.doors) {
-      if (typeof freshBooking.doors === 'string') {
-        try { doorsArr = JSON.parse(freshBooking.doors); } catch(_) {}
-      } else if (Array.isArray(freshBooking.doors)) {
-        doorsArr = freshBooking.doors;
+    if (freshDoors) {
+      if (typeof freshDoors === 'string') {
+        try { doorsArr = JSON.parse(freshDoors); } catch(_) {}
+      } else if (Array.isArray(freshDoors)) {
+        doorsArr = freshDoors;
       }
     }
 
@@ -367,12 +373,14 @@ window.submitChecklist = async function() {
       updatePayload.status = 'completed';
     }
 
-    const { error } = await sb
-      .from('installation_bookings')
-      .update(updatePayload)
-      .eq('id', selectedBooking.id);
+    const { data: updated, error } = await sb.rpc('update_installer_booking', {
+      p_token: getInstallerSessionToken(),
+      p_booking_id: selectedBooking.id,
+      p_changes: updatePayload
+    });
 
     if (error) throw error;
+    if (!updated) throw new Error('Installer session expired');
 
     // Update local memory
     const idx = dbBookings.findIndex(b => b.id === selectedBooking.id);

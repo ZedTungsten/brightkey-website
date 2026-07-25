@@ -12,15 +12,17 @@ async function handleLogin(e) {
   submitBtn.innerText = 'Verifying...';
 
   try {
-    const { data: matchingInstaller, error } = await sb
-      .rpc('authenticate_installer', {
+    const { data: authenticatedInstaller, error } = await sb
+      .rpc('create_installer_session', {
         p_password: enteredPass
       })
       .maybeSingle();
 
     if (error) throw error;
 
-    if (matchingInstaller) {
+    if (authenticatedInstaller) {
+      const { session_token: sessionToken, ...matchingInstaller } = authenticatedInstaller;
+      sessionStorage.setItem('bk_installer_session', sessionToken);
       currentInstaller = {
         id: matchingInstaller.id,
         first_name: matchingInstaller.first_name,
@@ -59,6 +61,7 @@ async function handleLogin(e) {
 }
 
 function handleLogout() {
+  sessionStorage.removeItem('bk_installer_session');
   localStorage.removeItem('bk_active_installer');
   localStorage.removeItem(`bk_cache_${currentInstaller?.id}`);
   currentInstaller = null;
