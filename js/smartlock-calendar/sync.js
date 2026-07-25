@@ -53,6 +53,18 @@ async function syncData() {
   banner.classList.remove('offline');
 
   try {
+    const { data: payoutProfile, error: payoutProfileError } = await sb
+      .rpc('get_installer_payout_profile', {
+        p_token: getInstallerSessionToken()
+      })
+      .maybeSingle();
+
+    if (payoutProfileError) throw payoutProfileError;
+    if (!payoutProfile) throw new Error('Installer session expired');
+
+    Object.assign(currentInstaller, payoutProfile);
+    localStorage.setItem('bk_active_installer', JSON.stringify(currentInstaller));
+
     // Fetch booking checklist
     const { data: checklistRes } = await sb
       .from('global_settings')
