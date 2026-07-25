@@ -1573,22 +1573,29 @@
         if (glReimbursement) breakdownRows += row('Reimbursement', 'General ledger reimbursement', glReimbursement);
         if (cashAdvance) breakdownRows += row('Cash Advance', 'General ledger cash advance', -cashAdvance);
 
-        const cutoffValues = schedules.map(day => (
-          this.getProratedSalaryAllocation(emp, day, schedules, mk).value
+        const scheduleRows = schedules.map(day => ({
+          day,
+          order: 1,
+          label: `Cutoff Payout (Day ${day})`,
+          value: this.getProratedSalaryAllocation(emp, day, schedules, mk).value
             + this._adjsForSchedule(empId, day, mk, schedules)
             + (isOwner ? 0 : this._commsForSchedule(empId, day, mk, schedules))
             + (installationPayouts.cutoffPayouts[day] || 0)
             + (isOwner ? 0 : this._glAdditionsForSchedule(empId, day, mk, schedules))
             - (isOwner ? 0 : this._glDeductionsForSchedule(empId, day, mk, schedules))
-        ));
+        }));
+        const specialByDay = new Map();
         specialSchedules.forEach(item => {
-          const index = schedules.findIndex(day => Number(item.day) <= day);
-          const targetIndex = index === -1 ? schedules.length - 1 : index;
-          if (targetIndex >= 0) cutoffValues[targetIndex] += Number(item.value) || 0;
+          const day = Number(item.day) || 1;
+          specialByDay.set(day, (specialByDay.get(day) || 0) + (Number(item.value) || 0));
         });
-        const cutoffHtml = schedules.map((day, index) => {
-          return `<div style="display:flex;justify-content:space-between;padding:0.5rem 0;font-size:0.85rem;border-bottom:1px dashed #e5e7eb;"><span style="font-weight:500;color:#4b5563;">Cutoff Payout (Day ${day})</span><span style="font-weight:700;color:#111827;font-variant-numeric:tabular-nums;margin-right:12px;">${peso(cutoffValues[index])}</span></div>`;
-        }).join('');
+        specialByDay.forEach((value, day) => {
+          scheduleRows.push({ day, order: 0, label: `Special Payout (Day ${day})`, value });
+        });
+        const cutoffHtml = scheduleRows
+          .sort((a, b) => a.day - b.day || a.order - b.order)
+          .map(item => `<div style="display:flex;justify-content:space-between;padding:0.5rem 0;font-size:0.85rem;border-bottom:1px dashed #e5e7eb;"><span style="font-weight:500;color:#4b5563;">${esc(item.label)}</span><span style="font-weight:700;color:#111827;font-variant-numeric:tabular-nums;margin-right:12px;">${peso(item.value)}</span></div>`)
+          .join('');
 
         let department = emp.department || '—';
         const matchedDepartment = (this.companyStructure?.departments || []).find(dept => dept.managerId === empId || (dept.subteams || []).some(team => team.managerId === empId || (team.colleagueIds || []).includes(empId)));
