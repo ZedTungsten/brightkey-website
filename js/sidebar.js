@@ -3,6 +3,13 @@
 
   let activeCompanyId = null;
 
+  function shouldCheckIncompleteCommissions() {
+    const path = window.location.pathname.replace(/\/+$/, '');
+    return path === '/dashboard/sales-goals/commissions'
+      || path === '/dashboard/sales-commissions'
+      || path === '/dashboard/payout-tracker/commissions';
+  }
+
   async function checkIncompleteCommissions(companyId) {
     if (!companyId) return;
     const sb = window.BKAuth?.sb;
@@ -13,7 +20,7 @@
       const [bookingsRes, configRes, productsRes, assignmentsRes] = await Promise.all([
         sb.from('installation_bookings').select('id, status, doors, product_skus, product_qtys').eq('company_id', companyId).neq('status', 'cancelled'),
         sb.from('global_settings').select('value').eq('key', 'commissions_config').eq('company_id', companyId).maybeSingle(),
-        sb.from('products').select('sku, business, category, tags'),
+        sb.from('products').select('id, sku, business, category, tags').or(`company_id.eq.${companyId},company_id.is.null`),
         sb.from('commission_assignments').select('booking_id, sku, product_index, rate_label, employee_id').eq('company_id', companyId)
       ]);
 
@@ -130,7 +137,7 @@
   }
 
   window.BKRefreshCommissionsBadge = function() {
-    if (activeCompanyId) {
+    if (activeCompanyId && shouldCheckIncompleteCommissions()) {
       checkIncompleteCommissions(activeCompanyId);
     }
   };
@@ -922,7 +929,9 @@
               if (activeCompanyId) {
                 // Move expensive badge checks off the initial-load path (delay by 2s)
                 setTimeout(() => {
-                  checkIncompleteCommissions(activeCompanyId);
+                  if (shouldCheckIncompleteCommissions()) {
+                    checkIncompleteCommissions(activeCompanyId);
+                  }
                   checkPendingShipments(activeCompanyId);
                   checkPendingWarehouse(activeCompanyId);
                 }, 2000);

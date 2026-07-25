@@ -970,7 +970,8 @@
 
       const { data, error } = await sb
         .from('products')
-        .select('sku, title, category, business, image_main, dealer_price, count_inventory')
+        .select('id, sku, title, category, business, image_main, dealer_price, count_inventory')
+        .or(`company_id.eq.${companyId},company_id.is.null`)
         .in('sku', missingSkus);
       if (error) throw error;
 
@@ -996,6 +997,7 @@
     async function performDashboardRefresh() {
       // 2. Fetch inventory snapshot — scoped to active warehouse
       let invQuery = sb.from('inventory').select('*');
+      if (companyId) invQuery = invQuery.or(`company_id.eq.${companyId},company_id.is.null`);
       if (activeWarehouseId) {
         invQuery = invQuery.eq('warehouse_id', activeWarehouseId);
       } else {
@@ -1004,18 +1006,20 @@
 
       // 3. Fetch transactions — scoped to active warehouse
       let txQuery = sb.from('inventory_transactions').select('*').order('created_at', { ascending: false });
+      if (companyId) txQuery = txQuery.or(`company_id.eq.${companyId},company_id.is.null`);
       if (activeWarehouseId) {
         txQuery = txQuery.eq('warehouse_id', activeWarehouseId);
       } else {
         txQuery = txQuery.is('warehouse_id', null);
       }
+      txQuery = txQuery.range(0, 999);
 
       const transferQuery = companyId
-        ? sb.from('warehouse_transfers').select('*')
+        ? sb.from('warehouse_transfers').select('*').eq('company_id', companyId)
         : Promise.resolve({ data: [], error: null });
 
       const deliveryQuery = companyId
-        ? sb.from('delivery_bookings').select('*')
+        ? sb.from('delivery_bookings').select('*').eq('company_id', companyId)
         : Promise.resolve({ data: [], error: null });
 
       const [
@@ -2486,6 +2490,7 @@
         // Query products
         let prodQuery = sb.from('products')
           .select('id, sku, title, category, business, image_main, count_inventory', { count: 'exact' })
+          .or(`company_id.eq.${companyId},company_id.is.null`)
           .or('count_inventory.is.null,count_inventory.neq.false');
 
         if (statsSearch) {
@@ -2519,7 +2524,13 @@
         let txQuery = sb.from('inventory_transactions')
           .select('sku, quantity, status, timestamp_reserved, timestamp_dispatched, timestamp_returned, timestamp_cancelled')
           .in('sku', targetSkus)
-          .or(`created_at.gte.${startDate},updated_at.gte.${startDate},timestamp_reserved.gte.${startDate},timestamp_dispatched.gte.${startDate},timestamp_returned.gte.${startDate},timestamp_cancelled.gte.${startDate}`);
+          .or([
+            `and(timestamp_reserved.gte.${startDate},timestamp_reserved.lt.${endDate})`,
+            `and(timestamp_dispatched.gte.${startDate},timestamp_dispatched.lt.${endDate})`,
+            `and(timestamp_returned.gte.${startDate},timestamp_returned.lt.${endDate})`,
+            `and(timestamp_cancelled.gte.${startDate},timestamp_cancelled.lt.${endDate})`
+          ].join(','))
+          .range(0, 4999);
 
         if (activeWarehouseId) {
           txQuery = txQuery.eq('warehouse_id', activeWarehouseId);

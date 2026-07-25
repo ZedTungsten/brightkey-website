@@ -678,7 +678,11 @@
     }
 
     async function loadCoreData() {
-      const { data: pData, error: pErr } = await sb.from('products').select('id, sku, title, category, business, image_main, dealer_price, count_inventory').order('sku');
+      const { data: pData, error: pErr } = await sb
+        .from('products')
+        .select('id, sku, title, category, business, image_main, dealer_price, count_inventory')
+        .or(`company_id.eq.${companyId},company_id.is.null`)
+        .order('sku');
       if (pErr) throw pErr;
       allProducts = pData || [];
     }
@@ -692,6 +696,7 @@
       const selectedMonth = `${filterYear}-${String(filterMonth).padStart(2, '0')}`;
 
       let invQuery = sb.from('inventory').select('*');
+      if (companyId) invQuery = invQuery.or(`company_id.eq.${companyId},company_id.is.null`);
       if (activeWarehouseId) {
         invQuery = invQuery.eq('warehouse_id', activeWarehouseId);
       } else {
@@ -699,18 +704,20 @@
       }
 
       let txQuery = sb.from('inventory_transactions').select('*').order('created_at', { ascending: false });
+      if (companyId) txQuery = txQuery.or(`company_id.eq.${companyId},company_id.is.null`);
       if (activeWarehouseId) {
         txQuery = txQuery.eq('warehouse_id', activeWarehouseId);
       } else {
         txQuery = txQuery.is('warehouse_id', null);
       }
+      txQuery = txQuery.range(0, 999);
 
       const deliveryQuery = companyId
-        ? sb.from('delivery_bookings').select('*')
+        ? sb.from('delivery_bookings').select('*').eq('company_id', companyId)
         : Promise.resolve({ data: [], error: null });
 
       const installQuery = companyId
-        ? sb.from('installation_bookings').select('order_no, scheduled_date, customer_address, customer_phone')
+        ? sb.from('installation_bookings').select('order_no, scheduled_date, customer_address, customer_phone').eq('company_id', companyId)
         : Promise.resolve({ data: [], error: null });
 
       const suppliersQuery = sb.from('suppliers').select('name, city');

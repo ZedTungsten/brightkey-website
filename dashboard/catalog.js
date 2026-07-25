@@ -359,7 +359,12 @@
   async function fetchProducts() {
     const tbody = document.getElementById('products-body');
     tbody.innerHTML = `<tr><td colspan="13" style="padding:2rem;text-align:center;color:var(--text-muted)">Loading…</td></tr>`;
-    const { data, error } = await sbClient.from('products').select('*').order('created_at', { ascending: false });
+    if (!currentCompanyId) return;
+    const { data, error } = await sbClient
+      .from('products')
+      .select('*')
+      .or(`company_id.eq.${currentCompanyId},company_id.is.null`)
+      .order('created_at', { ascending: false });
     if (error) {
       tbody.innerHTML = `<tr><td colspan="13" style="padding:2rem;text-align:center;color:var(--danger)">Error: ${esc(error.message)}</td></tr>`;
       return;
@@ -2096,7 +2101,13 @@
       // Dynamically load feature definitions from the database based on Tenants settings
       if (currentCompanyId) {
         const { data: businesses } = await window.BKAuth.sb.from('tenant_businesses').select('id, name').eq('company_id', currentCompanyId);
-        const { data: dbFeatures } = await window.BKAuth.sb.from('business_features').select('business_id, name, display_name');
+        const businessIds = (businesses || []).map(business => business.id);
+        const { data: dbFeatures } = businessIds.length
+          ? await window.BKAuth.sb
+            .from('business_features')
+            .select('business_id, name, display_name')
+            .in('business_id', businessIds)
+          : { data: [] };
 
         if (businesses && dbFeatures) {
           // Dynamically populate filter-business and f-business dropdowns from tenant_businesses

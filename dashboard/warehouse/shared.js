@@ -287,18 +287,32 @@ window.WarehousePage = {
   // 13. AutoSync Bookings
   runAutoSync: async function() {
     let didChange = false;
-    const { data: bData, error: bErr } = await this.sb.from('installation_bookings').select('*').neq('status', 'completed');
+    const { data: bData, error: bErr } = await this.sb
+      .from('installation_bookings')
+      .select('id, order_no, customer_name, customer_city, customer_address, status')
+      .eq('company_id', this.companyId)
+      .neq('status', 'completed')
+      .range(0, 999);
     if (bErr) throw bErr;
     this.bookings = bData || [];
 
     try {
-      const { data: delivData } = await this.sb.from('delivery_bookings').select('*');
+      const { data: delivData } = await this.sb
+        .from('delivery_bookings')
+        .select('id, reference_id, customer_name')
+        .eq('company_id', this.companyId)
+        .range(0, 999);
       this.deliveryBookings = delivData || [];
     } catch (e) {
       console.warn('Failed to load delivery bookings in shared.js:', e);
     }
 
-    const { data: txRefs, error: refErr } = await this.sb.from('inventory_transactions').select('reference_id, status').eq('type', 'customer_order');
+    const { data: txRefs, error: refErr } = await this.sb
+      .from('inventory_transactions')
+      .select('reference_id, status')
+      .or(`company_id.eq.${this.companyId},company_id.is.null`)
+      .eq('type', 'customer_order')
+      .range(0, 999);
     if (refErr) throw refErr;
 
     const existingRefs = {};
@@ -326,9 +340,12 @@ window.WarehousePage = {
       const wrongCityTxs = this.activeTransactions.filter(t =>
         t.reference_id === orderNo && t.customer_city !== city
       );
-      for (const tx of wrongCityTxs) {
-        await this.sb.from('inventory_transactions').update({ customer_city: city }).eq('id', tx.id);
-        tx.customer_city = city;
+      if (wrongCityTxs.length > 0) {
+        await this.sb
+          .from('inventory_transactions')
+          .update({ customer_city: city })
+          .in('id', wrongCityTxs.map(tx => tx.id));
+        wrongCityTxs.forEach(tx => { tx.customer_city = city; });
         didChange = true;
       }
 
@@ -338,9 +355,12 @@ window.WarehousePage = {
         const wrongNameTxs = this.activeTransactions.filter(t =>
           t.reference_id === orderNo && t.customer_name !== bookingName
         );
-        for (const tx of wrongNameTxs) {
-          await this.sb.from('inventory_transactions').update({ customer_name: bookingName }).eq('id', tx.id);
-          tx.customer_name = bookingName;
+        if (wrongNameTxs.length > 0) {
+          await this.sb
+            .from('inventory_transactions')
+            .update({ customer_name: bookingName })
+            .in('id', wrongNameTxs.map(tx => tx.id));
+          wrongNameTxs.forEach(tx => { tx.customer_name = bookingName; });
           didChange = true;
         }
 
@@ -348,9 +368,12 @@ window.WarehousePage = {
         const wrongNameDb = (this.deliveryBookings || []).filter(db =>
           db.reference_id === orderNo && db.customer_name !== bookingName
         );
-        for (const db of wrongNameDb) {
-          await this.sb.from('delivery_bookings').update({ customer_name: bookingName }).eq('id', db.id);
-          db.customer_name = bookingName;
+        if (wrongNameDb.length > 0) {
+          await this.sb
+            .from('delivery_bookings')
+            .update({ customer_name: bookingName })
+            .in('id', wrongNameDb.map(db => db.id));
+          wrongNameDb.forEach(db => { db.customer_name = bookingName; });
           didChange = true;
         }
       }
