@@ -507,10 +507,16 @@
             <div class="panel-title">Customer Information</div>
             <div class="form-row" style="margin-bottom: 1rem;">
               <div class="form-group" style="grid-column: span 2; display: flex; flex-direction: column; gap: 0.5rem;">
-                <label style="display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; font-weight: 600; color: var(--text-primary); cursor: pointer; user-select: none;">
-                  <input type="checkbox" id="prev-cust-checkbox" onchange="togglePrevCustomerFields(this)" style="cursor: pointer;" />
-                  Previous Customer
-                </label>
+                <div style="display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap;">
+                  <label style="display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; font-weight: 600; color: var(--text-primary); cursor: pointer; user-select: none;">
+                    <input type="checkbox" id="prev-cust-checkbox" onchange="togglePrevCustomerFields(this)" style="cursor: pointer;" />
+                    Previous Customer
+                  </label>
+                  <label style="display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; font-weight: 600; color: var(--text-primary); cursor: pointer; user-select: none;">
+                    <input type="checkbox" id="company-office-checkbox" onchange="toggleCompanyOfficeMode(this.checked)" style="cursor: pointer;" />
+                    Company / Office
+                  </label>
+                </div>
                 <div id="prev-customer-fields" style="display: none; gap: 0.75rem; width: 100%;">
                   <div style="flex: 1;">
                     <label class="form-label" style="font-size: 0.75rem;">Month & Year</label>
@@ -529,8 +535,26 @@
             </div>
             <div class="form-row">
               <div class="form-group">
-                <label class="form-label">Full Name <span style="color: var(--danger);">*</span></label>
-                <input type="text" class="form-input" id="cust-name" placeholder="e.g. Juan dela Cruz" required />
+                <label class="form-label" id="cust-first-name-label">First Name <span style="color: var(--danger);">*</span></label>
+                <input type="text" class="form-input" id="cust-first-name" placeholder="e.g. Juan" required />
+              </div>
+              <div class="form-group">
+                <label class="form-label" id="cust-last-name-label">Last Name <span style="color: var(--danger);">*</span></label>
+                <input type="text" class="form-input" id="cust-last-name" placeholder="e.g. dela Cruz" required />
+              </div>
+              <div class="form-group" id="company-type-group" style="display:none;">
+                <label class="form-label">Type of Company <span style="color: var(--danger);">*</span></label>
+                <select class="form-select" id="cust-company-type">
+                  <option value="" disabled selected hidden>Select company type</option>
+                  <option value="education">Education (daycares, schools, centers)</option>
+                  <option value="government">Government (LGU, NGO, barangay)</option>
+                  <option value="healthcare">Healthcare (clinics, hospitals)</option>
+                  <option value="hospitality">Hospitality (hotel, resort, bars, AirBNB)</option>
+                  <option value="manufacturing">Manufacturing (factories, plants)</option>
+                  <option value="offices">Offices (commercial, firms, corporate)</option>
+                  <option value="religious">Religious (churches, chapels)</option>
+                  <option value="retail">Retail (grocery, malls, stores)</option>
+                </select>
               </div>
               <div class="form-group">
                 <label class="form-label">Social Media Name (FB/IG)</label>
@@ -813,9 +837,10 @@
           try {
             const sb = window.BKAuth.sb;
             const { data, error } = await sb.from('installation_bookings')
-              .select('customer_name, customer_social, customer_email, customer_phone, customer_address, customer_city, customer_province, google_map_pin_url, scheduled_date, created_at')
+              .select('customer_name, customer_first_name, customer_last_name, customer_is_company, customer_company_name, customer_contact_person, customer_company_type, customer_social, customer_email, customer_phone, customer_address, customer_city, customer_province, google_map_pin_url, scheduled_date, created_at')
               .eq('company_id', currentCompanyId)
-              .order('scheduled_date', { ascending: false });
+              .order('scheduled_date', { ascending: false })
+              .limit(500);
             
             if (error) throw error;
             dbPreviousBookings = data || [];
@@ -867,6 +892,31 @@
       });
     }
 
+    function splitCustomerName(fullName) {
+      const parts = String(fullName || '').trim().split(/\s+/).filter(Boolean);
+      const lastName = parts.pop() || '';
+      return {
+        firstName: parts.join(' '),
+        lastName
+      };
+    }
+
+    function toggleCompanyOfficeMode(isCompany) {
+      const firstLabel = document.getElementById('cust-first-name-label');
+      const lastLabel = document.getElementById('cust-last-name-label');
+      const firstInput = document.getElementById('cust-first-name');
+      const lastInput = document.getElementById('cust-last-name');
+      const companyTypeGroup = document.getElementById('company-type-group');
+      const companyTypeSelect = document.getElementById('cust-company-type');
+
+      firstLabel.firstChild.textContent = isCompany ? 'Company Name ' : 'First Name ';
+      lastLabel.firstChild.textContent = isCompany ? 'Contact Person ' : 'Last Name ';
+      firstInput.placeholder = isCompany ? 'e.g. BrightKey Solutions' : 'e.g. Juan';
+      lastInput.placeholder = isCompany ? 'e.g. Juan dela Cruz' : 'e.g. dela Cruz';
+      companyTypeGroup.style.display = isCompany ? 'block' : 'none';
+      companyTypeSelect.required = isCompany;
+    }
+
     function onPrevCustMonthYearChange(select) {
       const monthYear = select.value;
       const selectCustomer = document.getElementById('prev-cust-select');
@@ -911,7 +961,18 @@
           }
         }
 
-        document.getElementById('cust-name').value = matched.customer_name || '';
+        const isCompany = matched.customer_is_company === true;
+        document.getElementById('company-office-checkbox').checked = isCompany;
+        toggleCompanyOfficeMode(isCompany);
+
+        const legacyNameParts = splitCustomerName(matched.customer_name);
+        document.getElementById('cust-first-name').value = isCompany
+          ? (matched.customer_company_name || matched.customer_name || '')
+          : (matched.customer_first_name || legacyNameParts.firstName);
+        document.getElementById('cust-last-name').value = isCompany
+          ? (matched.customer_contact_person || '')
+          : (matched.customer_last_name || legacyNameParts.lastName);
+        document.getElementById('cust-company-type').value = isCompany ? (matched.customer_company_type || '') : '';
         document.getElementById('cust-social').value = matched.customer_social || '';
         document.getElementById('cust-email').value = matched.customer_email || '';
         document.getElementById('cust-phone').value = matched.customer_phone || '';
@@ -1943,7 +2004,11 @@
 
     // --- Schedule and print receipt ---
     async function scheduleAndPrint() {
-      const name = document.getElementById('cust-name').value;
+      const firstName = document.getElementById('cust-first-name').value.trim();
+      const lastName = document.getElementById('cust-last-name').value.trim();
+      const isCompany = document.getElementById('company-office-checkbox').checked;
+      const companyType = document.getElementById('cust-company-type').value;
+      const name = isCompany ? firstName : `${firstName} ${lastName}`.trim();
       const social = document.getElementById('cust-social').value;
       const email = document.getElementById('cust-email').value;
       const phone = document.getElementById('cust-phone').value;
@@ -1954,8 +2019,9 @@
       const dateVal = document.getElementById('sched-date').value;
       const timeVal = document.getElementById('sched-time').value;
 
-      if (!name || !dateVal) {
-        showNotification("Please specify Customer Name and Preferred Installation Date.", 'error');
+      if (!firstName || !lastName || (isCompany && !companyType) || !dateVal) {
+        const requiredNames = isCompany ? 'company name, contact person, company type' : "customer's first name and last name";
+        showNotification(`Please specify the ${requiredNames} and preferred installation date.`, 'error');
         return;
       }
 
@@ -1966,7 +2032,8 @@
       try {
 
       // Build SURNAME-ORDERNO folder ID (e.g. DELACRUZ-ORD-20260520-123)
-      const surname = name.trim().split(' ').pop().toUpperCase().replace(/[^A-Z0-9]/g, '');
+      const surnameSource = isCompany ? firstName.trim().split(/\s+/).pop() : lastName;
+      const surname = surnameSource.toUpperCase().replace(/[^A-Z0-9]/g, '');
       const receiptNo = 'ORD-' + new Date().toISOString().slice(0,10).replace(/-/g,'') + '-' + Date.now().toString().slice(-3);
       const folderRefId = `${surname}-${receiptNo}`;
 
@@ -2151,6 +2218,12 @@
         folder_ref_id:      folderRefId,
         order_no:           receiptNo,
         customer_name:      name,
+        customer_first_name: isCompany ? null : firstName,
+        customer_last_name:  isCompany ? null : lastName,
+        customer_is_company: isCompany,
+        customer_company_name: isCompany ? firstName : null,
+        customer_contact_person: isCompany ? lastName : null,
+        customer_company_type: isCompany ? companyType : null,
         customer_social:    social || null,
         customer_email:     email || null,
         customer_phone:     phone || null,
@@ -2605,7 +2678,11 @@
       window.doorAttachedProducts = {};
       
       // Clear Customer details
-      document.getElementById('cust-name').value = '';
+      document.getElementById('cust-first-name').value = '';
+      document.getElementById('cust-last-name').value = '';
+      document.getElementById('company-office-checkbox').checked = false;
+      document.getElementById('cust-company-type').value = '';
+      toggleCompanyOfficeMode(false);
       document.getElementById('cust-social').value = '';
       document.getElementById('cust-email').value = '';
       document.getElementById('cust-phone').value = '';
