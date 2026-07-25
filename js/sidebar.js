@@ -142,147 +142,49 @@
     }
   };
 
-  async function checkPendingWarehouse(companyId) {
+  let logisticsBadgePromise = null;
+
+  async function refreshLogisticsBadges(companyId) {
     if (!companyId) return;
     const sb = window.BKAuth?.sb;
     if (!sb) return;
 
-    try {
-      // 1. Load active transactions and delivery bookings for the tenant
-      const [txRes, dbRes] = await Promise.all([
-        sb.from('inventory_transactions')
-          .select('id, type, status, reference_id')
-          .eq('company_id', companyId),
-        sb.from('delivery_bookings')
-          .select('reference_id')
-          .eq('company_id', companyId)
-      ]);
+    if (logisticsBadgePromise) return logisticsBadgePromise;
 
-      if (txRes.error || dbRes.error) return;
+    logisticsBadgePromise = (async () => {
+      const { data, error } = await sb.rpc('get_logistics_badges', {
+        p_company_id: companyId
+      }).maybeSingle();
+      if (error) {
+        console.error('Error checking logistics badge state:', error);
+        return;
+      }
 
-      const txs = txRes.data || [];
-      const deliveryBookings = dbRes.data || [];
-
-      // 2. Calculate inspectCount
-      const inspectCount = new Set(
-        txs.filter(t => t.status === 'reserved' && t.type === 'customer_order').map(t => t.reference_id)
-      ).size;
-
-      // 3. Calculate packCount
-      const packCount = new Set(
-        txs.filter(t => t.status === 'inspect' && t.type === 'customer_order').map(t => t.reference_id)
-      ).size;
-
-      // 4. Calculate dispatchCount
-      const dispatchCount = txs.filter(t => {
-        if (t.status !== 'packed') return false;
-        if (t.reference_id) {
-          const hasUnpacked = txs.some(other =>
-            other.reference_id === t.reference_id &&
-            ['reserved', 'inspect'].includes(other.status)
-          );
-          if (hasUnpacked) return false;
-        }
-        return true;
-      }).length;
-
-      // 5. Calculate receiveCount
-      const receiveCount = txs.filter(t => {
-        const isIncoming = (t.reference_id && (t.reference_id.startsWith('RCV-') || t.reference_id.startsWith('SUP-')));
-        if (isIncoming) {
-          if (!['ordered', 'dispatched'].includes(t.status)) return false;
-          const isBooked = deliveryBookings.some(db => db.reference_id === t.reference_id);
-          return isBooked;
-        }
-        if (!['ordered', 'returned', 'cancelled'].includes(t.status)) return false;
-        return t.type !== 'supplier_order';
-      }).length;
-
-      const hasWarehousePending = (inspectCount > 0 || packCount > 0 || dispatchCount > 0 || receiveCount > 0);
+      const hasWarehousePending = Boolean(data?.warehouse_pending);
+      const hasShipmentsPending = Boolean(data?.shipments_pending);
 
       const warehouseBadge = document.getElementById('warehouse-badge-dot');
-      if (warehouseBadge) {
-        warehouseBadge.style.display = hasWarehousePending ? 'inline-block' : 'none';
+      const shipBadge = document.getElementById('ship-badge-dot');
+      const logisticsBadge = document.getElementById('logistics-badge-dot');
+
+      if (warehouseBadge) warehouseBadge.style.display = hasWarehousePending ? 'inline-block' : 'none';
+      if (shipBadge) shipBadge.style.display = hasShipmentsPending ? 'inline-block' : 'none';
+      if (logisticsBadge) {
+        logisticsBadge.style.display = (hasWarehousePending || hasShipmentsPending) ? 'inline-block' : 'none';
       }
 
       window.BKWarehousePending = hasWarehousePending;
-      updateLogisticsBadgeVisibility();
-    } catch (e) {
-      console.error('Error checking warehouse pending state:', e);
-    }
-  }
+      window.BKShipmentsPending = hasShipmentsPending;
+    })().finally(() => {
+      logisticsBadgePromise = null;
+    });
 
-  function updateLogisticsBadgeVisibility() {
-    const logisticsBadge = document.getElementById('logistics-badge-dot');
-    if (logisticsBadge) {
-      const showLogisticsDot = window.BKShipmentsPending || window.BKWarehousePending;
-      logisticsBadge.style.display = showLogisticsDot ? 'inline-block' : 'none';
-    }
-  }
-
-  async function checkPendingShipments(companyId) {
-    if (!companyId) return;
-    const sb = window.BKAuth?.sb;
-    if (!sb) return;
-
-    try {
-      const [txRes, dbRes] = await Promise.all([
-        sb.from('inventory_transactions')
-          .select('id, type, status, reference_id')
-          .eq('company_id', companyId)
-          .in('type', ['customer_order', 'supplier_order']),
-        sb.from('delivery_bookings')
-          .select('reference_id')
-          .eq('company_id', companyId)
-      ]);
-
-      if (txRes.error || dbRes.error) return;
-
-      const txs = txRes.data || [];
-      const bookedRefs = new Set((dbRes.data || []).map(d => d.reference_id));
-
-      // Send count: packed customer_orders, not RCV- prefixed, not booked, no unpacked siblings
-      const sendQueue = txs.filter(t => {
-        if (t.type !== 'customer_order') return false;
-        if (t.status !== 'packed') return false;
-        if (t.reference_id && t.reference_id.startsWith('RCV-')) return false;
-        if (bookedRefs.has(t.reference_id)) return false;
-        if (t.reference_id) {
-          const hasUnpacked = txs.some(other =>
-            other.reference_id === t.reference_id &&
-            ['reserved', 'inspect'].includes(other.status)
-          );
-          if (hasUnpacked) return false;
-        }
-        return true;
-      });
-      const sendCount = new Set(sendQueue.map(t => t.reference_id)).size;
-
-      // Receive count: ordered transactions with RCV- or SUP- prefix, not booked
-      const receiveQueue = txs.filter(t => {
-        if (t.status !== 'ordered') return false;
-        if (!t.reference_id || (!t.reference_id.startsWith('RCV-') && !t.reference_id.startsWith('SUP-'))) return false;
-        if (bookedRefs.has(t.reference_id)) return false;
-        return true;
-      });
-      const receiveCount = new Set(receiveQueue.map(t => t.reference_id)).size;
-
-      const hasPending = sendCount > 0 || receiveCount > 0;
-
-      const shipBadge = document.getElementById('ship-badge-dot');
-      if (shipBadge) shipBadge.style.display = hasPending ? 'inline-block' : 'none';
-
-      window.BKShipmentsPending = hasPending;
-      updateLogisticsBadgeVisibility();
-    } catch (e) {
-      console.error('Error checking pending shipments:', e);
-    }
+    return logisticsBadgePromise;
   }
 
   window.BKRefreshShipmentsBadge = function() {
     if (activeCompanyId) {
-      checkPendingShipments(activeCompanyId);
-      checkPendingWarehouse(activeCompanyId);
+      refreshLogisticsBadges(activeCompanyId);
     }
   };
 
@@ -932,8 +834,7 @@
                   if (shouldCheckIncompleteCommissions()) {
                     checkIncompleteCommissions(activeCompanyId);
                   }
-                  checkPendingShipments(activeCompanyId);
-                  checkPendingWarehouse(activeCompanyId);
+                  refreshLogisticsBadges(activeCompanyId);
                 }, 2000);
               }
             } catch (coErr) {
