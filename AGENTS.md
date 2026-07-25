@@ -88,6 +88,168 @@ We enforce rigorous practices to prevent SQL injections (SQLi) and Cross-Site Sc
 
 ---
 
+## 5.1 Database Query Performance & Disk IO Budget
+> [!CRITICAL]
+> **DATABASE EFFICIENCY IS A BUILD REQUIREMENT, NOT A LATER OPTIMIZATION TASK**:
+> Every new dashboard feature must be designed so its normal page load remains
+> bounded as the tenant's data grows. A query that is acceptable with test data
+> but scans a complete operational table is not production-ready.
+
+### 5.1.1 Never Run Operational Audits from Global Components
+- Shared files such as `js/sidebar.js`, `js/auth.js`, navigation badges, headers,
+  chat bootstrapping, and global layouts execute on many or every dashboard route.
+- They must **not** load complete sets of bookings, products, transactions,
+  attendance logs, commissions, or journal entries to calculate a badge or status.
+- Run feature-specific audits only on the feature's own routes.
+- Global badges must use a small company-scoped `count`, boolean RPC, cached
+  summary row, or materialized summary. They must never reconstruct business
+  state client-side from several operational tables.
+
+```javascript
+// Bad: runs on every dashboard route and downloads operational records.
+const { data } = await sb
+  .from('installation_bookings')
+  .select('*')
+  .eq('company_id', companyId);
+
+// Good: feature-specific, bounded summary.
+const { count } = await sb
+  .from('installation_bookings')
+  .select('id', { count: 'exact', head: true })
+  .eq('company_id', companyId)
+  .eq('status', 'needs_review');
+```
+
+### 5.1.2 Tenant Ownership Is Mandatory on Reads and Writes
+- Resolve and validate `companyId` before issuing company-owned queries.
+- Every read from a company-owned table must include the company boundary, even
+  when RLS is enabled. RLS is the security boundary; the explicit filter is also
+  the query-planning and performance boundary.
+- Every insert or upsert into a company-owned table must explicitly write
+  `company_id`. Never rely on a nullable default.
+- New company-owned columns should be `NOT NULL` unless the absence of ownership
+  is a documented business requirement.
+- For existing tables, backfill ownership safely before adding `NOT NULL`.
+- Compatibility filters such as `company_id.is.null` are temporary migration
+  measures only. Do not introduce new null-owned records.
+
+```javascript
+if (!companyId || companyId === 'null') return;
+
+await sb.from('inventory_transactions').insert({
+  company_id: companyId,
+  warehouse_id: warehouseId,
+  sku,
+  quantity,
+  type: 'customer_order',
+  status: 'reserved'
+});
+```
+
+### 5.1.3 No Unbounded Collection Queries
+- History, ledger, booking, review, attendance, and transaction queries must have
+  server-side pagination or a strict bounded date window.
+- Apply filtering and ordering before `.range()` or `.limit()`.
+- Default list pages should normally request 50–100 rows. Larger limits require
+  a documented reason and must still have a hard ceiling.
+- Do not fetch 1,000–10,000 rows merely to filter, sort, count, or paginate them
+  in JavaScript.
+- Prefer keyset/cursor pagination for rapidly growing tables. Offset pagination
+  is acceptable for smaller administrative lists.
+- Date-based reports must include both a start and an end bound; never query
+  “from the beginning of this month onward” without the month-end boundary.
+
+```javascript
+const { data, error } = await sb
+  .from('inventory_transactions')
+  .select('id, sku, quantity, status, created_at')
+  .eq('company_id', companyId)
+  .eq('warehouse_id', warehouseId)
+  .gte('created_at', periodStart)
+  .lt('created_at', periodEnd)
+  .order('created_at', { ascending: false })
+  .range(pageStart, pageEnd);
+```
+
+### 5.1.4 Select Only the Fields the View Uses
+- Do not use `.select('*')` for tables containing large JSON, media, attachment,
+  address, conversation, or audit fields.
+- List screens must request a narrow projection.
+- Load full details only after a user opens a specific record.
+- `.select('*')` is permitted only for a justified single-record detail query
+  where the view genuinely consumes nearly every field.
+- Products queries must still include `id`, as required by Section 10.
+
+### 5.1.5 Eliminate N+1 Database Requests
+- Never place a Supabase read or write inside a loop when the operation can be
+  expressed as one batch.
+- Collect IDs/SKUs/reference numbers, fetch them with `.in(...)`, then construct
+  an in-memory lookup map.
+- Batch updates sharing the same value with `.in('id', ids)`.
+- When several inventory counters must change atomically, use a database RPC or
+  transaction rather than repeated client-side read/modify/write operations.
+- Chunk unusually large ID lists into bounded batches.
+
+### 5.1.6 Indexes Must Match Real Query Shapes
+- Before adding an index, inspect the live schema and the actual query captured
+  in `pg_stat_statements`.
+- For composite indexes, put equality/tenant filters first, followed by range or
+  ordering columns used by the query.
+- Common examples:
+  - `(company_id, status)`
+  - `(company_id, scheduled_date)`
+  - `(company_id, warehouse_id, created_at DESC)`
+  - `(employee_id, created_at DESC)`
+- Use `EXPLAIN` to confirm the intended index is chosen.
+- Do not add speculative indexes. Indexes increase write IO, storage, vacuum
+  work, and maintenance cost.
+- Migrations must use non-destructive, rerunnable statements such as
+  `CREATE INDEX IF NOT EXISTS`.
+
+### 5.1.7 Cache and Refresh Deliberately
+- Deduplicate identical requests within a page lifecycle by caching the active
+  Promise or result in the module context.
+- Refresh only after the underlying action changes data, when the active tenant
+  changes, or at a documented low-frequency interval.
+- Do not implement aggressive polling for sidebar status or counters.
+- Persistent business configuration follows Section 19 and belongs in
+  `global_settings`; do not misuse browser storage as a cross-page database cache.
+
+### 5.1.8 Mandatory Pre-Deployment Query Audit
+For any feature that adds or changes database access:
+
+1. Inspect every touched live table with:
+   `node scripts/db-inspect.js <table_name>`.
+2. Search the changed files for:
+   - `.select('*')`
+   - database calls inside loops
+   - missing `company_id` on inserts/upserts
+   - collection queries without `.range()`, `.limit()`, or date bounds
+   - shared/sidebar/auth code loading operational tables
+3. Run targeted ESLint and syntax checks.
+4. Load every affected dashboard route with realistic authenticated data.
+5. Confirm loading states finish, existing records remain visible, and no raw
+   database errors appear.
+6. For high-frequency or high-volume paths, compare `pg_stat_statements` before
+   and after deployment: calls, total time, mean time, shared blocks read/hit,
+   and temporary blocks.
+7. Review Supabase Database Health after a representative business cycle.
+
+### 5.1.9 Definition of Done
+A database-backed dashboard feature is not complete unless:
+
+- Tenant ownership is written and filtered explicitly.
+- Collection size is bounded on the server.
+- Payload columns are intentionally selected.
+- No avoidable N+1 access remains.
+- Required composite indexes are verified against the real query.
+- Global components do not perform feature-wide scans.
+- The affected routes are tested with existing production-shaped data.
+- Query growth remains proportional to the requested page/report, not to the
+  tenant's complete lifetime dataset.
+
+---
+
 ## 6. Prohibited Browser Dialogs (alert, confirm, prompt)
 > [!IMPORTANT]
 > Standard browser dialogs (`alert()`, `confirm()`, `prompt()`) are strictly prohibited in the ERP dashboard. Always use custom-styled overlay modal components to provide a premium user experience and maintain unified design aesthetics.
