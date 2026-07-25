@@ -453,3 +453,41 @@ This means the typical approach of adding `border-right` and `box-shadow` to a s
   * Always use **red** color styling for action buttons and SVGs (e.g. `color: var(--danger) !important;` or direct red color tokens) to signal risk or irreversible changes.
 * **Confirm / Good / Proceed / Positive Actions**:
   * Always use **green** color styling for action buttons and SVGs (e.g. `color: var(--success) !important;` or direct green color tokens) to signal validation, creation, or confirmation success.
+
+---
+
+## 18. Off-Screen PDF Generation
+
+> [!IMPORTANT]
+> When generating PDFs with `html2pdf` or `html2canvas`, never render the source
+> inside an element or iframe using `display: none`, zero dimensions, or another
+> non-rendered layout state. These libraries require a measurable layout surface;
+> hidden sources can produce blank PDF pages.
+
+Use the direct detached-element pattern established by Smart-lock Calendar:
+
+```javascript
+const sheet = document.createElement('div');
+sheet.innerHTML = `<div style="width:210mm;background:#fff;">...</div>`;
+
+await html2pdf()
+  .set({
+    margin: [10, 10, 10, 10],
+    filename: 'Payslip.pdf',
+    image: { type: 'jpeg', quality: 0.98 },
+    html2canvas: { scale: 2, useCORS: true, letterRendering: true },
+    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+  })
+  .from(sheet)
+  .save();
+```
+
+Rules:
+
+- Build and populate the complete PDF source before calling `.from(sheet)`.
+- Keep the user on the current page; do not redirect solely to generate a file.
+- Do not use a `display:none` iframe as the PDF rendering surface.
+- Use `useCORS: true` for approved remote logos and signature images.
+- After meaningful PDF changes, download the file, confirm it has a nontrivial
+  size, render its pages to images, and visually verify that content is visible,
+  aligned, readable, and unclipped.
