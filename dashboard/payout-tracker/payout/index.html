@@ -1532,13 +1532,10 @@
         const installationPayouts = isOwner
           ? { thresholdEarnings: 0, thresholdDescription: '', serviceEarnings: 0, serviceDescription: '', cutoffPayouts: {} }
           : this.calculateInstallerPayouts(empId, mk, schedules);
-        const glReimbursement = isOwner ? 0 : this._glAdditionsForEmpMonth(empId, mk);
-        const cashAdvance = isOwner ? 0 : this._glDeductionsForEmpMonth(empId, mk);
         const adjustmentsTotal = adjustments.reduce((sum, item) => sum + (Number(item.value) || 0), 0);
         const specialTotal = specialSchedules.reduce((sum, item) => sum + (Number(item.value) || 0), 0);
         const totalPayout = salaryPaid + commissions + adjustmentsTotal + specialTotal
-          + installationPayouts.thresholdEarnings + installationPayouts.serviceEarnings
-          + glReimbursement - cashAdvance;
+          + installationPayouts.thresholdEarnings + installationPayouts.serviceEarnings;
 
         let profile = {};
         let template = {};
@@ -1565,13 +1562,27 @@
           salaryIsProrated ? 'Based on eligible scheduled workdays' : 'Monthly Basic Salary',
           salaryPaid
         );
-        adjustments.forEach(item => { breakdownRows += row('Adjustment', item.label || 'Adjustment', item.value); });
-        specialSchedules.forEach(item => { breakdownRows += row('Special Payout', `${item.label || 'Special Payout'} (Day ${item.day})`, item.value); });
-        if (installationPayouts.thresholdEarnings) breakdownRows += row('Earnings Past Threshold', installationPayouts.thresholdDescription || 'Extra installation credits above threshold', installationPayouts.thresholdEarnings);
-        if (installationPayouts.serviceEarnings) breakdownRows += row('Service Job Earnings', installationPayouts.serviceDescription || 'Extra paid service jobs', installationPayouts.serviceEarnings);
+        if (installationPayouts.thresholdEarnings > 0) {
+          breakdownRows += `<tr><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;font-weight:600;">Earnings Past Threshold</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;color:#4b5563;line-height:1.5;">${esc(installationPayouts.thresholdDescription).replace(/\n/g, '<br>')}</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;text-align:right;font-variant-numeric:tabular-nums;width:120px;">${peso(installationPayouts.thresholdEarnings)}</td></tr>`;
+        }
+        if (installationPayouts.serviceEarnings > 0) {
+          breakdownRows += `<tr><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;font-weight:600;">Service Job Earnings</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;color:#4b5563;line-height:1.5;">${esc(installationPayouts.serviceDescription).replace(/\n/g, '<br>')}</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;text-align:right;font-variant-numeric:tabular-nums;width:120px;">${peso(installationPayouts.serviceEarnings)}</td></tr>`;
+        }
         if (commissions) breakdownRows += row('Commissions', 'Sales commissions', commissions);
-        if (glReimbursement) breakdownRows += row('Reimbursement', 'General ledger reimbursement', glReimbursement);
-        if (cashAdvance) breakdownRows += row('Cash Advance', 'General ledger cash advance', -cashAdvance);
+        if (adjustments.length > 0) {
+          const shortMonths = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+          const labels = adjustments.map(item => {
+            const date = new Date(item.date);
+            return esc(item.label || 'Adjustment') + (!isNaN(date.getTime()) ? ` (${shortMonths[date.getMonth()]} ${date.getDate()})` : '');
+          }).join('<br>');
+          const amounts = adjustments.map(item => peso(item.value)).join('<br>');
+          breakdownRows += `<tr><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;font-weight:600;vertical-align:top;">Adjustments</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;color:#4b5563;vertical-align:top;line-height:1.5;">${labels}</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;text-align:right;font-variant-numeric:tabular-nums;vertical-align:top;line-height:1.5;width:120px;">${amounts}</td></tr>`;
+        }
+        if (specialSchedules.length > 0) {
+          const labels = specialSchedules.map(item => `${esc(item.label || 'Special Payout')} (Day ${item.day})`).join('<br>');
+          const amounts = specialSchedules.map(item => peso(item.value)).join('<br>');
+          breakdownRows += `<tr><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;font-weight:600;vertical-align:top;">Special Payouts</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;color:#4b5563;vertical-align:top;line-height:1.5;">${labels}</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;text-align:right;font-variant-numeric:tabular-nums;vertical-align:top;line-height:1.5;width:120px;">${amounts}</td></tr>`;
+        }
 
         const scheduleRows = schedules.map(day => ({
           day,
@@ -1581,8 +1592,6 @@
             + this._adjsForSchedule(empId, day, mk, schedules)
             + (isOwner ? 0 : this._commsForSchedule(empId, day, mk, schedules))
             + (installationPayouts.cutoffPayouts[day] || 0)
-            + (isOwner ? 0 : this._glAdditionsForSchedule(empId, day, mk, schedules))
-            - (isOwner ? 0 : this._glDeductionsForSchedule(empId, day, mk, schedules))
         }));
         const specialByDay = new Map();
         specialSchedules.forEach(item => {
@@ -1598,9 +1607,14 @@
           .join('');
 
         let department = emp.department || '—';
+        let departmentHeadId = null;
         const matchedDepartment = (this.companyStructure?.departments || []).find(dept => dept.managerId === empId || (dept.subteams || []).some(team => team.managerId === empId || (team.colleagueIds || []).includes(empId)));
-        if (matchedDepartment) department = matchedDepartment.name;
-        const managerId = this.reportingToMap[empId] || emp.reporting_to;
+        if (matchedDepartment) {
+          department = matchedDepartment.name;
+          departmentHeadId = matchedDepartment.managerId;
+        }
+        let managerId = this.reportingToMap[empId] || emp.reporting_to;
+        if (!managerId && departmentHeadId && departmentHeadId !== empId) managerId = departmentHeadId;
         const manager = this.employees.find(item => item.id === managerId);
         const reportingTo = manager ? [manager.first_name, manager.last_name].filter(Boolean).join(' ') : '—';
         const employeeName = [emp.first_name, emp.last_name].filter(Boolean).join(' ');
