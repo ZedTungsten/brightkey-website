@@ -1,16 +1,9 @@
 import { createClient } from '@supabase/supabase-js';
 import { createHash } from 'crypto';
-
-function verifySignature(tenant, company, role, email, sig) {
-  const msg = `${tenant}:${company}:${role || ''}:${email}:brightkey_invite_salt`;
-  const hash = createHash('sha256').update(msg).digest('hex');
-  return hash === sig;
-}
+import { setApiCors } from '../lib/api/security.js';
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  setApiCors(req, res, 'GET, OPTIONS');
 
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method Not Allowed' });
@@ -19,16 +12,6 @@ export default async function handler(req, res) {
 
   if (!tenant || !company || !email || !sig) {
     return res.status(400).json({ valid: false, reason: 'missing_params' });
-  }
-
-  // 1. Dev bypass key
-  if (sig === 'dev-bypass-key-2026') {
-    return res.status(200).json({ valid: true });
-  }
-
-  // 2. Verify signature
-  if (!verifySignature(tenant, company, role, email, sig)) {
-    return res.status(200).json({ valid: false, reason: 'invalid_signature' });
   }
 
   const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -46,22 +29,24 @@ export default async function handler(req, res) {
   });
 
   try {
-    // 3. Query the database invitation record
+    const tokenHash = createHash('sha256').update(sig).digest('hex');
     const { data: invite, error } = await supabase
       .from('company_invitations')
-      .select('created_at')
+      .select('expires_at, used_at')
       .eq('tenant_id', tenant)
+      .eq('company_id', company)
       .eq('email', email.toLowerCase().trim())
+      .eq('token_hash', tokenHash)
       .maybeSingle();
 
     if (error || !invite) {
       return res.status(200).json({ valid: false, reason: 'not_found' });
     }
 
-    // 4. Check 3-day expiration (72 hours)
-    const createdAtTime = new Date(invite.created_at).getTime();
-    const threeDaysMs = 3 * 24 * 60 * 60 * 1000;
-    if (Date.now() - createdAtTime > threeDaysMs) {
+    if (invite.used_at) {
+      return res.status(200).json({ valid: false, reason: 'used' });
+    }
+    if (!invite.expires_at || new Date(invite.expires_at).getTime() <= Date.now()) {
       return res.status(200).json({ valid: false, reason: 'expired' });
     }
 

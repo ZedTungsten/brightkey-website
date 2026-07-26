@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import nodemailer from 'nodemailer';
+import { requireCompanyAccess, sendAccessError } from '../lib/api/security.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
@@ -281,6 +282,9 @@ export default async function handler(req, res) {
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
   try {
+    const access = await requireCompanyAccess(req, supabase, companyId, { modules: ['HR'] });
+    if (access.error) return sendAccessError(res, access);
+
     // 1. Resolve tenant_id from companyId
     const { data: co, error: coErr } = await supabase
       .from('companies')

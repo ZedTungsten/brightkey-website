@@ -898,18 +898,23 @@
           const matchesWarehouse = activeWarehouseId 
             ? t.warehouse_id === activeWarehouseId 
             : t.warehouse_id === null;
-          if (matchesWarehouse && t.reference_id) {
+          const p = (allProducts || []).find(prod => prod.sku === t.sku);
+          const isNonInv = window.isNonInventoryItem && window.isNonInventoryItem(t.sku, p);
+          if (matchesWarehouse && t.reference_id && !isNonInv) {
             activeRefIds.add(t.reference_id);
           }
         }
       });
 
-      const inspectQueue = activeTransactions.filter(t => 
-        t.status === 'reserved' && 
-        t.type === 'customer_order' &&
-        t.reference_id &&
-        activeRefIds.has(t.reference_id)
-      );
+      const inspectQueue = activeTransactions.filter(t => {
+        const p = (allProducts || []).find(prod => prod.sku === t.sku);
+        const isNonInv = window.isNonInventoryItem && window.isNonInventoryItem(t.sku, p);
+        return t.status === 'reserved' && 
+          t.type === 'customer_order' &&
+          t.reference_id &&
+          activeRefIds.has(t.reference_id) &&
+          !isNonInv;
+      });
 
       if (inspectQueue.length === 0) {
         tbody.innerHTML = `<tr><td colspan="9" class="text-center text-muted" style="padding:2rem 0;">No orders currently in inspection queue.</td></tr>`;

@@ -1969,7 +1969,7 @@ window.EventsApp = {
     btn.innerHTML = 'Sending...';
 
     try {
-      const res = await fetch('/api/send-custom-email', {
+      const res = await window.BKAuth.authenticatedFetch('/api/send-custom-email', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -2051,7 +2051,7 @@ window.EventsApp = {
     btn.textContent = 'Sending...';
 
     try {
-      const res = await fetch('/api/send-custom-email', {
+      const res = await window.BKAuth.authenticatedFetch('/api/send-custom-email', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -2517,7 +2517,7 @@ window.EventsApp = {
         };
 
         // Call the consolidated send-custom-email API
-        const response = await fetch('/api/send-custom-email', {
+        const response = await window.BKAuth.authenticatedFetch('/api/send-custom-email', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

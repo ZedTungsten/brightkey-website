@@ -17,7 +17,7 @@
 
   let cachedUserPromise = null;
   let cachedUserRolePromise = null;
-  let cachedRoleGatePromise = null;
+  let cachedRoleGatePromises = {};
 
   const contextCache = {
     companyPromises: {},
@@ -195,7 +195,7 @@
   async function signIn(email, password) {
     cachedUserPromise = null;
     cachedUserRolePromise = null;
-    cachedRoleGatePromise = null;
+    cachedRoleGatePromises = {};
     const { data, error } = await sb.auth.signInWithPassword({ email, password });
     if (error) throw error;
     return data.user;
@@ -224,7 +224,7 @@
   async function signOut() {
     cachedUserPromise = null;
     cachedUserRolePromise = null;
-    cachedRoleGatePromise = null;
+    cachedRoleGatePromises = {};
     contextCache.companyPromises = {};
     contextCache.employeePromises = {};
     contextCache.employeeIdPromises = {};
@@ -275,8 +275,12 @@
    * Returns { user, role, tenantId, modules } on success, or redirects and returns null.
    */
   async function checkRoleGate(requiredModules = [], redirectTo = '../../admin.html') {
-    if (!cachedRoleGatePromise) {
-      cachedRoleGatePromise = (async () => {
+    const normalizedModules = [...new Set(
+      requiredModules.map(module => String(module).trim().toLowerCase())
+    )].sort();
+    const gateKey = JSON.stringify(normalizedModules);
+    if (!cachedRoleGatePromises[gateKey]) {
+      cachedRoleGatePromises[gateKey] = (async () => {
         const user = await requireAuth(redirectTo);
         if (!user) return null;
 
@@ -311,7 +315,7 @@
         return { user, role, tenantId, modules };
       })();
     }
-    return cachedRoleGatePromise;
+    return cachedRoleGatePromises[gateKey];
   }
 
   function getCompany(tenantId) {

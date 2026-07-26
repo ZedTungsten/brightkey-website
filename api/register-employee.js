@@ -1,16 +1,9 @@
 import { createClient } from '@supabase/supabase-js';
 import { createHash } from 'crypto';
-
-function verifySignature(tenant, company, role, email, sig) {
-  const msg = `${tenant}:${company}:${role || ''}:${email}:brightkey_invite_salt`;
-  const hash = createHash('sha256').update(msg).digest('hex');
-  return hash === sig;
-}
+import { setApiCors } from '../lib/api/security.js';
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  setApiCors(req, res);
 
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
@@ -38,11 +31,6 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Missing required registration parameters.' });
   }
 
-  // 1. Verify invite signature
-  if (signature !== 'dev-bypass-key-2026' && !verifySignature(tenant_id, company_id, role, email, signature)) {
-    return res.status(400).json({ error: 'Invalid invitation signature. Registration rejected.' });
-  }
-
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
     auth: {
       autoRefreshToken: false,
@@ -51,25 +39,24 @@ export default async function handler(req, res) {
   });
 
   try {
-    // 1b. Check if invitation exists and is not older than 3 days
-    if (signature !== 'dev-bypass-key-2026') {
-      const { data: invite, error: inviteErr } = await supabase
-        .from('company_invitations')
-        .select('created_at')
-        .eq('tenant_id', tenant_id)
-        .eq('email', email.toLowerCase().trim())
-        .maybeSingle();
+    const normalizedInviteEmail = email.toLowerCase().trim();
+    const tokenHash = createHash('sha256').update(signature).digest('hex');
+    const { data: invite, error: inviteErr } = await supabase
+      .from('company_invitations')
+      .select('company_id, role, expires_at, used_at')
+      .eq('tenant_id', tenant_id)
+      .eq('company_id', company_id)
+      .eq('email', normalizedInviteEmail)
+      .eq('token_hash', tokenHash)
+      .maybeSingle();
 
-      if (inviteErr || !invite) {
-        return res.status(400).json({ error: 'No pending invitation found for this email. Please ask your administrator for a new invite.' });
-      }
-
-      const createdAtTime = new Date(invite.created_at).getTime();
-      const threeDaysMs = 3 * 24 * 60 * 60 * 1000;
-      if (Date.now() - createdAtTime > threeDaysMs) {
-        return res.status(400).json({ error: 'This invitation has expired (3-day limit). Please contact your administrator to receive a new invitation.' });
-      }
+    if (inviteErr || !invite || invite.used_at) {
+      return res.status(400).json({ error: 'This invitation is invalid or has already been used. Ask your administrator for a new invitation.' });
     }
+    if (!invite.expires_at || new Date(invite.expires_at).getTime() <= Date.now()) {
+      return res.status(400).json({ error: 'This invitation has expired. Ask your administrator for a new invitation.' });
+    }
+    const invitedRole = invite.role || '';
 
     // Define activeEmail, resolving placeholders if needed
     let activeEmail = email.toLowerCase().trim();
@@ -82,6 +69,7 @@ export default async function handler(req, res) {
     const { data: existingEmp, error: empFetchErr } = await supabase
       .from('employees')
       .select('*')
+      .eq('company_id', company_id)
       .eq('email', activeEmail)
       .maybeSingle();
 
@@ -96,48 +84,20 @@ export default async function handler(req, res) {
     }
     const fullName = `${firstName} ${lastName}`.trim();
 
-    // 1d. Check if user already exists in auth.users
-    const { data: { users }, error: listError } = await supabase.auth.admin.listUsers();
-    let existingAuthUser = null;
-    if (!listError && users) {
-      existingAuthUser = users.find(u => u.email.toLowerCase() === activeEmail);
-    }
-
-    let userId = null;
-
-    if (existingAuthUser) {
-      userId = existingAuthUser.id;
-      // Update existing auth user with new password and metadata
-      const { error: updateError } = await supabase.auth.admin.updateUserById(userId, {
-        password: password,
-        user_metadata: {
-          full_name: fullName,
-          needs_password_reset: false
-        }
-      });
-      if (updateError) {
-        console.error('Auth User Update Error:', updateError);
-        return res.status(400).json({ error: `Auth Error: ${updateError.message}` });
+    const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+      email: activeEmail,
+      password,
+      email_confirm: true,
+      user_metadata: {
+        full_name: fullName,
+        needs_password_reset: false
       }
-    } else {
-      // 2. Create auth user with service role client and the user's chosen password
-      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-        email: activeEmail,
-        password: password,
-        email_confirm: true,
-        user_metadata: {
-          full_name: fullName,
-          needs_password_reset: false
-        }
-      });
-
-      if (authError) {
-        console.error('Auth User Creation Error:', authError);
-        return res.status(400).json({ error: `Auth Error: ${authError.message}` });
-      }
-
-      userId = authData.user.id;
+    });
+    if (authError || !authData?.user) {
+      console.error('Auth User Creation Error:', authError);
+      return res.status(400).json({ error: 'An account with this email already exists or could not be created.' });
     }
+    const userId = authData.user.id;
 
     // 3. Create tenant member record
     // Decode the role/access format from the invitation URL:
@@ -145,10 +105,10 @@ export default async function handler(req, res) {
     //   'access:Mod1,Mod2' → role=null, accessible_modules=['Mod1','Mod2']
     let memberRole = null;
     let memberModules = [];
-    if (role === 'admin') {
+    if (invitedRole === 'admin') {
       memberRole = 'admin';
-    } else if (role && role.startsWith('access:')) {
-      memberModules = role.substring(7).split(',').map(s => s.trim()).filter(Boolean);
+    } else if (invitedRole.startsWith('access:')) {
+      memberModules = invitedRole.substring(7).split(',').map(s => s.trim()).filter(Boolean);
     }
 
     const { error: tmError } = await supabase.from('tenant_members').insert({
@@ -255,6 +215,7 @@ export default async function handler(req, res) {
 
       const finalEmployeePayload = employee_payload ? {
         ...employee_payload,
+        company_id: company_id,
         email: activeEmail,
         employee_number: employeeNumber,
         id: userId
@@ -282,11 +243,13 @@ export default async function handler(req, res) {
       }
     }
 
-    // 5. Delete the pending invitation since user has successfully registered
+    // 5. Retain the invitation as an audit record and make it unusable.
     await supabase.from('company_invitations')
-      .delete()
+      .update({ used_at: new Date().toISOString() })
       .eq('tenant_id', tenant_id)
-      .eq('email', email.toLowerCase().trim());
+      .eq('company_id', company_id)
+      .eq('email', normalizedInviteEmail)
+      .eq('token_hash', tokenHash);
 
     // 6. Send welcome email via Resend
     let emailSent = false;

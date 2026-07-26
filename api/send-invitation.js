@@ -1,11 +1,9 @@
-import { createClient } from '@supabase/supabase-js';
-import { createHash } from 'crypto';
+import { createHash, randomBytes } from 'crypto';
 import nodemailer from 'nodemailer';
+import { createServiceClient, requireCompanyAccess, sendAccessError, setApiCors } from '../lib/api/security.js';
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  setApiCors(req, res);
 
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
@@ -14,55 +12,47 @@ export default async function handler(req, res) {
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'Missing or invalid authorization token' });
   }
-  const token = authHeader.split(' ')[1];
-
-  const SUPABASE_URL = process.env.SUPABASE_URL;
-  const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
   const RESEND_API_KEY = process.env.RESEND_API_KEY;
   const EMAIL_FROM = process.env.EMAIL_FROM || 'BrightKey Solutions <onboarding@brightkeysolutions.com>';
-
-  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-    return res.status(500).json({ error: 'Supabase configuration is missing on server.' });
-  }
 
   const { tenant_id, company_id, email, full_name, role, invited_by, invite_type } = req.body;
   if (!tenant_id || !company_id || !email || !full_name) {
     return res.status(400).json({ error: 'Missing required parameters.' });
   }
 
-  // Initialize service client
-  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-    auth: { autoRefreshToken: false, persistSession: false }
-  });
+  const supabase = createServiceClient();
 
   try {
     // 1. Verify user's session token and identity
-    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
-    if (userError || !user) {
-      return res.status(401).json({ error: 'Unauthorized session.' });
+    const access = await requireCompanyAccess(req, supabase, company_id, { roles: ['owner', 'admin'] });
+    if (access.error) return sendAccessError(res, access);
+    if (access.company.tenant_id !== tenant_id) {
+      return res.status(403).json({ error: 'The selected company does not belong to this tenant.' });
     }
 
-    // 2. Authorize the user (must be owner or admin of this tenant)
-    const { data: member, error: memberError } = await supabase
-      .from('tenant_members')
-      .select('role')
+    const inviteToken = randomBytes(32).toString('base64url');
+    const tokenHash = createHash('sha256').update(inviteToken).digest('hex');
+    const normalizedEmail = email.toLowerCase().trim();
+    const expiresAt = new Date(Date.now() + (72 * 60 * 60 * 1000)).toISOString();
+
+    await supabase
+      .from('company_invitations')
+      .delete()
       .eq('tenant_id', tenant_id)
-      .eq('user_id', user.id)
-      .limit(1);
+      .eq('email', normalizedEmail);
 
-    if (memberError || !member || member.length === 0 || !['owner', 'admin'].includes(member[0].role)) {
-      return res.status(403).json({ error: 'Forbidden: You do not have permissions to invite members to this tenant.' });
-    }
-
-    // 3. Insert into company_invitations
     const { error: inviteError } = await supabase
       .from('company_invitations')
       .insert({
         tenant_id,
-        email: email.toLowerCase().trim(),
+        company_id,
+        email: normalizedEmail,
         full_name,
         role: role ? role : null,
-        invited_by: user.id
+        invited_by: access.user.id,
+        token_hash: tokenHash,
+        expires_at: expiresAt,
+        used_at: null
       });
 
     if (inviteError) {
@@ -72,17 +62,13 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: `Invite insertion failed: ${inviteError.message}` });
     }
 
-    // 4. Generate secure signature
-    const msg = `${tenant_id}:${company_id}:${role || ''}:${email.toLowerCase().trim()}:brightkey_invite_salt`;
-    const signature = createHash('sha256').update(msg).digest('hex');
-
     // 5. Construct invite URL
     let origin = req.headers.referer ? new URL(req.headers.referer).origin : 'https://www.brightkeysolutions.com';
     if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
       origin = 'https://www.brightkeysolutions.com';
     }
     const pagePath = invite_type === 'directory' ? 'employee-directory-registration.html' : 'employee-registration';
-    const inviteLink = `${origin}/${pagePath}?tenant=${encodeURIComponent(tenant_id)}&company=${encodeURIComponent(company_id)}&role=${encodeURIComponent(role || '')}&email=${encodeURIComponent(email.toLowerCase().trim())}&sig=${signature}`;
+    const inviteLink = `${origin}/${pagePath}?tenant=${encodeURIComponent(tenant_id)}&company=${encodeURIComponent(company_id)}&role=${encodeURIComponent(role || '')}&email=${encodeURIComponent(normalizedEmail)}&sig=${encodeURIComponent(inviteToken)}`;
 
     // 6. Fetch company-specific Resend / SMTP credentials if they exist
     const { data: integration } = await supabase

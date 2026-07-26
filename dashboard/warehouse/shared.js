@@ -1,5 +1,14 @@
 'use strict';
 
+window.isNonInventoryItem = function(sku, productObj) {
+  if (!sku) return false;
+  const upper = String(sku).trim().toUpperCase();
+  if (['OCULAR', 'BACKJOB', 'DAY OFF', 'DAYOFF', 'SERVICE', 'INSTALLATION'].includes(upper)) return true;
+  if (upper.startsWith('OC-') || upper.startsWith('BJ-')) return true;
+  if (productObj && productObj.count_inventory === false) return true;
+  return false;
+};
+
 window.WarehousePage = {
   sb: null,
   companyId: null,
@@ -199,6 +208,7 @@ window.WarehousePage = {
 
   // 10. Update Badge Counts
   updateBadgeCounts: function() {
+    const allProds = this.allProducts || [];
     const receiveCount = this.activeTransactions.filter(t => {
       const isIncoming = (t.reference_id && (t.reference_id.startsWith('RCV-') || t.reference_id.startsWith('SUP-')));
       if (isIncoming) {
@@ -210,15 +220,25 @@ window.WarehousePage = {
       if (!['ordered', 'returned', 'cancelled'].includes(t.status)) return false;
       return t.type !== 'supplier_order';
     }).length;
-    const inspectCount = [...new Set(this.activeTransactions.filter(t => t.status === 'reserved' && t.type === 'customer_order').map(t => t.reference_id))].length;
-    const packCount = [...new Set(this.activeTransactions.filter(t => t.status === 'inspect' && t.type === 'customer_order').map(t => t.reference_id))].length;
+    const inspectCount = [...new Set(this.activeTransactions.filter(t => 
+      t.status === 'reserved' && 
+      t.type === 'customer_order' &&
+      !window.isNonInventoryItem(t.sku, allProds.find(p => p.sku === t.sku))
+    ).map(t => t.reference_id))].length;
+    const packCount = [...new Set(this.activeTransactions.filter(t => 
+      t.status === 'inspect' && 
+      t.type === 'customer_order' &&
+      !window.isNonInventoryItem(t.sku, allProds.find(p => p.sku === t.sku))
+    ).map(t => t.reference_id))].length;
     
     const dispatchCount = this.activeTransactions.filter(t => {
       if (t.status !== 'packed') return false;
+      if (window.isNonInventoryItem(t.sku, allProds.find(p => p.sku === t.sku))) return false;
       if (t.reference_id) {
         const hasUnpacked = this.activeTransactions.some(other => 
           other.reference_id === t.reference_id && 
-          ['reserved', 'inspect'].includes(other.status)
+          ['reserved', 'inspect'].includes(other.status) &&
+          !window.isNonInventoryItem(other.sku, allProds.find(p => p.sku === other.sku))
         );
         if (hasUnpacked) return false;
       }
