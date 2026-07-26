@@ -207,9 +207,9 @@
     async function loadStaticData() {
       try {
         const [employeesRes, assignmentsRes, productsRes, payoutRes, mediaRes, checklistRes] = await Promise.all([
-          sb.from('employees')
-            .select('id, employee_number, first_name, last_name, title, department, assignment, city, picture_link, employment_status')
-            .eq('company_id', currentCompanyId),
+          sb.rpc('get_company_installer_directory', {
+            p_company_id: currentCompanyId
+          }),
           sb.from('employee_assignments').select('id, name, visibility').eq('company_id', currentCompanyId || ''),
           sb.from('products')
             .select('id, sku, category')

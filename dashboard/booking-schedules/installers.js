@@ -42,12 +42,15 @@
     // Build <option> HTML for door installer dropdowns
     function buildDoorInstallerOptions(selectedId = '') {
       const installerNames = window._installerAssignmentNames || [];
+      const installerNameSet = new Set(
+        installerNames.map(name => String(name || '').trim().toLowerCase()).filter(Boolean)
+      );
       const installers = dbEmployees.filter(emp => {
         // Filter by assignment if assignments are configured
         const empAssigns = (emp.assignment || '').split(',').map(s => s.trim());
         const empAssignsLower = empAssigns.map(s => s.toLowerCase());
-        if (installerNames.length > 0) {
-          return empAssigns.some(a => installerNames.includes(a));
+        if (installerNameSet.size > 0) {
+          return empAssignsLower.some(assignment => installerNameSet.has(assignment));
         }
         const title = (emp.title || emp.position || '').toLowerCase();
         return title.includes('installer') || title.includes('operations') || title.includes('field') || empAssignsLower.includes('installer');
