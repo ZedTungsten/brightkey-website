@@ -207,9 +207,59 @@ window.WarehousePage = {
   },
 
   // 10. Update Badge Counts
-  updateBadgeCounts: function() {
+  updateBadgeCounts: async function() {
+    const renderBadges = (receive, inspect, pack, dispatch) => {
+      const badges = [
+        { id: 'badge-count-receive', count: receive },
+        { id: 'badge-count-inspect', count: inspect },
+        { id: 'badge-count-pack', count: pack },
+        { id: 'badge-count-dispatch', count: dispatch }
+      ];
+
+      badges.forEach(b => {
+        const el = document.getElementById(b.id);
+        if (el) {
+          if (b.count > 0) {
+            el.innerText = b.count;
+            el.style.display = 'inline-block';
+          } else {
+            el.style.display = 'none';
+          }
+        }
+      });
+    };
+
+    // Attempt efficient server-side RPC counting
+    if (this.sb && this.companyId) {
+      try {
+        const { data, error } = await this.sb.rpc('get_warehouse_tab_counts', {
+          p_company_id: this.companyId,
+          p_warehouse_id: this.activeWarehouseId || null
+        });
+
+        if (!error && data && data.length > 0) {
+          const row = data[0];
+          renderBadges(
+            Number(row.receive_count || 0),
+            Number(row.inspect_count || 0),
+            Number(row.pack_count || 0),
+            Number(row.dispatch_count || 0)
+          );
+          return;
+        }
+      } catch (err) {
+        console.warn('Server-side tab counting RPC unavailable, using fallback:', err);
+      }
+    }
+
+    // Client-side fallback if RPC is pending migration
     const allProds = this.allProducts || [];
     const receiveCount = this.activeTransactions.filter(t => {
+      const matchesWarehouse = this.activeWarehouseId 
+        ? t.warehouse_id === this.activeWarehouseId 
+        : (t.warehouse_id === null || !t.warehouse_id);
+      if (!matchesWarehouse) return false;
+
       const isIncoming = (t.reference_id && (t.reference_id.startsWith('RCV-') || t.reference_id.startsWith('SUP-')));
       if (isIncoming) {
         if (!['ordered', 'dispatched'].includes(t.status)) return false;
@@ -219,7 +269,7 @@ window.WarehousePage = {
 
       if (!['ordered', 'returned', 'cancelled'].includes(t.status)) return false;
       return t.type !== 'supplier_order';
-    }).length;
+    }).length + (this.warehouseTransfers || []).filter(tr => tr.status === 'approved' && tr.to_warehouse_id === this.activeWarehouseId).length;
     const inspectCount = [...new Set(this.activeTransactions.filter(t => 
       t.status === 'reserved' && 
       t.type === 'customer_order' &&
@@ -245,24 +295,7 @@ window.WarehousePage = {
       return true;
     }).length;
 
-    const badges = [
-      { id: 'badge-count-receive', count: receiveCount },
-      { id: 'badge-count-inspect', count: inspectCount },
-      { id: 'badge-count-pack', count: packCount },
-      { id: 'badge-count-dispatch', count: dispatchCount }
-    ];
-
-    badges.forEach(b => {
-      const el = document.getElementById(b.id);
-      if (el) {
-        if (b.count > 0) {
-          el.innerText = b.count;
-          el.style.display = 'inline-block';
-        } else {
-          el.style.display = 'none';
-        }
-      }
-    });
+    renderBadges(receiveCount, inspectCount, packCount, dispatchCount);
   },
 
   // 11. AutoSync Bookings Background Launcher
