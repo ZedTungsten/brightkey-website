@@ -56,6 +56,16 @@ export default async function handler(req, res) {
       return res.status(403).json({ error: 'Forbidden: You do not have permissions to create member accounts.' });
     }
 
+    const { data: company } = await supabase
+      .from('companies')
+      .select('id')
+      .eq('id', company_id)
+      .eq('tenant_id', tenant_id)
+      .maybeSingle();
+    if (!company) {
+      return res.status(403).json({ error: 'The selected company does not belong to this tenant.' });
+    }
+
     // 3. Create auth user with service role client immediately
     const { data: authData, error: authError } = await supabase.auth.admin.createUser({
       email: email.toLowerCase().trim(),
@@ -94,6 +104,7 @@ export default async function handler(req, res) {
     const { data: existingEmp, error: empFetchErr } = await supabase
       .from('employees')
       .select('id')
+      .eq('company_id', company_id)
       .eq('email', email.toLowerCase().trim())
       .maybeSingle();
 

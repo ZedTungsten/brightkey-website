@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
-import { requireCompanyAccess, sendAccessError, setApiCors } from '../lib/api/security.js';
+import { requireCompanyAccess, sendAccessError, setApiCors, writeSecurityAudit } from '../lib/api/security.js';
+import { enforceRateLimit } from '../lib/api/rate-limit.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://ymjlosnxuhsybkzkoofq.supabase.co';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
@@ -49,6 +50,9 @@ export default async function handler(req, res) {
       modules: ['Products', 'Operations', 'Logistics', 'HR']
     });
     if (access.error) return sendAccessError(res, access);
+    if (!await enforceRateLimit({
+      supabase, req, res, scope: 'video-upload', identifier: `${companyId}:${access.user.id}`, limit: 30, windowSeconds: 3600
+    })) return;
 
     const { data: quotaRows, error: quotaError } = await supabase
       .rpc('check_company_storage_quota', {
@@ -88,6 +92,14 @@ export default async function handler(req, res) {
 
     const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${bucketName}/${filePath}`;
 
+    await writeSecurityAudit(supabase, {
+      companyId,
+      actorUserId: access.user.id,
+      action: 'company_video_uploaded',
+      targetType: 'storage_object',
+      targetId: filePath,
+      metadata: { bytes: buffer.length, content_type: contentType }
+    });
     return res.status(200).json({
       success: true,
       videoId: filePath,

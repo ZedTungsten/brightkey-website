@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import nodemailer from 'nodemailer';
-import { requireCompanyAccess, sendAccessError } from '../lib/api/security.js';
+import { requireCompanyAccess, sendAccessError, writeSecurityAudit } from '../lib/api/security.js';
+import { enforceRateLimit } from '../lib/api/rate-limit.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
@@ -284,6 +285,9 @@ export default async function handler(req, res) {
   try {
     const access = await requireCompanyAccess(req, supabase, companyId, { modules: ['HR'] });
     if (access.error) return sendAccessError(res, access);
+    if (!await enforceRateLimit({
+      supabase, req, res, scope: 'send-custom-email', identifier: `${companyId}:${access.user.id}`, limit: 20, windowSeconds: 600
+    })) return;
 
     // 1. Resolve tenant_id from companyId
     const { data: co, error: coErr } = await supabase
@@ -534,6 +538,14 @@ export default async function handler(req, res) {
       }
     }
 
+    await writeSecurityAudit(supabase, {
+      companyId,
+      actorUserId: access.user.id,
+      action: 'company_email_dispatch',
+      targetType: 'event',
+      targetId: eventId,
+      metadata: { sent_count: sentCount, test: Boolean(testRecipient) }
+    });
     return res.status(200).json({ success: true, count: sentCount });
 
   } catch (err) {

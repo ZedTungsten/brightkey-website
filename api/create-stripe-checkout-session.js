@@ -1,4 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
+import { isAllowedRedirectUrl, setApiCors } from '../lib/api/security.js';
+import { enforceRateLimit } from '../lib/api/rate-limit.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://ymjlosnxuhsybkzkoofq.supabase.co';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -6,9 +8,7 @@ const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  setApiCors(req, res);
 
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
@@ -21,8 +21,25 @@ export default async function handler(req, res) {
   if (!line_items?.length || !success_url || !cancel_url) {
     return res.status(400).json({ error: 'Missing line items or redirection parameters.' });
   }
+  if (!isAllowedRedirectUrl(success_url) || !isAllowedRedirectUrl(cancel_url)) {
+    return res.status(400).json({ error: 'Invalid checkout return URL.' });
+  }
+  if (line_items.length > 50 || line_items.some(item => (
+    !item?.name
+    || !Number.isInteger(Number(item.amount))
+    || Number(item.amount) < 1
+    || Number(item.amount) > 100000000
+    || !Number.isInteger(Number(item.quantity || 1))
+    || Number(item.quantity || 1) < 1
+    || Number(item.quantity || 1) > 100
+  ))) {
+    return res.status(400).json({ error: 'One or more checkout items are invalid.' });
+  }
 
   try {
+    if (!await enforceRateLimit({
+      supabase, req, res, scope: 'stripe-checkout', identifier: company_id, limit: 60, windowSeconds: 600
+    })) return;
     // Parameterized lookup for Stripe Secret Key
     const { data: config, error: configErr } = await supabase
       .from('company_integrations')

@@ -1,5 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import nodemailer from 'nodemailer';
+import { enforceRateLimit } from '../lib/api/rate-limit.js';
+import { setApiCors } from '../lib/api/security.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
@@ -7,6 +9,8 @@ const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const EMAIL_FROM = process.env.EMAIL_FROM || 'BrightKey Solutions <noreply@brightkeysolutions.com>';
 
 export default async function handler(req, res) {
+  setApiCors(req, res);
+  if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
@@ -25,11 +29,16 @@ export default async function handler(req, res) {
   });
 
   try {
+    const normalizedEmail = email.toLowerCase().trim();
+    if (!await enforceRateLimit({
+      supabase, req, res, scope: 'password-reset', identifier: normalizedEmail, limit: 5, windowSeconds: 3600
+    })) return;
+
     // 1. Resolve full name and company_id
     const { data: emp } = await supabase
       .from('employees')
       .select('first_name, last_name, company_id')
-      .eq('email', email.toLowerCase().trim())
+      .eq('email', normalizedEmail)
       .limit(1)
       .maybeSingle();
 
@@ -45,12 +54,13 @@ export default async function handler(req, res) {
 
     const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
       type: 'recovery',
-      email: email.toLowerCase().trim(),
+      email: normalizedEmail,
       options: { redirectTo }
     });
 
     if (linkError) {
-      return res.status(400).json({ error: `Failed to generate recovery link: ${linkError.message}` });
+      console.warn('Password recovery link could not be generated:', linkError.message);
+      return res.status(200).json({ success: true });
     }
 
     const resetLink = linkData?.properties?.action_link;

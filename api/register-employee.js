@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { createHash } from 'crypto';
 import { setApiCors } from '../lib/api/security.js';
+import { enforceRateLimit } from '../lib/api/rate-limit.js';
 
 export default async function handler(req, res) {
   setApiCors(req, res);
@@ -40,6 +41,10 @@ export default async function handler(req, res) {
 
   try {
     const normalizedInviteEmail = email.toLowerCase().trim();
+    if (!await enforceRateLimit({
+      supabase, req, res, scope: 'register-employee', identifier: normalizedInviteEmail, limit: 10, windowSeconds: 3600
+    })) return;
+
     const tokenHash = createHash('sha256').update(signature).digest('hex');
     const { data: invite, error: inviteErr } = await supabase
       .from('company_invitations')

@@ -2520,26 +2520,17 @@
         const endDate = new Date(statsYear, statsMonth, 1).toISOString();
 
         const targetSkus = products.map(p => p.sku);
-
-        let txQuery = sb.from('inventory_transactions')
-          .select('sku, quantity, status, timestamp_reserved, timestamp_dispatched, timestamp_returned, timestamp_cancelled')
-          .in('sku', targetSkus)
-          .or([
-            `and(timestamp_reserved.gte.${startDate},timestamp_reserved.lt.${endDate})`,
-            `and(timestamp_dispatched.gte.${startDate},timestamp_dispatched.lt.${endDate})`,
-            `and(timestamp_returned.gte.${startDate},timestamp_returned.lt.${endDate})`,
-            `and(timestamp_cancelled.gte.${startDate},timestamp_cancelled.lt.${endDate})`
-          ].join(','))
-          .range(0, 4999);
-
-        if (activeWarehouseId) {
-          txQuery = txQuery.eq('warehouse_id', activeWarehouseId);
-        } else {
-          txQuery = txQuery.is('warehouse_id', null);
+        if (!activeWarehouseId) {
+          throw new Error('Select a warehouse before loading transaction statistics.');
         }
 
-        const { data: txs, error: txErr } = await txQuery;
-        if (txErr) throw txErr;
+        const { data: monthlyStats, error: statsError } = await sb.rpc('get_inventory_monthly_stats', {
+          p_company_id: companyId,
+          p_warehouse_id: activeWarehouseId,
+          p_period_start: startDate,
+          p_period_end: endDate
+        });
+        if (statsError) throw statsError;
 
         // Group transaction sums by sku & status using transition timestamps
         const statsMap = {};
@@ -2547,20 +2538,14 @@
           statsMap[sku] = { reserved: 0, dispatched: 0, returned: 0, cancelled: 0 };
         });
 
-        (txs || []).forEach(tx => {
-          const qty = tx.quantity || 0;
-          if (tx.timestamp_reserved && tx.timestamp_reserved >= startDate && tx.timestamp_reserved < endDate) {
-            if (statsMap[tx.sku]) statsMap[tx.sku].reserved += qty;
-          }
-          if (tx.timestamp_dispatched && tx.timestamp_dispatched >= startDate && tx.timestamp_dispatched < endDate) {
-            if (statsMap[tx.sku]) statsMap[tx.sku].dispatched += qty;
-          }
-          if (tx.timestamp_returned && tx.timestamp_returned >= startDate && tx.timestamp_returned < endDate) {
-            if (statsMap[tx.sku]) statsMap[tx.sku].returned += qty;
-          }
-          if (tx.timestamp_cancelled && tx.timestamp_cancelled >= startDate && tx.timestamp_cancelled < endDate) {
-            if (statsMap[tx.sku]) statsMap[tx.sku].cancelled += qty;
-          }
+        (monthlyStats || []).forEach(row => {
+          if (!statsMap[row.sku]) return;
+          statsMap[row.sku] = {
+            reserved: Number(row.reserved || 0),
+            dispatched: Number(row.dispatched || 0),
+            returned: Number(row.returned || 0),
+            cancelled: Number(row.cancelled || 0)
+          };
         });
 
         // Perform client side sorting if sorting by stats columns

@@ -2287,51 +2287,28 @@
         if (!currentCompanyId) {
           throw new Error('Company information is unavailable. Refresh the page and try again.');
         }
+        const warehouseItems = new Map();
         for (const p of products) {
           const prodMeta = dbProducts.find(mp => mp.sku === p.sku);
           if (prodMeta && prodMeta.count_inventory === false) continue;
           if (!p.warehouse_id) {
             throw new Error(`Select a warehouse for ${p.sku} before scheduling this booking.`);
           }
+          if (!warehouseItems.has(p.warehouse_id)) warehouseItems.set(p.warehouse_id, []);
+          warehouseItems.get(p.warehouse_id).push({ sku: p.sku, quantity: p.qty });
+        }
 
-          const { error: transactionError } = await inventorySb.from('inventory_transactions').insert([{
-            company_id: currentCompanyId,
-            sku: p.sku,
-            quantity: p.qty,
-            type: 'customer_order',
-            status: 'reserved',
-            reference_id: receiptNo,
-            customer_name: name,
-            customer_city: city,
-            timestamp_reserved: reservedAt,
-            warehouse_id: p.warehouse_id
-          }]);
-          if (transactionError) throw transactionError;
-
-          const { data: invRow, error: inventoryError } = await inventorySb
-            .from('inventory')
-            .select('id, available, reserved')
-            .eq('company_id', currentCompanyId)
-            .eq('sku', p.sku)
-            .eq('warehouse_id', p.warehouse_id);
-          if (inventoryError) throw inventoryError;
-          if (invRow && invRow.length > 0) {
-            const inv = invRow[0];
-            const { error: inventoryUpdateError } = await inventorySb.from('inventory').update({
-              available: inv.available - p.qty,
-              reserved: (inv.reserved || 0) + p.qty
-            }).eq('id', inv.id);
-            if (inventoryUpdateError) throw inventoryUpdateError;
-          } else {
-            const { error: inventoryInsertError } = await inventorySb.from('inventory').insert([{
-              company_id: currentCompanyId,
-              sku: p.sku,
-              available: -p.qty,
-              reserved: p.qty,
-              warehouse_id: p.warehouse_id
-            }]);
-            if (inventoryInsertError) throw inventoryInsertError;
-          }
+        for (const [warehouseId, items] of warehouseItems) {
+          const { error: reservationError } = await inventorySb.rpc('reserve_customer_order_inventory', {
+            p_company_id: currentCompanyId,
+            p_warehouse_id: warehouseId,
+            p_reference_id: receiptNo,
+            p_customer_name: name,
+            p_customer_city: city,
+            p_reserved_at: reservedAt,
+            p_items: items
+          });
+          if (reservationError) throw reservationError;
         }
       } catch (invErr) {
         console.warn('Inventory reservation error (non-blocking):', invErr);

@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from 'crypto';
 import nodemailer from 'nodemailer';
-import { createServiceClient, requireCompanyAccess, sendAccessError, setApiCors } from '../lib/api/security.js';
+import { createServiceClient, requireCompanyAccess, sendAccessError, setApiCors, writeSecurityAudit } from '../lib/api/security.js';
+import { enforceRateLimit } from '../lib/api/rate-limit.js';
 
 export default async function handler(req, res) {
   setApiCors(req, res);
@@ -23,6 +24,10 @@ export default async function handler(req, res) {
   const supabase = createServiceClient();
 
   try {
+    if (!await enforceRateLimit({
+      supabase, req, res, scope: 'send-invitation', identifier: company_id, limit: 30, windowSeconds: 3600
+    })) return;
+
     // 1. Verify user's session token and identity
     const access = await requireCompanyAccess(req, supabase, company_id, { roles: ['owner', 'admin'] });
     if (access.error) return sendAccessError(res, access);
@@ -184,6 +189,14 @@ export default async function handler(req, res) {
       }
     }
 
+    await writeSecurityAudit(supabase, {
+      companyId: company_id,
+      actorUserId: access.user.id,
+      action: 'employee_invitation_created',
+      targetType: 'email',
+      targetId: normalizedEmail,
+      metadata: { tenant_id, role: role || null, email_sent: emailSent }
+    });
     return res.status(200).json({ success: true, email_sent: emailSent, fallback_link: inviteLink });
 
   } catch (err) {
