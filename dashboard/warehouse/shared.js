@@ -26,6 +26,7 @@ window.WarehousePage = {
       if (tx.type === 'customer_order') {
         return tx.reference_id && (
           tx.reference_id.startsWith('ORD-') || 
+          tx.reference_id.startsWith('OC-') ||
           tx.reference_id.startsWith('RCV-') || 
           tx.reference_id.startsWith('SND-')
         );
@@ -398,7 +399,13 @@ window.WarehousePage = {
           }
           console.log(`Syncing reserved item: ${item.qty}x ${item.sku} for order ${orderNo}`);
 
+          if (!this.companyId || !this.activeWarehouseId) {
+            console.warn(`Skipping inventory sync for ${orderNo}: company or warehouse is unresolved.`);
+            continue;
+          }
+
           const txPayload = {
+            company_id: this.companyId,
             sku: item.sku,
             quantity: item.qty,
             type: 'customer_order',
@@ -407,7 +414,7 @@ window.WarehousePage = {
             customer_name: booking.customer_name,
             customer_city: city,
             timestamp_reserved: booking.created_at || new Date().toISOString(),
-            warehouse_id: this.activeWarehouseId || null
+            warehouse_id: this.activeWarehouseId
           };
           const { error: insTxErr } = await this.sb.from('inventory_transactions').insert([txPayload]);
           if (insTxErr) {
