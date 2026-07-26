@@ -60,7 +60,13 @@ async function syncData() {
       .maybeSingle();
 
     if (payoutProfileError) throw payoutProfileError;
-    if (!payoutProfile) throw new Error('Installer session expired');
+    if (!payoutProfile) {
+      handleLogout();
+      const loginError = document.getElementById('login-error');
+      loginError.textContent = 'Your employee account is not active. Please contact your administrator.';
+      loginError.style.display = 'block';
+      return;
+    }
 
     Object.assign(currentInstaller, payoutProfile);
     localStorage.setItem('bk_active_installer', JSON.stringify(currentInstaller));
