@@ -17,8 +17,19 @@ let currentMoveModalFolderId = null; // Tracks folder directory state within Mov
 let currentLinkModalFolderId = null; // Tracks folder directory state within Link Folder modal
 let currentUserCanEdit = false; // Owner, Director, Sales Manager can delete, move, rename files
 let currentUserCanManageAccess = false; // Owner and Admin can restrict folder access
+let currentUserModules = []; // RBAC modules used to mirror folder access inside selectors
 let currentSideBySideLeftPage = 1; // Tracks current left page index in side-by-side mode
 const FOLDER_CODE_ALPHABET = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ-_';
+const FOLDER_COLORS = {
+  cyan: { background: '#ECFEFF', border: '#67E8F9' },
+  blue: { background: '#EFF6FF', border: '#93C5FD' },
+  lavender: { background: '#F5F3FF', border: '#C4B5FD' },
+  rose: { background: '#FFF1F2', border: '#FDA4AF' },
+  peach: { background: '#FFF7ED', border: '#FDBA74' },
+  yellow: { background: '#FEFCE8', border: '#FDE047' },
+  mint: { background: '#ECFDF5', border: '#6EE7B7' },
+  gray: { background: '#F8FAFC', border: '#CBD5E1' }
+};
 
 window.setResourceViewMode = function(mode) {
   explorerViewMode = mode;
@@ -61,11 +72,19 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Trigger preference sync on DOM load
   window.setResourceViewMode(explorerViewMode);
   if (window.BKAuth) {
-    const authInfo = await window.BKAuth.checkRoleGate(
-      ['Business', 'Products', 'Operations', 'Marketing', 'Sales', 'Customer Service', 'Logistics', 'HR', 'Finance'],
-      '../admin.html'
-    );
-    if (!authInfo) return;
+    const user = await window.BKAuth.requireAuth('../admin.html');
+    if (!user) return;
+    const memberInfo = await window.BKAuth.getUserRole();
+    if (!memberInfo?.tenantId) {
+      window.location.href = '../admin.html';
+      return;
+    }
+    const authInfo = {
+      user,
+      role: memberInfo.role,
+      tenantId: memberInfo.tenantId,
+      modules: memberInfo.modules || []
+    };
     sb = window.BKAuth.sb;
     currentTenantId = authInfo.tenantId;
 
@@ -86,18 +105,22 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Fetch employee level & sales manager configs to resolve file editing permission
     try {
       const user = authInfo.user;
-      const [empRes, smRes] = await Promise.all([
+      const [empRes, smRes, memberRes] = await Promise.all([
         sb.from('employees').select('id, level').eq('email', user.email).limit(1).maybeSingle(),
-        sb.from('global_settings').select('value').eq('key', 'sales_managers').eq('company_id', currentCompanyId).maybeSingle()
+        sb.from('global_settings').select('value').eq('key', 'sales_managers').eq('company_id', currentCompanyId).maybeSingle(),
+        sb.from('tenant_members').select('role, accessible_modules').eq('tenant_id', currentTenantId).eq('user_id', user.id).limit(1).maybeSingle()
       ]);
 
       const emp = empRes.data;
+      const member = memberRes.data;
       const salesManagers = (smRes.data?.value && Array.isArray(smRes.data.value.managers)) ? smRes.data.value.managers : [];
 
-      const isOwner = authInfo.role === 'owner';
-      const isAdmin = authInfo.role === 'admin';
+      const memberRole = String(member?.role || authInfo.role || '').toLowerCase();
+      const isOwner = memberRole === 'owner';
+      const isAdmin = memberRole === 'admin';
       const isSalesManager = emp && salesManagers.includes(emp.id);
 
+      currentUserModules = Array.isArray(member?.accessible_modules) ? member.accessible_modules : [];
       currentUserCanEdit = isOwner || isAdmin || isSalesManager;
       currentUserCanManageAccess = isOwner || isAdmin;
     } catch (authErr) {
@@ -123,7 +146,7 @@ async function loadResources() {
 
   try {
     const { data, error } = await sb.from('sales_resources')
-      .select('id, company_id, name, type, file_type, file_url, file_size, thumbnail_url, tags, parent_id, folder_code, restricted_access, allowed_modules, created_at, updated_at')
+      .select('id, company_id, name, type, file_type, file_url, file_size, thumbnail_url, tags, parent_id, folder_code, folder_color, restricted_access, allowed_modules, created_at, updated_at')
       .eq('company_id', currentCompanyId)
       .order('name', { ascending: true });
 
@@ -180,13 +203,16 @@ function renderExplorer() {
     const card = document.createElement('div');
     card.className = 'item-card';
     const isRestrictedFolder = isFolderEffectivelyRestricted(item);
+    const folderColor = item.type === 'folder' ? FOLDER_COLORS[item.folder_color] : null;
     
     let iconHtml = '';
     if (item.type === 'folder') {
       const folderSize = explorerViewMode === 'list' ? 20 : 32;
+      const folderFill = folderColor?.background || 'none';
+      const folderStroke = folderColor?.border || 'currentColor';
       iconHtml = isRestrictedFolder
-        ? `<svg viewBox="0 0 24 24" width="${folderSize}" height="${folderSize}" stroke="currentColor" stroke-width="2" fill="none"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path><rect x="9" y="12" width="6" height="5" rx="0.8" stroke-width="1.6"></rect><path d="M10 12v-1a2 1.5 0 0 1 4 0v1" stroke-width="1.6"></path></svg>`
-        : `<svg viewBox="0 0 24 24" width="${folderSize}" height="${folderSize}" stroke="currentColor" stroke-width="2" fill="none"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>`;
+        ? `<svg viewBox="0 0 24 24" width="${folderSize}" height="${folderSize}" stroke="${folderStroke}" stroke-width="2" fill="none"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" fill="${folderFill}"></path><rect x="9" y="12" width="6" height="5" rx="0.8" stroke-width="1.6" fill="${folderFill}"></rect><path d="M10 12v-1a2 1.5 0 0 1 4 0v1" stroke-width="1.6"></path></svg>`
+        : `<svg viewBox="0 0 24 24" width="${folderSize}" height="${folderSize}" stroke="${folderStroke}" stroke-width="2" fill="none"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" fill="${folderFill}"></path></svg>`;
     } else {
       // If grid mode and image, load the pre-generated small thumbnail, or fall back to transformation, then original file
       if (explorerViewMode === 'grid' && ['png', 'jpg', 'jpeg'].includes(item.file_type)) {
@@ -280,8 +306,9 @@ function renderExplorer() {
     const isGDriveFolder = item.type === 'folder' && item.file_url && (item.file_url.includes('google.com') || item.file_url.includes('drive.google.com'));
     const canShareFolder = item.type === 'folder' && !isLinkedFolder && !isGDriveFolder && item.folder_code;
     const canManageRestrictions = currentUserCanManageAccess && canShareFolder;
+    const canSetFolderColor = currentUserCanEdit && item.type === 'folder';
 
-    const actionMenuHtml = (currentUserCanEdit || canShareFolder) ? `
+    const actionMenuHtml = (currentUserCanEdit || canShareFolder || isGDriveFolder) ? `
       <!-- Actions Menu -->
       <div class="card-actions-trigger" onclick="toggleCardMenu(event, '${item.id}')">
         <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none"><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg>
@@ -291,6 +318,12 @@ function renderExplorer() {
         <div class="card-dropdown-item" onclick="copyFolderLink(event, '${item.folder_code}')">
           <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="2" fill="none"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
           Copy Folder Link
+        </div>
+        ` : ''}
+        ${isGDriveFolder ? `
+        <div class="card-dropdown-item" onclick="copyGoogleDriveFolderLink(event, '${item.id}')">
+          <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="2" fill="none"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+          Copy Link
         </div>
         ` : ''}
         ${canManageRestrictions ? `
@@ -312,16 +345,39 @@ function renderExplorer() {
           <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="2" fill="none"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
           Delete
         </div>
+        ${canSetFolderColor ? `
+        <div class="folder-color-menu" onclick="event.stopPropagation();">
+          <span class="folder-color-menu-label">Folder color</span>
+          <div class="folder-color-menu-grid">
+            ${Object.entries(FOLDER_COLORS).map(([color, values]) => `
+              <button
+                type="button"
+                class="folder-color-swatch${item.folder_color === color ? ' selected' : ''}"
+                style="--swatch-color:${values.border};"
+                aria-label="${color}"
+                title="${color}"
+                onclick="setFolderColor(event, '${item.id}', '${color}')"
+              ></button>
+            `).join('')}
+            <button
+              type="button"
+              class="folder-color-swatch no-color"
+              aria-label="No folder color"
+              title="No color"
+              onclick="setFolderColor(event, '${item.id}', null)"
+            ></button>
+          </div>
+        </div>
+        ` : ''}
         ` : ''}
       </div>
     ` : '';
 
     const shortcutBadgeHtml = isLinkedFolder ? `
-      <div class="shortcut-badge" title="Shortcut Link">
-        <svg viewBox="0 0 24 24" width="100%" height="100%" stroke="currentColor" stroke-width="3" fill="none">
-          <path d="M10 18h5v-5m-5 5l6-6"></path>
-        </svg>
-      </div>
+      <svg class="shortcut-badge" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2" fill="none" title="Linked folder">
+        <path d="M10 13a5 5 0 0 0 7.54.54l2-2a5 5 0 0 0-7.07-7.07l-1.15 1.15"></path>
+        <path d="M14 11a5 5 0 0 0-7.54-.54l-2 2a5 5 0 0 0 7.07 7.07l1.14-1.14"></path>
+      </svg>
     ` : '';
 
     const gdriveFolderBadgeHtml = isGDriveFolder ? `
@@ -476,22 +532,98 @@ function isFolderEffectivelyRestricted(folder, visited = new Set()) {
   return Boolean(linkedTarget && isFolderEffectivelyRestricted(linkedTarget, visited));
 }
 
+function canCurrentUserAccessFolder(folder, visited = new Set()) {
+  if (!folder || folder.type !== 'folder' || visited.has(folder.id)) return true;
+  if (currentUserCanManageAccess) return true;
+  visited.add(folder.id);
+
+  if (folder.restricted_access) {
+    const allowedModules = Array.isArray(folder.allowed_modules) ? folder.allowed_modules : [];
+    const hasAllowedModule = allowedModules.some(allowed =>
+      currentUserModules.some(memberModule =>
+        String(memberModule).trim().toLowerCase() === String(allowed).trim().toLowerCase()
+      )
+    );
+    if (!hasAllowedModule) return false;
+  }
+
+  const parent = folder.parent_id ? allResources.find(item => item.id === folder.parent_id) : null;
+  if (parent && !canCurrentUserAccessFolder(parent, visited)) return false;
+
+  const linkedTargetId = typeof folder.file_url === 'string'
+    && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(folder.file_url);
+  const linkedTarget = linkedTargetId ? allResources.find(item => item.id === folder.file_url) : null;
+  if (linkedTargetId && !linkedTarget) return false;
+  return !linkedTarget || canCurrentUserAccessFolder(linkedTarget, visited);
+}
+
 function toggleCardMenu(e, id) {
   e.stopPropagation();
   const menu = document.getElementById(`menu-${id}`);
   const isVisible = menu.style.display === 'block';
   
   document.querySelectorAll('.card-dropdown').forEach(d => d.style.display = 'none');
+  document.querySelectorAll('.item-card.menu-open').forEach(card => card.classList.remove('menu-open'));
   
   if (!isVisible) {
+    menu.closest('.item-card')?.classList.add('menu-open');
+    menu.style.left = '';
+    menu.style.right = '';
     menu.style.display = 'block';
+    const gridLeft = document.getElementById('explorer-grid').getBoundingClientRect().left;
+    if (menu.getBoundingClientRect().left < gridLeft) {
+      menu.style.left = '6px';
+      menu.style.right = 'auto';
+    }
   }
 }
 
 // Close menus when clicking outside
 document.addEventListener('click', () => {
   document.querySelectorAll('.card-dropdown').forEach(d => d.style.display = 'none');
+  document.querySelectorAll('.item-card.menu-open').forEach(card => card.classList.remove('menu-open'));
+  closeResourcesContextMenu();
 });
+
+function closeResourcesContextMenu() {
+  document.getElementById('resources-context-menu')?.classList.remove('open');
+}
+
+document.addEventListener('contextmenu', event => {
+  if (event.target.closest('#dash-sidebar') || !event.target.closest('.dash-main') || !currentUserCanEdit) {
+    closeResourcesContextMenu();
+    return;
+  }
+
+  event.preventDefault();
+  document.querySelectorAll('.card-dropdown').forEach(menu => menu.style.display = 'none');
+  document.querySelectorAll('.item-card.menu-open').forEach(card => card.classList.remove('menu-open'));
+
+  const menu = document.getElementById('resources-context-menu');
+  menu.classList.add('open');
+  const bounds = menu.getBoundingClientRect();
+  const left = Math.min(event.clientX, window.innerWidth - bounds.width - 8);
+  const top = Math.min(event.clientY, window.innerHeight - bounds.height - 8);
+  menu.style.left = `${Math.max(8, left)}px`;
+  menu.style.top = `${Math.max(8, top)}px`;
+});
+
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape') closeResourcesContextMenu();
+});
+
+window.addEventListener('scroll', closeResourcesContextMenu, true);
+
+window.handleResourcesContextAction = function(action) {
+  closeResourcesContextMenu();
+  if (action === 'create') {
+    openCreateFolderModal();
+  } else if (action === 'link') {
+    openLinkFolderModal();
+  } else if (action === 'gdrive') {
+    openLinkGDriveFolderModal();
+  }
+};
 
 // ── Breadcrumb Navigation ──
 window.navigateToFolder = function(id) {
@@ -528,6 +660,8 @@ window.addEventListener('popstate', () => {
 
 window.copyFolderLink = async function(e, folderCode) {
   e.stopPropagation();
+  document.querySelectorAll('.card-dropdown').forEach(menu => menu.style.display = 'none');
+  document.querySelectorAll('.item-card.menu-open').forEach(card => card.classList.remove('menu-open'));
   const url = `${window.location.origin}/dashboard/resources/folders/${folderCode}`;
   try {
     await navigator.clipboard.writeText(url);
@@ -535,6 +669,22 @@ window.copyFolderLink = async function(e, folderCode) {
   } catch (err) {
     console.error(err);
     showToast('Unable to copy the folder link. Please try again.', true);
+  }
+};
+
+window.copyGoogleDriveFolderLink = async function(e, folderId) {
+  e.stopPropagation();
+  document.querySelectorAll('.card-dropdown').forEach(menu => menu.style.display = 'none');
+  document.querySelectorAll('.item-card.menu-open').forEach(card => card.classList.remove('menu-open'));
+  const folder = allResources.find(item => item.id === folderId && item.type === 'folder');
+  if (!folder?.file_url) return;
+
+  try {
+    await navigator.clipboard.writeText(folder.file_url);
+    showToast('Google Drive link copied.');
+  } catch (err) {
+    console.error(err);
+    showToast('Unable to copy the Google Drive link. Please try again.', true);
   }
 };
 
@@ -564,9 +714,18 @@ function renderBreadcrumbs() {
   }
 
   path.forEach(folder => {
+    const lockIcon = isFolderEffectivelyRestricted(folder)
+      ? `
+        <svg class="breadcrumb-lock-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="5" y="10" width="14" height="11" rx="2"></rect>
+          <path d="M8 10V7a4 4 0 0 1 8 0v3"></path>
+        </svg>
+      `
+      : '';
+
     nav.innerHTML += `
       <span class="breadcrumb-separator">/</span>
-      <span class="breadcrumb-item" onclick="navigateToFolder('${folder.id}')">${escFulfillment(folder.name)}</span>
+      <span class="breadcrumb-item" onclick="navigateToFolder('${folder.id}')">${lockIcon}${escFulfillment(folder.name)}</span>
     `;
   });
 }
@@ -924,103 +1083,64 @@ window.openLinkFolderModal = function() {
     return;
   }
   currentLinkModalFolderId = null;
+  document.getElementById('link-folder-reference-input').value = '';
+  updateLinkFolderReferenceStatus('');
+  document.getElementById('link-folders-list').innerHTML = '';
   openModal('link-folder-modal');
-  renderLinkFolderBreadcrumbs();
-  loadLinkFolders();
 };
 
-window.navigateLinkSelectorFolder = function(id) {
-  currentLinkModalFolderId = id;
-  renderLinkFolderBreadcrumbs();
-  loadLinkFolders();
-};
-
-function renderLinkFolderBreadcrumbs() {
-  const nav = document.getElementById('link-folder-breadcrumb-nav');
-  nav.innerHTML = `<span class="breadcrumb-item" onclick="navigateLinkSelectorFolder(null)">Resources</span>`;
-
-  if (!currentLinkModalFolderId) return;
-
-  const path = [];
-  let tempId = currentLinkModalFolderId;
-  
-  while (tempId) {
-    const folder = allResources.find(r => r.id === tempId);
-    if (folder) {
-      path.unshift(folder);
-      tempId = folder.parent_id;
-    } else {
-      break;
-    }
-  }
-
-  path.forEach(folder => {
-    nav.innerHTML += `
-      <span class="breadcrumb-separator">/</span>
-      <span class="breadcrumb-item" onclick="navigateLinkSelectorFolder('${folder.id}')">${escFulfillment(folder.name)}</span>
-    `;
-  });
+function updateLinkFolderReferenceStatus(message, state = '') {
+  const status = document.getElementById('link-folder-reference-status');
+  status.textContent = message;
+  status.classList.toggle('valid', state === 'valid');
+  status.classList.toggle('invalid', state === 'invalid');
 }
 
-async function loadLinkFolders() {
+window.resolveLinkFolderReference = function(value) {
+  const reference = value.trim();
+  if (!reference) {
+    currentLinkModalFolderId = null;
+    updateLinkFolderReferenceStatus('');
+    document.getElementById('link-folders-list').innerHTML = '';
+    return;
+  }
+
+  const urlMatch = reference.match(/\/dashboard\/resources\/folders\/([A-Za-z0-9_-]{14})(?:[/?#]|$)/);
+  const folderCode = urlMatch?.[1] || (/^[A-Za-z0-9_-]{14}$/.test(reference) ? reference : null);
+  const folder = folderCode
+    ? allResources.find(item =>
+      item.type === 'folder'
+      && item.folder_code === folderCode
+      && canCurrentUserAccessFolder(item)
+    )
+    : null;
+
+  if (!folder) {
+    currentLinkModalFolderId = null;
+    document.getElementById('link-folders-list').innerHTML = '';
+    updateLinkFolderReferenceStatus('Folder not found or you do not have access.', 'invalid');
+    return;
+  }
+
+  currentLinkModalFolderId = folder.id;
+  updateLinkFolderReferenceStatus('');
   const container = document.getElementById('link-folders-list');
   container.innerHTML = `
-    <div style="display:flex; align-items:center; justify-content:center; padding:2rem 0; gap:0.5rem;">
-      <div class="spinner-cyan" style="width:18px; height:18px; border-width:2px;"></div>
-      <span style="font-size:0.8rem; color:var(--text-muted);">Loading folders...</span>
+    <div class="link-folder-selected-row">
+      <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+      <span>${escFulfillment(folder.name)}</span>
     </div>
   `;
-
-  try {
-    const { data, error } = await sb.from('sales_resources')
-      .select('id, name, parent_id, file_url')
-      .eq('company_id', currentCompanyId)
-      .eq('type', 'folder')
-      .order('name', { ascending: true });
-
-    if (error) throw error;
-
-    // Filter folders for current directory level inside selector modal
-    // Filter out folders that are already external links
-    const folders = (data || []).filter(f => f.parent_id === currentLinkModalFolderId && (!f.file_url || (!f.file_url.includes('google.com') && !f.file_url.includes('drive.google.com'))));
-
-    container.innerHTML = '';
-
-    if (folders.length === 0) {
-      container.innerHTML = `
-        <div style="text-align:center; padding:2rem 1rem; color:var(--text-muted); font-size:0.8rem;">
-          No folders inside this folder.
-        </div>
-      `;
-      return;
-    }
-
-    folders.forEach(f => {
-      const item = document.createElement('div');
-      item.style = "display:flex; align-items:center; justify-content:space-between; padding:0.6rem 1rem; border-radius:6px; background:var(--bg-surface); border:1px solid var(--border); cursor:pointer; transition:border-color 0.1s;";
-      item.innerHTML = `
-        <div style="display:flex; align-items:center; gap:0.6rem; font-size:0.8rem; font-weight:700; color:var(--text-primary);">
-          <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2.2" fill="none" style="color:var(--text-muted);"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
-          <span>${escFulfillment(f.name)}</span>
-        </div>
-        <button class="btn btn-outline" style="height:26px; font-size:0.72rem; padding:0 0.5rem;" onclick="event.stopPropagation(); executeLinkFolderShortcutDirect('${f.id}', '${escFulfillment(f.name).replace(/'/g, "\\'")}')">Link</button>
-      `;
-      item.onclick = () => navigateLinkSelectorFolder(f.id);
-      container.appendChild(item);
-    });
-  } catch (err) {
-    console.error(err);
-    container.innerHTML = `
-      <div style="text-align:center; padding:2rem 1rem; color:var(--danger); font-size:0.8rem;">
-        Failed to load folders: ${err.message}
-      </div>
-    `;
-  }
-}
+};
 
 window.executeLinkFolderShortcutDirect = async function(targetId, targetName) {
   if (!currentUserCanEdit) {
     showToast('Permission denied: Only Owner, Admin, and Sales Manager can manage resources.', true);
+    return;
+  }
+  const targetFolder = allResources.find(folder => folder.id === targetId && folder.type === 'folder');
+  if (!targetFolder || !canCurrentUserAccessFolder(targetFolder)) {
+    showToast('You do not have access to link this folder.', true);
     return;
   }
   
@@ -1107,6 +1227,27 @@ window.openFolderRestrictionsModal = function(e, id) {
   document.getElementById('btn-save-folder').textContent = "Save";
   resetFolderAccessControls(folder);
   openModal('create-folder-modal');
+};
+
+window.setFolderColor = async function(e, folderId, color) {
+  e.stopPropagation();
+  if (!currentUserCanEdit || (color !== null && !FOLDER_COLORS[color])) return;
+  const folder = allResources.find(item => item.id === folderId && item.type === 'folder');
+  if (!folder) return;
+
+  try {
+    const { error } = await sb.from('sales_resources')
+      .update({ folder_color: color, updated_at: new Date().toISOString() })
+      .eq('id', folderId)
+      .eq('company_id', currentCompanyId);
+
+    if (error) throw error;
+    folder.folder_color = color;
+    renderExplorer();
+  } catch (err) {
+    console.error(err);
+    showToast('Unable to update the folder color. Please try again.', true);
+  }
 };
 
 function resetFolderAccessControls(folder) {
