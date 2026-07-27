@@ -444,6 +444,8 @@
         tenantId: null,
         currentDate: new Date(),
         employees: [],
+        payoutSchedules: [15, 30],
+        regularPayoutState: {},
         specialSchedules: [],
         adjustments: [],
         commissionAssignments: [],
@@ -541,7 +543,7 @@
 
           try {
             // Fetch everything needed in parallel
-            const [empRes, configRes, payoutSetRes, adjRes, commRes, bookingsRes, payslipRes, accountsRes, journalRes, subRes, billRes, specPayoutRes] = await Promise.all([
+            const [empRes, configRes, payoutSetRes, adjRes, commRes, bookingsRes, payslipRes, accountsRes, journalRes, subRes, billRes, regPayoutRes, specPayoutRes] = await Promise.all([
               sb.from('employees')
                 .select('id, first_name, last_name, salary, employment_status')
                 .eq('company_id', this.companyId), // Query all employees so we can show terminated ones historically
@@ -586,6 +588,11 @@
                 .eq('company_id', this.companyId),
               sb.from('global_settings')
                 .select('value')
+                .eq('key', 'regular_payout_state')
+                .eq('company_id', this.companyId)
+                .maybeSingle(),
+              sb.from('global_settings')
+                .select('value')
                 .eq('key', 'special_payout_state')
                 .eq('company_id', this.companyId)
                 .maybeSingle()
@@ -598,6 +605,9 @@
             if (billRes.error) throw billRes.error;
 
             this.employees = empRes.data || [];
+            this.payoutSchedules = (configRes.data?.value?.payoutSchedules || [15, 30])
+              .map(Number)
+              .filter(Number.isFinite);
             this.specialSchedules = configRes.data?.value?.specialSchedules || [];
             if (payoutSetRes.data?.value) {
               this.payoutSettings = { ...this.payoutSettings, ...payoutSetRes.data.value };
@@ -608,6 +618,7 @@
             this.payslipRecords = payslipRes.data || [];
             this.subscriptions = subRes.data || [];
             this.billingRecords = billRes.data || [];
+            this.regularPayoutState = regPayoutRes.data?.value || {};
             this.specialPayoutState = specPayoutRes.data?.value || {};
 
             const salariesTotal = this.renderStatement() || 0;
@@ -852,6 +863,13 @@
 
           sortedEmps.forEach(emp => {
             const record = this.payslipRecords.find(r => r.employee_id === emp.id);
+            const schedules = this.payoutSchedules.length > 0 ? this.payoutSchedules : [15, 30];
+            const monthlySalary = Number(emp.salary) || 0;
+            const salaryPerSchedule = monthlySalary / schedules.length;
+            const paidSalaryFromState = schedules.reduce((sum, day) => {
+              const isPaid = this.regularPayoutState?.[targetMonthKey]?.[`${emp.id}_${day}`] === true;
+              return sum + (isPaid ? salaryPerSchedule : 0);
+            }, 0);
 
             let baseSalary = 0;
             let specialPayout = 0;
@@ -863,10 +881,13 @@
               .reduce((sum, a) => sum + (Number(a.amount) || 0), 0);
 
             if (record) {
-              baseSalary = Number(record.salary || record.basic_paid) || 0;
+              const recordedBasicPaid = Number(record.basic_paid) || 0;
+              baseSalary = emp.employment_status === 'Active'
+                ? (recordedBasicPaid || Number(record.salary) || monthlySalary)
+                : (recordedBasicPaid || paidSalaryFromState);
               specialPayout = Number(record.special_payouts) || 0;
             } else {
-              baseSalary = emp.employment_status === 'Active' ? (Number(emp.salary) || 0) : 0;
+              baseSalary = emp.employment_status === 'Active' ? monthlySalary : paidSalaryFromState;
               
               // Only count special payouts if they are checked/marked as paid in special_payout_state for this month key
               specialPayout = this.specialSchedules
@@ -884,7 +905,7 @@
 
             // A. Add to Salaries Table if active/payout exists
             const hasSalaryEarnings = baseSalary > 0 || specialPayout > 0;
-            const shouldShowSalary = record || (emp.employment_status === 'Active' && (baseSalary > 0 || totalEmpCost > 0)) || hasSalaryEarnings;
+            const shouldShowSalary = (emp.employment_status === 'Active' && (baseSalary > 0 || totalEmpCost > 0)) || hasSalaryEarnings;
             if (shouldShowSalary) {
               const rowSalaryTotal = baseSalary + specialPayout;
               grandTotalSalaries += baseSalary;
