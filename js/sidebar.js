@@ -692,16 +692,28 @@
       ]
     };
 
-    function isSidebarRouteActive(href, pathname) {
+    function getSidebarRouteMatchScore(href, pathname) {
       const linkPath = normalizeSidebarPath(href);
       const pagePath = normalizeSidebarPath(pathname);
+      const comparableLink = linkPath.toLowerCase();
+      const comparablePage = pagePath.toLowerCase();
 
-      if (linkPath === pagePath) return true;
+      if (comparableLink === comparablePage) return 10000 + linkPath.length;
 
-      return (sidebarRouteFamilies[linkPath] || []).some(prefix => {
+      let bestScore = 0;
+      if (comparableLink !== '/dashboard' && comparablePage.startsWith(comparableLink + '/')) {
+        bestScore = linkPath.length;
+      }
+
+      (sidebarRouteFamilies[linkPath] || []).forEach(prefix => {
         const normalizedPrefix = normalizeSidebarPath(prefix);
-        return pagePath === normalizedPrefix || pagePath.startsWith(normalizedPrefix + '/');
+        const comparablePrefix = normalizedPrefix.toLowerCase();
+        if (comparablePage === comparablePrefix || comparablePage.startsWith(comparablePrefix + '/')) {
+          bestScore = Math.max(bestScore, normalizedPrefix.length);
+        }
       });
+
+      return bestScore;
     }
     
     // Check main links
@@ -751,19 +763,23 @@
       group.classList.remove('expanded');
     });
 
-    // Check sub-links and auto-expand active group
-    document.querySelectorAll('.dash-nav-child').forEach(link => {
+    // Check sub-links using the longest route match, then expand its group.
+    const sidebarChildLinks = Array.from(document.querySelectorAll('.dash-nav-child'));
+    let activeSidebarLink = null;
+    let activeSidebarScore = 0;
+
+    sidebarChildLinks.forEach(link => {
       const href = link.getAttribute('href');
-      if (href && isSidebarRouteActive(href, currentPath)) {
-        link.classList.add('active');
-        const group = link.closest('.dash-nav-group');
-        if (group) {
-          group.classList.add('expanded');
-        }
-      } else {
-        link.classList.remove('active');
+      const score = href ? getSidebarRouteMatchScore(href, currentPath) : 0;
+      if (score > activeSidebarScore) {
+        activeSidebarLink = link;
+        activeSidebarScore = score;
       }
     });
+
+    sidebarChildLinks.forEach(link => link.classList.toggle('active', link === activeSidebarLink));
+    const activeSidebarGroup = activeSidebarLink?.closest('.dash-nav-group');
+    if (activeSidebarGroup) activeSidebarGroup.classList.add('expanded');
 
     // Enforce role-based access control menu visibility
     (async function checkRBAC() {

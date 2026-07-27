@@ -643,6 +643,23 @@
   <script>
     'use strict';
 
+    function showToast(message, isError = false) {
+      if (window.Toast) {
+        window.Toast.show(message, isError ? 'error' : 'success');
+      } else {
+        console.log((isError ? 'ERROR: ' : 'INFO: ') + message);
+      }
+    }
+
+    function esc(value) {
+      return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
     const AttendanceApp = {
       currentUser: null,
       companyId: null,
@@ -1311,7 +1328,7 @@
 
       async submitLeaveRequest() {
         if (!this.employee || !this.companyId) {
-          toast('Employee profile configuration incomplete.', 'error');
+          showToast('Employee profile configuration incomplete.', true);
           return;
         }
 
@@ -1319,7 +1336,7 @@
         const reason = document.getElementById('leave-reason').value.trim();
 
         if (!reason) {
-          toast('Please state a reason for filing leave.', 'error');
+          showToast('Please state a reason for filing leave.', true);
           return;
         }
 
@@ -1330,7 +1347,7 @@
           dateTo = document.getElementById('vl-to').value;
 
           if (!dateFrom || !dateTo) {
-            toast('Please specify leave start and end dates.', 'error');
+            showToast('Please specify leave start and end dates.', true);
             return;
           }
 
@@ -1338,7 +1355,7 @@
           const d2 = new Date(dateTo + 'T00:00:00');
 
           if (d2 < d1) {
-            toast('Start date cannot be after end date.', 'error');
+            showToast('Start date cannot be after end date.', true);
             return;
           }
 
@@ -1348,7 +1365,7 @@
           // Check balance limit
           const vlBalance = parseFloat(this.employee.vl_load || 0);
           if (numDays > vlBalance) {
-            toast(`Insufficient Vacation Leave balance. Requested: ${numDays}, Available: ${vlBalance}.`, 'error');
+            showToast(`Insufficient Vacation Leave balance. Requested: ${numDays}, Available: ${vlBalance}.`, true);
             return;
           }
 
@@ -1361,14 +1378,14 @@
 
           // Validate timing check
           if (!this.validateSickLeaveTiming()) {
-            toast('Filing rejected. Sick Leave must be requested at least 1 hour before shift start.', 'error');
+            showToast('Filing rejected. Sick Leave must be requested at least 1 hour before shift start.', true);
             return;
           }
 
           // Check balance limit
           const slBalance = parseFloat(this.employee.sl_load || 0);
           if (numDays > slBalance) {
-            toast(`Insufficient Sick Leave balance. Requested: ${numDays}, Available: ${slBalance}.`, 'error');
+            showToast(`Insufficient Sick Leave balance. Requested: ${numDays}, Available: ${slBalance}.`, true);
             return;
           }
         }
@@ -1393,7 +1410,7 @@
           const { error } = await sb.from('leave_requests').insert([payload]);
           if (error) throw error;
 
-          toast('Leave request submitted successfully.', 'success');
+          showToast('Leave request submitted successfully.');
           
           // Clear inputs
           document.getElementById('leave-reason').value = '';
@@ -1406,7 +1423,7 @@
           await this.loadLeavesData();
         } catch (err) {
           console.error(err);
-          toast('Filing error: ' + err.message, 'error');
+          showToast('The leave request could not be submitted. Please try again.', true);
         } finally {
           btn.disabled = false;
           btn.textContent = 'Request';
@@ -1449,11 +1466,11 @@
           const { error: reqErr } = await sb.from('leave_requests').update({ status: 'approved' }).eq('id', reqId);
           if (reqErr) throw reqErr;
 
-          toast('Leave request approved.');
+          showToast('Leave request approved.');
           await this.loadLeavesData();
         } catch (err) {
           console.error(err);
-          toast('Failed to approve request: ' + err.message, 'error');
+          showToast('The leave request could not be approved. Please try again.', true);
         }
       },
 
@@ -1472,7 +1489,7 @@
         const reason = document.getElementById('reject-reason-input').value.trim();
 
         if (!reason) {
-          toast('Please state rejection reason.', 'error');
+          showToast('Please state rejection reason.', true);
           return;
         }
 
@@ -1487,12 +1504,12 @@
 
           if (error) throw error;
 
-          toast('Leave request rejected.');
+          showToast('Leave request rejected.');
           this.closeRejectModal();
           await this.loadLeavesData();
         } catch (err) {
           console.error(err);
-          toast('Failed to reject: ' + err.message, 'error');
+          showToast('The leave request could not be rejected. Please try again.', true);
         }
       }
     };
