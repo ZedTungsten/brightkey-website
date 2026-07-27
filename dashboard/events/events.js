@@ -1565,7 +1565,13 @@ window.EventsApp = {
       let attendingCount = 0;
       let declinedCount = 0;
 
-      tbody.innerHTML = records.map(r => {
+        const chronologicalRecords = [...records].sort((a, b) => {
+            const aTime = a.updated_at ? new Date(a.updated_at).getTime() : Number.POSITIVE_INFINITY;
+            const bTime = b.updated_at ? new Date(b.updated_at).getTime() : Number.POSITIVE_INFINITY;
+            return aTime - bTime;
+        });
+
+        tbody.innerHTML = chronologicalRecords.map(r => {
         const emp = r.employees || {};
         const fullName = emp.first_name ? `${emp.first_name} ${emp.last_name}` : 'Unknown Recipient';
         const dept = emp.department || '—';

@@ -322,6 +322,7 @@
         </button>
         <div class="dash-nav-children">
           <a href="/dashboard/sales-goals/goals" class="dash-nav-child" data-role="sales">Sales</a>
+          <a href="/dashboard/CRM/customers" class="dash-nav-child" data-role="sales">CRM</a>
           <a href="/dashboard/sales-schedule" class="dash-nav-child" data-role="sales">Schedule</a>
           <a href="/dashboard/sales-stocks" class="dash-nav-child" data-role="sales">Stocks</a>
           <a href="/dashboard/resources" class="dash-nav-child" data-role="sales">Resources</a>
@@ -643,6 +644,9 @@
         '/dashboard/sales-goals/settings',
         '/dashboard/sales-commissions',
         '/dashboard/sales-goals/commissions'
+      ],
+      '/dashboard/CRM/customers': [
+        '/dashboard/CRM'
       ],
       '/dashboard/warehouse/inspect': [
         '/dashboard/warehouse'
