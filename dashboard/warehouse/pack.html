@@ -511,6 +511,14 @@
   </style>
   <style>
     /* Compact warehouse operation layouts for tablets and phones. */
+    .damage-reference-link{padding:0;border:0;background:transparent;color:var(--cyan-light);font:inherit;font-weight:700;cursor:pointer}
+    .damage-reference-link:hover,.damage-reference-link:focus-visible{color:var(--cyan);text-decoration:underline}
+    .damage-view-description{min-height:72px;padding:.85rem;border:1px solid var(--border);border-radius:8px;background:var(--bg-base);color:var(--text-primary);font-size:.86rem;line-height:1.55;white-space:pre-wrap}
+    .damage-view-media{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:.75rem}
+    .damage-view-media img{width:100%;height:140px;object-fit:cover;border:1px solid var(--border);border-radius:8px;background:var(--bg-elevated)}
+    .damage-view-media video{width:100%;height:auto;max-height:min(60vh,520px);object-fit:contain;border:1px solid var(--border);border-radius:8px;background:#000}
+    .damage-view-photo{padding:0;border:0;background:transparent;cursor:zoom-in}
+
     @media (max-width: 1024px) {.page-wrap{height:100dvh}.top-bar{min-height:52px;height:auto;padding:.5rem 1rem;gap:.75rem}.top-bar-title{font-size:.92rem;line-height:1.2}.top-bar>div:last-child{min-width:0}.wh-select-dropdown{min-width:150px;max-width:220px}.drawer-tabs{scrollbar-width:thin;overscroll-behavior-x:contain}.tab-btn{padding:.72rem .9rem;font-size:.78rem}.tab-panel{padding:1rem}.panel-header{padding:.8rem 1rem;font-size:.78rem}.table-responsive{overscroll-behavior-x:contain;overscroll-behavior-y:auto;touch-action:pan-x pan-y;-webkit-overflow-scrolling:touch}.ledger-table{min-width:720px;font-size:.78rem}.ledger-table th{padding:.55rem .7rem;font-size:.68rem}.ledger-table td{padding:.36rem .7rem}.ledger-table td img{width:54px!important;height:36px!important}.modal-overlay{padding:1rem}.modal-overlay .modal-content,.modal-overlay .modal{width:100%!important;max-height:calc(100dvh - 2rem)!important;overflow-y:auto;padding:1.25rem!important}}
     @media (max-width: 600px) {.top-bar{display:grid;grid-template-columns:minmax(0,1fr) auto;padding:.55rem .75rem}.top-bar-title{grid-column:1/-1;font-size:.88rem}.top-bar>div[style*="flex:1"]{display:none}.top-bar>div:last-child{grid-column:1/-1;display:grid!important;grid-template-columns:minmax(0,1fr) auto;gap:.5rem!important}.top-bar .wh-select-dropdown{width:100%;min-width:0;max-width:none;height:34px;font-size:.76rem}.top-bar .btn{min-height:34px;padding:.4rem .75rem;font-size:.76rem;justify-content:center}.drawer-tabs{min-height:42px}.tab-btn{padding:.65rem .72rem;font-size:.73rem}.tab-separator{padding:0 .15rem!important}.tab-panel{padding:.65rem}.panel{border-radius:7px}.panel-header{padding:.7rem .8rem;font-size:.73rem}.ledger-table{min-width:660px;font-size:.74rem}.ledger-table th{padding:.5rem .6rem;font-size:.64rem;letter-spacing:.04em}.ledger-table td{padding:.32rem .6rem}.ledger-table td img{width:48px!important;height:32px!important}.modal-overlay{align-items:flex-end!important;padding:.5rem}.modal-overlay .modal-content,.modal-overlay .modal{max-height:calc(100dvh - 1rem)!important;padding:1rem!important;border-radius:10px!important}.modal-content h3,.modal .modal-title{font-size:.98rem!important;line-height:1.3}.modal-content>div:last-child,.modal>div:last-child{display:grid!important;grid-template-columns:1fr 1fr;gap:.5rem!important}.modal-content>div:last-child .btn,.modal>div:last-child .btn{width:100%;height:auto!important;min-height:38px;padding:.45rem .6rem!important;justify-content:center;white-space:normal;line-height:1.2}#toast-container{top:.75rem;right:.75rem;left:.75rem;pointer-events:none}#toast-container .toast{width:100%;min-width:0;pointer-events:auto}}
   </style>
@@ -651,6 +659,31 @@
     </div>
   </div>
 
+  <div id="damage-details-modal" class="modal-overlay" aria-hidden="true" onclick="handleDamageDetailsBackdrop(event)" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); backdrop-filter:blur(4px); z-index:10000; align-items:center; justify-content:center;">
+    <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="damage-details-title" style="width:100%; max-width:680px; background:var(--bg-surface); border:1px solid var(--border); border-radius:12px; padding:1.75rem; box-shadow:0 12px 48px rgba(0,0,0,0.25); display:flex; flex-direction:column; gap:1.1rem; position:relative;">
+      <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:1rem;">
+        <div>
+          <h3 id="damage-details-title" style="margin:0 0 0.25rem; font-size:1.15rem; font-weight:600; color:var(--text-primary);">Damage Details</h3>
+          <div style="font-size:0.8rem; color:var(--text-muted);">Reference: <strong id="damage-details-reference" style="color:var(--cyan-light);"></strong></div>
+        </div>
+        <button type="button" class="btn btn-outline btn-sm" aria-label="Close damage details" onclick="closeDamageDetailsModal()" style="padding:0.4rem;">
+          <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div>
+        <div style="margin-bottom:0.45rem; font-size:0.75rem; font-weight:700; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em;">Damage Description</div>
+        <div id="damage-details-description" class="damage-view-description"></div>
+      </div>
+      <div>
+        <div style="margin-bottom:0.45rem; font-size:0.75rem; font-weight:700; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em;">Media</div>
+        <div id="damage-details-media" class="damage-view-media"></div>
+      </div>
+      <div style="display:flex; justify-content:flex-end; border-top:1px solid var(--border); padding-top:1rem;">
+        <button type="button" class="btn btn-outline" onclick="closeDamageDetailsModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
   
   </div>
 
@@ -689,6 +722,7 @@
     let allInventory = {};
     let isEditingAvailable = false;
     let warehouseTransfers = [];
+    let damagedGoodsByReference = new Map();
 
     // Supplier Order State
     let supplierOrderSearch = "";
@@ -796,13 +830,22 @@
         .eq('company_id', companyId)
         .range(0, 999);
 
+      const damagedGoodsQuery = companyId
+        ? sb.from('damaged_goods')
+          .select('reference_id, damage_description, photo_urls, video_url')
+          .eq('company_id', companyId)
+          .like('reference_id', 'SND-DMG-%')
+          .limit(100)
+        : Promise.resolve({ data: [], error: null });
+
       const [
         { data: invData, error: invErr },
         { data: txData, error: txErr },
         { data: transData, error: transErr },
         { data: delivData, error: delivErr },
-        { data: bData, error: bErr }
-      ] = await Promise.all([invQuery, txQuery, transferQuery, deliveryQuery, bookingsQuery]);
+        { data: bData, error: bErr },
+        { data: damagedData, error: damagedErr }
+      ] = await Promise.all([invQuery, txQuery, transferQuery, deliveryQuery, bookingsQuery, damagedGoodsQuery]);
 
       if (invErr) throw invErr;
       if (txErr) throw txErr;
@@ -813,6 +856,12 @@
         console.error('Failed to fetch installation bookings:', bErr);
       } else {
         bookings = bData || [];
+      }
+      if (damagedErr) {
+        console.error('Failed to fetch damaged goods details:', damagedErr);
+        damagedGoodsByReference = new Map();
+      } else {
+        damagedGoodsByReference = new Map((damagedData || []).map(record => [record.reference_id, record]));
       }
 
       allInventory = {};
@@ -1253,6 +1302,10 @@
         const qaDate = formatPackDate(group.timestamp_inspect, true);
         const installation = bookings.find(booking => booking.order_no === group.reference_id);
         const installDate = formatInstallSchedule(installation?.scheduled_date, installation?.scheduled_time);
+        const safeReference = escFulfillment(group.reference_id);
+        const referenceHtml = group.reference_id.startsWith('SND-DMG-')
+          ? `<button type="button" class="damage-reference-link" onclick="openDamageDetails('${encodeURIComponent(group.reference_id)}')">${safeReference}</button>`
+          : `<strong>${safeReference}</strong>`;
 
         const imagesHtml = group.items.map(t => {
           const p = allProducts.find(prod => prod.sku === t.sku) || { image_main: '' };
@@ -1268,7 +1321,7 @@
             <td>
               <div style="display: flex; flex-wrap: wrap; gap: 4px; max-width: 160px;">${imagesHtml}</div>
             </td>
-            <td><strong>${group.reference_id}</strong></td>
+            <td>${referenceHtml}</td>
             <td>${group.customer_name}</td>
             <td>${group.customer_city}</td>
             <td>${skusHtml}</td>
@@ -1571,6 +1624,57 @@
     let packOrderReferenceId = null;
     let packPhotoBlob = null;
     let packOrderBtn = null;
+
+    window.openDamageDetails = function(encodedReferenceId) {
+      const referenceId = decodeURIComponent(encodedReferenceId);
+      const record = damagedGoodsByReference.get(referenceId);
+      if (!record) {
+        showToast('Damage details are not available for this order.', true);
+        return;
+      }
+
+      document.getElementById('damage-details-reference').textContent = referenceId;
+      document.getElementById('damage-details-description').textContent =
+        record.damage_description || 'No damage description was provided.';
+
+      const media = document.getElementById('damage-details-media');
+      const photos = Array.isArray(record.photo_urls) ? record.photo_urls.filter(Boolean) : [];
+      const photoHtml = photos.map(url => {
+        const safeUrl = escFulfillment(url);
+        return `<button type="button" class="damage-view-photo" aria-label="View damage photo" onclick="window.showTheaterImage(this.querySelector('img').src)"><img src="${safeUrl}" alt="Damage evidence" loading="lazy"></button>`;
+      }).join('');
+      const videoHtml = record.video_url
+        ? `<video controls preload="metadata"><source src="${escFulfillment(record.video_url)}"></video>`
+        : '';
+      media.innerHTML = photoHtml || videoHtml
+        ? `${photoHtml}${videoHtml}`
+        : '<div class="text-muted" style="font-size:0.84rem;">No damage media was attached.</div>';
+
+      const modal = document.getElementById('damage-details-modal');
+      modal.style.display = 'flex';
+      modal.offsetHeight;
+      modal.classList.add('open');
+      modal.setAttribute('aria-hidden', 'false');
+    };
+
+    window.closeDamageDetailsModal = function() {
+      const modal = document.getElementById('damage-details-modal');
+      modal.classList.remove('open');
+      modal.setAttribute('aria-hidden', 'true');
+      setTimeout(() => {
+        if (!modal.classList.contains('open')) modal.style.display = 'none';
+      }, 150);
+    };
+
+    window.handleDamageDetailsBackdrop = function(event) {
+      if (event.target.id === 'damage-details-modal') closeDamageDetailsModal();
+    };
+
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && document.getElementById('damage-details-modal')?.classList.contains('open')) {
+        closeDamageDetailsModal();
+      }
+    });
 
     // Helper to detect if device is a mobile phone
     function isMobilePhone() {
