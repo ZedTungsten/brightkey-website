@@ -88,6 +88,122 @@ We enforce rigorous practices to prevent SQL injections (SQLi) and Cross-Site Sc
 
 ---
 
+## 22. Optimization Must Preserve Business Visibility and Workflow Semantics
+> [!CRITICAL]
+> **AN OPTIMIZATION IS NOT ALLOWED TO CHANGE WHO OR WHAT A VALID TENANT USER CAN SEE**:
+> Performance work may reduce payload size, query count, scan size, or render
+> cost, but it must preserve the existing authorized result set, historical
+> references, and workflow side effects. Treat visibility and downstream
+> synchronization as part of the query contract.
+
+### 22.1 Never Turn a Performance Filter into an Authorization Rule
+- RLS and explicit `company_id`/tenant boundaries prevent cross-tenant access.
+  Do not add role, department, creator, assignee, warehouse, or employee-self
+  filters to shared tenant data unless the documented business rule explicitly
+  requires that restriction.
+- Do not change a tenant-wide employee/profile query into `id = current user`.
+  Shared profiles, chat participants, schedules, rankings, assignments, and
+  historical records must still resolve other employees in the same tenant.
+- Do not treat failure to resolve a related row as permission to replace it with
+  `"Unknown Employee"`, `"Unknown User"`, or a blank value. First determine
+  whether the related-row query was incorrectly narrowed.
+- A count optimization and its corresponding list query must use equivalent
+  business predicates. A badge showing records that the list hides is a failed
+  optimization.
+
+### 22.2 Active-Only Filters Belong Only Where the Business Action Requires Them
+- Login gates and new-assignment selectors may exclude inactive, fired, or
+  resigned employees.
+- Historical and relational views must still resolve those employees by name:
+  past adjustments, payouts, schedules, sales, chat history, approvals,
+  assignments, invoices, and audit records must not become anonymous when an
+  employee becomes inactive.
+- When a page needs both behaviors, retain a tenant-wide lookup map for display
+  and derive a separate active-only collection for selectable options. Do not
+  reuse the active-only collection as the historical name directory.
+- Disabling login must be implemented at authentication/access gates. Do not
+  achieve it by hiding the employee row from every tenant query.
+
+### 22.3 SKU and Product Visibility Must Remain Tenant-Wide
+- Do not filter the shared product/SKU catalog by the current employee, creator,
+  department, or module role merely to reduce rows.
+- Booking, invoice, warehouse, sales, and product selectors must resolve all
+  tenant-authorized SKUs required by their records, including SKUs created by
+  another user.
+- Inventory-specific exclusions such as `count_inventory = false` may control
+  warehouse stock workflows, but they must not remove the SKU from invoices,
+  bookings, order history, or other non-inventory views.
+- Retain stable identifiers required for joins and deduplication, especially
+  `products.id`, `sku`, `company_id`, and relevant foreign keys.
+
+### 22.4 Narrow Projections Must Include the Full Downstream Data Contract
+- Before replacing `.select('*')` with a narrow projection, trace every consumer
+  of the returned object, including helpers, background sync, rendering,
+  sorting, grouping, fallback logic, and write-payload construction.
+- Never select fields for only the first visible use. A background workflow may
+  depend on fields read later in the same function.
+- If code reads `booking.product_skus`, `booking.product_qtys`, or
+  `booking.created_at`, those fields are mandatory in the booking projection
+  even when they are not rendered directly.
+- After narrowing a projection, search the complete call path for every
+  `record.<field>` access and verify each field is still selected. Missing fields
+  that silently produce empty arrays, skipped loops, blank labels, or omitted
+  inserts are release-blocking defects.
+- Prefer an explicit documented projection constant or typed mapper when the
+  same record shape is shared across multiple modules.
+
+### 22.5 Never Break Order-to-Workflow Handoffs
+- Optimizations must preserve all state transitions and derived records across:
+  booking/invoice → reserved transaction → Inspect → Pack → Dispatch → Receive.
+- A booking or invoice being visible does not prove warehouse synchronization
+  succeeded. Verify the expected `inventory_transactions` rows exist with the
+  correct `company_id`, `warehouse_id`, `reference_id`, SKU, quantity, type, and
+  status.
+- Do not remove data needed to construct downstream writes. A loop that now
+  receives an empty item collection without throwing is still a production
+  failure.
+- Repair scripts must be narrowly scoped and idempotent: use exact company and
+  reference boundaries plus `NOT EXISTS`/conflict guards. Never recreate,
+  overwrite, or advance existing transaction history during a backfill.
+
+### 22.6 Required Before/After Regression Audit for Optimizations
+For every optimization that changes database projections, filters, RLS policies,
+shared loaders, lookup maps, or synchronization:
+
+1. Record the expected pre-change result set and side effects for representative
+   tenant data.
+2. Test an active employee and an inactive employee referenced by historical
+   data.
+3. Test a regular user viewing another tenant member's profile/name, chat,
+   schedule, ranking, and assignment where applicable.
+4. Test SKUs created or managed by a different user in booking, invoice, sales,
+   and warehouse contexts.
+5. Create or use a production-shaped order and verify the complete workflow
+   handoff, not just the originating booking/invoice screen.
+6. Compare badges/counts with the records actually rendered by the destination
+   page.
+7. Confirm no valid same-tenant record changed to unknown, blank, missing, or
+   inaccessible.
+8. Confirm cross-tenant isolation still holds through RLS and explicit tenant
+   filters.
+
+### 22.7 Optimization Definition of Done
+An optimization is incomplete unless:
+
+- Authorized before/after result sets are equivalent.
+- Historical identities remain resolvable after employee deactivation.
+- Shared tenant SKUs remain visible in every required business module.
+- Workflow-generated rows and status transitions still occur.
+- Narrow projections cover every downstream field access.
+- Count and detail queries agree.
+- Production-shaped authenticated route tests pass for owner/admin and regular
+  users.
+- Any intentional visibility change is separately documented, explicitly
+  approved, and tested as a product/security change rather than described as a
+  performance optimization.
+
+---
+
 ## 5.1 Database Query Performance & Disk IO Budget
 > [!CRITICAL]
 > **DATABASE EFFICIENCY IS A BUILD REQUIREMENT, NOT A LATER OPTIMIZATION TASK**:

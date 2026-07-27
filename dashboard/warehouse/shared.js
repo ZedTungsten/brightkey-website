@@ -343,7 +343,7 @@ window.WarehousePage = {
     let didChange = false;
     const { data: bData, error: bErr } = await this.sb
       .from('installation_bookings')
-      .select('id, order_no, customer_name, customer_city, customer_address, status')
+      .select('id, order_no, customer_name, customer_city, customer_address, status, product_skus, product_qtys, created_at')
       .eq('company_id', this.companyId)
       .neq('status', 'completed')
       .range(0, 999);
