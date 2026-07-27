@@ -89,10 +89,13 @@ BEGIN
       FROM public.sales_resources related
       JOIN resource_chain child
         ON related.id = child.parent_id
-        OR (
-          child.type = 'folder'
-          AND child.file_url ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
-          AND related.id = child.file_url::UUID
+        OR related.id = (
+          CASE
+            WHEN child.type = 'folder'
+              AND child.file_url ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+            THEN child.file_url::UUID
+            ELSE NULL
+          END
         )
       WHERE related.company_id = v_company_id
     )
