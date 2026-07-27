@@ -212,8 +212,7 @@
           }),
           sb.from('employee_assignments').select('id, name, visibility').eq('company_id', currentCompanyId || ''),
           sb.from('products')
-            .select('id, sku, category')
-            .or(`company_id.eq.${currentCompanyId},company_id.is.null`),
+            .select('id, sku, category'),
           sb.from('global_settings').select('value').eq('key', 'installer_payout_settings').eq('company_id', currentCompanyId).maybeSingle(),
           sb.from('global_settings').select('value').eq('key', 'booking_media_requirements').eq('company_id', currentCompanyId).maybeSingle(),
           sb.from('global_settings').select('value').eq('key', 'booking_checklist').eq('company_id', currentCompanyId).maybeSingle()
