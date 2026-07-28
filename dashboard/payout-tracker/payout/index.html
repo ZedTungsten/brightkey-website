@@ -476,7 +476,7 @@
               completed: b.status === 'done' || b.status === 'completed' || b.status === 'finished',
               roles: roles,
               skus: activeSkus,
-              completed_at: b.updated_at || b.created_at || b.scheduled_date,
+              completed_at: b.completed_at || b.updated_at || b.created_at,
               scheduled_date: b.scheduled_date
             });
           }
@@ -559,7 +559,7 @@
               completed: !!door.completed,
               roles: roles,
               skus: doorSkus,
-              completed_at: door.completed_at || b.updated_at || b.created_at || b.scheduled_date,
+              completed_at: door.completed_at || b.completed_at || b.updated_at || b.created_at,
               scheduled_date: b.scheduled_date
             });
           } else {
@@ -601,16 +601,14 @@
           return { sku, rate: es.rate };
         });
 
-        const monthBookings = this.bookingsList.filter(b => {
+        const eligibleBookings = this.bookingsList.filter(b => {
           if (!b.scheduled_date) return false;
           if (b.status === 'cancelled') return false;
-          const d = new Date(b.scheduled_date);
-          const bookingMonthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-          return bookingMonthKey === monthKey;
+          return true;
         });
 
         const doorJobs = [];
-        monthBookings.forEach(b => {
+        eligibleBookings.forEach(b => {
           const assignmentType = String(b.product_skus || '').trim().toLowerCase();
           const orderNo = String(b.order_no || '').toUpperCase();
           const isNonCreditableJob = assignmentType === 'day off' || assignmentType === 'ocular' || assignmentType === 'backjob'
@@ -625,23 +623,43 @@
           });
         });
 
-        // Sort doors chronologically by scheduled_date
-        doorJobs.sort((a, b) => new Date(a.scheduled_date) - new Date(b.scheduled_date));
+        // Completion controls both earning order and payout cutoff placement.
+        doorJobs.sort((a, b) => new Date(a.completed_at) - new Date(b.completed_at));
 
-        let runningCredit = 0;
+        let payoutCredit = 0;
+        const creditBySourceMonth = {};
         let totalThresholdEarnings = 0;
         let totalServiceEarnings = 0;
         const cutoffPayouts = {};
+        const rolloverCutoffPayouts = {};
         const serviceCounts = {};
 
-        sortedScheds.forEach(day => { cutoffPayouts[day] = 0; });
+        sortedScheds.forEach(day => {
+          cutoffPayouts[day] = 0;
+          rolloverCutoffPayouts[day] = 0;
+        });
 
         doorJobs.forEach(job => {
           let weight = 0;
           if (job.roles.includes('lead')) weight = leadWeight;
           else if (job.roles.includes('assist')) weight = assistWeight;
 
-          // 1. Service pay
+          // Determine threshold eligibility in the work's original calendar month.
+          const sourceMonth = String(job.completed_at || '').slice(0, 7);
+          if (!sourceMonth) return;
+          const previousCredit = creditBySourceMonth[sourceMonth] || 0;
+          const newCredit = previousCredit + weight;
+          let thresholdPayForJob = 0;
+          if (newCredit > thresholdVal) {
+            const extraCredit = weight;
+            thresholdPayForJob = extraCredit * leadRateVal;
+          }
+          creditBySourceMonth[sourceMonth] = newCredit;
+
+          const bucket = this.getCutoffBucket(job.completed_at, sortedScheds);
+          if (!bucket || bucket.monthKey !== monthKey) return;
+          payoutCredit += weight;
+
           let servicePayForJob = 0;
           if (job.roles.includes('service')) {
             job.skus.forEach(sku => {
@@ -653,26 +671,17 @@
             });
           }
 
-          // 2. Extra threshold pay
-          let thresholdPayForJob = 0;
-          const previousCredit = runningCredit;
-          const newCredit = previousCredit + weight;
-          if (newCredit > thresholdVal) {
-            const extraCredit = weight;
-            thresholdPayForJob = extraCredit * leadRateVal;
-          }
-          runningCredit = newCredit;
-
           totalThresholdEarnings += thresholdPayForJob;
           totalServiceEarnings += servicePayForJob;
 
           // Determine cutoff day
-          const date = new Date(job.scheduled_date);
-          const dayVal = date.getUTCDate();
-          const cutoffDay = this.getScheduleDayForItemDay(dayVal, sortedScheds);
+          const cutoffDay = bucket.day;
           
           if (cutoffPayouts[cutoffDay] !== undefined) {
             cutoffPayouts[cutoffDay] += (thresholdPayForJob + servicePayForJob);
+            if (sourceMonth !== monthKey) {
+              rolloverCutoffPayouts[cutoffDay] += (thresholdPayForJob + servicePayForJob);
+            }
           } else {
             cutoffPayouts[sortedScheds[sortedScheds.length - 1]] += (thresholdPayForJob + servicePayForJob);
           }
@@ -699,13 +708,14 @@
         }
 
         return {
-          totalCredit: runningCredit,
+          totalCredit: payoutCredit,
           thresholdEarnings: totalThresholdEarnings,
           thresholdDescription,
           serviceEarnings: totalServiceEarnings,
           serviceDescription,
           totalInstallationPayout: totalThresholdEarnings + totalServiceEarnings,
-          cutoffPayouts
+          cutoffPayouts,
+          rolloverCutoffPayouts
         };
       },
 
@@ -978,6 +988,21 @@
         return sortedScheds[sortedScheds.length - 1];
       },
 
+      getCutoffBucket(dateValue, schedules = this.payoutSchedules) {
+        const match = String(dateValue || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+        if (!match) return null;
+        let year = Number(match[1]);
+        let month = Number(match[2]);
+        const day = Number(match[3]);
+        const sorted = [...schedules].map(Number).filter(Boolean).sort((a, b) => a - b);
+        if (!sorted.length) sorted.push(30);
+        const cutoffDay = sorted.find(cutoff => day <= cutoff);
+        if (cutoffDay) return { monthKey: `${year}-${String(month).padStart(2, '0')}`, day: cutoffDay };
+        month += 1;
+        if (month > 12) { month = 1; year += 1; }
+        return { monthKey: `${year}-${String(month).padStart(2, '0')}`, day: sorted[0] };
+      },
+
       // ── Render ──
       render() {
         const header = document.getElementById('summary-table-header');
@@ -1044,7 +1069,7 @@
           // Commission for this month
           const empComms = isOwner ? 0 : this._commissionForEmpMonth(emp.id, mk);
           // Adjustments for this month
-          const empAdjs = this.adjustmentsList.filter(a => a.employeeId === emp.id && a.date?.startsWith(mk.substring(0,7))).reduce((s, a) => s + (Number(a.value) || 0), 0);
+          const empAdjs = sortedScheds.reduce((sum, day) => sum + this._adjsForSchedule(emp.id, day, mk, sortedScheds), 0);
           const empGlAdd = isOwner ? 0 : this._glAdditionsForEmpMonth(emp.id, mk);
           const empGlDed = isOwner ? 0 : this._glDeductionsForEmpMonth(emp.id, mk);
 
@@ -1090,6 +1115,11 @@
             const instPortion = instPayouts.cutoffPayouts[day] || 0;
             const glAddVal = isOwner ? 0 : this._glAdditionsForSchedule(emp.id, day, mk, sortedScheds);
             const glDedVal = isOwner ? 0 : this._glDeductionsForSchedule(emp.id, day, mk, sortedScheds);
+            const rolledComms = isOwner ? 0 : this._commsForSchedule(emp.id, day, mk, sortedScheds, null, true);
+            const rolledInst = instPayouts.rolloverCutoffPayouts?.[day] || 0;
+            const rolledAdjs = this._adjsForSchedule(emp.id, day, mk, sortedScheds, true);
+            const rolledGlAdd = isOwner ? 0 : this._glAdditionsForSchedule(emp.id, day, mk, sortedScheds, true);
+            const rolledGlDed = isOwner ? 0 : this._glDeductionsForSchedule(emp.id, day, mk, sortedScheds, true);
             
             const totalSchedVal = salaryPortion + adjsVal + commsVal + instPortion + glAddVal - glDedVal;
             employeePayoutDaysTotal += totalSchedVal;
@@ -1100,11 +1130,16 @@
             const breakdownItems = [];
             if (salaryAllocation.isProrated) breakdownItems.push(`Pro Sal: ${salaryPortion === 0 ? '₱0.00' : php(salaryPortion)}`);
             else if (salaryPortion > 0) breakdownItems.push(`Sal: ${php(salaryPortion)}`);
-            if (commsVal > 0) breakdownItems.push(`Com: ${php(commsVal)}`);
-            if (instPortion > 0) breakdownItems.push(`Inst: ${php(instPortion)}`);
-            if (adjsVal !== 0) breakdownItems.push(`Adj: ${php(adjsVal)}`);
-            if (glAddVal > 0) breakdownItems.push(`Reimb (GL): ${php(glAddVal)}`);
-            if (glDedVal > 0) breakdownItems.push(`Cash Adv: -${php(glDedVal)}`);
+            if (commsVal - rolledComms > 0) breakdownItems.push(`Com: ${php(commsVal - rolledComms)}`);
+            if (rolledComms > 0) breakdownItems.push(`Rol Com: ${php(rolledComms)}`);
+            if (instPortion - rolledInst > 0) breakdownItems.push(`Inst: ${php(instPortion - rolledInst)}`);
+            if (rolledInst > 0) breakdownItems.push(`Rol Inst: ${php(rolledInst)}`);
+            if (adjsVal - rolledAdjs !== 0) breakdownItems.push(`Adj: ${php(adjsVal - rolledAdjs)}`);
+            if (rolledAdjs !== 0) breakdownItems.push(`Rol Adj: ${php(rolledAdjs)}`);
+            if (glAddVal - rolledGlAdd > 0) breakdownItems.push(`Reimb: ${php(glAddVal - rolledGlAdd)}`);
+            if (rolledGlAdd > 0) breakdownItems.push(`Rol Reimb: ${php(rolledGlAdd)}`);
+            if (glDedVal - rolledGlDed > 0) breakdownItems.push(`Cash Adv: -${php(glDedVal - rolledGlDed)}`);
+            if (rolledGlDed > 0) breakdownItems.push(`Rol Cash Adv: -${php(rolledGlDed)}`);
             
             const breakdownHtml = breakdownItems.length > 0 
               ? `<div class="payout-breakdown" style="font-size:0.68rem; color:var(--text-muted); line-height:1.2; text-align:right; font-family:var(--font); width:100%; font-variant-numeric:tabular-nums;">${breakdownItems.join('<br>')}</div>` 
@@ -1251,6 +1286,7 @@
             if (p.sku) productMap[p.sku.toLowerCase()] = p;
           });
         }
+        const commissionScheds = [...(this.commissionSchedules.length ? this.commissionSchedules : [15, 30])].map(Number).sort((a, b) => a - b);
         return this.commissionAssignments.filter(a => {
           if (a.employee_id !== empId) return false;
           const b = this.bookingsList.find(x => x.id === a.booking_id);
@@ -1259,24 +1295,23 @@
           const door  = doors[a.product_index];
           const isDone = (door && door.completed) || ['done', 'completed', 'finished'].includes(b.status);
           if (!isDone) return false;
-          const ds = b.scheduled_date;
-          if (!ds) return false;
-          const d = new Date(ds);
-          return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}` === mk;
+          const completedAt = door?.completed_at || b.completed_at || b.updated_at || b.created_at;
+          if (!completedAt) return false;
+          return this.getCutoffBucket(completedAt, commissionScheds)?.monthKey === mk;
         }).reduce((s, a) => s + this._getDynamicCommAmount(a, productMap), 0);
       },
 
-      _glAdditionsForSchedule(empId, schedDay, mk, sortedScheds) {
+      _glAdditionsForSchedule(empId, schedDay, mk, sortedScheds, rolloverOnly = null) {
         if (!this.generalJournalEntries || !this.accountAssignments) return 0;
         return this.generalJournalEntries.filter(r => {
           const assignedEmpId = this.accountAssignments[r.account_id];
           if (assignedEmpId !== empId) return false;
           const accName = (this.glAccountsMap?.[r.account_id] || '').toLowerCase();
           if (!accName.includes('due to')) return false;
-          const d = new Date(r.date);
-          const entryMonthKey = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
-          if (entryMonthKey !== mk) return false;
-          return this.getScheduleDayForItemDay(d.getUTCDate(), sortedScheds) === schedDay;
+          const bucket = this.getCutoffBucket(r.date, sortedScheds);
+          if (bucket?.monthKey !== mk || bucket.day !== schedDay) return false;
+          const isRollover = String(r.date || '').slice(0, 7) !== mk;
+          return rolloverOnly === null || isRollover === rolloverOnly;
         }).reduce((s, r) => {
           const credit = parseFloat(r.credit) || 0;
           const debit = parseFloat(r.debit) || 0;
@@ -1284,17 +1319,17 @@
         }, 0);
       },
 
-      _glDeductionsForSchedule(empId, schedDay, mk, sortedScheds) {
+      _glDeductionsForSchedule(empId, schedDay, mk, sortedScheds, rolloverOnly = null) {
         if (!this.generalJournalEntries || !this.accountAssignments) return 0;
         return this.generalJournalEntries.filter(r => {
           const assignedEmpId = this.accountAssignments[r.account_id];
           if (assignedEmpId !== empId) return false;
           const accName = (this.glAccountsMap?.[r.account_id] || '').toLowerCase();
           if (!accName.includes('due from')) return false;
-          const d = new Date(r.date);
-          const entryMonthKey = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
-          if (entryMonthKey !== mk) return false;
-          return this.getScheduleDayForItemDay(d.getUTCDate(), sortedScheds) === schedDay;
+          const bucket = this.getCutoffBucket(r.date, sortedScheds);
+          if (bucket?.monthKey !== mk || bucket.day !== schedDay) return false;
+          const isRollover = String(r.date || '').slice(0, 7) !== mk;
+          return rolloverOnly === null || isRollover === rolloverOnly;
         }).reduce((s, r) => {
           const debit = parseFloat(r.debit) || 0;
           const credit = parseFloat(r.credit) || 0;
@@ -1309,9 +1344,7 @@
           if (assignedEmpId !== empId) return false;
           const accName = (this.glAccountsMap?.[r.account_id] || '').toLowerCase();
           if (!accName.includes('due to')) return false;
-          const d = new Date(r.date);
-          const entryMonthKey = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
-          return entryMonthKey === mk;
+          return this.getCutoffBucket(r.date, this.payoutSchedules)?.monthKey === mk;
         }).reduce((s, r) => {
           const credit = parseFloat(r.credit) || 0;
           const debit = parseFloat(r.debit) || 0;
@@ -1326,9 +1359,7 @@
           if (assignedEmpId !== empId) return false;
           const accName = (this.glAccountsMap?.[r.account_id] || '').toLowerCase();
           if (!accName.includes('due from')) return false;
-          const d = new Date(r.date);
-          const entryMonthKey = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
-          return entryMonthKey === mk;
+          return this.getCutoffBucket(r.date, this.payoutSchedules)?.monthKey === mk;
         }).reduce((s, r) => {
           const debit = parseFloat(r.debit) || 0;
           const credit = parseFloat(r.credit) || 0;
@@ -1336,18 +1367,19 @@
         }, 0);
       },
 
-      _adjsForSchedule(empId, schedDay, mk, sortedScheds) {
+      _adjsForSchedule(empId, schedDay, mk, sortedScheds, rolloverOnly = null) {
         return this.adjustmentsList.filter(a => {
           if (a.employeeId !== empId) return false;
-          const d = new Date(a.date);
-          if (`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}` !== mk) return false;
-          return this.getScheduleDayForItemDay(d.getUTCDate(), sortedScheds) === schedDay;
+          const bucket = this.getCutoffBucket(a.date, sortedScheds);
+          if (bucket?.monthKey !== mk || bucket.day !== schedDay) return false;
+          const isRollover = String(a.date || '').slice(0, 7) !== mk;
+          return rolloverOnly === null || isRollover === rolloverOnly;
         }).reduce((s, a) => s + (Number(a.value) || 0), 0);
       },
 
 
 
-      _commsForSchedule(empId, schedDay, mk, sortedScheds, passedProductMap = null) {
+      _commsForSchedule(empId, schedDay, mk, sortedScheds, passedProductMap = null, rolloverOnly = null) {
         let productMap = passedProductMap;
         if (!productMap) {
           productMap = {};
@@ -1363,11 +1395,12 @@
           const door  = doors[a.product_index];
           const isDone = (door && door.completed) || ['done', 'completed', 'finished'].includes(b.status);
           if (!isDone) return false;
-          const ds = b.scheduled_date;
-          if (!ds) return false;
-          const d = new Date(ds);
-          if (`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}` !== mk) return false;
-          return this.getScheduleDayForItemDay(d.getUTCDate(), sortedScheds) === schedDay;
+          const completedAt = door?.completed_at || b.completed_at || b.updated_at || b.created_at;
+          if (!completedAt) return false;
+          const bucket = this.getCutoffBucket(completedAt, sortedScheds);
+          if (bucket?.monthKey !== mk || bucket.day !== schedDay) return false;
+          const isRollover = String(completedAt).slice(0, 7) !== mk;
+          return rolloverOnly === null || isRollover === rolloverOnly;
         }).reduce((s, a) => s + this._getDynamicCommAmount(a, productMap), 0);
       },
 

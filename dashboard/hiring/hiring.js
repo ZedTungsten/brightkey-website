@@ -288,7 +288,7 @@ const HiringApp = {
     const isForms = templateTab === 'forms';
     if (isForms) {
       content.innerHTML = `
-        <div class="hiring-page template-page">
+        <div class="hiring-page template-page application-form-page">
           <div class="hiring-page-header application-form-page-header">
             <div>
               <h2>Applicant Form</h2>
@@ -473,18 +473,16 @@ const HiringApp = {
         ${qualifications.length ? `<div class="application-qualification-list">${qualifications.map((qualification, index) => this.renderApplicationQualification(qualification, index, form.requiredQualifications.includes(qualification))).join('')}</div>` : '<div class="application-fields-empty">This job post has no qualifications yet.</div>'}
       </section>
       <section class="application-form-section">
-        <div class="application-form-section-heading application-custom-fields-heading">
-          <div><h3>Questions</h3></div>
-          <button class="btn btn-outline btn-sm" type="button" onclick="HiringApp.addApplicationField()">Add Field</button>
-        </div>
+        <div class="application-form-section-heading application-custom-fields-heading"><div><h3>Questions</h3></div></div>
         <div class="application-custom-fields" id="application-custom-fields">
           ${form.customFields.length ? form.customFields.map((field, index) => this.renderApplicationCustomField(field, index)).join('') : '<div class="application-fields-empty">Add a custom question, date, choice, or rating field.</div>'}
         </div>
+        <div class="application-add-field-row"><button class="btn btn-outline btn-sm" type="button" onclick="HiringApp.addApplicationField()">Add Field</button></div>
       </section>`;
   },
 
   renderApplicationQualification(qualification, index, isRequired) {
-    return `<label class="application-qualification-row"><input type="checkbox" ${isRequired ? 'checked' : ''} onchange="HiringApp.toggleApplicationQualification(${index}, this.checked)" /><span>${this.esc(qualification)}</span><strong>Required</strong></label>`;
+    return `<label class="application-qualification-row"><input type="checkbox" ${isRequired ? 'checked' : ''} onchange="HiringApp.toggleApplicationQualification(${index}, this.checked)" /><span>${this.esc(qualification)}</span>${isRequired ? '<strong>Required</strong>' : ''}</label>`;
   },
 
   renderApplicationCustomField(field, index) {
@@ -492,7 +490,7 @@ const HiringApp = {
     return `<article class="application-custom-field" draggable="true" ondragstart="HiringApp.startApplicationFieldDrag(${index})" ondragover="event.preventDefault()" ondrop="HiringApp.dropApplicationField(${index})">
       <button class="application-drag-handle" type="button" aria-label="Drag question" title="Drag to reorder"><svg viewBox="0 0 12 20" fill="currentColor" aria-hidden="true"><circle cx="3" cy="3" r="1.3"/><circle cx="9" cy="3" r="1.3"/><circle cx="3" cy="10" r="1.3"/><circle cx="9" cy="10" r="1.3"/><circle cx="3" cy="17" r="1.3"/><circle cx="9" cy="17" r="1.3"/></svg></button>
       <div class="application-field-main">
-        <label><span>Question</span><input value="${this.esc(field.question)}" placeholder="Enter a question" onchange="HiringApp.updateApplicationField(${index}, 'question', this.value)" /></label>
+        <label><span>Question ${index + 1}</span><input value="${this.esc(field.question)}" placeholder="Enter a question" onchange="HiringApp.updateApplicationField(${index}, 'question', this.value)" /></label>
         <label><span>Type of Answer</span><select onchange="HiringApp.updateApplicationFieldType(${index}, this.value)">${Object.entries(typeLabels).map(([value, label]) => `<option value="${value}" ${field.type === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label>
         ${this.renderApplicationFieldOptions(field, index)}
       </div>
@@ -524,7 +522,31 @@ const HiringApp = {
     form.requiredQualifications = required
       ? [...new Set([...form.requiredQualifications, qualification])]
       : form.requiredQualifications.filter(item => item !== qualification);
+    this.renderApplicationFormBuilder();
     this.scheduleApplicationFormSave();
+  },
+
+  renderApplicationPreviewField(field, index) {
+    const question = `${index + 1}. ${this.esc(field.question || 'Untitled question')}`;
+    const type = field.type || 'short';
+    if (type === 'long') {
+      return `<label class="application-preview-field"><span>${question}</span><textarea rows="2"></textarea></label>`;
+    }
+    if (type === 'date') {
+      return `<label class="application-preview-field"><span>${question}</span><input type="date" /></label>`;
+    }
+    if (type === 'slider') {
+      const options = field.options?.length ? field.options : ['Option 1', 'Option 2', 'Option 3', 'Option 4'];
+      const selectedIndex = Math.floor((options.length - 1) / 2);
+      const progress = options.length > 1 ? (selectedIndex / (options.length - 1)) * 100 : 0;
+      return `<fieldset class="application-preview-field"><legend>${question}</legend><div class="application-preview-slider"><input type="range" min="0" max="${options.length - 1}" step="1" value="${selectedIndex}" aria-label="${question}" style="--slider-progress: ${progress}%" oninput="this.style.setProperty('--slider-progress', (this.value / this.max * 100) + '%')" /><div class="application-preview-slider-labels">${options.map(option => `<span>${this.esc(option)}</span>`).join('')}</div></div></fieldset>`;
+    }
+    if (['checkboxes', 'radio'].includes(type)) {
+      const inputType = type === 'checkboxes' ? 'checkbox' : 'radio';
+      const options = (field.options || []).map((option, optionIndex) => `<label><input type="${inputType}" name="application-preview-field-${index}" value="${this.esc(option)}" /><span>${this.esc(option || `Option ${optionIndex + 1}`)}</span></label>`).join('');
+      return `<fieldset class="application-preview-field"><legend>${question}</legend><div class="application-preview-options ${type}">${options}</div></fieldset>`;
+    }
+    return `<label class="application-preview-field"><span>${question}</span><input type="text" /></label>`;
   },
 
   viewApplicationForm() {
@@ -539,11 +561,19 @@ const HiringApp = {
       ? post.qualifications.map(item => typeof item === 'string' ? item : item?.item)
         .filter(item => form.requiredQualifications.includes(item))
       : [];
-    const customFields = form.customFields.map(field => `<label class="application-preview-field"><span>${this.esc(field.question || 'Untitled question')}</span>${['checkboxes', 'radio', 'slider'].includes(field.type) ? `<div class="application-preview-options">${(field.options || []).map(option => `<span>${this.esc(option)}</span>`).join('')}</div>` : `<div class="application-preview-answer ${this.esc(field.type || 'short')}"></div>`}</label>`).join('');
+    const customFields = form.customFields.map((field, index) => this.renderApplicationPreviewField(field, index)).join('');
     const overlay = document.createElement('div');
     overlay.className = 'hiring-modal-overlay application-form-preview-overlay';
     overlay.id = 'application-form-preview';
-    overlay.innerHTML = `<div class="hiring-modal-card application-form-preview-card" role="dialog" aria-modal="true" aria-labelledby="application-form-preview-title"><div class="hiring-modal-header"><h3 id="application-form-preview-title">${this.esc(post.job_title)}</h3><button class="hiring-icon-btn" type="button" aria-label="Close preview" onclick="HiringApp.closeApplicationFormPreview()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div><div class="application-form-preview-body">${post.job_description ? `<p class="application-preview-job-description">${this.esc(post.job_description)}</p>` : ''}${form.instructions ? `<p class="application-preview-instructions">${this.esc(form.instructions)}</p>` : ''}${requiredQualifications.length ? `<section class="application-preview-required-qualifications"><h4>Required Qualifications</h4><ul>${requiredQualifications.map(item => `<li>${this.esc(item)}</li>`).join('')}</ul></section>` : ''}<section><h4>Applicant Information</h4><div class="application-preview-standard-fields">${['First Name', 'Last Name', 'Address', 'Contact Number', 'Email'].map(field => `<label><span>${field}</span><div></div></label>`).join('')}</div></section>${customFields ? `<section><h4>Additional Questions</h4><div class="application-preview-custom-fields">${customFields}</div></section>` : ''}</div></div>`;
+    const applicantFields = [
+      ['First Name', 'text', ''],
+      ['Last Name', 'text', ''],
+      ['Address', 'text', ''],
+      ['Contact Number', 'tel', 'inputmode="numeric" pattern="[0-9]*" oninput="this.value = this.value.replace(/[^0-9]/g, \'\')"'],
+      ['Email', 'email', '']
+    ].map(([label, type, attributes]) => `<label><span>${label}</span><input type="${type}" ${attributes} /></label>`).join('');
+    const certification = 'I certify that the information I have provided is true, accurate, and complete. I consent to the collection and processing of my personal information for recruitment purposes, including consideration for future job opportunities.';
+    overlay.innerHTML = `<div class="hiring-modal-card application-form-preview-card" role="dialog" aria-modal="true" aria-labelledby="application-form-preview-title"><div class="hiring-modal-header"><h3 id="application-form-preview-title">${this.esc(post.job_title)}</h3><button class="hiring-icon-btn" type="button" aria-label="Close preview" onclick="HiringApp.closeApplicationFormPreview()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div><form class="application-form-preview-body" onsubmit="event.preventDefault(); HiringApp.showToast('This is a preview. Responses were not submitted.');">${post.job_description ? `<p class="application-preview-job-description">${this.esc(post.job_description)}</p>` : ''}${form.instructions ? `<p class="application-preview-instructions">${this.esc(form.instructions)}</p>` : ''}${requiredQualifications.length ? `<section class="application-preview-required-qualifications"><h4>Required Qualifications</h4><ul>${requiredQualifications.map(item => `<li>${this.esc(item)}</li>`).join('')}</ul></section>` : ''}<section><h4>Applicant Information</h4><div class="application-preview-standard-fields">${applicantFields}</div></section>${customFields ? `<section><h4>Additional Questions</h4><div class="application-preview-custom-fields">${customFields}</div></section>` : ''}<label class="application-preview-certification"><input type="checkbox" required /><span>${certification}</span></label><button class="btn application-preview-submit" type="submit">Submit</button></form></div>`;
     document.body.appendChild(overlay);
     overlay.style.display = 'flex';
     overlay.offsetHeight;

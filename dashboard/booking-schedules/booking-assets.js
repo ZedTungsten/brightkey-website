@@ -260,7 +260,8 @@
       const door = doorsArr[doorIndex];
       if (!door) return;
 
-      const photos = door.photos || [];
+      const photos = (door.photos || []).filter(url => typeof url === 'string' && url.trim() && url !== 'null' && url !== 'undefined');
+      door.photos = photos;
 
       const container = document.getElementById(`door-pics-container-${doorIndex}`);
       if (!container) return;
@@ -269,7 +270,7 @@
       photos.forEach((url, idx) => {
         thumbsHtml += `
           <div style="position: relative; display: inline-block; width: 44px; height: 44px;">
-            <img class="door-thumbnail" src="${url}" alt="Door Pic" style="width: 44px; height: 44px; margin: 0;" />
+            <img class="door-thumbnail" src="${url}" alt="Door Pic" onerror="this.parentElement.remove()" style="width: 44px; height: 44px; margin: 0;" />
             <button type="button" onclick="deleteDoorPic(${doorIndex}, ${idx})" style="position: absolute; top: -4px; right: -4px; background: var(--danger); border: none; color: white; border-radius: 50%; width: 14px; height: 14px; font-size: 8px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; line-height: 1;" title="Delete">x</button>
           </div>
         `;
@@ -368,6 +369,9 @@
         }
 
         const imageUrl = result.url;
+        if (!imageUrl || imageUrl === 'null' || imageUrl === 'undefined') {
+          throw new Error('The upload finished without a valid photo URL. Please retry the upload.');
+        }
 
         // Push to local array
         if (!door.photos) door.photos = [];

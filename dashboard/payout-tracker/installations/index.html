@@ -118,6 +118,7 @@
           { sku: 'BASEPLATE-S', rate: 700 }
         ]
       },
+      payoutSchedules: [15, 30],
       selectedYear: new Date().getFullYear(),
       selectedMonth: new Date().getMonth(),
 
@@ -164,10 +165,20 @@
           }
         } catch (_) {}
 
-        // 3. Bookings
+        // 3. Payout cutoff schedules
+        try {
+          const { data } = await sb.from('global_settings')
+            .select('value')
+            .eq('key', 'salary_tracker_config')
+            .eq('company_id', this.companyId)
+            .maybeSingle();
+          this.payoutSchedules = data?.value?.payoutSchedules || [15, 30];
+        } catch (_) { this.payoutSchedules = [15, 30]; }
+
+        // 4. Bookings
         try {
           const { data, error } = await sb.from('installation_bookings')
-            .select('id, status, scheduled_date, doors, products, product_skus, installers, installer_id, installer_name')
+            .select('id, status, scheduled_date, updated_at, created_at, doors, products, product_skus, installers, installer_id, installer_name')
             .eq('company_id', this.companyId);
           if (error) throw error;
           this.bookingsList = data || [];
@@ -176,6 +187,21 @@
 
       monthKey() {
         return `${this.selectedYear}-${String(this.selectedMonth + 1).padStart(2, '0')}`;
+      },
+
+      getCutoffBucket(dateValue, schedules = this.payoutSchedules) {
+        const match = String(dateValue || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+        if (!match) return null;
+        let year = Number(match[1]);
+        let month = Number(match[2]);
+        const day = Number(match[3]);
+        const sorted = [...schedules].map(Number).filter(Boolean).sort((a, b) => a - b);
+        if (!sorted.length) sorted.push(30);
+        const cutoffDay = sorted.find(cutoff => day <= cutoff);
+        if (cutoffDay) return { monthKey: `${year}-${String(month).padStart(2, '0')}`, day: cutoffDay };
+        month += 1;
+        if (month > 12) { month = 1; year += 1; }
+        return { monthKey: `${year}-${String(month).padStart(2, '0')}`, day: sorted[0] };
       },
 
       updateMonthDisplay() {
@@ -259,7 +285,8 @@
             assignedDoors.push({
               completed: b.status === 'done' || b.status === 'completed' || b.status === 'finished',
               roles: roles,
-              skus: activeSkus
+              skus: activeSkus,
+              completed_at: b.updated_at || b.created_at
             });
           }
           return assignedDoors;
@@ -340,7 +367,8 @@
             assignedDoors.push({
               completed: !!door.completed,
               roles: roles,
-              skus: doorSkus
+              skus: doorSkus,
+              completed_at: door.completed_at || b.updated_at || b.created_at
             });
           } else {
             if (anyDoorHasAttachedProducts && door) {
@@ -380,33 +408,48 @@
           return { sku, rate: es.rate };
         });
 
-        // Gather completed bookings for this month
-        const monthBookings = this.bookingsList.filter(b => {
+        // Keep all eligible work so monthly threshold progress is preserved before carryover.
+        const eligibleBookings = this.bookingsList.filter(b => {
           if (!b.scheduled_date) return false;
           if (b.status === 'cancelled') return false;
-          const d = new Date(b.scheduled_date);
-          const bookingMonthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-          return bookingMonthKey === mk;
-        });
+          return true;
+        }).sort((a, b) => String(a.scheduled_date).localeCompare(String(b.scheduled_date)));
 
         const activeInstallers = [];
 
         this.employees.forEach(emp => {
           let leadCount = 0;
           let assistCount = 0;
+          let totalCredit = 0;
+          let thresholdEarnings = 0;
           let serviceEarnings = 0;
           const serviceCounts = {};
+          const creditBySourceMonth = {};
 
-          monthBookings.forEach(b => {
+          eligibleBookings.forEach(b => {
             const assignedDoors = this.getAssignedDoorsForBookingAndEmployee(b, emp.id);
             assignedDoors.forEach(d => {
               if (!d.completed) return;
 
-              if (d.roles.includes('lead')) {
-                leadCount++;
-              } else if (d.roles.includes('assist')) {
-                assistCount++;
-              }
+              let weight = 0;
+              if (d.roles.includes('lead')) weight = leadWeight;
+              else if (d.roles.includes('assist')) weight = assistWeight;
+
+              const completedAt = d.completed_at || b.updated_at || b.created_at;
+              const sourceMonth = String(completedAt || '').slice(0, 7);
+              if (!sourceMonth) return;
+              const previousCredit = creditBySourceMonth[sourceMonth] || 0;
+              const newCredit = previousCredit + weight;
+              const thresholdPayForJob = newCredit > thresholdVal ? weight * leadRateVal : 0;
+              creditBySourceMonth[sourceMonth] = newCredit;
+
+              const bucket = this.getCutoffBucket(completedAt, this.payoutSchedules);
+              if (!bucket || bucket.monthKey !== mk) return;
+
+              if (d.roles.includes('lead')) leadCount++;
+              else if (d.roles.includes('assist')) assistCount++;
+              totalCredit += weight;
+              thresholdEarnings += thresholdPayForJob;
 
               if (d.roles.includes('service')) {
                 d.skus.forEach(sku => {
@@ -419,13 +462,6 @@
               }
             });
           });
-
-          const totalCredit = (leadCount * leadWeight) + (assistCount * assistWeight);
-          let thresholdEarnings = 0;
-          if (totalCredit > thresholdVal) {
-            const extraCredit = totalCredit - thresholdVal;
-            thresholdEarnings = extraCredit * leadRateVal;
-          }
 
           const grandTotal = thresholdEarnings + serviceEarnings;
 

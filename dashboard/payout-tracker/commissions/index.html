@@ -185,6 +185,21 @@
         return `${this.selectedYear}-${String(this.selectedMonth + 1).padStart(2, '0')}`;
       },
 
+      getCutoffBucket(dateValue, schedules = this.commissionSchedules) {
+        const match = String(dateValue || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+        if (!match) return null;
+        let year = Number(match[1]);
+        let month = Number(match[2]);
+        const day = Number(match[3]);
+        const sorted = [...schedules].map(Number).filter(Boolean).sort((a, b) => a - b);
+        if (!sorted.length) sorted.push(30);
+        const cutoffDay = sorted.find(cutoff => day <= cutoff);
+        if (cutoffDay) return { monthKey: `${year}-${String(month).padStart(2, '0')}`, day: cutoffDay };
+        month += 1;
+        if (month > 12) { month = 1; year += 1; }
+        return { monthKey: `${year}-${String(month).padStart(2, '0')}`, day: sorted[0] };
+      },
+
       updateMonthDisplay() {
         const el = document.getElementById('commission-month-display');
         if (el) el.textContent = `${MONTHS[this.selectedMonth]} ${this.selectedYear}`;
@@ -212,6 +227,11 @@
         try { return JSON.parse(b.doors); } catch (_) { return []; }
       },
 
+      getCompletionTimestamp(booking, productIndex) {
+        const door = this._parseDoors(booking)[productIndex];
+        return door?.completed_at || booking?.completed_at || booking?.updated_at || booking?.created_at || null;
+      },
+
       render() {
         const header = document.getElementById('commission-table-header');
         const tbody  = document.getElementById('commission-table-body');
@@ -220,13 +240,6 @@
         const mk       = this.monthKey();
         const scheds   = [...this.commissionSchedules].sort((a, b) => a - b);
         const schedDays = scheds.length > 0 ? scheds : [30];
-
-        const getSchedDay = (dateStr) => {
-          if (!dateStr) return schedDays[schedDays.length - 1];
-          const day = new Date(dateStr).getDate();
-          for (const s of schedDays) { if (day <= s) return s; }
-          return schedDays[schedDays.length - 1];
-        };
 
         const productMap = {};
         (this.dbProducts || []).forEach(p => {
@@ -241,21 +254,22 @@
           const door  = doors[a.product_index];
           const isDone = (door && door.completed) || ['done', 'completed', 'finished'].includes(b.status);
           if (!isDone) return false;
-          const ds = b.scheduled_date;
-          if (!ds) return false;
-          const d = new Date(ds);
-          return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}` === mk;
+          const completedAt = this.getCompletionTimestamp(b, a.product_index);
+          if (!completedAt) return false;
+          return this.getCutoffBucket(completedAt, schedDays)?.monthKey === mk;
         });
 
         // Group by employee and schedule day, calculating amounts dynamically on the fly
         const empCommissions = {};
+        const empRolloverCommissions = {};
         const empDoneDates   = {};
         monthAssignments.forEach(a => {
           if (!a.employee_id) return;
           const b = this.bookingsList.find(x => x.id === a.booking_id);
           if (!b) return;
-          const ds    = b.scheduled_date;
-          const schedDay = getSchedDay(ds);
+          const completedAt = this.getCompletionTimestamp(b, a.product_index);
+          const schedDay = this.getCutoffBucket(completedAt, schedDays)?.day;
+          if (!schedDay) return;
 
           let eligibleCentavos = 0;
           if (a.sku === 'ORDER_TOTAL') {
@@ -290,9 +304,13 @@
 
           empCommissions[a.employee_id] = empCommissions[a.employee_id] || {};
           empCommissions[a.employee_id][schedDay] = (empCommissions[a.employee_id][schedDay] || 0) + splitCommAmountCentavos;
+          if (String(completedAt).slice(0, 7) !== mk) {
+            empRolloverCommissions[a.employee_id] = empRolloverCommissions[a.employee_id] || {};
+            empRolloverCommissions[a.employee_id][schedDay] = (empRolloverCommissions[a.employee_id][schedDay] || 0) + splitCommAmountCentavos;
+          }
 
-          if (ds) {
-            const label = new Date(ds).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+          if (completedAt) {
+            const label = new Date(completedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
             empDoneDates[a.employee_id] = empDoneDates[a.employee_id] || {};
             empDoneDates[a.employee_id][schedDay] = empDoneDates[a.employee_id][schedDay] || [];
             if (!empDoneDates[a.employee_id][schedDay].includes(label)) empDoneDates[a.employee_id][schedDay].push(label);
@@ -323,7 +341,10 @@
           let cells = '';
           schedDays.forEach(day => {
             const amount = empCommissions[empId]?.[day] || 0;
-            cells += `<td style="font-weight:700;font-variant-numeric:tabular-nums;">${esc(php(amount / 100))}</td>`;
+            const rolled = empRolloverCommissions[empId]?.[day] || 0;
+            cells += `<td style="font-weight:700;font-variant-numeric:tabular-nums;">${esc(php(amount / 100))}
+              ${rolled ? `<div style="margin-top:0.15rem;font-size:0.68rem;font-weight:600;color:var(--text-muted);">Rol Com: ${esc(php(rolled / 100))}</div>` : ''}
+            </td>`;
           });
 
           bodyHtml += `<tr class="employee-row" data-emp-id="${esc(empId)}">

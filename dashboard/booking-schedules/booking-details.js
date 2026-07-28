@@ -288,7 +288,7 @@
               `;
             } else {
               return `
-                <img class="door-thumbnail" src="${url}" alt="Installer Media" onclick="openLightbox('${url}')" style="width:36px; height:36px; object-fit:cover; border-radius:4px; border:1px solid var(--border); vertical-align:middle; margin-right:4px; cursor:pointer;" />
+                <img class="door-thumbnail" src="${url}" alt="Installer Media" onerror="this.remove()" onclick="openLightbox('${url}')" style="width:36px; height:36px; object-fit:cover; border-radius:4px; border:1px solid var(--border); vertical-align:middle; margin-right:4px; cursor:pointer;" />
               `;
             }
           }).join('');
@@ -329,11 +329,13 @@
             : 'N/A';
 
           // Door photos thumbnails
-          const photos = door?.photos || [];
-          let thumbs = 'No pics';
+          const photos = (door?.photos || []).filter(url => (
+            typeof url === 'string' && url.trim() && url !== 'null' && url !== 'undefined'
+          ));
+          let thumbs = '';
           if (photos.length > 0) {
             thumbs = photos.map(url => `
-              <img class="door-thumbnail" src="${url}" alt="Door Pic" onclick="openLightbox('${url}')" style="margin: 0;" />
+              <img class="door-thumbnail" src="${url}" alt="Door Pic" onerror="this.remove()" onclick="openLightbox('${url}')" style="margin: 0;" />
             `).join('');
           }
           const photosHtml = `

@@ -1626,6 +1626,9 @@
       const file = input.files[0];
       const parent = input.parentElement;
       if (file) {
+        // A newly selected file must not reuse the URL cached for an earlier
+        // successful upload attempt.
+        delete parent.dataset.uploadedUrl;
         const reader = new FileReader();
         reader.onload = function(e) {
           // Check if img already exists
@@ -2074,7 +2077,16 @@
           const w = wrappers[j];
           const b64 = w.getAttribute('data-base64');
           if (b64) {
-            const url = await uploadFileToSupabase(b64, `door_${i+1}_photo_${j+1}.png`, 'installations', folderRefId, 'doors', currentCompanyId);
+            // Retain successful uploads across a retry so one failed image does
+            // not create duplicate/orphaned uploads for the other door photos.
+            let url = w.dataset.uploadedUrl || '';
+            if (!url) {
+              url = await uploadFileToSupabase(b64, `door_${i+1}_photo_${j+1}.png`, 'installations', folderRefId, 'doors', currentCompanyId);
+            }
+            if (!url || url === 'null' || url === 'undefined') {
+              throw new Error(`Door ${i + 1}, photo ${j + 1} failed to upload. Please retry before scheduling the booking.`);
+            }
+            w.dataset.uploadedUrl = url;
             photos.push(url);
           }
         }
