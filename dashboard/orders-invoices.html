@@ -265,8 +265,50 @@
                     </div>
                   </div>
                   <div class="form-group" style="margin-bottom: 0.75rem;">
-                    <label class="form-label">Full Name</label>
-                    <input type="text" class="form-input" id="inv-fullname" oninput="compileReceipt()" />
+                    <label style="display:inline-flex;align-items:center;gap:0.5rem;font-size:0.85rem;font-weight:600;cursor:pointer;">
+                      <input type="checkbox" id="inv-is-company" onchange="toggleInvoiceCompanyFields(); compileReceipt();" />
+                      Company / Office
+                    </label>
+                  </div>
+                  <div class="form-group-row" id="inv-person-name-fields" style="margin-bottom: 0.75rem;">
+                    <div class="form-group">
+                      <label class="form-label">First Name</label>
+                      <input type="text" class="form-input" id="inv-first-name" oninput="compileReceipt()" />
+                    </div>
+                    <div class="form-group">
+                      <label class="form-label">Last Name</label>
+                      <input type="text" class="form-input" id="inv-last-name" oninput="compileReceipt()" />
+                    </div>
+                  </div>
+                  <div id="inv-company-fields" style="display:none;">
+                    <div class="form-group-row" style="margin-bottom: 0.75rem;">
+                      <div class="form-group">
+                        <label class="form-label">Company Name</label>
+                        <input type="text" class="form-input" id="inv-company-name" oninput="compileReceipt()" />
+                      </div>
+                      <div class="form-group">
+                        <label class="form-label">Contact Person</label>
+                        <input type="text" class="form-input" id="inv-contact-person" oninput="compileReceipt()" />
+                      </div>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0.75rem;">
+                      <label class="form-label">Type of Company</label>
+                      <select class="form-input" id="inv-company-type" onchange="compileReceipt()">
+                        <option value="">Select company type</option>
+                        <option value="education">Education (daycares, schools, centers)</option>
+                        <option value="government">Government (LGU, NGO, barangay)</option>
+                        <option value="healthcare">Healthcare (clinics, hospitals)</option>
+                        <option value="hospitality">Hospitality (hotel, resort, bars, AirBNB)</option>
+                        <option value="manufacturing">Manufacturing (factories, plants)</option>
+                        <option value="offices">Offices (commercial, firms, corporate)</option>
+                        <option value="religious">Religious (churches, chapels)</option>
+                        <option value="retail">Retail (grocery, malls, stores)</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="form-group" style="margin-bottom: 0.75rem;">
+                    <label class="form-label">Social Media Name (FB/IG)</label>
+                    <input type="text" class="form-input" id="inv-social" oninput="compileReceipt()" />
                   </div>
                   <div class="form-group-row" style="margin-bottom: 0.75rem;">
                     <div class="form-group">
@@ -278,9 +320,23 @@
                       <input type="email" class="form-input" id="inv-email" oninput="compileReceipt()" />
                     </div>
                   </div>
-                  <div class="form-group">
-                    <label class="form-label">Full Address</label>
+                  <div class="form-group" style="margin-bottom: 0.75rem;">
+                    <label class="form-label">Street Address</label>
                     <textarea class="form-input" id="inv-address" rows="2" style="height: auto; resize: none;" oninput="compileReceipt()"></textarea>
+                  </div>
+                  <div class="form-group-row" style="margin-bottom: 0.75rem;">
+                    <div class="form-group">
+                      <label class="form-label">City</label>
+                      <input type="text" class="form-input" id="inv-city" oninput="compileReceipt()" />
+                    </div>
+                    <div class="form-group">
+                      <label class="form-label">Province</label>
+                      <input type="text" class="form-input" id="inv-province" oninput="compileReceipt()" />
+                    </div>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Google Map Pin Link</label>
+                    <input type="url" class="form-input" id="inv-map-pin" oninput="compileReceipt()" />
                   </div>
                 </div>
 
@@ -780,6 +836,70 @@
       }
     }
 
+    function splitLegacyCustomerName(name) {
+      const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+      return {
+        firstName: parts.shift() || '',
+        lastName: parts.join(' ')
+      };
+    }
+
+    function getInvoiceCustomerFields() {
+      const isCompany = document.getElementById('inv-is-company').checked;
+      const firstName = document.getElementById('inv-first-name').value.trim();
+      const lastName = document.getElementById('inv-last-name').value.trim();
+      const companyName = document.getElementById('inv-company-name').value.trim();
+      const contactPerson = document.getElementById('inv-contact-person').value.trim();
+
+      return {
+        customer_name: isCompany ? companyName : [firstName, lastName].filter(Boolean).join(' '),
+        customer_first_name: isCompany ? null : (firstName || null),
+        customer_last_name: isCompany ? null : (lastName || null),
+        customer_is_company: isCompany,
+        customer_company_name: isCompany ? (companyName || null) : null,
+        customer_contact_person: isCompany ? (contactPerson || null) : null,
+        customer_company_type: isCompany ? (document.getElementById('inv-company-type').value || null) : null,
+        customer_social: document.getElementById('inv-social').value.trim() || null,
+        customer_phone: document.getElementById('inv-contact').value.trim() || null,
+        customer_email: document.getElementById('inv-email').value.trim() || null,
+        customer_address: document.getElementById('inv-address').value.trim(),
+        customer_city: document.getElementById('inv-city').value.trim() || null,
+        customer_province: document.getElementById('inv-province').value.trim() || null,
+        google_map_pin_url: document.getElementById('inv-map-pin').value.trim() || null
+      };
+    }
+
+    function getInvoiceFullAddress(customer = getInvoiceCustomerFields()) {
+      return [customer.customer_address, customer.customer_city, customer.customer_province]
+        .filter(Boolean)
+        .join(', ');
+    }
+
+    window.toggleInvoiceCompanyFields = function() {
+      const isCompany = document.getElementById('inv-is-company').checked;
+      document.getElementById('inv-person-name-fields').style.display = isCompany ? 'none' : 'flex';
+      document.getElementById('inv-company-fields').style.display = isCompany ? 'block' : 'none';
+    };
+
+    function setInvoiceCustomerFields(data) {
+      const legacyName = splitLegacyCustomerName(data.customer_name);
+      const isCompany = Boolean(data.customer_is_company);
+      document.getElementById('inv-is-company').checked = isCompany;
+      document.getElementById('inv-first-name').value = data.customer_first_name || (!isCompany ? legacyName.firstName : '');
+      document.getElementById('inv-last-name').value = data.customer_last_name || (!isCompany ? legacyName.lastName : '');
+      document.getElementById('inv-company-name').value = data.customer_company_name || (isCompany ? data.customer_name || '' : '');
+      document.getElementById('inv-contact-person').value = data.customer_contact_person || '';
+      document.getElementById('inv-company-type').value = data.customer_company_type || '';
+      document.getElementById('inv-social').value = data.customer_social || '';
+      document.getElementById('inv-contact').value = data.customer_phone || '';
+      document.getElementById('inv-email').value = data.customer_email || '';
+      document.getElementById('inv-address').value = data.customer_address || '';
+      document.getElementById('inv-city').value = data.customer_city || '';
+      document.getElementById('inv-province').value = data.customer_province || '';
+      document.getElementById('inv-map-pin').value = data.google_map_pin_url || '';
+      toggleInvoiceCompanyFields();
+    }
+
     // Load bookings sorted by name and filtered by selected Month & Year of installation (scheduled_date)
     async function loadBookingsDropdown() {
       try {
@@ -793,7 +913,8 @@
         }
 
         let query = sb.from('installation_bookings')
-          .select('id, order_no, customer_name, scheduled_date, status')
+          .select('id, order_no, customer_name, customer_last_name, scheduled_date, status')
+          .eq('company_id', currentCompanyId)
           .neq('status', 'cancelled');
 
         if (selectedMonth) {
@@ -814,17 +935,17 @@
 
         bookingsList = data || [];
         bookingsList.sort((a, b) => {
-          const nameA = (a.customer_name || '').trim().toLowerCase();
-          const nameB = (b.customer_name || '').trim().toLowerCase();
+          const nameA = (a.customer_last_name || a.customer_name || '').trim().toLowerCase();
+          const nameB = (b.customer_last_name || b.customer_name || '').trim().toLowerCase();
           return nameA.localeCompare(nameB);
         });
         const selector = document.getElementById('booking-selector');
-        selector.innerHTML = '<option value="">-- Choose Order / Last Name --</option>';
+        selector.replaceChildren(new Option('-- Choose Order / Last Name --', ''));
         bookingsList.forEach(b => {
           const dateStr = b.scheduled_date 
             ? new Date(b.scheduled_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) 
             : 'Unscheduled';
-          selector.innerHTML += `<option value="${b.id}">${b.customer_name} - ${dateStr} [${b.order_no}]</option>`;
+          selector.add(new Option(`${b.customer_name || 'Unnamed Customer'} - ${dateStr} [${b.order_no || ''}]`, b.id));
         });
       } catch (e) {
         console.error('Error fetching bookings dropdown:', e);
@@ -840,7 +961,11 @@
         return;
       }
 
-      const { data, error } = await sb.from('installation_bookings').select('*').eq('id', selectedBookingId).single();
+      const { data, error } = await sb.from('installation_bookings')
+        .select('id, order_no, company_id, customer_name, customer_first_name, customer_last_name, customer_is_company, customer_company_name, customer_contact_person, customer_company_type, customer_social, customer_email, customer_phone, customer_address, customer_city, customer_province, google_map_pin_url, scheduled_date, products, product_unit_prices, charge_labels, charge_values, deduction_labels, deduction_values')
+        .eq('company_id', currentCompanyId)
+        .eq('id', selectedBookingId)
+        .single();
       if (error || !data) {
         showNotification('Error loading booking data', 'error');
         updatePanelStates(false);
@@ -851,10 +976,7 @@
 
       // Fill client info
       document.getElementById('inv-orderno').value = data.order_no;
-      document.getElementById('inv-fullname').value = data.customer_name;
-      document.getElementById('inv-contact').value = data.customer_phone || '';
-      document.getElementById('inv-email').value = data.customer_email || '';
-      document.getElementById('inv-address').value = data.customer_address || '';
+      setInvoiceCustomerFields(data);
       document.getElementById('inv-date').value = data.scheduled_date || '';
 
       // Reset dynamic lists
@@ -903,10 +1025,7 @@
 
       // Save initial state for dirty checking
       loadedBookingState = {
-        customer_name: data.customer_name || '',
-        customer_phone: data.customer_phone || '',
-        customer_email: data.customer_email || '',
-        customer_address: data.customer_address || '',
+        ...getInvoiceCustomerFields(),
         scheduled_date: data.scheduled_date || '',
         products: initialProducts,
         charges: initialCharges,
@@ -956,10 +1075,7 @@
       selectedBookingId = null;
       loadedBookingState = null;
       document.getElementById('inv-orderno').value = '';
-      document.getElementById('inv-fullname').value = '';
-      document.getElementById('inv-contact').value = '';
-      document.getElementById('inv-email').value = '';
-      document.getElementById('inv-address').value = '';
+      setInvoiceCustomerFields({});
       document.getElementById('inv-date').value = '';
 
       document.getElementById('inv-products-container').innerHTML = '';
@@ -1148,10 +1264,11 @@
 
       // Inputs — use dummy values for builder preview when no booking is loaded
       const orderno  = document.getElementById('inv-orderno').value  || (noBooking ? 'ORD-PREVIEW-001'              : 'ORD-2026XXXX-XXX');
-      const fullname = document.getElementById('inv-fullname').value || (noBooking ? 'Juan dela Cruz'               : 'Customer Name');
+      const customer = getInvoiceCustomerFields();
+      const fullname = customer.customer_name || (noBooking ? 'Juan dela Cruz' : 'Customer Name');
       const contact  = document.getElementById('inv-contact').value  || (noBooking ? '0917-555-1234'                : 'Contact Number');
       const email    = document.getElementById('inv-email').value.trim() || (noBooking ? 'sample@email.com'             : '');
-      const address  = document.getElementById('inv-address').value  || (noBooking ? '123 Sample St., Cavite City'  : 'Address');
+      const address  = getInvoiceFullAddress(customer) || (noBooking ? '123 Sample St., Cavite City' : 'Address');
 
       const rawDateStr = document.getElementById('inv-date').value;
       const receiptDate = rawDateStr
@@ -1596,10 +1713,9 @@
 
       if (newProductsToAdd.length > 0) {
         try {
-          const address = document.getElementById('inv-address').value || '';
-          const addrParts = address.split(',');
-          const city = addrParts.length >= 2 ? addrParts[addrParts.length - 2].trim() : (addrParts[0]?.trim() || 'N/A');
-          const customerName = document.getElementById('inv-fullname').value;
+          const customer = getInvoiceCustomerFields();
+          const city = customer.customer_city || 'N/A';
+          const customerName = customer.customer_name;
           
           for (const item of newProductsToAdd) {
              // Create transaction record
@@ -1668,10 +1784,7 @@
       }
 
       // Read values
-      const fullname = document.getElementById('inv-fullname').value;
-      const contact = document.getElementById('inv-contact').value;
-      const email = document.getElementById('inv-email').value;
-      const address = document.getElementById('inv-address').value;
+      const customer = getInvoiceCustomerFields();
       const schedDate = document.getElementById('inv-date').value || null;
 
       // Products lists
@@ -1750,10 +1863,7 @@
         }
 
         const { error } = await sb.from('installation_bookings').update({
-          customer_name: fullname,
-          customer_phone: contact,
-          customer_email: email,
-          customer_address: address,
+          ...customer,
           scheduled_date: schedDate,
           products: products,
           charge_labels: cLabels.join(' | ') || null,
@@ -1765,7 +1875,7 @@
           charges: totalCharges,
           deductions: totalDeductions,
           grand_total: grandTotal
-        }).eq('id', selectedBookingId);
+        }).eq('company_id', currentCompanyId).eq('id', selectedBookingId);
 
         if (error) throw error;
         if (loadedBookingState) {
@@ -1973,10 +2083,7 @@
         }
       });
 
-      const currentFullName = document.getElementById('inv-fullname').value;
-      const currentPhone = document.getElementById('inv-contact').value;
-      const currentEmail = document.getElementById('inv-email').value;
-      const currentAddress = document.getElementById('inv-address').value;
+      const currentCustomer = getInvoiceCustomerFields();
       const currentDate = document.getElementById('inv-date').value;
 
       // Compare helper
@@ -1985,10 +2092,16 @@
       );
       const matchCharges = JSON.stringify(currentCharges) === JSON.stringify(loadedBookingState.charges);
       const matchDeductions = JSON.stringify(currentDeductions) === JSON.stringify(loadedBookingState.deductions);
-      const matchMetadata = currentFullName === loadedBookingState.customer_name &&
-                            currentPhone === loadedBookingState.customer_phone &&
-                            currentEmail === loadedBookingState.customer_email &&
-                            currentAddress === loadedBookingState.customer_address &&
+      const customerKeys = [
+        'customer_name', 'customer_first_name', 'customer_last_name', 'customer_is_company',
+        'customer_company_name', 'customer_contact_person', 'customer_company_type',
+        'customer_social', 'customer_phone', 'customer_email', 'customer_address',
+        'customer_city', 'customer_province', 'google_map_pin_url'
+      ];
+      const matchCustomer = customerKeys.every(key =>
+        (currentCustomer[key] ?? null) === (loadedBookingState[key] ?? null)
+      );
+      const matchMetadata = matchCustomer &&
                             currentDate === loadedBookingState.scheduled_date;
 
       const changed = !(matchProducts && matchCharges && matchDeductions && matchMetadata);
@@ -2032,10 +2145,7 @@
 
       try {
         const orderNo = document.getElementById('inv-orderno').value;
-        const customerName = document.getElementById('inv-fullname').value;
-        const customerPhone = document.getElementById('inv-contact').value;
-        const customerEmail = document.getElementById('inv-email').value;
-        const customerAddress = document.getElementById('inv-address').value;
+        const customer = getInvoiceCustomerFields();
         const scheduledDate = document.getElementById('inv-date').value || null;
 
         // Gather products
@@ -2132,17 +2242,18 @@
         const grandTotalCents = subtotalCents + totalChargesCents - totalDeductionsCents;
 
         // Fetch original booking to keep track of deposits/balances
-        const { data: origData, error: origError } = await sb.from('installation_bookings').select('deposit_amount').eq('id', selectedBookingId).single();
+        const { data: origData, error: origError } = await sb.from('installation_bookings')
+          .select('deposit_amount')
+          .eq('company_id', currentCompanyId)
+          .eq('id', selectedBookingId)
+          .single();
         if (origError) throw origError;
 
         const depositCents = origData.deposit_amount || 0;
         const balanceCents = grandTotalCents - depositCents;
 
         const updatePayload = {
-          customer_name:       customerName,
-          customer_phone:      customerPhone || null,
-          customer_email:      customerEmail || null,
-          customer_address:    customerAddress,
+          ...customer,
           scheduled_date:      scheduledDate,
           
           product_skus:        prodSkus.join(' | ') || null,
@@ -2169,15 +2280,15 @@
           await checkAndAddNewProducts(orderNo, productsList);
         }
 
-        const { error } = await sb.from('installation_bookings').update(updatePayload).eq('id', selectedBookingId);
+        const { error } = await sb.from('installation_bookings')
+          .update(updatePayload)
+          .eq('company_id', currentCompanyId)
+          .eq('id', selectedBookingId);
         if (error) throw error;
 
         // Update local loaded state
         loadedBookingState = {
-          customer_name: customerName,
-          customer_phone: customerPhone,
-          customer_email: customerEmail,
-          customer_address: customerAddress,
+          ...customer,
           scheduled_date: scheduledDate,
           products: productsList.map(p => ({ sku: p.sku, qty: p.qty })),
           charges: cLabels.map((l, idx) => ({ label: l, val: parseFloat(cValues[idx]) })),

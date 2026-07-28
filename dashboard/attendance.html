@@ -488,6 +488,7 @@
           <div class="tabs-nav">
             <button class="tab-btn active" id="tab-btn-logs" onclick="AttendanceApp.switchTab('logs')">Logs</button>
             <button class="tab-btn" id="tab-btn-leaves" onclick="AttendanceApp.switchTab('leaves')">Leaves</button>
+            <button class="tab-btn" id="tab-btn-requests" onclick="AttendanceApp.switchTab('requests')">Requests</button>
           </div>
 
           <div class="scroll-area">
@@ -578,9 +579,18 @@
                   <button class="btn btn-cyan btn-sm" id="btn-submit-leave" onclick="AttendanceApp.submitLeaveRequest()">Request</button>
                 </div>
 
-                <!-- Manager Approvals Table View (Manager/Admin Only) -->
-                <div class="manager-section" id="manager-approvals-section" style="display: none;">
-                  <div class="leaves-section-title">Leave Request Approvals</div>
+                <!-- My Submitted Requests Cards -->
+                <div class="leaves-section-title">My Leave Requests</div>
+                <div class="leaves-grid" id="my-requests-container">
+                  <div style="grid-column: 1/-1; text-align:center; padding: 2rem; color:var(--text-muted);">No requests submitted yet.</div>
+                </div>
+
+              </div>
+
+              <!-- ── Manager Requests Tab Content ── -->
+              <div class="tab-content" id="tab-content-requests">
+                <div class="manager-section" id="manager-approvals-section">
+                  <div class="leaves-section-title">Direct Report Leave Requests</div>
                   <div style="overflow-x: auto;">
                     <table class="manager-table">
                       <thead>
@@ -594,18 +604,11 @@
                         </tr>
                       </thead>
                       <tbody id="manager-approvals-tbody">
-                        <tr><td colspan="6" style="text-align:center; padding: 2rem; color:var(--text-muted);">No pending approvals.</td></tr>
+                        <tr><td colspan="6" style="text-align:center; padding: 2rem; color:var(--text-muted);">Loading requests…</td></tr>
                       </tbody>
                     </table>
                   </div>
                 </div>
-
-                <!-- My Submitted Requests Cards -->
-                <div class="leaves-section-title">My Leave Requests</div>
-                <div class="leaves-grid" id="my-requests-container">
-                  <div style="grid-column: 1/-1; text-align:center; padding: 2rem; color:var(--text-muted);">No requests submitted yet.</div>
-                </div>
-
               </div>
 
             </div>
@@ -728,7 +731,8 @@
         try {
           const sb = window.BKAuth.sb;
           const { data } = await sb.from('employees')
-            .select('*')
+            .select('id, company_id, first_name, last_name, email, shift_time_1, employment_status, vl_load, sl_load')
+            .eq('company_id', this.companyId)
             .eq('email', this.currentUser.email)
             .limit(1)
             .maybeSingle();
@@ -745,6 +749,9 @@
         
         document.getElementById(`tab-btn-${tab}`).classList.add('active');
         document.getElementById(`tab-content-${tab}`).classList.add('active');
+        if (tab === 'requests') {
+          this.loadManagerApprovals();
+        }
       },
 
       changeMonth(dir) {
@@ -773,7 +780,8 @@
             const endOfMonth = new Date(this.selectedYear, this.selectedMonth + 1, 1).toISOString();
 
             const { data, error } = await sb.from('attendance_logs')
-              .select('*')
+              .select('created_at, status')
+              .eq('company_id', this.companyId)
               .eq('employee_id', this.employee.id)
               .gte('created_at', startOfMonth)
               .lt('created_at', endOfMonth)
@@ -1177,7 +1185,6 @@
         document.getElementById('sl-balance').textContent = Number(this.employee.sl_load || 0).toFixed(1);
 
         await this.loadMyRequests();
-        await this.loadManagerApprovals();
       },
 
       async loadMyRequests() {
@@ -1187,9 +1194,11 @@
         try {
           const sb = window.BKAuth.sb;
           const { data, error } = await sb.from('leave_requests')
-            .select('*')
+            .select('id, employee_id, leave_type, date_from, date_to, number_of_days, reason, status, rejected_reason, created_at')
+            .eq('company_id', this.companyId)
             .eq('employee_id', this.employee.id)
-            .order('created_at', { ascending: false });
+            .order('created_at', { ascending: false })
+            .limit(100);
 
           if (error) throw error;
 
@@ -1230,80 +1239,47 @@
       },
 
       async loadManagerApprovals() {
-        const section = document.getElementById('manager-approvals-section');
         const tbody = document.getElementById('manager-approvals-tbody');
+        if (!tbody || !this.employee || !this.companyId) return;
 
-        // Check if the current user has access to approvals
-        // Managers, HR, Admin, Owner can access this
-        let isManagerOrHR = false;
-        let role = '';
-
-        try {
-          const roleInfo = await window.BKAuth.getUserRole();
-          role = roleInfo?.role || '';
-          if (['owner', 'admin', 'hr'].includes(role.toLowerCase())) {
-            isManagerOrHR = true;
-          }
-        } catch (_) {}
-
-        // Check if this employee has direct reports (reporting_to field check)
-        let hasReports = false;
-        try {
-          const sb = window.BKAuth.sb;
-          const { data } = await sb.from('employees')
-            .select('id')
-            .eq('reporting_to', this.employee.id)
-            .limit(1);
-          if (data && data.length > 0) {
-            hasReports = true;
-          }
-        } catch (_) {}
-
-        const position = (this.employee?.position || '').toLowerCase();
-        const isLeadOrHead = position.includes('lead') || position.includes('head') || position.includes('manager') || position.includes('supervisor') || ['owner', 'admin', 'hr'].includes(role.toLowerCase());
-
-        if (!hasReports || !isLeadOrHead) {
-          section.style.display = 'none';
-          return;
-        }
-
-        section.style.display = 'block';
         tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding: 2rem; color:var(--text-muted);"><div class="bk-spinner" style="margin: 0 auto;"></div>Loading approvals…</td></tr>';
 
         try {
           const sb = window.BKAuth.sb;
-          let query = sb.from('leave_requests')
-            .select(`
-              *,
-              employees (
-                first_name,
-                last_name,
-                reporting_to
-              )
-            `)
-            .eq('status', 'pending');
+          const { data: reports, error: reportsError } = await sb.from('employees')
+            .select('id, first_name, last_name')
+            .eq('company_id', this.companyId)
+            .eq('reporting_to', this.employee.id)
+            .order('first_name', { ascending: true })
+            .limit(1000);
+          if (reportsError) throw reportsError;
 
-          // If not HR/Admin/Owner, filter strictly by reporting manager matching this employee's ID
-          if (!isManagerOrHR) {
-            // Note: PostgREST relational filter
-            query = query.eq('employees.reporting_to', this.employee.id);
+          if (!reports || reports.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding: 2rem; color:var(--text-muted);">You have no direct reports.</td></tr>';
+            return;
           }
 
-          const { data, error } = await query;
-          if (error) throw error;
+          const reportIds = reports.map(report => report.id);
+          const reportMap = new Map(reports.map(report => [report.id, report]));
+          const { data: requests, error: requestsError } = await sb.from('leave_requests')
+            .select('id, employee_id, leave_type, date_from, date_to, number_of_days, reason, status, created_at')
+            .eq('company_id', this.companyId)
+            .eq('status', 'pending')
+            .in('employee_id', reportIds)
+            .order('created_at', { ascending: true })
+            .limit(100);
+          if (requestsError) throw requestsError;
 
-          // Filter out rows where employees relation is null (could happen if query filtering has mismatches)
-          const filtered = data.filter(row => row.employees);
-
-          if (filtered.length === 0) {
+          if (!requests || requests.length === 0) {
             tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding: 2rem; color:var(--text-muted);">No pending approvals.</td></tr>';
             return;
           }
 
-          tbody.innerHTML = filtered.map(req => {
+          tbody.innerHTML = requests.map(req => {
             const dateFromStr = new Date(req.date_from).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
             const dateToStr = new Date(req.date_to).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-            const empName = `${req.employees.first_name} ${req.employees.last_name}`;
+            const report = reportMap.get(req.employee_id);
+            const empName = [report?.first_name, report?.last_name].filter(Boolean).join(' ') || 'Unknown Employee';
 
             return `
               <tr>
@@ -1313,7 +1289,7 @@
                 <td>${req.number_of_days}</td>
                 <td><span style="font-size:0.8rem; color:var(--text-secondary);">${esc(req.reason)}</span></td>
                 <td style="text-align: center;">
-                  <button class="btn btn-outline btn-xs" onclick="AttendanceApp.approveRequest('${req.id}', '${req.employee_id}', '${req.leave_type}', ${req.number_of_days})" style="margin-right: 0.25rem;">Approve</button>
+                  <button class="btn btn-outline btn-xs" onclick="AttendanceApp.approveRequest('${req.id}')" style="margin-right: 0.25rem;">Approve</button>
                   <button class="btn btn-danger-fill btn-xs" onclick="AttendanceApp.openRejectModal('${req.id}')">Reject</button>
                 </td>
               </tr>
@@ -1322,7 +1298,7 @@
 
         } catch (err) {
           console.error(err);
-          tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding: 2rem; color:var(--danger);">Failed to load approvals: ${err.message}</td></tr>`;
+          tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding: 2rem; color:var(--danger);">Leave requests could not be loaded.</td></tr>';
         }
       },
 
@@ -1430,7 +1406,7 @@
         }
       },
 
-      async approveRequest(reqId, employeeId, leaveType, days) {
+      async approveRequest(reqId) {
         const ok = await BKDialog.ask({
           title: 'Approve Leave Request',
           message: 'Are you sure you want to approve this request? Leave credits will be deducted.',
@@ -1440,34 +1416,15 @@
 
         try {
           const sb = window.BKAuth.sb;
-
-          // 1. Fetch employee's current loads
-          const { data: emp, error: empErr } = await sb.from('employees')
-            .select('vl_load, sl_load')
-            .eq('id', employeeId)
-            .limit(1)
-            .maybeSingle();
-
-          if (empErr) throw empErr;
-
-          // 2. Calculate balance adjustment
-          let updateLoad = {};
-          if (leaveType === 'vacation') {
-            updateLoad.vl_load = Math.max(0, (emp.vl_load || 0) - days);
-          } else {
-            updateLoad.sl_load = Math.max(0, (emp.sl_load || 0) - days);
-          }
-
-          // 3. Update employee loads
-          const { error: loadErr } = await sb.from('employees').update(updateLoad).eq('id', employeeId);
-          if (loadErr) throw loadErr;
-
-          // 4. Approve request
-          const { error: reqErr } = await sb.from('leave_requests').update({ status: 'approved' }).eq('id', reqId);
-          if (reqErr) throw reqErr;
+          const { error } = await sb.rpc('decide_direct_report_leave_request', {
+            p_request_id: reqId,
+            p_decision: 'approved',
+            p_rejection_reason: null
+          });
+          if (error) throw error;
 
           showToast('Leave request approved.');
-          await this.loadLeavesData();
+          await this.loadManagerApprovals();
         } catch (err) {
           console.error(err);
           showToast('The leave request could not be approved. Please try again.', true);
@@ -1495,18 +1452,17 @@
 
         try {
           const sb = window.BKAuth.sb;
-          const { error } = await sb.from('leave_requests')
-            .update({
-              status: 'rejected',
-              rejected_reason: reason
-            })
-            .eq('id', id);
+          const { error } = await sb.rpc('decide_direct_report_leave_request', {
+            p_request_id: id,
+            p_decision: 'rejected',
+            p_rejection_reason: reason
+          });
 
           if (error) throw error;
 
           showToast('Leave request rejected.');
           this.closeRejectModal();
-          await this.loadLeavesData();
+          await this.loadManagerApprovals();
         } catch (err) {
           console.error(err);
           showToast('The leave request could not be rejected. Please try again.', true);
