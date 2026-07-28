@@ -15,7 +15,22 @@
     office: 'On-site',
     entry_level: 'Entry Level',
     intermediate: 'Intermediate',
-    expert: 'Expert'
+    expert: 'Expert',
+    allowances: 'Allowances',
+    commission: 'Commission',
+    performance_bonus: 'Performance Bonus',
+    '13th_month': '13th Month',
+    overtime_pay: 'Overtime Pay',
+    premiums: 'Premiums (SSS, PAG-IBIG, etc.)',
+    hmo: 'HMO',
+    paid_leave: 'Paid Leave',
+    gas_allowance: 'Gas Allowance',
+    meal_allowance: 'Meal Allowance',
+    transportation: 'Transportation',
+    uniform: 'Uniform',
+    company_phone: 'Company Phone',
+    company_laptop: 'Company Laptop',
+    training: 'Training'
   };
 
   function formatLabel(value) {
@@ -86,6 +101,14 @@
     ].filter(Boolean);
   }
 
+  function jobHeroMeta(job) {
+    return [
+      locationLabel(job),
+      formatLabel(job.reporting_mode),
+      formatLabel(job.employment_type)
+    ].filter(Boolean);
+  }
+
   function renderEmpty(container, title, description) {
     const empty = createElement('div', 'careers-empty');
     empty.append(
@@ -97,7 +120,7 @@
 
   function renderCareerCard(job) {
     const card = createElement('a', 'career-card');
-    card.href = `/hiring/job-post/${encodeURIComponent(job.public_code)}`;
+    card.href = `/careers/${encodeURIComponent(job.public_code)}`;
 
     const content = createElement('div');
     const eyebrow = createElement('div', 'career-card__eyebrow');
@@ -145,12 +168,12 @@
       : [];
   }
 
-  function appendListSection(parent, title, items) {
+  function appendListSection(parent, title, items, formatter = value => value) {
     const values = normalizeItems(items);
     if (!values.length) return;
     const section = createElement('section', 'job-section');
     const list = createElement('ul', 'job-list');
-    values.forEach(value => list.appendChild(createElement('li', '', value)));
+    values.forEach(value => list.appendChild(createElement('li', '', formatter(value))));
     section.append(createElement('h2', '', title), list);
     parent.appendChild(section);
   }
@@ -203,6 +226,14 @@
     document.title = `${job.job_title} — Careers at Brightkey`;
     const root = document.getElementById('job-detail-root');
     const hero = createElement('section', 'job-detail__hero');
+    const heroImage = createElement('img', 'job-detail__hero-image');
+    heroImage.src = job.template?.header_image_url || '/assets/og-image.png';
+    heroImage.alt = '';
+    heroImage.setAttribute('aria-hidden', 'true');
+    heroImage.style.objectPosition = `50% ${job.template?.header_image_position_y ?? 50}%`;
+    heroImage.style.transform = `scale(${Math.min(2, Math.max(1, Number(job.template?.header_image_zoom || 100) / 100))})`;
+    const heroOverlay = createElement('span', 'job-detail__hero-overlay');
+    heroOverlay.setAttribute('aria-hidden', 'true');
     const heroInner = createElement('div', 'container job-detail__hero-inner');
     const breadcrumb = createElement('nav', 'breadcrumb');
     breadcrumb.setAttribute('aria-label', 'Breadcrumb');
@@ -213,7 +244,7 @@
     breadcrumb.append(home, createElement('span', '', '›'), careers, createElement('span', '', '›'), createElement('span', '', job.job_title));
 
     const eyebrow = createElement('div', 'job-detail__eyebrow');
-    jobMeta(job).forEach(item => eyebrow.appendChild(createElement('span', '', item)));
+    jobHeroMeta(job).forEach(item => eyebrow.appendChild(createElement('span', '', item)));
     const meta = createElement('div', 'job-detail__meta');
     addMetaPills(meta, [
       compensationText(job),
@@ -228,15 +259,15 @@
       createElement('p', 'job-detail__summary', job.job_description),
       meta
     );
-    hero.appendChild(heroInner);
+    hero.append(heroImage, heroOverlay, heroInner);
 
     const bodySection = createElement('section', 'section');
     const body = createElement('div', 'container job-detail__body');
     const content = createElement('div', 'job-detail__content');
     appendListSection(content, 'Qualifications', job.qualifications);
     appendResponsibilities(content, job.responsibilities);
-    appendListSection(content, 'Benefits', job.benefits);
-    appendListSection(content, 'Additional compensation', job.compensation_extras);
+    appendListSection(content, 'Benefits', job.benefits, formatLabel);
+    appendListSection(content, 'Additional Compensation', job.compensation_extras, formatLabel);
     appendListSection(content, 'Project milestones', job.milestones);
 
     const applyCard = createElement('aside', 'job-apply-card');
@@ -276,15 +307,24 @@
       return;
     }
     try {
-      const jobs = await callRpc('get_public_job_post', {
-        p_company_id: COMPANY_ID,
-        p_public_code: code
-      });
+      const [jobs, templates] = await Promise.all([
+        callRpc('get_public_job_post', {
+          p_company_id: COMPANY_ID,
+          p_public_code: code
+        }),
+        callRpc('get_public_job_post_template', {
+          p_company_id: COMPANY_ID,
+          p_public_code: code
+        })
+      ]);
       if (!jobs.length) {
         renderNotFound();
         return;
       }
-      renderJob(jobs[0]);
+      renderJob({
+        ...jobs[0],
+        template: templates[0] || null
+      });
     } catch (error) {
       console.error('Job detail load failed:', error);
       renderNotFound();

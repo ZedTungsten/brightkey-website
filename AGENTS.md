@@ -605,3 +605,32 @@ We use two distinct patterns for modal overlays. Do NOT mix them:
 >     }
 >   }
 >   ```
+
+---
+
+## 22. Reusable Sitewide UI Components
+> [!IMPORTANT]
+> Elements repeated across multiple pages—such as public-site footers, headers,
+> navigation, and dashboard sidebars—must have one shared implementation. Do not
+> copy their complete HTML into every page.
+>
+> - **Use Lightweight Mount Points**: Each page should declare only the semantic
+>   mount element required by the shared renderer. For the public-site footer:
+>   ```html
+>   <footer class="footer" data-unified-footer></footer>
+>   <script src="/js/main.js"></script>
+>   ```
+> - **One Source of Truth**: Footer structure and links belong in the existing
+>   unified footer component in `js/main.js` (exposed as
+>   `window.BKUnifiedFooter`). Dashboard navigation belongs in `js/sidebar.js`.
+>   Update the shared component once instead of creating page-specific copies.
+> - **No Page-Specific Footer Markup**: New public pages, including listing and
+>   detail routes, must not hardcode footer columns, links, branding, or copyright
+>   rows. Use the shared footer mount even when the page initially needs only a
+>   minimal footer.
+> - **Keep Component Styling Shared**: Do not add page-specific footer CSS unless
+>   the page has a documented layout requirement that cannot be expressed by the
+>   shared component. Remove obsolete styles when duplicated markup is replaced.
+> - **Verify the Rendered Component**: Test each new page after integration and
+>   confirm the mount renders the shared structure, current year, expected links,
+>   and no console errors.

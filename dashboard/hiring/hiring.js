@@ -11,6 +11,10 @@ const HiringApp = {
   jobTemplateSettings: {},
   templateImageDataUrls: {},
   templateHeaderTextMode: 'white',
+  applicationForms: {},
+  selectedApplicationFormId: '',
+  applicationFormSaveTimer: null,
+  draggedApplicationFieldIndex: null,
   hiringInformation: {
     email: '',
     contactNumber: '',
@@ -64,8 +68,11 @@ const HiringApp = {
       this.renderModals();
       await Promise.all([this.loadEmployees(), this.loadJobPosts()]);
     } else if (activeTab === 'templates') {
-      this.renderTemplatesPage();
-      await this.loadTemplateData();
+      const templateTab = window.location.hash === '#forms' ? 'forms' : 'posting';
+      this.renderTemplateSubtabs(templateTab);
+      this.renderTemplatesPage(templateTab);
+      if (templateTab === 'posting') await this.loadTemplateData();
+      if (templateTab === 'forms') await this.loadApplicationForms();
     } else if (activeTab === 'settings') {
       this.renderSettingsPage();
       await this.loadHiringInformation();
@@ -105,12 +112,13 @@ const HiringApp = {
                   <th>Compensation</th>
                   <th>Reporting</th>
                   <th>Date Posted</th>
+                  <th>Job Code</th>
                   <th>Visibility</th>
                   <th>Actions</th>
                 </tr>
               </thead>
               <tbody id="job-posts-body">
-                <tr><td colspan="9"><div class="loading-wrapper"><span class="spinner-cyan"></span><span>Loading job posts</span></div></td></tr>
+                <tr><td colspan="10"><div class="loading-wrapper"><span class="spinner-cyan"></span><span>Loading job posts</span></div></td></tr>
               </tbody>
             </table>
           </div>
@@ -246,9 +254,63 @@ const HiringApp = {
     this.showToast('Hiring information saved.');
   },
 
-  renderTemplatesPage() {
+  async switchTemplateSubtab(tab) {
+    const nextTab = tab === 'forms' ? 'forms' : 'posting';
+    history.replaceState(null, '', nextTab === 'forms' ? '#forms' : window.location.pathname);
+    this.renderTemplateSubtabs(nextTab);
+    this.renderTemplatesPage(nextTab);
+    if (nextTab === 'posting') await this.loadTemplateData();
+    if (nextTab === 'forms') await this.loadApplicationForms();
+  },
+
+  renderTemplateSubtabs(templateTab = 'posting') {
+    document.querySelector('.hiring-template-subtabs')?.remove();
+    const primaryTabs = document.querySelector('.hiring-tabs');
+    if (!primaryTabs) return;
+
+    const subtabBar = document.createElement('nav');
+    subtabBar.className = 'hiring-template-subtabs';
+    subtabBar.setAttribute('aria-label', 'Template sections');
+    ['posting', 'forms'].forEach((tab) => {
+      const button = document.createElement('button');
+      button.className = `template-subtab${templateTab === tab ? ' active' : ''}`;
+      button.type = 'button';
+      button.textContent = tab === 'posting' ? 'Posting' : 'Forms';
+      button.addEventListener('click', () => this.switchTemplateSubtab(tab));
+      subtabBar.appendChild(button);
+    });
+    primaryTabs.insertAdjacentElement('afterend', subtabBar);
+  },
+
+  renderTemplatesPage(templateTab = 'posting') {
     const content = document.querySelector('.hiring-content');
     if (!content) return;
+    const isForms = templateTab === 'forms';
+    if (isForms) {
+      content.innerHTML = `
+        <div class="hiring-page template-page">
+          <div class="hiring-page-header application-form-page-header">
+            <div>
+              <h2>Applicant Form</h2>
+              <p>Build the application form for each job post. Changes save automatically.</p>
+            </div>
+            <div class="application-form-actions">
+              <button class="btn btn-outline application-view-form-btn" type="button" onclick="HiringApp.viewApplicationForm()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 12s3.5-6.5 9.5-6.5S21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="2.8"/></svg>Preview Form</button>
+              <label class="template-select-wrap application-form-select" for="application-form-job-select">
+                <span>Job Post — Code</span>
+                <select id="application-form-job-select" disabled onchange="HiringApp.selectApplicationForm(this.value)">
+                  <option value="">Loading job posts…</option>
+                </select>
+              </label>
+            </div>
+          </div>
+          <div id="application-form-builder" class="application-form-builder" aria-live="polite">
+            <div class="template-loading"><span class="spinner-cyan"></span><span>Loading form builder</span></div>
+          </div>
+        </div>`;
+      return;
+    }
+
     content.innerHTML = `
       <div class="hiring-page template-page">
         <div class="hiring-page-header template-page-header">
@@ -283,7 +345,7 @@ const HiringApp = {
               <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 16V4m0 0 4 4m-4-4L8 8M4 20h16"/></svg>
               Upload Header Image
             </button>
-            <span>Recommended: 1600 × 450 px</span>
+            <span>Recommended: 2400 × 900 px (8:3). Keep the main subject toward the right or center-right.</span>
           </div>
           <div class="template-image-adjustments" id="template-image-adjustments" hidden>
             <label>
@@ -316,6 +378,284 @@ const HiringApp = {
           </div>
         </div>
       </div>`;
+  },
+
+  getDefaultApplicationForm() {
+    return {
+      instructions: '',
+      requiredQualifications: [],
+      customFields: []
+    };
+  },
+
+  getActiveApplicationForm() {
+    if (!this.selectedApplicationFormId) return null;
+    if (!this.applicationForms[this.selectedApplicationFormId]) {
+      this.applicationForms[this.selectedApplicationFormId] = this.getDefaultApplicationForm();
+    }
+    const form = this.applicationForms[this.selectedApplicationFormId];
+    form.customFields = Array.isArray(form.customFields) ? form.customFields : [];
+    form.requiredQualifications = Array.isArray(form.requiredQualifications) ? form.requiredQualifications : [];
+    form.instructions = String(form.instructions || '');
+    return form;
+  },
+
+  async loadApplicationForms() {
+    const builder = document.getElementById('application-form-builder');
+    const select = document.getElementById('application-form-job-select');
+    if (!builder || !select) return;
+
+    const [postsResult, formsResult] = await Promise.all([
+      this.sb.from('job_posts')
+        .select('id, public_code, job_title, job_description, qualifications')
+        .eq('company_id', this.companyId)
+        .order('created_at', { ascending: false }),
+      this.sb.from('global_settings')
+        .select('value')
+        .eq('company_id', this.companyId)
+        .eq('key', 'job_application_forms')
+        .maybeSingle()
+    ]);
+
+    if (postsResult.error || formsResult.error) {
+      console.error('Applicant form builder load failed:', postsResult.error || formsResult.error);
+      builder.innerHTML = '<div class="hiring-empty">Applicant forms could not be loaded. Please refresh and try again.</div>';
+      return;
+    }
+
+    this.jobPosts = postsResult.data || [];
+    this.applicationForms = formsResult.data?.value || {};
+    if (!this.jobPosts.length) {
+      select.innerHTML = '<option value="">No job posts available</option>';
+      select.disabled = true;
+      builder.innerHTML = '<div class="hiring-empty">Create a job post before building an applicant form.</div>';
+      return;
+    }
+
+    select.disabled = false;
+    select.innerHTML = this.jobPosts.map(post =>
+      `<option value="${this.esc(post.id)}">${this.esc(post.job_title)} — ${this.esc(post.public_code || 'No code')}</option>`
+    ).join('');
+    const selected = this.jobPosts.some(post => post.id === this.selectedApplicationFormId)
+      ? this.selectedApplicationFormId
+      : this.jobPosts[0].id;
+    this.selectApplicationForm(selected);
+  },
+
+  selectApplicationForm(jobId) {
+    this.selectedApplicationFormId = jobId || '';
+    const select = document.getElementById('application-form-job-select');
+    if (select && jobId) select.value = jobId;
+    this.renderApplicationFormBuilder();
+  },
+
+  renderApplicationFormBuilder() {
+    const builder = document.getElementById('application-form-builder');
+    const form = this.getActiveApplicationForm();
+    const post = this.jobPosts.find(item => item.id === this.selectedApplicationFormId);
+    if (!builder || !form || !post) return;
+    const qualifications = Array.isArray(post.qualifications)
+      ? post.qualifications.map(item => typeof item === 'string' ? item : item?.item).filter(Boolean)
+      : [];
+    builder.innerHTML = `
+      <section class="application-form-section">
+        <div class="application-form-section-heading">
+          <div><h3>Application content</h3></div>
+          <span class="application-form-save-status" id="application-form-save-status">Saved</span>
+        </div>
+        <label class="application-instructions-field" for="application-form-instructions">
+          <span>Instructions</span>
+          <textarea id="application-form-instructions" rows="3" placeholder="Please complete this application truthfully and accurately. Inaccurate or false information may affect the evaluation of your application or result in disqualification." oninput="HiringApp.updateApplicationInstructions(this.value)">${this.esc(form.instructions)}</textarea>
+        </label>
+      </section>
+      <section class="application-form-section application-qualifications-section">
+        <div class="application-form-section-heading"><div><h3>Required qualifications</h3></div></div>
+        ${qualifications.length ? `<div class="application-qualification-list">${qualifications.map((qualification, index) => this.renderApplicationQualification(qualification, index, form.requiredQualifications.includes(qualification))).join('')}</div>` : '<div class="application-fields-empty">This job post has no qualifications yet.</div>'}
+      </section>
+      <section class="application-form-section">
+        <div class="application-form-section-heading application-custom-fields-heading">
+          <div><h3>Questions</h3></div>
+          <button class="btn btn-outline btn-sm" type="button" onclick="HiringApp.addApplicationField()">Add Field</button>
+        </div>
+        <div class="application-custom-fields" id="application-custom-fields">
+          ${form.customFields.length ? form.customFields.map((field, index) => this.renderApplicationCustomField(field, index)).join('') : '<div class="application-fields-empty">Add a custom question, date, choice, or rating field.</div>'}
+        </div>
+      </section>`;
+  },
+
+  renderApplicationQualification(qualification, index, isRequired) {
+    return `<label class="application-qualification-row"><input type="checkbox" ${isRequired ? 'checked' : ''} onchange="HiringApp.toggleApplicationQualification(${index}, this.checked)" /><span>${this.esc(qualification)}</span><strong>Required</strong></label>`;
+  },
+
+  renderApplicationCustomField(field, index) {
+    const typeLabels = { short: 'Short Answer', long: 'Long Answer', date: 'Date Picker', checkboxes: 'Checkboxes', radio: 'Radio Button', slider: 'Slider' };
+    return `<article class="application-custom-field" draggable="true" ondragstart="HiringApp.startApplicationFieldDrag(${index})" ondragover="event.preventDefault()" ondrop="HiringApp.dropApplicationField(${index})">
+      <button class="application-drag-handle" type="button" aria-label="Drag question" title="Drag to reorder"><svg viewBox="0 0 12 20" fill="currentColor" aria-hidden="true"><circle cx="3" cy="3" r="1.3"/><circle cx="9" cy="3" r="1.3"/><circle cx="3" cy="10" r="1.3"/><circle cx="9" cy="10" r="1.3"/><circle cx="3" cy="17" r="1.3"/><circle cx="9" cy="17" r="1.3"/></svg></button>
+      <div class="application-field-main">
+        <label><span>Question</span><input value="${this.esc(field.question)}" placeholder="Enter a question" onchange="HiringApp.updateApplicationField(${index}, 'question', this.value)" /></label>
+        <label><span>Type of Answer</span><select onchange="HiringApp.updateApplicationFieldType(${index}, this.value)">${Object.entries(typeLabels).map(([value, label]) => `<option value="${value}" ${field.type === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label>
+        ${this.renderApplicationFieldOptions(field, index)}
+      </div>
+      <button class="application-remove-field" type="button" aria-label="Remove question" title="Remove question" onclick="HiringApp.removeApplicationField(${index})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/></svg></button>
+    </article>`;
+  },
+
+  renderApplicationFieldOptions(field, index) {
+    if (!['checkboxes', 'radio', 'slider'].includes(field.type)) {
+      const placeholder = field.type === 'long' ? 'Long answer (two lines)' : field.type === 'date' ? 'Date picker' : 'Short answer';
+      return `<div class="application-answer-preview ${field.type}">${placeholder}</div>`;
+    }
+    const options = field.options || [];
+    const isSlider = field.type === 'slider';
+    return `<div class="application-field-options">
+      ${options.map((option, optionIndex) => `<div class="application-option-row"><input value="${this.esc(option)}" onchange="HiringApp.updateApplicationOption(${index}, ${optionIndex}, this.value)" />${isSlider && options.length === 5 && optionIndex === 2 ? '<span class="application-neutral-label">Neutral</span>' : ''}<button type="button" aria-label="Remove option" ${options.length <= 2 ? 'disabled' : ''} onclick="HiringApp.removeApplicationOption(${index}, ${optionIndex})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/></svg></button></div>`).join('')}
+      <button class="application-add-option" type="button" ${options.length >= 10 ? 'disabled' : ''} onclick="HiringApp.addApplicationOption(${index})">Add option${options.length >= 10 ? ' (max 10)' : ''}</button>
+    </div>`;
+  },
+
+  toggleApplicationQualification(index, required) {
+    const form = this.getActiveApplicationForm();
+    const post = this.jobPosts.find(item => item.id === this.selectedApplicationFormId);
+    const qualifications = Array.isArray(post?.qualifications)
+      ? post.qualifications.map(item => typeof item === 'string' ? item : item?.item).filter(Boolean)
+      : [];
+    const qualification = qualifications[index];
+    if (!form || !qualification) return;
+    form.requiredQualifications = required
+      ? [...new Set([...form.requiredQualifications, qualification])]
+      : form.requiredQualifications.filter(item => item !== qualification);
+    this.scheduleApplicationFormSave();
+  },
+
+  viewApplicationForm() {
+    const post = this.jobPosts.find(item => item.id === this.selectedApplicationFormId);
+    const form = this.getActiveApplicationForm();
+    if (!post || !form) {
+      this.showToast('Select a job post first.', true);
+      return;
+    }
+    document.getElementById('application-form-preview')?.remove();
+    const requiredQualifications = Array.isArray(post.qualifications)
+      ? post.qualifications.map(item => typeof item === 'string' ? item : item?.item)
+        .filter(item => form.requiredQualifications.includes(item))
+      : [];
+    const customFields = form.customFields.map(field => `<label class="application-preview-field"><span>${this.esc(field.question || 'Untitled question')}</span>${['checkboxes', 'radio', 'slider'].includes(field.type) ? `<div class="application-preview-options">${(field.options || []).map(option => `<span>${this.esc(option)}</span>`).join('')}</div>` : `<div class="application-preview-answer ${this.esc(field.type || 'short')}"></div>`}</label>`).join('');
+    const overlay = document.createElement('div');
+    overlay.className = 'hiring-modal-overlay application-form-preview-overlay';
+    overlay.id = 'application-form-preview';
+    overlay.innerHTML = `<div class="hiring-modal-card application-form-preview-card" role="dialog" aria-modal="true" aria-labelledby="application-form-preview-title"><div class="hiring-modal-header"><h3 id="application-form-preview-title">${this.esc(post.job_title)}</h3><button class="hiring-icon-btn" type="button" aria-label="Close preview" onclick="HiringApp.closeApplicationFormPreview()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div><div class="application-form-preview-body">${post.job_description ? `<p class="application-preview-job-description">${this.esc(post.job_description)}</p>` : ''}${form.instructions ? `<p class="application-preview-instructions">${this.esc(form.instructions)}</p>` : ''}${requiredQualifications.length ? `<section class="application-preview-required-qualifications"><h4>Required Qualifications</h4><ul>${requiredQualifications.map(item => `<li>${this.esc(item)}</li>`).join('')}</ul></section>` : ''}<section><h4>Applicant Information</h4><div class="application-preview-standard-fields">${['First Name', 'Last Name', 'Address', 'Contact Number', 'Email'].map(field => `<label><span>${field}</span><div></div></label>`).join('')}</div></section>${customFields ? `<section><h4>Additional Questions</h4><div class="application-preview-custom-fields">${customFields}</div></section>` : ''}</div></div>`;
+    document.body.appendChild(overlay);
+    overlay.style.display = 'flex';
+    overlay.offsetHeight;
+    overlay.classList.add('open');
+  },
+
+  closeApplicationFormPreview() {
+    const overlay = document.getElementById('application-form-preview');
+    if (!overlay) return;
+    overlay.classList.remove('open');
+    setTimeout(() => overlay.remove(), 150);
+  },
+
+  updateApplicationInstructions(value) {
+    const form = this.getActiveApplicationForm();
+    if (!form) return;
+    form.instructions = value;
+    this.scheduleApplicationFormSave();
+  },
+
+  addApplicationField(type = 'short') {
+    const form = this.getActiveApplicationForm();
+    if (!form) return;
+    form.customFields.push({ question: '', type, options: ['Option 1', 'Option 2', ...(type === 'slider' ? ['Option 3', 'Option 4'] : [])] });
+    this.renderApplicationFormBuilder();
+    this.scheduleApplicationFormSave();
+  },
+
+  updateApplicationField(index, key, value) {
+    const field = this.getActiveApplicationForm()?.customFields[index];
+    if (!field) return;
+    field[key] = value;
+    this.scheduleApplicationFormSave();
+  },
+
+  updateApplicationFieldType(index, type) {
+    const field = this.getActiveApplicationForm()?.customFields[index];
+    if (!field) return;
+    field.type = type;
+    if (['checkboxes', 'radio'].includes(type) && !field.options?.length) field.options = ['Option 1', 'Option 2'];
+    if (type === 'slider' && field.options?.length < 4) field.options = ['Option 1', 'Option 2', 'Option 3', 'Option 4'];
+    this.renderApplicationFormBuilder();
+    this.scheduleApplicationFormSave();
+  },
+
+  updateApplicationOption(fieldIndex, optionIndex, value) {
+    const field = this.getActiveApplicationForm()?.customFields[fieldIndex];
+    if (!field?.options) return;
+    field.options[optionIndex] = value;
+    this.scheduleApplicationFormSave();
+  },
+
+  addApplicationOption(index) {
+    const field = this.getActiveApplicationForm()?.customFields[index];
+    if (!field || field.options.length >= 10) return;
+    field.options.push(`Option ${field.options.length + 1}`);
+    this.renderApplicationFormBuilder();
+    this.scheduleApplicationFormSave();
+  },
+
+  removeApplicationOption(fieldIndex, optionIndex) {
+    const field = this.getActiveApplicationForm()?.customFields[fieldIndex];
+    if (!field || field.options.length <= 2) return;
+    field.options.splice(optionIndex, 1);
+    this.renderApplicationFormBuilder();
+    this.scheduleApplicationFormSave();
+  },
+
+  removeApplicationField(index) {
+    const form = this.getActiveApplicationForm();
+    if (!form) return;
+    form.customFields.splice(index, 1);
+    this.renderApplicationFormBuilder();
+    this.scheduleApplicationFormSave();
+  },
+
+  startApplicationFieldDrag(index) {
+    this.draggedApplicationFieldIndex = index;
+  },
+
+  dropApplicationField(targetIndex) {
+    const form = this.getActiveApplicationForm();
+    const sourceIndex = this.draggedApplicationFieldIndex;
+    if (!form || sourceIndex == null || sourceIndex === targetIndex) return;
+    const [field] = form.customFields.splice(sourceIndex, 1);
+    form.customFields.splice(targetIndex, 0, field);
+    this.draggedApplicationFieldIndex = null;
+    this.renderApplicationFormBuilder();
+    this.scheduleApplicationFormSave();
+  },
+
+  scheduleApplicationFormSave() {
+    const status = document.getElementById('application-form-save-status');
+    if (status) status.textContent = 'Saving…';
+    clearTimeout(this.applicationFormSaveTimer);
+    this.applicationFormSaveTimer = setTimeout(() => this.saveApplicationForms(), 500);
+  },
+
+  async saveApplicationForms() {
+    const status = document.getElementById('application-form-save-status');
+    const { error } = await this.sb.from('global_settings').upsert({
+      company_id: this.companyId,
+      key: 'job_application_forms',
+      value: this.applicationForms
+    }, { onConflict: 'company_id,key' });
+    if (error) {
+      console.error('Applicant form save failed:', error);
+      if (status) status.textContent = 'Could not save';
+      this.showToast('Applicant form changes could not be saved. Please try again.', true);
+      return;
+    }
+    if (status) status.textContent = 'Saved';
   },
 
   async loadTemplateData() {
@@ -533,7 +873,7 @@ const HiringApp = {
       const objectUrl = URL.createObjectURL(file);
       image.onload = () => {
         URL.revokeObjectURL(objectUrl);
-        const scale = Math.min(1, 1600 / image.naturalWidth, 1600 / image.naturalHeight);
+        const scale = Math.min(1, 2400 / image.naturalWidth, 2400 / image.naturalHeight);
         const width = Math.max(1, Math.round(image.naturalWidth * scale));
         const height = Math.max(1, Math.round(image.naturalHeight * scale));
         const canvas = document.createElement('canvas');
@@ -1128,7 +1468,7 @@ const HiringApp = {
 
     if (error) {
       console.error('Job posts load failed:', error);
-      body.innerHTML = `<tr><td colspan="9"><div class="hiring-empty">Job posts are not available yet. Apply the Hiring database migration, then refresh this page.</div></td></tr>`;
+      body.innerHTML = `<tr><td colspan="10"><div class="hiring-empty">Job posts are not available yet. Apply the Hiring database migration, then refresh this page.</div></td></tr>`;
       return;
     }
 
@@ -1140,7 +1480,7 @@ const HiringApp = {
     const body = document.getElementById('job-posts-body');
     if (!body) return;
     if (!this.jobPosts.length) {
-      body.innerHTML = `<tr><td colspan="9"><div class="hiring-empty">No job posts yet. Create your first job post.</div></td></tr>`;
+      body.innerHTML = `<tr><td colspan="10"><div class="hiring-empty">No job posts yet. Create your first job post.</div></td></tr>`;
       return;
     }
 
@@ -1160,12 +1500,15 @@ const HiringApp = {
 
       return `<tr>
         <td><span class="job-type-pill${isProject ? ' project' : ''}">${typeLabel}</span></td>
-        <td><span class="job-title-cell">${this.esc(post.job_title)}</span></td>
+        <td>${post.public_code
+          ? `<a class="job-title-cell" href="/careers/${this.esc(post.public_code)}" target="_blank" rel="noopener noreferrer">${this.esc(post.job_title)}</a>`
+          : `<span class="job-title-cell">${this.esc(post.job_title)}</span>`}</td>
         <td>${this.esc(departmentTeam)}</td>
         <td>${post.visibility_level ? `<span class="job-level-pill">Level ${post.visibility_level}</span>` : '—'}</td>
         <td>${this.esc(compensation)}</td>
         <td>${this.esc(reporting)}</td>
         <td>${this.esc(this.formatDate(post.created_at))}</td>
+        <td><code class="job-code-cell">${this.esc(post.public_code || '—')}</code></td>
         <td>
           <label class="visibility-toggle" aria-label="Toggle visibility for ${this.esc(post.job_title)}">
             <input type="checkbox" checked />
