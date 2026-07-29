@@ -296,13 +296,16 @@
         fieldset.append(slider, labelsRow);
       } else {
         const optionsRow = createElement('div', `job-application-options job-application-options--${type}`);
-        let specifyToggle = null;
+        let specifyTrigger = null;
+        let specifyField = null;
         let specifyInput = null;
         const updateSpecifyState = () => {
-          if (!specifyToggle || !specifyInput) return;
-          specifyInput.disabled = !specifyToggle.checked;
-          specifyInput.required = specifyToggle.checked;
-          if (!specifyToggle.checked) specifyInput.value = '';
+          if (!specifyTrigger || !specifyField || !specifyInput) return;
+          const isSelected = specifyTrigger.checked;
+          specifyField.hidden = !isSelected;
+          specifyInput.disabled = !isSelected;
+          specifyInput.required = isSelected;
+          if (!isSelected) specifyInput.value = '';
         };
         options.forEach((option, optionIndex) => {
           const optionLabel = createElement('label');
@@ -311,29 +314,21 @@
           input.name = `application_question_${index}`;
           input.value = String(option || `Option ${optionIndex + 1}`);
           input.addEventListener('change', updateSpecifyState);
+          if (field.allowSpecify && optionIndex === options.length - 1) specifyTrigger = input;
           optionLabel.append(input, createElement('span', '', input.value));
           optionsRow.appendChild(optionLabel);
         });
         if (field.allowSpecify) {
-          const specify = createElement('div', 'job-application-specify');
-          const specifyLabel = document.createElement('label');
-          specifyToggle = document.createElement('input');
-          specifyToggle.type = type === 'radio' ? 'radio' : 'checkbox';
-          specifyToggle.name = `application_question_${index}`;
-          specifyToggle.value = '__please_specify__';
+          specifyField = createElement('div', 'job-application-specify');
+          specifyField.hidden = true;
           specifyInput = document.createElement('input');
           specifyInput.type = 'text';
           specifyInput.name = `application_question_${index}_specify`;
           specifyInput.placeholder = 'Please specify';
           specifyInput.maxLength = 180;
           specifyInput.disabled = true;
-          specifyToggle.addEventListener('change', () => {
-            updateSpecifyState();
-            if (specifyToggle.checked) specifyInput.focus();
-          });
-          specifyLabel.append(specifyToggle, createElement('span', '', 'Please specify'));
-          specify.append(specifyLabel, specifyInput);
-          optionsRow.appendChild(specify);
+          specifyField.appendChild(specifyInput);
+          optionsRow.appendChild(specifyField);
         }
         fieldset.appendChild(optionsRow);
       }
@@ -376,8 +371,10 @@
     const type = field?.type || 'short';
     const fieldName = `application_question_${index}`;
     const specifyValue = form.elements.namedItem(`${fieldName}_specify`)?.value?.trim() || '';
-    const formatChoice = value => value === '__please_specify__'
-      ? (specifyValue ? `Please specify: ${specifyValue}` : '')
+    const options = Array.isArray(field.options) ? field.options : [];
+    const lastOption = String(options[options.length - 1] || '');
+    const formatChoice = value => field.allowSpecify && value === lastOption
+      ? (specifyValue ? `${value}: ${specifyValue}` : '')
       : value;
     if (type === 'checkboxes') {
       return [...form.querySelectorAll(`input[name="${fieldName}"]:checked`)]

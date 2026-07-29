@@ -1486,9 +1486,10 @@ const HiringApp = {
     }
     if (['checkboxes', 'radio'].includes(type)) {
       const inputType = type === 'checkboxes' ? 'checkbox' : 'radio';
-      const options = (field.options || []).map((option, optionIndex) => `<label><input type="${inputType}" name="application-preview-field-${index}" value="${this.esc(option)}" onchange="HiringApp.updateApplicationPreviewSpecifyState(this)" /><span>${this.esc(option || `Option ${optionIndex + 1}`)}</span></label>`).join('');
+      const fieldOptions = field.options || [];
+      const options = fieldOptions.map((option, optionIndex) => `<label><input type="${inputType}" name="application-preview-field-${index}" value="${this.esc(option)}" ${field.allowSpecify && optionIndex === fieldOptions.length - 1 ? 'data-specify-trigger' : ''} onchange="HiringApp.updateApplicationPreviewSpecifyState(this)" /><span>${this.esc(option || `Option ${optionIndex + 1}`)}</span></label>`).join('');
       const specify = field.allowSpecify
-        ? `<div class="application-preview-specify"><label><input type="${inputType}" name="application-preview-field-${index}" value="__please_specify__" data-specify-toggle onchange="HiringApp.updateApplicationPreviewSpecifyState(this)" /><span>Please specify</span></label><input type="text" data-specify-input placeholder="Please specify" disabled /></div>`
+        ? '<div class="application-preview-specify" data-specify-field hidden><input type="text" data-specify-input placeholder="Please specify" disabled /></div>'
         : '';
       return `<fieldset class="application-preview-field"><legend>${question}</legend><div class="application-preview-options ${type}">${options}${specify}</div></fieldset>`;
     }
@@ -1513,13 +1514,16 @@ const HiringApp = {
 
   updateApplicationPreviewSpecifyState(input) {
     const options = input?.closest('.application-preview-options');
-    const specifyToggle = options?.querySelector('[data-specify-toggle]');
+    const specifyTrigger = options?.querySelector('[data-specify-trigger]');
+    const specifyField = options?.querySelector('[data-specify-field]');
     const specifyInput = options?.querySelector('[data-specify-input]');
-    if (!specifyToggle || !specifyInput) return;
-    specifyInput.disabled = !specifyToggle.checked;
-    specifyInput.required = specifyToggle.checked;
-    if (!specifyToggle.checked) specifyInput.value = '';
-    if (input === specifyToggle && specifyToggle.checked) specifyInput.focus();
+    if (!specifyTrigger || !specifyField || !specifyInput) return;
+    const isSelected = specifyTrigger.checked;
+    specifyField.hidden = !isSelected;
+    specifyInput.disabled = !isSelected;
+    specifyInput.required = isSelected;
+    if (!isSelected) specifyInput.value = '';
+    if (input === specifyTrigger && isSelected) specifyInput.focus();
   },
 
   viewApplicationForm() {

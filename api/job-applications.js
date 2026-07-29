@@ -59,12 +59,15 @@ function normalizeAnswer(field, rawAnswer, fileData, companyId, applicationId, i
     ? field.options.map(option => cleanText(option, 200)).filter(Boolean).slice(0, 10)
     : [];
   const allowSpecify = field?.allowSpecify === true;
+  const lastOption = options[options.length - 1] || '';
   const normalizeChoice = value => {
-    const cleaned = cleanText(value, 200);
+    const cleaned = cleanText(value, 400);
+    if (allowSpecify && cleaned === lastOption) return '';
     if (options.includes(cleaned)) return cleaned;
-    if (allowSpecify && cleaned.startsWith('Please specify: ')) {
-      const specified = cleanText(cleaned.slice('Please specify: '.length), 180);
-      return specified ? `Please specify: ${specified}` : '';
+    const specifyPrefix = `${lastOption}: `;
+    if (allowSpecify && lastOption && cleaned.startsWith(specifyPrefix)) {
+      const specified = cleanText(cleaned.slice(specifyPrefix.length), 180);
+      return specified ? `${lastOption}: ${specified}` : '';
     }
     return '';
   };

@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import { createServiceClient } from '../lib/api/security.js';
+import { createPublicClient } from '../lib/api/security.js';
 
 const COMPANY_ID = 'e6cf43ed-1f42-4aad-a6ed-470147a0489f';
 const CODE_PATTERN = /^[A-Za-z0-9_-]{5}$/;
@@ -96,7 +96,7 @@ export default async function handler(req, res) {
   try {
     const [template, publicJob] = await Promise.all([
       readFile(TEMPLATE_PATH, 'utf8'),
-      loadPublicJob(createServiceClient(), code)
+      loadPublicJob(createPublicClient(), code)
     ]);
 
     if (!publicJob.job) {
