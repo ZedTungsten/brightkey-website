@@ -1573,7 +1573,9 @@ window.EventsApp = {
 
         tbody.innerHTML = chronologicalRecords.map(r => {
         const emp = r.employees || {};
-        const fullName = emp.first_name ? `${emp.first_name} ${emp.last_name}` : 'Unknown Recipient';
+        const firstName = String(emp.first_name || '').trim();
+        const lastName = String(emp.last_name || '').trim();
+        const fullName = [firstName, lastName].filter(Boolean).join(' ') || 'Unknown Recipient';
         const dept = emp.department || '—';
         
         if (r.opened) openedCount++;
@@ -1606,7 +1608,7 @@ window.EventsApp = {
 
         return `
           <tr>
-            <td style="font-weight:600;">${esc(fullName)}</td>
+            <td style="font-weight:400;white-space:nowrap;">${esc(fullName)}</td>
             <td>${esc(dept)}</td>
             <td style="text-align:center;">${respondedViaBadge}</td>
             <td style="text-align:center;">${openedBadge}</td>

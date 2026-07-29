@@ -14,6 +14,19 @@ const HiringApp = {
   applicationForms: {},
   selectedApplicationFormId: '',
   applicationFormSaveTimer: null,
+  hiringEmailTemplates: {},
+  selectedHiringEmailType: 'next_step',
+  hiringEmailEditing: false,
+  hiringEmailSaveTimer: null,
+  hiringEmailEditSnapshot: null,
+  hiringEmailPlaceholderTarget: null,
+  applicationSummaries: [],
+  applications: [],
+  selectedApplicantJobCode: '',
+  selectedApplicantStage: 1,
+  selectedApplicantJob: null,
+  pendingApplicantAction: null,
+  applicantHashListenerBound: false,
   draggedApplicationFieldIndex: null,
   hiringInformation: {
     email: '',
@@ -26,6 +39,8 @@ const HiringApp = {
   draggedQualificationRow: null,
   selectedDays: new Set(),
   tagValues: [],
+  applicationStages: [],
+  jobPostColumns: 'id, company_id, employment_type, position, department_name, team_name, assignee_id, position_type, visibility_level, job_title, job_description, qualifications, responsibilities, milestones, project_length, fixed_price, monthly_salary, monthly_salary_max, salary_mode, salary_confidential, salary_negotiable, compensation_extras, benefits, reporting_days, reporting_time_start, reporting_time_end, free_hours, reporting_mode, location_scope, location_country, location_city, applicant_type, expertise_level, vacancy_count, expected_start_date, tags, application_stages, status, public_code, created_at',
 
   esc(value) {
     return String(value ?? '')
@@ -67,12 +82,24 @@ const HiringApp = {
       this.renderJobPostPage();
       this.renderModals();
       await Promise.all([this.loadEmployees(), this.loadJobPosts()]);
+    } else if (activeTab === 'applicants') {
+      this.renderApplicantsPage();
+      await this.loadApplicationSummaries();
+      if (!this.applicantHashListenerBound) {
+        window.addEventListener('hashchange', () => this.handleApplicantHashChange());
+        this.applicantHashListenerBound = true;
+      }
     } else if (activeTab === 'templates') {
-      const templateTab = window.location.hash === '#forms' ? 'forms' : 'posting';
+      const templateTab = window.location.hash === '#forms'
+        ? 'forms'
+        : window.location.hash === '#email'
+          ? 'email'
+          : 'posting';
       this.renderTemplateSubtabs(templateTab);
       this.renderTemplatesPage(templateTab);
       if (templateTab === 'posting') await this.loadTemplateData();
       if (templateTab === 'forms') await this.loadApplicationForms();
+      if (templateTab === 'email') await this.loadHiringEmailTemplates();
     } else if (activeTab === 'settings') {
       this.renderSettingsPage();
       await this.loadHiringInformation();
@@ -124,6 +151,383 @@ const HiringApp = {
           </div>
         </div>
       </div>`;
+  },
+
+  renderApplicantsPage() {
+    const content = document.querySelector('.hiring-content');
+    if (!content) return;
+    content.innerHTML = `
+      <div class="hiring-page applicants-page">
+        <div class="hiring-page-header">
+          <div>
+            <h2>Applicants</h2>
+            <p class="hiring-page-description">Review applications grouped by job post.</p>
+          </div>
+        </div>
+        <div id="applicant-summary-view">
+          <div class="loading-wrapper"><span class="spinner-cyan"></span><span>Loading applications</span></div>
+        </div>
+        <div id="applicant-detail-view" hidden></div>
+        <div class="hiring-modal-overlay applicant-confirm-overlay" id="applicant-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="applicant-confirm-title">
+          <div class="hiring-modal-card applicant-confirm-card">
+            <div class="hiring-modal-header">
+              <h3 id="applicant-confirm-title">Confirm applicant action</h3>
+              <button class="hiring-icon-btn" type="button" aria-label="Close" onclick="HiringApp.closeApplicantConfirmation()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+              </button>
+            </div>
+            <div class="applicant-confirm-body">
+              <p id="applicant-confirm-message"></p>
+            </div>
+            <div class="hiring-modal-footer">
+              <button class="btn btn-outline" type="button" onclick="HiringApp.closeApplicantConfirmation()">Cancel</button>
+              <button class="btn applicant-confirm-submit" id="applicant-confirm-submit" type="button" onclick="HiringApp.confirmApplicantAction()">Confirm</button>
+            </div>
+          </div>
+        </div>
+      </div>`;
+  },
+
+  async loadApplicationSummaries() {
+    const summaryView = document.getElementById('applicant-summary-view');
+    const { data, error } = await this.sb.rpc('get_job_application_summary', {
+      p_company_id: this.companyId
+    });
+    if (error) {
+      console.error('Failed to load application summaries:', error);
+      if (summaryView) {
+        summaryView.innerHTML = '<div class="hiring-empty">Applications could not be loaded. Refresh the page and try again.</div>';
+      }
+      return;
+    }
+    this.applicationSummaries = data || [];
+    this.renderApplicationSummaryCards();
+    await this.handleApplicantHashChange();
+  },
+
+  renderApplicationSummaryCards() {
+    const summaryView = document.getElementById('applicant-summary-view');
+    if (!summaryView) return;
+    if (!this.applicationSummaries.length) {
+      summaryView.innerHTML = '<div class="hiring-empty">Create a job post to begin receiving applications.</div>';
+      return;
+    }
+
+    summaryView.innerHTML = `<div class="applicant-card-grid">${this.applicationSummaries.map(job => `
+      <a class="applicant-job-card" href="#${encodeURIComponent(job.job_public_code)}" aria-label="View applications for ${this.esc(job.job_title)}">
+        <div class="applicant-job-card-heading">
+          <h3>${this.esc(job.job_title)} <span>– ${this.esc(job.job_public_code)}</span></h3>
+          <strong>${Number(job.total_count || 0)}</strong>
+        </div>
+        <div class="applicant-job-card-counts">
+          <span class="approved"><b>${Number(job.approved_count || 0)}</b> Approved</span>
+          <span class="rejected"><b>${Number(job.rejected_count || 0)}</b> Rejected</span>
+          <span class="pending"><b>${Number(job.pending_count || 0)}</b> Pending actions</span>
+        </div>
+      </a>`).join('')}</div>`;
+  },
+
+  async handleApplicantHashChange() {
+    const code = decodeURIComponent(window.location.hash.replace(/^#/, '')).trim();
+    const summaryView = document.getElementById('applicant-summary-view');
+    const detailView = document.getElementById('applicant-detail-view');
+    if (!summaryView || !detailView) return;
+
+    if (!code) {
+      this.selectedApplicantJobCode = '';
+      summaryView.hidden = false;
+      detailView.hidden = true;
+      return;
+    }
+
+    const selectedJob = this.applicationSummaries.find(job => job.job_public_code === code);
+    if (!selectedJob) {
+      window.history.replaceState(null, '', window.location.pathname);
+      this.showToast('The selected job post could not be found.', true);
+      summaryView.hidden = false;
+      detailView.hidden = true;
+      return;
+    }
+
+    if (this.selectedApplicantJobCode !== code) this.selectedApplicantStage = 1;
+    this.selectedApplicantJobCode = code;
+    summaryView.hidden = true;
+    detailView.hidden = false;
+    detailView.innerHTML = '<div class="loading-wrapper"><span class="spinner-cyan"></span><span>Loading applicants</span></div>';
+    await this.loadApplicationsForJob(selectedJob);
+  },
+
+  async loadApplicationsForJob(job) {
+    const [postResult, applicationResult] = await Promise.all([
+      this.sb
+        .from('job_posts')
+        .select('id, application_stages')
+        .eq('company_id', this.companyId)
+        .eq('id', job.job_post_id)
+        .maybeSingle(),
+      this.sb
+        .from('job_applications')
+        .select('id, submitted_at, first_name, last_name, contact_number, email, address, answers, status, current_stage, stage_history, hired_at')
+        .eq('company_id', this.companyId)
+        .eq('job_post_id', job.job_post_id)
+        .order('submitted_at', { ascending: false })
+        .range(0, 99)
+    ]);
+    if (postResult.error || applicationResult.error) {
+      const error = postResult.error || applicationResult.error;
+      console.error('Failed to load job applications:', error);
+      const detailView = document.getElementById('applicant-detail-view');
+      if (detailView) {
+        detailView.innerHTML = '<div class="hiring-empty">Applicants could not be loaded. Refresh the page and try again.</div>';
+      }
+      return;
+    }
+    this.selectedApplicantJob = {
+      ...job,
+      application_stages: this.normalizeApplicationStages(postResult.data?.application_stages)
+    };
+    this.applications = applicationResult.data || [];
+    this.renderApplicationsTable(this.selectedApplicantJob);
+  },
+
+  renderApplicationsTable(job) {
+    const detailView = document.getElementById('applicant-detail-view');
+    if (!detailView) return;
+    const stages = this.normalizeApplicationStages(job.application_stages);
+    const activeStage = Math.min(Math.max(1, this.selectedApplicantStage), stages.length);
+    this.selectedApplicantStage = activeStage;
+    const stageApplications = this.applications.filter(application => Number(application.current_stage || 1) === activeStage);
+    const questionCount = stageApplications.reduce((maximum, application) => (
+      Math.max(maximum, Array.isArray(application.answers) ? application.answers.length : 0)
+    ), 0);
+    const questionHeaders = Array.from({ length: questionCount }, (_, index) => `<th>Q${index + 1}</th>`).join('');
+    const stage = stages[activeStage - 1];
+    const tasks = stage.actions.slice(0, 5);
+
+    detailView.innerHTML = `
+      <div class="applicant-detail-header">
+        <button class="btn btn-outline btn-sm" type="button" onclick="HiringApp.showApplicantCards()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+          All Job Posts
+        </button>
+        <div>
+          <h2>${this.esc(job.job_title)} <span>– ${this.esc(job.job_public_code)}</span></h2>
+          <p>${Number(job.total_count || 0)} total applications</p>
+        </div>
+      </div>
+      <nav class="applicant-stage-navigator" aria-label="Application stages">
+        <button type="button" aria-label="Previous stage" onclick="HiringApp.changeApplicantStage(-1)" ${activeStage <= 1 ? 'disabled' : ''}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+        </button>
+        <strong>${this.esc(stage.name)}</strong>
+        <button type="button" aria-label="Next stage" onclick="HiringApp.changeApplicantStage(1)" ${activeStage >= stages.length ? 'disabled' : ''}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+        </button>
+      </nav>
+      <div class="applicant-stage-tasks" aria-label="${this.esc(stage.name)} tasks">
+        ${tasks.map((task, index) => `
+          <div class="applicant-stage-task">
+            <span>Task ${index + 1}</span>
+            <p>${this.esc(String(task || '').trim() || this.getApplicationStagePlaceholder(activeStage - 1, index))}</p>
+          </div>`).join('')}
+      </div>
+      <div class="hiring-panel applicant-table-panel">
+        <div class="hiring-table-responsive">
+          <table class="hiring-table applicant-table">
+            <thead><tr>
+              <th>Date submitted</th>
+              <th>First Name</th>
+              <th>Last Name</th>
+              <th>Contact Number</th>
+              <th>Email</th>
+              <th>Address</th>
+              ${questionHeaders}
+              <th>Actions</th>
+            </tr></thead>
+            <tbody>
+              ${stageApplications.length
+                ? stageApplications.map(application => this.renderApplicationRow(application, questionCount, stages.length)).join('')
+                : `<tr><td colspan="${7 + questionCount}"><div class="hiring-empty">No applicants are currently in ${this.esc(stage.name)}.</div></td></tr>`}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      ${this.applications.length >= 100 ? '<p class="applicant-result-note">Showing the 100 most recent applications.</p>' : ''}`;
+  },
+
+  renderApplicationRow(application, questionCount, stageCount) {
+    const answers = Array.isArray(application.answers) ? application.answers : [];
+    const answerCells = Array.from({ length: questionCount }, (_, index) => {
+      const answer = answers[index];
+      if (answer?.file?.path) {
+        return `<td><button class="applicant-file-link" type="button" onclick="HiringApp.openApplicationFile('${this.esc(application.id)}', '${this.esc(answer.file.path)}')">${this.esc(answer.file.name || 'Open file')}</button></td>`;
+      }
+      if (Array.isArray(answer?.answer)) {
+        const values = answer.answer.filter(Boolean);
+        return `<td>${values.length ? `<div class="applicant-answer-list">${values.map(value => `<span>${this.esc(value)}</span>`).join('')}</div>` : '—'}</td>`;
+      }
+      const value = answer?.answer;
+      return `<td>${value ? this.esc(value) : '—'}</td>`;
+    }).join('');
+    return `<tr>
+      <td>${this.formatLongDate(application.submitted_at)}</td>
+      <td>${this.esc(application.first_name)}</td>
+      <td>${this.esc(application.last_name)}</td>
+      <td>${this.esc(application.contact_number)}</td>
+      <td><a class="applicant-email-link" href="mailto:${this.esc(application.email)}">${this.esc(application.email)}</a></td>
+      <td>${this.esc(application.address)}</td>
+      ${answerCells}
+      <td>
+        <div class="applicant-actions">
+          <button class="applicant-action approve ${application.hired_at ? 'active' : ''}" type="button" aria-label="${Number(application.current_stage || 1) >= stageCount ? 'Hire' : 'Move'} ${this.esc(application.first_name)} ${this.esc(application.last_name)}" title="${Number(application.current_stage || 1) >= stageCount ? 'Hire Applicant' : 'Move to Next Stage'}" onclick="HiringApp.openApplicantConfirmation('${this.esc(application.id)}')" ${application.status === 'rejected' || application.hired_at ? 'disabled' : ''}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>
+          </button>
+          <button class="applicant-action reject ${application.status === 'rejected' ? 'active' : ''}" type="button" aria-label="Reject ${this.esc(application.first_name)} ${this.esc(application.last_name)}" title="Reject" onclick="HiringApp.updateApplicationStatus('${this.esc(application.id)}', 'rejected')" ${application.status === 'rejected' ? 'disabled' : ''}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+          </button>
+        </div>
+      </td>
+    </tr>`;
+  },
+
+  formatLongDate(value) {
+    if (!value) return '—';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '—';
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  },
+
+  showApplicantCards() {
+    window.history.pushState(null, '', window.location.pathname);
+    this.handleApplicantHashChange();
+  },
+
+  changeApplicantStage(change) {
+    if (!this.selectedApplicantJob) return;
+    const stageCount = this.normalizeApplicationStages(this.selectedApplicantJob.application_stages).length;
+    this.selectedApplicantStage = Math.min(stageCount, Math.max(1, this.selectedApplicantStage + change));
+    this.renderApplicationsTable(this.selectedApplicantJob);
+  },
+
+  openApplicantConfirmation(applicationId) {
+    const application = this.applications.find(item => item.id === applicationId);
+    if (!application || !this.selectedApplicantJob) return;
+    const stages = this.normalizeApplicationStages(this.selectedApplicantJob.application_stages);
+    const isHire = Number(application.current_stage || 1) >= stages.length;
+    const fullName = `${application.first_name} ${application.last_name}`.trim();
+    this.pendingApplicantAction = { applicationId, isHire, fullName };
+    const title = document.getElementById('applicant-confirm-title');
+    const message = document.getElementById('applicant-confirm-message');
+    const submit = document.getElementById('applicant-confirm-submit');
+    if (title) title.textContent = isHire ? 'Confirm Hire' : 'Confirm Stage Change';
+    if (message) {
+      message.textContent = isHire
+        ? `Hire ${fullName} as ${this.selectedApplicantJob.job_title}?`
+        : `Move ${fullName} to ${stages[Number(application.current_stage || 1)]?.name || 'the next stage'}?`;
+    }
+    if (submit) submit.textContent = isHire ? 'Hire' : 'Move';
+    this.openModal('applicant-confirm-modal');
+  },
+
+  closeApplicantConfirmation() {
+    this.pendingApplicantAction = null;
+    this.closeModal('applicant-confirm-modal');
+  },
+
+  async confirmApplicantAction() {
+    const pending = this.pendingApplicantAction;
+    const application = this.applications.find(item => item.id === pending?.applicationId);
+    if (!pending || !application || !this.selectedApplicantJob) return;
+    const submit = document.getElementById('applicant-confirm-submit');
+    if (submit) submit.disabled = true;
+    const { data: userData } = await this.sb.auth.getUser();
+    const now = new Date().toISOString();
+    const currentStage = Number(application.current_stage || 1);
+    const history = Array.isArray(application.stage_history) ? [...application.stage_history] : [];
+    history.push({
+      stage: currentStage,
+      action: pending.isHire ? 'hired' : 'advanced',
+      completed_at: now,
+      completed_by: userData?.user?.id || null
+    });
+    const update = pending.isHire
+      ? {
+        status: 'approved',
+        hired_at: now,
+        reviewed_at: now,
+        reviewed_by: userData?.user?.id || null,
+        stage_history: history
+      }
+      : {
+        status: 'pending',
+        current_stage: currentStage + 1,
+        reviewed_at: now,
+        reviewed_by: userData?.user?.id || null,
+        stage_history: history
+      };
+    const { error } = await this.sb
+      .from('job_applications')
+      .update(update)
+      .eq('id', application.id)
+      .eq('company_id', this.companyId);
+    if (submit) submit.disabled = false;
+    if (error) {
+      console.error('Failed to update application status:', error);
+      this.showToast('The applicant could not be moved. Please try again.', true);
+      return;
+    }
+    this.closeApplicantConfirmation();
+    this.showToast(pending.isHire ? `${pending.fullName} was hired.` : `${pending.fullName} moved to the next stage.`);
+    await this.loadApplicationSummaries();
+  },
+
+  async updateApplicationStatus(applicationId, status) {
+    if (status !== 'rejected') return;
+    const { data: userData } = await this.sb.auth.getUser();
+    const { error } = await this.sb
+      .from('job_applications')
+      .update({
+        status,
+        reviewed_at: new Date().toISOString(),
+        reviewed_by: userData?.user?.id || null
+      })
+      .eq('id', applicationId)
+      .eq('company_id', this.companyId);
+    if (error) {
+      console.error('Failed to reject application:', error);
+      this.showToast('The application could not be rejected. Please try again.', true);
+      return;
+    }
+    this.showToast('Application rejected.');
+    await this.loadApplicationSummaries();
+  },
+
+  async openApplicationFile(applicationId, filePath) {
+    const { data: sessionData } = await this.sb.auth.getSession();
+    const accessToken = sessionData?.session?.access_token;
+    if (!accessToken) {
+      this.showToast('Your session has expired. Sign in again to open this file.', true);
+      return;
+    }
+    try {
+      const response = await fetch('/api/job-application-file', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          companyId: this.companyId,
+          applicationId,
+          filePath
+        })
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.url) throw new Error(result.error);
+      window.open(result.url, '_blank', 'noopener,noreferrer');
+    } catch (error) {
+      this.showToast(error.message || 'The application file could not be opened. Please try again.', true);
+    }
   },
 
   renderSettingsPage() {
@@ -255,12 +659,14 @@ const HiringApp = {
   },
 
   async switchTemplateSubtab(tab) {
-    const nextTab = tab === 'forms' ? 'forms' : 'posting';
-    history.replaceState(null, '', nextTab === 'forms' ? '#forms' : window.location.pathname);
+    const nextTab = ['forms', 'email'].includes(tab) ? tab : 'posting';
+    const nextHash = nextTab === 'posting' ? window.location.pathname : `#${nextTab}`;
+    history.replaceState(null, '', nextHash);
     this.renderTemplateSubtabs(nextTab);
     this.renderTemplatesPage(nextTab);
     if (nextTab === 'posting') await this.loadTemplateData();
     if (nextTab === 'forms') await this.loadApplicationForms();
+    if (nextTab === 'email') await this.loadHiringEmailTemplates();
   },
 
   renderTemplateSubtabs(templateTab = 'posting') {
@@ -271,11 +677,11 @@ const HiringApp = {
     const subtabBar = document.createElement('nav');
     subtabBar.className = 'hiring-template-subtabs';
     subtabBar.setAttribute('aria-label', 'Template sections');
-    ['posting', 'forms'].forEach((tab) => {
+    ['posting', 'forms', 'email'].forEach((tab) => {
       const button = document.createElement('button');
       button.className = `template-subtab${templateTab === tab ? ' active' : ''}`;
       button.type = 'button';
-      button.textContent = tab === 'posting' ? 'Posting' : 'Forms';
+      button.textContent = tab === 'posting' ? 'Posting' : tab === 'forms' ? 'Forms' : 'Email';
       button.addEventListener('click', () => this.switchTemplateSubtab(tab));
       subtabBar.appendChild(button);
     });
@@ -286,6 +692,64 @@ const HiringApp = {
     const content = document.querySelector('.hiring-content');
     if (!content) return;
     const isForms = templateTab === 'forms';
+    const isEmail = templateTab === 'email';
+    if (isEmail) {
+      content.innerHTML = `
+        <div class="hiring-page template-page hiring-email-page">
+          <div class="hiring-page-header hiring-email-page-header">
+            <div>
+              <h2>Email Templates</h2>
+              <p>Build the messages applicants receive as they move through hiring.</p>
+            </div>
+            <div class="hiring-email-actions">
+              <button class="btn btn-outline hiring-email-cancel-btn" id="hiring-email-cancel-btn" type="button" onclick="HiringApp.cancelHiringEmailEditor()" hidden>
+                Cancel
+              </button>
+              <button class="btn btn-outline hiring-email-test-btn" id="hiring-email-test-btn" type="button" onclick="HiringApp.openHiringEmailTestModal()" hidden>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
+                Send Test
+              </button>
+              <button class="btn btn-outline hiring-email-edit-btn" id="hiring-email-edit-btn" type="button" onclick="HiringApp.toggleHiringEmailEditor()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg>
+                Edit
+              </button>
+              <label class="template-select-wrap hiring-email-select-wrap" for="hiring-email-type-select">
+                <span>Email type</span>
+                <select id="hiring-email-type-select" onchange="HiringApp.selectHiringEmailType(this.value)">
+                  <option value="next_step">Next Step Approval</option>
+                  <option value="requirements">Further Requirements</option>
+                  <option value="hire">Hire</option>
+                  <option value="rejection">Rejection</option>
+                </select>
+              </label>
+            </div>
+          </div>
+          <div id="hiring-email-workspace" class="hiring-email-workspace">
+            <div class="template-loading"><span class="spinner-cyan"></span><span>Loading email template</span></div>
+          </div>
+          <div class="hiring-modal-overlay" id="hiring-email-test-modal" role="dialog" aria-modal="true" aria-labelledby="hiring-email-test-title">
+            <div class="hiring-modal-card compact">
+              <div class="hiring-modal-header">
+                <h3 id="hiring-email-test-title">Send Test Email</h3>
+                <button class="hiring-icon-btn" type="button" aria-label="Close" onclick="HiringApp.closeModal('hiring-email-test-modal')">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+                </button>
+              </div>
+              <div class="hiring-modal-body">
+                <label class="hiring-email-test-field" for="hiring-email-test-recipient">
+                  <span>Insert email to send</span>
+                  <input id="hiring-email-test-recipient" type="email" autocomplete="email" maxlength="254" placeholder="name@example.com" onkeydown="if(event.key === 'Enter'){event.preventDefault(); HiringApp.sendHiringEmailTest();}" />
+                </label>
+              </div>
+              <div class="hiring-modal-footer">
+                <button class="btn btn-outline" type="button" onclick="HiringApp.closeModal('hiring-email-test-modal')">Cancel</button>
+                <button class="btn btn-primary" id="hiring-email-test-send-btn" type="button" onclick="HiringApp.sendHiringEmailTest()">Send Test</button>
+              </div>
+            </div>
+          </div>
+        </div>`;
+      return;
+    }
     if (isForms) {
       content.innerHTML = `
         <div class="hiring-page template-page application-form-page">
@@ -378,6 +842,476 @@ const HiringApp = {
           </div>
         </div>
       </div>`;
+  },
+
+  getDefaultHiringEmailTemplates() {
+    return {
+      next_step: {
+        subject: 'Your application is moving to the next step',
+        preheader: 'We would like to continue with your application.',
+        blocks: [
+          { type: 'header', value: 'Your application is moving forward' },
+          { type: 'body', value: 'Hi {{first_name}},\n\nThank you for your application for {{job_title}}. We are pleased to move you to the next stage of our hiring process.' },
+          { type: 'body', value: 'Our hiring team will contact you with the schedule and next steps.' },
+          { type: 'signature', value: 'Best regards,\nBrightKey Hiring Team' }
+        ]
+      },
+      requirements: {
+        subject: 'Further requirements for your application',
+        preheader: 'Please review the additional requirements for your application.',
+        blocks: [
+          { type: 'header', value: 'Further requirements' },
+          { type: 'body', value: 'Hi {{first_name}},\n\nWe need a few more details to continue reviewing your application for {{job_title}}.' },
+          { type: 'bullet-list', value: 'Reply with the requested information\nComplete any assigned assessment\nConfirm your availability' },
+          { type: 'signature', value: 'Best regards,\nBrightKey Hiring Team' }
+        ]
+      },
+      hire: {
+        subject: 'Welcome to BrightKey',
+        preheader: 'We are pleased to offer you the position.',
+        blocks: [
+          { type: 'header', value: 'Congratulations, {{first_name}}' },
+          { type: 'body', value: 'We are pleased to offer you the {{job_title}} position at BrightKey.' },
+          { type: 'body', value: 'Our HR team will contact you with your offer details and onboarding requirements.' },
+          { type: 'signature', value: 'Welcome to the team,\nBrightKey Hiring Team' }
+        ]
+      },
+      rejection: {
+        subject: 'Update on your BrightKey application',
+        preheader: 'Thank you for your interest in BrightKey.',
+        blocks: [
+          { type: 'header', value: 'Application update' },
+          { type: 'body', value: 'Hi {{first_name}},\n\nThank you for the time and effort you invested in applying for {{job_title}}.' },
+          { type: 'body', value: 'After careful review, we will not be moving forward with your application at this time. We appreciate your interest and wish you success in your job search.' },
+          { type: 'signature', value: 'Sincerely,\nBrightKey Hiring Team' }
+        ]
+      }
+    };
+  },
+
+  normalizeHiringEmailTemplate(template, fallback) {
+    const allowedTypes = new Set(['header', 'subheader', 'body', 'bullet-list', 'number-list', 'signature', 'spacer', 'hr']);
+    const blocks = Array.isArray(template?.blocks)
+      ? template.blocks.slice(0, 30).filter(block => allowedTypes.has(block?.type)).map(block => ({
+        type: block.type,
+        value: String(block.value || '').slice(0, 5000)
+      }))
+      : fallback.blocks;
+    return {
+      subject: String(template?.subject || fallback.subject).slice(0, 100),
+      preheader: String(template?.preheader || fallback.preheader).slice(0, 150),
+      blocks: blocks.length ? blocks : fallback.blocks
+    };
+  },
+
+  getActiveHiringEmailTemplate() {
+    const defaults = this.getDefaultHiringEmailTemplates();
+    return this.normalizeHiringEmailTemplate(
+      this.hiringEmailTemplates[this.selectedHiringEmailType],
+      defaults[this.selectedHiringEmailType]
+    );
+  },
+
+  async loadHiringEmailTemplates() {
+    const workspace = document.getElementById('hiring-email-workspace');
+    if (!workspace) return;
+    const { data, error } = await this.sb
+      .from('global_settings')
+      .select('value')
+      .eq('company_id', this.companyId)
+      .eq('key', 'hiring_email_templates')
+      .maybeSingle();
+    if (error) {
+      console.error('Hiring email templates load failed:', error);
+      workspace.innerHTML = '<div class="hiring-empty">Email templates could not be loaded. Refresh the page and try again.</div>';
+      return;
+    }
+    const defaults = this.getDefaultHiringEmailTemplates();
+    const saved = data?.value && typeof data.value === 'object' ? data.value : {};
+    this.hiringEmailTemplates = Object.fromEntries(
+      Object.keys(defaults).map(key => [key, this.normalizeHiringEmailTemplate(saved[key], defaults[key])])
+    );
+    this.hiringEmailEditing = false;
+    this.renderHiringEmailWorkspace();
+  },
+
+  selectHiringEmailType(type) {
+    if (!Object.hasOwn(this.getDefaultHiringEmailTemplates(), type)) return;
+    this.selectedHiringEmailType = type;
+    const select = document.getElementById('hiring-email-type-select');
+    if (select) select.value = type;
+    this.renderHiringEmailWorkspace();
+  },
+
+  toggleHiringEmailEditor() {
+    if (this.hiringEmailEditing) {
+      this.hiringEmailEditing = false;
+      this.hiringEmailEditSnapshot = null;
+    } else {
+      this.hiringEmailEditSnapshot = JSON.parse(JSON.stringify(this.hiringEmailTemplates));
+      this.hiringEmailEditing = true;
+    }
+    this.renderHiringEmailWorkspace();
+  },
+
+  async cancelHiringEmailEditor() {
+    if (!this.hiringEmailEditing) return;
+    clearTimeout(this.hiringEmailSaveTimer);
+    this.hiringEmailSaveTimer = null;
+    if (this.hiringEmailEditSnapshot) {
+      this.hiringEmailTemplates = JSON.parse(JSON.stringify(this.hiringEmailEditSnapshot));
+    }
+    this.hiringEmailEditSnapshot = null;
+    this.hiringEmailEditing = false;
+    this.renderHiringEmailWorkspace();
+    const restored = await this.saveHiringEmailTemplates();
+    if (restored) this.showToast('Email template changes discarded.');
+  },
+
+  renderHiringEmailWorkspace() {
+    const workspace = document.getElementById('hiring-email-workspace');
+    const select = document.getElementById('hiring-email-type-select');
+    if (!workspace) return;
+    if (select) select.value = this.selectedHiringEmailType;
+    const template = this.getActiveHiringEmailTemplate();
+    this.hiringEmailTemplates[this.selectedHiringEmailType] = template;
+    const editButton = document.getElementById('hiring-email-edit-btn');
+    const cancelButton = document.getElementById('hiring-email-cancel-btn');
+    const testButton = document.getElementById('hiring-email-test-btn');
+    if (cancelButton) cancelButton.hidden = !this.hiringEmailEditing;
+    if (testButton) testButton.hidden = !this.hiringEmailEditing;
+    if (editButton) {
+      editButton.classList.toggle('active', this.hiringEmailEditing);
+      editButton.lastChild.textContent = this.hiringEmailEditing ? ' Save' : ' Edit';
+    }
+    workspace.classList.toggle('editing', this.hiringEmailEditing);
+    workspace.innerHTML = `
+      ${this.hiringEmailEditing ? `
+        <aside class="hiring-email-builder">
+          <div class="hiring-email-builder-fields">
+            <label><span>Subject Line</span><small>${template.subject.length} / 100</small><input maxlength="100" value="${this.esc(template.subject)}" oninput="HiringApp.handleHiringEmailInput('meta', 'subject', this)" /></label>
+            <label><span>Email Preview (Preheader)</span><small>${template.preheader.length} / 150</small><input maxlength="150" value="${this.esc(template.preheader)}" oninput="HiringApp.handleHiringEmailInput('meta', 'preheader', this)" /></label>
+          </div>
+          <div class="hiring-email-insert-blocks">
+            <strong>Insert Blocks</strong>
+            <div>
+              ${[
+                ['header', 'Header'],
+                ['subheader', 'Subheader'],
+                ['body', 'Body Text'],
+                ['bullet-list', 'Bullet List'],
+                ['number-list', 'Numbered List'],
+                ['signature', 'Signature'],
+                ['spacer', 'Spacer'],
+                ['hr', 'Horizontal Line']
+              ].map(([type, label]) => `<button class="btn btn-outline btn-sm" type="button" onclick="HiringApp.addHiringEmailBlock('${type}')">+ ${label}</button>`).join('')}
+            </div>
+          </div>
+          <div class="hiring-email-block-list">
+            <strong>Email Content Order</strong>
+            ${template.blocks.map((block, index) => this.renderHiringEmailBlock(block, index)).join('')}
+          </div>
+          <p class="hiring-email-save-status" id="hiring-email-save-status">${this.hiringEmailSaveTimer ? 'Saving…' : 'Saved automatically'}</p>
+        </aside>` : ''}
+      <section class="hiring-email-viewer" aria-label="Rendered email preview">
+        <div class="hiring-email-envelope" id="hiring-email-envelope">
+          <div><span>Subject</span><strong>${this.esc(template.subject)}</strong></div>
+          <div><span>Preview</span><p>${this.esc(template.preheader)}</p></div>
+        </div>
+        <div class="hiring-email-canvas">
+          <div class="hiring-email-logo"><img src="/assets/logo-dark.svg" alt="BrightKey" /></div>
+          <div class="hiring-email-rendered-blocks" id="hiring-email-rendered-blocks">${template.blocks.map(block => this.renderHiringEmailPreviewBlock(block)).join('')}</div>
+          <p class="hiring-email-footer">This message was sent by BrightKey Hiring.</p>
+        </div>
+      </section>
+      <div class="hiring-email-placeholder-menu" id="hiring-email-placeholder-menu" role="listbox" aria-label="Applicant placeholders">
+        ${[
+          ['first_name', 'First Name'],
+          ['last_name', 'Last Name'],
+          ['email', 'Email'],
+          ['contact_number', 'Contact Number'],
+          ['job_title', 'Job Title']
+        ].map(([value, label]) => `<button type="button" role="option" onmousedown="event.preventDefault()" onclick="HiringApp.insertHiringEmailPlaceholder('${value}')"><span>${label}</span><code>{{${value}}}</code></button>`).join('')}
+      </div>`;
+  },
+
+  openHiringEmailTestModal() {
+    const input = document.getElementById('hiring-email-test-recipient');
+    if (input) {
+      input.value = '';
+      input.classList.remove('invalid');
+    }
+    this.openModal('hiring-email-test-modal');
+    setTimeout(() => input?.focus(), 50);
+  },
+
+  async sendHiringEmailTest() {
+    const input = document.getElementById('hiring-email-test-recipient');
+    const button = document.getElementById('hiring-email-test-send-btn');
+    const recipient = input?.value.trim() || '';
+    if (!input || !input.checkValidity() || !recipient) {
+      input?.classList.add('invalid');
+      input?.focus();
+      this.showToast('Enter a valid email address.', true);
+      return;
+    }
+    input.classList.remove('invalid');
+    const template = this.getActiveHiringEmailTemplate();
+    button.disabled = true;
+    button.textContent = 'Sending…';
+    try {
+      const response = await window.BKAuth.authenticatedFetch('/api/send-hiring-test-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          companyId: this.companyId,
+          recipient,
+          subject: template.subject,
+          preheader: template.preheader,
+          blocks: template.blocks
+        })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'The test email could not be sent.');
+      this.closeModal('hiring-email-test-modal');
+      this.showToast(`Test email sent to ${recipient}.`);
+    } catch (error) {
+      console.error('Hiring test email failed:', error);
+      this.showToast(error.message || 'The test email could not be sent.', true);
+    } finally {
+      button.disabled = false;
+      button.textContent = 'Send Test';
+    }
+  },
+
+  renderHiringEmailBlock(block, index) {
+    const textTypes = !['spacer', 'hr'].includes(block.type);
+    const supportsFormatting = ['body', 'signature'].includes(block.type);
+    const label = block.type.replace('-', ' ');
+    return `<article class="hiring-email-block-card">
+      <div class="hiring-email-block-heading">
+        <div class="hiring-email-block-title">
+          <span>${this.esc(label)}</span>
+          ${supportsFormatting ? `
+            <div class="hiring-email-format-controls" aria-label="Text formatting">
+              <button type="button" aria-label="Bold" title="Bold" onclick="HiringApp.applyHiringEmailFormat(${index}, 'bold')"><strong>B</strong></button>
+              <button type="button" aria-label="Italic" title="Italic" onclick="HiringApp.applyHiringEmailFormat(${index}, 'italic')"><em>I</em></button>
+              <button type="button" aria-label="Underline" title="Underline" onclick="HiringApp.applyHiringEmailFormat(${index}, 'underline')"><u>U</u></button>
+            </div>` : ''}
+        </div>
+        <div>
+          <button type="button" aria-label="Move block up" onclick="HiringApp.moveHiringEmailBlock(${index}, -1)" ${index === 0 ? 'disabled' : ''}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="m6 15 6-6 6 6"/></svg></button>
+          <button type="button" aria-label="Move block down" onclick="HiringApp.moveHiringEmailBlock(${index}, 1)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg></button>
+          <button class="danger" type="button" aria-label="Remove block" onclick="HiringApp.removeHiringEmailBlock(${index})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 12h14"/></svg></button>
+        </div>
+      </div>
+      ${textTypes ? `<textarea id="hiring-email-block-${index}" rows="${['body', 'signature', 'bullet-list', 'number-list'].includes(block.type) ? 3 : 1}" maxlength="5000" oninput="HiringApp.handleHiringEmailInput('block', ${index}, this)">${this.esc(block.value)}</textarea>` : `<div class="hiring-email-structural-block">${block.type === 'spacer' ? 'Vertical spacing' : 'Horizontal divider'}</div>`}
+    </article>`;
+  },
+
+  renderHiringEmailPreviewBlock(block) {
+    const value = this.renderHiringEmailRichText(block.value);
+    if (block.type === 'header') return `<h1>${value || 'Email heading'}</h1>`;
+    if (block.type === 'subheader') return `<h2>${value || 'Email subheading'}</h2>`;
+    if (block.type === 'body') return `<p>${value}</p>`;
+    if (block.type === 'signature') return `<p class="signature">${value}</p>`;
+    if (block.type === 'bullet-list' || block.type === 'number-list') {
+      const tag = block.type === 'bullet-list' ? 'ul' : 'ol';
+      const items = String(block.value || '').split('\n').map(item => item.trim()).filter(Boolean);
+      return `<${tag}>${items.map(item => `<li>${this.renderHiringEmailRichText(item)}</li>`).join('')}</${tag}>`;
+    }
+    if (block.type === 'spacer') return '<div class="email-spacer"></div>';
+    if (block.type === 'hr') return '<hr>';
+    return '';
+  },
+
+  renderHiringEmailRichText(value) {
+    const placeholders = [];
+    let text = String(value || '').replace(/\{\{(?:first_name|last_name|email|contact_number|job_title)\}\}/g, match => {
+      placeholders.push(match);
+      return `ZZHIRINGPLACEHOLDER${placeholders.length - 1}ZZ`;
+    });
+    text = this.esc(text)
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/_([^_\n]+)_/g, '<em>$1</em>')
+      .replace(/&lt;u&gt;([\s\S]+?)&lt;\/u&gt;/g, '<u>$1</u>')
+      .replace(/\n/g, '<br>');
+    placeholders.forEach((placeholder, index) => {
+      text = text.replace(`ZZHIRINGPLACEHOLDER${index}ZZ`, this.esc(placeholder));
+    });
+    return text;
+  },
+
+  handleHiringEmailInput(kind, field, input) {
+    if (kind === 'meta') this.updateHiringEmailMeta(field, input.value, input);
+    else this.updateHiringEmailBlock(Number(field), input.value);
+    this.updateHiringEmailPlaceholderMenu(kind, field, input);
+  },
+
+  updateHiringEmailPlaceholderMenu(kind, field, input) {
+    const menu = document.getElementById('hiring-email-placeholder-menu');
+    if (!menu || !input) return;
+    const cursor = input.selectionStart ?? input.value.length;
+    const beforeCursor = input.value.slice(0, cursor);
+    const match = beforeCursor.match(/\{\{[a-z_]*$/i);
+    if (!match) {
+      this.closeHiringEmailPlaceholderMenu();
+      return;
+    }
+    const query = match[0].slice(2).toLowerCase();
+    let visibleCount = 0;
+    menu.querySelectorAll('button').forEach(button => {
+      const matches = button.textContent.toLowerCase().includes(query);
+      button.hidden = !matches;
+      if (matches) visibleCount += 1;
+    });
+    if (!visibleCount) {
+      this.closeHiringEmailPlaceholderMenu();
+      return;
+    }
+    this.hiringEmailPlaceholderTarget = {
+      kind,
+      field,
+      input,
+      start: cursor - match[0].length,
+      end: cursor
+    };
+    const rect = input.getBoundingClientRect();
+    menu.style.left = `${Math.min(rect.left, window.innerWidth - 300)}px`;
+    menu.style.top = `${Math.min(rect.bottom + 6, window.innerHeight - 250)}px`;
+    menu.classList.add('open');
+  },
+
+  closeHiringEmailPlaceholderMenu() {
+    document.getElementById('hiring-email-placeholder-menu')?.classList.remove('open');
+    this.hiringEmailPlaceholderTarget = null;
+  },
+
+  insertHiringEmailPlaceholder(name) {
+    const target = this.hiringEmailPlaceholderTarget;
+    if (!target?.input) return;
+    const token = `{{${name}}}`;
+    const input = target.input;
+    input.value = input.value.slice(0, target.start) + token + input.value.slice(target.end);
+    const nextCursor = target.start + token.length;
+    input.focus();
+    input.setSelectionRange(nextCursor, nextCursor);
+    if (target.kind === 'meta') this.updateHiringEmailMeta(target.field, input.value, input);
+    else this.updateHiringEmailBlock(Number(target.field), input.value);
+    this.closeHiringEmailPlaceholderMenu();
+  },
+
+  applyHiringEmailFormat(index, format) {
+    const input = document.getElementById(`hiring-email-block-${index}`);
+    if (!input) return;
+    const start = input.selectionStart;
+    const end = input.selectionEnd;
+    const selected = input.value.slice(start, end);
+    const wrappers = {
+      bold: ['**', '**'],
+      italic: ['_', '_'],
+      underline: ['<u>', '</u>']
+    };
+    const wrapper = wrappers[format];
+    if (!wrapper) return;
+    const formatted = `${wrapper[0]}${selected}${wrapper[1]}`;
+    input.value = input.value.slice(0, start) + formatted + input.value.slice(end);
+    input.focus();
+    input.setSelectionRange(start + wrapper[0].length, start + wrapper[0].length + selected.length);
+    this.updateHiringEmailBlock(index, input.value);
+  },
+
+  updateHiringEmailMeta(field, value, input) {
+    const template = this.getActiveHiringEmailTemplate();
+    template[field] = String(value || '').slice(0, field === 'subject' ? 100 : 150);
+    this.hiringEmailTemplates[this.selectedHiringEmailType] = template;
+    this.scheduleHiringEmailSave();
+    const counter = input?.closest('label')?.querySelector('small');
+    if (counter) counter.textContent = `${template[field].length} / ${field === 'subject' ? 100 : 150}`;
+    this.refreshHiringEmailPreview();
+  },
+
+  updateHiringEmailBlock(index, value) {
+    const template = this.getActiveHiringEmailTemplate();
+    if (!template.blocks[index]) return;
+    template.blocks[index].value = String(value || '').slice(0, 5000);
+    this.hiringEmailTemplates[this.selectedHiringEmailType] = template;
+    this.scheduleHiringEmailSave();
+    this.refreshHiringEmailPreview();
+  },
+
+  refreshHiringEmailPreview() {
+    const template = this.getActiveHiringEmailTemplate();
+    const envelope = document.getElementById('hiring-email-envelope');
+    const blocks = document.getElementById('hiring-email-rendered-blocks');
+    if (envelope) {
+      envelope.innerHTML = `<div><span>Subject</span><strong>${this.esc(template.subject)}</strong></div><div><span>Preview</span><p>${this.esc(template.preheader)}</p></div>`;
+    }
+    if (blocks) blocks.innerHTML = template.blocks.map(block => this.renderHiringEmailPreviewBlock(block)).join('');
+  },
+
+  addHiringEmailBlock(type) {
+    const template = this.getActiveHiringEmailTemplate();
+    if (template.blocks.length >= 30) return;
+    const defaults = {
+      header: 'New Header',
+      subheader: 'New Subheader',
+      body: 'Enter email body text.',
+      'bullet-list': 'First item\nSecond item',
+      'number-list': 'First item\nSecond item',
+      signature: 'Best regards,\nBrightKey Hiring Team',
+      spacer: '',
+      hr: ''
+    };
+    template.blocks.push({ type, value: defaults[type] || '' });
+    this.hiringEmailTemplates[this.selectedHiringEmailType] = template;
+    this.scheduleHiringEmailSave();
+    this.renderHiringEmailWorkspace();
+  },
+
+  removeHiringEmailBlock(index) {
+    const template = this.getActiveHiringEmailTemplate();
+    if (template.blocks.length <= 1) return;
+    template.blocks.splice(index, 1);
+    this.hiringEmailTemplates[this.selectedHiringEmailType] = template;
+    this.scheduleHiringEmailSave();
+    this.renderHiringEmailWorkspace();
+  },
+
+  moveHiringEmailBlock(index, direction) {
+    const template = this.getActiveHiringEmailTemplate();
+    const target = index + direction;
+    if (target < 0 || target >= template.blocks.length) return;
+    [template.blocks[index], template.blocks[target]] = [template.blocks[target], template.blocks[index]];
+    this.hiringEmailTemplates[this.selectedHiringEmailType] = template;
+    this.scheduleHiringEmailSave();
+    this.renderHiringEmailWorkspace();
+  },
+
+  scheduleHiringEmailSave() {
+    const status = document.getElementById('hiring-email-save-status');
+    if (status) status.textContent = 'Saving…';
+    clearTimeout(this.hiringEmailSaveTimer);
+    this.hiringEmailSaveTimer = setTimeout(() => this.saveHiringEmailTemplates(), 500);
+  },
+
+  async saveHiringEmailTemplates() {
+    const { error } = await this.sb.from('global_settings').upsert({
+      company_id: this.companyId,
+      key: 'hiring_email_templates',
+      value: this.hiringEmailTemplates
+    }, { onConflict: 'company_id,key' });
+    const status = document.getElementById('hiring-email-save-status');
+    if (error) {
+      console.error('Hiring email templates save failed:', error);
+      this.hiringEmailSaveTimer = null;
+      if (status) status.textContent = 'Could not save';
+      this.showToast('The email template could not be saved. Please try again.', true);
+      return false;
+    }
+    this.hiringEmailSaveTimer = null;
+    if (status) status.textContent = 'Saved automatically';
+    return true;
   },
 
   getDefaultApplicationForm() {
@@ -486,7 +1420,7 @@ const HiringApp = {
   },
 
   renderApplicationCustomField(field, index) {
-    const typeLabels = { short: 'Short Answer', long: 'Long Answer', date: 'Date Picker', checkboxes: 'Checkboxes', radio: 'Radio Button', slider: 'Slider' };
+    const typeLabels = { short: 'Short Answer', long: 'Long Answer', date: 'Date Picker', upload: 'Upload File', checkboxes: 'Checkboxes', radio: 'Radio Button', slider: 'Slider' };
     return `<article class="application-custom-field" draggable="true" ondragstart="HiringApp.startApplicationFieldDrag(${index})" ondragover="event.preventDefault()" ondrop="HiringApp.dropApplicationField(${index})">
       <button class="application-drag-handle" type="button" aria-label="Drag question" title="Drag to reorder"><svg viewBox="0 0 12 20" fill="currentColor" aria-hidden="true"><circle cx="3" cy="3" r="1.3"/><circle cx="9" cy="3" r="1.3"/><circle cx="3" cy="10" r="1.3"/><circle cx="9" cy="10" r="1.3"/><circle cx="3" cy="17" r="1.3"/><circle cx="9" cy="17" r="1.3"/></svg></button>
       <div class="application-field-main">
@@ -500,7 +1434,13 @@ const HiringApp = {
 
   renderApplicationFieldOptions(field, index) {
     if (!['checkboxes', 'radio', 'slider'].includes(field.type)) {
-      const placeholder = field.type === 'long' ? 'Long answer (two lines)' : field.type === 'date' ? 'Date picker' : 'Short answer';
+      const placeholder = field.type === 'long'
+        ? 'Long answer (two lines)'
+        : field.type === 'date'
+          ? 'Date picker'
+          : field.type === 'upload'
+            ? 'One file · JPG, JPEG, PNG, PDF, HEIC or GIF · max 15 MB'
+            : 'Short answer';
       return `<div class="application-answer-preview ${field.type}">${placeholder}</div>`;
     }
     const options = field.options || [];
@@ -530,10 +1470,13 @@ const HiringApp = {
     const question = `${index + 1}. ${this.esc(field.question || 'Untitled question')}`;
     const type = field.type || 'short';
     if (type === 'long') {
-      return `<label class="application-preview-field"><span>${question}</span><textarea rows="2"></textarea></label>`;
+      return `<label class="application-preview-field"><span>${question}</span><textarea rows="2" maxlength="500" oninput="this.nextElementSibling.textContent = this.value.length + ' of 500'"></textarea><small class="application-preview-character-count" aria-live="polite">0 of 500</small></label>`;
     }
     if (type === 'date') {
       return `<label class="application-preview-field"><span>${question}</span><input type="date" /></label>`;
+    }
+    if (type === 'upload') {
+      return `<label class="application-preview-field"><span>${question}</span><input type="file" accept=".jpg,.jpeg,.png,.pdf,.heic,.gif" onchange="HiringApp.validateApplicationPreviewFile(this)" /><small class="application-preview-file-help">One file only · JPG, JPEG, PNG, PDF, HEIC or GIF · max 15 MB</small></label>`;
     }
     if (type === 'slider') {
       const options = field.options?.length ? field.options : ['Option 1', 'Option 2', 'Option 3', 'Option 4'];
@@ -547,6 +1490,22 @@ const HiringApp = {
       return `<fieldset class="application-preview-field"><legend>${question}</legend><div class="application-preview-options ${type}">${options}</div></fieldset>`;
     }
     return `<label class="application-preview-field"><span>${question}</span><input type="text" /></label>`;
+  },
+
+  validateApplicationPreviewFile(input) {
+    const file = input?.files?.[0];
+    if (!file) return;
+    const extension = file.name.split('.').pop()?.toLowerCase();
+    const allowedExtensions = new Set(['jpg', 'jpeg', 'png', 'pdf', 'heic', 'gif']);
+    if (!allowedExtensions.has(extension)) {
+      input.value = '';
+      this.showToast('Choose a JPG, JPEG, PNG, PDF, HEIC, or GIF file.', true);
+      return;
+    }
+    if (file.size > 15 * 1024 * 1024) {
+      input.value = '';
+      this.showToast('The file is too large. Choose a file that is 15 MB or smaller.', true);
+    }
   },
 
   viewApplicationForm() {
@@ -572,8 +1531,10 @@ const HiringApp = {
       ['Contact Number', 'tel', 'inputmode="numeric" pattern="[0-9]*" oninput="this.value = this.value.replace(/[^0-9]/g, \'\')"'],
       ['Email', 'email', '']
     ].map(([label, type, attributes]) => `<label><span>${label}</span><input type="${type}" ${attributes} /></label>`).join('');
+    const defaultInstructions = 'Please complete this application truthfully and accurately. Inaccurate or false information may affect the evaluation of your application or result in disqualification.';
+    const applicationInstructions = form.instructions?.trim() || defaultInstructions;
     const certification = 'I certify that the information I have provided is true, accurate, and complete. I consent to the collection and processing of my personal information for recruitment purposes, including consideration for future job opportunities.';
-    overlay.innerHTML = `<div class="hiring-modal-card application-form-preview-card" role="dialog" aria-modal="true" aria-labelledby="application-form-preview-title"><div class="hiring-modal-header"><h3 id="application-form-preview-title">${this.esc(post.job_title)}</h3><button class="hiring-icon-btn" type="button" aria-label="Close preview" onclick="HiringApp.closeApplicationFormPreview()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div><form class="application-form-preview-body" onsubmit="event.preventDefault(); HiringApp.showToast('This is a preview. Responses were not submitted.');">${post.job_description ? `<p class="application-preview-job-description">${this.esc(post.job_description)}</p>` : ''}${form.instructions ? `<p class="application-preview-instructions">${this.esc(form.instructions)}</p>` : ''}${requiredQualifications.length ? `<section class="application-preview-required-qualifications"><h4>Required Qualifications</h4><ul>${requiredQualifications.map(item => `<li>${this.esc(item)}</li>`).join('')}</ul></section>` : ''}<section><h4>Applicant Information</h4><div class="application-preview-standard-fields">${applicantFields}</div></section>${customFields ? `<section><h4>Additional Questions</h4><div class="application-preview-custom-fields">${customFields}</div></section>` : ''}<label class="application-preview-certification"><input type="checkbox" required /><span>${certification}</span></label><button class="btn application-preview-submit" type="submit">Submit</button></form></div>`;
+    overlay.innerHTML = `<div class="hiring-modal-card application-form-preview-card" role="dialog" aria-modal="true" aria-labelledby="application-form-preview-title"><div class="hiring-modal-header"><h3 id="application-form-preview-title">${this.esc(post.job_title)}</h3><button class="hiring-icon-btn" type="button" aria-label="Close preview" onclick="HiringApp.closeApplicationFormPreview()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div><form class="application-form-preview-body" onsubmit="event.preventDefault(); HiringApp.showToast('This is a preview. Responses were not submitted.');">${post.job_description ? `<p class="application-preview-job-description">${this.esc(post.job_description)}</p>` : ''}${requiredQualifications.length ? `<section class="application-preview-required-qualifications"><h4>Required Qualifications</h4><ul>${requiredQualifications.map(item => `<li>${this.esc(item)}</li>`).join('')}</ul></section>` : ''}<p class="application-preview-instructions">${this.esc(applicationInstructions)}</p><section><h4>Applicant Information</h4><div class="application-preview-standard-fields">${applicantFields}</div></section>${customFields ? `<section><h4>Additional Questions</h4><div class="application-preview-custom-fields">${customFields}</div></section>` : ''}<label class="application-preview-certification"><input type="checkbox" required /><span>${certification}</span></label><button class="btn application-preview-submit" type="submit">Submit</button></form></div>`;
     document.body.appendChild(overlay);
     overlay.style.display = 'flex';
     overlay.offsetHeight;
@@ -692,9 +1653,10 @@ const HiringApp = {
     const [postsResult, profileResult, templateSettingsResult, hiringInformationResult] = await Promise.all([
       this.sb
         .from('job_posts')
-        .select('*')
+        .select(this.jobPostColumns)
         .eq('company_id', this.companyId)
-        .order('created_at', { ascending: false }),
+        .order('created_at', { ascending: false })
+        .limit(100),
       this.sb
         .from('global_settings')
         .select('value')
@@ -1197,8 +2159,21 @@ const HiringApp = {
                     <input id="fixed-price" type="number" min="0" step="0.01" placeholder="₱0.00" />
                   </div>
                   <div class="hiring-field conditional-section regular-only">
-                    <label for="monthly-salary">Salary</label>
-                    <input id="monthly-salary" type="number" min="0" step="0.01" placeholder="₱0.00 / mo" />
+                    <label>Salary</label>
+                    <div class="salary-mode-options" role="radiogroup" aria-label="Salary format">
+                      <label><input id="salary-mode-single" type="radio" name="salary-mode" value="single" checked onchange="HiringApp.toggleSalaryMode()" /> Single</label>
+                      <label><input id="salary-mode-range" type="radio" name="salary-mode" value="range" onchange="HiringApp.toggleSalaryMode()" /> Range</label>
+                    </div>
+                    <div class="salary-input-grid" id="salary-input-grid">
+                      <label class="salary-amount-field">
+                        <span id="salary-primary-label">Monthly Salary</span>
+                        <input id="monthly-salary" type="number" min="0" step="0.01" placeholder="₱0.00 / mo" />
+                      </label>
+                      <label class="salary-amount-field" id="salary-maximum-field" hidden>
+                        <span>To Salary</span>
+                        <input id="monthly-salary-max" type="number" min="0" step="0.01" placeholder="₱0.00 / mo" />
+                      </label>
+                    </div>
                   </div>
                   <div class="hiring-field conditional-section regular-only">
                     <label>Salary Options</label>
@@ -1340,6 +2315,33 @@ const HiringApp = {
                     <div class="tag-pill-list" id="job-tags-list"></div>
                     <input id="job-tags-input" autocomplete="off" placeholder="Type a skill" onkeydown="HiringApp.handleTagKeydown(event)" oninput="HiringApp.handleTagInput(event)" onblur="HiringApp.commitTagInput()" />
                   </div>
+                </div>
+              </section>
+
+              <section class="hiring-form-section conditional-section employment-dependent" hidden>
+                <div class="application-stages-heading">
+                  <div>
+                    <h4 class="hiring-section-title">Application Stages</h4>
+                    <p>List the tests or interviewer actions applicants must complete before moving forward.</p>
+                  </div>
+                  <button class="btn btn-outline application-stage-add" id="add-application-stage-btn" type="button" onclick="HiringApp.addApplicationStage()">
+                    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+                    Add Stage
+                  </button>
+                </div>
+                <div class="application-submission-step" aria-label="Application workflow begins with submission">
+                  <div class="application-submission-bar">Application Submission</div>
+                  <svg class="application-submission-arrow" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M12 4v14M7 13l5 5 5-5"/>
+                  </svg>
+                </div>
+                <div class="application-stages-list" id="application-stages-list"></div>
+                <p class="application-stage-limit">Up to 4 stages · 5 tasks per stage</p>
+                <div class="application-onboarding-step" aria-label="Successful applicants proceed to onboarding">
+                  <svg class="application-onboarding-arrow" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M12 4v14M7 13l5 5 5-5"/>
+                  </svg>
+                  <div class="application-onboarding-bar">Onboarding</div>
                 </div>
               </section>
             </div>
@@ -1492,9 +2494,10 @@ const HiringApp = {
 
     const { data, error } = await this.sb
       .from('job_posts')
-      .select('*')
+      .select(this.jobPostColumns)
       .eq('company_id', this.companyId)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .limit(100);
 
     if (error) {
       console.error('Job posts load failed:', error);
@@ -1518,12 +2521,15 @@ const HiringApp = {
       const isProject = post.employment_type === 'project_based';
       const typeLabel = isProject ? 'Project Based' : 'Regular Employee';
       const departmentTeam = [post.department_name, post.team_name].filter(Boolean).join(' / ') || '—';
-      const amount = isProject ? post.fixed_price : post.monthly_salary;
       const compensation = !isProject && post.salary_confidential
         ? `Confidential${post.salary_negotiable ? ' · Negotiable' : ''}`
-        : amount == null
-          ? '—'
-          : `${this.formatCurrency(amount)}${isProject ? ' fixed' : ' / mo'}${!isProject && post.salary_negotiable ? ' · Negotiable' : ''}`;
+        : isProject && post.fixed_price != null
+          ? `${this.formatCurrency(post.fixed_price)} fixed`
+          : !isProject && post.salary_mode === 'range' && post.monthly_salary != null && post.monthly_salary_max != null
+            ? `${this.formatCurrency(post.monthly_salary)} – ${this.formatCurrency(post.monthly_salary_max)} / mo${post.salary_negotiable ? ' · Negotiable' : ''}`
+            : post.monthly_salary == null
+              ? '—'
+              : `${this.formatCurrency(post.monthly_salary)} / mo${!isProject && post.salary_negotiable ? ' · Negotiable' : ''}`;
       const reporting = post.free_hours
         ? 'Free hours'
         : [this.formatTime(post.reporting_time_start), this.formatTime(post.reporting_time_end)].filter(Boolean).join(' – ') || '—';
@@ -1666,6 +2672,7 @@ const HiringApp = {
     form?.reset();
     this.selectedDays.clear();
     this.setTags([]);
+    this.setApplicationStages(this.getDefaultApplicationStages());
     document.querySelectorAll('.day-chip').forEach(button => button.classList.remove('active'));
     document.querySelectorAll('.invalid').forEach(field => field.classList.remove('invalid'));
     document.getElementById('qualifications-list').innerHTML = '';
@@ -1678,6 +2685,7 @@ const HiringApp = {
     this.updateLocationFields();
     this.updateAvailabilityFields();
     this.toggleFreeHours();
+    this.toggleSalaryMode();
     this.toggleSalaryConfidential();
     this.updateCharacterCount('job-title', 'job-title-count', 100);
     this.updateCharacterCount('job-description', 'job-description-count', 500);
@@ -1700,6 +2708,7 @@ const HiringApp = {
     value('project-length', post.project_length);
     value('fixed-price', post.fixed_price);
     value('monthly-salary', post.monthly_salary);
+    value('monthly-salary-max', post.monthly_salary_max);
     value('vacancy-count', post.vacancy_count || 1);
     value('availability-type', post.expected_start_date ? 'start_date' : 'immediately');
     value('expected-start-date', post.expected_start_date);
@@ -1716,9 +2725,13 @@ const HiringApp = {
     value('applicant-type', post.applicant_type);
     value('expertise-level', post.expertise_level);
     this.setTags(post.tags || []);
+    this.setApplicationStages(post.application_stages);
     document.getElementById('free-hours').checked = Boolean(post.free_hours);
     document.getElementById('salary-confidential').checked = Boolean(post.salary_confidential);
     document.getElementById('salary-negotiable').checked = Boolean(post.salary_negotiable);
+    const salaryMode = post.salary_mode === 'range' ? 'range' : 'single';
+    const salaryModeInput = document.querySelector(`input[name="salary-mode"][value="${salaryMode}"]`);
+    if (salaryModeInput) salaryModeInput.checked = true;
     this.setCheckedValues('compensation-extra', post.compensation_extras || []);
     this.setCheckedValues('job-benefit', post.benefits || []);
 
@@ -1736,6 +2749,7 @@ const HiringApp = {
     this.updateLocationFields();
     this.updateAvailabilityFields();
     this.toggleFreeHours();
+    this.toggleSalaryMode();
     this.toggleSalaryConfidential();
     this.updateCharacterCount('job-title', 'job-title-count', 100);
     this.updateCharacterCount('job-description', 'job-description-count', 500);
@@ -1944,10 +2958,26 @@ const HiringApp = {
 
   toggleSalaryConfidential() {
     const isConfidential = document.getElementById('salary-confidential')?.checked;
-    const salary = document.getElementById('monthly-salary');
-    if (!salary) return;
-    salary.disabled = Boolean(isConfidential);
-    if (isConfidential) salary.value = '';
+    ['monthly-salary', 'monthly-salary-max'].forEach(id => {
+      const salary = document.getElementById(id);
+      if (!salary) return;
+      salary.disabled = Boolean(isConfidential);
+      if (isConfidential) salary.value = '';
+    });
+  },
+
+  toggleSalaryMode() {
+    const mode = document.querySelector('input[name="salary-mode"]:checked')?.value || 'single';
+    const rangeField = document.getElementById('salary-maximum-field');
+    const inputGrid = document.getElementById('salary-input-grid');
+    const primaryLabel = document.getElementById('salary-primary-label');
+    if (rangeField) rangeField.hidden = mode !== 'range';
+    if (inputGrid) inputGrid.classList.toggle('range', mode === 'range');
+    if (primaryLabel) primaryLabel.textContent = mode === 'range' ? 'From Salary' : 'Monthly Salary';
+    if (mode !== 'range') {
+      const maximum = document.getElementById('monthly-salary-max');
+      if (maximum) maximum.value = '';
+    }
   },
 
   setCheckedValues(name, values) {
@@ -2019,6 +3049,128 @@ const HiringApp = {
       </span>`).join('');
   },
 
+  getDefaultApplicationStages() {
+    return [
+      { name: 'Stage 1', actions: [''] },
+      { name: 'Stage 2', actions: [''] },
+      { name: 'Stage 3', actions: [''] }
+    ];
+  },
+
+  normalizeApplicationStages(stages) {
+    const isLegacyDefault = Array.isArray(stages)
+      && stages.length === 1
+      && Array.isArray(stages[0]?.actions)
+      && stages[0].actions.length === 3
+      && stages[0].actions.every(action => !String(action ?? '').trim());
+    const source = Array.isArray(stages) && stages.length && !isLegacyDefault
+      ? stages.slice(0, 4)
+      : this.getDefaultApplicationStages();
+    return source.map((stage, stageIndex) => {
+      const actions = Array.isArray(stage?.actions) && stage.actions.length
+        ? stage.actions.slice(0, 5).map(action => String(action ?? ''))
+        : [''];
+      return {
+        name: `Stage ${stageIndex + 1}`,
+        actions
+      };
+    });
+  },
+
+  setApplicationStages(stages) {
+    this.applicationStages = this.normalizeApplicationStages(stages);
+    this.renderApplicationStages();
+  },
+
+  getApplicationStagePlaceholder(stageIndex, actionIndex) {
+    const defaults = [
+      'Filter in relevant applications, reject irrelevant profiles',
+      'Preliminary interview with HR via video call',
+      'Final interview with CEO'
+    ];
+    if (actionIndex === 0 && defaults[stageIndex]) return defaults[stageIndex];
+    return `Describe the next task for Stage ${stageIndex + 1}`;
+  },
+
+  renderApplicationStages() {
+    const container = document.getElementById('application-stages-list');
+    if (!container) return;
+    container.innerHTML = this.applicationStages.map((stage, stageIndex) => `
+      <article class="application-stage-card">
+        <div class="application-stage-card-header">
+          <h5>${this.esc(stage.name)}</h5>
+          ${this.applicationStages.length > 1 ? `
+            <button class="hiring-icon-btn application-stage-remove" type="button" aria-label="Remove ${this.esc(stage.name)}" onclick="HiringApp.removeApplicationStage(${stageIndex})">
+              <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>
+            </button>` : ''}
+        </div>
+        <div class="application-stage-actions">
+          ${stage.actions.map((action, actionIndex) => `
+            <div class="application-stage-action">
+              <label for="application-stage-${stageIndex}-action-${actionIndex}">Task ${actionIndex + 1}</label>
+              <div class="application-stage-action-control">
+                <textarea
+                  id="application-stage-${stageIndex}-action-${actionIndex}"
+                  maxlength="500"
+                  rows="3"
+                  placeholder="${this.esc(this.getApplicationStagePlaceholder(stageIndex, actionIndex))}"
+                  oninput="HiringApp.updateApplicationStageAction(${stageIndex}, ${actionIndex}, this.value)"
+                >${this.esc(action)}</textarea>
+                ${stage.actions.length > 1 ? `
+                  <button class="hiring-icon-btn application-action-remove" type="button" aria-label="Remove task ${actionIndex + 1}" onclick="HiringApp.removeApplicationStageAction(${stageIndex}, ${actionIndex})">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 12h14"/></svg>
+                  </button>` : ''}
+              </div>
+            </div>`).join('')}
+        </div>
+        <button class="builder-add application-action-add" type="button" onclick="HiringApp.addApplicationStageAction(${stageIndex})" ${stage.actions.length >= 5 ? 'disabled' : ''}>
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+          Add Task
+        </button>
+      </article>`).join('');
+
+    const addStageButton = document.getElementById('add-application-stage-btn');
+    if (addStageButton) addStageButton.disabled = this.applicationStages.length >= 4;
+  },
+
+  updateApplicationStageAction(stageIndex, actionIndex, value) {
+    const stage = this.applicationStages[stageIndex];
+    if (!stage || actionIndex < 0 || actionIndex >= stage.actions.length) return;
+    stage.actions[actionIndex] = value;
+  },
+
+  addApplicationStageAction(stageIndex) {
+    const stage = this.applicationStages[stageIndex];
+    if (!stage || stage.actions.length >= 5) return;
+    stage.actions.push('');
+    this.renderApplicationStages();
+  },
+
+  removeApplicationStageAction(stageIndex, actionIndex) {
+    const stage = this.applicationStages[stageIndex];
+    if (!stage || stage.actions.length <= 1) return;
+    stage.actions.splice(actionIndex, 1);
+    this.renderApplicationStages();
+  },
+
+  addApplicationStage() {
+    if (this.applicationStages.length >= 4) return;
+    this.applicationStages.push({
+      name: `Stage ${this.applicationStages.length + 1}`,
+      actions: ['']
+    });
+    this.renderApplicationStages();
+  },
+
+  removeApplicationStage(stageIndex) {
+    if (this.applicationStages.length <= 1) return;
+    this.applicationStages.splice(stageIndex, 1);
+    this.applicationStages.forEach((stage, index) => {
+      stage.name = `Stage ${index + 1}`;
+    });
+    this.renderApplicationStages();
+  },
+
   updateCharacterCount(inputId, counterId, max) {
     const input = document.getElementById(inputId);
     const counter = document.getElementById(counterId);
@@ -2029,7 +3181,11 @@ const HiringApp = {
     document.querySelectorAll('.invalid').forEach(field => field.classList.remove('invalid'));
     const type = document.getElementById('job-type').value;
     const required = ['job-position-type', 'job-hiring-manager', 'job-title', 'job-description'];
-    if (type === 'regular' && !document.getElementById('salary-confidential').checked) required.push('monthly-salary');
+    const salaryMode = document.querySelector('input[name="salary-mode"]:checked')?.value || 'single';
+    if (type === 'regular' && !document.getElementById('salary-confidential').checked) {
+      required.push('monthly-salary');
+      if (salaryMode === 'range') required.push('monthly-salary-max');
+    }
     if (type === 'project_based') required.push('project-length', 'fixed-price');
     if (document.getElementById('location-scope').value === 'specific') {
       required.push('location-country');
@@ -2052,11 +3208,22 @@ const HiringApp = {
       end.classList.add('invalid');
       invalid.push(start);
     }
+    const salaryMinimum = document.getElementById('monthly-salary');
+    const salaryMaximum = document.getElementById('monthly-salary-max');
+    if (
+      type === 'regular'
+      && salaryMode === 'range'
+      && !document.getElementById('salary-confidential').checked
+      && Number(salaryMaximum.value) < Number(salaryMinimum.value)
+    ) {
+      salaryMaximum.classList.add('invalid');
+      invalid.push(salaryMaximum);
+    }
 
     if (invalid.length) {
       invalid.forEach(field => field?.classList.add('invalid'));
       invalid[0]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      this.showToast('Complete the highlighted fields. Reporting start time must also be earlier than the end time.', true);
+      this.showToast('Complete the highlighted fields. Time and salary ranges must end at or above their starting values.', true);
       return false;
     }
     return true;
@@ -2066,6 +3233,8 @@ const HiringApp = {
     const type = document.getElementById('job-type').value;
     const isRegular = type === 'regular';
     const freeHours = document.getElementById('free-hours').checked;
+    const salaryMode = document.querySelector('input[name="salary-mode"]:checked')?.value || 'single';
+    const salaryConfidential = isRegular && document.getElementById('salary-confidential').checked;
     return {
       company_id: this.companyId,
       employment_type: type,
@@ -2084,10 +3253,14 @@ const HiringApp = {
       milestones: isRegular ? [] : this.collectBuilder('milestones-list', ['item', 'kpi', 'payout']),
       project_length: isRegular ? null : document.getElementById('project-length').value,
       fixed_price: isRegular ? null : Number(document.getElementById('fixed-price').value),
-      monthly_salary: isRegular && !document.getElementById('salary-confidential').checked
+      monthly_salary: isRegular && !salaryConfidential
         ? Number(document.getElementById('monthly-salary').value)
         : null,
-      salary_confidential: isRegular && document.getElementById('salary-confidential').checked,
+      salary_mode: isRegular ? salaryMode : 'single',
+      monthly_salary_max: isRegular && !salaryConfidential && salaryMode === 'range'
+        ? Number(document.getElementById('monthly-salary-max').value)
+        : null,
+      salary_confidential: salaryConfidential,
       salary_negotiable: isRegular && document.getElementById('salary-negotiable').checked,
       compensation_extras: isRegular ? this.getCheckedValues('compensation-extra') : [],
       benefits: isRegular ? this.getCheckedValues('job-benefit') : [],
@@ -2110,6 +3283,7 @@ const HiringApp = {
         ? document.getElementById('expected-start-date').value || null
         : null,
       tags: [...this.tagValues],
+      application_stages: this.normalizeApplicationStages(this.applicationStages),
       status: 'posted',
       created_by: this.authInfo.user.id
     };
@@ -2254,6 +3428,9 @@ const HiringApp = {
     if (post.salary_confidential) return '';
     if (post.employment_type === 'project_based') {
       return post.fixed_price == null ? '' : `${this.formatCurrency(post.fixed_price)} fixed price`;
+    }
+    if (post.salary_mode === 'range' && post.monthly_salary != null && post.monthly_salary_max != null) {
+      return `${this.formatCurrency(post.monthly_salary)} – ${this.formatCurrency(post.monthly_salary_max)} / month`;
     }
     return post.monthly_salary == null ? '' : `${this.formatCurrency(post.monthly_salary)} / month`;
   },
