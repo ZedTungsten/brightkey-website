@@ -1421,8 +1421,8 @@ const HiringApp = {
 
   renderApplicationCustomField(field, index) {
     const typeLabels = { short: 'Short Answer', long: 'Long Answer', date: 'Date Picker', upload: 'Upload File', checkboxes: 'Checkboxes', radio: 'Radio Button', slider: 'Slider' };
-    return `<article class="application-custom-field" draggable="true" ondragstart="HiringApp.startApplicationFieldDrag(${index})" ondragover="event.preventDefault()" ondrop="HiringApp.dropApplicationField(${index})">
-      <button class="application-drag-handle" type="button" aria-label="Drag question" title="Drag to reorder"><svg viewBox="0 0 12 20" fill="currentColor" aria-hidden="true"><circle cx="3" cy="3" r="1.3"/><circle cx="9" cy="3" r="1.3"/><circle cx="3" cy="10" r="1.3"/><circle cx="9" cy="10" r="1.3"/><circle cx="3" cy="17" r="1.3"/><circle cx="9" cy="17" r="1.3"/></svg></button>
+    return `<article class="application-custom-field" ondragover="event.preventDefault()" ondrop="HiringApp.dropApplicationField(${index})">
+      <button class="application-drag-handle" type="button" draggable="true" aria-label="Drag question" title="Drag to reorder" ondragstart="HiringApp.startApplicationFieldDrag(event, ${index})" ondragend="HiringApp.endApplicationFieldDrag()"><svg viewBox="0 0 12 20" fill="currentColor" aria-hidden="true"><circle cx="3" cy="3" r="1.3"/><circle cx="9" cy="3" r="1.3"/><circle cx="3" cy="10" r="1.3"/><circle cx="9" cy="10" r="1.3"/><circle cx="3" cy="17" r="1.3"/><circle cx="9" cy="17" r="1.3"/></svg></button>
       <div class="application-field-main">
         <label><span>Question ${index + 1}</span><input value="${this.esc(field.question)}" placeholder="Enter a question" onchange="HiringApp.updateApplicationField(${index}, 'question', this.value)" /></label>
         <label><span>Type of Answer</span><select onchange="HiringApp.updateApplicationFieldType(${index}, this.value)">${Object.entries(typeLabels).map(([value, label]) => `<option value="${value}" ${field.type === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label>
@@ -1446,7 +1446,7 @@ const HiringApp = {
     const options = field.options || [];
     const isSlider = field.type === 'slider';
     return `<div class="application-field-options">
-      ${options.map((option, optionIndex) => `<div class="application-option-row"><input value="${this.esc(option)}" onchange="HiringApp.updateApplicationOption(${index}, ${optionIndex}, this.value)" />${isSlider && options.length === 5 && optionIndex === 2 ? '<span class="application-neutral-label">Neutral</span>' : ''}<button type="button" aria-label="Remove option" ${options.length <= 2 ? 'disabled' : ''} onclick="HiringApp.removeApplicationOption(${index}, ${optionIndex})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/></svg></button></div>`).join('')}
+      ${options.map((option, optionIndex) => `<div class="application-option-row"><input value="${this.esc(option)}" onchange="HiringApp.updateApplicationOption(${index}, ${optionIndex}, this.value)" />${isSlider && options.length === 5 && optionIndex === 2 ? '<span class="application-neutral-label">Neutral</span>' : ''}${!isSlider && optionIndex === options.length - 1 ? `<label class="application-option-specify-toggle" title="Add a “Please Specify” short field"><input type="checkbox" ${field.allowSpecify ? 'checked' : ''} onchange="HiringApp.updateApplicationField(${index}, 'allowSpecify', this.checked); HiringApp.renderApplicationFormBuilder()" /><span>Add “Please Specify” field</span></label>` : ''}<button type="button" aria-label="Remove option" ${options.length <= 2 ? 'disabled' : ''} onclick="HiringApp.removeApplicationOption(${index}, ${optionIndex})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/></svg></button></div>`).join('')}
       <button class="application-add-option" type="button" ${options.length >= 10 ? 'disabled' : ''} onclick="HiringApp.addApplicationOption(${index})">Add option${options.length >= 10 ? ' (max 10)' : ''}</button>
     </div>`;
   },
@@ -1486,8 +1486,11 @@ const HiringApp = {
     }
     if (['checkboxes', 'radio'].includes(type)) {
       const inputType = type === 'checkboxes' ? 'checkbox' : 'radio';
-      const options = (field.options || []).map((option, optionIndex) => `<label><input type="${inputType}" name="application-preview-field-${index}" value="${this.esc(option)}" /><span>${this.esc(option || `Option ${optionIndex + 1}`)}</span></label>`).join('');
-      return `<fieldset class="application-preview-field"><legend>${question}</legend><div class="application-preview-options ${type}">${options}</div></fieldset>`;
+      const options = (field.options || []).map((option, optionIndex) => `<label><input type="${inputType}" name="application-preview-field-${index}" value="${this.esc(option)}" onchange="HiringApp.updateApplicationPreviewSpecifyState(this)" /><span>${this.esc(option || `Option ${optionIndex + 1}`)}</span></label>`).join('');
+      const specify = field.allowSpecify
+        ? `<div class="application-preview-specify"><label><input type="${inputType}" name="application-preview-field-${index}" value="__please_specify__" data-specify-toggle onchange="HiringApp.updateApplicationPreviewSpecifyState(this)" /><span>Please specify</span></label><input type="text" data-specify-input placeholder="Please specify" disabled /></div>`
+        : '';
+      return `<fieldset class="application-preview-field"><legend>${question}</legend><div class="application-preview-options ${type}">${options}${specify}</div></fieldset>`;
     }
     return `<label class="application-preview-field"><span>${question}</span><input type="text" /></label>`;
   },
@@ -1506,6 +1509,17 @@ const HiringApp = {
       input.value = '';
       this.showToast('The file is too large. Choose a file that is 15 MB or smaller.', true);
     }
+  },
+
+  updateApplicationPreviewSpecifyState(input) {
+    const options = input?.closest('.application-preview-options');
+    const specifyToggle = options?.querySelector('[data-specify-toggle]');
+    const specifyInput = options?.querySelector('[data-specify-input]');
+    if (!specifyToggle || !specifyInput) return;
+    specifyInput.disabled = !specifyToggle.checked;
+    specifyInput.required = specifyToggle.checked;
+    if (!specifyToggle.checked) specifyInput.value = '';
+    if (input === specifyToggle && specifyToggle.checked) specifyInput.focus();
   },
 
   viewApplicationForm() {
@@ -1611,8 +1625,14 @@ const HiringApp = {
     this.scheduleApplicationFormSave();
   },
 
-  startApplicationFieldDrag(index) {
+  startApplicationFieldDrag(event, index) {
     this.draggedApplicationFieldIndex = index;
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', String(index));
+  },
+
+  endApplicationFieldDrag() {
+    this.draggedApplicationFieldIndex = null;
   },
 
   dropApplicationField(targetIndex) {

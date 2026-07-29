@@ -58,15 +58,26 @@ function normalizeAnswer(field, rawAnswer, fileData, companyId, applicationId, i
   const options = Array.isArray(field?.options)
     ? field.options.map(option => cleanText(option, 200)).filter(Boolean).slice(0, 10)
     : [];
+  const allowSpecify = field?.allowSpecify === true;
+  const normalizeChoice = value => {
+    const cleaned = cleanText(value, 200);
+    if (options.includes(cleaned)) return cleaned;
+    if (allowSpecify && cleaned.startsWith('Please specify: ')) {
+      const specified = cleanText(cleaned.slice('Please specify: '.length), 180);
+      return specified ? `Please specify: ${specified}` : '';
+    }
+    return '';
+  };
   let answer = null;
   let file = null;
 
   if (type === 'checkboxes') {
     const values = Array.isArray(rawAnswer) ? rawAnswer : [];
-    answer = [...new Set(values.map(value => cleanText(value, 200)).filter(value => options.includes(value)))].slice(0, 10);
+    answer = [...new Set(values.map(normalizeChoice).filter(Boolean))].slice(0, 11);
   } else if (type === 'radio' || type === 'slider') {
-    const value = cleanText(rawAnswer, 200);
-    answer = options.includes(value) ? value : '';
+    answer = type === 'radio'
+      ? normalizeChoice(rawAnswer)
+      : (options.includes(cleanText(rawAnswer, 200)) ? cleanText(rawAnswer, 200) : '');
   } else if (type === 'date') {
     const value = cleanText(rawAnswer, 10);
     answer = /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : '';

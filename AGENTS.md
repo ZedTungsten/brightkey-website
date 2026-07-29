@@ -634,3 +634,29 @@ We use two distinct patterns for modal overlays. Do NOT mix them:
 > - **Verify the Rendered Component**: Test each new page after integration and
 >   confirm the mount renders the shared structure, current year, expected links,
 >   and no console errors.
+
+---
+
+## 23. Handle-Only Dragging for Reorderable Builders
+> [!IMPORTANT]
+> Reorderable form builders, list builders, and card editors that display a
+> six-dot drag handle must start dragging **only from that handle**.
+>
+> - Never put `draggable="true"` on the complete card, row, question, or form
+>   field. Doing so interferes with selecting text and using inputs, textareas,
+>   dropdowns, buttons, and empty card space.
+> - Put `draggable="true"` and the `dragstart` listener directly on the visible
+>   drag-handle button.
+> - The containing card may remain the drop target through `dragover` and `drop`
+>   handlers, but it must not be a drag source.
+> - Clear the active dragged-item state on `dragend`, including cancelled drags.
+>
+> ```html
+> <article class="builder-item" ondragover="event.preventDefault()" ondrop="dropItem(event)">
+>   <button class="drag-handle" type="button" draggable="true"
+>     ondragstart="startItemDrag(event)" ondragend="endItemDrag()">
+>     <!-- six-dot SVG -->
+>   </button>
+>   <!-- interactive builder fields -->
+> </article>
+> ```

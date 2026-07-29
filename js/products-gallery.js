@@ -365,7 +365,9 @@
   }
 
   function cardMarkup(product) {
-    const features = productFeatures(product).slice(0, 4);
+    const allFeatures = productFeatures(product);
+    const features = allFeatures.slice(0, 4);
+    const hiddenFeatureCount = Math.max(0, allFeatures.length - features.length);
     const specs = productSpecs(product);
     const category = formatWords(product.category || product.business || 'Product');
     const url = productUrl(product);
@@ -379,7 +381,7 @@
       : '<div class="product-card__placeholder">Image coming soon</div>';
 
     const featureMarkup = features.length
-      ? `<div class="product-card__features">${features.map(feature => `<span class="product-card__feature">${esc(feature)}</span>`).join('')}</div>`
+      ? `<div class="product-card__features">${features.map(feature => `<span class="product-card__feature">${esc(feature)}</span>`).join('')}${hiddenFeatureCount ? `<span class="product-card__feature">+${hiddenFeatureCount} more</span>` : ''}</div>`
       : `<p class="product-card__details-note">${esc((product.description || 'View the product page for full features.').slice(0, 105))}</p>`;
 
     const specMarkup = specs.length
