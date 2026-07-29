@@ -192,11 +192,34 @@
     };
   }
 
+  let applicationModalScrollY = 0;
+
+  function lockApplicationModalBackground() {
+    applicationModalScrollY = window.scrollY;
+    const scrollbarWidth = Math.max(0, window.innerWidth - document.documentElement.clientWidth);
+    document.documentElement.classList.add('job-application-modal-open');
+    document.body.classList.add('job-application-modal-open');
+    document.body.style.position = 'fixed';
+    document.body.style.top = `-${applicationModalScrollY}px`;
+    document.body.style.width = '100%';
+    if (scrollbarWidth) document.body.style.paddingRight = `${scrollbarWidth}px`;
+  }
+
+  function unlockApplicationModalBackground() {
+    document.documentElement.classList.remove('job-application-modal-open');
+    document.body.classList.remove('job-application-modal-open');
+    document.body.style.position = '';
+    document.body.style.top = '';
+    document.body.style.width = '';
+    document.body.style.paddingRight = '';
+    window.scrollTo(0, applicationModalScrollY);
+  }
+
   function closeApplicationModal() {
     const modal = document.getElementById('job-application-modal');
     if (!modal) return;
     modal.classList.remove('open');
-    document.body.style.overflow = '';
+    unlockApplicationModalBackground();
     window.setTimeout(() => {
       modal.style.display = 'none';
       modal.remove();
@@ -500,7 +523,7 @@
     overlay.style.display = 'flex';
     overlay.offsetHeight;
     overlay.classList.add('open');
-    document.body.style.overflow = 'hidden';
+    lockApplicationModalBackground();
     closeButton.focus();
   }
 
