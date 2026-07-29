@@ -1,5 +1,9 @@
 import { createServiceClient, setApiCors } from '../lib/api/security.js';
 import { enforceRateLimit } from '../lib/api/rate-limit.js';
+import nodemailer from 'nodemailer';
+import { buildEmailBranding } from '../lib/api/email-branding.js';
+import { buildEmailFooter } from '../lib/api/email-footer.js';
+import { replaceHiringEmailPlaceholders } from '../lib/api/hiring-email-placeholders.js';
 
 const APPLICATION_BUCKET = 'brightkey-internal';
 const MAX_FILE_BYTES = 15 * 1024 * 1024;
@@ -14,6 +18,17 @@ const CONTENT_TYPES = {
 };
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const CODE_PATTERN = /^[A-Za-z0-9_-]{5}$/;
+const DEFAULT_CONFIRMATION_TEMPLATE = {
+  active: true,
+  subject: 'We received your BrightKey application',
+  preheader: 'Thank you for applying. Your application has been received.',
+  blocks: [
+    { type: 'header', value: 'Application received' },
+    { type: 'body', value: 'Hi {{first_name}},\n\nThank you for applying for the {{job_title}} position at BrightKey.' },
+    { type: 'body', value: 'Our hiring team has received your application and will review your qualifications. We will contact you if your application moves forward.' },
+    { type: 'signature', value: 'Best regards,\nBrightKey Hiring Team' }
+  ]
+};
 
 function cleanText(value, maxLength) {
   return String(value || '').trim().slice(0, maxLength);
@@ -40,17 +55,110 @@ async function loadJobAndForm(supabase, companyId, jobCode) {
 
   const { data: settings, error: settingsError } = await supabase
     .from('global_settings')
-    .select('value')
+    .select('key, value')
     .eq('company_id', companyId)
-    .eq('key', 'job_application_forms')
-    .maybeSingle();
+    .in('key', ['job_application_forms', 'hiring_email_templates', 'company_profile_config']);
   if (settingsError) throw settingsError;
 
-  const form = settings?.value?.[job.id] || {};
+  const settingsByKey = Object.fromEntries((settings || []).map(row => [row.key, row.value]));
+  const form = settingsByKey.job_application_forms?.[job.id] || {};
   return {
     job,
-    fields: Array.isArray(form.customFields) ? form.customFields.slice(0, 50) : []
+    fields: Array.isArray(form.customFields) ? form.customFields.slice(0, 50) : [],
+    confirmationTemplate: settingsByKey.hiring_email_templates?.after_submission || null,
+    companyProfile: settingsByKey.company_profile_config || {}
   };
+}
+
+function escHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function replaceApplicationPlaceholders(value, applicant, jobTitle) {
+  return replaceHiringEmailPlaceholders(value, { ...applicant, jobTitle });
+}
+
+function renderConfirmationBlocks(blocks, applicant, jobTitle) {
+  return (Array.isArray(blocks) ? blocks : []).slice(0, 30).map(block => {
+    const type = String(block?.type || '');
+    const value = replaceApplicationPlaceholders(String(block?.value || '').slice(0, 5000), applicant, jobTitle);
+    const text = escHtml(value).replace(/\n/g, '<br>');
+    const base = 'margin:0 0 18px;color:#3f4148;font-family:Arial,sans-serif;font-size:14px;line-height:1.65;text-align:left;';
+    if (type === 'header') return `<h1 style="${base}margin-bottom:28px;color:#111216;font-size:26px;line-height:1.25;font-weight:800;">${text}</h1>`;
+    if (type === 'subheader') return `<h2 style="${base}color:#27282d;font-size:17px;font-weight:700;">${text}</h2>`;
+    if (type === 'body' || type === 'signature') return `<p style="${base}${type === 'signature' ? 'margin-top:24px;' : ''}">${text}</p>`;
+    if (type === 'bullet-list' || type === 'number-list') {
+      const tag = type === 'bullet-list' ? 'ul' : 'ol';
+      const items = value.split('\n').map(item => item.trim()).filter(Boolean);
+      return `<${tag} style="${base}padding-left:22px;line-height:1.4;">${items.map(item => `<li style="margin-bottom:3px;line-height:1.4;">${escHtml(item)}</li>`).join('')}</${tag}>`;
+    }
+    if (type === 'spacer') return '<div style="height:28px;line-height:28px;">&nbsp;</div>';
+    if (type === 'hr') return '<hr style="margin:18px 0;border:0;border-top:1px solid #e5e7eb;">';
+    return '';
+  }).join('');
+}
+
+async function sendApplicationConfirmation(supabase, companyId, template, applicant, jobTitle, companyProfile) {
+  const activeTemplate = template && typeof template === 'object'
+    ? { ...DEFAULT_CONFIRMATION_TEMPLATE, ...template }
+    : DEFAULT_CONFIRMATION_TEMPLATE;
+  if (activeTemplate.active === false) return;
+  const { data: integration, error } = await supabase
+    .from('company_integrations')
+    .select('hr_sender_name, hr_resend_api_key, hr_resend_from_email, hr_smtp_host, hr_smtp_port, hr_smtp_user, hr_smtp_pass, resend_api_key, resend_from_email, smtp_host, smtp_port, smtp_user, smtp_pass')
+    .eq('company_id', companyId)
+    .maybeSingle();
+  if (error) throw error;
+
+  const senderName = integration?.hr_sender_name || 'BrightKey Hiring';
+  const resendKey = integration?.hr_resend_api_key || integration?.resend_api_key;
+  const resendFrom = integration?.hr_resend_from_email || integration?.resend_from_email;
+  const smtpUser = integration?.hr_smtp_user || integration?.smtp_user;
+  const smtpPass = integration?.hr_smtp_pass || integration?.smtp_pass;
+  const smtpHost = integration?.hr_smtp_host || integration?.smtp_host;
+  const smtpPort = Number(integration?.hr_smtp_port || integration?.smtp_port || 465);
+  if (!(resendKey && resendFrom) && !(smtpUser && smtpPass)) return;
+
+  const subject = replaceApplicationPlaceholders(activeTemplate.subject, applicant, jobTitle).slice(0, 100);
+  const preheader = replaceApplicationPlaceholders(activeTemplate.preheader, applicant, jobTitle).slice(0, 150);
+  const content = renderConfirmationBlocks(activeTemplate.blocks, applicant, jobTitle);
+  const branding = buildEmailBranding(companyProfile);
+  const html = `<!doctype html><html><body style="margin:0;padding:0;background:#f3f4f6;"><div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">${escHtml(preheader)}</div><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;"><tr><td style="padding:36px 32px;">${branding.logoHtml}${content}${buildEmailFooter(companyProfile)}</td></tr></table></td></tr></table></body></html>`;
+
+  if (smtpUser && smtpPass) {
+    const transporter = nodemailer.createTransport({
+      host: smtpHost,
+      port: smtpPort,
+      secure: smtpPort === 465,
+      auth: { user: smtpUser, pass: smtpPass }
+    });
+    await transporter.sendMail({
+      from: `"${senderName}" <${smtpUser}>`,
+      to: applicant.email,
+      subject,
+      html,
+      attachments: branding.nodemailerAttachments
+    });
+    return;
+  }
+
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      from: resendFrom?.includes('<') ? resendFrom : `"${senderName}" <${resendFrom}>`,
+      to: applicant.email,
+      subject,
+      html,
+      attachments: branding.resendAttachments
+    })
+  });
+  if (!response.ok) throw new Error('Application confirmation delivery failed.');
 }
 
 function normalizeAnswer(field, rawAnswer, fileData, companyId, applicationId, index) {
@@ -259,6 +367,17 @@ export default async function handler(req, res) {
         return res.status(409).json({ error: 'This application was already submitted.' });
       }
       throw insertError;
+    }
+
+    try {
+      await sendApplicationConfirmation(supabase, companyId, context.confirmationTemplate, {
+        firstName,
+        lastName,
+        contactNumber,
+        email
+      }, context.job.job_title, context.companyProfile);
+    } catch (emailError) {
+      console.error('Application confirmation email failed:', emailError);
     }
 
     return res.status(201).json({ success: true, applicationId });

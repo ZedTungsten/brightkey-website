@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import nodemailer from 'nodemailer';
 import { requireCompanyAccess, sendAccessError, writeSecurityAudit } from '../lib/api/security.js';
 import { enforceRateLimit } from '../lib/api/rate-limit.js';
+import { buildEmailBranding } from '../lib/api/email-branding.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
@@ -204,38 +205,6 @@ function compileHtmlBody(blocks, settings, logo, address, eventId, recipientEmai
   `;
 }
 
-async function ensurePublicUrl(supabase, companyId, logoStr) {
-  if (!logoStr) return '';
-  if (!logoStr.startsWith('data:image/')) {
-    return logoStr;
-  }
-  try {
-    const match = logoStr.match(/^data:(.*?);base64,/);
-    const contentType = match ? match[1] : 'image/png';
-    const base64Data = logoStr.split(';base64,').pop();
-    const buffer = Buffer.from(base64Data, 'base64');
-    const ext = contentType.split('/').pop() || 'png';
-    const filePath = `companies/${companyId}/logos/email_logo.${ext}`;
-
-    const { error } = await supabase.storage
-      .from('brightkey-assets')
-      .upload(filePath, buffer, {
-        contentType: contentType,
-        upsert: true
-      });
-
-    if (error) {
-      console.error('Error uploading logo:', error);
-      return '';
-    }
-    const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/brightkey-assets/${filePath}`;
-    return publicUrl;
-  } catch (err) {
-    console.error('ensurePublicUrl error:', err);
-    return '';
-  }
-}
-
 export default async function handler(req, res) {
   // Check if this is a tracking pixel open request
   if (req.method === 'GET' || req.query.track) {
@@ -371,10 +340,10 @@ export default async function handler(req, res) {
       .eq('company_id', companyId)
       .maybeSingle();
 
-    let finalLogo = logo;
+    let companyProfile = {};
     let finalAddressHtml = address;
     if (coProfile?.value) {
-      finalLogo = coProfile.value.logoDark || coProfile.value.logoLight || logo;
+      companyProfile = coProfile.value;
       const coName = coProfile.value.companyName || 'BrightKey Solutions';
       const addr1 = coProfile.value.companyAddressLine1 || '';
       const addr2 = coProfile.value.companyAddressLine2 || '';
@@ -389,8 +358,11 @@ export default async function handler(req, res) {
       `.trim();
     }
 
-    // Convert base64 logo to a public Storage URL if needed to avoid message clipping
-    finalLogo = await ensurePublicUrl(supabase, companyId, finalLogo);
+    const branding = buildEmailBranding({
+      ...companyProfile,
+      logoDark: companyProfile.logoDark || companyProfile.logoLight || logo || '',
+      logoLight: companyProfile.logoLight || logo || ''
+    });
 
     // Combine attendeeCta into compiler settings
     const compilerSettings = { ...settings, attendeeCta };
@@ -406,7 +378,7 @@ export default async function handler(req, res) {
         .limit(1)
         .maybeSingle();
 
-      const compiledHtml = compileHtmlBody(blocks, compilerSettings, finalLogo, finalAddressHtml, eventId, recipient, origin, emp?.id);
+      const compiledHtml = compileHtmlBody(blocks, compilerSettings, branding.logoSrc, finalAddressHtml, eventId, recipient, origin, emp?.id);
 
       let reportingToName = 'N/A';
       let city = 'N/A';
@@ -506,7 +478,8 @@ export default async function handler(req, res) {
           from: finalSmtpFrom,
           to: recipient,
           subject: finalSubject,
-          html: finalHtml
+          html: finalHtml,
+          attachments: branding.nodemailerAttachments
         });
         sentCount++;
       } else if (activeResendApiKey) {
@@ -525,7 +498,8 @@ export default async function handler(req, res) {
             from: finalFrom,
             to: recipient,
             subject: finalSubject,
-            html: finalHtml
+            html: finalHtml,
+            attachments: branding.resendAttachments
           })
         });
 

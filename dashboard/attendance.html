@@ -284,7 +284,42 @@
       padding: 0.75rem 1rem; color: var(--text-secondary);
       border-bottom: 1px solid var(--border); vertical-align: middle;
     }
-    .manager-table tr:hover td { background: var(--bg-elevated); }
+    .manager-table tbody tr:hover td { background: var(--bg-surface); }
+    .manager-action-group {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+    }
+    .manager-action-btn {
+      width: 92px;
+      padding: 0.55rem 0.75rem;
+      color: #fff;
+      border: 1px solid transparent;
+      border-radius: var(--radius-sm);
+      font-family: var(--font-sans);
+      font-size: 0.78rem;
+      font-weight: 700;
+      line-height: 1;
+      cursor: pointer;
+      transition: background-color var(--transition), border-color var(--transition);
+    }
+    .manager-action-btn.approve {
+      background: var(--success);
+      border-color: var(--success);
+    }
+    .manager-action-btn.approve:hover {
+      background: #059669;
+      border-color: #059669;
+    }
+    .manager-action-btn.reject {
+      background: var(--danger);
+      border-color: var(--danger);
+    }
+    .manager-action-btn.reject:hover {
+      background: #dc2626;
+      border-color: #dc2626;
+    }
 
     /* ── Modal overlay ── */
     .overlay-modal {
@@ -488,7 +523,7 @@
           <div class="tabs-nav">
             <button class="tab-btn active" id="tab-btn-logs" onclick="AttendanceApp.switchTab('logs')">Logs</button>
             <button class="tab-btn" id="tab-btn-leaves" onclick="AttendanceApp.switchTab('leaves')">Leaves</button>
-            <button class="tab-btn" id="tab-btn-requests" onclick="AttendanceApp.switchTab('requests')">Requests</button>
+            <button class="tab-btn" id="tab-btn-requests" hidden onclick="AttendanceApp.switchTab('requests')">Requests</button>
           </div>
 
           <div class="scroll-area">
@@ -600,7 +635,7 @@
                           <th>Dates</th>
                           <th>Days</th>
                           <th>Reason</th>
-                          <th style="width: 180px; text-align: center;">Actions</th>
+                          <th style="width: 220px; text-align: center;">Actions</th>
                         </tr>
                       </thead>
                       <tbody id="manager-approvals-tbody">
@@ -667,6 +702,7 @@
       currentUser: null,
       companyId: null,
       employee: null,
+      managerScope: null,
       selectedTab: 'logs',
       
       // Date Month Selector State
@@ -696,6 +732,7 @@
         
         if (this.companyId) {
           await this.loadEmployeeProfile();
+          await this.configureManagerRequestsAccess();
         }
 
         // Set SL Filing date display
@@ -743,6 +780,8 @@
       },
 
       switchTab(tab) {
+        if (tab === 'requests' && document.getElementById('tab-btn-requests')?.hidden) return;
+
         this.selectedTab = tab;
         document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
         document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
@@ -752,6 +791,52 @@
         if (tab === 'requests') {
           this.loadManagerApprovals();
         }
+      },
+
+      async configureManagerRequestsAccess() {
+        const requestsTab = document.getElementById('tab-btn-requests');
+        if (!requestsTab || !this.employee || !this.companyId) return;
+
+        try {
+          const { reports, isStructureManager } = await this.getManagerScope();
+          requestsTab.hidden = !(isStructureManager || reports.length > 0);
+        } catch (err) {
+          console.error('Could not resolve manager request access:', err);
+          requestsTab.hidden = true;
+        }
+      },
+
+      async getManagerScope() {
+        if (this.managerScope) return this.managerScope;
+
+        const sb = window.BKAuth.sb;
+        const [employeesResult, structureResult] = await Promise.all([
+          sb.from('employees')
+            .select('id, first_name, last_name, reporting_to')
+            .eq('company_id', this.companyId)
+            .order('first_name', { ascending: true })
+            .limit(500),
+          sb.from('global_settings')
+            .select('value')
+            .eq('company_id', this.companyId)
+            .eq('key', 'company_structure')
+            .maybeSingle()
+        ]);
+        if (employeesResult.error) throw employeesResult.error;
+        if (structureResult.error) throw structureResult.error;
+
+        const structure = structureResult.data?.value || { departments: [] };
+        const reports = (employeesResult.data || []).filter(report =>
+          report.id !== this.employee.id
+          && this.resolveLeaveManagerId(report, structure) === this.employee.id
+        );
+        const isStructureManager = (structure.departments || []).some(department =>
+          department?.managerId === this.employee.id
+          || (department?.subteams || []).some(team => team?.managerId === this.employee.id)
+        );
+
+        this.managerScope = { reports, isStructureManager };
+        return this.managerScope;
       },
 
       changeMonth(dir) {
@@ -1246,13 +1331,7 @@
 
         try {
           const sb = window.BKAuth.sb;
-          const { data: reports, error: reportsError } = await sb.from('employees')
-            .select('id, first_name, last_name')
-            .eq('company_id', this.companyId)
-            .eq('reporting_to', this.employee.id)
-            .order('first_name', { ascending: true })
-            .limit(1000);
-          if (reportsError) throw reportsError;
+          const { reports } = await this.getManagerScope();
 
           if (!reports || reports.length === 0) {
             tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding: 2rem; color:var(--text-muted);">You have no direct reports.</td></tr>';
@@ -1288,9 +1367,11 @@
                 <td><strong>${dateFromStr} — ${dateToStr}</strong></td>
                 <td>${req.number_of_days}</td>
                 <td><span style="font-size:0.8rem; color:var(--text-secondary);">${esc(req.reason)}</span></td>
-                <td style="text-align: center;">
-                  <button class="btn btn-outline btn-xs" onclick="AttendanceApp.approveRequest('${req.id}')" style="margin-right: 0.25rem;">Approve</button>
-                  <button class="btn btn-danger-fill btn-xs" onclick="AttendanceApp.openRejectModal('${req.id}')">Reject</button>
+                <td>
+                  <div class="manager-action-group">
+                    <button class="manager-action-btn approve" onclick="AttendanceApp.approveRequest('${req.id}')">Approve</button>
+                    <button class="manager-action-btn reject" onclick="AttendanceApp.openRejectModal('${req.id}')">Reject</button>
+                  </div>
                 </td>
               </tr>
             `;
@@ -1300,6 +1381,23 @@
           console.error(err);
           tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding: 2rem; color:var(--danger);">Leave requests could not be loaded.</td></tr>';
         }
+      },
+
+      resolveLeaveManagerId(employee, structure) {
+        if (employee?.reporting_to) return employee.reporting_to;
+        const employeeId = employee?.id;
+        if (!employeeId) return null;
+
+        for (const department of (structure?.departments || [])) {
+          const departmentManagerId = department?.managerId || null;
+          for (const team of (department?.subteams || [])) {
+            if (team?.managerId === employeeId) return departmentManagerId;
+            if ((team?.colleagueIds || []).includes(employeeId)) {
+              return team?.managerId || departmentManagerId;
+            }
+          }
+        }
+        return null;
       },
 
       async submitLeaveRequest() {

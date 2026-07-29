@@ -660,3 +660,26 @@ We use two distinct patterns for modal overlays. Do NOT mix them:
 >   <!-- interactive builder fields -->
 > </article>
 > ```
+
+---
+
+## 24. Standard Email Logo Delivery (Inline CID)
+> [!IMPORTANT]
+> All system-generated emails, including HR Events and Hiring emails, must use
+> the same company-scoped inline-logo implementation.
+>
+> - **Single Branding Source**: Read the logo from the `global_settings` record
+>   whose key is `company_profile_config`, filtered by the active `company_id`.
+>   Prefer `logoDark`, then fall back to `logoLight`.
+> - **Use CID for Uploaded Logos**: Data-image logos must be decoded server-side
+>   and attached to the email as an inline Content-ID (CID) image. Reference that
+>   CID from the email HTML. Do not send a browser data URL, convert the logo to
+>   styled text, or upload a new public copy for every message.
+> - **Reuse the Shared Helper**: Use
+>   `lib/api/email-branding.js` and its `buildEmailBranding()` result for the
+>   rendered logo plus the provider-specific Nodemailer or Resend attachments.
+>   Do not create another page-specific email-logo implementation.
+> - **Safe Fallback**: If no valid uploaded image is available, render escaped
+>   company-name text. Keep meaningful image alt text for supported logos.
+> - **Selected Test Only**: A test-email action must send only the email type
+>   currently selected in the UI, never every template in the set.

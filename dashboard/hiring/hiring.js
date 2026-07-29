@@ -357,6 +357,7 @@ const HiringApp = {
 
   renderApplicationRow(application, questionCount, stageCount) {
     const answers = Array.isArray(application.answers) ? application.answers : [];
+    const isFinalStage = Number(application.current_stage || 1) >= stageCount;
     const answerCells = Array.from({ length: questionCount }, (_, index) => {
       const answer = answers[index];
       if (answer?.file?.path) {
@@ -379,8 +380,10 @@ const HiringApp = {
       ${answerCells}
       <td>
         <div class="applicant-actions">
-          <button class="applicant-action approve ${application.hired_at ? 'active' : ''}" type="button" aria-label="${Number(application.current_stage || 1) >= stageCount ? 'Hire' : 'Move'} ${this.esc(application.first_name)} ${this.esc(application.last_name)}" title="${Number(application.current_stage || 1) >= stageCount ? 'Hire Applicant' : 'Move to Next Stage'}" onclick="HiringApp.openApplicantConfirmation('${this.esc(application.id)}')" ${application.status === 'rejected' || application.hired_at ? 'disabled' : ''}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>
+          <button class="applicant-action approve ${application.hired_at ? 'active' : ''}" type="button" aria-label="${isFinalStage ? 'Hire' : 'Move'} ${this.esc(application.first_name)} ${this.esc(application.last_name)}" title="${isFinalStage ? 'Hire Applicant' : 'Move to Next Stage'}" onclick="HiringApp.openApplicantConfirmation('${this.esc(application.id)}')" ${application.status === 'rejected' || application.hired_at ? 'disabled' : ''}>
+            ${isFinalStage
+              ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 22V4"/><path d="M5 4c5-3 9 3 14 0v10c-5 3-9-3-14 0"/></svg>'
+              : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>'}
           </button>
           <button class="applicant-action reject ${application.status === 'rejected' ? 'active' : ''}" type="button" aria-label="Reject ${this.esc(application.first_name)} ${this.esc(application.last_name)}" title="Reject" onclick="HiringApp.updateApplicationStatus('${this.esc(application.id)}', 'rejected')" ${application.status === 'rejected' ? 'disabled' : ''}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
@@ -709,6 +712,11 @@ const HiringApp = {
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
                 Send Test
               </button>
+              <label class="hiring-email-active-control" for="hiring-email-active-toggle">
+                <span>Active</span>
+                <input id="hiring-email-active-toggle" type="checkbox" onchange="HiringApp.toggleHiringEmailActive(this.checked)" />
+                <span class="hiring-email-active-pill" aria-hidden="true"></span>
+              </label>
               <button class="btn btn-outline hiring-email-edit-btn" id="hiring-email-edit-btn" type="button" onclick="HiringApp.toggleHiringEmailEditor()">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg>
                 Edit
@@ -716,6 +724,7 @@ const HiringApp = {
               <label class="template-select-wrap hiring-email-select-wrap" for="hiring-email-type-select">
                 <span>Email type</span>
                 <select id="hiring-email-type-select" onchange="HiringApp.selectHiringEmailType(this.value)">
+                  <option value="after_submission">After Sending Application</option>
                   <option value="next_step">Next Step Approval</option>
                   <option value="requirements">Further Requirements</option>
                   <option value="hire">Hire</option>
@@ -846,7 +855,19 @@ const HiringApp = {
 
   getDefaultHiringEmailTemplates() {
     return {
+      after_submission: {
+        active: true,
+        subject: 'We received your BrightKey application',
+        preheader: 'Thank you for applying. Your application has been received.',
+        blocks: [
+          { type: 'header', value: 'Application received' },
+          { type: 'body', value: 'Hi {{first_name}},\n\nThank you for applying for the {{job_title}} position at BrightKey.' },
+          { type: 'body', value: 'Our hiring team has received your application and will review your qualifications. We will contact you if your application moves forward.' },
+          { type: 'signature', value: 'Best regards,\nBrightKey Hiring Team' }
+        ]
+      },
       next_step: {
+        active: true,
         subject: 'Your application is moving to the next step',
         preheader: 'We would like to continue with your application.',
         blocks: [
@@ -857,6 +878,7 @@ const HiringApp = {
         ]
       },
       requirements: {
+        active: true,
         subject: 'Further requirements for your application',
         preheader: 'Please review the additional requirements for your application.',
         blocks: [
@@ -867,6 +889,7 @@ const HiringApp = {
         ]
       },
       hire: {
+        active: true,
         subject: 'Welcome to BrightKey',
         preheader: 'We are pleased to offer you the position.',
         blocks: [
@@ -877,6 +900,7 @@ const HiringApp = {
         ]
       },
       rejection: {
+        active: true,
         subject: 'Update on your BrightKey application',
         preheader: 'Thank you for your interest in BrightKey.',
         blocks: [
@@ -898,6 +922,7 @@ const HiringApp = {
       }))
       : fallback.blocks;
     return {
+      active: typeof template?.active === 'boolean' ? template.active : fallback.active !== false,
       subject: String(template?.subject || fallback.subject).slice(0, 100),
       preheader: String(template?.preheader || fallback.preheader).slice(0, 150),
       blocks: blocks.length ? blocks : fallback.blocks
@@ -915,17 +940,30 @@ const HiringApp = {
   async loadHiringEmailTemplates() {
     const workspace = document.getElementById('hiring-email-workspace');
     if (!workspace) return;
-    const { data, error } = await this.sb
-      .from('global_settings')
-      .select('value')
-      .eq('company_id', this.companyId)
-      .eq('key', 'hiring_email_templates')
-      .maybeSingle();
+    const [templatesResult, profileResult] = await Promise.all([
+      this.sb
+        .from('global_settings')
+        .select('value')
+        .eq('company_id', this.companyId)
+        .eq('key', 'hiring_email_templates')
+        .maybeSingle(),
+      this.sb
+        .from('global_settings')
+        .select('value')
+        .eq('company_id', this.companyId)
+        .eq('key', 'company_profile_config')
+        .maybeSingle()
+    ]);
+    const { data, error } = templatesResult;
     if (error) {
       console.error('Hiring email templates load failed:', error);
       workspace.innerHTML = '<div class="hiring-empty">Email templates could not be loaded. Refresh the page and try again.</div>';
       return;
     }
+    if (profileResult.error) {
+      console.error('Hiring email company profile load failed:', profileResult.error);
+    }
+    this.companyProfile = profileResult.data?.value || {};
     const defaults = this.getDefaultHiringEmailTemplates();
     const saved = data?.value && typeof data.value === 'object' ? data.value : {};
     this.hiringEmailTemplates = Object.fromEntries(
@@ -978,6 +1016,8 @@ const HiringApp = {
     const editButton = document.getElementById('hiring-email-edit-btn');
     const cancelButton = document.getElementById('hiring-email-cancel-btn');
     const testButton = document.getElementById('hiring-email-test-btn');
+    const activeToggle = document.getElementById('hiring-email-active-toggle');
+    if (activeToggle) activeToggle.checked = template.active !== false;
     if (cancelButton) cancelButton.hidden = !this.hiringEmailEditing;
     if (testButton) testButton.hidden = !this.hiringEmailEditing;
     if (editButton) {
@@ -985,6 +1025,7 @@ const HiringApp = {
       editButton.lastChild.textContent = this.hiringEmailEditing ? ' Save' : ' Edit';
     }
     workspace.classList.toggle('editing', this.hiringEmailEditing);
+    const brandingPreview = this.renderHiringEmailBrandingPreview();
     workspace.innerHTML = `
       ${this.hiringEmailEditing ? `
         <aside class="hiring-email-builder">
@@ -1019,9 +1060,9 @@ const HiringApp = {
           <div><span>Preview</span><p>${this.esc(template.preheader)}</p></div>
         </div>
         <div class="hiring-email-canvas">
-          <div class="hiring-email-logo"><img src="/assets/logo-dark.svg" alt="BrightKey" /></div>
+          ${brandingPreview}
           <div class="hiring-email-rendered-blocks" id="hiring-email-rendered-blocks">${template.blocks.map(block => this.renderHiringEmailPreviewBlock(block)).join('')}</div>
-          <p class="hiring-email-footer">This message was sent by BrightKey Hiring.</p>
+          ${this.renderHiringEmailFooterPreview()}
         </div>
       </section>
       <div class="hiring-email-placeholder-menu" id="hiring-email-placeholder-menu" role="listbox" aria-label="Applicant placeholders">
@@ -1033,6 +1074,60 @@ const HiringApp = {
           ['job_title', 'Job Title']
         ].map(([value, label]) => `<button type="button" role="option" onmousedown="event.preventDefault()" onclick="HiringApp.insertHiringEmailPlaceholder('${value}')"><span>${label}</span><code>{{${value}}}</code></button>`).join('')}
       </div>`;
+  },
+
+  renderHiringEmailBrandingPreview() {
+    const companyName = String(this.companyProfile?.companyName || 'BrightKey').trim().slice(0, 120);
+    const configuredLogo = String(this.companyProfile?.logoDark || this.companyProfile?.logoLight || '').trim();
+    const supportedDataImage = /^data:image\/(?:png|jpeg|gif|webp);base64,[A-Za-z0-9+/=\s]+$/i.test(configuredLogo);
+    const supportedRemoteImage = /^https:\/\/[^\s]+$/i.test(configuredLogo);
+    if (supportedDataImage || supportedRemoteImage) {
+      return `<div class="hiring-email-logo"><img src="${this.esc(configuredLogo)}" alt="${this.esc(companyName)}" /></div>`;
+    }
+    return `<div class="hiring-email-logo-fallback">${this.esc(companyName)}</div>`;
+  },
+
+  renderHiringEmailFooterPreview() {
+    const profile = this.companyProfile || {};
+    const icons = {
+      Facebook: ['0 0 24 24', 'M22 12c0-5.52-4.48-10-10-10S2 6.48 2 12c0 4.84 3.44 8.87 8 9.8V15H8v-3h2V9.5C10 7.57 11.57 6 13.5 6H16v3h-2c-.55 0-1 .45-1 1v2h3v3h-3v6.95c4.56-.93 8-4.96 8-9.75z'],
+      Messenger: ['0 0 24 24', 'M12 2C6.48 2 2 6.14 2 11.25c0 2.91 1.45 5.51 3.73 7.15V22l3.41-1.87c.88.24 1.8.37 2.86.37 5.52 0 10-4.14 10-9.25S17.52 2 12 2zm1.14 12.03-2.58-2.75-5.04 2.75 5.54-5.89 2.63 2.75 4.99-2.75-5.54 5.89z'],
+      Instagram: ['0 0 24 24', 'M12 2.16c3.2 0 3.58.02 4.85.07 3.25.15 4.77 1.69 4.92 4.92.06 1.27.07 1.65.07 4.85s-.01 3.58-.07 4.85c-.15 3.23-1.67 4.77-4.92 4.92-1.27.06-1.65.07-4.85.07s-3.58-.01-4.85-.07c-3.26-.15-4.77-1.7-4.92-4.92-.06-1.27-.07-1.64-.07-4.85s.01-3.58.07-4.85c.15-3.23 1.67-4.77 4.92-4.92 1.27-.05 1.65-.07 4.85-.07zM12 0C8.74 0 8.33.01 7.05.07 2.7.27.27 2.69.07 7.05.01 8.33 0 8.74 0 12s.01 3.67.07 4.95c.2 4.36 2.62 6.78 6.98 6.98C8.33 23.99 8.74 24 12 24s3.67-.01 4.95-.07c4.35-.2 6.78-2.62 6.98-6.98.06-1.28.07-1.69.07-4.95s-.01-3.67-.07-4.95c-.2-4.35-2.62-6.78-6.98-6.98C15.67.01 15.26 0 12 0zm0 5.84A6.16 6.16 0 1 0 12 18.16 6.16 6.16 0 0 0 12 5.84zm0 10.16a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm6.41-11.85a1.44 1.44 0 1 0 0 2.88 1.44 1.44 0 0 0 0-2.88z'],
+      X: ['0 0 24 24', 'M18.24 2.25h3.31l-7.23 8.26 8.51 11.24h-6.66l-5.21-6.82-5.97 6.82H1.68l7.73-8.84L1.25 2.25h6.83l4.71 6.23zm-1.16 17.52h1.84L7.08 4.13H5.12z'],
+      LinkedIn: ['0 0 24 24', 'M19 0H5a5 5 0 0 0-5 5v14a5 5 0 0 0 5 5h14a5 5 0 0 0 5-5V5a5 5 0 0 0-5-5zM8 19H5V8h3zm-1.5-12.27A1.76 1.76 0 1 1 6.5 3.2a1.76 1.76 0 0 1 0 3.53zM20 19h-3v-5.6c0-3.37-4-3.11-4 0V19h-3V8h3v1.77c1.4-2.59 7-2.78 7 2.47z'],
+      Tiktok: ['0 0 16 16', 'M9 0h1.98c.14.72.54 1.62 1.24 2.51C12.9 3.39 13.8 4 15 4v2c-1.75 0-3.07-.81-4-1.83V11a5 5 0 1 1-5-5v2a3 3 0 1 0 3 3z'],
+      YouTube: ['0 0 24 24', 'M23.5 6.16a3 3 0 0 0-2.11-2.11C19.52 3.55 12 3.55 12 3.55s-7.52 0-9.39.5A3 3 0 0 0 .5 6.16C0 8.03 0 12 0 12s0 3.97.5 5.84a3 3 0 0 0 2.11 2.11c1.87.51 9.39.51 9.39.51s7.52 0 9.39-.51a3 3 0 0 0 2.11-2.11C24 15.97 24 12 24 12s0-3.97-.5-5.84zM9.55 15.57V8.43L15.82 12z'],
+      Pinterest: ['0 0 24 24', 'M12 0a12 12 0 0 0-4.37 23.17c-.11-.95-.2-2.4.04-3.44l1.41-5.96s-.36-.72-.36-1.78c0-1.67.97-2.92 2.17-2.92 1.02 0 1.52.77 1.52 1.69 0 1.03-.66 2.57-1 4-.28 1.19.6 2.17 1.78 2.17 2.13 0 3.77-2.25 3.77-5.5 0-2.87-2.06-4.88-5.01-4.88-3.41 0-5.42 2.56-5.42 5.21 0 1.03.4 2.14.9 2.74.1.12.11.22.08.34l-.33 1.36c-.05.22-.17.27-.4.16-1.5-.7-2.44-2.89-2.44-4.65 0-3.78 2.75-7.26 7.93-7.26 4.16 0 7.4 2.97 7.4 6.93 0 4.14-2.61 7.46-6.23 7.46-1.22 0-2.36-.63-2.75-1.38l-.75 2.86a13 13 0 0 1-1.49 3.14A12 12 0 1 0 12 0z']
+    };
+    const socialHtml = (Array.isArray(profile.socialLinks) ? profile.socialLinks : []).slice(0, 12).map(item => {
+      const platform = Object.keys(icons).find(key => key.toLowerCase() === String(item?.platform || '').trim().toLowerCase()) || '';
+      const icon = icons[platform];
+      const rawUrl = String(item?.url || '').trim();
+      const url = /^https?:\/\/[^\s]+$/i.test(rawUrl)
+        ? rawUrl
+        : (/^(?:www\.)?(?:m\.me|messenger\.com|facebook\.com|instagram\.com|x\.com|twitter\.com|linkedin\.com|tiktok\.com|youtube\.com|youtu\.be|pinterest\.[a-z.]+)\/[^\s]+$/i.test(rawUrl) ? `https://${rawUrl}` : '');
+      if (!icon || !url) return '';
+      return `<a href="${this.esc(url)}" target="_blank" rel="noopener noreferrer" aria-label="${this.esc(platform)}"><svg viewBox="${icon[0]}" aria-hidden="true"><path d="${icon[1]}"></path></svg></a>`;
+    }).join('');
+    const name = String(profile.companyName || 'BrightKey Solutions').trim();
+    const address1 = String(profile.companyAddressLine1 || '').trim();
+    const address2 = String(profile.companyAddressLine2 || '').trim();
+    const phone = String(profile.phone || '').trim();
+    const email = String(profile.email || '').trim();
+    return `<footer class="hiring-email-footer">
+      ${socialHtml ? `<div class="hiring-email-footer-socials">${socialHtml}</div>` : ''}
+      <strong>${this.esc(name)}</strong>
+      ${address1 ? `<span>${this.esc(address1)}</span>` : ''}
+      ${address2 ? `<span>${this.esc(address2)}</span>` : ''}
+      ${(phone || email) ? `<span>${this.esc(phone)}${phone && email ? ' | ' : ''}${this.esc(email)}</span>` : ''}
+    </footer>`;
+  },
+
+  toggleHiringEmailActive(isActive) {
+    const template = this.getActiveHiringEmailTemplate();
+    template.active = Boolean(isActive);
+    this.hiringEmailTemplates[this.selectedHiringEmailType] = template;
+    this.scheduleHiringEmailSave();
   },
 
   openHiringEmailTestModal() {
@@ -1066,6 +1161,7 @@ const HiringApp = {
         body: JSON.stringify({
           companyId: this.companyId,
           recipient,
+          emailType: this.selectedHiringEmailType,
           subject: template.subject,
           preheader: template.preheader,
           blocks: template.blocks

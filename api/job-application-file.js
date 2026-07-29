@@ -1,4 +1,10 @@
-import { createServiceClient, requireCompanyAccess, sendAccessError, setApiCors } from '../lib/api/security.js';
+import {
+  createAuthenticatedClient,
+  getBearerToken,
+  requireCompanyAccess,
+  sendAccessError,
+  setApiCors
+} from '../lib/api/security.js';
 
 const APPLICATION_BUCKET = 'brightkey-internal';
 
@@ -9,9 +15,14 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'This file endpoint only accepts secure link requests.' });
   }
 
+  const accessToken = getBearerToken(req);
+  if (!accessToken) {
+    return res.status(401).json({ error: 'Your session has expired. Sign in again to open this file.' });
+  }
+
   let supabase;
   try {
-    supabase = createServiceClient();
+    supabase = createAuthenticatedClient(accessToken);
   } catch (error) {
     console.error('Application file configuration error:', error);
     return res.status(503).json({ error: 'The file service is temporarily unavailable.' });
@@ -48,4 +59,3 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'The application file could not be opened. Please try again.' });
   }
 }
-
