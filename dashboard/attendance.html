@@ -599,10 +599,20 @@
 
                   <!-- Sick Leave Inputs -->
                   <div id="sl-inputs-container" style="display: none;">
-                    <div class="form-group">
-                      <label class="form-label" for="sl-date">Filing Date</label>
-                      <input type="text" id="sl-date" class="form-input" readonly style="background:var(--bg-elevated);" />
-                      <div class="form-helper" id="sl-shift-helper">Must be submitted at least 1 hour before shift start</div>
+                    <div class="form-grid-2">
+                      <div class="form-group">
+                        <label class="form-label" for="sl-from" id="sl-from-label">Date</label>
+                        <input type="date" id="sl-from" class="form-input" onchange="AttendanceApp.onSickLeaveDateChange()" />
+                        <div class="form-helper" id="sl-shift-helper"></div>
+                      </div>
+                      <div class="form-group" id="sl-to-wrap" style="display: none;">
+                        <label class="form-label" for="sl-to">Date To</label>
+                        <input type="date" id="sl-to" class="form-input" onchange="AttendanceApp.calculateSLDays()" />
+                      </div>
+                    </div>
+                    <div class="form-group" id="sl-days-wrap" style="display: none;">
+                      <label class="form-label">Days Requested</label>
+                      <input type="text" id="sl-days-display" class="form-input" readonly value="1 day" style="background:var(--bg-elevated);" />
                     </div>
                   </div>
 
@@ -703,6 +713,13 @@
       companyId: null,
       employee: null,
       managerScope: null,
+      leaveRestrictions: {
+        sl_shift_cutoff_enabled: true,
+        sl_shift_cutoff_hours: 1,
+        sl_advance_filing_enabled: true,
+        sl_advance_days: 1,
+        sl_single_day_only: true
+      },
       selectedTab: 'logs',
       
       // Date Month Selector State
@@ -732,15 +749,11 @@
         
         if (this.companyId) {
           await this.loadEmployeeProfile();
+          await this.loadLeaveRestrictions();
           await this.configureManagerRequestsAccess();
         }
 
-        // Set SL Filing date display
-        const slDateEl = document.getElementById('sl-date');
-        if (slDateEl) {
-          const d = new Date();
-          slDateEl.value = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-        }
+        this.configureSickLeaveForm();
 
         // Default tomorrow constraints for VL Date inputs
         const tomorrow = new Date();
@@ -777,6 +790,104 @@
         } catch (err) {
           console.error(err);
         }
+      },
+
+      async loadLeaveRestrictions() {
+        if (!this.companyId) return;
+        try {
+          const sb = window.BKAuth.sb;
+          const { data, error } = await sb.from('global_settings')
+            .select('value')
+            .eq('company_id', this.companyId)
+            .eq('key', 'leaves_settings')
+            .maybeSingle();
+          if (error) throw error;
+
+          const settings = data?.value || {};
+          this.leaveRestrictions = {
+            sl_shift_cutoff_enabled: settings.sl_shift_cutoff_enabled !== false,
+            sl_shift_cutoff_hours: Math.max(0, Number(settings.sl_shift_cutoff_hours ?? 1)),
+            sl_advance_filing_enabled: settings.sl_advance_filing_enabled !== false,
+            sl_advance_days: Math.max(0, parseInt(settings.sl_advance_days ?? 1, 10)),
+            sl_single_day_only: settings.sl_single_day_only !== false
+          };
+        } catch (err) {
+          console.error('Failed to load Sick Leave restrictions:', err);
+        }
+      },
+
+      formatLocalDateInput(date) {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      },
+
+      configureSickLeaveForm() {
+        const fromInput = document.getElementById('sl-from');
+        const toInput = document.getElementById('sl-to');
+        if (!fromInput || !toInput) return;
+
+        const today = new Date();
+        const todayStr = this.formatLocalDateInput(today);
+        fromInput.min = todayStr;
+        fromInput.value = todayStr;
+
+        if (this.leaveRestrictions.sl_advance_filing_enabled) {
+          const latestStart = new Date(today);
+          latestStart.setDate(latestStart.getDate() + this.leaveRestrictions.sl_advance_days);
+          fromInput.max = this.formatLocalDateInput(latestStart);
+        } else {
+          fromInput.removeAttribute('max');
+        }
+
+        const singleDayOnly = this.leaveRestrictions.sl_single_day_only;
+        document.getElementById('sl-from-label').textContent = singleDayOnly ? 'Date' : 'Date From';
+        document.getElementById('sl-to-wrap').style.display = singleDayOnly ? 'none' : 'block';
+        document.getElementById('sl-days-wrap').style.display = singleDayOnly ? 'none' : 'block';
+        toInput.min = todayStr;
+        toInput.value = todayStr;
+
+        this.onSickLeaveDateChange();
+      },
+
+      onSickLeaveDateChange() {
+        const fromInput = document.getElementById('sl-from');
+        const toInput = document.getElementById('sl-to');
+        if (!fromInput || !toInput) return;
+
+        if (this.leaveRestrictions.sl_single_day_only) {
+          toInput.value = fromInput.value;
+        } else {
+          toInput.min = fromInput.value || this.formatLocalDateInput(new Date());
+          if (!toInput.value || toInput.value < fromInput.value) {
+            toInput.value = fromInput.value;
+          }
+          this.calculateSLDays();
+        }
+        this.validateSickLeaveTiming();
+      },
+
+      calculateSLDays() {
+        const fromVal = document.getElementById('sl-from').value;
+        const toVal = document.getElementById('sl-to').value;
+        const display = document.getElementById('sl-days-display');
+        if (!display) return;
+
+        if (!fromVal || !toVal) {
+          display.value = '0 days';
+          return;
+        }
+
+        const d1 = new Date(fromVal + 'T00:00:00');
+        const d2 = new Date(toVal + 'T00:00:00');
+        if (d2 < d1) {
+          display.value = 'Invalid range';
+          return;
+        }
+
+        const diffDays = Math.round((d2 - d1) / 86400000) + 1;
+        display.value = `${diffDays} day${diffDays === 1 ? '' : 's'}`;
       },
 
       switchTab(tab) {
@@ -1190,6 +1301,7 @@
         if (type === 'vacation') {
           vlBox.style.display = 'block';
           slBox.style.display = 'none';
+          document.getElementById('btn-submit-leave').disabled = false;
         } else {
           vlBox.style.display = 'none';
           slBox.style.display = 'block';
@@ -1224,6 +1336,46 @@
         if (!this.employee) return true;
         const btn = document.getElementById('btn-submit-leave');
         const helper = document.getElementById('sl-shift-helper');
+        const selectedDate = document.getElementById('sl-from')?.value;
+        const todayStr = this.formatLocalDateInput(new Date());
+
+        if (!selectedDate) {
+          btn.disabled = true;
+          helper.textContent = 'Select a Sick Leave date.';
+          helper.style.color = 'var(--danger)';
+          return false;
+        }
+
+        if (selectedDate < todayStr) {
+          btn.disabled = true;
+          helper.textContent = 'Sick Leave cannot be filed for a past date.';
+          helper.style.color = 'var(--danger)';
+          return false;
+        }
+
+        if (this.leaveRestrictions.sl_advance_filing_enabled) {
+          const latestStart = new Date();
+          latestStart.setDate(latestStart.getDate() + this.leaveRestrictions.sl_advance_days);
+          if (selectedDate > this.formatLocalDateInput(latestStart)) {
+            btn.disabled = true;
+            helper.textContent = `Sick Leave can only be filed up to ${this.leaveRestrictions.sl_advance_days} day(s) in advance.`;
+            helper.style.color = 'var(--danger)';
+            return false;
+          }
+        }
+
+        if (selectedDate > todayStr || !this.leaveRestrictions.sl_shift_cutoff_enabled) {
+          btn.disabled = false;
+          if (!this.leaveRestrictions.sl_shift_cutoff_enabled && selectedDate === todayStr) {
+            helper.textContent = 'The before-shift filing restriction is disabled.';
+          } else {
+            helper.textContent = this.leaveRestrictions.sl_advance_filing_enabled
+              ? `You may file up to ${this.leaveRestrictions.sl_advance_days} day(s) in advance.`
+              : 'Future Sick Leave filing is allowed.';
+          }
+          helper.style.color = 'var(--text-muted)';
+          return true;
+        }
         
         // Default shift is 09:00 AM
         let shiftStartHour = 9;
@@ -1246,17 +1398,17 @@
         shiftStartToday.setHours(shiftStartHour, shiftStartMin, 0, 0);
 
         const now = new Date();
-        const oneHourBefore = new Date(shiftStartToday);
-        oneHourBefore.setHours(oneHourBefore.getHours() - 1);
+        const cutoff = new Date(shiftStartToday);
+        cutoff.setMinutes(cutoff.getMinutes() - (this.leaveRestrictions.sl_shift_cutoff_hours * 60));
 
-        if (now >= oneHourBefore) {
+        if (now >= cutoff) {
           btn.disabled = true;
-          helper.textContent = `Shift starts at ${this.employee.shift_time_1 || '09:00 AM'}. Filing closed (less than 1 hour before shift start).`;
+          helper.textContent = `Shift starts at ${this.employee.shift_time_1 || '09:00 AM'}. Filing closed (less than ${this.leaveRestrictions.sl_shift_cutoff_hours} hour(s) before shift start).`;
           helper.style.color = 'var(--danger)';
           return false;
         } else {
           btn.disabled = false;
-          helper.textContent = `Shift starts at ${this.employee.shift_time_1 || '09:00 AM'}. Eligible for filing.`;
+          helper.textContent = `Shift starts at ${this.employee.shift_time_1 || '09:00 AM'}. File at least ${this.leaveRestrictions.sl_shift_cutoff_hours} hour(s) before the shift.`;
           helper.style.color = 'var(--text-muted)';
           return true;
         }
@@ -1444,15 +1596,27 @@
           }
 
         } else {
-          // Sick Leave is today
-          const todayStr = new Date().toISOString().split('T')[0];
-          dateFrom = todayStr;
-          dateTo = todayStr;
-          numDays = 1.0;
+          dateFrom = document.getElementById('sl-from').value;
+          dateTo = this.leaveRestrictions.sl_single_day_only
+            ? dateFrom
+            : document.getElementById('sl-to').value;
+
+          if (!dateFrom || !dateTo) {
+            showToast('Please specify the Sick Leave date.', true);
+            return;
+          }
+
+          const d1 = new Date(dateFrom + 'T00:00:00');
+          const d2 = new Date(dateTo + 'T00:00:00');
+          if (d2 < d1) {
+            showToast('Start date cannot be after end date.', true);
+            return;
+          }
+          numDays = Math.round((d2 - d1) / 86400000) + 1;
 
           // Validate timing check
           if (!this.validateSickLeaveTiming()) {
-            showToast('Filing rejected. Sick Leave must be requested at least 1 hour before shift start.', true);
+            showToast('This Sick Leave request does not meet the configured filing restrictions.', true);
             return;
           }
 
