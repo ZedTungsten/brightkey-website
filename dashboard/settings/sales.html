@@ -10,6 +10,24 @@
   <link rel="icon" type="image/svg+xml" href="../../assets/favicon.svg?v=2" />
 
   <link rel="stylesheet" href="shared.css">
+  <style>
+    .adjustments-table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 8px; }
+    .adjustments-table { width: 100%; border-collapse: collapse; min-width: 980px; }
+    .adjustments-table th,
+    .adjustments-table td { padding: 0.8rem 0.9rem; border-bottom: 1px solid var(--border); text-align: left; vertical-align: middle; }
+    .adjustments-table th { background: var(--bg-elevated); color: var(--text-muted); font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+    .adjustments-table td { color: var(--text-secondary); font-size: 0.8rem; }
+    .adjustments-table tbody tr:last-child td { border-bottom: 0; }
+    .adjustments-table .adjustment-value { font-weight: 700; color: var(--text-primary); }
+    .adjustments-table .adjustment-actions { display: flex; gap: 0.45rem; white-space: nowrap; }
+    .adjustments-empty { padding: 2.5rem 1rem; color: var(--text-muted); text-align: center; font-size: 0.82rem; }
+    .adjustment-modal-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+    .adjustment-modal-grid .span-2 { grid-column: 1 / -1; }
+    @media (max-width: 680px) {
+      .adjustment-modal-grid { grid-template-columns: 1fr; }
+      .adjustment-modal-grid .span-2 { grid-column: auto; }
+    }
+  </style>
 </head>
 <body>
 
@@ -113,15 +131,27 @@
 
                 <!-- Section: Commission Adjustments -->
                 <div class="wh-card" style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1.25rem; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px;">
-                  <h3 style="font-size: 0.95rem; font-weight: 700; color: var(--text-primary); border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; margin-bottom: 0.5rem;">Commission Adjustments</h3>
-                  
-                  <!-- Container for dynamically added adjustment rows -->
-                  <div id="adjustment-rows-container" style="display: flex; flex-direction: column; gap: 1rem;">
-                    <!-- Rows will be added here -->
+                  <div style="display:flex; align-items:center; justify-content:space-between; gap:1rem; border-bottom:1px solid var(--border); padding-bottom:0.75rem;">
+                    <h3 style="font-size: 0.95rem; font-weight: 700; color: var(--text-primary); margin:0;">Commission Adjustments</h3>
+                    <button class="btn btn-primary btn-sm" type="button" onclick="openAdjustmentModal()">+ Add Adjustment</button>
                   </div>
-
-                  <div>
-                    <button class="btn btn-outline btn-sm" onclick="addAdjustmentRow()">+ Add Adjustment</button>
+                  <div class="adjustments-table-wrap">
+                    <table class="adjustments-table">
+                      <thead>
+                        <tr>
+                          <th>Business / Tag</th>
+                          <th>Product Category</th>
+                          <th>SKU</th>
+                          <th>Commission Label</th>
+                          <th>Value</th>
+                          <th>Start Date</th>
+                          <th>End Date</th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody id="adjustments-table-body"></tbody>
+                    </table>
+                    <div class="adjustments-empty" id="adjustments-empty">No commission adjustments configured.</div>
                   </div>
                 </div>
 
@@ -129,6 +159,71 @@
             </div>
           </div>
         </main>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="adjustment-modal">
+    <div class="modal-card" style="width:680px; max-width:92%;">
+      <div class="modal-header">
+        <div class="modal-title" id="adjustment-modal-title">Add Adjustment</div>
+        <button class="modal-close" type="button" onclick="closeAdjustmentModal()" aria-label="Close">
+          <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+      <form id="adjustment-form">
+        <div class="modal-body adjustment-modal-grid" id="adjustment-modal-fields">
+          <div class="form-group span-2">
+            <label class="form-label" for="adjustment-business-tag">Business / Tag</label>
+            <select class="form-select adj-row-business-tag" id="adjustment-business-tag" onchange="onAdjRowBusinessChange('adjustment-modal-fields')"></select>
+          </div>
+          <div class="form-group adj-category-container">
+            <label class="form-label" for="adjustment-category">Product Category</label>
+            <select class="form-select adj-row-category" id="adjustment-category" onchange="onAdjRowCategoryChange('adjustment-modal-fields')">
+              <option value="all">All Categories</option>
+            </select>
+          </div>
+          <div class="form-group adj-sku-container">
+            <label class="form-label" for="adjustment-sku">SKU</label>
+            <select class="form-select adj-row-sku" id="adjustment-sku"><option value="all">All SKUs</option></select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="adjustment-label">Commission Label</label>
+            <select class="form-select adj-row-label" id="adjustment-label" required></select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="adjustment-value">Value (%)</label>
+            <input type="number" class="form-input adj-row-value" id="adjustment-value" placeholder="0.00" step="0.01" required />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="adjustment-start-date">Start Date</label>
+            <input type="date" class="form-input adj-row-start-date" id="adjustment-start-date" required />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="adjustment-end-date">End Date</label>
+            <input type="date" class="form-input adj-row-end-date" id="adjustment-end-date" required />
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline" type="button" onclick="closeAdjustmentModal()">Cancel</button>
+          <button class="btn btn-primary" id="adjustment-submit-button" type="submit">Add Adjustment</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="confirm-modal">
+    <div class="modal-card" style="width:400px; max-width:90%;">
+      <div class="modal-header">
+        <div class="modal-title">Remove Adjustment</div>
+        <button class="modal-close" type="button" onclick="SettingsPage.closeConfirmModal()" aria-label="Close">
+          <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+      <div class="modal-body"><p id="confirm-message"></p></div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" type="button" onclick="SettingsPage.closeConfirmModal()">Cancel</button>
+        <button class="btn btn-danger" id="btn-confirm-yes" type="button">Remove</button>
       </div>
     </div>
   </div>
@@ -142,6 +237,8 @@
     'use strict';
 
     let salesManagers = [];
+    let adjustmentRules = [];
+    let editingAdjustmentIndex = null;
     window.commissionsProductsData = [];
     const showToast = (msg, isError) => SettingsPage.showToast(msg, isError);
 
@@ -381,15 +478,10 @@
       if (row) row.remove();
     };
 
-    window.addAdjustmentRow = function(initialData = null) {
-      const container = document.getElementById('adjustment-rows-container');
-      if (!container) return;
-
-      const rowId = 'adj-row-' + Date.now() + Math.random().toString(36).slice(2, 6);
+    function getAdjustmentBusinessOptions() {
       const products = window.commissionsProductsData || [];
       const tags = [...new Set(products.flatMap(p => p.tags || []).filter(Boolean))].sort();
-
-      let dropdownOptionsHtml = `
+      let options = `
         <option value="all">All Businesses & Tags</option>
         <optgroup label="Businesses">
           <option value="biz:smart_lock">Smart Lock</option>
@@ -398,91 +490,150 @@
           <option value="biz:fire_extinguisher">Fire Extinguisher</option>
         </optgroup>
       `;
-
       if (tags.length > 0) {
-        dropdownOptionsHtml += `
+        options += `
           <optgroup label="Tags">
             ${tags.map(t => `<option value="tag:${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('')}
           </optgroup>
         `;
       }
-      
-      const html = `
-        <div class="adjustment-row-card" id="${rowId}" style="border: 1px solid var(--border); border-radius: 8px; padding: 1.25rem; background: var(--bg-elevated); position: relative; margin-bottom: 0.5rem;">
-          <div class="adj-row-filters" style="display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 0.75rem;">
-            <div class="form-group" style="flex: 1; min-width: 150px; max-width: calc(33.333% - 0.67rem);">
-              <label class="form-label" style="font-size: 0.65rem;">Business / Tag</label>
-              <select class="form-select adj-row-business-tag" onchange="onAdjRowBusinessChange('${rowId}')">
-                ${dropdownOptionsHtml}
-              </select>
-            </div>
-            <div class="form-group adj-category-container" style="display: none; flex: 1; min-width: 150px; max-width: calc(33.333% - 0.67rem);">
-              <label class="form-label" style="font-size: 0.65rem;">Product Category</label>
-              <select class="form-select adj-row-category" onchange="onAdjRowCategoryChange('${rowId}')">
-                <option value="all">All Categories</option>
-              </select>
-            </div>
-            <div class="form-group adj-sku-container" style="display: none; flex: 1; min-width: 150px; max-width: calc(33.333% - 0.67rem);">
-              <label class="form-label" style="font-size: 0.65rem;">SKU</label>
-              <select class="form-select adj-row-sku">
-                <option value="all">All SKUs</option>
-              </select>
-            </div>
-          </div>
-          <div style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: flex-end;">
-            <div class="form-group" style="flex: 1.5; min-width: 180px;">
-              <label class="form-label" style="font-size: 0.65rem;">Commission Label</label>
-              <select class="form-select adj-row-label">
-                <option value="">-- Choose Commission Rate Label --</option>
-              </select>
-            </div>
-            <div class="form-group" style="flex: 1; min-width: 100px;">
-              <label class="form-label" style="font-size: 0.65rem;">Value (%)</label>
-              <input type="number" class="form-input adj-row-value" placeholder="0.00" step="0.01" />
-            </div>
-            <div class="form-group" style="flex: 1.5; min-width: 140px;">
-              <label class="form-label" style="font-size: 0.65rem;">Start Date</label>
-              <input type="date" class="form-input adj-row-start-date" />
-            </div>
-            <div class="form-group" style="flex: 1.5; min-width: 140px;">
-              <label class="form-label" style="font-size: 0.65rem;">End Date</label>
-              <input type="date" class="form-input adj-row-end-date" />
-            </div>
-          </div>
-          <button class="btn btn-outline btn-sm" style="position: absolute; top: 0.5rem; right: 0.5rem; color: var(--danger); border-color: rgba(220,38,38,0.15); padding: 0.25rem;" onclick="removeAdjustmentRow('${rowId}')">
-            <svg viewBox="0 0 24 24" style="width:12px;height:12px;display:block;fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          </button>
-        </div>
-      `;
+      return options;
+    }
 
-      container.insertAdjacentHTML('beforeend', html);
-
-      const row = document.getElementById(rowId);
-      const labelSelect = row.querySelector('.adj-row-label');
+    function populateAdjustmentLabels(selectedValue = '') {
+      const labelSelect = document.getElementById('adjustment-label');
+      if (!labelSelect) return;
       const labelInputs = document.querySelectorAll('.rate-label-input');
       let selectHtml = '<option value="">-- Choose Commission Rate Label --</option>';
       labelInputs.forEach(input => {
         const val = input.value.trim();
         if (val) {
-          selectHtml += `<option value="${escapeHtml(val)}">${escapeHtml(val)}</option>`;
+          const selected = val === selectedValue ? ' selected' : '';
+          selectHtml += `<option value="${escapeHtml(val)}"${selected}>${escapeHtml(val)}</option>`;
         }
       });
       labelSelect.innerHTML = selectHtml;
+    }
 
-      if (initialData) {
-        row.querySelector('.adj-row-business-tag').value = initialData.business_tag_val || 'all';
-        window.onAdjRowBusinessChange(rowId, initialData.category || 'all', initialData.sku || 'all');
-        row.querySelector('.adj-row-label').value = initialData.label || '';
-        row.querySelector('.adj-row-value').value = initialData.value || '';
-        row.querySelector('.adj-row-start-date').value = initialData.start_date || '';
-        row.querySelector('.adj-row-end-date').value = initialData.end_date || '';
+    function formatAdjustmentDate(value) {
+      if (!value) return '—';
+      const date = new Date(`${value}T00:00:00`);
+      if (Number.isNaN(date.getTime())) return value;
+      return date.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
+    }
+
+    function adjustmentScopeLabel(rule) {
+      if (rule.scope === 'tags') return `Tag: ${rule.tag || '—'}`;
+      if (!rule.business || rule.business === 'all') return 'All Businesses & Tags';
+      return rule.business.split('_').map(part => part.charAt(0).toUpperCase() + part.slice(1)).join(' ');
+    }
+
+    function renderAdjustmentTable() {
+      const tbody = document.getElementById('adjustments-table-body');
+      const empty = document.getElementById('adjustments-empty');
+      if (!tbody || !empty) return;
+      tbody.innerHTML = adjustmentRules.map((rule, index) => {
+        const signedValue = rule.operator === 'minus' ? -Math.abs(Number(rule.value) || 0) : Math.abs(Number(rule.value) || 0);
+        return `<tr>
+          <td>${escapeHtml(adjustmentScopeLabel(rule))}</td>
+          <td>${escapeHtml(rule.scope === 'businesses' && rule.category && rule.category !== 'all' ? rule.category : 'All')}</td>
+          <td>${escapeHtml(rule.scope === 'businesses' && rule.sku && rule.sku !== 'all' ? rule.sku : 'All')}</td>
+          <td>${escapeHtml(rule.label || '—')}</td>
+          <td class="adjustment-value">${signedValue > 0 ? '+' : ''}${signedValue}%</td>
+          <td>${escapeHtml(formatAdjustmentDate(rule.start_date))}</td>
+          <td>${escapeHtml(formatAdjustmentDate(rule.end_date))}</td>
+          <td><div class="adjustment-actions">
+            <button class="btn btn-outline btn-sm" type="button" onclick="openAdjustmentModal(${index})">Edit</button>
+            <button class="btn btn-danger btn-sm" type="button" onclick="requestRemoveAdjustment(${index})">Remove</button>
+          </div></td>
+        </tr>`;
+      }).join('');
+      empty.style.display = adjustmentRules.length ? 'none' : 'block';
+      tbody.parentElement.style.display = adjustmentRules.length ? 'table' : 'none';
+    }
+
+    window.addAdjustmentRow = function(initialData = null) {
+      if (!initialData) return;
+      const businessTag = initialData.business_tag_val || 'all';
+      const parsedValue = Number(initialData.value) || 0;
+      const rule = {
+        label: initialData.label || '',
+        operator: parsedValue < 0 ? 'minus' : 'plus',
+        value: Math.abs(parsedValue),
+        start_date: initialData.start_date || '',
+        end_date: initialData.end_date || ''
+      };
+      if (businessTag.startsWith('tag:')) {
+        rule.scope = 'tags';
+        rule.tag = businessTag.replace('tag:', '');
+      } else {
+        rule.scope = 'businesses';
+        rule.business = businessTag.startsWith('biz:') ? businessTag.replace('biz:', '') : 'all';
+        rule.category = initialData.category || 'all';
+        rule.sku = initialData.sku || 'all';
       }
+      adjustmentRules.push(rule);
+      renderAdjustmentTable();
     };
 
-    window.removeAdjustmentRow = function(rowId) {
-      const row = document.getElementById(rowId);
-      if (row) row.remove();
+    window.openAdjustmentModal = function(index = null) {
+      editingAdjustmentIndex = Number.isInteger(index) ? index : null;
+      const rule = editingAdjustmentIndex === null ? null : adjustmentRules[editingAdjustmentIndex];
+      const businessSelect = document.getElementById('adjustment-business-tag');
+      businessSelect.innerHTML = getAdjustmentBusinessOptions();
+      const businessTag = rule?.scope === 'tags' ? `tag:${rule.tag}` : (rule?.business && rule.business !== 'all' ? `biz:${rule.business}` : 'all');
+      businessSelect.value = businessTag;
+      window.onAdjRowBusinessChange('adjustment-modal-fields', rule?.category || 'all', rule?.sku || 'all');
+      populateAdjustmentLabels(rule?.label || '');
+      document.getElementById('adjustment-value').value = rule ? (rule.operator === 'minus' ? -Math.abs(rule.value) : Math.abs(rule.value)) : '';
+      document.getElementById('adjustment-start-date').value = rule?.start_date || '';
+      document.getElementById('adjustment-end-date').value = rule?.end_date || '';
+      document.getElementById('adjustment-modal-title').textContent = rule ? 'Edit Adjustment' : 'Add Adjustment';
+      document.getElementById('adjustment-submit-button').textContent = rule ? 'Save Changes' : 'Add Adjustment';
+      document.getElementById('adjustment-modal').classList.add('open');
     };
+
+    window.closeAdjustmentModal = function() {
+      document.getElementById('adjustment-modal').classList.remove('open');
+      document.getElementById('adjustment-form').reset();
+      editingAdjustmentIndex = null;
+    };
+
+    window.requestRemoveAdjustment = function(index) {
+      const rule = adjustmentRules[index];
+      if (!rule) return;
+      SettingsPage.showConfirmModal(`Remove the ${rule.label || 'selected'} commission adjustment?`, () => {
+        adjustmentRules.splice(index, 1);
+        renderAdjustmentTable();
+      });
+    };
+
+    document.getElementById('adjustment-form').addEventListener('submit', event => {
+      event.preventDefault();
+      const fields = document.getElementById('adjustment-modal-fields');
+      const businessTag = fields.querySelector('.adj-row-business-tag').value;
+      const parsedValue = Number(fields.querySelector('.adj-row-value').value) || 0;
+      const rule = {
+        label: fields.querySelector('.adj-row-label').value,
+        operator: parsedValue < 0 ? 'minus' : 'plus',
+        value: Math.abs(parsedValue),
+        start_date: fields.querySelector('.adj-row-start-date').value,
+        end_date: fields.querySelector('.adj-row-end-date').value
+      };
+      if (businessTag.startsWith('tag:')) {
+        rule.scope = 'tags';
+        rule.tag = businessTag.replace('tag:', '');
+      } else {
+        rule.scope = 'businesses';
+        rule.business = businessTag.startsWith('biz:') ? businessTag.replace('biz:', '') : 'all';
+        rule.category = fields.querySelector('.adj-category-container').style.display !== 'none' ? fields.querySelector('.adj-row-category').value : 'all';
+        rule.sku = fields.querySelector('.adj-sku-container').style.display !== 'none' ? fields.querySelector('.adj-row-sku').value : 'all';
+      }
+      if (editingAdjustmentIndex === null) adjustmentRules.push(rule);
+      else adjustmentRules[editingAdjustmentIndex] = rule;
+      renderAdjustmentTable();
+      closeAdjustmentModal();
+    });
 
     window.addRateRow = function(label = '', value = '') {
       const container = document.getElementById('rates-container');
@@ -548,8 +699,8 @@
         const elContainer = document.getElementById('eligibility-rows-container');
         if (elContainer) elContainer.innerHTML = '';
 
-        const adjContainer = document.getElementById('adjustment-rows-container');
-        if (adjContainer) adjContainer.innerHTML = '';
+        adjustmentRules = [];
+        renderAdjustmentTable();
 
         if (data && data.value) {
           const v = data.value;
@@ -606,13 +757,10 @@
               initialData.end_date = r.end_date;
               addAdjustmentRow(initialData);
             });
-          } else {
-            addAdjustmentRow();
           }
         } else {
           addRateRow();
           addEligibilityRow();
-          addAdjustmentRow();
         }
       } catch (err) {
         console.error('Error loading commissions settings:', err);
@@ -654,36 +802,7 @@
         eligibility_rules.push(rule);
       });
 
-      const adjustment_rules = [];
-      const adjRows = document.querySelectorAll('#adjustment-rows-container .adjustment-row-card');
-      adjRows.forEach(row => {
-        const val = row.querySelector('.adj-row-business-tag').value;
-        const parsedVal = parseFloat(row.querySelector('.adj-row-value').value) || 0;
-        const rule = {
-          label: row.querySelector('.adj-row-label').value,
-          operator: parsedVal < 0 ? 'minus' : 'plus',
-          value: Math.abs(parsedVal),
-          start_date: row.querySelector('.adj-row-start-date').value,
-          end_date: row.querySelector('.adj-row-end-date').value
-        };
-        if (val.startsWith('biz:')) {
-          rule.scope = 'businesses';
-          rule.business = val.replace('biz:', '');
-          const catSelect = row.querySelector('.adj-row-category');
-          rule.category = (catSelect && row.querySelector('.adj-category-container').style.display !== 'none') ? catSelect.value : 'all';
-          const skuSelect = row.querySelector('.adj-row-sku');
-          rule.sku = (skuSelect && row.querySelector('.adj-sku-container').style.display !== 'none') ? skuSelect.value : 'all';
-        } else if (val.startsWith('tag:')) {
-          rule.scope = 'tags';
-          rule.tag = val.replace('tag:', '');
-        } else {
-          rule.scope = 'businesses';
-          rule.business = 'all';
-          rule.category = 'all';
-          rule.sku = 'all';
-        }
-        adjustment_rules.push(rule);
-      });
+      const adjustment_rules = adjustmentRules.map(rule => ({ ...rule }));
 
       const value = {
         eligibility_rules,
