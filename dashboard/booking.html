@@ -602,14 +602,14 @@
                   <label class="form-label">Google Map Screenshot</label>
                   <div class="file-input-wrapper" id="cust-map-wrapper" style="height: 100px;">
                     <span style="font-size: 0.75rem; color:var(--text-secondary); text-align:center;">Upload Map Screenshot</span>
-                    <input type="file" accept=".jpg,.jpeg,.png,.webp,.heic,image/jpeg,image/png,image/webp,image/heic" onchange="previewFile(this)" />
+                    <input type="file" accept="image/*,.heic,.heif" onchange="previewFile(this)" />
                   </div>
                 </div>
                 <div class="form-group">
                   <label class="form-label">House Frontage Photo</label>
                   <div class="file-input-wrapper" id="cust-frontage-wrapper" style="height: 100px;">
                     <span style="font-size: 0.75rem; color:var(--text-secondary); text-align:center;">Upload Frontage Photo</span>
-                    <input type="file" accept=".jpg,.jpeg,.png,.webp,.heic,image/jpeg,image/png,image/webp,image/heic" onchange="previewFile(this)" />
+                    <input type="file" accept="image/*,.heic,.heif" onchange="previewFile(this)" />
                   </div>
                 </div>
               </div>
@@ -1577,7 +1577,7 @@
           fileInputs += `
             <div class="file-input-wrapper">
               <span style="font-size: 0.7rem; color:var(--text-secondary); text-align:center;">Photo ${i}</span>
-              <input type="file" accept=".jpg,.jpeg,.png,.webp,.heic,image/jpeg,image/png,image/webp,image/heic" onchange="previewFile(this)" />
+              <input type="file" accept="image/*,.heic,.heif" onchange="previewFile(this)" />
             </div>
           `;
         }
@@ -1691,13 +1691,19 @@
     const BOOKING_IMAGE_UPLOAD_LIMIT_BYTES = 3 * 1024 * 1024;
     const BOOKING_IMAGE_JPEG_QUALITY = 0.8;
     const BOOKING_IMAGE_MAX_DIMENSIONS = [1920, 1600, 1280, 1024];
-    const BOOKING_IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'heic'];
-    const BOOKING_IMAGE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic'];
+    const BOOKING_IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'heic', 'heif'];
+    const BOOKING_IMAGE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif', 'image/x-heic', 'image/x-heif'];
 
     function isSupportedBookingImage(file) {
       const extension = String(file?.name || '').split('.').pop().toLowerCase();
       const mimeType = String(file?.type || '').toLowerCase();
       return BOOKING_IMAGE_EXTENSIONS.includes(extension) || BOOKING_IMAGE_MIME_TYPES.includes(mimeType);
+    }
+
+    function isHeicBookingImage(file) {
+      const extension = String(file?.name || '').split('.').pop().toLowerCase();
+      const mimeType = String(file?.type || '').toLowerCase();
+      return ['heic', 'heif'].includes(extension) || ['image/heic', 'image/heif', 'image/x-heic', 'image/x-heif'].includes(mimeType);
     }
 
     function readBlobAsDataUrl(blob) {
@@ -1748,12 +1754,16 @@
     }
 
     async function prepareBookingImage(file) {
-      const extension = String(file.name || '').split('.').pop().toLowerCase();
-      const mimeType = String(file.type || '').toLowerCase();
-      const sourceBlob = extension === 'heic' || mimeType === 'image/heic'
-        ? await convertHeicToJpegBlob(file)
-        : file;
-      const sourceImage = await loadBookingImage(sourceBlob);
+      let sourceImage;
+      try {
+        // Current iOS Safari can decode many camera HEIC/HEIF files directly.
+        // Prefer that native path because it avoids converter incompatibilities.
+        sourceImage = await loadBookingImage(file);
+      } catch (nativeDecodeError) {
+        if (!isHeicBookingImage(file)) throw nativeDecodeError;
+        const convertedBlob = await convertHeicToJpegBlob(file);
+        sourceImage = await loadBookingImage(convertedBlob);
+      }
       let jpegBlob = null;
 
       for (const maxDimension of BOOKING_IMAGE_MAX_DIMENSIONS) {
