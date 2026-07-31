@@ -209,6 +209,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <script src="/js/dashboard-ui.js?v=20260731-payslip-4"></script>
   <script src="/js/auth.js"></script>
   <script src="/js/sidebar.js"></script>
   <script src="/js/main.js"></script>
@@ -357,22 +358,6 @@
           this.bookingsList = data || [];
         } catch (e) { this.bookingsList = []; console.error(e); }
 
-        // Products & Config
-        try {
-          const [productsRes, configRes] = await Promise.all([
-            sb.from('products')
-              .select('id, sku, business, category, tags')
-              .or(`company_id.eq.${this.companyId},company_id.is.null`),
-            sb.from('global_settings').select('value').eq('key', 'commissions_config').eq('company_id', this.companyId).maybeSingle()
-          ]);
-          this.dbProducts = productsRes.data || [];
-          this.commissionsConfig = configRes.data?.value || { rates: [], eligibility_rules: [] };
-        } catch (e) {
-          console.error('Error loading config:', e);
-          this.dbProducts = [];
-          this.commissionsConfig = { rates: [], eligibility_rules: [] };
-        }
-
         // Installer Payout Settings
         try {
           const { data } = await sb.from('global_settings').select('value').eq('key', 'installer_payout_settings').eq('company_id', this.companyId).maybeSingle();
@@ -416,6 +401,7 @@
       },
 
       getAssignedDoorsForBookingAndEmployee(b, empId) {
+        const bookingIsDone = ['done', 'completed', 'finished'].includes(String(b.status || '').toLowerCase());
         let doorsArr = [];
         if (b.doors) {
           if (typeof b.doors === 'string') {
@@ -473,7 +459,7 @@
               : skus;
 
             assignedDoors.push({
-              completed: b.status === 'done' || b.status === 'completed' || b.status === 'finished',
+              completed: bookingIsDone,
               roles: roles,
               skus: activeSkus,
               completed_at: b.completed_at || b.updated_at || b.created_at,
@@ -556,7 +542,7 @@
             }
 
             assignedDoors.push({
-              completed: !!door.completed,
+              completed: Boolean(door.completed) || bookingIsDone,
               roles: roles,
               skus: doorSkus,
               completed_at: door.completed_at || b.completed_at || b.updated_at || b.created_at,
@@ -592,7 +578,13 @@
         const thresholdVal = payoutSettings.installations_before_crediting || 15;
         const leadWeight = payoutSettings.lead_credit !== undefined ? payoutSettings.lead_credit : 1.0;
         const assistWeight = payoutSettings.assist_credit !== undefined ? payoutSettings.assist_credit : 0.5;
+        const ocularWeight = payoutSettings.ocular_credit !== undefined ? payoutSettings.ocular_credit : 0;
+        const repairWeight = payoutSettings.repair_credit !== undefined ? payoutSettings.repair_credit : 0;
         const leadRateVal = payoutSettings.lead_rate || 1000;
+        const assistRateVal = payoutSettings.assist_rate || 500;
+        const ocularRateVal = payoutSettings.ocular_rate || 0;
+        const repairRateVal = payoutSettings.repair_rate || 0;
+        const ocularRepairEffectiveFrom = String(payoutSettings.ocular_repair_effective_from || '');
 
         const extraServicesList = (payoutSettings.extra_services || []).map(es => {
           let sku = es.sku || es.name || '';
@@ -609,24 +601,34 @@
 
         const doorJobs = [];
         eligibleBookings.forEach(b => {
-          const assignmentType = String(b.product_skus || '').trim().toLowerCase();
+          const assignmentSkus = String(b.product_skus || '')
+            .split('|')
+            .map((sku) => sku.trim().toLowerCase())
+            .filter(Boolean);
           const orderNo = String(b.order_no || '').toUpperCase();
-          const isNonCreditableJob = assignmentType === 'day off' || assignmentType === 'ocular' || assignmentType === 'backjob'
-            || orderNo.startsWith('DO-') || orderNo.startsWith('OC-') || orderNo.startsWith('BJ-');
-          if (isNonCreditableJob) return;
+          const isDayOff = assignmentSkus.includes('day off') || orderNo.startsWith('DO-');
+          const isBackjob = assignmentSkus.includes('backjob') || orderNo.startsWith('BJ-');
+          const isOcular = assignmentSkus.includes('ocular');
+          const isRepair = assignmentSkus.includes('repair');
+          if (isDayOff || isBackjob) return;
+          if ((isOcular || isRepair) && (!ocularRepairEffectiveFrom || b.scheduled_date < ocularRepairEffectiveFrom)) return;
 
           const assignedDoors = this.getAssignedDoorsForBookingAndEmployee(b, empId);
           assignedDoors.forEach(d => {
             if (d.completed) {
-              doorJobs.push(d);
+              doorJobs.push({ ...d, roles: isOcular ? ['ocular'] : isRepair ? ['repair'] : d.roles });
             }
           });
         });
 
-        // Completion controls both earning order and payout cutoff placement.
-        doorJobs.sort((a, b) => new Date(a.completed_at) - new Date(b.completed_at));
+        // Only Done assignments earn installation payout. Their scheduled
+        // installation date controls earning order, cutoff, and rollover.
+        doorJobs.sort((a, b) => new Date(a.scheduled_date) - new Date(b.scheduled_date));
 
-        let payoutCredit = 0;
+        let completedMonthCredit = 0;
+        let completedMonthLeadCount = 0;
+        let completedMonthAssistCount = 0;
+        let payoutEligibleCredit = 0;
         const creditBySourceMonth = {};
         let totalThresholdEarnings = 0;
         let totalServiceEarnings = 0;
@@ -641,24 +643,40 @@
 
         doorJobs.forEach(job => {
           let weight = 0;
+          let jobRate = 0;
           if (job.roles.includes('lead')) weight = leadWeight;
           else if (job.roles.includes('assist')) weight = assistWeight;
+          else if (job.roles.includes('ocular')) weight = ocularWeight;
+          else if (job.roles.includes('repair')) weight = repairWeight;
+          if (job.roles.includes('lead')) jobRate = leadRateVal;
+          else if (job.roles.includes('assist')) jobRate = assistRateVal;
+          else if (job.roles.includes('ocular')) jobRate = ocularRateVal;
+          else if (job.roles.includes('repair')) jobRate = repairRateVal;
 
           // Determine threshold eligibility in the work's original calendar month.
-          const sourceMonth = String(job.completed_at || '').slice(0, 7);
+          const sourceMonth = String(job.scheduled_date || '').slice(0, 7);
           if (!sourceMonth) return;
           const previousCredit = creditBySourceMonth[sourceMonth] || 0;
           const newCredit = previousCredit + weight;
           let thresholdPayForJob = 0;
           if (newCredit > thresholdVal) {
-            const extraCredit = weight;
-            thresholdPayForJob = extraCredit * leadRateVal;
+            thresholdPayForJob = jobRate;
           }
           creditBySourceMonth[sourceMonth] = newCredit;
 
-          const bucket = this.getCutoffBucket(job.completed_at, sortedScheds);
+          // Completion belongs to the scheduled installation month. Cutoff
+          // bucketing below controls only when that completed work is paid.
+          // A Done July 31 installation remains a July completion but rolls
+          // into the first August payout when July's final cutoff is the 30th.
+          if (sourceMonth === monthKey) {
+            completedMonthCredit += weight;
+            if (job.roles.includes('lead')) completedMonthLeadCount++;
+            else if (job.roles.includes('assist')) completedMonthAssistCount++;
+          }
+
+          const bucket = this.getCutoffBucket(job.scheduled_date, sortedScheds);
           if (!bucket || bucket.monthKey !== monthKey) return;
-          payoutCredit += weight;
+          payoutEligibleCredit += weight;
 
           let servicePayForJob = 0;
           if (job.roles.includes('service')) {
@@ -708,7 +726,10 @@
         }
 
         return {
-          totalCredit: payoutCredit,
+          totalCredit: completedMonthCredit,
+          completedLeadCount: completedMonthLeadCount,
+          completedAssistCount: completedMonthAssistCount,
+          payoutEligibleCredit,
           thresholdEarnings: totalThresholdEarnings,
           thresholdDescription,
           serviceEarnings: totalServiceEarnings,
@@ -1241,64 +1262,28 @@
         try { return JSON.parse(b.doors); } catch (_) { return []; }
       },
 
-      _getDynamicCommAmount(a, productMap) {
-        if (!a) return 0;
-        const b = this.bookingsList.find(x => x.id === a.booking_id);
-        if (!b) return 0;
-
-        let eligibleCentavos = 0;
-        if (a.sku === 'ORDER_TOTAL') {
-          const calc = getBookingEligibleCentavos(b, productMap, this.commissionsConfig.eligibility_rules);
-          eligibleCentavos = calc.finalEligibleCentavos;
-        } else {
-          const skus = (b.product_skus || '').split(' | ').map(s => s.trim());
-          const qtys = (b.product_qtys || '').split(' | ').map(s => s.trim());
-          const unitPrices = (b.product_unit_prices || '').split(' | ').map(s => s.trim());
-
-          const qty = parseInt(qtys[a.product_index]) || 1;
-          const unitPriceDec = parseFloat(unitPrices[a.product_index]) || 0;
-          const totalCentavos = Math.round(unitPriceDec * qty * 100);
-
-          const product = productMap[a.sku?.toLowerCase()] || { sku: a.sku || '', business: '', category: '', tags: [] };
-          const isEligible = checkSkuEligibility(product, this.commissionsConfig.eligibility_rules);
-          eligibleCentavos = isEligible ? totalCentavos : 0;
-        }
-
-        const rateConfig = (this.commissionsConfig.rates || []).find(r => r.label === a.rate_label);
-        const basePercent = rateConfig ? parseFloat(rateConfig.value) || 0 : 0;
-        const adjustment = getCommissionAdjustmentForBooking(b, a.rate_label, productMap, this.commissionsConfig.adjustment_rules);
-        const percent = basePercent + adjustment;
-
-        const cellAssignments = this.commissionAssignments.filter(x => x.booking_id === a.booking_id && x.sku === a.sku && x.product_index === a.product_index && x.rate_label === a.rate_label);
-        const activeAssignees = cellAssignments.filter(x => x.employee_id && x.employee_id !== 'none');
-        const divisor = activeAssignees.length || 1;
-        const splitPercent = percent / divisor;
-        const splitCommAmountCentavos = Math.round(eligibleCentavos * (splitPercent / 100));
-
-        return splitCommAmountCentavos / 100;
+      _isCommissionEligibleBooking(b) {
+        if (!b || String(b.status || '').toLowerCase() === 'cancelled') return false;
+        const doors = this._parseDoors(b);
+        const status = String(b.status || '').toLowerCase();
+        return ['done', 'completed', 'finished'].includes(status)
+          || (doors.length > 0 && doors.every(door => Boolean(door?.completed)));
       },
 
-      _commissionForEmpMonth(empId, mk, passedProductMap = null) {
-        let productMap = passedProductMap;
-        if (!productMap) {
-          productMap = {};
-          (this.dbProducts || []).forEach(p => {
-            if (p.sku) productMap[p.sku.toLowerCase()] = p;
-          });
-        }
-        const commissionScheds = [...(this.commissionSchedules.length ? this.commissionSchedules : [15, 30])].map(Number).sort((a, b) => a - b);
+      _getStoredCommAmount(a) {
+        return (Number(a?.amount) || 0) / 100;
+      },
+
+      _commissionForEmpMonth(empId, mk) {
+        const commissionScheds = [...(this.payoutSchedules.length ? this.payoutSchedules : [15, 30])].map(Number).sort((a, b) => a - b);
         return this.commissionAssignments.filter(a => {
           if (a.employee_id !== empId) return false;
           const b = this.bookingsList.find(x => x.id === a.booking_id);
-          if (!b || b.status === 'cancelled') return false;
-          const doors = this._parseDoors(b);
-          const door  = doors[a.product_index];
-          const isDone = (door && door.completed) || ['done', 'completed', 'finished'].includes(b.status);
-          if (!isDone) return false;
-          const completedAt = door?.completed_at || b.completed_at || b.updated_at || b.created_at;
-          if (!completedAt) return false;
-          return this.getCutoffBucket(completedAt, commissionScheds)?.monthKey === mk;
-        }).reduce((s, a) => s + this._getDynamicCommAmount(a, productMap), 0);
+          if (!this._isCommissionEligibleBooking(b)) return false;
+          const installDate = b?.scheduled_date;
+          if (!installDate) return false;
+          return this.getCutoffBucket(installDate, commissionScheds)?.monthKey === mk;
+        }).reduce((sum, assignment) => sum + this._getStoredCommAmount(assignment), 0);
       },
 
       _glAdditionsForSchedule(empId, schedDay, mk, sortedScheds, rolloverOnly = null) {
@@ -1379,29 +1364,18 @@
 
 
 
-      _commsForSchedule(empId, schedDay, mk, sortedScheds, passedProductMap = null, rolloverOnly = null) {
-        let productMap = passedProductMap;
-        if (!productMap) {
-          productMap = {};
-          (this.dbProducts || []).forEach(p => {
-            if (p.sku) productMap[p.sku.toLowerCase()] = p;
-          });
-        }
+      _commsForSchedule(empId, schedDay, mk, sortedScheds, _unusedProductMap = null, rolloverOnly = null) {
         return this.commissionAssignments.filter(a => {
           if (a.employee_id !== empId) return false;
           const b = this.bookingsList.find(x => x.id === a.booking_id);
-          if (!b || b.status === 'cancelled') return false;
-          const doors = this._parseDoors(b);
-          const door  = doors[a.product_index];
-          const isDone = (door && door.completed) || ['done', 'completed', 'finished'].includes(b.status);
-          if (!isDone) return false;
-          const completedAt = door?.completed_at || b.completed_at || b.updated_at || b.created_at;
-          if (!completedAt) return false;
-          const bucket = this.getCutoffBucket(completedAt, sortedScheds);
+          if (!this._isCommissionEligibleBooking(b)) return false;
+          const installDate = b?.scheduled_date;
+          if (!installDate) return false;
+          const bucket = this.getCutoffBucket(installDate, sortedScheds);
           if (bucket?.monthKey !== mk || bucket.day !== schedDay) return false;
-          const isRollover = String(completedAt).slice(0, 7) !== mk;
+          const isRollover = String(installDate).slice(0, 7) !== mk;
           return rolloverOnly === null || isRollover === rolloverOnly;
-        }).reduce((s, a) => s + this._getDynamicCommAmount(a, productMap), 0);
+        }).reduce((sum, assignment) => sum + this._getStoredCommAmount(assignment), 0);
       },
 
       // ── Checkbox toggles ──
@@ -1501,15 +1475,12 @@
 
           const empGlAdd = isOwner ? 0 : this._glAdditionsForEmpMonth(empId, mk);
           const empGlDed = isOwner ? 0 : this._glDeductionsForEmpMonth(empId, mk);
-          if (empGlAdd > 0) {
-            finalAdjObjs.push({
-              label: 'Reimbursement',
-              value: empGlAdd,
-              description: 'Reimbursement',
-              date: new Date().toISOString()
-            });
-            finalTotalAdjs += empGlAdd;
-          }
+          const reimbursementObjects = empGlAdd > 0 ? [{
+            label: 'Reimbursement',
+            value: empGlAdd,
+            description: 'Employee reimbursement from the general ledger',
+            date: `${mk}-${String(sortedScheds[sortedScheds.length - 1] || 1).padStart(2, '0')}`
+          }] : [];
           if (empGlDed > 0) {
             finalAdjObjs.push({
               label: 'Cash Advance',
@@ -1520,7 +1491,7 @@
             finalTotalAdjs -= empGlDed;
           }
  
-          const grandTotal   = salaryPaid + empComms + finalTotalAdjs + totalSpecs;
+          const grandTotal   = salaryPaid + empComms + finalTotalAdjs + totalSpecs + empGlAdd;
 
           let resolvedDeptName = emp.department || '—';
           const matchedDept = (this.companyStructure?.departments || []).find(d => d.managerId === empId || (d.subteams || []).some(s => s.managerId === empId || (s.colleagueIds || []).includes(empId)));
@@ -1531,10 +1502,10 @@
             department: resolvedDeptName, position: emp.title || '—',
             salary: baseSalary, basic_paid: salaryPaid,
             commissions: empComms, adjustments: finalTotalAdjs,
-            reimbursements: 0, special_payouts: totalSpecs,
+            reimbursements: empGlAdd, special_payouts: totalSpecs,
             total_payout: grandTotal,
             adjustments_list: finalAdjObjs,
-            reimbursements_list: [],
+            reimbursements_list: reimbursementObjects,
             special_schedules: empSpecs
           };
           try { await getSb().from('payslip_records').upsert(payload, { onConflict: 'employee_id,payout_month' }); } catch (e) { console.error(e); }
@@ -1589,7 +1560,7 @@
         }
 
         const peso = value => `₱${(Number(value) || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-        const row = (type, description, amount) => `<tr><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;font-weight:600;vertical-align:top;">${esc(type)}</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;color:#4b5563;line-height:1.5;vertical-align:top;">${esc(description)}</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;text-align:right;font-variant-numeric:tabular-nums;width:120px;vertical-align:top;">${peso(amount)}</td></tr>`;
+        const row = window.BKPayslipRenderer.createBreakdownRow || ((type, description, amount) => `<tr><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;font-weight:600;vertical-align:top;">${esc(type)}</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;color:#4b5563;line-height:1.5;vertical-align:top;">${esc(description)}</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;text-align:right;font-variant-numeric:tabular-nums;width:120px;vertical-align:top;">${peso(amount)}</td></tr>`);
         const salaryIsProrated = salaryPaid !== Number(emp.salary);
         let breakdownRows = row(
           salaryIsProrated ? 'Prorated Salary' : 'Basic Salary',
@@ -1639,11 +1610,6 @@
         specialByDay.forEach((value, day) => {
           scheduleRows.push({ day, order: 0, label: `Special Payout (Day ${day})`, value });
         });
-        const cutoffHtml = scheduleRows
-          .sort((a, b) => a.day - b.day || a.order - b.order)
-          .map(item => `<div style="display:flex;justify-content:space-between;padding:0.5rem 0;font-size:0.85rem;border-bottom:1px dashed #e5e7eb;"><span style="font-weight:500;color:#4b5563;">${esc(item.label)}</span><span style="font-weight:700;color:#111827;font-variant-numeric:tabular-nums;margin-right:12px;">${peso(item.value)}</span></div>`)
-          .join('');
-
         let department = emp.department || '—';
         let departmentHeadId = null;
         const matchedDepartment = (this.companyStructure?.departments || []).find(dept => dept.managerId === empId || (dept.subteams || []).some(team => team.managerId === empId || (team.colleagueIds || []).includes(empId)));
@@ -1657,27 +1623,25 @@
         const reportingTo = manager ? [manager.first_name, manager.last_name].filter(Boolean).join(' ') : '—';
         const employeeName = [emp.first_name, emp.last_name].filter(Boolean).join(' ');
         const logoUrl = template.logoStyle === 'dark' ? profile.logoDark : profile.logoLight;
-        const companyAddress = [profile.companyAddressLine1, profile.companyAddressLine2].filter(Boolean).map(esc).join('<br>');
-        const companyContact = [profile.email, profile.phone].filter(Boolean).map(esc).join('<br>');
-        const signature = template.signatureUrl ? `<img src="${esc(template.signatureUrl)}" alt="Signature" style="max-height:100px;max-width:170px;object-fit:contain;display:block;">` : '<div style="height:100px;width:150px;"></div>';
-        const sheet = document.createElement('div');
-        sheet.innerHTML = `<div style="display:flex;flex-direction:column;justify-content:space-between;min-height:250mm;box-sizing:border-box;background:#fff;color:#111827;padding:3rem 3rem 2.5rem 3rem;">
-          <div><div style="display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:1rem;margin-bottom:1.5rem;"><div>${logoUrl ? `<img src="${esc(logoUrl)}" alt="Logo" style="max-height:48px;max-width:150px;display:block;margin-bottom:0.5rem;filter:grayscale(1);">` : ''}</div><div style="text-align:right;font-size:0.7rem;line-height:1.25;color:#4b5563;"><strong style="display:block;margin-bottom:3px;color:#111827;font-size:0.7rem;font-weight:800;">${esc(profile.companyName || 'Brightkey Solutions')}</strong>${companyAddress}<br>${companyContact}</div></div>
-          <div style="text-align:center;margin-bottom:1.5rem;"><div style="font-size:1.6rem;font-weight:900;letter-spacing:1px;color:#111827;text-transform:uppercase;">Payslip</div><div style="font-size:0.95rem;color:#4b5563;margin-top:0.1rem;"><strong>${esc(monthText)}</strong></div></div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;background:#f9fafb;padding:0.85rem;border-radius:6px;margin-bottom:1.5rem;border:1px solid #e5e7eb;"><div><div style="margin-bottom:0.4rem;"><span style="font-size:0.65rem;text-transform:uppercase;color:#6b7280;font-weight:600;display:block;">Employee Name</span><strong style="font-size:0.8rem;color:#111827;">${esc(employeeName)}</strong></div><div><span style="font-size:0.65rem;text-transform:uppercase;color:#6b7280;font-weight:600;display:block;">Department</span><strong style="font-size:0.8rem;color:#111827;">${esc(department)}</strong></div></div><div><div style="margin-bottom:0.4rem;"><span style="font-size:0.65rem;text-transform:uppercase;color:#6b7280;font-weight:600;display:block;">Reporting To</span><strong style="font-size:0.8rem;color:#111827;">${esc(reportingTo)}</strong></div><div><span style="font-size:0.65rem;text-transform:uppercase;color:#6b7280;font-weight:600;display:block;">Position / Title</span><strong style="font-size:0.8rem;color:#111827;">${esc(emp.title || '—')}</strong></div></div></div>
-          <div style="margin-bottom:2rem;"><div style="font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:0.5rem;">Earnings &amp; Adjustments Breakdown</div><table style="width:100%;border-collapse:collapse;font-size:0.85rem;"><thead><tr style="background:#f3f4f6;text-align:left;"><th style="padding:0.5rem 0.75rem;border-bottom:1px solid #d1d5db;font-weight:700;">Type</th><th style="padding:0.5rem 0.75rem;border-bottom:1px solid #d1d5db;font-weight:700;">Description</th><th style="padding:0.5rem 0.75rem;border-bottom:1px solid #d1d5db;text-align:right;font-weight:700;width:120px;">Amount</th></tr></thead><tbody>${breakdownRows}</tbody></table></div>
-          <div style="margin-bottom:2rem;max-width:400px;margin-left:auto;"><div style="font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:0.5rem;border-bottom:1px solid #111827;padding-bottom:0.25rem;">Payout Schedule Allocation</div>${cutoffHtml}<div style="display:flex;justify-content:space-between;padding:0.75rem 0;font-size:1rem;font-weight:800;border-top:2px solid #111827;"><span>TOTAL PAYOUT</span><span style="font-variant-numeric:tabular-nums;margin-right:12px;">${peso(totalPayout)}</span></div></div></div>
-          <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:auto;padding-top:2rem;"><div style="font-size:0.72rem;color:#6b7280;max-width:320px;line-height:1.2;">This payslip is generated through Brightkey ERP and serves as an official payroll record. Any concerns regarding computation should be reported within seven (7) days of issuance.</div><div style="display:flex;flex-direction:column;align-items:center;width:180px;"><div style="height:105px;display:flex;align-items:center;justify-content:center;width:100%;">${signature}</div><div style="font-size:0.85rem;font-weight:700;border-top:1px solid #111827;width:100%;text-align:center;padding-top:0.25rem;margin-top:0.25rem;">${esc(template.signatoryName || 'Authorized Signatory')}</div><div style="font-size:0.72rem;color:#6b7280;width:100%;text-align:center;">Authorized Signatory</div></div></div>
-        </div>`;
+        const sheet = window.BKPayslipRenderer.createSheet({
+          profile,
+          template,
+          logoUrl,
+          monthText,
+          employeeName,
+          department,
+          reportingTo,
+          position: emp.title || '—',
+          breakdownRowsHtml: breakdownRows,
+          scheduleRows,
+          totalPayout
+        });
 
         try {
-          await html2pdf().set({
-            margin: [10, 10, 10, 10],
-            filename: `Payslip_${employeeName.replace(/\s+/g, '_')}_${monthText.replace(/\s+/g, '_')}.pdf`,
-            image: { type: 'jpeg', quality: 0.98 },
-            html2canvas: { scale: 2, useCORS: true, letterRendering: true },
-            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-          }).from(sheet).save();
+          await window.BKPayslipRenderer.downloadSheet(
+            sheet,
+            `Payslip_${employeeName.replace(/\s+/g, '_')}_${monthText.replace(/\s+/g, '_')}.pdf`
+          );
         } catch (error) {
           console.error('Unable to generate payslip PDF:', error);
           toast('The PDF could not be generated. Please try again.', 'error');
@@ -1685,148 +1649,6 @@
       },
 
     };
-
-    function checkSkuEligibility(product, eligibilityRules) {
-      if (!eligibilityRules || eligibilityRules.length === 0) return false;
-      for (const rule of eligibilityRules) {
-        if (rule.scope === 'businesses') {
-          if (rule.business === 'all') return true;
-          if (rule.business === product.business) {
-            if (rule.category === 'all') return true;
-            if (rule.category === product.category) {
-              if (rule.sku === 'all') return true;
-              if (rule.sku === product.sku) return true;
-            }
-          }
-        } else if (rule.scope === 'tags') {
-          if (product.tags && Array.isArray(product.tags) && product.tags.includes(rule.tag)) {
-            return true;
-          }
-        }
-      }
-      return false;
-    }
-
-    function getBookingEligibleCentavos(b, productMap, eligibilityRules) {
-      const skus = (b.product_skus || '').split(' | ').map(s => s.trim());
-      const qtys = (b.product_qtys || '').split(' | ').map(s => s.trim());
-      const unitPrices = (b.product_unit_prices || '').split(' | ').map(s => s.trim());
-
-      let skuSumCentavos = 0;
-      let allSkuSumCentavos = 0;
-      const numItems = Math.max(skus.length, qtys.length);
-      for (let i = 0; i < numItems; i++) {
-        const sku = skus[i] || '';
-        if (!sku) continue;
-        const qty = parseInt(qtys[i]) || 1;
-        const unitPriceDec = parseFloat(unitPrices[i]) || 0;
-        const itemCentavos = Math.round(unitPriceDec * qty * 100);
-        
-        allSkuSumCentavos += itemCentavos;
-
-        const product = productMap[sku.toLowerCase()] || { sku, business: '', category: '', tags: [] };
-        const isEligible = checkSkuEligibility(product, eligibilityRules);
-        if (isEligible) {
-          skuSumCentavos += itemCentavos;
-        }
-      }
-
-      let depositCentavos = Math.round(Math.abs(parseInt(b.deposit_amount) || 0));
-      let discountCentavos = 0;
-      let freebiesCentavos = 0;
-      let customCentavos = 0;
-
-      if (b.deduction_labels && b.deduction_values) {
-        const labels = b.deduction_labels.split('|').map(s => s.trim().toLowerCase());
-        const values = b.deduction_values.split('|').map(s => s.trim());
-        labels.forEach((label, idx) => {
-          const valPHP = parseFloat(values[idx]) || 0;
-          const valCentavos = Math.round(Math.abs(valPHP) * 100);
-          if (label.includes('discount')) {
-            discountCentavos += valCentavos;
-          } else if (label.includes('freebie')) {
-            freebiesCentavos += valCentavos;
-          } else if (label.includes('custom')) {
-            customCentavos += valCentavos;
-          } else if (label.includes('deposit')) {
-            depositCentavos += valCentavos;
-          }
-        });
-      }
-
-      let chargesCentavos = 0;
-      if (b.charge_labels && b.charge_values) {
-        const labels = b.charge_labels.split('|').map(s => s.trim().toLowerCase());
-        const values = b.charge_values.split('|').map(s => s.trim());
-        labels.forEach((label, idx) => {
-          const valPHP = parseFloat(values[idx]) || 0;
-          const valCentavos = Math.round(Math.abs(valPHP) * 100);
-          if (!label.includes('credit card fee')) {
-            chargesCentavos += valCentavos;
-          }
-        });
-      }
-
-      const finalEligibleCentavos = Math.max(0, skuSumCentavos - discountCentavos);
-      const grandTotal = parseInt(b.grand_total) || 0;
-      const balanceDue = parseInt(b.balance_due) || 0;
-      const orderGrandTotal = grandTotal > 0 ? grandTotal : (balanceDue + depositCentavos);
-      const totalPriceCentavos = orderGrandTotal + depositCentavos;
-
-      return {
-        skuSumCentavos,
-        finalEligibleCentavos,
-        totalPriceCentavos
-      };
-    }
-
-    function getCommissionAdjustmentForBooking(b, rateLabel, productMap, adjustmentRules) {
-      if (!adjustmentRules || adjustmentRules.length === 0) return 0;
-      const bDate = b.scheduled_date ? b.scheduled_date.slice(0, 10) : '';
-      if (!bDate) return 0;
-
-      const bookingSkus = (b.product_skus || '').split(' | ').map(s => s.trim().toLowerCase());
-      let totalAdjustment = 0;
-
-      adjustmentRules.forEach(r => {
-        const rStart = r.start_date || '1970-01-01';
-        const rEnd = r.end_date || '9999-12-31';
-        if (bDate < rStart || bDate > rEnd) return;
-        if (!r.label || r.label.trim().toLowerCase() !== rateLabel.trim().toLowerCase()) return;
-
-        let isMatch = false;
-        if (r.scope === 'businesses') {
-          const skuMatch = !r.sku || r.sku === 'all' || bookingSkus.includes(r.sku.toLowerCase());
-          const catMatch = !r.category || r.category === 'all' || bookingSkus.some(sku => {
-            const p = productMap[sku] || {};
-            return p.category && p.category.toLowerCase() === r.category.toLowerCase();
-          });
-          const bizMatch = !r.business || r.business === 'all' || bookingSkus.some(sku => {
-            const p = productMap[sku] || {};
-            return p.business && p.business.toLowerCase() === r.business.toLowerCase();
-          });
-          if (skuMatch && catMatch && bizMatch) isMatch = true;
-        } else if (r.scope === 'tags') {
-          const tagMatch = bookingSkus.some(sku => {
-            const p = productMap[sku] || {};
-            return p.tags && Array.isArray(p.tags) && p.tags.map(t => t.toLowerCase()).includes(r.tag.toLowerCase());
-          });
-          if (tagMatch) isMatch = true;
-        }
-
-        if (isMatch) {
-          let val = parseFloat(r.value) || 0;
-          if (r.operator === 'minus') {
-            val = -Math.abs(val);
-          } else {
-            val = Math.abs(val);
-          }
-          totalAdjustment += val;
-        }
-      });
-
-      return totalAdjustment;
-    }
 
     document.addEventListener('DOMContentLoaded', () => {
       App.init();

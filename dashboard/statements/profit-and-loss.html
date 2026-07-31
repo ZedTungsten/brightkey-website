@@ -472,7 +472,13 @@
           const thresholdVal = this.payoutSettings.installations_before_crediting || 15;
           const leadWeight = this.payoutSettings.lead_credit !== undefined ? this.payoutSettings.lead_credit : 1.0;
           const assistWeight = this.payoutSettings.assist_credit !== undefined ? this.payoutSettings.assist_credit : 0.5;
+          const ocularWeight = this.payoutSettings.ocular_credit !== undefined ? this.payoutSettings.ocular_credit : 0;
+          const repairWeight = this.payoutSettings.repair_credit !== undefined ? this.payoutSettings.repair_credit : 0;
           const leadRateVal = this.payoutSettings.lead_rate || 1000;
+          const assistRateVal = this.payoutSettings.assist_rate || 500;
+          const ocularRateVal = this.payoutSettings.ocular_rate || 0;
+          const repairRateVal = this.payoutSettings.repair_rate || 0;
+          const ocularRepairEffectiveFrom = String(this.payoutSettings.ocular_repair_effective_from || '');
           const extraServicesList = (this.payoutSettings.extra_services || []).map(es => {
             let sku = es.sku || es.name || '';
             if (sku === 'Welding Baseplate Metal') sku = 'BASEPLATE-M';
@@ -537,25 +543,27 @@
             });
 
             this.employees.forEach(emp => {
-              let leadCount = 0;
-              let assistCount = 0;
+              const completedJobs = [];
               let serviceEarnings = 0;
 
               monthBookings.forEach(b => {
-                const assignmentType = String(b.product_skus || '').trim().toLowerCase();
+                const assignmentSkus = String(b.product_skus || '')
+                  .split('|')
+                  .map((sku) => sku.trim().toLowerCase())
+                  .filter(Boolean);
                 const orderNo = String(b.order_no || '').toUpperCase();
-                const isNonCreditableJob = assignmentType === 'day off' || assignmentType === 'ocular' || assignmentType === 'backjob'
-                  || orderNo.startsWith('DO-') || orderNo.startsWith('OC-') || orderNo.startsWith('BJ-');
-                if (isNonCreditableJob) return;
+                const isDayOff = assignmentSkus.includes('day off') || orderNo.startsWith('DO-');
+                const isBackjob = assignmentSkus.includes('backjob') || orderNo.startsWith('BJ-');
+                const isOcular = assignmentSkus.includes('ocular');
+                const isRepair = assignmentSkus.includes('repair');
+                if (isDayOff || isBackjob) return;
+                if ((isOcular || isRepair) && (!ocularRepairEffectiveFrom || b.scheduled_date < ocularRepairEffectiveFrom)) return;
 
                 const assignedDoors = this.getAssignedDoorsForEmployee(b, emp.id);
                 assignedDoors.forEach(d => {
                   if (!d.completed) return;
-                  if (d.roles.includes('lead')) {
-                    leadCount++;
-                  } else if (d.roles.includes('assist')) {
-                    assistCount++;
-                  }
+                  const roles = isOcular ? ['ocular'] : isRepair ? ['repair'] : d.roles;
+                  completedJobs.push({ roles, scheduled_date: b.scheduled_date });
                   if (d.roles.includes('service')) {
                     d.skus.forEach(sku => {
                       const matchedService = extraServicesList.find(es => es.sku === sku);
@@ -567,12 +575,19 @@
                 });
               });
 
-              const totalCredit = (leadCount * leadWeight) + (assistCount * assistWeight);
+              completedJobs.sort((a, b) => String(a.scheduled_date).localeCompare(String(b.scheduled_date)));
+              let runningCredit = 0;
               let thresholdEarnings = 0;
-              if (totalCredit > thresholdVal) {
-                const extraCredit = totalCredit - thresholdVal;
-                thresholdEarnings = extraCredit * leadRateVal;
-              }
+              completedJobs.forEach(job => {
+                let weight = 0;
+                let jobRate = 0;
+                if (job.roles.includes('lead')) { weight = leadWeight; jobRate = leadRateVal; }
+                else if (job.roles.includes('assist')) { weight = assistWeight; jobRate = assistRateVal; }
+                else if (job.roles.includes('ocular')) { weight = ocularWeight; jobRate = ocularRateVal; }
+                else if (job.roles.includes('repair')) { weight = repairWeight; jobRate = repairRateVal; }
+                runningCredit += weight;
+                if (runningCredit > thresholdVal) thresholdEarnings += jobRate;
+              });
 
               monthlyValues[mKey].installations += ((thresholdEarnings + serviceEarnings) * 100);
             });

@@ -148,6 +148,7 @@ function getInstallerAssignedSkus(b, myId) {
 }
 
 function getInstallerAssignedDoorsForBooking(b, myId) {
+  const bookingIsDone = ['done', 'completed', 'finished'].includes(String(b.status || '').toLowerCase());
   let doorsArr = [];
   if (b.doors) {
     if (typeof b.doors === 'string') {
@@ -210,7 +211,7 @@ function getInstallerAssignedDoorsForBooking(b, myId) {
 
       assignedDoors.push({
         doorName: 'Standard Installation',
-        completed: b.status === 'done' || b.status === 'completed' || b.status === 'finished',
+        completed: bookingIsDone,
         roles: roles,
         skus: activeSkus
       });
@@ -288,7 +289,7 @@ function getInstallerAssignedDoorsForBooking(b, myId) {
 
       assignedDoors.push({
         doorName: door.name || `Door ${index + 1}`,
-        completed: !!door.completed,
+        completed: Boolean(door.completed) || bookingIsDone,
         roles: roles,
         skus: doorSkus
       });

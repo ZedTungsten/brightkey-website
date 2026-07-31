@@ -235,7 +235,13 @@ window.BKFinancialCalculators = {
     const thresholdVal = payoutSettings.installations_before_crediting || 15;
     const leadWeight = payoutSettings.lead_credit !== undefined ? payoutSettings.lead_credit : 1.0;
     const assistWeight = payoutSettings.assist_credit !== undefined ? payoutSettings.assist_credit : 0.5;
+    const ocularWeight = payoutSettings.ocular_credit !== undefined ? payoutSettings.ocular_credit : 0;
+    const repairWeight = payoutSettings.repair_credit !== undefined ? payoutSettings.repair_credit : 0;
     const leadRateVal = payoutSettings.lead_rate || 1000;
+    const assistRateVal = payoutSettings.assist_rate || 500;
+    const ocularRateVal = payoutSettings.ocular_rate || 0;
+    const repairRateVal = payoutSettings.repair_rate || 0;
+    const ocularRepairEffectiveFrom = String(payoutSettings.ocular_repair_effective_from || '');
     const extraServicesList = (payoutSettings.extra_services || []).map(es => {
       let sku = es.sku || es.name || '';
       if (sku === 'Welding Baseplate Metal') sku = 'BASEPLATE-M';
@@ -291,9 +297,21 @@ window.BKFinancialCalculators = {
       employees.forEach(emp => {
         const doorJobs = [];
         monthBookings.forEach(b => {
+          const assignmentSkus = String(b.product_skus || '')
+            .split('|')
+            .map((sku) => sku.trim().toLowerCase())
+            .filter(Boolean);
+          const orderNo = String(b.order_no || '').toUpperCase();
+          const isDayOff = assignmentSkus.includes('day off') || orderNo.startsWith('DO-');
+          const isBackjob = assignmentSkus.includes('backjob') || orderNo.startsWith('BJ-');
+          const isOcular = assignmentSkus.includes('ocular');
+          const isRepair = assignmentSkus.includes('repair');
+          if (isDayOff || isBackjob) return;
+          if ((isOcular || isRepair) && (!ocularRepairEffectiveFrom || b.scheduled_date < ocularRepairEffectiveFrom)) return;
+
           const assignedDoors = this.getAssignedDoorsForEmployee(b, emp.id);
           assignedDoors.forEach(d => {
-            if (d.completed) doorJobs.push(d);
+            if (d.completed) doorJobs.push({ ...d, roles: isOcular ? ['ocular'] : isRepair ? ['repair'] : d.roles });
           });
         });
 
@@ -305,8 +323,15 @@ window.BKFinancialCalculators = {
 
         doorJobs.forEach(job => {
           let weight = 0;
+          let jobRate = 0;
           if (job.roles.includes('lead')) weight = leadWeight;
           else if (job.roles.includes('assist')) weight = assistWeight;
+          else if (job.roles.includes('ocular')) weight = ocularWeight;
+          else if (job.roles.includes('repair')) weight = repairWeight;
+          if (job.roles.includes('lead')) jobRate = leadRateVal;
+          else if (job.roles.includes('assist')) jobRate = assistRateVal;
+          else if (job.roles.includes('ocular')) jobRate = ocularRateVal;
+          else if (job.roles.includes('repair')) jobRate = repairRateVal;
 
           if (job.roles.includes('service')) {
             job.skus.forEach(sku => {
@@ -318,8 +343,7 @@ window.BKFinancialCalculators = {
           const previousCredit = runningCredit;
           const newCredit = previousCredit + weight;
           if (newCredit > thresholdVal) {
-            const extraCredit = weight;
-            thresholdEarnings += (extraCredit * leadRateVal);
+            thresholdEarnings += jobRate;
           }
           runningCredit = newCredit;
         });

@@ -1627,7 +1627,9 @@
 
         // Current value: apply any pending change
         const staged = (this.pendingChanges[id] || {})[col];
-        const currentVal = staged ? staged.newId : (r.account_id || (this.accounts.find(a => a.name === r.account)?.id));
+        const currentVal = col === 'account'
+          ? (staged?.newId ?? r.account_id ?? this.accounts.find(a => a.name === r.account)?.id)
+          : (staged ? staged.new : r[col]);
 
         let html;
         if (col === 'account') {
@@ -1643,15 +1645,15 @@
           });
           html = `<select class="cell-edit-input">${opts}</select>`;
         } else if (col === 'date') {
-          html = `<input type="date" class="cell-edit-input" value="${currentVal || ''}" />`;
+          html = `<input type="date" class="cell-edit-input" value="${esc(currentVal ?? '')}" />`;
         } else if (col === 'debit' || col === 'credit') {
           const num = currentVal ? String(currentVal).replace(/[₱,]/g, '') : '';
           html = `<input type="number" class="cell-edit-input" value="${num}" step="0.01" min="0" />`;
         } else if (col === 'entry_number') {
           const formatted = currentVal ? fmtEntry(currentVal) : '';
-          html = `<input type="text" class="cell-edit-input" value="${formatted}" />`;
+          html = `<input type="text" class="cell-edit-input" value="${esc(formatted)}" />`;
         } else {
-          html = `<input type="text" class="cell-edit-input" value="${!currentVal || currentVal === '—' ? '' : currentVal}" />`;
+          html = `<input type="text" class="cell-edit-input" value="${esc(currentVal === null || currentVal === undefined || currentVal === '—' ? '' : currentVal)}" />`;
         }
 
         td.innerHTML = html;

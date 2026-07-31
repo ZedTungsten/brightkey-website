@@ -46,6 +46,8 @@
         installerNames.map(name => String(name || '').trim().toLowerCase()).filter(Boolean)
       );
       const installers = dbEmployees.filter(emp => {
+        const isActive = String(emp.employment_status || 'Active').trim().toLowerCase() === 'active';
+        if (!isActive && emp.id !== selectedId) return false;
         // Filter by assignment if assignments are configured
         const empAssigns = (emp.assignment || '').split(',').map(s => s.trim());
         const empAssignsLower = empAssigns.map(s => s.toLowerCase());

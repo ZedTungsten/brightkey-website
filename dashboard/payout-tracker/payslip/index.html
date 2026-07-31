@@ -839,31 +839,34 @@
         const bookingIds = [...new Set(commAssignments.map(a => a.booking_id))];
         if (bookingIds.length > 0) {
           try {
-            const { data, error } = await sb.from('installation_bookings').select('id, status, updated_at, created_at, doors, scheduled_date').in('id', bookingIds);
+            const { data, error } = await sb.from('installation_bookings')
+              .select('id, status, doors, scheduled_date')
+              .eq('company_id', this.companyId)
+              .in('id', bookingIds);
             if (!error) bookings = data || [];
           } catch (_) {}
         }
 
         // Compute commissions for this month
         const parseDoors = (b) => { if (!b) return []; if (Array.isArray(b.doors)) return b.doors; try { return JSON.parse(b.doors); } catch (_) { return []; } };
+        const isCommissionEligibleBooking = (b) => {
+          if (!b || String(b.status || '').toLowerCase() === 'cancelled') return false;
+          const doors = parseDoors(b);
+          const status = String(b.status || '').toLowerCase();
+          return ['done', 'completed', 'finished'].includes(status)
+            || (doors.length > 0 && doors.every(door => Boolean(door?.completed)));
+        };
         const parsedCommAssignments = commAssignments.filter(a => {
           const b = bookings.find(x => x.id === a.booking_id);
-          if (!b || b.status === 'cancelled') return false;
-          const doors = parseDoors(b);
-          const door  = doors[a.product_index];
-          const isDone = (door && door.completed) || ['done', 'completed', 'finished'].includes(b.status);
-          if (!isDone) return false;
-          const completedAt = door?.completed_at || b.updated_at || b.created_at;
-          if (!completedAt) return false;
-          return this.getCutoffBucket(completedAt, this.payoutSchedules)?.monthKey === mk;
+          if (!isCommissionEligibleBooking(b)) return false;
+          const installDate = b?.scheduled_date;
+          if (!installDate) return false;
+          return this.getCutoffBucket(installDate, this.payoutSchedules)?.monthKey === mk;
         }).map(a => {
           const b = bookings.find(x => x.id === a.booking_id);
-          const doors = parseDoors(b);
-          const door  = doors[a.product_index];
-          const completedAt = door?.completed_at || b.updated_at || b.created_at;
           return {
             amount: a.amount / 100,
-            date: completedAt
+            date: b.scheduled_date
           };
         });
 

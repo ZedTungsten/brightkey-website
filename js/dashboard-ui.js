@@ -159,3 +159,147 @@ window.BKUI = {
     };
   }
 };
+
+// Shared payslip document renderer used by Payout Tracker and Smartlock Calendar.
+(function registerPayslipRenderer() {
+  function esc(value) {
+    const node = document.createElement('div');
+    node.textContent = value == null ? '' : String(value);
+    return node.innerHTML;
+  }
+
+  function peso(value) {
+    return `₱${(Number(value) || 0).toLocaleString('en-PH', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    })}`;
+  }
+
+  function createBreakdownRow(type, description, amount) {
+    const formattedDescription = esc(description).replace(/\n/g, '<br>');
+    return `<tr>
+      <td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;font-weight:600;vertical-align:top;">${esc(type)}</td>
+      <td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;color:#4b5563;line-height:1.5;vertical-align:top;">${formattedDescription}</td>
+      <td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;text-align:right;font-variant-numeric:tabular-nums;width:120px;vertical-align:top;">${peso(amount)}</td>
+    </tr>`;
+  }
+
+  function createSheet(options = {}) {
+    const profile = options.profile || {};
+    const template = options.template || {};
+    const logoUrl = options.logoUrl || '';
+    const companyAddress = [profile.companyAddressLine1, profile.companyAddressLine2].filter(Boolean).map(esc).join('<br>');
+    const companyContact = [profile.email, profile.phone].filter(Boolean).map(esc).join('<br>');
+    const signature = template.signatureUrl
+      ? `<img src="${esc(template.signatureUrl)}" alt="Signature" style="max-height:100px;max-width:170px;object-fit:contain;display:block;">`
+      : '<div style="height:100px;width:150px;"></div>';
+    const scheduleRows = [...(options.scheduleRows || [])]
+      .sort((a, b) => Number(a.day) - Number(b.day) || Number(a.order) - Number(b.order));
+    const scheduleHtml = scheduleRows.map(item => `<div style="display:flex;justify-content:space-between;padding:0.5rem 0;font-size:0.85rem;border-bottom:1px dashed #e5e7eb;">
+      <span style="font-weight:500;color:#4b5563;">${esc(item.label)}</span>
+      <span style="font-weight:700;color:#111827;font-variant-numeric:tabular-nums;margin-right:12px;">${peso(item.value)}</span>
+    </div>`).join('');
+
+    const sheet = document.createElement('div');
+    sheet.innerHTML = `<div style="display:flex;flex-direction:column;justify-content:space-between;min-height:250mm;box-sizing:border-box;background:#fff;color:#111827;padding:3rem 3rem 2.5rem 3rem;">
+      <div>
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:1rem;margin-bottom:1.5rem;">
+          <div>${logoUrl ? `<img src="${esc(logoUrl)}" alt="Logo" style="max-height:48px;max-width:150px;display:block;margin-bottom:0.5rem;filter:grayscale(1);">` : ''}</div>
+          <div style="text-align:right;font-size:0.7rem;line-height:1.25;color:#4b5563;">
+            <strong style="display:block;margin-bottom:3px;color:#111827;font-size:0.7rem;font-weight:800;">${esc(profile.companyName || 'Brightkey Solutions')}</strong>
+            ${companyAddress}<br>${companyContact}
+          </div>
+        </div>
+        <div style="text-align:center;margin-bottom:1.5rem;">
+          <div style="font-size:1.6rem;font-weight:900;letter-spacing:1px;color:#111827;text-transform:uppercase;">Payslip</div>
+          <div style="font-size:0.95rem;color:#4b5563;margin-top:0.1rem;"><strong>${esc(options.monthText)}</strong></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;background:#f9fafb;padding:0.85rem;border-radius:6px;margin-bottom:1.5rem;border:1px solid #e5e7eb;">
+          <div>
+            <div style="margin-bottom:0.4rem;"><span style="font-size:0.65rem;text-transform:uppercase;color:#6b7280;font-weight:600;display:block;">Employee Name</span><strong style="font-size:0.8rem;color:#111827;">${esc(options.employeeName)}</strong></div>
+            <div><span style="font-size:0.65rem;text-transform:uppercase;color:#6b7280;font-weight:600;display:block;">Department</span><strong style="font-size:0.8rem;color:#111827;">${esc(options.department || '—')}</strong></div>
+          </div>
+          <div>
+            <div style="margin-bottom:0.4rem;"><span style="font-size:0.65rem;text-transform:uppercase;color:#6b7280;font-weight:600;display:block;">Reporting To</span><strong style="font-size:0.8rem;color:#111827;">${esc(options.reportingTo || '—')}</strong></div>
+            <div><span style="font-size:0.65rem;text-transform:uppercase;color:#6b7280;font-weight:600;display:block;">Position / Title</span><strong style="font-size:0.8rem;color:#111827;">${esc(options.position || '—')}</strong></div>
+          </div>
+        </div>
+        <div style="margin-bottom:2rem;">
+          <div style="font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:0.5rem;">Earnings &amp; Adjustments Breakdown</div>
+          <table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
+            <thead><tr style="background:#f3f4f6;text-align:left;">
+              <th style="padding:0.5rem 0.75rem;border-bottom:1px solid #d1d5db;font-weight:700;">Type</th>
+              <th style="padding:0.5rem 0.75rem;border-bottom:1px solid #d1d5db;font-weight:700;">Description</th>
+              <th style="padding:0.5rem 0.75rem;border-bottom:1px solid #d1d5db;text-align:right;font-weight:700;width:120px;">Amount</th>
+            </tr></thead>
+            <tbody>${options.breakdownRowsHtml || ''}</tbody>
+          </table>
+        </div>
+        <div style="margin-bottom:2rem;max-width:400px;margin-left:auto;">
+          <div style="font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:0.5rem;border-bottom:1px solid #111827;padding-bottom:0.25rem;">Payout Schedule Allocation</div>
+          ${scheduleHtml}
+          <div style="display:flex;justify-content:space-between;padding:0.75rem 0;font-size:1rem;font-weight:800;border-top:2px solid #111827;">
+            <span>TOTAL PAYOUT</span><span style="font-variant-numeric:tabular-nums;margin-right:12px;">${peso(options.totalPayout)}</span>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:auto;padding-top:2rem;">
+        <div style="font-size:0.72rem;color:#6b7280;max-width:320px;line-height:1.2;">This payslip is generated through Brightkey ERP and serves as an official payroll record. Any concerns regarding computation should be reported within seven (7) days of issuance.</div>
+        <div style="display:flex;flex-direction:column;align-items:center;width:180px;">
+          <div style="height:105px;display:flex;align-items:center;justify-content:center;width:100%;">${signature}</div>
+          <div style="font-size:0.85rem;font-weight:700;border-top:1px solid #111827;width:100%;text-align:center;padding-top:0.25rem;margin-top:0.25rem;">${esc(template.signatoryName || 'Authorized Signatory')}</div>
+          <div style="font-size:0.72rem;color:#6b7280;width:100%;text-align:center;">Authorized Signatory</div>
+        </div>
+      </div>
+    </div>`;
+    return sheet;
+  }
+
+  async function downloadSheet(sheet, filename) {
+    if (!sheet || typeof html2pdf !== 'function') {
+      throw new Error('The payslip generator is unavailable.');
+    }
+
+    // Capture from one fixed, off-screen A4 workspace. Rendering detached nodes
+    // can inherit the active page's scroll offset and create a large blank area.
+    const captureHost = document.createElement('div');
+    captureHost.style.cssText = [
+      'position:fixed',
+      'left:0',
+      'top:0',
+      'width:190mm',
+      'margin:0',
+      'padding:0',
+      'background:#fff',
+      'font-size:16px',
+      'line-height:normal',
+      'pointer-events:none',
+      'z-index:-2147483647'
+    ].join(';');
+    sheet.style.cssText = 'width:190mm;margin:0;padding:0;background:#fff;';
+    captureHost.appendChild(sheet);
+    document.body.appendChild(captureHost);
+
+    try {
+      await html2pdf().set({
+        margin: [10, 10, 10, 10],
+        filename,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: {
+          scale: 2,
+          useCORS: true,
+          letterRendering: true,
+          scrollX: 0,
+          scrollY: 0,
+          windowWidth: captureHost.scrollWidth,
+          windowHeight: captureHost.scrollHeight
+        },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      }).from(sheet).save();
+    } finally {
+      captureHost.remove();
+    }
+  }
+
+  window.BKPayslipRenderer = { createSheet, createBreakdownRow, downloadSheet, peso };
+})();

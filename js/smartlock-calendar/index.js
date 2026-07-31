@@ -11,6 +11,7 @@ let dbBookings = [];
 let deliveryBookingsMap = {};
 let installerPayoutSettings = null;
 let payoutTrackerData = { config: {}, regularState: {}, specialState: {}, proratedState: {}, adjustments: [], reimbursements: [], payslipRecords: [], companyProfile: {}, payslipConfig: {} };
+let installerPayslipModel = null;
 
 const defaultChecklist = [
   { text: "Door opens and closes smoothly without obstruction", indent: false },

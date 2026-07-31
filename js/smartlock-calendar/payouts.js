@@ -4,6 +4,130 @@ function isOwnerInstaller() {
   return String(currentInstaller?.assignment || '').split(',').some(value => value.trim().toLowerCase() === 'owner');
 }
 
+function getInstallerPayoutCutoffBucket(dateValue, schedules) {
+  const match = String(dateValue || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!match) return null;
+
+  let year = Number(match[1]);
+  let month = Number(match[2]);
+  const day = Number(match[3]);
+  const sorted = [...(schedules || [15, 30])].map(Number).filter(Boolean).sort((a, b) => a - b);
+  if (!sorted.length) sorted.push(30);
+
+  const cutoffDay = sorted.find(cutoff => day <= cutoff);
+  if (cutoffDay) {
+    return { monthKey: `${year}-${String(month).padStart(2, '0')}`, day: cutoffDay };
+  }
+
+  month += 1;
+  if (month > 12) {
+    month = 1;
+    year += 1;
+  }
+  return { monthKey: `${year}-${String(month).padStart(2, '0')}`, day: sorted[0] };
+}
+
+function getInstallerReimbursements(monthKey) {
+  if (isOwnerInstaller()) return [];
+
+  const record = (payoutTrackerData.payslipRecords || []).find(item => item.payout_month === monthKey);
+  if (record) {
+    const stored = Array.isArray(record.reimbursements_list) ? record.reimbursements_list : [];
+    if (stored.length) {
+      return stored.map(item => ({
+        ...item,
+        amount: Number(item.amount ?? item.value) || 0,
+        date: String(item.date || `${monthKey}-01`).slice(0, 10),
+        label: item.label || item.description || 'Reimbursement'
+      }));
+    }
+
+    const legacy = (Array.isArray(record.adjustments_list) ? record.adjustments_list : [])
+      .filter(item => String(item?.label || item?.description || '').toLowerCase().includes('reimbursement'))
+      .map(item => ({
+        ...item,
+        amount: Number(item.amount ?? item.value) || 0,
+        date: String(item.date || `${monthKey}-01`).slice(0, 10),
+        label: item.label || item.description || 'Reimbursement'
+      }));
+    if (legacy.length) return legacy;
+
+    const storedTotal = Number(record.reimbursements) || 0;
+    if (storedTotal) {
+      return [{
+        amount: storedTotal,
+        date: `${monthKey}-01`,
+        label: 'Reimbursement',
+        description: 'Employee reimbursement'
+      }];
+    }
+  }
+
+  return (payoutTrackerData.reimbursements || [])
+    .filter(item => String(item.date || '').startsWith(monthKey))
+    .map(item => ({
+      ...item,
+      amount: Number(item.amount ?? item.value) || 0,
+      date: String(item.date || `${monthKey}-01`).slice(0, 10)
+    }));
+}
+
+async function resolveInstallerReportingManager() {
+  if (!currentInstaller?.id || !currentInstaller?.company_id || !sb) return '—';
+
+  let managerId = currentInstaller.reporting_to || null;
+  try {
+    const { data: employee } = await sb
+      .from('employees')
+      .select('reporting_to')
+      .eq('company_id', currentInstaller.company_id)
+      .eq('id', currentInstaller.id)
+      .maybeSingle();
+    managerId = employee?.reporting_to || managerId;
+
+    if (!managerId) {
+      const { data: structureRow } = await sb
+        .from('global_settings')
+        .select('value')
+        .eq('company_id', currentInstaller.company_id)
+        .eq('key', 'company_structure')
+        .maybeSingle();
+      const departments = structureRow?.value?.departments || [];
+      for (const department of departments) {
+        const departmentHeadId = department.managerId || null;
+        if (departmentHeadId === currentInstaller.id) break;
+        for (const team of department.subteams || []) {
+          const teamManagerId = team.managerId || null;
+          if (teamManagerId === currentInstaller.id) {
+            managerId = departmentHeadId;
+            break;
+          }
+          if ((team.colleagueIds || []).includes(currentInstaller.id)) {
+            managerId = teamManagerId || departmentHeadId;
+            break;
+          }
+        }
+        if (!managerId && (department.colleagueIds || []).includes(currentInstaller.id)) {
+          managerId = departmentHeadId;
+        }
+        if (managerId) break;
+      }
+    }
+
+    if (!managerId || managerId === currentInstaller.id) return '—';
+    const { data: manager } = await sb
+      .from('employees')
+      .select('first_name, last_name')
+      .eq('company_id', currentInstaller.company_id)
+      .eq('id', managerId)
+      .maybeSingle();
+    return [manager?.first_name, manager?.last_name].filter(Boolean).join(' ') || '—';
+  } catch (error) {
+    console.error('Unable to resolve installer reporting manager:', error);
+    return '—';
+  }
+}
+
 function changePayoutMonth(direction) {
   const payoutInput = document.getElementById('payouts-month-select');
   if (!payoutInput) return;
@@ -73,7 +197,7 @@ function renderSalaryAndAdjustments(monthKey) {
     const cutoff = schedules.find(day => itemDay <= day) || schedules[schedules.length - 1];
     return !!monthState[`${currentInstaller.id}_${cutoff}`];
   };
-  (isOwnerInstaller() ? [] : (payoutTrackerData.reimbursements || []).filter(item => String(item.date || '').startsWith(monthKey))).forEach(item => addRow(item.label || 'Reimbursement', item.amount, itemPaidState(item), new Date(`${item.date}T00:00:00`).getDate()));
+  getInstallerReimbursements(monthKey).forEach(item => addRow(item.label || 'Reimbursement', item.amount, itemPaidState(item), new Date(`${item.date}T00:00:00`).getDate()));
   (payoutTrackerData.adjustments || []).filter(item => String(item.date || '').startsWith(monthKey)).forEach(item => addRow(item.label || 'Adjustment', item.amount, itemPaidState(item), new Date(`${item.date}T00:00:00`).getDate()));
 
   rows.sort((a, b) => a.day - b.day);
@@ -126,24 +250,50 @@ async function downloadInstallerPayslip() {
   const monthText = `${MONTH_NAMES[month - 1]} ${year}`;
   const profile = payoutTrackerData.companyProfile || {};
   const template = payoutTrackerData.payslipConfig || {};
-  const peso = value => `₱${(Number(value) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  const row = (type, description, amount) => `<tr><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;font-weight:600;vertical-align:top;">${escapeHtml(type)}</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;color:#4b5563;line-height:1.5;vertical-align:top;">${escapeHtml(description)}</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;text-align:right;font-variant-numeric:tabular-nums;width:120px;vertical-align:top;">${peso(amount)}</td></tr>`;
+  const renderer = window.BKPayslipRenderer;
+  if (!renderer?.createSheet) {
+    if (typeof showToast === 'function') {
+      showToast('The payslip generator could not be loaded. Refresh the page and try again.', true);
+    } else {
+      console.error('Payslip renderer is unavailable.');
+    }
+    return;
+  }
+  const row = renderer.createBreakdownRow || ((type, description, amount) => {
+    const pesoValue = `₱${(Number(amount) || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    return `<tr><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;font-weight:600;vertical-align:top;">${escapeHtml(type)}</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;color:#4b5563;line-height:1.5;vertical-align:top;">${escapeHtml(description)}</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;text-align:right;font-variant-numeric:tabular-nums;width:120px;vertical-align:top;">${pesoValue}</td></tr>`;
+  });
   const specialSchedules = isOwnerInstaller() ? [] : (payoutTrackerData.config?.specialSchedules || []).filter(item => item.employeeId === currentInstaller.id);
   const adjustments = (payoutTrackerData.adjustments || []).filter(item => String(item.date || '').startsWith(monthKey));
-  const reimbursements = isOwnerInstaller() ? [] : (payoutTrackerData.reimbursements || []).filter(item => String(item.date || '').startsWith(monthKey));
-  const thresholdEarnings = isOwnerInstaller() ? 0 : Number(document.getElementById('payout-extra-total')?.dataset.total) || 0;
-  const serviceEarnings = isOwnerInstaller() ? 0 : Number(document.getElementById('payout-services-total')?.dataset.total) || 0;
+  const reimbursements = getInstallerReimbursements(monthKey);
+  const liveModel = installerPayslipModel?.monthKey === monthKey ? installerPayslipModel : {};
+  const thresholdEarnings = isOwnerInstaller() ? 0 : Number(liveModel.thresholdEarnings ?? document.getElementById('payout-extra-total')?.dataset.total) || 0;
+  const serviceEarnings = isOwnerInstaller() ? 0 : Number(liveModel.serviceEarnings ?? document.getElementById('payout-services-total')?.dataset.total) || 0;
   const salaryAndAdjustmentsTotal = Number(document.getElementById('payout-salary-grand-total')?.dataset.total) || 0;
   const totalPayout = salaryAndAdjustmentsTotal + thresholdEarnings + serviceEarnings;
   const supplementalTotal = [...specialSchedules, ...adjustments, ...reimbursements].reduce((sum, item) => sum + (Number(item.value ?? item.amount) || 0), 0);
   const liveSalaryPaid = salaryAndAdjustmentsTotal - supplementalTotal;
   let rows = row(liveSalaryPaid !== Number(record.salary) ? 'Prorated Salary' : 'Basic Salary', liveSalaryPaid !== Number(record.salary) ? 'Based on eligible scheduled workdays' : 'Monthly Basic Salary', liveSalaryPaid);
-  adjustments.forEach(item => { rows += row('Adjustment', item.label || item.description || 'Adjustment', item.value ?? item.amount); });
-  reimbursements.forEach(item => { rows += row('Reimbursement', item.label || item.description || 'Reimbursement', item.value ?? item.amount); });
-  specialSchedules.forEach(item => { rows += row('Special Payout', `${item.label || 'Special Payout'} (Day ${item.day})`, item.value); });
-  if (thresholdEarnings) rows += row('Earnings Past Threshold', 'Extra installation credits above threshold', thresholdEarnings);
-  if (serviceEarnings) rows += row('Service Job Earnings', 'Extra paid service jobs', serviceEarnings);
+  if (thresholdEarnings) rows += row('Earnings Past Threshold', liveModel.thresholdDescription || 'Extra installation credits above threshold', thresholdEarnings);
+  if (serviceEarnings) rows += row('Service Job Earnings', liveModel.serviceDescription || 'Extra paid service jobs', serviceEarnings);
   if (Number(record.commissions)) rows += row('Commissions', 'Sales Commissions', record.commissions);
+  if (adjustments.length) {
+    const shortMonths = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const labels = adjustments.map(item => {
+      const date = new Date(`${item.date}T00:00:00`);
+      const suffix = !isNaN(date.getTime()) ? ` (${shortMonths[date.getMonth()]} ${date.getDate()})` : '';
+      return `${escapeHtml(item.label || item.description || 'Adjustment')}${suffix}`;
+    }).join('<br>');
+    const amounts = adjustments.map(item => renderer.peso(item.value ?? item.amount)).join('<br>');
+    rows += `<tr><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;font-weight:600;vertical-align:top;">Adjustments</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;color:#4b5563;vertical-align:top;line-height:1.5;">${labels}</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;text-align:right;font-variant-numeric:tabular-nums;vertical-align:top;line-height:1.5;width:120px;">${amounts}</td></tr>`;
+  }
+  if (specialSchedules.length) {
+    const labels = specialSchedules.map(item => `${escapeHtml(item.label || 'Special Payout')} (Day ${Number(item.day) || 1})`).join('<br>');
+    const amounts = specialSchedules.map(item => renderer.peso(item.value)).join('<br>');
+    rows += `<tr><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;font-weight:600;vertical-align:top;">Special Payouts</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;color:#4b5563;vertical-align:top;line-height:1.5;">${labels}</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;text-align:right;font-variant-numeric:tabular-nums;vertical-align:top;line-height:1.5;width:120px;">${amounts}</td></tr>`;
+  }
+  const reimbursementTotal = reimbursements.reduce((sum, item) => sum + (Number(item.value ?? item.amount) || 0), 0);
+  if (reimbursementTotal) rows += row('GL Reimbursement', 'Employee reimbursement from the general ledger', reimbursementTotal);
 
   const schedules = [...(payoutTrackerData.config?.payoutSchedules || [15, 30])].map(Number).sort((a, b) => a - b);
   const cutoffValues = schedules.map(() => liveSalaryPaid / (schedules.length || 1));
@@ -151,34 +301,56 @@ async function downloadInstallerPayslip() {
     const index = schedules.findIndex(cutoff => Number(day) <= cutoff);
     return index === -1 ? schedules.length - 1 : index;
   };
-  specialSchedules.forEach(item => { cutoffValues[cutoffIndexForDay(item.day)] += Number(item.value) || 0; });
-  [...adjustments, ...reimbursements].forEach(item => {
+  adjustments.forEach(item => {
     const itemDay = item.date ? new Date(item.date).getUTCDate() : schedules[schedules.length - 1];
     cutoffValues[cutoffIndexForDay(itemDay)] += Number(item.value ?? item.amount) || 0;
   });
-  if (cutoffValues.length) {
-    const allocated = cutoffValues.reduce((sum, value) => sum + value, 0);
-    cutoffValues[cutoffValues.length - 1] += totalPayout - allocated;
-  }
-  const cutoffHtml = schedules.map((day, index) => `<div style="display:flex;justify-content:space-between;padding:0.5rem 0;font-size:0.85rem;border-bottom:1px dashed #e5e7eb;"><span style="font-weight:500;color:#4b5563;">Cutoff Payout (Day ${day})</span><span style="font-weight:700;color:#111827;font-variant-numeric:tabular-nums;margin-right:12px;">${peso(cutoffValues[index])}</span></div>`).join('');
+  reimbursements.forEach(item => {
+    const itemDay = item.date ? new Date(item.date).getUTCDate() : schedules[schedules.length - 1];
+    cutoffValues[cutoffIndexForDay(itemDay)] += Number(item.value ?? item.amount) || 0;
+  });
+  schedules.forEach((day, index) => {
+    cutoffValues[index] += Number(liveModel.cutoffPayouts?.[day]) || 0;
+  });
+  if (Number(record.commissions)) cutoffValues[cutoffValues.length - 1] += Number(record.commissions);
+
+  const scheduleRows = schedules.map((day, index) => ({
+    day,
+    order: 1,
+    label: `Cutoff Payout (Day ${day})`,
+    value: cutoffValues[index]
+  }));
+  const specialByDay = new Map();
+  specialSchedules.forEach(item => {
+    const day = Number(item.day) || 1;
+    specialByDay.set(day, (specialByDay.get(day) || 0) + (Number(item.value) || 0));
+  });
+  specialByDay.forEach((value, day) => {
+    scheduleRows.push({ day, order: 0, label: `Special Payout (Day ${day})`, value });
+  });
   const logoUrl = template.logoStyle === 'dark' ? profile.logoDark : profile.logoLight;
   const employeeName = [currentInstaller.first_name, currentInstaller.last_name].filter(Boolean).join(' ');
-  const companyAddress = [profile.companyAddressLine1, profile.companyAddressLine2].filter(Boolean).map(escapeHtml).join('<br>');
-  const companyContact = [profile.email, profile.phone].filter(Boolean).map(escapeHtml).join('<br>');
-  const signatureImage = template.signatureUrl ? `<img src="${escapeHtml(template.signatureUrl)}" alt="Signature" style="max-height:100px;max-width:170px;object-fit:contain;display:block;">` : '<div style="height:100px;width:150px;"></div>';
-  const sheet = document.createElement('div');
-  sheet.innerHTML = `<div style="display:flex;flex-direction:column;justify-content:space-between;min-height:250mm;box-sizing:border-box;background:#fff;color:#111827;padding:3rem 3rem 2.5rem 3rem;">
-    <div><div style="display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:1rem;margin-bottom:1.5rem;"><div>${logoUrl ? `<img src="${escapeHtml(logoUrl)}" alt="Logo" style="max-height:48px;max-width:150px;display:block;margin-bottom:0.5rem;filter:grayscale(1);">` : ''}</div><div style="text-align:right;font-size:0.7rem;line-height:1.25;color:#4b5563;"><strong style="display:block;margin-bottom:3px;color:#111827;font-size:0.7rem;font-weight:800;">${escapeHtml(profile.companyName || 'Brightkey Solutions')}</strong>${companyAddress}<br>${companyContact}</div></div>
-    <div style="text-align:center;margin-bottom:1.5rem;"><div style="font-size:1.6rem;font-weight:900;letter-spacing:1px;color:#111827;text-transform:uppercase;">Payslip</div><div style="font-size:0.95rem;color:#4b5563;margin-top:0.1rem;"><strong>${escapeHtml(monthText)}</strong></div></div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;background:#f9fafb;padding:0.85rem;border-radius:6px;margin-bottom:1.5rem;border:1px solid #e5e7eb;"><div><div style="margin-bottom:0.4rem;"><span style="font-size:0.65rem;text-transform:uppercase;color:#6b7280;font-weight:600;display:block;">Employee Name</span><strong style="font-size:0.8rem;color:#111827;">${escapeHtml(employeeName)}</strong></div><div><span style="font-size:0.65rem;text-transform:uppercase;color:#6b7280;font-weight:600;display:block;">Department</span><strong style="font-size:0.8rem;color:#111827;">${escapeHtml(record.department || currentInstaller.department || '—')}</strong></div></div><div><div style="margin-bottom:0.4rem;"><span style="font-size:0.65rem;text-transform:uppercase;color:#6b7280;font-weight:600;display:block;">Reporting To</span><strong style="font-size:0.8rem;color:#111827;">—</strong></div><div><span style="font-size:0.65rem;text-transform:uppercase;color:#6b7280;font-weight:600;display:block;">Position / Title</span><strong style="font-size:0.8rem;color:#111827;">${escapeHtml(record.position || currentInstaller.title || '—')}</strong></div></div></div>
-    <div style="margin-bottom:2rem;"><div style="font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:0.5rem;">Earnings &amp; Adjustments Breakdown</div><table style="width:100%;border-collapse:collapse;font-size:0.85rem;"><thead><tr style="background:#f3f4f6;text-align:left;"><th style="padding:0.5rem 0.75rem;border-bottom:1px solid #d1d5db;font-weight:700;">Type</th><th style="padding:0.5rem 0.75rem;border-bottom:1px solid #d1d5db;font-weight:700;">Description</th><th style="padding:0.5rem 0.75rem;border-bottom:1px solid #d1d5db;text-align:right;font-weight:700;width:120px;">Amount</th></tr></thead><tbody>${rows}</tbody></table></div>
-    <div style="margin-bottom:2rem;max-width:400px;margin-left:auto;"><div style="font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:0.5rem;border-bottom:1px solid #111827;padding-bottom:0.25rem;">Payout Schedule Allocation</div>${cutoffHtml}<div style="display:flex;justify-content:space-between;padding:0.75rem 0;font-size:1rem;font-weight:800;border-top:2px solid #111827;"><span>TOTAL PAYOUT</span><span style="font-variant-numeric:tabular-nums;margin-right:12px;">${peso(totalPayout)}</span></div></div></div>
-    <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:auto;padding-top:2rem;"><div style="font-size:0.72rem;color:#6b7280;max-width:320px;line-height:1.2;">This payslip is generated through Brightkey ERP and serves as an official payroll record. Any concerns regarding computation should be reported within seven (7) days of issuance.</div><div style="display:flex;flex-direction:column;align-items:center;width:180px;"><div style="height:105px;display:flex;align-items:center;justify-content:center;width:100%;">${signatureImage}</div><div style="font-size:0.85rem;font-weight:700;border-top:1px solid #111827;width:100%;text-align:center;padding-top:0.25rem;margin-top:0.25rem;">${escapeHtml(template.signatoryName || 'Authorized Signatory')}</div><div style="font-size:0.72rem;color:#6b7280;width:100%;text-align:center;">Authorized Signatory</div></div></div>
-  </div>`;
+  const reportingTo = await resolveInstallerReportingManager();
+  const sheet = renderer.createSheet({
+    profile,
+    template,
+    logoUrl,
+    monthText,
+    employeeName,
+    department: record.department || currentInstaller.department || '—',
+    reportingTo,
+    position: record.position || currentInstaller.title || '—',
+    breakdownRowsHtml: rows,
+    scheduleRows,
+    totalPayout
+  });
   const button = document.getElementById('btn-download-installer-payslip');
   button.disabled = true;
   try {
-    await html2pdf().set({ margin:[10,10,10,10], filename:`Payslip_${employeeName.replace(/\s+/g, '_')}_${monthText.replace(/\s+/g, '_')}.pdf`, image:{type:'jpeg',quality:0.98}, html2canvas:{scale:2,useCORS:true,letterRendering:true}, jsPDF:{unit:'mm',format:'a4',orientation:'portrait'} }).from(sheet).save();
+    await renderer.downloadSheet(
+      sheet,
+      `Payslip_${employeeName.replace(/\s+/g, '_')}_${monthText.replace(/\s+/g, '_')}.pdf`
+    );
   } finally {
     updateInstallerPayslipState(monthKey);
   }
@@ -211,8 +383,17 @@ function drawPayouts() {
   const thresholdVal = config.installations_before_crediting || 15;
   const leadWeight = config.lead_credit !== undefined ? config.lead_credit : 1.0;
   const assistWeight = config.assist_credit !== undefined ? config.assist_credit : 0.5;
+  const ocularWeight = config.ocular_credit !== undefined ? config.ocular_credit : 0;
+  const repairWeight = config.repair_credit !== undefined ? config.repair_credit : 0;
   const leadRateVal = config.lead_rate || 1000;
   const assistRateVal = config.assist_rate || 500;
+  const ocularRateVal = config.ocular_rate || 0;
+  const repairRateVal = config.repair_rate || 0;
+  const ocularRepairEffectiveFrom = String(config.ocular_repair_effective_from || '');
+  const payoutSchedules = [...(payoutTrackerData.config?.payoutSchedules || [15, 30])]
+    .map(Number)
+    .filter(Boolean)
+    .sort((a, b) => a - b);
   const extraServicesList = (config.extra_services || []).map(es => {
     let sku = es.sku || es.name || '';
     if (sku === 'Welding Baseplate Metal') sku = 'BASEPLATE-M';
@@ -225,28 +406,34 @@ function drawPayouts() {
   document.getElementById('payout-assist-weight').textContent = assistWeight.toFixed(1);
   document.getElementById('payout-target-threshold').textContent = thresholdVal + ' Counts';
 
-  // 1. Gather all bookings for selected month
-  const monthBookings = dbBookings.filter(b => {
+  // Keep all Done work available so threshold eligibility can be calculated in
+  // its installation month before a post-cutoff payout is carried forward.
+  const eligibleBookings = dbBookings.filter(b => {
     if (!b.scheduled_date) return false;
-    const d = new Date(b.scheduled_date);
-    const bookingMonthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    return bookingMonthKey === targetMonthKey;
+    if (String(b.status || '').toLowerCase() === 'cancelled') return false;
+    return true;
   });
 
   const doorJobs = [];
-  monthBookings.forEach(b => {
-    const assignmentType = String(b.product_skus || '').trim().toLowerCase();
+  eligibleBookings.forEach(b => {
+    const assignmentSkus = String(b.product_skus || '')
+      .split('|')
+      .map((sku) => sku.trim().toLowerCase())
+      .filter(Boolean);
     const orderNo = String(b.order_no || '').toUpperCase();
-    const isNonCreditableJob = assignmentType === 'day off' || assignmentType === 'ocular' || assignmentType === 'backjob'
-      || orderNo.startsWith('DO-') || orderNo.startsWith('OC-') || orderNo.startsWith('BJ-');
-    if (isNonCreditableJob) return;
+    const isDayOff = assignmentSkus.includes('day off') || orderNo.startsWith('DO-');
+    const isBackjob = assignmentSkus.includes('backjob') || orderNo.startsWith('BJ-');
+    const isOcular = assignmentSkus.includes('ocular');
+    const isRepair = assignmentSkus.includes('repair');
+    if (isDayOff || isBackjob) return;
+    if ((isOcular || isRepair) && (!ocularRepairEffectiveFrom || b.scheduled_date < ocularRepairEffectiveFrom)) return;
 
     const assignedDoors = getInstallerAssignedDoorsForBooking(b, myId);
     assignedDoors.forEach(d => {
       if (d.completed) {
         doorJobs.push({
           completed_at: d.completed_at || b.updated_at || b.created_at || b.scheduled_date,
-          roles: d.roles,
+          roles: isOcular ? ['ocular'] : isRepair ? ['repair'] : d.roles,
           skus: d.skus,
           scheduled_date: b.scheduled_date
         });
@@ -262,39 +449,62 @@ function drawPayouts() {
   let serviceEarnings = 0;
   const serviceCounts = {};
 
-  let runningCredit = 0;
+  let completedMonthCredit = 0;
+  const creditBySourceMonth = {};
+  let payoutEligibleExtraCredit = 0;
   let thresholdEarnings = 0;
+  const cutoffPayouts = {};
+  payoutSchedules.forEach(day => { cutoffPayouts[day] = 0; });
 
   doorJobs.forEach(job => {
     let weight = 0;
-    if (job.roles.includes('lead')) {
-      leadCount++;
-      weight = leadWeight;
-    } else if (job.roles.includes('assist')) {
-      assistCount++;
-      weight = assistWeight;
+    let jobRate = 0;
+    if (job.roles.includes('lead')) weight = leadWeight;
+    else if (job.roles.includes('assist')) weight = assistWeight;
+    else if (job.roles.includes('ocular')) weight = ocularWeight;
+    else if (job.roles.includes('repair')) weight = repairWeight;
+    if (job.roles.includes('lead')) jobRate = leadRateVal;
+    else if (job.roles.includes('assist')) jobRate = assistRateVal;
+    else if (job.roles.includes('ocular')) jobRate = ocularRateVal;
+    else if (job.roles.includes('repair')) jobRate = repairRateVal;
+
+    const sourceMonth = String(job.scheduled_date || '').slice(0, 7);
+    if (!sourceMonth) return;
+    const previousCredit = creditBySourceMonth[sourceMonth] || 0;
+    const newCredit = previousCredit + weight;
+    const thresholdPayForJob = !isOwner && newCredit > thresholdVal ? jobRate : 0;
+    creditBySourceMonth[sourceMonth] = newCredit;
+
+    // Completion progress belongs to the scheduled installation month.
+    if (sourceMonth === targetMonthKey) {
+      completedMonthCredit += weight;
+      if (job.roles.includes('lead')) leadCount++;
+      else if (job.roles.includes('assist')) assistCount++;
     }
 
+    // Money follows the cutoff bucket. For example, a Done July 31 job remains
+    // a July completion but appears in the first August payout.
+    const payoutBucket = getInstallerPayoutCutoffBucket(job.scheduled_date, payoutSchedules);
+    if (!payoutBucket || payoutBucket.monthKey !== targetMonthKey) return;
+
+    thresholdEarnings += thresholdPayForJob;
+    if (thresholdPayForJob > 0) payoutEligibleExtraCredit += weight;
+
+    let servicePayForJob = 0;
     if (!isOwner && job.roles.includes('service')) {
       job.skus.forEach(sku => {
         const matchedService = extraServicesList.find(es => es.sku === sku);
         if (matchedService) {
           serviceCounts[sku] = (serviceCounts[sku] || 0) + 1;
           serviceEarnings += matchedService.rate;
+          servicePayForJob += matchedService.rate;
         }
       });
     }
-
-    const previousCredit = runningCredit;
-    const newCredit = previousCredit + weight;
-    if (!isOwner && newCredit > thresholdVal) {
-      const extraCredit = weight;
-      thresholdEarnings += extraCredit * leadRateVal;
-    }
-    runningCredit = newCredit;
+    cutoffPayouts[payoutBucket.day] = (cutoffPayouts[payoutBucket.day] || 0) + thresholdPayForJob + servicePayForJob;
   });
 
-  const totalCredit = runningCredit;
+  const totalCredit = completedMonthCredit;
   
   // Update Threshold Progress
   const thresholdSummary = `${totalCredit.toFixed(1)} / ${thresholdVal} Counts`;
@@ -313,13 +523,11 @@ function drawPayouts() {
   // 2. Calculate threshold earnings (extra works past threshold)
   let thresholdEarningsDetailsHtml = '';
 
-  if (totalCredit > thresholdVal) {
-    const extraCredit = thresholdEarnings / leadRateVal;
-
+  if (thresholdEarnings > 0) {
     thresholdEarningsDetailsHtml = `
       <div style="display:flex; justify-content:space-between;">
-        <span>Extra Credits:</span>
-        <strong>+${extraCredit.toFixed(1)}</strong>
+        <span>Payout-eligible Extra Credits:</span>
+        <strong>+${payoutEligibleExtraCredit.toFixed(1)}</strong>
       </div>
       <div style="display:flex; justify-content:space-between; font-size:0.78rem; color:var(--text-muted);">
         <span>Lead Payout Rate (1.0 cr):</span>
@@ -331,7 +539,7 @@ function drawPayouts() {
       </div>
     `;
   } else {
-    thresholdEarningsDetailsHtml = `<div style="font-style:italic; color:var(--text-muted); font-size:0.8rem;">Threshold not reached yet (${totalCredit.toFixed(1)} / ${thresholdVal}).</div>`;
+    thresholdEarningsDetailsHtml = `<div style="font-style:italic; color:var(--text-muted); font-size:0.8rem;">No threshold earnings are payable in this month's cutoff buckets.</div>`;
   }
 
   const peso = value => `₱${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -360,6 +568,21 @@ function drawPayouts() {
   document.getElementById('payout-services-total').textContent = peso(serviceEarnings);
   document.getElementById('payout-services-total').dataset.total = String(serviceEarnings);
   document.getElementById('payout-services-details').innerHTML = servicesDetailsHtml;
+
+  const serviceDescription = Object.entries(serviceCounts).map(([sku]) => {
+    const matched = extraServicesList.find(item => item.sku === sku);
+    return `₱${Number(matched?.rate || 0).toLocaleString()} per ${sku}`;
+  }).join('\n');
+  installerPayslipModel = {
+    monthKey: targetMonthKey,
+    thresholdEarnings,
+    thresholdDescription: thresholdEarnings > 0
+      ? `₱${leadRateVal.toLocaleString()} per extra work`
+      : `Threshold of ${thresholdVal} counts not reached`,
+    serviceEarnings,
+    serviceDescription: serviceDescription || 'No extra paid services recorded',
+    cutoffPayouts
+  };
 
   // 4. Grand Total
   const grandTotal = thresholdEarnings + serviceEarnings;

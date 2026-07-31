@@ -229,6 +229,28 @@
     }
     .form-select:focus { border-color: var(--cyan); }
 
+    .commission-summary-table {
+      min-width: 0;
+    }
+    .commission-summary-table th,
+    .commission-summary-table td {
+      position: static !important;
+      left: auto !important;
+      top: auto !important;
+      width: auto !important;
+      min-width: 0 !important;
+      max-width: none !important;
+      box-shadow: none !important;
+    }
+    .commission-summary-table th::after,
+    .commission-summary-table td::after {
+      display: none !important;
+    }
+    .commission-summary-table td:last-child,
+    .commission-summary-table th:last-child {
+      text-align: right;
+    }
+
     /* Status badges */
     .status-badge { display: inline-block; padding: 0.2rem 0.55rem; border-radius: 20px; font-size: 0.72rem; font-weight: 600; }
     .status-published { background: rgba(22,163,74,0.1); color: var(--success); }
@@ -335,13 +357,11 @@
         min-width: 0;
         font-size: 0.8rem;
       }
-      .panel-header label[for="status-filter"],
       .panel-header label[for="assign-filter"] {
         align-self: center;
         margin-left: 0 !important;
         font-size: 0.68rem !important;
       }
-      #status-filter,
       #assign-filter {
         width: 100% !important;
         min-height: 36px;
@@ -444,13 +464,6 @@
                     </button>
                     <input type="month" id="month-filter" style="position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; pointer-events: none; z-index: 1; margin: 0; padding: 0;" />
                   </div>
-                  <label for="status-filter" style="font-size: 0.8rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0; margin-left: 1rem;">Status:</label>
-                  <select id="status-filter" class="form-select" style="font-size: 0.8rem; padding: 0.25rem 0.5rem; height: auto; width: 120px;">
-                    <option value="all">All</option>
-                    <option value="pending">Pending</option>
-                    <option value="eligible" selected>Eligible</option>
-                    <option value="cancelled">Cancelled</option>
-                  </select>
                   <label for="assign-filter" style="font-size: 0.8rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0; margin-left: 1rem;">Assign:</label>
                   <select id="assign-filter" class="form-select" style="font-size: 0.8rem; padding: 0.25rem 0.5rem; height: auto; width: 130px;">
                     <option value="all" selected>All</option>
@@ -500,6 +513,27 @@
               </div>
             </div>
 
+            <div class="panel">
+              <div class="panel-header">
+                <span>Summary of sales and commissions</span>
+              </div>
+              <div class="table-responsive">
+                <table class="commission-summary-table" aria-label="Monthly eligible commission summary">
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Total</th>
+                    </tr>
+                  </thead>
+                  <tbody id="commission-summary-body">
+                    <tr>
+                      <td colspan="2" style="padding: 2rem; text-align: center; color: var(--text-muted);">Loading summary...</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
           </div>
         </div>
       </main>
@@ -523,6 +557,7 @@
 
     let dbBookings = [];
     let dbProducts = [];
+    let dbEmployees = [];
     let eligibleEmployees = [];
     let commissionsConfig = { rates: [], eligibility_rules: [] };
     let currentCompanyId = null;
@@ -845,13 +880,6 @@
         updateMonthLabel(currentMonthStr);
         monthFilter.addEventListener('change', (e) => {
           updateMonthLabel(e.target.value);
-          renderCommissionsTable();
-        });
-      }
-
-      const statusFilter = document.getElementById('status-filter');
-      if (statusFilter) {
-        statusFilter.addEventListener('change', () => {
           renderCommissionsTable();
         });
       }
@@ -1200,7 +1228,8 @@
           .filter(a => Array.isArray(a.visibility) && a.visibility.includes('sales.commissions'))
           .map(a => a.name);
 
-        eligibleEmployees = (employeesRes.data || []).filter(e => e.assignment && commsAssignments.includes(e.assignment));
+        dbEmployees = employeesRes.data || [];
+        eligibleEmployees = dbEmployees.filter(e => e.assignment && commsAssignments.includes(e.assignment));
 
         if (configRes.data && configRes.data.value) {
           commissionsConfig = configRes.data.value;
@@ -1415,24 +1444,32 @@
 
       const monthFilter = document.getElementById('month-filter');
       const selectedMonth = monthFilter ? monthFilter.value : '';
-      const statusFilter = document.getElementById('status-filter');
-      const statusFilterVal = statusFilter ? statusFilter.value : 'all';
       const assignFilter = document.getElementById('assign-filter');
       const assignFilterVal = assignFilter ? assignFilter.value : 'all';
 
-      let filteredBookings = dbBookings;
-      if (selectedMonth) {
-        filteredBookings = dbBookings.filter(b => {
-          if (!b.scheduled_date) return false;
-          const date = new Date(b.scheduled_date);
-          const yyyy = date.getFullYear();
-          const mm = String(date.getMonth() + 1).padStart(2, '0');
-          return `${yyyy}-${mm}` === selectedMonth;
-        });
-      }
+      const parseBookingDoors = booking => {
+        if (Array.isArray(booking?.doors)) return booking.doors;
+        try { return JSON.parse(booking?.doors || '[]'); } catch (_) { return []; }
+      };
+      const isSmartlockCalendarDone = booking => {
+        if (!booking || String(booking.status || '').toLowerCase() === 'cancelled') return false;
+        const status = String(booking.status || '').toLowerCase();
+        const doors = parseBookingDoors(booking);
+        return ['done', 'completed', 'finished'].includes(status)
+          || (doors.length > 0 && doors.every(door => Boolean(door?.completed)));
+      };
+
+      // Commission rows use only the selected install month and the Smartlock
+      // Calendar completion flag. Media upload state is intentionally ignored.
+      const filteredBookings = dbBookings.filter(booking => {
+        if (!booking.scheduled_date || !selectedMonth) return false;
+        return String(booking.scheduled_date).slice(0, 7) === selectedMonth
+          && isSmartlockCalendarDone(booking);
+      });
 
       if (filteredBookings.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="${10 + rates.length}" style="padding: 3rem; text-align: center; color: var(--text-muted);">No bookings found for the selected month.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="${10 + rates.length}" style="padding: 3rem; text-align: center; color: var(--text-muted);">No completed installation jobs found for the selected month.</td></tr>`;
+        renderMonthlyCommissionSummary([], {}, rates);
         return;
       }
 
@@ -1441,6 +1478,8 @@
       dbProducts.forEach(p => {
         if (p.sku) productMap[p.sku.toLowerCase()] = p;
       });
+
+      renderMonthlyCommissionSummary(filteredBookings, productMap, rates);
 
       // Render rows by splitting bookings with multiple products
       const rowsHtml = [];
@@ -1480,22 +1519,6 @@
         const finalEligibleCentavos = calc.finalEligibleCentavos;
         const totalPriceCentavos = calc.totalPriceCentavos;
 
-        let doorsArr = [];
-        if (typeof b.doors === 'string') {
-          try { doorsArr = JSON.parse(b.doors); } catch(_) {}
-        } else if (Array.isArray(b.doors)) {
-          doorsArr = b.doors;
-        }
-
-        // Check status:
-        const isCancelled = b.status === 'cancelled';
-        const isBookingDone = ['done', 'completed', 'finished'].includes(b.status) || (doorsArr.length > 0 && doorsArr.every(d => d.completed));
-
-        // Filter by status dropdown
-        if (statusFilterVal === 'eligible' && (isCancelled || !isBookingDone)) return;
-        if (statusFilterVal === 'pending' && (isCancelled || isBookingDone)) return;
-        if (statusFilterVal === 'cancelled' && !isCancelled) return;
-
         // Filter by assign dropdown (complete vs incomplete)
         let isRowComplete = true;
         rates.forEach(r => {
@@ -1507,11 +1530,9 @@
           }
         });
 
-        const isReallyComplete = isRowComplete && !isCancelled;
-        if (statusFilterVal !== 'cancelled') {
-          if (assignFilterVal === 'complete' && !isReallyComplete) return;
-          if (assignFilterVal === 'incomplete' && (isReallyComplete || isCancelled)) return;
-        }
+        const isReallyComplete = isRowComplete;
+        if (assignFilterVal === 'complete' && !isReallyComplete) return;
+        if (assignFilterVal === 'incomplete' && isReallyComplete) return;
 
         // Build dynamic rate cells
         let ratesCellsHtml = '';
@@ -1529,7 +1550,7 @@
           const activeCount = assignedIds.filter(id => id !== '' && id !== 'none').length;
           const divisor = activeCount || 1;
           const splitPercent = percent / divisor;
-          const eligibleCentavos = isCancelled ? 0 : finalEligibleCentavos;
+          const eligibleCentavos = finalEligibleCentavos;
           const splitCommAmountCentavos = Math.round(eligibleCentavos * (splitPercent / 100));
 
           const adjHtml = adjustment !== 0 ? `
@@ -1673,9 +1694,7 @@
           }
         });
 
-        const statusText = isCancelled ? 'Cancelled' : (isBookingDone ? 'Eligible' : 'Pending');
-        const badgeClass = isCancelled ? 'status-badge status-cancelled' : (isBookingDone ? 'status-badge status-published' : 'status-badge status-draft');
-        const statusHtml = `<td><span class="${badgeClass}">${statusText}</span></td>`;
+        const statusHtml = '<td><span class="status-badge status-published">Eligible</span></td>';
 
         const skuBadges = eligibleSkusList.map(s => `<span class="sku-badge" style="font-family: var(--font-mono); font-weight: 700; font-size: 0.78rem; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 4px; padding: 0.15rem 0.4rem; color: var(--text-primary); margin-right: 0.25rem;">${escapeHtml(s)}</span>`).join('');
 
@@ -1715,6 +1734,80 @@
       }
 
       tbody.innerHTML = rowsHtml.join('');
+    }
+
+    function renderMonthlyCommissionSummary(bookings, productMap, rates) {
+      const summaryBody = document.getElementById('commission-summary-body');
+      if (!summaryBody) return;
+
+      const totalsByEmployee = new Map();
+
+      bookings.forEach(booking => {
+        const calc = getBookingEligibleCentavos(
+          booking,
+          productMap,
+          commissionsConfig.eligibility_rules
+        );
+        if (!calc.finalEligibleCentavos) return;
+
+        rates.forEach(rate => {
+          const cellKey = `${booking.id}_ORDER_TOTAL_0_${rate.label}`;
+          const assignedIds = (cellAssignments[cellKey] || [])
+            .filter(id => id && id !== 'none');
+          if (assignedIds.length === 0) return;
+
+          const basePercent = parseFloat(rate.value) || 0;
+          const adjustment = getCommissionAdjustmentForBooking(
+            booking,
+            rate.label,
+            productMap,
+            commissionsConfig.adjustment_rules
+          );
+          const splitPercent = (basePercent + adjustment) / assignedIds.length;
+          const amountPerEmployee = Math.round(
+            calc.finalEligibleCentavos * (splitPercent / 100)
+          );
+
+          assignedIds.forEach(employeeId => {
+            totalsByEmployee.set(
+              employeeId,
+              (totalsByEmployee.get(employeeId) || 0) + amountPerEmployee
+            );
+          });
+        });
+      });
+
+      if (totalsByEmployee.size === 0) {
+        summaryBody.innerHTML = `
+          <tr>
+            <td colspan="2" style="padding: 2rem; text-align: center; color: var(--text-muted);">
+              No eligible commissions assigned for the selected month.
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      const employeeMap = new Map(dbEmployees.map(employee => [
+        employee.id,
+        `${employee.first_name || ''} ${employee.last_name || ''}`.trim()
+      ]));
+
+      const rows = Array.from(totalsByEmployee.entries())
+        .map(([employeeId, total]) => ({
+          name: employeeMap.get(employeeId) || 'Unknown Employee',
+          total
+        }))
+        .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
+
+      summaryBody.innerHTML = rows.map(row => `
+        <tr>
+          <td>${escapeHtml(row.name)}</td>
+          <td style="font-variant-numeric: tabular-nums; font-weight: 700; color: var(--success);">
+            ${fmtPHP(row.total)}
+          </td>
+        </tr>
+      `).join('');
     }
 
     window.openViewReceiptById = async function(bookingId) {

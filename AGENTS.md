@@ -683,3 +683,26 @@ We use two distinct patterns for modal overlays. Do NOT mix them:
 >   company-name text. Keep meaningful image alt text for supported logos.
 > - **Selected Test Only**: A test-email action must send only the email type
 >   currently selected in the UI, never every template in the set.
+
+---
+
+## 25. Installation Completion Month vs. Payout Cutoff
+> [!CRITICAL]
+> Installation completion and installation payout eligibility are related but
+> distinct business facts:
+>
+> - Count an installer assignment as completed when its assigned door is marked
+>   completed, or when the whole booking is marked `done`, `completed`, or
+>   `finished`. This preserves valid legacy door-level completion records.
+> - Attribute the completed count to the booking's `scheduled_date` calendar
+>   month. Never move the completed count into the following month.
+> - Use that same `scheduled_date` to determine the payout cutoff bucket.
+> - Work dated after the month's final cutoff rolls into the first payout of the
+>   next month, but remains a completion in its original installation month.
+> - Scheduled assignments that are not Done do not count and do not roll over
+>   until they are marked Done.
+>
+> Example: with July cutoffs on the 15th and 30th, a Done installation dated
+> July 31 is included in July's completed installation count and paid in the
+> first August cutoff. An unfinished July 31 assignment is included in neither
+> completed counts nor payout.

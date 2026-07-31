@@ -153,7 +153,7 @@ function renderFeaturesHtml(featuresRow, configuredLabels = {}) {
     const display = (valStr.toLowerCase() === 'x') ? label : `${label} (${valStr})`;
     html += `
       <li style="display:flex; align-items:center; gap:0.5rem; font-size:0.95rem; color:var(--text-secondary);">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--cyan)" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--cyan)" stroke-width="3" style="flex:0 0 16px;"><path d="M20 6L9 17l-5-5"/></svg>
         ${escapeHtml(display)}
       </li>
     `;

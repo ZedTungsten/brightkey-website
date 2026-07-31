@@ -1608,6 +1608,7 @@
         const listEl = document.getElementById('home-events-list');
         if (!listEl) return;
 
+        const now = new Date();
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
@@ -1637,13 +1638,34 @@
           });
         }
 
-        // Helper to find next recurrence date
+        const getOccurrenceEnd = (ev, occurrenceDate) => {
+          let end = new Date(occurrenceDate);
+
+          if (!ev.is_recurring && ev.is_date_range && ev.date_to) {
+            const endParts = String(ev.date_to).split('-').map(Number);
+            if (endParts.length === 3 && endParts.every(Number.isFinite)) {
+              end = new Date(endParts[0], endParts[1] - 1, endParts[2]);
+            }
+          }
+
+          if (ev.time_end) {
+            const [hours, minutes] = String(ev.time_end).split(':').map(Number);
+            end.setHours(hours || 0, minutes || 0, 0, 0);
+          } else {
+            end.setHours(23, 59, 59, 999);
+          }
+
+          return end;
+        };
+
+        // Helper to find the next occurrence that has not already ended.
         const getNextOccurrence = (ev, todayDate) => {
           if (!ev.is_recurring) {
+            if (!ev.date_from) return null;
             const dateParts = ev.date_from.split('-').map(Number);
             const d = new Date(dateParts[0], dateParts[1] - 1, dateParts[2]);
             d.setHours(0, 0, 0, 0);
-            return d;
+            return getOccurrenceEnd(ev, d) >= now ? d : null;
           }
 
           const pattern = ev.recurrence_pattern;
@@ -1678,7 +1700,7 @@
               matches = (targetMonth !== undefined && targetDay !== undefined && testDate.getMonth() === targetMonth && testDate.getDate() === targetDay);
             }
 
-            if (matches) {
+            if (matches && getOccurrenceEnd(ev, testDate) >= now) {
               return testDate;
             }
           }

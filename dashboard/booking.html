@@ -1046,12 +1046,15 @@
 
           const [productsRes, inventoryRes, employeesRes, assignmentsRes, warehousesRes] = await Promise.all([
             sb.from('products')
-              .select('id, sku, title, image_main, installation_price, count_inventory'),
+              .select('id, sku, title, category, image_main, installation_price, count_inventory')
+              .or(`company_id.eq.${currentCompanyId},company_id.is.null`)
+              .limit(2000),
             sb.from('inventory')
-              .select('sku, available, warehouse_id')
-              .eq('company_id', currentCompanyId),
+              .select('sku, available, warehouse_id, company_id')
+              .or(`company_id.eq.${currentCompanyId},company_id.is.null`)
+              .limit(2000),
             sb.from('employees')
-              .select('id, employee_number, first_name, last_name, title, department, assignment, address')
+              .select('id, employee_number, first_name, last_name, title, department, assignment, address, employment_status')
               .eq('company_id', currentCompanyId),
             sb.from('employee_assignments').select('id, name, visibility').eq('company_id', currentCompanyId || ''),
             sb.from('warehouses').select('id, name').eq('tenant_id', tenantId).eq('is_active', true).order('created_at', { ascending: true })
@@ -1064,7 +1067,24 @@
             dbWarehouses = warehousesRes.data;
           }
           if (inventoryRes.data) {
-            dbInventory = inventoryRes.data;
+            const inventoryByWarehouseSku = new Map();
+            inventoryRes.data.forEach(item => {
+              const normalizedSku = String(item.sku || '').trim().toUpperCase();
+              const warehouseId = String(item.warehouse_id || '');
+              if (!normalizedSku || !warehouseId) return;
+
+              const key = `${warehouseId}::${normalizedSku}`;
+              const existing = inventoryByWarehouseSku.get(key);
+              const isCompanyOwned = item.company_id === currentCompanyId;
+              const existingIsCompanyOwned = existing?.company_id === currentCompanyId;
+
+              // Match the Warehouse & Inventory Ledger compatibility rule while
+              // preferring the tenant-owned snapshot over a legacy null-owned row.
+              if (!existing || (isCompanyOwned && !existingIsCompanyOwned)) {
+                inventoryByWarehouseSku.set(key, item);
+              }
+            });
+            dbInventory = Array.from(inventoryByWarehouseSku.values());
           }
 
           // Store installer-eligible assignment names (those with booking.door_specifications visibility)
@@ -1087,6 +1107,7 @@
               salePrice: null, // Always use installation price
               available: invMap[p.sku] || 0,
               img: p.image_main || '../assets/og-image.png',
+              category: p.category || '',
               count_inventory: p.count_inventory !== false
             }));
           }
@@ -1222,15 +1243,26 @@
     function buildDoorInstallerOptions(selectedId = '') {
       const employeeSource = dbEmployees.length > 0 ? dbEmployees : MOCK_EMPLOYEES;
       const installerNames = window._installerAssignmentNames || [];
+      const installerNameSet = new Set(
+        installerNames.map(name => String(name || '').trim().toLowerCase()).filter(Boolean)
+      );
       const installers = employeeSource.filter(emp => {
+        const isActive = String(emp.employment_status || 'Active').trim().toLowerCase() === 'active';
+        if (!isActive && emp.id !== selectedId) return false;
+        const employeeAssignments = String(emp.assignment || '')
+          .split(',')
+          .map(assignment => assignment.trim().toLowerCase())
+          .filter(Boolean);
         // Filter by assignment if assignments are configured
-        if (installerNames.length > 0) {
-          return emp.assignment && installerNames.includes(emp.assignment);
+        if (installerNameSet.size > 0) {
+          return employeeAssignments.some(assignment => installerNameSet.has(assignment));
         }
         // Fallback: title/position/assignment-based filter for when assignments aren't set up yet
         const title = (emp.title || emp.position || '').toLowerCase();
-        const assignment = (emp.assignment || '').toLowerCase();
-        return title.includes('installer') || title.includes('operations') || title.includes('field') || assignment.includes('installer');
+        return title.includes('installer') ||
+          title.includes('operations') ||
+          title.includes('field') ||
+          employeeAssignments.includes('installer');
       });
       let html = '<option value="">-- Unassigned --</option>';
       installers.forEach(inst => {
@@ -1294,11 +1326,35 @@
       }
     }
 
+    function updateDoorServiceInstaller(doorId) {
+      const wrapper = document.getElementById(`${doorId}-service-installer`);
+      if (!wrapper) return;
+
+      const attachedSkus = window.doorAttachedProducts[doorId] || [];
+      const hasServiceProduct = attachedSkus.some(sku => {
+        const normalizedSku = String(sku || '').trim().toUpperCase();
+        const product = dbProducts.find(item =>
+          String(item.sku || '').trim().toUpperCase() === normalizedSku
+        );
+        return String(product?.category || '').trim().toLowerCase() === 'service';
+      });
+
+      wrapper.style.display = hasServiceProduct ? 'flex' : 'none';
+      if (!hasServiceProduct) {
+        const serviceSelect = wrapper.querySelector('.door-service-select');
+        if (serviceSelect) serviceSelect.value = '';
+      }
+    }
+
     // --- Dynamic Product Rows ---
     function getProductStockInWarehouse(sku, warehouseId) {
       if (!warehouseId) return 0;
-      const inv = dbInventory.find(item => item.sku === sku && item.warehouse_id === warehouseId);
-      return inv ? inv.available : 0;
+      const normalizedSku = String(sku || '').trim().toUpperCase();
+      const inv = dbInventory.find(item =>
+        String(item.sku || '').trim().toUpperCase() === normalizedSku &&
+        item.warehouse_id === warehouseId
+      );
+      return inv ? Number(inv.available || 0) : 0;
     }
 
     function populateProductOptions(rowId, warehouseId) {
@@ -1479,6 +1535,8 @@
           select.innerHTML = optionsHtml;
           select.value = ''; // Reset select to placeholder after draw
         }
+
+        updateDoorServiceInstaller(doorId);
       });
     }
 
@@ -1589,6 +1647,12 @@
                 <div style="display:flex; gap:0.4rem; align-items:center;">
                   <span style="font-size:0.7rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.04em; min-width:38px; flex-shrink:0;">Lead</span>
                   <select class="form-input door-installer-select door-lead-select" data-role="lead" style="height:auto; padding:0.4rem; flex:1;">
+                    ${buildDoorInstallerOptions()}
+                  </select>
+                </div>
+                <div id="${doorId}-service-installer" style="display:none; gap:0.4rem; align-items:center;">
+                  <span style="font-size:0.7rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.04em; min-width:38px; flex-shrink:0;">Service</span>
+                  <select class="form-input door-installer-select door-service-select" data-role="service" style="height:auto; padding:0.4rem; flex:1;">
                     ${buildDoorInstallerOptions()}
                   </select>
                 </div>

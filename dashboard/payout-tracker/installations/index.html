@@ -178,7 +178,7 @@
         // 4. Bookings
         try {
           const { data, error } = await sb.from('installation_bookings')
-            .select('id, status, scheduled_date, updated_at, created_at, doors, products, product_skus, installers, installer_id, installer_name')
+            .select('id, order_no, status, scheduled_date, updated_at, created_at, doors, products, product_skus, installers, installer_id, installer_name')
             .eq('company_id', this.companyId);
           if (error) throw error;
           this.bookingsList = data || [];
@@ -226,6 +226,7 @@
       },
 
       getAssignedDoorsForBookingAndEmployee(b, empId) {
+        const bookingIsDone = ['done', 'completed', 'finished'].includes(String(b.status || '').toLowerCase());
         let doorsArr = [];
         if (b.doors) {
           if (typeof b.doors === 'string') {
@@ -283,7 +284,7 @@
               : skus;
 
             assignedDoors.push({
-              completed: b.status === 'done' || b.status === 'completed' || b.status === 'finished',
+              completed: bookingIsDone,
               roles: roles,
               skus: activeSkus,
               completed_at: b.updated_at || b.created_at
@@ -365,7 +366,7 @@
             }
 
             assignedDoors.push({
-              completed: !!door.completed,
+              completed: Boolean(door.completed) || bookingIsDone,
               roles: roles,
               skus: doorSkus,
               completed_at: door.completed_at || b.updated_at || b.created_at
@@ -394,11 +395,16 @@
         const thresholdVal = this.payoutSettings.installations_before_crediting || 15;
         const leadWeight = this.payoutSettings.lead_credit !== undefined ? this.payoutSettings.lead_credit : 1.0;
         const assistWeight = this.payoutSettings.assist_credit !== undefined ? this.payoutSettings.assist_credit : 0.5;
+        const ocularWeight = this.payoutSettings.ocular_credit !== undefined ? this.payoutSettings.ocular_credit : 0;
+        const repairWeight = this.payoutSettings.repair_credit !== undefined ? this.payoutSettings.repair_credit : 0;
         const leadRateVal = this.payoutSettings.lead_rate || 1000;
         const assistRateVal = this.payoutSettings.assist_rate || 500;
+        const ocularRateVal = this.payoutSettings.ocular_rate || 0;
+        const repairRateVal = this.payoutSettings.repair_rate || 0;
+        const ocularRepairEffectiveFrom = String(this.payoutSettings.ocular_repair_effective_from || '');
 
         if (thresholdLabelEl) {
-          thresholdLabelEl.textContent = `Config: Threshold = ${thresholdVal} Counts | Lead = ${leadWeight.toFixed(1)} cr (₱${leadRateVal.toLocaleString()}) | Assist = ${assistWeight.toFixed(1)} cr (₱${assistRateVal.toLocaleString()})`;
+          thresholdLabelEl.textContent = `Config: Threshold = ${thresholdVal} Counts | Lead = ${leadWeight.toFixed(1)} cr (₱${leadRateVal.toLocaleString()}) | Assist = ${assistWeight.toFixed(1)} cr (₱${assistRateVal.toLocaleString()}) | Ocular = ${ocularWeight.toFixed(1)} cr (₱${ocularRateVal.toLocaleString()}) | Repair = ${repairWeight.toFixed(1)} cr (₱${repairRateVal.toLocaleString()})`;
         }
 
         const extraServicesList = (this.payoutSettings.extra_services || []).map(es => {
@@ -411,7 +417,7 @@
         // Keep all eligible work so monthly threshold progress is preserved before carryover.
         const eligibleBookings = this.bookingsList.filter(b => {
           if (!b.scheduled_date) return false;
-          if (b.status === 'cancelled') return false;
+          if (String(b.status || '').toLowerCase() === 'cancelled') return false;
           return true;
         }).sort((a, b) => String(a.scheduled_date).localeCompare(String(b.scheduled_date)));
 
@@ -427,28 +433,54 @@
           const creditBySourceMonth = {};
 
           eligibleBookings.forEach(b => {
+            const assignmentSkus = String(b.product_skus || '')
+              .split('|')
+              .map((sku) => sku.trim().toLowerCase())
+              .filter(Boolean);
+            const orderNo = String(b.order_no || '').toUpperCase();
+            const isDayOff = assignmentSkus.includes('day off') || orderNo.startsWith('DO-');
+            const isBackjob = assignmentSkus.includes('backjob') || orderNo.startsWith('BJ-');
+            const isOcular = assignmentSkus.includes('ocular');
+            const isRepair = assignmentSkus.includes('repair');
+            if (isDayOff || isBackjob) return;
+            if ((isOcular || isRepair) && (!ocularRepairEffectiveFrom || b.scheduled_date < ocularRepairEffectiveFrom)) return;
+
             const assignedDoors = this.getAssignedDoorsForBookingAndEmployee(b, emp.id);
             assignedDoors.forEach(d => {
               if (!d.completed) return;
 
+              const roles = isOcular ? ['ocular'] : isRepair ? ['repair'] : d.roles;
               let weight = 0;
-              if (d.roles.includes('lead')) weight = leadWeight;
-              else if (d.roles.includes('assist')) weight = assistWeight;
+              let jobRate = 0;
+              if (roles.includes('lead')) weight = leadWeight;
+              else if (roles.includes('assist')) weight = assistWeight;
+              else if (roles.includes('ocular')) weight = ocularWeight;
+              else if (roles.includes('repair')) weight = repairWeight;
+              if (roles.includes('lead')) jobRate = leadRateVal;
+              else if (roles.includes('assist')) jobRate = assistRateVal;
+              else if (roles.includes('ocular')) jobRate = ocularRateVal;
+              else if (roles.includes('repair')) jobRate = repairRateVal;
 
-              const completedAt = d.completed_at || b.updated_at || b.created_at;
-              const sourceMonth = String(completedAt || '').slice(0, 7);
+              const sourceMonth = String(b.scheduled_date || '').slice(0, 7);
               if (!sourceMonth) return;
               const previousCredit = creditBySourceMonth[sourceMonth] || 0;
               const newCredit = previousCredit + weight;
-              const thresholdPayForJob = newCredit > thresholdVal ? weight * leadRateVal : 0;
+              const thresholdPayForJob = newCredit > thresholdVal ? jobRate : 0;
               creditBySourceMonth[sourceMonth] = newCredit;
 
-              const bucket = this.getCutoffBucket(completedAt, this.payoutSchedules);
+              // Completed Counts represent work completed in the selected calendar
+              // month, matching Smartlock Calendar. Payout eligibility is handled
+              // separately below so work past the final cutoff can roll forward
+              // without disappearing from the source month's completion count.
+              if (sourceMonth === mk) {
+                if (d.roles.includes('lead')) leadCount++;
+                else if (d.roles.includes('assist')) assistCount++;
+                totalCredit += weight;
+              }
+
+              const bucket = this.getCutoffBucket(b.scheduled_date, this.payoutSchedules);
               if (!bucket || bucket.monthKey !== mk) return;
 
-              if (d.roles.includes('lead')) leadCount++;
-              else if (d.roles.includes('assist')) assistCount++;
-              totalCredit += weight;
               thresholdEarnings += thresholdPayForJob;
 
               if (d.roles.includes('service')) {
@@ -465,7 +497,7 @@
 
           const grandTotal = thresholdEarnings + serviceEarnings;
 
-          if (leadCount > 0 || assistCount > 0 || Object.keys(serviceCounts).length > 0) {
+          if (leadCount > 0 || assistCount > 0 || grandTotal > 0 || Object.keys(serviceCounts).length > 0) {
             activeInstallers.push({
               emp,
               leadCount,

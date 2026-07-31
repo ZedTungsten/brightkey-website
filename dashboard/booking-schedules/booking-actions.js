@@ -254,6 +254,7 @@
 
       const installerNames = window._installerAssignmentNames || [];
       const installers = dbEmployees.filter(emp => {
+        if (String(emp.employment_status || 'Active').trim().toLowerCase() !== 'active') return false;
         const empAssigns = (emp.assignment || '').split(',').map(s => s.trim());
         const empAssignsLower = empAssigns.map(s => s.toLowerCase());
         if (installerNames.length > 0) {
