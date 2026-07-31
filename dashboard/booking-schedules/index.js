@@ -52,6 +52,7 @@
     let currentTenantId;
     let currentCompanyId;
     let dbBookings = [];
+    let calendarBookings = [];
     let dbTransactionsMap = new Map();
     let dbEmployees = [];
     let dbProducts = [];
@@ -60,6 +61,7 @@
     let bookingChecklist = [];
     let installerPayoutSettings = {};
     let filteredBookings = [];
+    let filteredCalendarBookings = [];
     let selectedBooking = null;
     let selectedDayDate = '';
     let searchQuery = '';
@@ -136,6 +138,18 @@
       const lastDay = new Date(year, month + 1, 0).getDate();
       const end = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
       return { start, end };
+    }
+
+    function formatLocalDate(date) {
+      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    }
+
+    function getCalendarDateRange(year, month) {
+      const startDate = new Date(year, month, 1);
+      startDate.setDate(startDate.getDate() - startDate.getDay());
+      const endDate = new Date(startDate);
+      endDate.setDate(endDate.getDate() + 41);
+      return { start: formatLocalDate(startDate), end: formatLocalDate(endDate) };
     }
 
     const MONTH_NAMES = [
@@ -246,7 +260,7 @@
       }
     }
 
-    // Fetches only the current month's bookings — re-called on month navigation
+    // Fetches the six-week calendar window so adjacent-month dates can be shown.
     function setMonthBookingsLoading(isLoading) {
       const overlay = document.getElementById('month-loading-overlay');
       const navigator = document.getElementById('calendar-month-navigator');
@@ -264,7 +278,8 @@
     async function loadMonthBookings() {
       setMonthBookingsLoading(true);
       updateHash();
-      const { start, end } = getMonthDateRange(currentYear, currentMonth);
+      const { start, end } = getCalendarDateRange(currentYear, currentMonth);
+      const monthRange = getMonthDateRange(currentYear, currentMonth);
       try {
         const bookingsRes = await sb
           .from('installation_bookings')
@@ -289,11 +304,14 @@
           }
         }
 
-        dbBookings = data || [];
+        calendarBookings = data || [];
+        dbBookings = calendarBookings.filter(booking => (
+          booking.scheduled_date >= monthRange.start && booking.scheduled_date <= monthRange.end
+        ));
 
         // Fetch inventory_transactions statuses in batch for the loaded bookings
         dbTransactionsMap.clear();
-        const orderNos = dbBookings.map(b => b.order_no).filter(Boolean);
+        const orderNos = calendarBookings.map(b => b.order_no).filter(Boolean);
         if (orderNos.length > 0) {
           try {
             const { data: txsData, error: txsErr } = await sb
@@ -332,8 +350,9 @@
     function applyFilterAndRender() {
       if (!searchQuery) {
         filteredBookings = [...dbBookings];
+        filteredCalendarBookings = [...calendarBookings];
       } else {
-        filteredBookings = dbBookings.filter(b => {
+        const matchesSearch = b => {
           const name = (b.customer_name || '').toLowerCase();
           const address = (b.customer_address || '').toLowerCase();
           const installer = (b.installer_name || '').toLowerCase();
@@ -342,7 +361,9 @@
             || address.includes(searchQuery)
             || installer.includes(searchQuery)
             || skus.includes(searchQuery);
-        });
+        };
+        filteredBookings = dbBookings.filter(matchesSearch);
+        filteredCalendarBookings = calendarBookings.filter(matchesSearch);
       }
 
       // Sort filtered bookings by scheduled date and time (AM slot before PM slot)
@@ -355,6 +376,12 @@
         const isPmA = isAfternoon(a.scheduled_time) ? 1 : 0;
         const isPmB = isAfternoon(b.scheduled_time) ? 1 : 0;
         return isPmA - isPmB;
+      });
+      filteredCalendarBookings.sort((a, b) => {
+        const dateA = a.scheduled_date || '9999-12-31';
+        const dateB = b.scheduled_date || '9999-12-31';
+        if (dateA !== dateB) return dateA.localeCompare(dateB);
+        return (isAfternoon(a.scheduled_time) ? 1 : 0) - (isAfternoon(b.scheduled_time) ? 1 : 0);
       });
 
       drawCalendar();
@@ -473,27 +500,19 @@
       const cellsContainer = document.getElementById('calendar-cells');
       cellsContainer.innerHTML = '';
 
-      const firstDayDate = new Date(currentYear, currentMonth, 1);
-      const firstDayIndex = firstDayDate.getDay();
-      const totalDays = new Date(currentYear, currentMonth + 1, 0).getDate();
+      const gridStart = new Date(currentYear, currentMonth, 1);
+      gridStart.setDate(gridStart.getDate() - gridStart.getDay());
 
-      // Filler cells for previous month padding
-      for (let i = 0; i < firstDayIndex; i++) {
-        cellsContainer.insertAdjacentHTML('beforeend', `
-          <div class="calendar-cell" style="background:#f9fafb; opacity:0.3;">
-            <div class="calendar-cell-header"><span class="calendar-cell-num"></span></div>
-            <div class="calendar-half am"></div>
-            <div class="calendar-half pm"></div>
-          </div>
-        `);
-      }
-
-      // Populate days
-      for (let day = 1; day <= totalDays; day++) {
-        const dateStr = `${currentYear}-${(currentMonth + 1).toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
+      // Always render a complete six-week grid, including adjacent-month dates.
+      for (let offset = 0; offset < 42; offset++) {
+        const cellDate = new Date(gridStart);
+        cellDate.setDate(gridStart.getDate() + offset);
+        const day = cellDate.getDate();
+        const dateStr = formatLocalDate(cellDate);
+        const isOutsideMonth = cellDate.getFullYear() !== currentYear || cellDate.getMonth() !== currentMonth;
         
         // Filter bookings scheduled for this date (from our searched list)
-        const dayBookings = filteredBookings.filter(b => b.scheduled_date === dateStr);
+        const dayBookings = filteredCalendarBookings.filter(b => b.scheduled_date === dateStr);
 
         let amHtml = '';
         let pmHtml = '';
@@ -611,7 +630,7 @@
 
           const slotColorClass = isDayOff ? 'day-off' : (isAfternoon(b.scheduled_time) ? 'pm' : 'am');
           const slotHtml = `
-            <div class="calendar-slot ${slotColorClass}${isAborted ? ' aborted' : ''}${isFullyDone ? ' completed-media' : ''}" title="${escapeHtml(b.customer_name)} (${escapeHtml(cityStr)})" onclick="event.stopPropagation(); showBookingDetails('${b.id}')">
+            <div class="calendar-slot ${slotColorClass}${isAborted ? ' aborted' : ''}${isFullyDone ? ' completed-media' : ''}${isOutsideMonth ? ' adjacent-month-booking' : ''}" title="${escapeHtml(b.customer_name)} (${escapeHtml(cityStr)})"${isOutsideMonth ? ' aria-disabled="true"' : ` onclick="event.stopPropagation(); showBookingDetails('${b.id}')"`}>
               <div style="font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; width:100%;">${displayText}</div>
               ${badgeHtml}
             </div>
@@ -629,11 +648,11 @@
           ? `<span style="background:#EF4444; color:#fff; font-size:0.6rem; font-weight:700; padding:1px 6px; border-radius:4px; line-height:1.2; text-transform:uppercase; letter-spacing:0.02em;">Workpermit missing</span>`
           : '';
 
-        const isToday = (currentYear === todayYear && currentMonth === todayMonth && day === todayDay);
-        const cellClass = isToday ? 'calendar-cell today' : 'calendar-cell';
+        const isToday = cellDate.getFullYear() === todayYear && cellDate.getMonth() === todayMonth && day === todayDay;
+        const cellClass = `calendar-cell${isOutsideMonth ? ' adjacent-month' : ''}${isToday ? ' today' : ''}`;
 
         const cellHtml = `
-          <div class="${cellClass}" onclick="handleDayClick('${dateStr}', event)">
+          <div class="${cellClass}"${isOutsideMonth ? ' aria-disabled="true"' : ` onclick="handleDayClick('${dateStr}', event)"`}>
             <div class="calendar-cell-header">
               <span class="calendar-cell-num">${day}</span>
               ${workPermitPill}
