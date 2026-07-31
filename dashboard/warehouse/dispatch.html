@@ -83,12 +83,13 @@
                       <th>Qty</th>
                       <th>Packed Date</th>
                       <th>Pickup Date</th>
+                      <th>Notes</th>
                       <th>Install Date</th>
                       <th style="width: 120px; text-align: center;">Action</th>
                     </tr>
                   </thead>
                   <tbody id="dispatch-list">
-                    <tr><td colspan="10" class="text-center text-muted" style="padding:2rem 0;">No items waiting to be dispatched.</td></tr>
+                    <tr><td colspan="11" class="text-center text-muted" style="padding:2rem 0;">No items waiting to be dispatched.</td></tr>
                   </tbody>
                 </table>
               </div>
@@ -404,7 +405,7 @@
 
       const bookingsQuery = companyId
         ? sb.from('installation_bookings')
-          .select('order_no, scheduled_date, scheduled_time, status, customer_name, customer_city, customer_address')
+          .select('order_no, scheduled_date, scheduled_time, status, customer_name, customer_city, customer_address, notes, pickup_notes')
           .eq('company_id', companyId)
         : Promise.resolve({ data: [], error: null });
 
@@ -868,7 +869,7 @@
       });
 
       if (dispatchQueue.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="10" class="text-center text-muted" style="padding:2rem 0;">No packed items ready to dispatch.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="11" class="text-center text-muted" style="padding:2rem 0;">No packed items ready to dispatch.</td></tr>`;
         return;
       }
 
@@ -949,6 +950,8 @@
           ? `<img src="${escFulfillment(group.packed_photo_url)}" alt="Packed order ${escFulfillment(group.reference_id)}" style="width: 80px; height: 50px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-elevated); display: block; cursor: pointer;" onclick="maximizePhoto(this.src)" title="View packed image" />`
           : '<span style="color: var(--text-muted);">No image</span>';
 
+        const notes = pickupSchedule?.notes || installation?.pickup_notes || installation?.notes || '—';
+
         tbody.innerHTML += `
           <tr>
             <td>${packedImageHtml}</td>
@@ -959,6 +962,7 @@
             <td>${qtysHtml}</td>
             <td style="white-space: nowrap;">${packedDate}</td>
             <td style="white-space: nowrap; font-weight: 700; color: var(--cyan-light);">${pickupDate}</td>
+            <td style="font-size:0.8rem; color:var(--text-secondary); max-width:200px; white-space:pre-wrap;">${escFulfillment(notes)}</td>
             <td style="white-space: nowrap; font-weight: 700; color: var(--text-primary);">${installDate}</td>
             <td style="text-align: center;">
               <button class="btn btn-primary" onclick="openPickupModal('${escFulfillment(group.reference_id)}', '${escFulfillment(customerName)}', '${escFulfillment(customerCity)}')" style="padding: 0.3rem 0.6rem; font-size: 0.75rem;">

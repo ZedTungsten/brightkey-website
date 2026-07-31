@@ -367,64 +367,21 @@
 
     async function ensurePackTransactions() {
       if (!WarehousePage.activeWarehouseId) return;
-      const unpackedWithoutTransaction = damagedGoods.filter(record =>
-        !record.archived_at
-        && (record.status || 'unpacked') === 'unpacked'
-        && !record.inventory_transaction_id
-      );
-      if (!unpackedWithoutTransaction.length) return;
-
-      for (const record of unpackedWithoutTransaction) {
-        const supplier = suppliers.find(item => item.id === record.supplier_id);
-        const referenceId = record.reference_id
-          || `SND-DMG-${new Date(record.created_at || Date.now()).toISOString().slice(0, 10).replace(/-/g, '')}-${record.id.slice(0, 6).toUpperCase()}`;
-
-        const { data: existingTransactions, error: existingError } = await sb
-          .from('inventory_transactions')
-          .select('id')
-          .eq('reference_id', referenceId)
-          .limit(1);
-        if (existingError) throw existingError;
-
-        let transactionId = existingTransactions?.[0]?.id || null;
-        if (!transactionId) {
-          const { data: transaction, error: transactionError } = await sb
-            .from('inventory_transactions')
-            .insert({
-              company_id: companyId,
-              warehouse_id: WarehousePage.activeWarehouseId,
-              sku: record.sku,
-              quantity: 1,
-              type: 'customer_order',
-              status: 'inspect',
-              reference_id: referenceId,
-              customer_name: supplier?.name || 'Damaged Goods',
-              customer_city: supplier?.city || supplier?.province || '',
-              timestamp_inspect: new Date().toISOString()
-            })
-            .select('id')
-            .single();
-          if (transactionError) throw transactionError;
-          transactionId = transaction.id;
-        }
-
-        const { error: linkError } = await sb
+      const { data: reconciledCount, error } = await sb.rpc('reconcile_damaged_goods_inventory', {
+        p_company_id: companyId,
+        p_warehouse_id: WarehousePage.activeWarehouseId
+      });
+      if (error) throw error;
+      if (Number(reconciledCount) > 0) {
+        const { data: refreshed, error: refreshError } = await sb
           .from('damaged_goods')
-          .update({
-            inventory_transaction_id: transactionId,
-            reference_id: referenceId,
-            status: 'unpacked'
-          })
-          .eq('id', record.id)
-          .eq('company_id', companyId);
-        if (linkError) throw linkError;
-
-        record.inventory_transaction_id = transactionId;
-        record.reference_id = referenceId;
-        record.status = 'unpacked';
+          .select('id, company_id, product_id, supplier_id, inventory_transaction_id, reference_id, sku, damage_description, photo_urls, video_url, status, archived_at, created_at, updated_at')
+          .eq('company_id', companyId)
+          .order('created_at', { ascending: false });
+        if (refreshError) throw refreshError;
+        damagedGoods = refreshed || [];
+        await loadWarehouseBadges();
       }
-
-      await loadWarehouseBadges();
     }
 
     async function loadWarehouseBadges() {
@@ -731,6 +688,10 @@
         (!product ? skuSelect : (!supplier ? supplierSelect : descriptionInput)).scrollIntoView({ behavior: 'smooth', block: 'center' });
         return;
       }
+      if (requestedStatus === 'unpacked' && !WarehousePage.activeWarehouseId) {
+        showToast('Select a warehouse before issuing damaged goods.', true);
+        return;
+      }
       const uploadsInProgress = [...photoSlots, videoSlot]
         .filter(Boolean)
         .some(slot => Number.isFinite(Number(slot.progress)) && Number(slot.progress) < 100);
@@ -743,6 +704,7 @@
           .from('inventory_transactions')
           .select('status')
           .eq('id', existing.inventory_transaction_id)
+          .eq('company_id', companyId)
           .maybeSingle();
         if (linkedTransactionError) {
           showToast('The linked Pack entry could not be checked. Please try again.', true);
@@ -798,99 +760,12 @@
         }
         if (result.error) throw result.error;
 
-        if (!editingId && requestedStatus === 'unpacked') {
-          if (!WarehousePage.activeWarehouseId) throw new Error('Select a warehouse before recording damaged goods.');
-          const damageId = result.data.id;
-          const referenceId = `SND-DMG-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${damageId.slice(0, 6).toUpperCase()}`;
-          const now = new Date().toISOString();
-          const { data: transaction, error: transactionError } = await sb
-            .from('inventory_transactions')
-            .insert({
-              company_id: companyId,
-              warehouse_id: WarehousePage.activeWarehouseId,
-              sku: product.sku,
-              quantity: 1,
-              type: 'customer_order',
-              status: 'inspect',
-              reference_id: referenceId,
-              customer_name: supplier.name,
-              customer_city: supplier.city || supplier.province || '',
-              timestamp_inspect: now
-            })
-            .select('id')
-            .single();
-          if (transactionError) {
-            await sb.from('damaged_goods').delete().eq('id', damageId);
-            throw transactionError;
-          }
-          const { error: linkError } = await sb
-            .from('damaged_goods')
-            .update({
-              inventory_transaction_id: transaction.id,
-              reference_id: referenceId,
-              status: 'unpacked'
-            })
-            .eq('id', damageId);
-          if (linkError) {
-            await sb.from('inventory_transactions').delete().eq('id', transaction.id);
-            await sb.from('damaged_goods').delete().eq('id', damageId);
-            throw linkError;
-          }
-        } else if (editingId && requestedStatus === 'customer_possession' && existing?.inventory_transaction_id) {
-          const { error: transactionDeleteError } = await sb
-            .from('inventory_transactions')
-            .delete()
-            .eq('id', existing.inventory_transaction_id);
-          if (transactionDeleteError) throw transactionDeleteError;
-          const { error: unlinkError } = await sb
-            .from('damaged_goods')
-            .update({ inventory_transaction_id: null })
-            .eq('id', editingId);
-          if (unlinkError) throw unlinkError;
-        } else if (existing?.inventory_transaction_id) {
-          const { error: transactionUpdateError } = await sb
-            .from('inventory_transactions')
-            .update({
-              sku: product.sku,
-              customer_name: supplier.name,
-              customer_city: supplier.city || supplier.province || ''
-            })
-            .eq('id', existing.inventory_transaction_id);
-          if (transactionUpdateError) throw transactionUpdateError;
-        } else if (editingId && requestedStatus === 'unpacked') {
-          if (!WarehousePage.activeWarehouseId) throw new Error('Select a warehouse before moving this item to Pack.');
-          const referenceId = existing?.reference_id
-            || `SND-DMG-${new Date(existing?.created_at || Date.now()).toISOString().slice(0, 10).replace(/-/g, '')}-${editingId.slice(0, 6).toUpperCase()}`;
-          const { data: transaction, error: transactionError } = await sb
-            .from('inventory_transactions')
-            .insert({
-              company_id: companyId,
-              warehouse_id: WarehousePage.activeWarehouseId,
-              sku: product.sku,
-              quantity: 1,
-              type: 'customer_order',
-              status: 'inspect',
-              reference_id: referenceId,
-              customer_name: supplier.name,
-              customer_city: supplier.city || supplier.province || '',
-              timestamp_inspect: new Date().toISOString()
-            })
-            .select('id')
-            .single();
-          if (transactionError) throw transactionError;
-          const { error: linkError } = await sb
-            .from('damaged_goods')
-            .update({
-              inventory_transaction_id: transaction.id,
-              reference_id: referenceId,
-              status: 'unpacked'
-            })
-            .eq('id', editingId);
-          if (linkError) {
-            await sb.from('inventory_transactions').delete().eq('id', transaction.id);
-            throw linkError;
-          }
-        }
+        const damageId = editingId || result.data.id;
+        const { error: inventorySyncError } = await sb.rpc('sync_damaged_goods_inventory', {
+          p_damage_id: damageId,
+          p_warehouse_id: WarehousePage.activeWarehouseId || null
+        });
+        if (inventorySyncError) throw inventorySyncError;
 
         const retainedUrls = new Set([...finalPhotoUrls, finalVideoUrl].filter(Boolean));
         const replacedUrls = [
@@ -933,14 +808,7 @@
       button.disabled = true;
       button.textContent = 'Deleting...';
       try {
-        if (record.inventory_transaction_id) {
-          const { error: transactionError } = await sb
-            .from('inventory_transactions')
-            .delete()
-            .eq('id', record.inventory_transaction_id);
-          if (transactionError) throw transactionError;
-        }
-        const { error } = await sb.from('damaged_goods').delete().eq('id', record.id).eq('company_id', companyId);
+        const { error } = await sb.rpc('delete_damaged_goods_record', { p_damage_id: record.id });
         if (error) throw error;
         await removeMedia([...(record.photo_urls || []), record.video_url].filter(Boolean));
         closeDeleteModal();

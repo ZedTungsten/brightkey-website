@@ -295,12 +295,13 @@
                       <th>SKU</th>
                       <th>Qty</th>
                       <th>Request Date</th>
+                      <th>Pickup Date</th>
                       <th>Install Date</th>
                       <th>Action</th>
                     </tr>
                   </thead>
                   <tbody id="inspect-list">
-                    <tr><td colspan="9" class="text-center text-muted" style="padding:2rem 0;">No items waiting to be inspected.</td></tr>
+                    <tr><td colspan="10" class="text-center text-muted" style="padding:2rem 0;">No items waiting to be inspected.</td></tr>
                   </tbody>
                 </table>
               </div>
@@ -498,7 +499,7 @@
 
       const bookingsQuery = sb
         .from('installation_bookings')
-        .select('order_no, scheduled_date, scheduled_time')
+        .select('order_no, scheduled_date, scheduled_time, pickup_date, pickup_time')
         .eq('company_id', companyId)
         .range(0, 999);
 
@@ -917,7 +918,7 @@
       });
 
       if (inspectQueue.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="9" class="text-center text-muted" style="padding:2rem 0;">No orders currently in inspection queue.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="10" class="text-center text-muted" style="padding:2rem 0;">No orders currently in inspection queue.</td></tr>`;
         return;
       }
 
@@ -932,6 +933,8 @@
             customer_name: t.customer_name || 'N/A',
             customer_city: t.customer_city || 'N/A',
             timestamp_reserved: t.timestamp_reserved || t.created_at,
+            pickup_date: booking?.pickup_date || null,
+            pickup_time: booking?.pickup_time || '',
             install_date: booking?.scheduled_date ? new Date(booking.scheduled_date) : null,
             scheduled_time: booking?.scheduled_time || '',
             items: []
@@ -966,6 +969,18 @@
       orderGroups.forEach(group => {
         const rowSpan = group.items.length;
         const dateOnly = group.timestamp_reserved ? new Date(group.timestamp_reserved).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
+
+        let pickupDateFriendly = '—';
+        if (group.pickup_date) {
+          const pickupDate = new Date(`${group.pickup_date}T00:00:00`);
+          const formatted = pickupDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+          const pickupTime = group.pickup_time === 'Morning'
+            ? '8:00 AM'
+            : group.pickup_time === 'Afternoon'
+              ? '1:00 PM'
+              : group.pickup_time;
+          pickupDateFriendly = formatted + (pickupTime ? ` ${pickupTime}` : '');
+        }
         
         let installDateFriendly = '—';
         if (group.install_date) {
@@ -998,6 +1013,7 @@
                 <td><code>${item.sku}</code></td>
                 <td><strong>${item.quantity}</strong></td>
                 <td rowspan="${rowSpan}">${dateOnly}</td>
+                <td rowspan="${rowSpan}"><strong>${pickupDateFriendly}</strong></td>
                 <td rowspan="${rowSpan}"><strong>${installDateFriendly}</strong></td>
                 <td>${actionButtonHtml}</td>
               </tr>

@@ -586,12 +586,13 @@
                       <th>SKU</th>
                       <th>Qty</th>
                       <th>QA Date</th>
+                      <th>Pickup Date</th>
                       <th>Install Date</th>
                       <th>Action</th>
                     </tr>
                   </thead>
                   <tbody id="pack-list">
-                    <tr><td colspan="9" class="text-center text-muted" style="padding:2rem 0;">No items waiting to be packed.</td></tr>
+                    <tr><td colspan="10" class="text-center text-muted" style="padding:2rem 0;">No items waiting to be packed.</td></tr>
                   </tbody>
                 </table>
               </div>
@@ -826,7 +827,7 @@
         : Promise.resolve({ data: [], error: null });
 
       const bookingsQuery = sb.from('installation_bookings')
-        .select('order_no, scheduled_date, scheduled_time')
+        .select('order_no, scheduled_date, scheduled_time, pickup_date, pickup_time')
         .eq('company_id', companyId)
         .range(0, 999);
 
@@ -1271,7 +1272,7 @@
       });
 
       if (packingQueue.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="9" class="text-center text-muted" style="padding:2rem 0;">No orders currently in packing queue.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="10" class="text-center text-muted" style="padding:2rem 0;">No orders currently in packing queue.</td></tr>`;
         return;
       }
 
@@ -1301,6 +1302,9 @@
         const qtysHtml = group.items.map(t => `<strong>${t.quantity}</strong>`).join('<br/>');
         const qaDate = formatPackDate(group.timestamp_inspect, true);
         const installation = bookings.find(booking => booking.order_no === group.reference_id);
+        const pickupDate = installation?.pickup_date
+          ? formatInstallSchedule(installation.pickup_date, installation.pickup_time)
+          : '—';
         const installDate = formatInstallSchedule(installation?.scheduled_date, installation?.scheduled_time);
         const safeReference = escFulfillment(group.reference_id);
         const referenceHtml = group.reference_id.startsWith('SND-DMG-')
@@ -1327,6 +1331,7 @@
             <td>${skusHtml}</td>
             <td>${qtysHtml}</td>
             <td style="white-space: nowrap;">${qaDate}</td>
+            <td style="white-space: nowrap;">${pickupDate}</td>
             <td style="white-space: nowrap;">${installDate}</td>
             <td>
               <button class="btn btn-cyan btn-sm" onclick="window.packOrder(this, '${group.reference_id}', '${group.customer_name.replace(/'/g, "\\'")}', '${group.customer_city.replace(/'/g, "\\'")}')">
