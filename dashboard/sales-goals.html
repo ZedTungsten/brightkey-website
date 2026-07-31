@@ -902,7 +902,17 @@
                 <p>Detailed view of booked orders, products, additional charges, and deductions for the selected month.</p>
               </div>
               <div>
-                <select id="orders-month-select" class="filter-select" onchange="onOrdersMonthChange(this.value)" style="min-width: 150px;"></select>
+                <div class="month-nav-container">
+                  <button type="button" id="btn-orders-month-prev" class="month-nav-btn" aria-label="Previous month" onclick="changeOrdersMonthOffset(-1)">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                  </button>
+                  <span id="orders-month-display-label" class="month-display-label" style="cursor: pointer; user-select: none; position: relative; z-index: 2;" onclick="try { document.getElementById('orders-month-filter').showPicker(); } catch(_) { document.getElementById('orders-month-filter').click(); }">Loading...</span>
+                  <button type="button" id="btn-orders-month-next" class="month-nav-btn" aria-label="Next month" onclick="changeOrdersMonthOffset(1)">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                  </button>
+                  <input type="month" id="orders-month-filter" style="position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; pointer-events: none; z-index: 1; margin: 0; padding: 0;" onchange="onOrdersMonthPickerChange(this.value)" />
+                </div>
+                <select id="orders-month-select" style="display: none;"></select>
               </div>
             </div>
 
@@ -1131,7 +1141,7 @@
       const currentMonthStr = getYearMonthStr(d);
       currentSelectedMonth = currentMonthStr;
       
-      if (dashboardSelect) dashboardSelect.value = currentSelectedMonth;
+        if (dashboardSelect) dashboardSelect.value = currentSelectedMonth;
       updateGoalsMonthUI();
 
       const ordersSelect = document.getElementById('orders-month-select');
@@ -1145,6 +1155,7 @@
         });
         ordersSelect.value = currentSelectedMonth;
       }
+      if (window.updateOrdersMonthUI) window.updateOrdersMonthUI();
     }
 
     function getYearMonthStr(dateObj) {
@@ -1173,6 +1184,7 @@
         const currentBiz = document.getElementById('settings-business-select').value;
         onSettingsBusinessChange(currentBiz);
       } else if (tabName === 'orders') {
+        if (window.updateOrdersMonthUI) window.updateOrdersMonthUI();
         renderOrdersTab();
       } else {
         if (window.updateGoalsMonthUI) window.updateGoalsMonthUI();
@@ -1614,7 +1626,42 @@
       currentSelectedMonth = val;
       const goalsSelect = document.getElementById('goals-month-select');
       if (goalsSelect) goalsSelect.value = val;
+      window.updateOrdersMonthUI();
       renderOrdersTab();
+    };
+
+    window.updateOrdersMonthUI = function() {
+      const label = document.getElementById('orders-month-display-label');
+      if (label) {
+        label.textContent = formatMonthName(currentSelectedMonth);
+      }
+      const ordersSelect = document.getElementById('orders-month-select');
+      if (ordersSelect) {
+        ordersSelect.value = currentSelectedMonth;
+      }
+      const monthFilter = document.getElementById('orders-month-filter');
+      if (monthFilter) {
+        monthFilter.value = currentSelectedMonth;
+      }
+    };
+
+    window.changeOrdersMonthOffset = function(offset) {
+      let idx = monthsList.indexOf(currentSelectedMonth);
+      if (idx === -1) idx = monthsList.indexOf(getYearMonthStr(new Date()));
+      let newIdx = idx - offset;
+      if (newIdx >= 0 && newIdx < monthsList.length) {
+        currentSelectedMonth = monthsList[newIdx];
+        window.updateOrdersMonthUI();
+        renderOrdersTab();
+      }
+    };
+
+    window.onOrdersMonthPickerChange = function(val) {
+      if (val) {
+        currentSelectedMonth = val;
+        window.updateOrdersMonthUI();
+        renderOrdersTab();
+      }
     };
 
     window.allOrdersData = [];
