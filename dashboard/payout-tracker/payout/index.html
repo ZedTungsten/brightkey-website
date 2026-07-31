@@ -308,9 +308,9 @@
         // Employees
         try {
           const { data, error } = await sb.from('employees')
-            .select('id, first_name, middle_name, last_name, salary, employment_status, department, title, payout_details, payout_details_image, reporting_to, date_hired, shift_days, assignment')
+            .select('id, first_name, middle_name, last_name, salary, employment_status, date_inactive, department, title, payout_details, payout_details_image, reporting_to, date_hired, shift_days, assignment')
             .eq('company_id', this.companyId)
-            .eq('employment_status', 'Active');
+            .limit(500);
           if (error) throw error;
           this.employees = data || [];
         } catch (e) { this.employees = []; console.error(e); }
@@ -748,6 +748,20 @@
         return String(emp?.assignment || '').split(',').some(value => value.trim().toLowerCase() === 'owner');
       },
 
+      isActiveEmployee(emp) {
+        return String(emp?.employment_status || '').trim().toLowerCase() === 'active';
+      },
+
+      getInactiveDate(emp) {
+        return String(emp?.date_inactive || '').slice(0, 10);
+      },
+
+      isInactiveCommissionOnly(emp, monthKey = this.monthKey()) {
+        const inactiveDate = this.getInactiveDate(emp);
+        return !this.isActiveEmployee(emp)
+          && this._commissionForEmpMonth(emp.id, monthKey, inactiveDate || null) > 0;
+      },
+
       getShiftWeekdays(shiftDays) {
         const value = String(shiftDays || '').toLowerCase().replace(/\s+/g, '');
         const tokenMap = {
@@ -770,6 +784,7 @@
       },
 
       getProratedSalaryAllocation(emp, cutoffDay, sortedScheds, monthKey = this.monthKey(), forceSelected = null) {
+        if (!this.isActiveEmployee(emp)) return { value: 0, isProrated: false };
         const baseSalary = Number(emp.salary) || 0;
         const regularValue = baseSalary / (sortedScheds.length || 1);
         const selectedIds = this.proratedSalaryState[monthKey] || [];
@@ -945,7 +960,7 @@
         });
       },
 
-      groupEmployees() {
+      groupEmployees(employees = this.employees) {
         const empDeptMap = {};
         const empSubteamsMap = {};
         const deptHeadsSet = new Set();
@@ -970,7 +985,7 @@
         const grouped = {};
         const unassigned = [];
         const selectedMonthKey = this.monthKey();
-        this.employees.forEach(emp => {
+        employees.forEach(emp => {
           const hireMonthKey = String(emp.date_hired || '').slice(0, 7);
           if (hireMonthKey && hireMonthKey > selectedMonthKey) return;
 
@@ -1053,7 +1068,8 @@
         headerHtml += `<th style="width:100px; text-align:center;">Action</th>`;
         header.innerHTML = headerHtml;
 
-        const { grouped, unassigned } = this.groupEmployees();
+        const payoutEmployees = this.employees.filter(emp => this.isActiveEmployee(emp) || this.isInactiveCommissionOnly(emp, mk));
+        const { grouped, unassigned } = this.groupEmployees(payoutEmployees);
         let bodyHtml = '';
 
         // Aggregators for total row
@@ -1071,7 +1087,9 @@
 
         const renderEmpRow = (emp) => {
           const isOwner = this.isOwnerEmployee(emp);
-          const baseSalary    = emp.salary || 0;
+          const commissionOnly = this.isInactiveCommissionOnly(emp, mk);
+          const inactiveDate = commissionOnly ? this.getInactiveDate(emp) : null;
+          const baseSalary    = commissionOnly ? 0 : (emp.salary || 0);
           const positionText  = emp.title || '';
           const detailsText   = emp.payout_details || '';
           const detailsImage  = emp.payout_details_image || '';
@@ -1088,11 +1106,11 @@
           if (!detailsHtml) detailsHtml = '—';
 
           // Commission for this month
-          const empComms = isOwner ? 0 : this._commissionForEmpMonth(emp.id, mk);
+          const empComms = isOwner ? 0 : this._commissionForEmpMonth(emp.id, mk, inactiveDate);
           // Adjustments for this month
-          const empAdjs = sortedScheds.reduce((sum, day) => sum + this._adjsForSchedule(emp.id, day, mk, sortedScheds), 0);
-          const empGlAdd = this._glAdditionsForEmpMonth(emp.id, mk);
-          const empGlDed = this._glDeductionsForEmpMonth(emp.id, mk);
+          const empAdjs = commissionOnly ? 0 : sortedScheds.reduce((sum, day) => sum + this._adjsForSchedule(emp.id, day, mk, sortedScheds), 0);
+          const empGlAdd = commissionOnly ? 0 : this._glAdditionsForEmpMonth(emp.id, mk);
+          const empGlDed = commissionOnly ? 0 : this._glDeductionsForEmpMonth(emp.id, mk);
 
           // Add to aggregators
           sumBaseSalary += baseSalary;
@@ -1105,7 +1123,7 @@
           let specialCellsHtml = '';
           let totalSpecials = 0;
           specialDays.forEach(day => {
-            const specVal = isOwner ? 0 : this.specialSchedules.filter(s => s.employeeId === emp.id && Number(s.day) === day).reduce((s, x) => s + (Number(x.value) || 0), 0);
+            const specVal = isOwner || commissionOnly ? 0 : this.specialSchedules.filter(s => s.employeeId === emp.id && Number(s.day) === day).reduce((s, x) => s + (Number(x.value) || 0), 0);
             totalSpecials += specVal;
             sumSpecialDays[day] += specVal;
             if (specVal > 0) {
@@ -1122,25 +1140,25 @@
 
           // Payout columns
           let payoutCellsHtml = '';
-          const instPayouts = isOwner
+          const instPayouts = isOwner || commissionOnly
             ? { totalInstallationPayout: 0, cutoffPayouts: {} }
             : this.calculateInstallerPayouts(emp.id, mk, sortedScheds);
           let employeePayoutDaysTotal = 0;
           sumInstPayouts += instPayouts.totalInstallationPayout;
           
           sortedScheds.forEach((day, sIdx) => {
-            const salaryAllocation = this.getProratedSalaryAllocation(emp, day, sortedScheds, mk);
+            const salaryAllocation = commissionOnly ? { value: 0, isProrated: false } : this.getProratedSalaryAllocation(emp, day, sortedScheds, mk);
             const salaryPortion = salaryAllocation.value;
-            const adjsVal  = this._adjsForSchedule(emp.id, day, mk, sortedScheds);
-            const commsVal  = isOwner ? 0 : this._commsForSchedule(emp.id, day, mk, sortedScheds);
+            const adjsVal  = commissionOnly ? 0 : this._adjsForSchedule(emp.id, day, mk, sortedScheds);
+            const commsVal  = isOwner ? 0 : this._commsForSchedule(emp.id, day, mk, sortedScheds, null, null, inactiveDate);
             const instPortion = instPayouts.cutoffPayouts[day] || 0;
-            const glAddVal = this._glAdditionsForSchedule(emp.id, day, mk, sortedScheds);
-            const glDedVal = this._glDeductionsForSchedule(emp.id, day, mk, sortedScheds);
-            const rolledComms = isOwner ? 0 : this._commsForSchedule(emp.id, day, mk, sortedScheds, null, true);
+            const glAddVal = commissionOnly ? 0 : this._glAdditionsForSchedule(emp.id, day, mk, sortedScheds);
+            const glDedVal = commissionOnly ? 0 : this._glDeductionsForSchedule(emp.id, day, mk, sortedScheds);
+            const rolledComms = isOwner ? 0 : this._commsForSchedule(emp.id, day, mk, sortedScheds, null, true, inactiveDate);
             const rolledInst = instPayouts.rolloverCutoffPayouts?.[day] || 0;
-            const rolledAdjs = this._adjsForSchedule(emp.id, day, mk, sortedScheds, true);
-            const rolledGlAdd = this._glAdditionsForSchedule(emp.id, day, mk, sortedScheds, true);
-            const rolledGlDed = this._glDeductionsForSchedule(emp.id, day, mk, sortedScheds, true);
+            const rolledAdjs = commissionOnly ? 0 : this._adjsForSchedule(emp.id, day, mk, sortedScheds, true);
+            const rolledGlAdd = commissionOnly ? 0 : this._glAdditionsForSchedule(emp.id, day, mk, sortedScheds, true);
+            const rolledGlDed = commissionOnly ? 0 : this._glDeductionsForSchedule(emp.id, day, mk, sortedScheds, true);
             
             const totalSchedVal = salaryPortion + adjsVal + commsVal + instPortion + glAddVal - glDedVal;
             employeePayoutDaysTotal += totalSchedVal;
@@ -1274,7 +1292,7 @@
         return (Number(a?.amount) || 0) / 100;
       },
 
-      _commissionForEmpMonth(empId, mk) {
+      _commissionForEmpMonth(empId, mk, afterDateExclusive = null) {
         const commissionScheds = [...(this.payoutSchedules.length ? this.payoutSchedules : [15, 30])].map(Number).sort((a, b) => a - b);
         return this.commissionAssignments.filter(a => {
           if (a.employee_id !== empId) return false;
@@ -1282,6 +1300,7 @@
           if (!this._isCommissionEligibleBooking(b)) return false;
           const installDate = b?.scheduled_date;
           if (!installDate) return false;
+          if (afterDateExclusive && String(installDate).slice(0, 10) <= afterDateExclusive) return false;
           return this.getCutoffBucket(installDate, commissionScheds)?.monthKey === mk;
         }).reduce((sum, assignment) => sum + this._getStoredCommAmount(assignment), 0);
       },
@@ -1364,13 +1383,14 @@
 
 
 
-      _commsForSchedule(empId, schedDay, mk, sortedScheds, _unusedProductMap = null, rolloverOnly = null) {
+      _commsForSchedule(empId, schedDay, mk, sortedScheds, _unusedProductMap = null, rolloverOnly = null, afterDateExclusive = null) {
         return this.commissionAssignments.filter(a => {
           if (a.employee_id !== empId) return false;
           const b = this.bookingsList.find(x => x.id === a.booking_id);
           if (!this._isCommissionEligibleBooking(b)) return false;
           const installDate = b?.scheduled_date;
           if (!installDate) return false;
+          if (afterDateExclusive && String(installDate).slice(0, 10) <= afterDateExclusive) return false;
           const bucket = this.getCutoffBucket(installDate, sortedScheds);
           if (bucket?.monthKey !== mk || bucket.day !== schedDay) return false;
           const isRollover = String(installDate).slice(0, 7) !== mk;
@@ -1440,16 +1460,18 @@
 
         if (allChecked) {
           const isOwner = this.isOwnerEmployee(emp);
-          const baseSalary   = emp.salary || 0;
+          const commissionOnly = this.isInactiveCommissionOnly(emp, mk);
+          const inactiveDate = commissionOnly ? this.getInactiveDate(emp) : null;
+          const baseSalary   = commissionOnly ? 0 : (emp.salary || 0);
           const sortedScheds = [...scheds].sort((a, b) => a - b);
-          const salaryPaid   = this.getEmployeeSalaryTotal(emp, sortedScheds, mk);
-          const empComms     = isOwner ? 0 : this._commissionForEmpMonth(empId, mk);
-          const empAdjObjs   = this.adjustmentsList.filter(a => { const d = new Date(a.date); return a.employeeId === empId && `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}` === mk; });
-          const empSpecs     = isOwner ? [] : this.specialSchedules.filter(s => s.employeeId === empId);
+          const salaryPaid   = commissionOnly ? 0 : this.getEmployeeSalaryTotal(emp, sortedScheds, mk);
+          const empComms     = isOwner ? 0 : this._commissionForEmpMonth(empId, mk, inactiveDate);
+          const empAdjObjs   = commissionOnly ? [] : this.adjustmentsList.filter(a => { const d = new Date(a.date); return a.employeeId === empId && `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}` === mk; });
+          const empSpecs     = isOwner || commissionOnly ? [] : this.specialSchedules.filter(s => s.employeeId === empId);
           const totalAdjs    = empAdjObjs.reduce((s, a) => s + (Number(a.value) || 0), 0);
           const totalSpecs   = empSpecs.reduce((s, x) => s + (Number(x.value) || 0), 0);
 
-          const instPayouts = isOwner
+          const instPayouts = isOwner || commissionOnly
             ? { thresholdEarnings: 0, serviceEarnings: 0 }
             : this.calculateInstallerPayouts(empId, mk, sortedScheds);
           const finalAdjObjs = [...empAdjObjs];
@@ -1473,8 +1495,8 @@
             finalTotalAdjs += instPayouts.serviceEarnings;
           }
 
-          const empGlAdd = this._glAdditionsForEmpMonth(empId, mk);
-          const empGlDed = this._glDeductionsForEmpMonth(empId, mk);
+          const empGlAdd = commissionOnly ? 0 : this._glAdditionsForEmpMonth(empId, mk);
+          const empGlDed = commissionOnly ? 0 : this._glDeductionsForEmpMonth(empId, mk);
           const reimbursementObjects = empGlAdd > 0 ? [{
             label: 'Reimbursement',
             value: empGlAdd,
@@ -1528,15 +1550,17 @@
         const mk = this.monthKey();
         const monthText = `${MONTHS[this.selectedMonth]} ${this.selectedYear}`;
         const isOwner = this.isOwnerEmployee(emp);
+        const commissionOnly = this.isInactiveCommissionOnly(emp, mk);
+        const inactiveDate = commissionOnly ? this.getInactiveDate(emp) : null;
         const schedules = [...(this.payoutSchedules.length ? this.payoutSchedules : [15, 30])].map(Number).sort((a, b) => a - b);
-        const salaryPaid = this.getEmployeeSalaryTotal(emp, schedules, mk);
-        const commissions = isOwner ? 0 : this._commissionForEmpMonth(empId, mk);
-        const adjustments = this.adjustmentsList.filter(item => item.employeeId === empId && String(item.date || '').startsWith(mk));
-        const specialSchedules = isOwner ? [] : this.specialSchedules.filter(item => item.employeeId === empId);
-        const installationPayouts = isOwner
+        const salaryPaid = commissionOnly ? 0 : this.getEmployeeSalaryTotal(emp, schedules, mk);
+        const commissions = isOwner ? 0 : this._commissionForEmpMonth(empId, mk, inactiveDate);
+        const adjustments = commissionOnly ? [] : this.adjustmentsList.filter(item => item.employeeId === empId && String(item.date || '').startsWith(mk));
+        const specialSchedules = isOwner || commissionOnly ? [] : this.specialSchedules.filter(item => item.employeeId === empId);
+        const installationPayouts = isOwner || commissionOnly
           ? { thresholdEarnings: 0, thresholdDescription: '', serviceEarnings: 0, serviceDescription: '', cutoffPayouts: {} }
           : this.calculateInstallerPayouts(empId, mk, schedules);
-        const glReimbursement = this._glAdditionsForEmpMonth(empId, mk);
+        const glReimbursement = commissionOnly ? 0 : this._glAdditionsForEmpMonth(empId, mk);
         const adjustmentsTotal = adjustments.reduce((sum, item) => sum + (Number(item.value) || 0), 0);
         const specialTotal = specialSchedules.reduce((sum, item) => sum + (Number(item.value) || 0), 0);
         const totalPayout = salaryPaid + commissions + adjustmentsTotal + specialTotal
@@ -1561,8 +1585,8 @@
 
         const peso = value => `₱${(Number(value) || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
         const row = window.BKPayslipRenderer.createBreakdownRow || ((type, description, amount) => `<tr><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;font-weight:600;vertical-align:top;">${esc(type)}</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;color:#4b5563;line-height:1.5;vertical-align:top;">${esc(description)}</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;text-align:right;font-variant-numeric:tabular-nums;width:120px;vertical-align:top;">${peso(amount)}</td></tr>`);
-        const salaryIsProrated = salaryPaid !== Number(emp.salary);
-        let breakdownRows = row(
+        const salaryIsProrated = !commissionOnly && salaryPaid !== Number(emp.salary);
+        let breakdownRows = commissionOnly ? '' : row(
           salaryIsProrated ? 'Prorated Salary' : 'Basic Salary',
           salaryIsProrated ? 'Based on eligible scheduled workdays' : 'Monthly Basic Salary',
           salaryPaid
@@ -1596,11 +1620,13 @@
           day,
           order: 1,
           label: `Cutoff Payout (Day ${day})`,
-          value: this.getProratedSalaryAllocation(emp, day, schedules, mk).value
-            + this._adjsForSchedule(empId, day, mk, schedules)
-            + (isOwner ? 0 : this._commsForSchedule(empId, day, mk, schedules))
-            + (installationPayouts.cutoffPayouts[day] || 0)
-            + this._glAdditionsForSchedule(empId, day, mk, schedules)
+          value: commissionOnly
+            ? (isOwner ? 0 : this._commsForSchedule(empId, day, mk, schedules, null, null, inactiveDate))
+            : this.getProratedSalaryAllocation(emp, day, schedules, mk).value
+              + this._adjsForSchedule(empId, day, mk, schedules)
+              + (isOwner ? 0 : this._commsForSchedule(empId, day, mk, schedules))
+              + (installationPayouts.cutoffPayouts[day] || 0)
+              + this._glAdditionsForSchedule(empId, day, mk, schedules)
         }));
         const specialByDay = new Map();
         specialSchedules.forEach(item => {
