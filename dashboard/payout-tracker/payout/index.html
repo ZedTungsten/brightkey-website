@@ -43,6 +43,7 @@
     #summary-table tr.employee-row:hover td.col-sticky-1,
     #summary-table tr.employee-row:hover td.col-sticky-2,
     #summary-table tr.employee-row:hover td.col-sticky-3 { background: var(--bg-elevated); }
+    #summary-table tr.inactive-employee-row td.col-name { color: var(--text-muted); }
 
     #summary-table tr.dept-header-row td { background: #f4fcfd !important; }
     #summary-table tr.team-header-row td { background: #f8fafc !important; }
@@ -762,10 +763,16 @@
         return Boolean(inactiveMonth) && monthKey <= inactiveMonth;
       },
 
-      isInactiveCommissionOnly(emp, monthKey = this.monthKey()) {
+      isCutoffEligibleForEmployee(emp, cutoffDay, monthKey = this.monthKey()) {
+        if (this.isActiveEmployee(emp)) return true;
         const inactiveDate = this.getInactiveDate(emp);
-        return !this.isRegularPayoutEmployee(emp, monthKey)
-          && this._commissionForEmpMonth(emp.id, monthKey, inactiveDate || null) > 0;
+        if (!inactiveDate) return false;
+        const inactiveMonth = inactiveDate.slice(0, 7);
+        if (monthKey < inactiveMonth) return true;
+        if (monthKey > inactiveMonth) return false;
+        const daysInMonth = new Date(this.selectedYear, this.selectedMonth + 1, 0).getDate();
+        const cutoffDate = `${monthKey}-${String(Math.min(Number(cutoffDay), daysInMonth)).padStart(2, '0')}`;
+        return cutoffDate <= inactiveDate;
       },
 
       getShiftWeekdays(shiftDays) {
@@ -1074,7 +1081,7 @@
         headerHtml += `<th style="width:100px; text-align:center;">Action</th>`;
         header.innerHTML = headerHtml;
 
-        const payoutEmployees = this.employees.filter(emp => this.isRegularPayoutEmployee(emp, mk) || this.isInactiveCommissionOnly(emp, mk));
+        const payoutEmployees = this.employees.filter(emp => this.isRegularPayoutEmployee(emp, mk));
         const { grouped, unassigned } = this.groupEmployees(payoutEmployees);
         let bodyHtml = '';
 
@@ -1093,9 +1100,8 @@
 
         const renderEmpRow = (emp) => {
           const isOwner = this.isOwnerEmployee(emp);
-          const commissionOnly = this.isInactiveCommissionOnly(emp, mk);
-          const inactiveDate = commissionOnly ? this.getInactiveDate(emp) : null;
-          const baseSalary    = commissionOnly ? 0 : (emp.salary || 0);
+          const inactiveDate = this.isActiveEmployee(emp) ? null : this.getInactiveDate(emp);
+          const baseSalary    = emp.salary || 0;
           const positionText  = emp.title || '';
           const detailsText   = emp.payout_details || '';
           const detailsImage  = emp.payout_details_image || '';
@@ -1112,11 +1118,14 @@
           if (!detailsHtml) detailsHtml = '—';
 
           // Commission for this month
-          const empComms = isOwner ? 0 : this._commissionForEmpMonth(emp.id, mk, inactiveDate);
+          const empComms = isOwner ? 0 : sortedScheds.reduce((sum, day) => {
+            if (!this.isCutoffEligibleForEmployee(emp, day, mk)) return sum;
+            return sum + this._commsForSchedule(emp.id, day, mk, sortedScheds, null, null, inactiveDate);
+          }, 0);
           // Adjustments for this month
-          const empAdjs = commissionOnly ? 0 : sortedScheds.reduce((sum, day) => sum + this._adjsForSchedule(emp.id, day, mk, sortedScheds), 0);
-          const empGlAdd = commissionOnly ? 0 : this._glAdditionsForEmpMonth(emp.id, mk);
-          const empGlDed = commissionOnly ? 0 : this._glDeductionsForEmpMonth(emp.id, mk);
+          const empAdjs = sortedScheds.reduce((sum, day) => this.isCutoffEligibleForEmployee(emp, day, mk) ? sum + this._adjsForSchedule(emp.id, day, mk, sortedScheds) : sum, 0);
+          const empGlAdd = sortedScheds.reduce((sum, day) => this.isCutoffEligibleForEmployee(emp, day, mk) ? sum + this._glAdditionsForSchedule(emp.id, day, mk, sortedScheds) : sum, 0);
+          const empGlDed = sortedScheds.reduce((sum, day) => this.isCutoffEligibleForEmployee(emp, day, mk) ? sum + this._glDeductionsForSchedule(emp.id, day, mk, sortedScheds) : sum, 0);
 
           // Add to aggregators
           sumBaseSalary += baseSalary;
@@ -1129,15 +1138,18 @@
           let specialCellsHtml = '';
           let totalSpecials = 0;
           specialDays.forEach(day => {
-            const specVal = isOwner || commissionOnly ? 0 : this.specialSchedules.filter(s => s.employeeId === emp.id && Number(s.day) === day).reduce((s, x) => s + (Number(x.value) || 0), 0);
-            totalSpecials += specVal;
-            sumSpecialDays[day] += specVal;
+            const specVal = isOwner ? 0 : this.specialSchedules.filter(s => s.employeeId === emp.id && Number(s.day) === day).reduce((s, x) => s + (Number(x.value) || 0), 0);
+            const isEligible = this.isCutoffEligibleForEmployee(emp, day, mk);
+            if (isEligible) {
+              totalSpecials += specVal;
+              sumSpecialDays[day] += specVal;
+            }
             if (specVal > 0) {
               const isPaid = this.specialPayoutState[mk]?.[`${emp.id}_${day}`] || false;
               const isPast = this.isPastDay(day);
-              specialCellsHtml += `<td style="text-align:right;"><div class="payout-cell-container" style="display:inline-flex;align-items:center;justify-content:flex-end;gap:0.4rem;width:100%;">
-                <input type="checkbox" class="payout-checkbox" ${isPaid ? 'checked' : ''} onchange="App.toggleSpecialPayoutCheck('${emp.id}',${day},this.checked)">
-                <span class="payout-val ${isPast && !isPaid ? 'overdue' : ''}" id="val-spec-${emp.id}-${day}" style="font-variant-numeric:tabular-nums; ${isPaid ? 'text-decoration:line-through;opacity:0.5;' : ''}">${esc(php(specVal))}</span>
+              specialCellsHtml += `<td style="text-align:right;"><div class="payout-cell-container${isEligible ? '' : ' grayed-out'}" style="display:inline-flex;align-items:center;justify-content:flex-end;gap:0.4rem;width:100%;">
+                ${isEligible ? `<input type="checkbox" class="payout-checkbox" ${isPaid ? 'checked' : ''} onchange="App.toggleSpecialPayoutCheck('${emp.id}',${day},this.checked)">` : ''}
+                <span class="payout-val ${isEligible && isPast && !isPaid ? 'overdue' : ''}" id="val-spec-${emp.id}-${day}" style="font-variant-numeric:tabular-nums; ${isPaid ? 'text-decoration:line-through;opacity:0.5;' : ''}">${esc(php(specVal))}</span>
               </div></td>`;
             } else {
               specialCellsHtml += `<td style="text-align:right;color:var(--text-muted);">—</td>`;
@@ -1146,27 +1158,30 @@
 
           // Payout columns
           let payoutCellsHtml = '';
-          const instPayouts = isOwner || commissionOnly
+          const instPayouts = isOwner
             ? { totalInstallationPayout: 0, cutoffPayouts: {} }
             : this.calculateInstallerPayouts(emp.id, mk, sortedScheds);
+          const eligibleInstallationTotal = sortedScheds.reduce((sum, day) => this.isCutoffEligibleForEmployee(emp, day, mk) ? sum + (instPayouts.cutoffPayouts[day] || 0) : sum, 0);
           let employeePayoutDaysTotal = 0;
-          sumInstPayouts += instPayouts.totalInstallationPayout;
+          sumInstPayouts += eligibleInstallationTotal;
           
           sortedScheds.forEach((day, sIdx) => {
-            const salaryAllocation = commissionOnly ? { value: 0, isProrated: false } : this.getProratedSalaryAllocation(emp, day, sortedScheds, mk);
+            const isEligible = this.isCutoffEligibleForEmployee(emp, day, mk);
+            const salaryAllocation = this.getProratedSalaryAllocation(emp, day, sortedScheds, mk);
             const salaryPortion = salaryAllocation.value;
-            const adjsVal  = commissionOnly ? 0 : this._adjsForSchedule(emp.id, day, mk, sortedScheds);
+            const adjsVal  = this._adjsForSchedule(emp.id, day, mk, sortedScheds);
             const commsVal  = isOwner ? 0 : this._commsForSchedule(emp.id, day, mk, sortedScheds, null, null, inactiveDate);
             const instPortion = instPayouts.cutoffPayouts[day] || 0;
-            const glAddVal = commissionOnly ? 0 : this._glAdditionsForSchedule(emp.id, day, mk, sortedScheds);
-            const glDedVal = commissionOnly ? 0 : this._glDeductionsForSchedule(emp.id, day, mk, sortedScheds);
+            const glAddVal = this._glAdditionsForSchedule(emp.id, day, mk, sortedScheds);
+            const glDedVal = this._glDeductionsForSchedule(emp.id, day, mk, sortedScheds);
             const rolledComms = isOwner ? 0 : this._commsForSchedule(emp.id, day, mk, sortedScheds, null, true, inactiveDate);
             const rolledInst = instPayouts.rolloverCutoffPayouts?.[day] || 0;
-            const rolledAdjs = commissionOnly ? 0 : this._adjsForSchedule(emp.id, day, mk, sortedScheds, true);
-            const rolledGlAdd = commissionOnly ? 0 : this._glAdditionsForSchedule(emp.id, day, mk, sortedScheds, true);
-            const rolledGlDed = commissionOnly ? 0 : this._glDeductionsForSchedule(emp.id, day, mk, sortedScheds, true);
+            const rolledAdjs = this._adjsForSchedule(emp.id, day, mk, sortedScheds, true);
+            const rolledGlAdd = this._glAdditionsForSchedule(emp.id, day, mk, sortedScheds, true);
+            const rolledGlDed = this._glDeductionsForSchedule(emp.id, day, mk, sortedScheds, true);
             
-            const totalSchedVal = salaryPortion + adjsVal + commsVal + instPortion + glAddVal - glDedVal;
+            const displayedSchedVal = salaryPortion + adjsVal + commsVal + instPortion + glAddVal - glDedVal;
+            const totalSchedVal = isEligible ? displayedSchedVal : 0;
             employeePayoutDaysTotal += totalSchedVal;
             sumPayoutDays[day] += totalSchedVal;
             const isPaid = this.regularPayoutState[mk]?.[`${emp.id}_${day}`] || false;
@@ -1191,10 +1206,10 @@
               : '';
 
             payoutCellsHtml += `<td style="text-align:right;">
-              <div class="payout-cell-container" style="display:flex; flex-direction:column; align-items:flex-end; gap:0.15rem; min-width:90px; padding:0.25rem 0; width:100%;">
+              <div class="payout-cell-container${isEligible ? '' : ' grayed-out'}" style="display:flex; flex-direction:column; align-items:flex-end; gap:0.15rem; min-width:90px; padding:0.25rem 0; width:100%;">
                 <div style="display:inline-flex; align-items:center; justify-content:flex-end; gap:0.4rem; width:100%;">
-                  <input type="checkbox" class="payout-checkbox" ${isPaid ? 'checked' : ''} onchange="App.togglePayoutCheck('${emp.id}',${day},this.checked)">
-                  <span class="payout-val ${isPast && !isPaid ? 'overdue' : ''}" id="val-${emp.id}-${day}" style="font-variant-numeric:tabular-nums; ${isPaid ? 'text-decoration:line-through;opacity:0.5;' : ''}" title="${esc(breakdownItems.join('\n'))}">${esc(php(totalSchedVal))}</span>
+                  ${isEligible ? `<input type="checkbox" class="payout-checkbox" ${isPaid ? 'checked' : ''} onchange="App.togglePayoutCheck('${emp.id}',${day},this.checked)">` : ''}
+                  <span class="payout-val ${isEligible && isPast && !isPaid ? 'overdue' : ''}" id="val-${emp.id}-${day}" style="font-variant-numeric:tabular-nums; ${isPaid ? 'text-decoration:line-through;opacity:0.5;' : ''}" title="${esc(breakdownItems.join('\n'))}">${esc(php(displayedSchedVal))}</span>
                 </div>
                 ${breakdownHtml}
               </div>
@@ -1204,13 +1219,13 @@
           const grandTotal = employeePayoutDaysTotal + totalSpecials;
           sumGrandTotal += grandTotal;
 
-          return `<tr class="employee-row" data-emp-id="${esc(emp.id)}">
+          return `<tr class="employee-row${this.isActiveEmployee(emp) ? '' : ' inactive-employee-row'}" data-emp-id="${esc(emp.id)}">
             <td class="col-name col-sticky-1">${esc([emp.first_name, emp.last_name].filter(Boolean).join(' '))}</td>
             <td class="col-sticky-2"><div style="font-size:0.75rem;color:var(--text-secondary);">${esc(positionText || '—')}</div></td>
             <td class="col-sticky-3"><div style="font-size:0.75rem;color:var(--text-secondary);">${detailsHtml}</div></td>
             <td style="text-align:right; font-variant-numeric:tabular-nums;">${esc(php(baseSalary))}</td>
             <td style="text-align:right; font-variant-numeric:tabular-nums;">${esc(php(empComms))}</td>
-            <td style="text-align:right; font-variant-numeric:tabular-nums;">${esc(php(instPayouts.totalInstallationPayout))}</td>
+            <td style="text-align:right; font-variant-numeric:tabular-nums;">${esc(php(eligibleInstallationTotal))}</td>
             <td style="text-align:right; font-variant-numeric:tabular-nums; color:${empAdjs < 0 ? 'var(--danger)' : 'var(--text-primary)'};">${esc(php(empAdjs))}</td>
             <td style="text-align:right; font-variant-numeric:tabular-nums;">${esc(php(empGlAdd))}</td>
             <td style="text-align:right; font-variant-numeric:tabular-nums; color:${empGlDed > 0 ? 'var(--danger)' : 'var(--text-primary)'};">${esc(empGlDed > 0 ? `-${php(empGlDed)}` : php(0))}</td>
@@ -1298,7 +1313,7 @@
         return (Number(a?.amount) || 0) / 100;
       },
 
-      _commissionForEmpMonth(empId, mk, afterDateExclusive = null) {
+      _commissionForEmpMonth(empId, mk, throughDateInclusive = null) {
         const commissionScheds = [...(this.payoutSchedules.length ? this.payoutSchedules : [15, 30])].map(Number).sort((a, b) => a - b);
         return this.commissionAssignments.filter(a => {
           if (a.employee_id !== empId) return false;
@@ -1306,7 +1321,7 @@
           if (!this._isCommissionEligibleBooking(b)) return false;
           const installDate = b?.scheduled_date;
           if (!installDate) return false;
-          if (afterDateExclusive && String(installDate).slice(0, 10) <= afterDateExclusive) return false;
+          if (throughDateInclusive && String(installDate).slice(0, 10) > throughDateInclusive) return false;
           return this.getCutoffBucket(installDate, commissionScheds)?.monthKey === mk;
         }).reduce((sum, assignment) => sum + this._getStoredCommAmount(assignment), 0);
       },
@@ -1389,14 +1404,14 @@
 
 
 
-      _commsForSchedule(empId, schedDay, mk, sortedScheds, _unusedProductMap = null, rolloverOnly = null, afterDateExclusive = null) {
+      _commsForSchedule(empId, schedDay, mk, sortedScheds, _unusedProductMap = null, rolloverOnly = null, throughDateInclusive = null) {
         return this.commissionAssignments.filter(a => {
           if (a.employee_id !== empId) return false;
           const b = this.bookingsList.find(x => x.id === a.booking_id);
           if (!this._isCommissionEligibleBooking(b)) return false;
           const installDate = b?.scheduled_date;
           if (!installDate) return false;
-          if (afterDateExclusive && String(installDate).slice(0, 10) <= afterDateExclusive) return false;
+          if (throughDateInclusive && String(installDate).slice(0, 10) > throughDateInclusive) return false;
           const bucket = this.getCutoffBucket(installDate, sortedScheds);
           if (bucket?.monthKey !== mk || bucket.day !== schedDay) return false;
           const isRollover = String(installDate).slice(0, 7) !== mk;
@@ -1466,8 +1481,8 @@
 
         if (allChecked) {
           const isOwner = this.isOwnerEmployee(emp);
-          const commissionOnly = this.isInactiveCommissionOnly(emp, mk);
-          const inactiveDate = commissionOnly ? this.getInactiveDate(emp) : null;
+          const commissionOnly = !this.isRegularPayoutEmployee(emp, mk);
+          const inactiveDate = this.isActiveEmployee(emp) ? null : this.getInactiveDate(emp);
           const baseSalary   = commissionOnly ? 0 : (emp.salary || 0);
           const sortedScheds = [...scheds].sort((a, b) => a - b);
           const salaryPaid   = commissionOnly ? 0 : this.getEmployeeSalaryTotal(emp, sortedScheds, mk);
@@ -1556,8 +1571,8 @@
         const mk = this.monthKey();
         const monthText = `${MONTHS[this.selectedMonth]} ${this.selectedYear}`;
         const isOwner = this.isOwnerEmployee(emp);
-        const commissionOnly = this.isInactiveCommissionOnly(emp, mk);
-        const inactiveDate = commissionOnly ? this.getInactiveDate(emp) : null;
+        const commissionOnly = !this.isRegularPayoutEmployee(emp, mk);
+        const inactiveDate = this.isActiveEmployee(emp) ? null : this.getInactiveDate(emp);
         const schedules = [...(this.payoutSchedules.length ? this.payoutSchedules : [15, 30])].map(Number).sort((a, b) => a - b);
         const salaryPaid = commissionOnly ? 0 : this.getEmployeeSalaryTotal(emp, schedules, mk);
         const commissions = isOwner ? 0 : this._commissionForEmpMonth(empId, mk, inactiveDate);
