@@ -136,7 +136,7 @@
       }
 
       tbody.innerHTML = this.holidays.map((holiday) => `<tr>
-        <td>${esc(holiday.holiday_name)}</td>
+        <td><span class="holiday-name-cell">${holiday.consistent_date_annually ? '<span class="holiday-recurring-icon" title="Consistent every year" aria-label="Consistent every year"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7h-5V2"/><path d="M20 7a8 8 0 0 0-13.7-2.7L4 6"/><path d="M4 17h5v5"/><path d="M4 17a8 8 0 0 0 13.7 2.7L20 18"/></svg></span>' : ''}<span>${esc(holiday.holiday_name)}</span></span></td>
         <td>${esc(HOLIDAY_TYPES[holiday.holiday_type] || holiday.holiday_type)}</td>
         <td>${formatDate(holiday.calendar_year === this.currentYear || holiday.consistent_date_annually ? dateForYear(holiday.date_from, holiday.calendar_year, this.currentYear) : null)}</td>
         <td>${formatDate(holiday.calendar_year === this.currentYear || holiday.consistent_date_annually ? dateForYear(holiday.date_to, holiday.calendar_year, this.currentYear) : null)}</td>

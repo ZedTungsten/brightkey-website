@@ -801,7 +801,7 @@
         </button>
       </div>
       <div class="modal-body" style="padding: 1.5rem; display: flex; flex-direction: column; gap: 0.75rem; font-size: 0.88rem; line-height: 1.55; color: var(--text-secondary, #52525b);">
-        <div id="calendar-event-name" style="font-size: 0.95rem; font-weight: 800; color: var(--text-primary); word-break: break-word;"></div>
+        <div id="calendar-event-name" style="font-size: 0.95rem; font-weight: 600; color: var(--text-primary); word-break: break-word;"></div>
         <div id="calendar-event-desc" style="white-space: pre-wrap; word-break: break-word;"></div>
       </div>
       <div class="modal-footer" style="padding: 1rem 1.5rem; border-top: 1px solid var(--border, #e4e4e7); background: var(--bg-elevated, #f4f4f5); display: flex; justify-content: flex-end;">
@@ -958,6 +958,8 @@
       activeModalMilestoneId: null,
       calendarDate: new Date(),
       calendarEvents: {},
+      calendarHolidays: {},
+      holidayYearCache: {},
       birthdays: [],
 
       async init() {
@@ -1048,6 +1050,7 @@
           await this.loadMyTasks();
           await this.loadMyMilestones();
           await this.loadCompanyEvents();
+          await this.loadCalendarHolidays(this.calendarDate.getFullYear());
           await this.loadBirthdays();
 
           // Initialize sticky notes
@@ -1299,10 +1302,12 @@
         });
       },
 
-      changeCalendarMonth(direction) {
+      async changeCalendarMonth(direction) {
         this.calendarDate = new Date(this.calendarDate.getFullYear(), this.calendarDate.getMonth() + direction, 1);
+        await this.loadCalendarHolidays(this.calendarDate.getFullYear());
         this.generateBirthdayEvents();
         this.renderCalendar();
+        this.renderUpcomingEvents();
       },
 
       renderCalendar() {
@@ -1329,13 +1334,18 @@
           
           const event = this.calendarEvents[key];
           const hasEvent = !!event;
-          const eventColor = event?.color || '#d97706';
+          const eventColor = event?.color || '#e35d2f';
           const birthdayDot = hasEvent ? `<div style="position: absolute; bottom: 2px; left: 20%; right: 20%; height: 3px; background: ${eventColor}; border-radius: 1px;"></div>` : '';
+          const holidayEntries = this.calendarHolidays[key] || [];
+          const holidayName = holidayEntries.map(holiday => holiday.name).join(', ');
+          const dateMarker = holidayEntries.length
+            ? '<div style="position:absolute;bottom:2px;left:20%;right:20%;height:3px;background:#eab308;border-radius:1px;"></div>'
+            : birthdayDot;
 
           days.push(`
-            <button type="button" class="home-calendar-day${mutedClass}${todayClass}" onclick="App.showCalendarDayModal('${key}')" aria-label="${esc(label)}">
+            <button type="button" class="home-calendar-day${mutedClass}${todayClass}" onclick="App.showCalendarDayModal('${key}')" aria-label="${esc(label)}${holidayEntries.length ? `, Holiday: ${esc(holidayName)}` : ''}">
               ${date.getDate()}
-              ${birthdayDot}
+              ${dateMarker}
             </button>
           `);
         }
@@ -1359,6 +1369,66 @@
         } catch (err) {
           console.error('Error loading birthdays:', err);
           this.birthdays = [];
+        }
+      },
+
+      async loadCalendarHolidays(year) {
+        if (!this.companyId) return;
+        if (this.holidayYearCache[year]) {
+          this.calendarHolidays = this.holidayYearCache[year];
+          return;
+        }
+
+        try {
+          const { data, error } = await BKAuth.sb
+            .from('company_holidays')
+            .select('holiday_name, holiday_type, calendar_year, date_from, date_to, consistent_date_annually, inactive_from_year')
+            .eq('company_id', this.companyId)
+            .lte('calendar_year', year)
+            .or(`inactive_from_year.is.null,inactive_from_year.gt.${year}`)
+            .order('calendar_year', { ascending: false })
+            .limit(500);
+          if (error) throw error;
+
+          const effectiveByName = new Map();
+          (data || []).forEach(holiday => {
+            const nameKey = String(holiday.holiday_name || '').trim().toLowerCase();
+            if (nameKey && !effectiveByName.has(nameKey)) effectiveByName.set(nameKey, holiday);
+          });
+
+          const holidaysByDate = {};
+          effectiveByName.forEach(holiday => {
+            const carriesDate = holiday.calendar_year === year || holiday.consistent_date_annually;
+            if (!carriesDate || !holiday.date_from) return;
+
+            const toDisplayedYear = value => value ? `${year}-${String(value).slice(5)}` : null;
+            const dateFrom = holiday.calendar_year === year ? holiday.date_from : toDisplayedYear(holiday.date_from);
+            const dateTo = holiday.date_to
+              ? (holiday.calendar_year === year ? holiday.date_to : toDisplayedYear(holiday.date_to))
+              : dateFrom;
+            const cursor = new Date(`${dateFrom}T00:00:00`);
+            const end = new Date(`${dateTo}T00:00:00`);
+            if (Number.isNaN(cursor.getTime()) || Number.isNaN(end.getTime())) return;
+
+            let isStart = true;
+            while (cursor <= end) {
+              const key = this.getCalendarKey(cursor);
+              if (!holidaysByDate[key]) holidaysByDate[key] = [];
+              holidaysByDate[key].push({
+                name: holiday.holiday_name,
+                type: holiday.holiday_type,
+                isStart
+              });
+              isStart = false;
+              cursor.setDate(cursor.getDate() + 1);
+            }
+          });
+
+          this.holidayYearCache[year] = holidaysByDate;
+          this.calendarHolidays = holidaysByDate;
+        } catch (err) {
+          console.error('Error loading company holidays:', err);
+          this.calendarHolidays = {};
         }
       },
 
@@ -1516,7 +1586,7 @@
                   name: "Birthday: " + name,
                   description: `${name}'s Birthday!`,
                   isBirthday: true,
-                  color: '#d97706'
+                  color: '#e35d2f'
                 };
               } else {
                 this.calendarEvents[key].name += ", " + name;
@@ -1638,6 +1708,21 @@
           });
         }
 
+        // 2. Company holidays
+        Object.entries(this.calendarHolidays || {}).forEach(([dateKey, holidays]) => {
+          const dateParts = dateKey.split('-').map(Number);
+          const holidayDate = new Date(dateParts[0], dateParts[1] - 1, dateParts[2]);
+          if (holidayDate < today) return;
+          holidays.filter(holiday => holiday.isStart).forEach(holiday => {
+            upcoming.push({
+              type: 'holiday',
+              title: holiday.name,
+              holidayType: holiday.type,
+              date: holidayDate
+            });
+          });
+        });
+
         const getOccurrenceEnd = (ev, occurrenceDate) => {
           let end = new Date(occurrenceDate);
 
@@ -1707,7 +1792,7 @@
           return null;
         };
 
-        // 2. Corporate Events (filtered by visibility level)
+        // 3. Corporate Events (filtered by visibility level)
         const visibleEvents = (this.companyEvents || []).filter(ev => this.checkEventVisibility(ev));
 
         visibleEvents.forEach(ev => {
@@ -1736,7 +1821,7 @@
         };
 
         const cakeSvg = `
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#d97706" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#e35d2f" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;">
             <path d="M20 21v-8a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8"></path>
             <path d="M4 16h16"></path>
             <path d="M12 11V3"></path>
@@ -1750,6 +1835,12 @@
             <line x1="16" y1="2" x2="16" y2="6"></line>
             <line x1="8" y1="2" x2="8" y2="6"></line>
             <line x1="3" y1="10" x2="21" y2="10"></line>
+          </svg>
+        `;
+
+        const holidayStarSvg = `
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="#eab308" stroke="#eab308" stroke-width="1.5" stroke-linejoin="round" style="flex-shrink:0;">
+            <path d="m12 2.5 2.85 5.77 6.37.93-4.61 4.49 1.09 6.34L12 17.04l-5.7 2.99 1.09-6.34L2.78 9.2l6.37-.93L12 2.5Z"></path>
           </svg>
         `;
 
@@ -1767,13 +1858,22 @@
                 </div>
               </div>
             `;
-          } else {
-            const dateStr = `${item.date.getFullYear()}-${String(item.date.getMonth() + 1).padStart(2, '0')}-${String(item.date.getDate()).padStart(2, '0')}`;
+          } else if (item.type === 'holiday') {
             html += `
-              <div style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; width: 100%;" onclick="App.openCorpEventModal('${esc(item.event.id)}', '${dateStr}')">
+              <div style="display:flex;align-items:center;gap:0.5rem;width:100%;">
+                ${holidayStarSvg}
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:0.75rem;min-width:0;flex:1;width:100%;">
+                  <span title="${esc(item.title)}" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:400;color:var(--text-primary);font-size:0.82rem;">${esc(item.title)}</span>
+                  <span style="flex:0 0 auto;font-size:0.82rem;color:var(--text-secondary);text-align:right;">${formatDate(item.date)}</span>
+                </div>
+              </div>
+            `;
+          } else {
+            html += `
+              <div style="display: flex; align-items: center; gap: 0.5rem; width: 100%;">
                 ${calendarSvg}
                 <div style="display: flex; align-items: center; justify-content: space-between; flex: 1; width: 100%;">
-                  <span style="font-weight: 400; color: var(--cyan-light, #22d3ee); font-size: 0.82rem; text-decoration: underline;">${esc(item.title)}</span>
+                  <span style="font-weight: 400; color: var(--text-primary); font-size: 0.82rem;">${esc(item.title)}</span>
                   <span style="font-size: 0.82rem; color: var(--text-secondary); text-align: right;">${formatDate(item.date)}</span>
                 </div>
               </div>
@@ -1787,6 +1887,13 @@
 
       showCalendarDayModal(dateKey) {
         const event = this.calendarEvents[dateKey] || null;
+        const holidays = this.calendarHolidays[dateKey] || [];
+        const holidayNames = holidays.map(holiday => holiday.name);
+        const holidayTypeLabels = {
+          regular_holiday: 'Regular Holiday',
+          special_non_working_holiday: 'Special Non-working Holiday',
+          company_break: 'Company Break'
+        };
         
         // Redirect to corporate event modal if it is a corporate event!
         if (event && event.eventId && !event.isBirthday) {
@@ -1807,8 +1914,9 @@
         }
 
         titleEl.textContent = this.formatCalendarDate(date);
-        eventNameEl.textContent = event?.name || 'No events for this day.';
-        eventDescEl.textContent = event?.description || '';
+        eventNameEl.textContent = event?.name || holidayNames.join(', ') || 'No events for this day.';
+        eventNameEl.style.fontWeight = event || holidayNames.length ? '600' : '400';
+        eventDescEl.textContent = event?.description || holidays.map(holiday => holidayTypeLabels[holiday.type] || holiday.type).join(', ');
 
         modal.style.display = 'flex';
         modal.offsetHeight;
