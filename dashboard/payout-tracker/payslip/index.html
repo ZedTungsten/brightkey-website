@@ -818,15 +818,24 @@
         const sb   = getSb();
         const priorMonth = this.selectedMonth === 0 ? 11 : this.selectedMonth - 1;
         const priorYear = this.selectedMonth === 0 ? this.selectedYear - 1 : this.selectedYear;
-        const carryStart = `${priorYear}-${String(priorMonth + 1).padStart(2, '0')}-01`;
-        const nextM = this.selectedMonth + 1 > 11 ? 0 : this.selectedMonth + 1;
-        const nextY = this.selectedMonth + 1 > 11 ? this.selectedYear + 1 : this.selectedYear;
-        const end   = `${nextY}-${String(nextM + 1).padStart(2, '0')}-01`;
+        const configuredCutoffs = this.payoutSchedules.map(Number).filter(Boolean);
+        const finalCutoff = Math.max(...(configuredCutoffs.length ? configuredCutoffs : [30]));
+        const pad = value => String(value).padStart(2, '0');
+        const priorDays = new Date(priorYear, priorMonth + 1, 0).getDate();
+        const currentDays = new Date(this.selectedYear, this.selectedMonth + 1, 0).getDate();
+        const carryStart = finalCutoff < priorDays ? `${priorYear}-${pad(priorMonth + 1)}-${pad(finalCutoff + 1)}` : `${mk}-01`;
+        let endYear = this.selectedYear, endMonth = this.selectedMonth + 1, endDay = finalCutoff + 1;
+        if (finalCutoff >= currentDays) { endMonth += 1; endDay = 1; if (endMonth > 12) { endMonth = 1; endYear += 1; } }
+        const end = `${endYear}-${pad(endMonth)}-${pad(endDay)}`;
+        const journalAccountIds = Object.keys(this.accountAssignments).filter(id => this.accountAssignments[id] === empId && /due to|due from/.test(this.glAccountsMap[id] || ''));
+        const journalRequest = journalAccountIds.length
+          ? sb.from('general_journal').select('account_id, date, debit, credit').eq('company_id', this.companyId).in('account_id', journalAccountIds).gte('date', carryStart).lt('date', end).order('id').limit(1000)
+          : Promise.resolve({ data: [] });
 
         const [adjRes, commRes, journalRes] = await Promise.allSettled([
           sb.from('employee_adjustments').select('id, amount, date, label').eq('company_id', this.companyId).eq('employee_id', empId).gte('date', carryStart).lt('date', end),
           sb.from('commission_assignments').select('booking_id, product_index, amount').eq('company_id', this.companyId).eq('employee_id', empId),
-          sb.from('general_journal').select('account_id, date, debit, credit').eq('company_id', this.companyId).gte('date', carryStart).lt('date', end).not('account_id', 'is', null),
+          journalRequest,
         ]);
 
         const adjs  = adjRes.status === 'fulfilled'
