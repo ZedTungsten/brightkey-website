@@ -756,9 +756,15 @@
         return String(emp?.date_inactive || '').slice(0, 10);
       },
 
+      isRegularPayoutEmployee(emp, monthKey = this.monthKey()) {
+        if (this.isActiveEmployee(emp)) return true;
+        const inactiveMonth = this.getInactiveDate(emp).slice(0, 7);
+        return Boolean(inactiveMonth) && monthKey <= inactiveMonth;
+      },
+
       isInactiveCommissionOnly(emp, monthKey = this.monthKey()) {
         const inactiveDate = this.getInactiveDate(emp);
-        return !this.isActiveEmployee(emp)
+        return !this.isRegularPayoutEmployee(emp, monthKey)
           && this._commissionForEmpMonth(emp.id, monthKey, inactiveDate || null) > 0;
       },
 
@@ -784,7 +790,7 @@
       },
 
       getProratedSalaryAllocation(emp, cutoffDay, sortedScheds, monthKey = this.monthKey(), forceSelected = null) {
-        if (!this.isActiveEmployee(emp)) return { value: 0, isProrated: false };
+        if (!this.isRegularPayoutEmployee(emp, monthKey)) return { value: 0, isProrated: false };
         const baseSalary = Number(emp.salary) || 0;
         const regularValue = baseSalary / (sortedScheds.length || 1);
         const selectedIds = this.proratedSalaryState[monthKey] || [];
@@ -1068,7 +1074,7 @@
         headerHtml += `<th style="width:100px; text-align:center;">Action</th>`;
         header.innerHTML = headerHtml;
 
-        const payoutEmployees = this.employees.filter(emp => this.isActiveEmployee(emp) || this.isInactiveCommissionOnly(emp, mk));
+        const payoutEmployees = this.employees.filter(emp => this.isRegularPayoutEmployee(emp, mk) || this.isInactiveCommissionOnly(emp, mk));
         const { grouped, unassigned } = this.groupEmployees(payoutEmployees);
         let bodyHtml = '';
 

@@ -54,10 +54,17 @@ function openDetailsModal(bookingId) {
   document.getElementById('det-address').innerText = cleanAddress;
 
   const mapPinEl = document.getElementById('det-map-pin');
-  if (b.google_map_pin_url) {
-    mapPinEl.innerHTML = `<a href="${b.google_map_pin_url}" target="_blank" rel="noopener noreferrer">Open Google Maps Pin</a>`;
+  const mapPinUrl = String(b.google_map_pin_url || '').trim();
+  mapPinEl.replaceChildren();
+  if (/^https?:\/\//i.test(mapPinUrl)) {
+    const mapPinLink = document.createElement('a');
+    mapPinLink.href = mapPinUrl;
+    mapPinLink.target = '_blank';
+    mapPinLink.rel = 'noopener noreferrer';
+    mapPinLink.textContent = mapPinUrl;
+    mapPinEl.appendChild(mapPinLink);
   } else {
-    mapPinEl.innerText = 'No link provided';
+    mapPinEl.textContent = 'No link provided';
   }
 
   document.getElementById('det-notes').innerText = b.notes || 'N/A';

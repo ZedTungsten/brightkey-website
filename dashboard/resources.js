@@ -235,7 +235,7 @@ function renderExplorer() {
         // File icons depending on file_type
         if (item.file_type === 'pdf') {
           iconHtml = `<svg viewBox="0 0 24 24" width="30" height="30" stroke="currentColor" stroke-width="2" fill="none"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="9" y1="15" x2="15" y2="15"></line></svg>`;
-        } else if (['png', 'jpg', 'jpeg'].includes(item.file_type)) {
+        } else if (['png', 'jpg', 'jpeg', 'image'].includes(item.file_type)) {
           iconHtml = `<svg viewBox="0 0 24 24" width="30" height="30" stroke="currentColor" stroke-width="2" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>`;
         } else if (item.file_type === 'slide') {
           iconHtml = `<svg viewBox="0 0 24 24" width="30" height="30" stroke="currentColor" stroke-width="2" fill="none"><rect x="3" y="3" width="18" height="12" rx="2"></rect><path d="M12 15v4M9 21h6"></path></svg>`;
@@ -245,7 +245,7 @@ function renderExplorer() {
           iconHtml = `<svg viewBox="0 0 24 24" width="30" height="30" stroke="currentColor" stroke-width="2" fill="none"><path d="M9 18V5l12-2v13"></path><circle cx="6.5" cy="18" r="2.5"></circle><circle cx="18.5" cy="16" r="2.5"></circle></svg>`;
         } else if (item.file_type === 'youtube') {
           iconHtml = `<img src="https://upload.wikimedia.org/wikipedia/commons/0/09/YouTube_full-color_icon_%282017%29.svg" alt="YouTube" style="width:38px; height:auto; display:block;" />`;
-        } else if (item.file_type === 'video') {
+        } else if (['video', 'mp4', 'mpg', 'mov'].includes(item.file_type)) {
           iconHtml = `<svg viewBox="0 0 24 24" width="30" height="30" stroke="currentColor" stroke-width="2" fill="none"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"></rect><line x1="7" y1="2" x2="7" y2="22"></line><line x1="17" y1="2" x2="17" y2="22"></line><line x1="2" y1="12" x2="22" y2="12"></line><line x1="2" y1="7" x2="7" y2="7"></line><line x1="2" y1="17" x2="7" y2="17"></line><line x1="17" y1="17" x2="22" y2="17"></line><line x1="17" y1="7" x2="22" y2="7"></line></svg>`;
         } else {
           iconHtml = `<svg viewBox="0 0 24 24" width="30" height="30" stroke="currentColor" stroke-width="2" fill="none"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>`;
@@ -255,7 +255,7 @@ function renderExplorer() {
 
     // Auto append lowercase extensions to files in Grid view
     let displayName = item.name;
-    if (item.type !== 'folder' && item.file_type !== 'youtube' && !displayName.toLowerCase().endsWith('.' + String(item.file_type).toLowerCase())) {
+    if (item.type !== 'folder' && !['youtube', 'video', 'image'].includes(item.file_type) && !displayName.toLowerCase().endsWith('.' + String(item.file_type).toLowerCase())) {
       displayName = displayName + '.' + String(item.file_type).toLowerCase();
     }
 
@@ -1346,6 +1346,7 @@ window.openUploadFileModal = function() {
   document.getElementById('file-name-input').value = "";
   document.getElementById('file-uploader').value = "";
   document.getElementById('file-gdrive-url').value = "";
+  document.getElementById('file-gdrive-type').value = "";
   document.getElementById('file-youtube-url').value = "";
   document.getElementById('file-source-type').value = "upload";
   
@@ -1469,22 +1470,26 @@ document.addEventListener("DOMContentLoaded", () => {
 window.toggleFileSourceFields = function(source) {
   const uploadField = document.getElementById('file-upload-field');
   const gdriveField = document.getElementById('file-gdrive-field');
+  const gdriveTypeField = document.getElementById('file-gdrive-type-field');
   const youtubeField = document.getElementById('file-youtube-field');
   const btn = document.getElementById('btn-save-file');
 
   if (source === 'upload') {
     uploadField.style.display = 'block';
     gdriveField.style.display = 'none';
+    gdriveTypeField.style.display = 'none';
     youtubeField.style.display = 'none';
     btn.textContent = "Upload";
   } else if (source === 'gdrive') {
     uploadField.style.display = 'none';
     gdriveField.style.display = 'block';
+    gdriveTypeField.style.display = 'block';
     youtubeField.style.display = 'none';
     btn.textContent = "Link File";
   } else {
     uploadField.style.display = 'none';
     gdriveField.style.display = 'none';
+    gdriveTypeField.style.display = 'none';
     youtubeField.style.display = 'block';
     btn.textContent = "Link Video";
   }
@@ -1607,14 +1612,17 @@ window.saveFile = async function() {
         }
       }
 
-      // Auto detect Google Drive file type from URL patterns
-      let gdriveFileType = 'doc'; // Use distinct variable name
-      if (url.includes('/presentation') || url.includes('/slides')) {
-        gdriveFileType = 'slide';
-      } else if (url.includes('/spreadsheets') || url.includes('/sheets')) {
-        gdriveFileType = 'sheet';
-      } else if (url.includes('/document') || url.includes('/docs')) {
-        gdriveFileType = 'doc';
+      if (isGDriveFolderUrl(url)) {
+        showToast('This is a Google Drive folder link. Open the individual file in Drive and copy its file link instead.', true);
+        btn.disabled = false;
+        return;
+      }
+
+      const gdriveFileType = document.getElementById('file-gdrive-type').value;
+      if (!gdriveFileType) {
+        showToast('Please select the Google Drive file type.', true);
+        btn.disabled = false;
+        return;
       }
 
       const { error: driveDbErr } = await sb.from('sales_resources').insert([{
@@ -1919,9 +1927,10 @@ window.viewFileResource = function(item) {
   sheetFooter.style.display = 'none';
 
   let embedUrl = item.file_url;
+  const isDriveFolderLink = isGDriveFolderUrl(embedUrl);
 
   // Auto transform Google Drive sharing links to Embed / Preview links
-  if (embedUrl.includes('drive.google.com') || embedUrl.includes('docs.google.com')) {
+  if (!isDriveFolderLink && (embedUrl.includes('drive.google.com') || embedUrl.includes('docs.google.com'))) {
     // Doc, Slides, Sheets embedding transformations
     if (item.file_type === 'doc') {
       embedUrl = transformGDriveDocUrl(embedUrl);
@@ -1929,12 +1938,16 @@ window.viewFileResource = function(item) {
       embedUrl = transformGDriveSlideUrl(embedUrl);
     } else if (item.file_type === 'sheet') {
       embedUrl = transformGDriveSheetUrl(embedUrl);
+    } else if (['video', 'mp4', 'mpg', 'mov', 'image'].includes(item.file_type)) {
+      embedUrl = transformGDriveFileUrl(embedUrl);
     }
   }
 
   overlay.style.display = 'flex';
 
-  if (item.file_type === 'pdf') {
+  if (isDriveFolderLink) {
+    body.innerHTML = `<div style="max-width:640px; margin-top:8vh; padding:2rem; border:1px solid var(--border); border-radius:12px; background:var(--bg-surface); color:var(--text-primary); text-align:center; line-height:1.6;"><strong>This resource uses a Google Drive folder link.</strong><br><span style="color:var(--text-muted);">Open the individual file in Google Drive and copy its file link to enable an embedded preview.</span></div>`;
+  } else if (item.file_type === 'pdf') {
     // Embed PDF preview natively
     body.innerHTML = `<iframe src="${embedUrl}" style="width:100%; height:80vh; min-height:600px; border:none; background:#fff; border-radius:8px;"></iframe>`;
   } else if (['png', 'jpg', 'jpeg'].includes(item.file_type)) {
@@ -1958,6 +1971,8 @@ window.viewFileResource = function(item) {
 
     // View full height of file naturally by letting it take vertical height and scrolling the .viewer-body wrapper
     body.innerHTML = `<div style="width:100%; height:100%; display:flex; justify-content:center; align-items:center; overflow:hidden;"><img src="${displayUrl}" style="max-width:100%; max-height:calc(100vh - 120px); object-fit:contain; border-radius:6px; box-shadow:0 12px 32px rgba(0,0,0,0.5); display:block;" onerror="this.src='${embedUrl}';" /></div>`;
+  } else if (item.file_type === 'image') {
+    body.innerHTML = `<iframe src="${embedUrl}" title="${escFulfillment(item.name)}" style="width:min(960px, 100%); height:80vh; min-height:600px; border:none; border-radius:8px; background:#fff;"></iframe>`;
   } else if (item.file_type === 'doc') {
     // Doc — Render single clean read-only frame aligned with document page dimensions (standard 850px)
     body.innerHTML = `
@@ -2010,11 +2025,12 @@ window.viewFileResource = function(item) {
     } else {
       body.innerHTML = `<div style="color:var(--text-muted); padding:2rem;">This YouTube link cannot be previewed.</div>`;
     }
-  } else if (item.file_type === 'video') {
+  } else if (['video', 'mp4', 'mpg', 'mov'].includes(item.file_type)) {
     // Video Player View
-    body.innerHTML = `
-      <video controls autoplay style="max-width:min(800px, 100%); max-height:80vh; border-radius:8px; border:1px solid var(--border); background:#000; margin-top:2vh;" src="${embedUrl}"></video>
-    `;
+    const isGoogleDriveVideo = embedUrl.includes('drive.google.com');
+    body.innerHTML = isGoogleDriveVideo
+      ? `<iframe src="${embedUrl}" allow="autoplay" allowfullscreen style="width:min(960px, 100%); aspect-ratio:16/9; border:none; border-radius:8px; background:#000; margin-top:2vh;"></iframe>`
+      : `<video controls autoplay style="max-width:min(800px, 100%); max-height:80vh; border-radius:8px; border:1px solid var(--border); background:#000; margin-top:2vh;" src="${embedUrl}"></video>`;
   } else {
     // Generic iframe
     body.innerHTML = `<iframe src="${embedUrl}" style="width:100%; height:80vh; min-height:600px; border:none; background:#fff; border-radius:8px;"></iframe>`;
@@ -2049,6 +2065,26 @@ window.navigateViewerFile = function(direction) {
   }
 };
 
+function getGDriveFileId(url) {
+  const pathMatch = url.match(/\/file\/d\/([^/?#]+)/);
+  if (pathMatch) return pathMatch[1];
+
+  try {
+    return new URL(url).searchParams.get('id') || '';
+  } catch (_) {
+    return '';
+  }
+}
+
+function isGDriveFolderUrl(url) {
+  try {
+    const parsed = new URL(url);
+    return parsed.hostname === 'drive.google.com' && parsed.pathname.split('/').includes('folders');
+  } catch (_) {
+    return false;
+  }
+}
+
 window.closeFileViewer = function() {
   const overlay = document.getElementById('file-viewer-overlay');
   const body = document.getElementById('viewer-container-body');
@@ -2072,6 +2108,11 @@ function transformGDriveDocUrl(url) {
     return url.replace(/\/+$/, '') + '/preview?rm=minimal';
   }
   return url;
+}
+
+function transformGDriveFileUrl(url) {
+  const fileId = getGDriveFileId(url);
+  return fileId ? `https://drive.google.com/file/d/${fileId}/preview` : url;
 }
 
 function transformGDriveSlideUrl(url) {

@@ -376,7 +376,7 @@
           <a href="/dashboard/employee-directory" class="dash-nav-child" data-role="hr">Directory</a>
           <a href="/dashboard/organization-map.html" class="dash-nav-child" data-role="hr">Org Map</a>
           <a href="/dashboard/attendance-leaves" class="dash-nav-child" data-role="hr">Attendance & Leaves</a>
-          <a href="/dashboard/events" class="dash-nav-child" data-role="hr">Events</a>
+          <a href="/dashboard/events/company" class="dash-nav-child" data-role="hr">Events</a>
           <a href="/dashboard/hiring" class="dash-nav-child" data-role="hr">Hiring</a>
           <a href="/dashboard/payout-tracker/payout/" class="dash-nav-child" data-role="hr" style="display: flex; justify-content: space-between; align-items: center;">
             <span>Payout Tracker</span>
@@ -670,6 +670,11 @@
       ],
       '/dashboard/hiring': [
         '/dashboard/hiring'
+      ],
+      '/dashboard/events/company': [
+        '/dashboard/events',
+        '/dashboard/events/company',
+        '/dashboard/events/holiday'
       ],
       '/dashboard/payout-tracker/payout': [
         '/dashboard/payout-tracker'
