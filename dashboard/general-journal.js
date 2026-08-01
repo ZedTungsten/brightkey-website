@@ -190,7 +190,7 @@
       populateCatSelects() {
         const sel = document.getElementById('new-acct-cat');
         if (!sel) return;
-        sel.innerHTML = '';
+        sel.innerHTML = '<option value="" disabled selected hidden>Select category…</option>';
         this.customCategories.forEach(c => {
           const o = document.createElement('option');
           o.value = o.textContent = c;
@@ -548,7 +548,7 @@
               await this.saveCategories();
             }
           }
-          if (!name) { Toast.error('Account name is required.'); return; }
+          if (!cat) { Toast.error('Please select a category.'); return; } if (!name) { Toast.error('Account name is required.'); return; }
           try {
             await sbPost('journal_accounts', { name, category: cat, company_id: this.companyId });
             document.getElementById('new-acct-name').value = '';
