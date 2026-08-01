@@ -1326,22 +1326,28 @@
         }).reduce((sum, assignment) => sum + this._getStoredCommAmount(assignment), 0);
       },
 
+      _isGlReimbursementAccount(accountId) {
+        const accountName = String(this.glAccountsMap?.[accountId] || '').toLowerCase();
+        return accountName.includes('due to staff') || accountName.includes('due to owner');
+      },
+
+      _glReimbursementAmount(entry) {
+        // Credits record the employee/owner expense. Debits settle the liability and
+        // must not erase the reimbursement from the historical payout cutoff.
+        return parseFloat(entry?.credit) || 0;
+      },
+
       _glAdditionsForSchedule(empId, schedDay, mk, sortedScheds, rolloverOnly = null) {
         if (!this.generalJournalEntries || !this.accountAssignments) return 0;
         return this.generalJournalEntries.filter(r => {
           const assignedEmpId = this.accountAssignments[r.account_id];
           if (assignedEmpId !== empId) return false;
-          const accName = (this.glAccountsMap?.[r.account_id] || '').toLowerCase();
-          if (!accName.includes('due to')) return false;
+          if (!this._isGlReimbursementAccount(r.account_id)) return false;
           const bucket = this.getCutoffBucket(r.date, sortedScheds);
           if (bucket?.monthKey !== mk || bucket.day !== schedDay) return false;
           const isRollover = String(r.date || '').slice(0, 7) !== mk;
           return rolloverOnly === null || isRollover === rolloverOnly;
-        }).reduce((s, r) => {
-          const credit = parseFloat(r.credit) || 0;
-          const debit = parseFloat(r.debit) || 0;
-          return s + (credit - debit);
-        }, 0);
+        }).reduce((sum, entry) => sum + this._glReimbursementAmount(entry), 0);
       },
 
       _glDeductionsForSchedule(empId, schedDay, mk, sortedScheds, rolloverOnly = null) {
@@ -1367,14 +1373,9 @@
         return this.generalJournalEntries.filter(r => {
           const assignedEmpId = this.accountAssignments[r.account_id];
           if (assignedEmpId !== empId) return false;
-          const accName = (this.glAccountsMap?.[r.account_id] || '').toLowerCase();
-          if (!accName.includes('due to')) return false;
+          if (!this._isGlReimbursementAccount(r.account_id)) return false;
           return this.getCutoffBucket(r.date, this.payoutSchedules)?.monthKey === mk;
-        }).reduce((s, r) => {
-          const credit = parseFloat(r.credit) || 0;
-          const debit = parseFloat(r.debit) || 0;
-          return s + (credit - debit);
-        }, 0);
+        }).reduce((sum, entry) => sum + this._glReimbursementAmount(entry), 0);
       },
 
       _glDeductionsForEmpMonth(empId, mk) {
