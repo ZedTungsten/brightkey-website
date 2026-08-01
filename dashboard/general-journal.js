@@ -417,9 +417,9 @@
         const c = document.getElementById('accts-list');
         if (!c) return;
         if (!this.accounts.length) { c.innerHTML = '<div class="tbl-state">No accounts yet.</div>'; return; }
-        const g = this.grouped(false);
+        const g = this.grouped(false), selectedCategory = document.getElementById('new-acct-cat')?.value;
         let html = '';
-        Object.keys(g).sort().forEach(cat => {
+        Object.keys(g).sort().filter(cat => !selectedCategory || selectedCategory === '__create_new__' || cat === selectedCategory).forEach(cat => {
           const isDeleted = this.deletedCategories.includes(cat);
           const groupStyle = isDeleted ? 'color: var(--danger); font-weight: 700; background: rgba(239, 68, 68, 0.08); padding: 4px 12px;' : '';
           html += `<div class="acct-group-label" style="${groupStyle}">${esc(cat)}</div>`;
@@ -449,7 +449,7 @@
               </div>`;
           });
         });
-        c.innerHTML = html;
+        c.innerHTML = html || '<div class="tbl-state">No accounts in this category yet.</div>';
       },
 
       editAcct(id) {
@@ -533,8 +533,8 @@
         const categorySelect = document.getElementById('new-acct-cat');
         const newCategoryControls = document.getElementById('new-cat-controls');
         const newCategoryInput = document.getElementById('new-cat-name');
-        categorySelect.addEventListener('change', function() { const isCreate = this.value === '__create_new__'; this.style.display = isCreate ? 'none' : ''; newCategoryControls.style.display = isCreate ? 'grid' : 'none'; if (isCreate) newCategoryInput.focus(); });
-        document.getElementById('cancel-new-cat-btn').addEventListener('click', () => { newCategoryInput.value = ''; newCategoryControls.style.display = 'none'; categorySelect.style.display = ''; categorySelect.selectedIndex = categorySelect.options.length > 1 ? 0 : -1; categorySelect.focus(); });
+        categorySelect.addEventListener('change', () => { const isCreate = categorySelect.value === '__create_new__'; categorySelect.style.display = isCreate ? 'none' : ''; newCategoryControls.style.display = isCreate ? 'grid' : 'none'; this.renderAcctsList(); if (isCreate) newCategoryInput.focus(); });
+        document.getElementById('cancel-new-cat-btn').addEventListener('click', () => { newCategoryInput.value = ''; newCategoryControls.style.display = 'none'; categorySelect.style.display = ''; categorySelect.selectedIndex = categorySelect.options.length > 1 ? 0 : -1; this.renderAcctsList(); categorySelect.focus(); });
 
         document.getElementById('add-acct-btn').addEventListener('click', async () => {
           const name = document.getElementById('new-acct-name').value.trim();
