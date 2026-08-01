@@ -191,7 +191,7 @@
         const sel = document.getElementById('new-acct-cat');
         if (!sel) return;
         sel.innerHTML = '<option value="" disabled selected hidden>Select category…</option>';
-        this.customCategories.forEach(c => {
+        [...this.customCategories].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' })).forEach(c => {
           const o = document.createElement('option');
           o.value = o.textContent = c;
           sel.appendChild(o);
