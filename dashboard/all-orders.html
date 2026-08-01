@@ -721,10 +721,10 @@
 
       const installQuery = companyId
         ? sb.from('installation_bookings')
-          .select('order_no, scheduled_date, customer_address, customer_phone')
+          .select('order_no, scheduled_date, customer_address, customer_phone, status')
           .eq('company_id', companyId)
-          .gte('scheduled_date', monthStart.slice(0, 10))
-          .lt('scheduled_date', monthEnd.slice(0, 10))
+          .gte('created_at', monthStart)
+          .lt('created_at', monthEnd)
           .range(0, 249)
         : Promise.resolve({ data: [], error: null });
 
@@ -893,14 +893,9 @@
       });
 
       const consolidatedList = Object.values(groupedOrders).sort((a, b) => {
-        const customerA = String(a.customer_name || '').trim();
-        const customerB = String(b.customer_name || '').trim();
-
-        // Keep unnamed/system-generated sources after named customers.
-        if (!customerA && customerB) return 1;
-        if (customerA && !customerB) return -1;
-
-        return customerA.localeCompare(customerB, 'en', {
+        const orderA = String(a.reference_id || '').trim();
+        const orderB = String(b.reference_id || '').trim();
+        return orderB.localeCompare(orderA, 'en', {
           sensitivity: 'base',
           numeric: true
         });
@@ -908,6 +903,8 @@
 
       tbody.innerHTML = consolidatedList.map(group => {
         const t = group.items[0]; // representative transaction
+        const installationBooking = dbInstallationBookings.find(booking => booking.order_no === t.reference_id);
+        const isCancelledOrder = installationBooking?.status === 'cancelled' || group.items.every(item => item.status === 'cancelled');
         const dateCreated = t.created_at ? new Date(t.created_at).toLocaleString() : '—';
         
         // Show proper supplier PO or reference if no customer name exists
@@ -941,6 +938,7 @@
 
         const statsHtml = `
           <div style="font-size: 0.72rem; line-height: 1.45; color:var(--text-secondary);">
+            ${isCancelledOrder ? '<div style="margin-bottom:0.3rem;"><span class="badge badge-cancelled">Cancelled</span></div>' : ''}
             <div><strong>Booked:</strong> ${tsReserved}</div>
             <div><strong>Inspected:</strong> ${tsInspect}</div>
             <div><strong>Packed:</strong> ${tsPacked}</div>

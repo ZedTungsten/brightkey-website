@@ -267,7 +267,7 @@ window.WarehousePage = {
         return isBooked;
       }
 
-      if (!['ordered', 'returned', 'cancelled'].includes(t.status)) return false;
+      if (!['ordered', 'returned'].includes(t.status)) return false;
       return t.type !== 'supplier_order';
     }).length + (this.warehouseTransfers || []).filter(tr => tr.status === 'approved' && tr.to_warehouse_id === this.activeWarehouseId).length;
     const inspectCount = [...new Set(this.activeTransactions.filter(t => 

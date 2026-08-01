@@ -88,23 +88,25 @@
         // 2. Cancel all active inventory transactions for this order
         const orderNo = selectedBooking.order_no;
         if (orderNo) {
-          // Delete delivery booking if it exists
-          const { error: delBookingErr } = await sb
-            .from('delivery_bookings')
-            .delete()
-            .eq('reference_id', orderNo);
-          if (delBookingErr) throw delBookingErr;
-
           const { data: txs, error: txFetchErr } = await sb
             .from('inventory_transactions')
-            .select('id, sku, quantity, status, warehouse_id')
+            .select('id, sku, quantity, status, warehouse_id, timestamp_dispatched')
             .eq('reference_id', orderNo)
             .eq('type', 'customer_order')
             .in('status', ['inspect', 'reserved', 'packed', 'dispatched']);
           if (txFetchErr) throw txFetchErr;
 
+          const hasDispatched = (txs || []).some(tx => tx.status === 'dispatched' || tx.timestamp_dispatched);
+          if (!hasDispatched) {
+            const { error: delBookingErr } = await sb
+              .from('delivery_bookings')
+              .delete()
+              .eq('reference_id', orderNo);
+            if (delBookingErr) throw delBookingErr;
+          }
+
           const now = new Date().toISOString();
-          for (const tx of (txs || [])) {
+          for (const tx of (txs || []).filter(tx => !hasDispatched && tx.status !== 'dispatched')) {
             // Cancel the transaction
             const { error: txErr } = await sb
               .from('inventory_transactions')
@@ -130,8 +132,6 @@
                 invUpdate.reserved = Math.max(0, (inv.reserved || 0) - tx.quantity);
               } else if (tx.status === 'packed') {
                 invUpdate.packed = Math.max(0, (inv.packed || 0) - tx.quantity);
-              } else if (tx.status === 'dispatched') {
-                invUpdate.dispatched = Math.max(0, (inv.dispatched || 0) - tx.quantity);
               }
               const { error: updErr } = await sb
                 .from('inventory')

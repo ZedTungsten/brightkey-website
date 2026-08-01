@@ -666,12 +666,16 @@
         this.consolidatedOrders = [];
         for (const [refId, txs] of Object.entries(groupedMap)) {
           const db = this.deliveryBookings.find(b => b.reference_id === refId);
-          
-          // Use transaction's created_at (order booking date) to filter months, aligning with all-orders.html
-          const filterDateStr = txs[0].created_at;
-          if (!filterDateStr) continue;
-          
-          const d = new Date(filterDateStr);
+
+          // The Done queue belongs to the month in which the order was dispatched.
+          const transactionDispatchDates = txs
+            .map(t => t.timestamp_dispatched)
+            .filter(Boolean)
+            .sort();
+          const dateDispatched = db?.picked_up_at || transactionDispatchDates[0] || null;
+          if (!dateDispatched) continue;
+
+          const d = new Date(dateDispatched);
           if (d.getFullYear() !== filterYear || d.getMonth() !== filterMonth) {
             continue;
           }
@@ -685,7 +689,6 @@
             }
           }
 
-          const dateDispatched = db?.picked_up_at || txs.find(t => t.timestamp_dispatched)?.timestamp_dispatched || null;
           const dateReceived = db?.delivered_at || txs.find(t => t.timestamp_received)?.timestamp_received || null;
 
           let city = txs[0].customer_city;

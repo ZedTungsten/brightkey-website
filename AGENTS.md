@@ -88,6 +88,16 @@ We enforce rigorous practices to prevent SQL injections (SQLi) and Cross-Site Sc
 
 ---
 
+## 21. JavaScript Module Size & Route Chunks
+> [!IMPORTANT]
+> **PREVENT MONOLITHIC JAVASCRIPT FILES**:
+> - Run `npm run check:module-size` as part of every normal lint pass.
+> - New JavaScript modules under `dashboard/` and `js/` must not exceed 1,000 lines.
+> - Existing oversized modules are frozen at the line counts recorded in `scripts/module-size-baseline.json`; they may shrink but must not grow.
+> - When a module reaches its limit, extract feature-specific behavior into focused files and load those files only on the routes that need them. Keep shared authentication, tenant resolution, and common UI helpers in shared modules rather than duplicating them.
+> - Do not raise a baseline to make the checker pass. Refactor the new behavior into a chunk, or reduce the oversized module below its prior baseline.
+> - Once an existing module reaches 1,000 lines or fewer, remove its baseline exemption so it cannot grow past the standard limit again.
+
 ## 22. Optimization Must Preserve Business Visibility and Workflow Semantics
 > [!CRITICAL]
 > **AN OPTIMIZATION IS NOT ALLOWED TO CHANGE WHO OR WHAT A VALID TENANT USER CAN SEE**:

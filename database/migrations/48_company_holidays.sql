@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS public.company_holidays (
   ),
   date_from DATE,
   date_to DATE,
+  consistent_date_annually BOOLEAN NOT NULL DEFAULT FALSE,
   created_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
