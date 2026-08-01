@@ -530,12 +530,11 @@
           toggle.classList.toggle('open', open);
         });
 
-        document.getElementById('new-acct-cat').addEventListener('change', function() {
-          const newCatInput = document.getElementById('new-cat-name');
-          const isCreate = this.value === '__create_new__';
-          newCatInput.style.display = isCreate ? '' : 'none';
-          if (isCreate) newCatInput.focus();
-        });
+        const categorySelect = document.getElementById('new-acct-cat');
+        const newCategoryControls = document.getElementById('new-cat-controls');
+        const newCategoryInput = document.getElementById('new-cat-name');
+        categorySelect.addEventListener('change', function() { const isCreate = this.value === '__create_new__'; newCategoryControls.style.display = isCreate ? 'grid' : 'none'; if (isCreate) newCategoryInput.focus(); });
+        document.getElementById('cancel-new-cat-btn').addEventListener('click', () => { newCategoryInput.value = ''; newCategoryControls.style.display = 'none'; categorySelect.selectedIndex = categorySelect.options.length > 1 ? 0 : -1; categorySelect.focus(); });
 
         document.getElementById('add-acct-btn').addEventListener('click', async () => {
           const name = document.getElementById('new-acct-name').value.trim();
@@ -553,8 +552,8 @@
           try {
             await sbPost('journal_accounts', { name, category: cat, company_id: this.companyId });
             document.getElementById('new-acct-name').value = '';
-            document.getElementById('new-cat-name').value = '';
-            document.getElementById('new-cat-name').style.display = 'none';
+            newCategoryInput.value = '';
+            newCategoryControls.style.display = 'none';
             this.populateCatSelects();
             this.renderCatsList();
             Toast.success(`"${name}" added.`);
