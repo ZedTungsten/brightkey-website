@@ -755,15 +755,18 @@
 
       GRID_DAYS.forEach(wday => {
         // Find all employee blocks that cover this hour on this weekday
-        const covering = schedules.filter(s =>
-          s.day_of_week === wday && h >= s.hour_start && h < s.hour_end
-        );
+        const covering = schedules
+          .filter(s => s.day_of_week === wday && h >= s.hour_start && h < s.hour_end)
+          .map(schedule => ({
+            schedule,
+            employee: allEmployees.find(employee => employee.id === schedule.employee_id)
+          }))
+          .filter(item => item.employee);
 
         // Multiple employees can overlap — stack them side by side
-        const blockHtml = covering.map((s, idx) => {
-          const emp   = allEmployees.find(e => e.id === s.employee_id);
-          const color = s.color || emp?.color || '#06b6d4';
-          const lbl   = emp ? `${emp.first_name} ${emp.last_name}` : '?';
+        const blockHtml = covering.map(({ schedule, employee }, idx) => {
+          const color = schedule.color || employee.color || '#06b6d4';
+          const lbl   = `${employee.first_name} ${employee.last_name}`;
           const w     = 100 / covering.length;
           return `<div class="cal-block-label" style="background:${esc(color)};left:${idx*w}%;width:${w}%;">${esc(lbl)}</div>`;
         }).join('');
@@ -908,7 +911,8 @@
     const { data: empData, error: empErr } = await sb
       .from('employees')
       .select('id, first_name, last_name, assignment, picture_link')
-      .eq('company_id', companyId);
+      .eq('company_id', companyId)
+      .eq('employment_status', 'Active');
     if (empErr) throw empErr;
 
     // Filter to Sales employees (or show all if no sales assignments defined)
@@ -917,6 +921,9 @@
       const empAssigns = (e.assignment || '').split(',').map(s => s.trim());
       return empAssigns.some(a => salesAssignments.includes(a));
     });
+
+    const visibleEmployeeIds = new Set(allEmployees.map(employee => employee.id));
+    schedules = schedules.filter(schedule => visibleEmployeeIds.has(schedule.employee_id));
 
     // Merge color from schedules
     allEmployees.forEach(emp => {

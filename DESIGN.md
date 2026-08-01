@@ -15,6 +15,7 @@ Guidelines for styling, icons, modal alerts, and loading components to maintain 
 * **Always use inline SVG for icons.**
 * **Never use emojis** as icons or decorative elements anywhere in the UI (HTML, template strings, or JS-generated markup).
 * **Minimalist SVG Buttons**: When rendering inline SVG buttons (e.g. edit, delete, cancel), use minimalist SVGs without containers, borders, backgrounds, or default padding. Buttons wrapping these SVGs should be transparent and borderless.
+* **Standard Row Actions**: Use a pencil SVG for edit actions and a trash-can SVG for delete/remove actions. Render the SVG only—do not place visible `Edit`, `Delete`, or `Remove` text inside compact table action buttons. Keep an `aria-label` and `title` on every icon-only button for accessibility, and color destructive trash actions with `var(--danger)`.
 
 ---
 

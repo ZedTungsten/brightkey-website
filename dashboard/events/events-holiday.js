@@ -142,12 +142,10 @@
         <td>${formatDate(holiday.calendar_year === this.currentYear || holiday.consistent_date_annually ? dateForYear(holiday.date_to, holiday.calendar_year, this.currentYear) : null)}</td>
         <td class="holiday-actions-cell">
           <button type="button" class="action-btn holiday-action-btn" data-holiday-action="edit" data-holiday-id="${esc(holiday.id)}" aria-label="Edit ${esc(holiday.holiday_name)}" title="Edit">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-            <span>Edit</span>
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
           </button>
           <button type="button" class="action-btn holiday-action-btn danger" data-holiday-action="remove" data-holiday-id="${esc(holiday.id)}" aria-label="Remove ${esc(holiday.holiday_name)}" title="Remove">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
-            <span>Remove</span>
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
           </button>
         </td>
       </tr>`).join('');
