@@ -728,9 +728,6 @@
           if (from) {
             toEl.setAttribute('min', from);
             toEl.setAttribute('max', today);
-            if (toEl.value && toEl.value < from) {
-              toEl.value = '';
-            }
           } else {
             toEl.removeAttribute('min');
             toEl.setAttribute('max', today);
@@ -742,9 +739,6 @@
           const to = toEl.value;
           if (to) {
             fromEl.setAttribute('max', to);
-            if (fromEl.value && fromEl.value > to) {
-              fromEl.value = '';
-            }
           } else {
             fromEl.removeAttribute('min');
             fromEl.setAttribute('max', today);
