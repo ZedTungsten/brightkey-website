@@ -479,6 +479,18 @@
       return `${datePart} ${timePart}`;
     }
 
+    function isCorrectedDate(originalValue, transactionValue) {
+      if (!originalValue || !transactionValue) return false;
+      const originalTime = new Date(originalValue).getTime();
+      const transactionTime = new Date(transactionValue).getTime();
+      return Number.isFinite(originalTime) && Number.isFinite(transactionTime) && Math.abs(originalTime - transactionTime) > 1000;
+    }
+
+    function renderAuditedDate(originalValue, correctedValue) {
+      if (!correctedValue) return formatDateTime(originalValue);
+      return `<span style="display:block; color:var(--text-muted); text-decoration:line-through; font-size:0.75rem;">${formatDateTime(originalValue)}</span><span style="display:block; color:var(--text-primary); font-weight:600; margin-top:0.2rem;">${formatDateTime(correctedValue)}</span>`;
+    }
+
     const DeliveryApp = {
       currentUser: null,
       companyId: null,
@@ -818,7 +830,9 @@
             .map(t => t.timestamp_dispatched)
             .filter(Boolean)
             .sort();
-          const dateDispatched = db?.picked_up_at || transactionDispatchDates[0] || null;
+          const originalDateDispatched = db?.picked_up_at || transactionDispatchDates[0] || null;
+          const correctedDateDispatched = isCorrectedDate(db?.picked_up_at, transactionDispatchDates[0]) ? transactionDispatchDates[0] : null;
+          const dateDispatched = correctedDateDispatched || originalDateDispatched;
           if (!dateDispatched) continue;
 
           const d = new Date(dateDispatched);
@@ -835,7 +849,13 @@
             }
           }
 
-          const dateReceived = db?.delivered_at || txs.find(t => t.timestamp_received)?.timestamp_received || null;
+          const transactionReceivedDates = txs
+            .map(t => t.timestamp_received)
+            .filter(Boolean)
+            .sort();
+          const originalDateReceived = db?.delivered_at || transactionReceivedDates[0] || null;
+          const correctedDateReceived = isCorrectedDate(db?.delivered_at, transactionReceivedDates[0]) ? transactionReceivedDates[0] : null;
+          const dateReceived = correctedDateReceived || originalDateReceived;
 
           let city = txs[0].customer_city;
           if (!city || city === 'N/A') {
@@ -860,6 +880,10 @@
             db: db,
             dateDispatched,
             dateReceived,
+            originalDateDispatched,
+            correctedDateDispatched,
+            originalDateReceived,
+            correctedDateReceived,
             status: txs.some(t => t.status === 'received') ? 'received' : 'dispatched'
           });
         }
@@ -893,8 +917,8 @@
           const tollText = toll ? `₱${(toll / 100).toFixed(2)}` : '₱0.00';
           const totalText = totalFee ? `₱${(totalFee / 100).toFixed(2)}` : '₱0.00';
 
-          const dispatchedDateText = formatDateTime(order.dateDispatched);
-          const receivedDateText = formatDateTime(order.dateReceived);
+          const dispatchedDateText = renderAuditedDate(order.originalDateDispatched, order.correctedDateDispatched);
+          const receivedDateText = renderAuditedDate(order.originalDateReceived, order.correctedDateReceived);
 
           const statusColors = {
             dispatched: 'var(--cyan-light)',
