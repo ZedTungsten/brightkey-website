@@ -169,6 +169,19 @@
     .form-input:focus {
       border-color: var(--cyan);
     }
+    .bulk-fee-input {
+      width: 76px;
+      padding: 0.25rem 0.4rem;
+      border: none;
+      border-radius: 4px;
+      background: #fefdf0;
+      color: #1e293b;
+      font: inherit;
+      font-variant-numeric: tabular-nums;
+      text-align: right;
+      outline: none;
+    }
+    .bulk-fee-input:focus { box-shadow: inset 0 0 0 1px var(--cyan); }
 
     /* ── Modal Overlay ── */
     .modal-overlay {
@@ -277,6 +290,10 @@
                     </button>
                   </div>
                   <input type="text" id="search-done" oninput="DeliveryApp.renderDoneQueue()" placeholder="Search Name or Order..." style="background:var(--bg-elevated); border:1px solid var(--border); border-radius:6px; padding:0.4rem 0.75rem; color:var(--text-primary); font-size:0.85rem; font-family:inherit; outline:none; width: 220px; height: 38px;" />
+                  <button type="button" class="btn btn-outline" id="btn-bulk-fees" onclick="DeliveryApp.toggleBulkFeeEdit()" style="margin-left: auto;">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+                    <span id="bulk-fees-btn-text">Bulk Edit</span>
+                  </button>
                 </div>
 
                 <div class="panel">
@@ -428,6 +445,7 @@
       selectedBooking: null,
       donePhotoBlob: null,
       currentDate: new Date(),
+      isBulkEditingFees: false,
 
       async init() {
         if (!window.BKAuth) return;
@@ -455,6 +473,82 @@
         const labelEl = document.getElementById('month-label');
         if (labelEl) {
           labelEl.textContent = this.currentDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+        }
+      },
+
+      toggleBulkFeeEdit() {
+        if (!this.isBulkEditingFees) {
+          this.isBulkEditingFees = true;
+          this.updateBulkFeeButton();
+          this.renderDoneQueue();
+          return;
+        }
+        this.saveBulkFees();
+      },
+
+      updateBulkFeeButton() {
+        const button = document.getElementById('btn-bulk-fees');
+        const label = document.getElementById('bulk-fees-btn-text');
+        if (!button || !label) return;
+        label.textContent = this.isBulkEditingFees ? 'Save Prices' : 'Bulk Edit';
+        button.style.borderColor = this.isBulkEditingFees ? 'var(--cyan)' : '';
+        button.style.color = this.isBulkEditingFees ? 'var(--cyan-light)' : '';
+        button.style.background = this.isBulkEditingFees ? 'var(--cyan-dim)' : '';
+      },
+
+      async saveBulkFees() {
+        const button = document.getElementById('btn-bulk-fees');
+        const inputs = Array.from(document.querySelectorAll('.bulk-fee-input'));
+        if (!inputs.length || !this.companyId) {
+          this.isBulkEditingFees = false;
+          this.updateBulkFeeButton();
+          this.renderDoneQueue();
+          return;
+        }
+
+        const feesByReference = {};
+        let hasInvalidPrice = false;
+        inputs.forEach(input => {
+          const refId = input.dataset.reference;
+          if (!feesByReference[refId]) feesByReference[refId] = {};
+          const rawValue = input.value.replace(/,/g, '').trim();
+          const numericValue = rawValue === '' ? 0 : Number(rawValue);
+          if (!Number.isFinite(numericValue) || numericValue < 0) hasInvalidPrice = true;
+          feesByReference[refId][input.dataset.field] = Math.round((Number.isFinite(numericValue) ? Math.max(0, numericValue) : 0) * 100);
+        });
+        if (hasInvalidPrice) {
+          Toast.error('Enter valid non-negative amounts for all delivery prices.');
+          return;
+        }
+
+        const updates = Object.entries(feesByReference).map(([refId, fees]) => {
+          const order = this.consolidatedOrders.find(item => item.reference_id === refId);
+          if (!order) return null;
+          if (order.db) return { ...order.db, ...fees, company_id: this.companyId };
+          return {
+            reference_id: refId,
+            customer_name: order.customer_name,
+            customer_city: order.customer_city,
+            status: order.status === 'received' ? 'delivered' : 'picked_up',
+            delivered_at: order.status === 'received' ? order.dateReceived : null,
+            company_id: this.companyId,
+            ...fees
+          };
+        }).filter(Boolean);
+
+        if (button) button.disabled = true;
+        try {
+          const { error } = await window.BKAuth.sb.from('delivery_bookings').upsert(updates);
+          if (error) throw error;
+          this.isBulkEditingFees = false;
+          this.updateBulkFeeButton();
+          await this.loadData();
+          Toast.success('Delivery prices updated successfully.');
+        } catch (err) {
+          console.error('Failed to save bulk delivery prices:', err);
+          Toast.error('Could not save the delivery prices. Please try again.');
+        } finally {
+          if (button) button.disabled = false;
         }
       },
 
@@ -504,6 +598,7 @@
                 tip_2: Math.round(tip2Val),
                 toll: Math.round(tollVal)
               })
+              .eq('company_id', this.companyId)
               .eq('id', order.db.id);
 
             if (error) throw error;
@@ -780,10 +875,10 @@
             <td>${esc(order.customer_city)}</td>
             <td class="done-sku-column">${skusHtml}</td>
             <td class="done-qty-column">${qtysHtml}</td>
-            <td>${baseText}</td>
-            <td>${t1Text}</td>
-            <td>${t2Text}</td>
-            <td>${tollText}</td>
+            <td>${this.renderBulkFeeField(order.reference_id, 'base_fee', baseFee, baseText)}</td>
+            <td>${this.renderBulkFeeField(order.reference_id, 'tip_1', tip1, t1Text)}</td>
+            <td>${this.renderBulkFeeField(order.reference_id, 'tip_2', tip2, t2Text)}</td>
+            <td>${this.renderBulkFeeField(order.reference_id, 'toll', toll, tollText)}</td>
             <td><strong>${totalText}</strong></td>
             <td style="white-space:nowrap;">${dispatchedDateText}</td>
             <td style="white-space:nowrap;">${receivedDateText}</td>
@@ -793,6 +888,11 @@
           tbody.appendChild(tr);
         });
 
+      },
+
+      renderBulkFeeField(referenceId, field, centavos, displayText) {
+        if (!this.isBulkEditingFees) return displayText;
+        return `<input type="number" min="0" step="0.01" class="bulk-fee-input" data-reference="${esc(referenceId)}" data-field="${field}" value="${(centavos / 100).toFixed(2)}" aria-label="${field.replace(/_/g, ' ')} for ${esc(referenceId)}" />`;
       },
 
       openDoneModal(idOrRef) {
