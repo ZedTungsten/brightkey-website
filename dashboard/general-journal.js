@@ -1575,7 +1575,7 @@
             <td class="delete-col">
               ${isDel
                 ? `<button class="btn btn-ghost btn-sm" style="color:var(--cyan);padding:0 6px;" onclick="JournalApp.unmarkDelete(${r.entry_number})" title="Undo delete">&#8617;</button>`
-                : `<button class="btn btn-ghost btn-sm" style="color:var(--danger);padding:0 6px;" onclick="JournalApp.markDelete(${r.entry_number})" title="Remove entry"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg></button>`}
+                : `<button class="btn btn-ghost btn-sm" style="color:var(--danger);padding:0 6px;" onclick="JournalApp.markDelete(${r.entry_number})" title="Delete entry" aria-label="Delete entry"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M8 6V4h8v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>`}
             </td>` : '';
 
           const atts = r.attachments || [];
