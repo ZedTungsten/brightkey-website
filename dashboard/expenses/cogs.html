@@ -329,16 +329,29 @@
   <script src="../../js/auth.js"></script>
   <script src="../../js/sidebar.js"></script>
   <script src="../../js/main.js"></script>
-  <script src="/dashboard/expenses/expenses-month.js"></script>
 
   <script>
     (function() {
       'use strict';
 
+      const expenseMonthKey = 'bk-expenses-selected-month';
+      const readExpenseMonth = () => {
+        try {
+          const match = /^(\d{4})-(\d{2})$/.exec(sessionStorage.getItem(expenseMonthKey) || '');
+          if (match && Number(match[2]) >= 1 && Number(match[2]) <= 12) return new Date(Number(match[1]), Number(match[2]) - 1, 1);
+        } catch (_) { /* Use the current month when storage is unavailable. */ }
+        return new Date();
+      };
+      const shiftExpenseMonth = (date, direction) => {
+        const next = new Date(date.getFullYear(), date.getMonth() + direction, 1);
+        try { sessionStorage.setItem(expenseMonthKey, `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}`); } catch (_) { /* Continue without persistence. */ }
+        return next;
+      };
+
       window.ExpensesApp = {
         companyId: null,
         tenantId: null,
-        currentDate: window.BKExpensesMonth.read(),
+        currentDate: readExpenseMonth(),
         products: [],
         bookings: [],
         costLedger: [],
@@ -365,7 +378,7 @@
         },
 
         changeMonth(dir) {
-          this.currentDate = window.BKExpensesMonth.shift(this.currentDate, dir);
+          this.currentDate = shiftExpenseMonth(this.currentDate, dir);
           this.updateMonthLabel();
           this.loadData();
         },
