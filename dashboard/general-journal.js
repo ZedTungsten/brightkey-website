@@ -1568,6 +1568,8 @@
             ? ` onclick="JournalApp.openOrphanPop(event,${r.id},'${esc(displayName)}')" title="Unknown account — click to fix"` : '';
 
           const ec = (col) => (!isDel && this.editMode) ? ` data-col="${col}" data-id="${r.id}"` : '';
+          const editedClass = (col) => chgs[col] ? ' cell-pending-edit' : '';
+          const editedAttr = (col) => chgs[col] ? ' class="cell-pending-edit"' : '';
           const entryNumberHtml = JournalPartnerReveal.entryNumberHtml(this, r, d.entry_number);
           const rowNumber = r._isFilterPartner ? '' : off + (++filteredRowIndex);
 
@@ -1590,13 +1592,13 @@
 
           return `<tr class="${rowCls}" data-id="${r.id}" data-entry="${r.entry_number}"${r._isFilterPartner ? ' title="Paired entry shown outside the active account and search filters"' : ''}${oa}>
             <td class="num" style="color:var(--text-muted);font-size:0.72rem;">${rowNumber}</td>
-            <td class="entry-num"${ec('entry_number')}>${entryNumberHtml}</td>
-            <td${ec('date')}>${d.date || '—'}</td>
-            <td${ec('account')} style="${orphan || isCatDeleted ? 'color:var(--danger);font-weight:600;' : ''}"${isCatDeleted ? ' title="Account is not assigned to an active category"' : ''}>${isCatDeleted ? WARN_ICON : ''}${esc(displayName)}</td>
-            <td class="debit"${ec('debit')}>${d.debit   ? php(d.debit)   : '—'}</td>
-            <td class="credit"${ec('credit')}>${d.credit ? php(d.credit) : '—'}</td>
-            <td${ec('description_1')}>${esc(d.description_1 || '')}</td>
-            <td${ec('description_2')}>${esc(d.description_2 || '')}</td>
+            <td class="entry-num${editedClass('entry_number')}"${ec('entry_number')}>${entryNumberHtml}</td>
+            <td${editedAttr('date')}${ec('date')}>${d.date || '—'}</td>
+            <td${editedAttr('account')}${ec('account')} style="${orphan || isCatDeleted ? 'color:var(--danger);font-weight:600;' : ''}"${isCatDeleted ? ' title="Account is not assigned to an active category"' : ''}>${isCatDeleted ? WARN_ICON : ''}${esc(displayName)}</td>
+            <td class="debit${editedClass('debit')}"${ec('debit')}>${d.debit   ? php(d.debit)   : '—'}</td>
+            <td class="credit${editedClass('credit')}"${ec('credit')}>${d.credit ? php(d.credit) : '—'}</td>
+            <td${editedAttr('description_1')}${ec('description_1')}>${esc(d.description_1 || '')}</td>
+            <td${editedAttr('description_2')}${ec('description_2')}>${esc(d.description_2 || '')}</td>
             <td style="text-align:center;">${docsHtml || '—'}</td>
             ${delCell}
           </tr>`;
