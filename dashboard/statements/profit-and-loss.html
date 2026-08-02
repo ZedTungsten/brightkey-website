@@ -279,15 +279,18 @@
         resolvePlanForMonth(s, targetMonthStr) {
           const subBills = this.softwareBilling.filter(b => b.subscription_id === s.id);
           const exactBill = subBills.find(b => b.billing_month === targetMonthStr);
-          if (exactBill) return { mode: exactBill.mode, cost_centavos: exactBill.cost_centavos };
+          if (exactBill && exactBill.mode !== 'unsubscribed') {
+            return { mode: exactBill.mode, cost_centavos: exactBill.cost_centavos };
+          }
 
           if (s.mode === 'pay_as_you_go') {
             const subStartMonth = (s.subscribed_date || '').slice(0, 7);
-            if (subStartMonth === targetMonthStr) return { mode: 'pay_as_you_go', cost_centavos: s.cost_centavos };
+            const targetMonth = targetMonthStr.slice(0, 7);
+            if (subStartMonth === targetMonth) return { mode: 'pay_as_you_go', cost_centavos: s.cost_centavos };
             return { mode: 'pay_as_you_go', cost_centavos: 0 };
           }
 
-          const pastBills = subBills.filter(b => b.billing_month <= targetMonthStr);
+          const pastBills = subBills.filter(b => b.billing_month <= targetMonthStr && b.mode !== 'unsubscribed');
           if (pastBills.length > 0) {
             pastBills.sort((a, b) => b.billing_month.localeCompare(a.billing_month));
             const latestBill = pastBills[0];
@@ -755,7 +758,6 @@
           // 6. Software & Apps Subscriptions
           this.months.forEach(m => {
             const mKey = m.key;
-            if (this.lockedStatements.some(ls => ls.month === mKey)) return;
             const currentMonthDateStr = `${mKey}-01`;
             const currentMonthLastDayStr = `${mKey}-${new Date(m.year, m.month, 0).getDate()}`;
 
@@ -785,10 +787,16 @@
           });
 
           // Merge locked statements
+          const liveSoftwareApps = Object.fromEntries(
+            Object.entries(monthlyValues).map(([month, values]) => [month, values.softwareApps])
+          );
           if (this.lockedStatements && this.lockedStatements.length > 0) {
             this.lockedStatements.forEach(ls => {
               if (monthlyValues[ls.month]) {
-                monthlyValues[ls.month] = ls.statement_data;
+                monthlyValues[ls.month] = {
+                  ...ls.statement_data,
+                  softwareApps: liveSoftwareApps[ls.month] ?? ls.statement_data.softwareApps
+                };
               }
             });
           }
