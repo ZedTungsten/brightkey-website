@@ -105,19 +105,9 @@
             <select id="invite-role" class="form-select" onchange="handleRoleChange(this.value)">
               <!-- Populated by JS -->
             </select>
-            <div id="invite-custom-access-container" style="display:none; flex-direction:column; gap:0.4rem; margin-top:0.5rem; padding:0.75rem; background:var(--bg-elevated); border:1px solid var(--border); border-radius:6px;">
+            <div id="invite-custom-access-container" class="custom-access-container" style="display:none;">
               <label class="form-label" style="margin-bottom:0.2rem;">Select Access Modules</label>
-              <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; font-size:0.82rem;">
-                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="invite-custom-access" value="Business" /> Business</label>
-                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="invite-custom-access" value="Products" /> Products</label>
-                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="invite-custom-access" value="Operations" /> Operations</label>
-                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="invite-custom-access" value="Marketing" /> Marketing</label>
-                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="invite-custom-access" value="Sales" /> Sales</label>
-                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="invite-custom-access" value="Customer Service" /> Customer Service</label>
-                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="invite-custom-access" value="Logistics" /> Logistics</label>
-                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="invite-custom-access" value="HR" /> HR</label>
-                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="invite-custom-access" value="Finance" /> Finance</label>
-              </div>
+              <div id="invite-access-options" class="access-options-grid"></div>
             </div>
           </div>
           <div class="warning-box" id="admin-warning">
@@ -134,7 +124,7 @@
 
   <!-- Edit Member Access Modal -->
   <div class="modal-overlay" id="edit-role-modal">
-    <div class="modal-card" style="width: 400px; max-width: 90%;">
+    <div class="modal-card" style="width: 560px; max-width: 90%;">
       <div class="modal-header">
         <div class="modal-title">Edit Member Access</div>
         <button class="modal-close" onclick="closeEditRoleModal()">
@@ -154,19 +144,9 @@
             <select id="edit-role-select" class="form-select" onchange="handleEditRoleSelectChange(this.value)">
               <!-- Filled by JS -->
             </select>
-            <div id="edit-custom-access-container" style="display:none; flex-direction:column; gap:0.4rem; margin-top:0.5rem; padding:0.75rem; background:var(--bg-elevated); border:1px solid var(--border); border-radius:6px;">
+            <div id="edit-custom-access-container" class="custom-access-container" style="display:none;">
               <label class="form-label" style="margin-bottom:0.2rem;">Select Access Modules</label>
-              <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; font-size:0.82rem;">
-                 <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="edit-custom-access" value="Business" /> Business</label>
-                 <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="edit-custom-access" value="Products" /> Products</label>
-                 <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="edit-custom-access" value="Operations" /> Operations</label>
-                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="edit-custom-access" value="Marketing" /> Marketing</label>
-                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="edit-custom-access" value="Sales" /> Sales</label>
-                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="edit-custom-access" value="Customer Service" /> Customer Service</label>
-                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="edit-custom-access" value="Logistics" /> Logistics</label>
-                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="edit-custom-access" value="HR" /> HR</label>
-                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="edit-custom-access" value="Finance" /> Finance</label>
-              </div>
+              <div id="edit-access-options" class="access-options-grid"></div>
             </div>
           </div>
         </div>
@@ -208,6 +188,58 @@
     let employeePrefix = 'BK';
     const showToast = (msg, isError) => SettingsPage.showToast(msg, isError);
     const showConfirmModal = (msg, onConfirm) => SettingsPage.showConfirmModal(msg, onConfirm);
+    const accessModules = ['Business', 'Products', 'Operations', 'Marketing', 'Sales', 'Customer Service', 'Logistics', 'HR', 'Finance'];
+
+    function renderAccessOptions(prefix) {
+      const container = document.getElementById(`${prefix}-access-options`);
+      if (!container) return;
+      const scopedConfig = window.BKAuth.subpageAccess || {};
+      container.innerHTML = accessModules.map(moduleName => {
+        const subpages = scopedConfig[moduleName] || [];
+        const parent = `<label class="access-option"><input type="checkbox" class="${prefix}-custom-access access-module-parent" value="${moduleName}" data-module="${moduleName}" /> ${moduleName}${subpages.length ? '<span class="access-module-hint">Full access</span>' : ''}</label>`;
+        if (!subpages.length) return parent;
+        return `<div class="access-module-group">${parent}<div class="access-subpages">${subpages.map(item => `<label class="access-subpage-option"><input type="checkbox" class="${prefix}-subpage-access" value="${item.key}" data-module="${moduleName}" /> ${item.label}</label>`).join('')}</div></div>`;
+      }).join('');
+      container.querySelectorAll('.access-module-parent[data-module]').forEach(parent => {
+        parent.addEventListener('change', () => syncSubpageInputs(prefix, parent.dataset.module));
+      });
+    }
+
+    function syncSubpageInputs(prefix, moduleName) {
+      const parent = document.querySelector(`.${prefix}-custom-access[data-module="${moduleName}"]`);
+      document.querySelectorAll(`.${prefix}-subpage-access[data-module="${moduleName}"]`).forEach(child => {
+        if (parent?.checked) child.checked = false;
+        child.disabled = Boolean(parent?.checked);
+      });
+    }
+
+    function collectAccessModules(prefix) {
+      const selected = [];
+      document.querySelectorAll(`.${prefix}-custom-access:checked`).forEach(input => selected.push(input.value));
+      Object.keys(window.BKAuth.subpageAccess || {}).forEach(moduleName => {
+        const scoped = Array.from(document.querySelectorAll(`.${prefix}-subpage-access[data-module="${moduleName}"]:checked`)).map(input => input.value);
+        if (!scoped.length) return;
+        if (!selected.includes(moduleName)) selected.push(moduleName);
+        selected.push(...scoped);
+      });
+      return selected;
+    }
+
+    function applyAccessModules(prefix, modules) {
+      const values = Array.isArray(modules) ? modules : [];
+      document.querySelectorAll(`.${prefix}-custom-access`).forEach(parent => {
+        const hasScoped = values.some(value => String(value).startsWith(`${parent.value}:`));
+        parent.checked = values.includes(parent.value) && !hasScoped;
+      });
+      document.querySelectorAll(`.${prefix}-subpage-access`).forEach(child => { child.checked = values.includes(child.value); });
+      Object.keys(window.BKAuth.subpageAccess || {}).forEach(moduleName => syncSubpageInputs(prefix, moduleName));
+    }
+
+    function formatAccessModules(modules) {
+      const values = Array.isArray(modules) ? modules : [];
+      const scopedParents = new Set(values.filter(value => String(value).includes(':')).map(value => String(value).split(':')[0]));
+      return values.filter(value => !scopedParents.has(value)).map(value => String(value).replace(':', ': '));
+    }
 
     window.initSettingsPage = async function() {
       // Load Employee Prefix
@@ -218,6 +250,8 @@
         }
       } catch (err) { console.warn('Prefix load failed:', err); }
 
+      renderAccessOptions('invite');
+      renderAccessOptions('edit');
       loadRolesDropdown();
       await loadAllMembers();
     };
@@ -248,13 +282,13 @@
       if (warning) warning.style.display = (role === 'admin') ? 'block' : 'none';
       const customContainer = document.getElementById('invite-custom-access-container');
       if (customContainer) customContainer.style.display = (role === 'custom') ? 'flex' : 'none';
-      document.querySelectorAll('.invite-custom-access').forEach(cb => cb.checked = (role === 'admin'));
+      applyAccessModules('invite', role === 'admin' ? accessModules : []);
     };
 
     window.handleEditRoleSelectChange = function(role) {
       const customContainer = document.getElementById('edit-custom-access-container');
       if (customContainer) customContainer.style.display = (role === 'user') ? 'flex' : 'none';
-      document.querySelectorAll('.edit-custom-access').forEach(cb => cb.checked = false);
+      applyAccessModules('edit', []);
     };
 
     function formatDateAdded(isoString) {
@@ -341,8 +375,9 @@
         } else if (row.role === 'admin') {
           roleInnerHtml = `<span class="badge badge-cyan">Administrator</span>`;
         } else {
-          const listItems = rowModules.length
-            ? rowModules.map(m => `<li style="font-weight:400; color:var(--text-secondary); margin-bottom:0.1rem;">${escapeHtml(m)}</li>`).join('')
+          const displayModules = formatAccessModules(rowModules);
+          const listItems = displayModules.length
+            ? displayModules.map(m => `<li style="font-weight:400; color:var(--text-secondary); margin-bottom:0.1rem;">${escapeHtml(m)}</li>`).join('')
             : '<li style="font-weight:400; color:var(--text-muted);">No Access</li>';
           roleInnerHtml = `<div><div style="font-weight:700; color:var(--text-primary);">User</div><ul style="margin:0.2rem 0 0 0.5rem; padding-left:0.75rem; list-style-type:disc; font-size:0.8rem;">${listItems}</ul></div>`;
         }
@@ -399,7 +434,7 @@
         let inviteRoleCell = '';
         if (row.role === 'admin') inviteRoleCell = `<span class="badge badge-gray">Administrator</span>`;
         else if (row.role && row.role.startsWith('access:')) {
-          const mods = row.role.substring(7).split(',').map(s => s.trim());
+          const mods = formatAccessModules(row.role.substring(7).split(',').map(s => s.trim()));
           inviteRoleCell = `<div><div style="font-weight:700; color:var(--text-primary);">User</div><ul style="margin:0.2rem 0 0 0.5rem; padding-left:0.75rem; list-style-type:disc; font-size:0.8rem;">${mods.map(m => `<li>${escapeHtml(m)}</li>`).join('')}</ul></div>`;
         } else {
           inviteRoleCell = `<span class="badge badge-gray">${escapeHtml(row.role || 'None')}</span>`;
@@ -434,7 +469,7 @@
       btn.innerText = 'Inviting...';
 
       if (role === 'custom') {
-        const checkedModules = Array.from(document.querySelectorAll('.invite-custom-access:checked')).map(cb => cb.value);
+        const checkedModules = collectAccessModules('invite');
         if (checkedModules.length === 0) {
           showToast('Please check at least one access module for Custom role.', true);
           btn.disabled = false;
@@ -581,17 +616,14 @@
       if (select) {
         select.innerHTML = '<option value="admin">Administrator</option><option value="user">User (Custom Modules)</option>';
         const customContainer = document.getElementById('edit-custom-access-container');
-        document.querySelectorAll('.edit-custom-access').forEach(cb => cb.checked = false);
         if (currentRole === 'admin') {
           select.value = 'admin';
           customContainer.style.display = 'none';
+          applyAccessModules('edit', accessModules);
         } else {
           select.value = 'user';
           customContainer.style.display = 'flex';
-          currentModules.forEach(mod => {
-            const cb = document.querySelector(`.edit-custom-access[value="${mod}"]`);
-            if (cb) cb.checked = true;
-          });
+          applyAccessModules('edit', currentModules);
         }
       }
       document.getElementById('edit-role-modal').classList.add('open');
@@ -610,7 +642,7 @@
       if (selectedAccess === 'admin') {
         newRole = 'admin';
       } else {
-        newModules = Array.from(document.querySelectorAll('.edit-custom-access:checked')).map(cb => cb.value);
+        newModules = collectAccessModules('edit');
         if (newModules.length === 0) { showToast('Please check at least one access module.', true); return; }
       }
       try {

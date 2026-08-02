@@ -26,6 +26,46 @@
     statusPromises: {}
   };
 
+  const subpageAccess = {
+    HR: [
+      { key: 'HR:Directory', label: 'Directory', routes: ['/dashboard/employee-directory'] },
+      { key: 'HR:Org Map', label: 'Org Map', routes: ['/dashboard/organization-map'] },
+      { key: 'HR:Attendance & Leaves', label: 'Attendance & Leaves', routes: ['/dashboard/attendance-leaves', '/dashboard/attendance'] },
+      { key: 'HR:Events', label: 'Events', routes: ['/dashboard/events'] },
+      { key: 'HR:Hiring', label: 'Hiring', routes: ['/dashboard/hiring'] },
+      { key: 'HR:Payout Tracker', label: 'Payout Tracker', routes: ['/dashboard/payout-tracker'] }
+    ],
+    Finance: [
+      { key: 'Finance:Bookkeeping', label: 'Bookkeeping', routes: ['/dashboard/bookkeeping'] },
+      { key: 'Finance:Payment Accounts', label: 'Payment Accounts', routes: ['/dashboard/payment-accounts'] },
+      { key: 'Finance:General Journal', label: 'General Journal', routes: ['/dashboard/general-journal'] },
+      { key: 'Finance:Statements', label: 'Statements', routes: ['/dashboard/statements'] },
+      { key: 'Finance:Expenses', label: 'Expenses', routes: ['/dashboard/expenses'] },
+      { key: 'Finance:Ledgers', label: 'Ledgers', routes: ['/dashboard/ledgers'] },
+      { key: 'Finance:Adjustments', label: 'Adjustments', routes: ['/dashboard/finance-adjustments'] },
+      { key: 'Finance:Receivables', label: 'Receivables', routes: ['/dashboard/receivables'] },
+      { key: 'Finance:Payables', label: 'Payables', routes: ['/dashboard/payables'] },
+      { key: 'Finance:Payout Tracker', label: 'Payout Tracker', routes: ['/dashboard/payout-tracker'] }
+    ]
+  };
+
+  function normalizeAccessPath(path) {
+    return String(path || '').split(/[?#]/)[0].replace(/\.html$/, '').replace(/\/$/, '') || '/';
+  }
+
+  function hasModuleAccessForPath(modules, moduleName, path = window.location.pathname) {
+    const normalizedModule = String(moduleName || '').trim().toLowerCase();
+    const normalizedModules = (Array.isArray(modules) ? modules : []).map(value => String(value).trim().toLowerCase());
+    const scopedKey = Object.keys(subpageAccess).find(key => key.toLowerCase() === normalizedModule);
+    const scopedOptions = subpageAccess[scopedKey] || [];
+    const scopedModules = normalizedModules.filter(value => value.startsWith(`${normalizedModule}:`));
+    if (!scopedOptions.length) return normalizedModules.includes(normalizedModule);
+    if (!scopedModules.length) return normalizedModules.includes(normalizedModule);
+    const normalizedPath = normalizeAccessPath(path);
+    const matchedOption = scopedOptions.find(option => option.routes.some(route => normalizedPath === route || normalizedPath.startsWith(`${route}/`)));
+    return Boolean(matchedOption && scopedModules.includes(matchedOption.key.toLowerCase()));
+  }
+
   /**
    * Convert technical request/database errors into safe, actionable UI copy.
    * Full error objects should still be logged to the console by the caller.
@@ -304,9 +344,7 @@
         }
 
         // Check if the user has at least one of the required modules (case-insensitive check)
-        const hasAccess = requiredModules.some(mod => 
-          modules.some(m => m.trim().toLowerCase() === mod.trim().toLowerCase())
-        );
+        const hasAccess = requiredModules.some(mod => hasModuleAccessForPath(modules, mod));
         if (!hasAccess) {
           window.location.href = redirectTo;
           return null;
@@ -455,6 +493,8 @@
     getUser,
     getUserRole,
     checkRoleGate,
+    hasModuleAccessForPath,
+    subpageAccess,
     getCompany,
     getEmployee,
     getEmployeeById,

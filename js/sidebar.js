@@ -822,13 +822,13 @@
 
           if (isOwnerOrAdmin) {
             group.style.display = 'block';
-          } else if (accessibleModules.includes(moduleName)) {
+          } else if (accessibleModules.some(access => String(access).trim().toLowerCase() === moduleName.toLowerCase() || String(access).trim().toLowerCase().startsWith(`${moduleName.toLowerCase()}:`))) {
             group.style.display = 'block';
           } else {
             group.style.display = 'none';
           }
         });
-
+        ['HR', 'Finance'].forEach(moduleName => { const group = document.getElementById(moduleName === 'HR' ? 'nav-group-hr' : 'nav-group-finance'); const scoped = accessibleModules.some(access => String(access).trim().toLowerCase().startsWith(`${moduleName.toLowerCase()}:`)); if (!group || isOwnerOrAdmin || !scoped) return; group.querySelectorAll('.dash-nav-child').forEach(link => { if (!window.BKAuth.hasModuleAccessForPath(accessibleModules, moduleName, link.getAttribute('href') || '')) link.style.display = 'none'; }); });
         // Handle user menu options role filtering
         document.querySelectorAll('#user-menu [data-role]').forEach(el => {
           const allowedRole = el.dataset.role;
