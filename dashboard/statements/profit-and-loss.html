@@ -464,11 +464,6 @@
             };
           });
 
-          const dealerPriceMap = {};
-          this.products.forEach(p => {
-            if (p.sku) dealerPriceMap[p.sku.toLowerCase()] = p.dealer_price || 0;
-          });
-
           const thresholdVal = this.payoutSettings.installations_before_crediting || 15;
           const leadWeight = this.payoutSettings.lead_credit !== undefined ? this.payoutSettings.lead_credit : 1.0;
           const assistWeight = this.payoutSettings.assist_credit !== undefined ? this.payoutSettings.assist_credit : 0.5;
@@ -512,15 +507,13 @@
               monthlyValues[mKey].revenueBooking += (orderGrandTotal + absDepositCentavos);
             }
 
-            let skusArr = [];
-            let qtysArr = [];
-            if (b.product_skus) skusArr = b.product_skus.split(' | ').filter(Boolean);
-            if (b.product_qtys) qtysArr = b.product_qtys.split(' | ').map(Number);
-            skusArr.forEach((sku, idx) => {
-              const qty = qtysArr[idx] || 0;
-              const dPrice = dealerPriceMap[sku.toLowerCase()] || 0;
-              monthlyValues[mKey].supplierCost += (qty * dPrice);
-            });
+          });
+
+          // Recognize supplier cost from the same inventory cost ledger used by Expenses > COGS.
+          (this.inventoryCostLedger || []).forEach(entry => {
+            const mKey = String(entry.recognized_at || '').slice(0, 7);
+            if (!monthlyValues[mKey] || this.lockedStatements.some(ls => ls.month === mKey)) return;
+            monthlyValues[mKey].supplierCost += Number(entry.total_cost_centavos) || 0;
           });
 
           // Process Supplier Cost Adjustments
@@ -885,6 +878,7 @@
               this.softwareBilling = [];
               this.regularPayoutState = {};
               this.specialPayoutState = {};
+              this.inventoryCostLedger = [];
               this.supplierCostAdjustments = [];
             } else {
               // Find the range bounds for unlocked months
@@ -895,7 +889,7 @@
               const endMonthKey = sortedUnlocked[sortedUnlocked.length - 1].key;
 
               const [
-                productsRes,
+                inventoryCostLedgerRes,
                 bookingsRes,
                 employeesRes,
                 payslipRecordsRes,
@@ -914,9 +908,13 @@
                 deliveryRes,
                 supplierCostAdjustmentsRes
               ] = await Promise.all([
-                sb.from('products')
-                  .select('id, sku, dealer_price, sale_price')
-                  .or(`company_id.eq.${this.companyId},company_id.is.null`),
+                sb.from('inventory_cost_ledger')
+                  .select('total_cost_centavos, recognized_at')
+                  .eq('company_id', this.companyId)
+                  .gte('recognized_at', startRange + 'T00:00:00')
+                  .lte('recognized_at', endRange + 'T23:59:59.999999')
+                  .order('recognized_at', { ascending: false })
+                  .limit(sortedUnlocked.length * 5000),
                 sb.from('installation_bookings')
                   .select('id, created_at, scheduled_date, order_no, grand_total, deposit_amount, balance_due, deduction_labels, deduction_values, status, product_skus, product_qtys, doors, installers, installer_id, products')
                   .eq('company_id', this.companyId)
@@ -958,7 +956,8 @@
                   .lte('adjustment_date', endRange)
               ]);
 
-              this.products = productsRes.data || [];
+              if (inventoryCostLedgerRes.error) throw inventoryCostLedgerRes.error;
+              this.inventoryCostLedger = inventoryCostLedgerRes.data || [];
               this.bookings = bookingsRes.data || [];
               this.employees = employeesRes.data || [];
               this.payslipRecords = payslipRecordsRes.data || [];
