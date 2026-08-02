@@ -62,6 +62,11 @@
     .benchmark-ear-bottom::after { bottom: 0; clip-path: polygon(100% 0, 100% 100%, 0 100%); }
     .benchmark-ear-green::after { background: var(--success, #22c55e); }
     .benchmark-ear-red::after { background: var(--danger, #ef4444); }
+    .change-cell { position: relative; }
+    .change-indicator { position: absolute; right: 2px; top: 50%; transform: translateY(-50%); display: inline-flex; pointer-events: none; }
+    .change-indicator svg { width: 10px; height: 10px; }
+    .change-indicator-green { color: var(--success, #22c55e); }
+    .change-indicator-red { color: var(--danger, #ef4444); }
     
     /* ── Hierarchy ── */
     .row-net-profit td {
@@ -224,6 +229,10 @@
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>
                 Show Benchmarks
               </button>
+              <button id="btn-show-changes" onclick="PLApp.toggleShowChanges()" class="btn btn-outline btn-sm" aria-pressed="false" style="display: flex; align-items: center; gap: 0.4rem;">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17V7m0 0-4 4m4-4 4 4M17 7v10m0 0-4-4m4 4 4-4"/></svg>
+                Show Changes
+              </button>
               <button id="btn-lock-mode" onclick="PLApp.toggleLockMode()" class="btn btn-outline btn-sm" style="display: flex; align-items: center; gap: 0.4rem;">
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
                 Lock Months
@@ -282,6 +291,7 @@
         benchmarks: {},
         benchmarkEditMode: false,
         showBenchmarks: false,
+        showChanges: false,
 
         resolvePlanForMonth(s, targetMonthStr) {
           const subBills = this.softwareBilling.filter(b => b.subscription_id === s.id);
@@ -1303,6 +1313,7 @@
           tbody.innerHTML = html;
           this.renderBenchmarkCells();
           this.applyBenchmarkIndicators();
+          this.applyChangeIndicators();
         },
 
         formatBenchmarkValue(raw) {
@@ -1348,6 +1359,13 @@
             showBtn.style.background = this.showBenchmarks ? 'var(--cyan)' : '';
             showBtn.style.color = this.showBenchmarks ? '#fff' : '';
             showBtn.style.borderColor = this.showBenchmarks ? 'var(--cyan)' : '';
+          }
+          const changesBtn = document.getElementById('btn-show-changes');
+          if (changesBtn) {
+            changesBtn.setAttribute('aria-pressed', String(this.showChanges));
+            changesBtn.style.background = this.showChanges ? 'var(--cyan)' : '';
+            changesBtn.style.color = this.showChanges ? '#fff' : '';
+            changesBtn.style.borderColor = this.showChanges ? 'var(--cyan)' : '';
           }
         },
 
@@ -1405,8 +1423,65 @@
 
         toggleShowBenchmarks() {
           this.showBenchmarks = !this.showBenchmarks;
+          if (this.showBenchmarks) this.showChanges = false;
           this.renderBenchmarkCells();
           this.applyBenchmarkIndicators();
+          this.applyChangeIndicators();
+        },
+
+        appendChangeIndicator(cell, isIncrease, isGood) {
+          const namespace = 'http://www.w3.org/2000/svg';
+          const indicator = document.createElement('span');
+          indicator.className = `change-indicator ${isGood ? 'change-indicator-green' : 'change-indicator-red'}`;
+          indicator.title = `${isIncrease ? 'Increased' : 'Decreased'} from previous month`;
+          const svg = document.createElementNS(namespace, 'svg');
+          svg.setAttribute('viewBox', '0 0 24 24');
+          svg.setAttribute('fill', 'none');
+          svg.setAttribute('stroke', 'currentColor');
+          svg.setAttribute('stroke-width', '3');
+          svg.setAttribute('stroke-linecap', 'round');
+          svg.setAttribute('stroke-linejoin', 'round');
+          svg.setAttribute('aria-hidden', 'true');
+          const path = document.createElementNS(namespace, 'path');
+          path.setAttribute('d', isIncrease ? 'M12 19V5M5 12l7-7 7 7' : 'M12 5v14m7-7-7 7-7-7');
+          svg.appendChild(path);
+          indicator.appendChild(svg);
+          cell.classList.add('change-cell');
+          cell.appendChild(indicator);
+        },
+
+        applyChangeIndicators() {
+          document.querySelectorAll('.change-indicator').forEach(indicator => indicator.remove());
+          document.querySelectorAll('.change-cell').forEach(cell => cell.classList.remove('change-cell'));
+          if (!this.showChanges || this.benchmarkEditMode) return;
+
+          let expenseSection = false;
+          document.querySelectorAll('#table-body tr').forEach(row => {
+            if (row.classList.contains('row-expenses')) expenseSection = true;
+            if (row.classList.contains('row-spacer')) return;
+            for (let monthIndex = 0; monthIndex < this.months.length - 1; monthIndex++) {
+              const currentValueCell = row.cells[2 + (monthIndex * 2)];
+              const previousValueCell = row.cells[2 + ((monthIndex + 1) * 2)];
+              const currentPercentCell = row.cells[3 + (monthIndex * 2)];
+              const previousPercentCell = row.cells[3 + ((monthIndex + 1) * 2)];
+              [[currentValueCell, previousValueCell], [currentPercentCell, previousPercentCell]].forEach(([currentCell, previousCell]) => {
+                const current = this.parseDisplayedMetric(currentCell);
+                const previous = this.parseDisplayedMetric(previousCell);
+                if (current === null || previous === null || current === previous) return;
+                const isIncrease = current > previous;
+                const isGood = expenseSection ? !isIncrease : isIncrease;
+                this.appendChangeIndicator(currentCell, isIncrease, isGood);
+              });
+            }
+          });
+        },
+
+        toggleShowChanges() {
+          this.showChanges = !this.showChanges;
+          if (this.showChanges) this.showBenchmarks = false;
+          this.renderBenchmarkCells();
+          this.applyBenchmarkIndicators();
+          this.applyChangeIndicators();
         },
 
         async toggleBenchmarkEdit() {
