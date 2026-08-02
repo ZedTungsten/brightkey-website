@@ -105,6 +105,45 @@
       color: var(--text-secondary);
       vertical-align: middle;
     }
+    .done-col-ref,
+    .done-col-name {
+      position: sticky;
+      background: var(--bg-surface);
+      white-space: nowrap;
+      z-index: 3;
+    }
+    .done-col-ref {
+      left: 0;
+      width: 140px;
+      min-width: 140px;
+      max-width: 140px;
+      box-shadow: inset -1px 0 0 var(--border);
+    }
+    .done-col-name {
+      left: 140px;
+      width: 220px;
+      min-width: 220px;
+      max-width: 220px;
+      box-shadow: inset -1.5px 0 0 var(--border-hover);
+    }
+    thead .done-col-ref,
+    thead .done-col-name {
+      background: var(--bg-elevated);
+      z-index: 6;
+    }
+    tbody tr:hover .done-col-ref,
+    tbody tr:hover .done-col-name { background: var(--bg-elevated); }
+    .done-col-name::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      right: -10px;
+      width: 10px;
+      height: 100%;
+      background: linear-gradient(to right, rgba(0, 0, 0, 0.08), transparent);
+      pointer-events: none;
+      z-index: 1;
+    }
     .done-item-list {
       display: grid;
       grid-auto-rows: 1.65rem;
@@ -294,6 +333,7 @@
                     <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
                     <span id="bulk-fees-btn-text">Bulk Edit</span>
                   </button>
+                  <button type="button" class="btn btn-outline" id="btn-cancel-bulk-fees" onclick="DeliveryApp.cancelBulkFeeEdit()" style="display: none;">Cancel</button>
                 </div>
 
                 <div class="panel">
@@ -302,8 +342,8 @@
                     <table>
                       <thead>
                         <tr>
-                          <th>Ref Order</th>
-                          <th>Full Name</th>
+                          <th class="done-col-ref">Ref Order</th>
+                          <th class="done-col-name">Full Name</th>
                           <th>City</th>
                           <th class="done-sku-column">SKU</th>
                           <th class="done-qty-column">Qty</th>
@@ -489,11 +529,19 @@
       updateBulkFeeButton() {
         const button = document.getElementById('btn-bulk-fees');
         const label = document.getElementById('bulk-fees-btn-text');
+        const cancelButton = document.getElementById('btn-cancel-bulk-fees');
         if (!button || !label) return;
         label.textContent = this.isBulkEditingFees ? 'Save Prices' : 'Bulk Edit';
         button.style.borderColor = this.isBulkEditingFees ? 'var(--cyan)' : '';
         button.style.color = this.isBulkEditingFees ? 'var(--cyan-light)' : '';
         button.style.background = this.isBulkEditingFees ? 'var(--cyan-dim)' : '';
+        if (cancelButton) cancelButton.style.display = this.isBulkEditingFees ? 'inline-flex' : 'none';
+      },
+
+      cancelBulkFeeEdit() {
+        this.isBulkEditingFees = false;
+        this.updateBulkFeeButton();
+        this.renderDoneQueue();
       },
 
       async saveBulkFees() {
@@ -870,8 +918,8 @@
 
           const tr = document.createElement('tr');
           tr.innerHTML = `
-            <td><strong>${esc(order.reference_id)}</strong></td>
-            <td>${esc(order.customer_name)}</td>
+            <td class="done-col-ref"><strong>${esc(order.reference_id)}</strong></td>
+            <td class="done-col-name">${esc(order.customer_name)}</td>
             <td>${esc(order.customer_city)}</td>
             <td class="done-sku-column">${skusHtml}</td>
             <td class="done-qty-column">${qtysHtml}</td>
