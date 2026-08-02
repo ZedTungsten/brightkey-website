@@ -53,9 +53,13 @@
     return String(path || '').split(/[?#]/)[0].replace(/\.html$/, '').replace(/\/$/, '') || '/';
   }
 
+  function normalizeAccessToken(value) {
+    return String(value || '').trim().replace(/\s*:\s*/, ':').toLowerCase();
+  }
+
   function hasModuleAccessForPath(modules, moduleName, path = window.location.pathname) {
     const normalizedModule = String(moduleName || '').trim().toLowerCase();
-    const normalizedModules = (Array.isArray(modules) ? modules : []).map(value => String(value).trim().toLowerCase());
+    const normalizedModules = (Array.isArray(modules) ? modules : []).map(normalizeAccessToken);
     const scopedKey = Object.keys(subpageAccess).find(key => key.toLowerCase() === normalizedModule);
     const scopedOptions = subpageAccess[scopedKey] || [];
     const scopedModules = normalizedModules.filter(value => value.startsWith(`${normalizedModule}:`));

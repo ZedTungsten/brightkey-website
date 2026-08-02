@@ -226,7 +226,7 @@
     }
 
     function applyAccessModules(prefix, modules) {
-      const values = Array.isArray(modules) ? modules : [];
+      const values = (Array.isArray(modules) ? modules : []).map(value => String(value).trim().replace(/\s*:\s*/, ':'));
       document.querySelectorAll(`.${prefix}-custom-access`).forEach(parent => {
         const hasScoped = values.some(value => String(value).startsWith(`${parent.value}:`));
         parent.checked = values.includes(parent.value) && !hasScoped;
@@ -646,11 +646,14 @@
         if (newModules.length === 0) { showToast('Please check at least one access module.', true); return; }
       }
       try {
-        const { error } = await sb.from('tenant_members').update({
+        const { data: savedMember, error } = await sb.from('tenant_members').update({
           role: newRole,
           accessible_modules: newModules
-        }).eq('id', memberId);
+        }).eq('tenant_id', currentTenantId).eq('id', memberId).select('accessible_modules').maybeSingle();
         if (error) throw error;
+        if (!savedMember) throw new Error('Member access was not updated.');
+        const savedModules = (savedMember.accessible_modules || []).map(value => String(value).trim().replace(/\s*:\s*/, ':'));
+        if (newModules.length !== savedModules.length || newModules.some(value => !savedModules.includes(value))) throw new Error('Member access did not save correctly.');
         showToast('Member access updated.');
         closeEditRoleModal();
         loadAllMembers();
