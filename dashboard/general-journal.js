@@ -1734,6 +1734,10 @@
 
         let saving = false;
         let discarded = false;
+        if (col === 'account') inp.addEventListener('change', async () => {
+          if (saving || discarded) return;
+          saving = true; await commit();
+        });
         inp.addEventListener('keydown', async e => {
           if (e.key === 'Enter') {
             e.preventDefault();
