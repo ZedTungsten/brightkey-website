@@ -173,6 +173,10 @@
       justify-content: flex-end;
       gap: 0.75rem;
     }
+    #subscription-form .modal-footer { flex-wrap: wrap; }
+    @media (max-width: 560px) {
+      #subscription-edit-actions { width: 100%; margin-right: 0 !important; }
+    }
     
     /* Hide Unsubscribed column */
     .hide-unsubscribed th:nth-child(4),
@@ -390,7 +394,6 @@
                   <option value="pay_as_you_go">Pay as you go</option>
                   <option value="monthly">Monthly</option>
                   <option value="annual">Annual</option>
-                  <option value="unsubscribed" id="opt-unsubscribed" style="display: none;">Unsubscribed</option>
                 </select>
               </div>
               <div class="form-group" style="display: flex; flex-direction: column; gap: 0.35rem;">
@@ -420,10 +423,36 @@
               </div>
             </div>
             <div class="modal-footer" style="background: var(--bg-base);">
+              <div id="subscription-edit-actions" style="display: none; align-items: center; gap: 0.5rem; margin-right: auto;">
+                <button type="button" id="unsubscribe-subscription-btn" class="btn btn-outline" onclick="OpexApp.openSubscriptionAction('unsubscribe')" style="font-weight: 600; padding: 0.35rem 0.75rem;">Unsubscribe</button>
+                <button type="button" class="btn btn-outline" onclick="OpexApp.openSubscriptionAction('delete')" style="font-weight: 600; padding: 0.35rem 0.75rem; color: var(--danger); border-color: var(--danger);">Delete</button>
+              </div>
               <button type="button" class="btn btn-outline" onclick="OpexApp.closeSubModal()" style="font-weight: 600; padding: 0.35rem 0.75rem;">Cancel</button>
               <button type="submit" class="btn btn-primary" style="font-weight: 600; padding: 0.35rem 0.75rem;">Save</button>
             </div>
           </form>
+        </div>
+      </div>
+
+      <div id="subscription-action-modal" class="modal-overlay">
+        <div class="modal-card" style="max-width: 440px;">
+          <div class="modal-header">
+            <h3 id="subscription-action-title" style="font-size: 1rem; font-weight: 700; color: var(--text-primary); margin: 0;"></h3>
+            <button type="button" onclick="OpexApp.closeSubscriptionAction()" aria-label="Close" style="background: none; border: none; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; justify-content: center;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+          </div>
+          <div class="modal-body">
+            <p id="subscription-action-message" style="margin: 0; color: var(--text-secondary); font-size: 0.86rem; line-height: 1.55;"></p>
+            <div id="subscription-action-date-group" class="form-group" style="display: none; flex-direction: column; gap: 0.35rem;">
+              <label for="subscription-action-date" style="font-size: 0.78rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Date Unsubscribed</label>
+              <input type="date" id="subscription-action-date" class="form-select" style="width: 100%; text-align: left; height: 38px; padding: 0.35rem 0.5rem; background: var(--bg-elevated); border: 1px solid var(--border); color: var(--text-primary); border-radius: 4px;" />
+            </div>
+          </div>
+          <div class="modal-footer" style="background: var(--bg-base);">
+            <button type="button" class="btn btn-outline" onclick="OpexApp.closeSubscriptionAction()">Cancel</button>
+            <button type="button" id="subscription-action-confirm" class="btn" onclick="OpexApp.confirmSubscriptionAction()" style="font-weight: 600;"></button>
+          </div>
         </div>
       </div>
     </main>
@@ -455,6 +484,7 @@
         billingRecords: [],
         subSortColumn: null,
         subSortAsc: true,
+        subscriptionAction: null,
         payoutSettings: {
           installations_before_crediting: 15,
           lead_credit: 1.0,
@@ -1115,7 +1145,7 @@
           
           // Check for exact override in the target month
           const exactBill = subBills.find(b => b.billing_month === targetMonthStr);
-          if (exactBill) {
+          if (exactBill && exactBill.mode !== 'unsubscribed') {
             return { mode: exactBill.mode, cost_centavos: exactBill.cost_centavos };
           }
 
@@ -1130,7 +1160,7 @@
           }
 
           // Find all past billing overrides on or before the target month
-          const pastBills = subBills.filter(b => b.billing_month <= targetMonthStr);
+          const pastBills = subBills.filter(b => b.billing_month <= targetMonthStr && b.mode !== 'unsubscribed');
           if (pastBills.length > 0) {
             pastBills.sort((a, b) => b.billing_month.localeCompare(a.billing_month));
             const latestBill = pastBills[0];
@@ -1379,7 +1409,8 @@
           let totalManagerCost = 0;
           managerFilteredSubs.forEach(s => {
             const plan = this.resolvePlanForMonth(s, currentMonthDateStr);
-            const mode = plan.mode;
+            const isUnsubscribedBeforeMonth = Boolean(s.unsubscribed_date && s.unsubscribed_date < currentMonthDateStr);
+            const mode = isUnsubscribedBeforeMonth ? 'unsubscribed' : plan.mode;
             const costCentavos = plan.cost_centavos;
 
             let resolvedCostCentavos = 0;
@@ -1484,10 +1515,10 @@
           title.textContent = 'Create Subscription';
           form.reset();
           document.getElementById('sub-id').value = '';
-          document.getElementById('opt-unsubscribed').style.display = 'none';
           document.getElementById('sub-billing-url').value = '';
           document.getElementById('sub-account-email').value = '';
           document.getElementById('sub-card-last-four').value = '';
+          document.getElementById('subscription-edit-actions').style.display = 'none';
           
           // Set subscribed date default to today's date in YYYY-MM-DD
           const todayStr = new Date().toISOString().slice(0, 10);
@@ -1521,18 +1552,20 @@
           document.getElementById('sub-billing-url').value = sub.billing_url || '';
           document.getElementById('sub-account-email').value = sub.account_email || '';
           document.getElementById('sub-card-last-four').value = sub.card_last_four || '';
+          document.getElementById('subscription-edit-actions').style.display = 'flex';
+          document.getElementById('unsubscribe-subscription-btn').style.display = sub.status === 'unsubscribed' ? 'none' : 'inline-flex';
 
           // Resolve active plan for the current selected month
           const year = this.currentDate.getFullYear();
           const month = this.currentDate.getMonth() + 1;
           const currentMonthDateStr = `${year}-${String(month).padStart(2, '0')}-01`;
           const plan = this.resolvePlanForMonth(sub, currentMonthDateStr);
+          const editablePlan = plan.mode === 'unsubscribed' ? { mode: sub.mode, cost_centavos: sub.cost_centavos } : plan;
 
-          document.getElementById('sub-mode').value = plan.mode;
-          document.getElementById('sub-cost').value = (plan.cost_centavos / 100).toFixed(2);
-          document.getElementById('opt-unsubscribed').style.display = 'block';
+          document.getElementById('sub-mode').value = editablePlan.mode;
+          document.getElementById('sub-cost').value = (editablePlan.cost_centavos / 100).toFixed(2);
 
-          this.handleModeChange(plan.mode);
+          this.handleModeChange(editablePlan.mode);
 
           modal.style.display = 'flex';
           modal.offsetHeight; // reflow
@@ -1546,6 +1579,87 @@
           setTimeout(() => {
             modal.style.display = 'none';
           }, 250);
+        },
+
+        openSubscriptionAction(action) {
+          const id = document.getElementById('sub-id').value;
+          const sub = this.subscriptions.find(item => item.id === id);
+          const modal = document.getElementById('subscription-action-modal');
+          if (!sub || !modal) return;
+
+          this.subscriptionAction = action;
+          const isDelete = action === 'delete';
+          document.getElementById('subscription-action-title').textContent = isDelete ? 'Delete Subscription' : 'Unsubscribe';
+          document.getElementById('subscription-action-message').textContent = isDelete
+            ? `Delete ${sub.name} and all of its monthly billing entries? This is intended only for subscriptions created by mistake and cannot be undone.`
+            : `${sub.name} will remain included in OPEX through the unsubscribe month, then stop appearing in succeeding months.`;
+          const dateGroup = document.getElementById('subscription-action-date-group');
+          const dateInput = document.getElementById('subscription-action-date');
+          dateGroup.style.display = isDelete ? 'none' : 'flex';
+          dateInput.required = !isDelete;
+          dateInput.min = sub.subscribed_date || '';
+          dateInput.value = sub.unsubscribed_date || new Date().toISOString().slice(0, 10);
+
+          const confirmBtn = document.getElementById('subscription-action-confirm');
+          confirmBtn.textContent = isDelete ? 'Delete Subscription' : 'Confirm Unsubscribe';
+          confirmBtn.style.background = isDelete ? 'var(--danger)' : 'var(--success)';
+          confirmBtn.style.color = '#fff';
+          modal.style.display = 'flex';
+          modal.offsetHeight;
+          modal.classList.add('open');
+        },
+
+        closeSubscriptionAction() {
+          const modal = document.getElementById('subscription-action-modal');
+          if (!modal) return;
+          modal.classList.remove('open');
+          setTimeout(() => { modal.style.display = 'none'; }, 250);
+          this.subscriptionAction = null;
+        },
+
+        async confirmSubscriptionAction() {
+          const id = document.getElementById('sub-id').value;
+          const sub = this.subscriptions.find(item => item.id === id);
+          const confirmBtn = document.getElementById('subscription-action-confirm');
+          if (!sub || !this.companyId || !this.subscriptionAction || !confirmBtn) return;
+
+          const action = this.subscriptionAction;
+          const unsubscribeDate = document.getElementById('subscription-action-date').value;
+          if (action === 'unsubscribe' && !unsubscribeDate) {
+            this.showToast('Select the date the subscription ended.', true);
+            return;
+          }
+          if (action === 'unsubscribe' && sub.subscribed_date && unsubscribeDate < sub.subscribed_date) {
+            this.showToast('The unsubscribe date cannot be earlier than the subscribed date.', true);
+            return;
+          }
+
+          confirmBtn.disabled = true;
+          confirmBtn.textContent = action === 'delete' ? 'Deleting...' : 'Unsubscribing...';
+          try {
+            const sb = window.BKAuth.sb;
+            if (action === 'delete') {
+              const { data: deleted, error } = await sb.from('software_subscriptions').delete().eq('company_id', this.companyId).eq('id', id).select('id').maybeSingle();
+              if (error) throw error;
+              if (!deleted) throw new Error('Subscription was not deleted.');
+              const { error: billingError } = await sb.from('software_subscription_billing').delete().eq('company_id', this.companyId).eq('subscription_id', id);
+              if (billingError) console.error('Subscription deleted, but billing cleanup failed:', billingError);
+              this.showToast('Subscription and its billing history deleted.');
+            } else {
+              const { data: updated, error } = await sb.from('software_subscriptions').update({ status: 'unsubscribed', unsubscribed_date: unsubscribeDate }).eq('company_id', this.companyId).eq('id', id).select('id').maybeSingle();
+              if (error) throw error;
+              if (!updated) throw new Error('Subscription was not updated.');
+              this.showToast('Subscription unsubscribed. Its OPEX history has been preserved.');
+            }
+            this.closeSubscriptionAction();
+            this.closeSubModal();
+            await this.loadData();
+          } catch (err) {
+            console.error(`Failed to ${action} subscription:`, err);
+            this.showToast(action === 'delete' ? 'Could not delete this subscription. Its records were left unchanged.' : 'Could not unsubscribe this subscription. Please try again.', true);
+          } finally {
+            confirmBtn.disabled = false;
+          }
         },
 
         handleModeChange(mode) {
