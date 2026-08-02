@@ -384,7 +384,11 @@
         : Promise.resolve({ data: [], error: null });
 
       const deliveryQuery = companyId
-        ? sb.from('delivery_bookings').select('*').eq('company_id', companyId)
+        ? sb.from('delivery_bookings')
+          .select('id, reference_id, customer_name, customer_city, delivery_photo_url, base_fee, tip_1, tip_2, toll')
+          .eq('company_id', companyId)
+          .order('created_at', { ascending: false })
+          .range(0, 499)
         : Promise.resolve({ data: [], error: null });
 
       const pickupSchedulesQuery = companyId
@@ -429,13 +433,14 @@
 
       if (invErr) throw invErr;
       if (txErr) throw txErr;
+      if (delivErr) console.error('Failed to load delivery booking details:', delivErr);
 
       allInventory = {};
       (invData || []).forEach(row => {
         allInventory[row.sku] = row;
       });
       activeTransactions = txData || [];
-      dbDeliveryBookings = delivData || [];
+      dbDeliveryBookings = delivErr ? [] : (delivData || []);
       if (bookingErr) {
         console.error('Failed to fetch installation schedules:', bookingErr);
         bookings = [];
@@ -1741,7 +1746,7 @@
       });
     }
 
-    window.openPickupModal = function(referenceId, customerName, customerCity) {
+    window.openPickupModal = async function(referenceId, customerName, customerCity) {
       pickupOrderReferenceId = referenceId;
       pickupCustomerName = customerName;
       pickupCustomerCity = customerCity;
@@ -1756,8 +1761,26 @@
       document.getElementById('p-tip-2').value = '';
       document.getElementById('p-toll').value = '';
 
-      // Find existing delivery booking to prefill
-      const existing = dbDeliveryBookings.find(b => b.reference_id === referenceId);
+      // Fetch the exact booking so fees entered in Ship are current when pickup opens.
+      let existing = dbDeliveryBookings.find(b => b.reference_id === referenceId);
+      try {
+        const { data: latest, error } = await sb.from('delivery_bookings')
+          .select('id, reference_id, customer_name, customer_city, delivery_photo_url, base_fee, tip_1, tip_2, toll')
+          .eq('company_id', companyId)
+          .eq('reference_id', referenceId)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (error) throw error;
+        if (latest) {
+          existing = latest;
+          const cachedIndex = dbDeliveryBookings.findIndex(item => item.reference_id === referenceId);
+          if (cachedIndex >= 0) dbDeliveryBookings[cachedIndex] = latest;
+          else dbDeliveryBookings.push(latest);
+        }
+      } catch (err) {
+        console.error('Could not refresh delivery fees for pickup:', err);
+      }
       if (existing) {
         document.getElementById('p-base-fee').value = existing.base_fee ? (existing.base_fee / 100).toFixed(2) : '';
         document.getElementById('p-tip-1').value = existing.tip_1 ? (existing.tip_1 / 100).toFixed(2) : '';
@@ -1892,7 +1915,7 @@
             tip_1: t1Val,
             tip_2: t2Val,
             toll: tollVal
-          }).eq('id', existing.id);
+          }).eq('company_id', companyId).eq('id', existing.id);
           if (dbErr) throw dbErr;
         } else {
           const { error: dbErr } = await sb.from('delivery_bookings').insert([{
