@@ -107,9 +107,14 @@
       if (!r.ok) throw new Error(`Delete ${r.status}`);
     }
 
-    /* ════════════════════════════════════════════
-       JournalApp
-    ════════════════════════════════════════════ */
+    const JournalPartnerReveal = { loadingIds: new Set(), isEnabled(app) { const f = app.getFilters(); return f.selectedAccounts.size > 0 && Boolean(f.search); },
+      entryNumberHtml(app, row, entryNumber) { if (!this.isEnabled(app) || row._isFilterPartner) return fmtEntry(entryNumber); const disabled = this.loadingIds.has(row.id) || app.entries.some(item => item._partnerForId === row.id); return `<button type="button" class="entry-partner-btn" onclick="event.stopPropagation();JournalPartnerReveal.reveal(${row.id})" ${disabled ? 'disabled' : ''} title="Show the paired debit or credit row">${fmtEntry(entryNumber)}</button>`; }, async reveal(sourceId) {
+        if (!this.isEnabled(JournalApp) || this.loadingIds.has(sourceId)) return; const source = JournalApp.entries.find(row => row.id === sourceId); if (!source || source._isFilterPartner || JournalApp.entries.some(row => row._partnerForId === sourceId)) return; this.loadingIds.add(sourceId); JournalApp.renderTable();
+        try { const params = new URLSearchParams({ select: 'id,entry_number,year,month,date,account_id,account,debit,credit,description_1,description_2,attachments', company_id: `eq.${JournalApp.companyId}`, entry_number: `eq.${source.entry_number}`, id: `neq.${source.id}`, order: 'id.asc', limit: '10' }); const rows = await sbGet(`general_journal?${params}`); const sourceHasDebit = Number(source.debit || 0) !== 0; const partner = rows.find(row => sourceHasDebit ? Number(row.credit || 0) !== 0 : Number(row.debit || 0) !== 0) || rows[0]; if (!partner) { Toast.error('No paired journal row was found for this entry.'); return; } const index = JournalApp.entries.findIndex(row => row.id === sourceId); if (index !== -1 && !JournalApp.entries.some(row => row.id === partner.id)) JournalApp.entries.splice(index + 1, 0, { ...partner, _isFilterPartner: true, _partnerForId: sourceId }); }
+        catch (error) { console.error('Failed to load paired journal row:', error); Toast.error('The paired journal row could not be loaded. Please try again.'); } finally { this.loadingIds.delete(sourceId); JournalApp.renderTable(); }
+      } };
+
+    /* ═══════════════════ JournalApp ═══════════════════ */
     const JournalApp = {
       accounts:  [],
       entries:   [],
@@ -1512,10 +1517,8 @@
 
       renderTable() {
         this.updateHeaderSortIndicators();
-        const tbody  = document.getElementById('j-tbody');
-        const known  = new Set(this.accounts.map(a => a.name));
-        const off    = (this.page - 1) * this.pageSize;
-        const cols   = this.editMode ? 10 : 9;
+        const tbody  = document.getElementById('j-tbody'), known = new Set(this.accounts.map(a => a.name));
+        const off = (this.page - 1) * this.pageSize, cols = this.editMode ? 10 : 9; let filteredRowIndex = 0;
 
         // Dynamically set min-height on .table-wrap based on pageSize to prevent jumping
         const wrap = document.querySelector('.table-wrap');
@@ -1530,7 +1533,7 @@
           return;
         }
 
-        tbody.innerHTML = this.entries.map((r, i) => {
+        tbody.innerHTML = this.entries.map((r) => {
           const isDel   = this.pendingDeletes.has(r.entry_number);
           const chgs    = this.pendingChanges[r.id] || {};
           const hasDiff = Object.keys(chgs).length > 0;
@@ -1565,16 +1568,14 @@
             }
           }
 
-          let rowCls = '';
-          if (isDel)             rowCls = 'row-pending-delete';
-          else if (hasDiff)      rowCls = 'row-pending-edit';
-          else if (orphan)       rowCls = 'row-orphan';
-          else if (isCatDeleted) rowCls = 'row-deleted-cat';
+          const rowClasses = r._isFilterPartner ? ['row-filter-partner'] : []; if (isDel) rowClasses.push('row-pending-delete'); else if (hasDiff) rowClasses.push('row-pending-edit'); else if (orphan) rowClasses.push('row-orphan'); else if (isCatDeleted) rowClasses.push('row-deleted-cat'); const rowCls = rowClasses.join(' ');
 
           const oa = orphan && !this.editMode
             ? ` onclick="JournalApp.openOrphanPop(event,${r.id},'${esc(displayName)}')" title="Unknown account — click to fix"` : '';
 
           const ec = (col) => (!isDel && this.editMode) ? ` data-col="${col}" data-id="${r.id}"` : '';
+          const entryNumberHtml = JournalPartnerReveal.entryNumberHtml(this, r, d.entry_number);
+          const rowNumber = r._isFilterPartner ? '' : off + (++filteredRowIndex);
 
           const delCell = this.editMode ? `
             <td class="delete-col">
@@ -1593,9 +1594,9 @@
             return `<a href="${url}" target="_blank" rel="noopener noreferrer" title="${title}" style="text-decoration:none; margin: 0 4px; font-size: 0.95rem;">${icon}</a>`;
           }).join('');
 
-          return `<tr class="${rowCls}" data-id="${r.id}" data-entry="${r.entry_number}"${oa}>
-            <td class="num" style="color:var(--text-muted);font-size:0.72rem;">${off + i + 1}</td>
-            <td class="entry-num"${ec('entry_number')}>${fmtEntry(d.entry_number)}</td>
+          return `<tr class="${rowCls}" data-id="${r.id}" data-entry="${r.entry_number}"${r._isFilterPartner ? ' title="Paired entry shown outside the active account and search filters"' : ''}${oa}>
+            <td class="num" style="color:var(--text-muted);font-size:0.72rem;">${rowNumber}</td>
+            <td class="entry-num"${ec('entry_number')}>${entryNumberHtml}</td>
             <td${ec('date')}>${d.date || '—'}</td>
             <td${ec('account')} style="${orphan || isCatDeleted ? 'color:var(--danger);font-weight:600;' : ''}"${isCatDeleted ? ' title="Account is not assigned to an active category"' : ''}>${isCatDeleted ? WARN_ICON : ''}${esc(displayName)}</td>
             <td class="debit"${ec('debit')}>${d.debit   ? php(d.debit)   : '—'}</td>
