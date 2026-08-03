@@ -21,9 +21,8 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Missing required parameters.' });
   }
 
-  const supabase = createServiceClient();
-
   try {
+    const supabase = createServiceClient();
     if (!await enforceRateLimit({
       supabase, req, res, scope: 'send-invitation', identifier: company_id, limit: 30, windowSeconds: 3600
     })) return;
@@ -201,6 +200,6 @@ export default async function handler(req, res) {
 
   } catch (err) {
     console.error('Invitation handler crash:', err);
-    return res.status(500).json({ error: `Server crash: ${err.message}` });
+    return res.status(500).json({ error: 'The invitation service is temporarily unavailable. Check the server configuration and try again.' });
   }
 }

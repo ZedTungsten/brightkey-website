@@ -200,11 +200,7 @@
         if (customContainer) {
           customContainer.style.display = (role === 'custom') ? 'flex' : 'none';
         }
-        if (role === 'admin') {
-          document.querySelectorAll('.link-invite-custom-access').forEach(cb => cb.checked = true);
-        } else {
-          document.querySelectorAll('.link-invite-custom-access').forEach(cb => cb.checked = false);
-        }
+        window.BKDirectoryAccess.setRole('link-invite', role);
       },
 
       async submitInviteLink(e) {
@@ -229,7 +225,7 @@
 
         let role = roleSelect.value;
         if (role === 'custom') {
-          const checkedModules = Array.from(document.querySelectorAll('.link-invite-custom-access:checked')).map(cb => cb.value);
+          const checkedModules = window.BKDirectoryAccess.collect('link-invite');
           if (checkedModules.length === 0) {
             toast('Please check at least one access module for Custom role.', 'error');
             btn.disabled = false;
@@ -243,7 +239,7 @@
           const { data: { session } } = await getSb().auth.getSession();
           const token = session?.access_token;
 
-          const res = await fetch('/api/send-invitation', {
+          const res = await fetch(window.BKDirectoryAccess.invitationEndpoint(), {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -259,7 +255,7 @@
             })
           });
 
-          const data = await res.json();
+          const data = await res.json().catch(() => ({ error: 'The invitation service returned an invalid response. Try again shortly.' }));
           if (!res.ok) {
             toast(data.error || 'Invitation failed.', 'error');
             btn.disabled = false;
@@ -301,11 +297,7 @@
         if (customContainer) {
           customContainer.style.display = (role === 'custom') ? 'flex' : 'none';
         }
-        if (role === 'admin') {
-          document.querySelectorAll('.invite-custom-access').forEach(cb => cb.checked = true);
-        } else {
-          document.querySelectorAll('.invite-custom-access').forEach(cb => cb.checked = false);
-        }
+        window.BKDirectoryAccess.setRole('invite', role);
       },
 
       async submitInvite(e) {
@@ -324,7 +316,7 @@
         let role = roleSelect.value;
 
         if (role === 'custom') {
-          const checkedModules = Array.from(document.querySelectorAll('.invite-custom-access:checked')).map(cb => cb.value);
+          const checkedModules = window.BKDirectoryAccess.collect('invite');
           if (checkedModules.length === 0) {
             toast('Please check at least one access module for Custom role.', 'error');
             btn.disabled = false;
@@ -338,7 +330,7 @@
           const { data: { session } } = await getSb().auth.getSession();
           const token = session?.access_token;
 
-          const res = await fetch('/api/send-invitation', {
+          const res = await fetch(window.BKDirectoryAccess.invitationEndpoint(), {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -354,7 +346,7 @@
             })
           });
 
-          const data = await res.json();
+          const data = await res.json().catch(() => ({ error: 'The invitation service returned an invalid response. Try again shortly.' }));
           if (!res.ok) {
             toast(data.error || 'Invitation failed.', 'error');
             return;
