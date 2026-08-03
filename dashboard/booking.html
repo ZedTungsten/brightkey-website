@@ -992,15 +992,26 @@
       if (matched) {
         let city = matched.customer_city || '';
         let province = matched.customer_province || '';
+        let streetAddress = matched.customer_address || '';
+        const addressParts = streetAddress.split(',').map(s => s.trim()).filter(Boolean);
         
         if ((!city || !province) && matched.customer_address) {
-          const parts = matched.customer_address.split(',').map(s => s.trim()).filter(Boolean);
-          if (parts.length >= 2) {
-            if (!province) province = parts[parts.length - 1];
-            if (!city) city = parts[parts.length - 2];
-          } else if (parts.length === 1) {
-            if (!city) city = parts[0];
+          if (addressParts.length >= 2) {
+            if (!province) province = addressParts[addressParts.length - 1];
+            if (!city) city = addressParts[addressParts.length - 2];
+          } else if (addressParts.length === 1) {
+            if (!city) city = addressParts[0];
           }
+        }
+
+        const trailingCity = addressParts[addressParts.length - 2] || '';
+        const trailingProvince = addressParts[addressParts.length - 1] || '';
+        if (
+          addressParts.length >= 3 &&
+          trailingCity.localeCompare(city, undefined, { sensitivity: 'accent' }) === 0 &&
+          trailingProvince.localeCompare(province, undefined, { sensitivity: 'accent' }) === 0
+        ) {
+          streetAddress = addressParts.slice(0, -2).join(', ');
         }
 
         const isCompany = matched.customer_is_company === true;
@@ -1018,7 +1029,7 @@
         document.getElementById('cust-social').value = matched.customer_social || '';
         document.getElementById('cust-email').value = matched.customer_email || '';
         document.getElementById('cust-phone').value = matched.customer_phone || '';
-        document.getElementById('cust-address').value = matched.customer_address || '';
+        document.getElementById('cust-address').value = streetAddress;
         document.getElementById('cust-city').value = city;
         document.getElementById('cust-province').value = province;
         document.getElementById('cust-zip').value = '';
@@ -2482,7 +2493,9 @@
         customer_social:    social || null,
         customer_email:     email || null,
         customer_phone:     phone || null,
-        customer_address:   `${address}, ${city}, ${province} ${zip}`.trim(),
+        customer_address:   address || null,
+        customer_city:      city || null,
+        customer_province:  province || null,
         scheduled_date:     dateVal || null,
         scheduled_time:     timeVal || null,
         pickup_date:        pickupDateVal || null,

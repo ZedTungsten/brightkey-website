@@ -878,20 +878,30 @@
     function resolveInvoiceCustomerLocation(data) {
       let city = String(data.customer_city || '').trim();
       let province = String(data.customer_province || '').trim();
+      let streetAddress = String(data.customer_address || '').trim();
+      const addressParts = streetAddress
+        .split(',')
+        .map(part => part.trim())
+        .filter(Boolean);
 
-      if ((!city || !province) && data.customer_address) {
-        const addressParts = String(data.customer_address)
-          .split(',')
-          .map(part => part.trim())
-          .filter(Boolean);
-
+      if (!city || !province) {
         if (addressParts.length >= 3) {
           if (!province) province = addressParts[addressParts.length - 1];
           if (!city) city = addressParts[addressParts.length - 2];
         }
       }
 
-      return { city, province };
+      const trailingCity = addressParts[addressParts.length - 2] || '';
+      const trailingProvince = addressParts[addressParts.length - 1] || '';
+      if (
+        addressParts.length >= 3 &&
+        trailingCity.localeCompare(city, undefined, { sensitivity: 'accent' }) === 0 &&
+        trailingProvince.localeCompare(province, undefined, { sensitivity: 'accent' }) === 0
+      ) {
+        streetAddress = addressParts.slice(0, -2).join(', ');
+      }
+
+      return { city, province, streetAddress };
     }
 
     window.toggleInvoiceCompanyFields = function() {
@@ -913,7 +923,7 @@
       document.getElementById('inv-social').value = data.customer_social || '';
       document.getElementById('inv-contact').value = data.customer_phone || '';
       document.getElementById('inv-email').value = data.customer_email || '';
-      document.getElementById('inv-address').value = data.customer_address || '';
+      document.getElementById('inv-address').value = location.streetAddress;
       document.getElementById('inv-city').value = location.city;
       document.getElementById('inv-province').value = location.province;
       document.getElementById('inv-map-pin').value = data.google_map_pin_url || '';
