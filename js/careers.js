@@ -621,12 +621,15 @@
     document.title = `${job.job_title} — Careers at Brightkey`;
     const root = document.getElementById('job-detail-root');
     const hero = createElement('section', 'job-detail__hero');
-    const heroImage = createElement('img', 'job-detail__hero-image');
-    heroImage.src = job.template?.header_image_url || '/assets/og-image.png';
-    heroImage.alt = '';
-    heroImage.setAttribute('aria-hidden', 'true');
-    heroImage.style.objectPosition = `50% ${job.template?.header_image_position_y ?? 50}%`;
-    heroImage.style.transform = `scale(${Math.min(2, Math.max(1, Number(job.template?.header_image_zoom || 100) / 100))})`;
+    const heroImageUrl = String(job.template?.header_image_url || '').trim();
+    const heroImage = heroImageUrl ? createElement('img', 'job-detail__hero-image') : null;
+    if (heroImage) {
+      heroImage.src = heroImageUrl;
+      heroImage.alt = '';
+      heroImage.setAttribute('aria-hidden', 'true');
+      heroImage.style.objectPosition = `50% ${job.template?.header_image_position_y ?? 50}%`;
+      heroImage.style.transform = `scale(${Math.min(2, Math.max(1, Number(job.template?.header_image_zoom || 100) / 100))})`;
+    }
     const heroOverlay = createElement('span', 'job-detail__hero-overlay');
     heroOverlay.setAttribute('aria-hidden', 'true');
     const heroInner = createElement('div', 'container job-detail__hero-inner');
@@ -654,7 +657,8 @@
       createElement('p', 'job-detail__summary', job.job_description),
       meta
     );
-    hero.append(heroImage, heroOverlay, heroInner);
+    if (heroImage) hero.appendChild(heroImage);
+    hero.append(heroOverlay, heroInner);
 
     const bodySection = createElement('section', 'section');
     const body = createElement('div', 'container job-detail__body');
