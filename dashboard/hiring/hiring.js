@@ -1524,7 +1524,7 @@ const HiringApp = {
         <label><span>Type of Answer</span><select onchange="HiringApp.updateApplicationFieldType(${index}, this.value)">${Object.entries(typeLabels).map(([value, label]) => `<option value="${value}" ${field.type === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label>
         ${this.renderApplicationFieldOptions(field, index)}
       </div>
-      <button class="application-remove-field" type="button" aria-label="Remove question" title="Remove question" onclick="HiringApp.removeApplicationField(${index})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/></svg></button>
+      <div class="application-field-actions"><button class="application-duplicate-field" type="button" aria-label="Duplicate question" title="Duplicate question" onclick="HiringApp.duplicateApplicationField(${index})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg></button><button class="application-remove-field" type="button" aria-label="Delete question" title="Delete question" onclick="HiringApp.removeApplicationField(${index})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v5M14 11v5"/></svg></button></div>
     </article>`;
   },
 
@@ -1673,8 +1673,14 @@ const HiringApp = {
     const form = this.getActiveApplicationForm();
     if (!form) return;
     form.customFields.push({ question: '', type, options: ['Option 1', 'Option 2', ...(type === 'slider' ? ['Option 3', 'Option 4'] : [])] });
-    this.renderApplicationFormBuilder();
-    this.scheduleApplicationFormSave();
+    this.renderApplicationFormBuilder(); this.scheduleApplicationFormSave();
+  },
+
+  duplicateApplicationField(index) {
+    const form = this.getActiveApplicationForm(); const field = form?.customFields[index];
+    if (!field) return;
+    form.customFields.splice(index + 1, 0, { ...field, options: Array.isArray(field.options) ? [...field.options] : field.options });
+    this.renderApplicationFormBuilder(); this.scheduleApplicationFormSave();
   },
 
   updateApplicationField(index, key, value) {
@@ -1721,8 +1727,7 @@ const HiringApp = {
     const form = this.getActiveApplicationForm();
     if (!form) return;
     form.customFields.splice(index, 1);
-    this.renderApplicationFormBuilder();
-    this.scheduleApplicationFormSave();
+    this.renderApplicationFormBuilder(); this.scheduleApplicationFormSave();
   },
 
   startApplicationFieldDrag(event, index) {
@@ -1731,9 +1736,7 @@ const HiringApp = {
     event.dataTransfer.setData('text/plain', String(index));
   },
 
-  endApplicationFieldDrag() {
-    this.draggedApplicationFieldIndex = null;
-  },
+  endApplicationFieldDrag() { this.draggedApplicationFieldIndex = null; },
 
   dropApplicationField(targetIndex) {
     const form = this.getActiveApplicationForm();
