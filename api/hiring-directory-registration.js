@@ -14,6 +14,15 @@ const UPLOAD_TYPES = {
 
 const clean = (value, max = 250) => String(value || '').trim().slice(0, max);
 const tokenHash = token => createHash('sha256').update(String(token || '')).digest('hex');
+const formatShiftTime = value => {
+  const match = String(value || '').trim().match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+  if (!match) return clean(value, 20) || null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hours > 23 || minutes > 59) return clean(value, 20) || null;
+  const suffix = hours >= 12 ? 'PM' : 'AM';
+  return `${String(hours % 12 || 12).padStart(2, '0')}:${String(minutes).padStart(2, '0')} ${suffix}`;
+};
 const validDate = value => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value || ''))) return false;
   const date = new Date(`${value}T00:00:00Z`);
@@ -128,7 +137,9 @@ export default async function handler(req, res) {
     });
     if (employeeNumberError || !employeeNumber) throw new Error('employee_number_unavailable');
     const job = context.job;
-    const shiftTime = job.free_hours ? 'Free hours' : [job.reporting_time_start, job.reporting_time_end].filter(Boolean).join(' - ') || null;
+    const shiftTime = job.free_hours
+      ? 'Free hours'
+      : [formatShiftTime(job.reporting_time_start), formatShiftTime(job.reporting_time_end)].filter(Boolean).join(' - ') || null;
     const employee = {
       id: randomUUID(), company_id: registration.company_id, employee_number: employeeNumber,
       first_name: context.application.first_name, middle_name: clean(fields.middleName) || null, last_name: context.application.last_name,

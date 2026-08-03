@@ -858,13 +858,13 @@
 
         const shiftTimeCell = () => {
           const val1 = emp.shift_time_1 || '';
-          
+          const displayVal1 = window.BKEmployeeTime.formatRange(val1);
           if (!isEdit) {
             if (!val1) return `<td class="grp-hr cell-empty">—</td>`;
-            return `<td class="grp-hr"><div style="font-variant-numeric: tabular-nums;">${esc(val1)}</div></td>`;
+            return `<td class="grp-hr"><div style="font-variant-numeric: tabular-nums;">${esc(displayVal1)}</div></td>`;
           }
           
-          const parts1 = val1.split('-').map(s => s.trim());
+          const parts1 = displayVal1.split('-').map(s => s.trim());
           const startParts1 = parseTimeParts(parts1[0] || '');
           const endParts1 = parseTimeParts(parts1[1] || '');
           
