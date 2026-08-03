@@ -88,17 +88,16 @@ We enforce rigorous practices to prevent SQL injections (SQLi) and Cross-Site Sc
 
 ---
 
-## 21. JavaScript Module Size & Route Chunks
+## 5.1 JavaScript Module Size & Route Chunks
 > [!IMPORTANT]
-> **PREVENT MONOLITHIC JAVASCRIPT FILES**:
-> - Run `npm run check:module-size` as part of every normal lint pass.
-> - New JavaScript modules under `dashboard/` and `js/` must not exceed 1,000 lines.
-> - Existing oversized modules are frozen at the line counts recorded in `scripts/module-size-baseline.json`; they may shrink but must not grow.
-> - When a module reaches its limit, extract feature-specific behavior into focused files and load those files only on the routes that need them. Keep shared authentication, tenant resolution, and common UI helpers in shared modules rather than duplicating them.
-> - Do not raise a baseline to make the checker pass. Refactor the new behavior into a chunk, or reduce the oversized module below its prior baseline.
-> - Once an existing module reaches 1,000 lines or fewer, remove its baseline exemption so it cannot grow past the standard limit again.
+> Run `npm run check:module-size` with normal linting. New modules under
+> `dashboard/` and `js/` are limited to 1,000 lines. Existing exemptions in
+> `scripts/module-size-baseline.json` may shrink but never grow; never raise a
+> baseline to pass. Extract route-specific chunks, retain only genuinely shared
+> auth/tenant/UI helpers globally, and remove exemptions once files reach 1,000
+> lines.
 
-## 22. Optimization Must Preserve Business Visibility and Workflow Semantics
+## 5.2 Optimization Must Preserve Visibility and Workflow Semantics
 > [!CRITICAL]
 > **AN OPTIMIZATION IS NOT ALLOWED TO CHANGE WHO OR WHAT A VALID TENANT USER CAN SEE**:
 > Performance work may reduce payload size, query count, scan size, or render
@@ -106,273 +105,141 @@ We enforce rigorous practices to prevent SQL injections (SQLi) and Cross-Site Sc
 > references, and workflow side effects. Treat visibility and downstream
 > synchronization as part of the query contract.
 
-### 22.1 Never Turn a Performance Filter into an Authorization Rule
-- RLS and explicit `company_id`/tenant boundaries prevent cross-tenant access.
-  Do not add role, department, creator, assignee, warehouse, or employee-self
-  filters to shared tenant data unless the documented business rule explicitly
-  requires that restriction.
-- Do not change a tenant-wide employee/profile query into `id = current user`.
-  Shared profiles, chat participants, schedules, rankings, assignments, and
-  historical records must still resolve other employees in the same tenant.
-- Do not treat failure to resolve a related row as permission to replace it with
-  `"Unknown Employee"`, `"Unknown User"`, or a blank value. First determine
-  whether the related-row query was incorrectly narrowed.
-- A count optimization and its corresponding list query must use equivalent
-  business predicates. A badge showing records that the list hides is a failed
-  optimization.
+### 5.2.1 Never Turn a Performance Filter into an Authorization Rule
+- RLS plus explicit tenant/company boundaries provide isolation. Never add role,
+  department, creator, assignee, warehouse, employee-self, or similar filters
+  merely to reduce rows; they require an explicit business rule.
+- Tenant-wide profiles, chat, schedules, rankings, assignments, and historical
+  identities must remain resolvable. Investigate narrowed related-row queries
+  before displaying `Unknown` or blanks. Badge/count and list predicates must
+  remain equivalent.
 
-### 22.2 Active-Only Filters Belong Only Where the Business Action Requires Them
-- Login gates and new-assignment selectors may exclude inactive, fired, or
-  resigned employees.
-- Historical and relational views must still resolve those employees by name:
-  past adjustments, payouts, schedules, sales, chat history, approvals,
-  assignments, invoices, and audit records must not become anonymous when an
-  employee becomes inactive.
-- When a page needs both behaviors, retain a tenant-wide lookup map for display
-  and derive a separate active-only collection for selectable options. Do not
-  reuse the active-only collection as the historical name directory.
-- Disabling login must be implemented at authentication/access gates. Do not
-  achieve it by hiding the employee row from every tenant query.
+### 5.2.2 Active-Only Filters Belong Only Where the Business Action Requires Them
+- Login gates and new-assignment selectors may exclude inactive employees;
+  historical adjustments, payouts, schedules, sales, chat, approvals,
+  assignments, invoices, and audits may not. Keep a tenant-wide identity map and
+  derive a separate active selectable list. Disable login at the auth gate.
 
-### 22.3 SKU and Product Visibility Must Remain Tenant-Wide
-- Do not filter the shared product/SKU catalog by the current employee, creator,
-  department, or module role merely to reduce rows.
-- Booking, invoice, warehouse, sales, and product selectors must resolve all
-  tenant-authorized SKUs required by their records, including SKUs created by
-  another user.
-- Inventory-specific exclusions such as `count_inventory = false` may control
-  warehouse stock workflows, but they must not remove the SKU from invoices,
-  bookings, order history, or other non-inventory views.
-- Retain stable identifiers required for joins and deduplication, especially
-  `products.id`, `sku`, `company_id`, and relevant foreign keys.
+### 5.2.3 SKU and Product Visibility Must Remain Tenant-Wide
+- Shared SKUs remain visible across booking, invoices, warehouse, sales, and
+  history regardless of creator/employee. Inventory-only rules such as
+  `count_inventory = false` must not hide products elsewhere. Preserve
+  `products.id`, `sku`, `company_id`, and join keys.
 
-### 22.4 Narrow Projections Must Include the Full Downstream Data Contract
-- Before replacing `.select('*')` with a narrow projection, trace every consumer
-  of the returned object, including helpers, background sync, rendering,
-  sorting, grouping, fallback logic, and write-payload construction.
-- Never select fields for only the first visible use. A background workflow may
-  depend on fields read later in the same function.
-- If code reads `booking.product_skus`, `booking.product_qtys`, or
-  `booking.created_at`, those fields are mandatory in the booking projection
-  even when they are not rendered directly.
-- After narrowing a projection, search the complete call path for every
-  `record.<field>` access and verify each field is still selected. Missing fields
-  that silently produce empty arrays, skipped loops, blank labels, or omitted
-  inserts are release-blocking defects.
-- Prefer an explicit documented projection constant or typed mapper when the
-  same record shape is shared across multiple modules.
+### 5.2.4 Narrow Projections Must Include the Full Downstream Data Contract
+- Before narrowing `.select('*')`, trace renderers, helpers, sorting/grouping,
+  fallbacks, background sync, and write-payload builders; search the full call
+  path for every `record.field`. Missing downstream fields are release-blocking
+  even when failure is silent. Use a documented projection constant/mapper for
+  shared shapes.
 
-### 22.5 Never Break Order-to-Workflow Handoffs
-- Optimizations must preserve all state transitions and derived records across:
-  booking/invoice → reserved transaction → Inspect → Pack → Dispatch → Receive.
-- A booking or invoice being visible does not prove warehouse synchronization
-  succeeded. Verify the expected `inventory_transactions` rows exist with the
-  correct `company_id`, `warehouse_id`, `reference_id`, SKU, quantity, type, and
-  status.
-- Do not remove data needed to construct downstream writes. A loop that now
-  receives an empty item collection without throwing is still a production
-  failure.
-- Repair scripts must be narrowly scoped and idempotent: use exact company and
-  reference boundaries plus `NOT EXISTS`/conflict guards. Never recreate,
-  overwrite, or advance existing transaction history during a backfill.
+### 5.2.5 Never Break Order-to-Workflow Handoffs
+- Preserve booking/invoice → reserved transaction → Inspect → Pack → Dispatch →
+  Receive. Verify generated `inventory_transactions` ownership, warehouse,
+  reference, SKU, quantity, type, status, and transitions—not only source-page
+  visibility. Never remove fields used for downstream writes.
+- Backfills must be company/reference scoped, idempotent, and guarded by
+  `NOT EXISTS`/conflict handling; never overwrite or advance existing history.
 
-### 22.6 Required Before/After Regression Audit for Optimizations
+### 5.2.6 Required Before/After Regression Audit
 For every optimization that changes database projections, filters, RLS policies,
 shared loaders, lookup maps, or synchronization:
 
-1. Record the expected pre-change result set and side effects for representative
-   tenant data.
-2. Test an active employee and an inactive employee referenced by historical
-   data.
-3. Test a regular user viewing another tenant member's profile/name, chat,
-   schedule, ranking, and assignment where applicable.
-4. Test SKUs created or managed by a different user in booking, invoice, sales,
-   and warehouse contexts.
-5. Create or use a production-shaped order and verify the complete workflow
-   handoff, not just the originating booking/invoice screen.
-6. Compare badges/counts with the records actually rendered by the destination
-   page.
-7. Confirm no valid same-tenant record changed to unknown, blank, missing, or
-   inaccessible.
-8. Confirm cross-tenant isolation still holds through RLS and explicit tenant
-   filters.
+1. Record representative before/after results and side effects.
+2. Test owner/admin and regular users; active and historically referenced
+   inactive employees; another same-tenant user's records; and cross-tenant
+   isolation.
+3. Test another user's SKUs, badge/list equivalence, and a production-shaped
+   order through the complete workflow handoff.
+4. Confirm no valid record becomes unknown, blank, missing, or inaccessible.
 
-### 22.7 Optimization Definition of Done
-An optimization is incomplete unless:
-
-- Authorized before/after result sets are equivalent.
-- Historical identities remain resolvable after employee deactivation.
-- Shared tenant SKUs remain visible in every required business module.
-- Workflow-generated rows and status transitions still occur.
-- Narrow projections cover every downstream field access.
-- Count and detail queries agree.
-- Production-shaped authenticated route tests pass for owner/admin and regular
-  users.
-- Any intentional visibility change is separately documented, explicitly
-  approved, and tested as a product/security change rather than described as a
-  performance optimization.
+### 5.2.7 Definition of Done
+Authorized results, historical identities, shared SKUs, downstream fields,
+generated rows, status transitions, and badge/list agreement must remain
+equivalent in authenticated owner/admin and regular-user tests. Any intentional
+visibility change requires separate approval and product/security testing.
 
 ---
 
-## 5.1 Database Query Performance & Disk IO Budget
+## 5.3 Database Query Performance & Disk IO Budget
 > [!CRITICAL]
 > **DATABASE EFFICIENCY IS A BUILD REQUIREMENT, NOT A LATER OPTIMIZATION TASK**:
 > Every new dashboard feature must be designed so its normal page load remains
 > bounded as the tenant's data grows. A query that is acceptable with test data
 > but scans a complete operational table is not production-ready.
 
-### 5.1.1 Never Run Operational Audits from Global Components
-- Shared files such as `js/sidebar.js`, `js/auth.js`, navigation badges, headers,
-  chat bootstrapping, and global layouts execute on many or every dashboard route.
-- They must **not** load complete sets of bookings, products, transactions,
-  attendance logs, commissions, or journal entries to calculate a badge or status.
-- Run feature-specific audits only on the feature's own routes.
-- Global badges must use a small company-scoped `count`, boolean RPC, cached
-  summary row, or materialized summary. They must never reconstruct business
-  state client-side from several operational tables.
+### 5.3.1 Never Run Operational Audits from Global Components
+- Global auth/sidebar/header/chat/badge code must not load operational
+  collections. Run audits on feature routes; use company-scoped counts, boolean
+  RPCs, cached summaries, or materialized summaries globally.
 
-```javascript
-// Bad: runs on every dashboard route and downloads operational records.
-const { data } = await sb
-  .from('installation_bookings')
-  .select('*')
-  .eq('company_id', companyId);
+### 5.3.2 Tenant Ownership Is Mandatory on Reads and Writes
+- Validate `companyId` first. Every company-owned read includes the company
+  boundary in addition to RLS; every insert/upsert writes `company_id`.
+- New ownership columns are `NOT NULL` unless absence is documented. Safely
+  backfill existing rows first. `company_id.is.null` is migration compatibility
+  only; never create new null-owned rows.
 
-// Good: feature-specific, bounded summary.
-const { count } = await sb
-  .from('installation_bookings')
-  .select('id', { count: 'exact', head: true })
-  .eq('company_id', companyId)
-  .eq('status', 'needs_review');
-```
+### 5.3.3 No Unbounded Collection Queries
+- Growing collections require server pagination or a strict start/end date
+  window. Filter/order before `.range()`/`.limit()`; default pages normally load
+  50–100 rows. Larger limits need a reason and hard ceiling. Prefer cursors for
+  rapidly growing tables; never fetch thousands merely to process client-side.
 
-### 5.1.2 Tenant Ownership Is Mandatory on Reads and Writes
-- Resolve and validate `companyId` before issuing company-owned queries.
-- Every read from a company-owned table must include the company boundary, even
-  when RLS is enabled. RLS is the security boundary; the explicit filter is also
-  the query-planning and performance boundary.
-- Every insert or upsert into a company-owned table must explicitly write
-  `company_id`. Never rely on a nullable default.
-- New company-owned columns should be `NOT NULL` unless the absence of ownership
-  is a documented business requirement.
-- For existing tables, backfill ownership safely before adding `NOT NULL`.
-- Compatibility filters such as `company_id.is.null` are temporary migration
-  measures only. Do not introduce new null-owned records.
+### 5.3.4 Select Only the Fields the View Uses
+- List queries use narrow projections, especially for JSON/media/attachment/
+  conversation/audit tables. Load full details on demand; `.select('*')` needs a
+  justified single-record consumer. Follow Section 5.2.4 and always include
+  `products.id`.
 
-```javascript
-if (!companyId || companyId === 'null') return;
+### 5.3.5 Eliminate N+1 Database Requests
+- Do not put avoidable reads/writes in loops. Collect IDs/SKUs/references, fetch
+  with bounded `.in(...)` batches, and build lookup maps. Batch equal-value
+  updates; use an RPC/transaction for atomic inventory changes.
 
-await sb.from('inventory_transactions').insert({
-  company_id: companyId,
-  warehouse_id: warehouseId,
-  sku,
-  quantity,
-  type: 'customer_order',
-  status: 'reserved'
-});
-```
-
-### 5.1.3 No Unbounded Collection Queries
-- History, ledger, booking, review, attendance, and transaction queries must have
-  server-side pagination or a strict bounded date window.
-- Apply filtering and ordering before `.range()` or `.limit()`.
-- Default list pages should normally request 50–100 rows. Larger limits require
-  a documented reason and must still have a hard ceiling.
-- Do not fetch 1,000–10,000 rows merely to filter, sort, count, or paginate them
-  in JavaScript.
-- Prefer keyset/cursor pagination for rapidly growing tables. Offset pagination
-  is acceptable for smaller administrative lists.
-- Date-based reports must include both a start and an end bound; never query
-  “from the beginning of this month onward” without the month-end boundary.
-
-```javascript
-const { data, error } = await sb
-  .from('inventory_transactions')
-  .select('id, sku, quantity, status, created_at')
-  .eq('company_id', companyId)
-  .eq('warehouse_id', warehouseId)
-  .gte('created_at', periodStart)
-  .lt('created_at', periodEnd)
-  .order('created_at', { ascending: false })
-  .range(pageStart, pageEnd);
-```
-
-### 5.1.4 Select Only the Fields the View Uses
-- Do not use `.select('*')` for tables containing large JSON, media, attachment,
-  address, conversation, or audit fields.
-- List screens must request a narrow projection.
-- Load full details only after a user opens a specific record.
-- `.select('*')` is permitted only for a justified single-record detail query
-  where the view genuinely consumes nearly every field.
-- Products queries must still include `id`, as required by Section 10.
-
-### 5.1.5 Eliminate N+1 Database Requests
-- Never place a Supabase read or write inside a loop when the operation can be
-  expressed as one batch.
-- Collect IDs/SKUs/reference numbers, fetch them with `.in(...)`, then construct
-  an in-memory lookup map.
-- Batch updates sharing the same value with `.in('id', ids)`.
-- When several inventory counters must change atomically, use a database RPC or
-  transaction rather than repeated client-side read/modify/write operations.
-- Chunk unusually large ID lists into bounded batches.
-
-### 5.1.6 Indexes Must Match Real Query Shapes
-- Before adding an index, inspect the live schema and the actual query captured
-  in `pg_stat_statements`.
-- For composite indexes, put equality/tenant filters first, followed by range or
-  ordering columns used by the query.
-- Common examples:
-  - `(company_id, status)`
-  - `(company_id, scheduled_date)`
-  - `(company_id, warehouse_id, created_at DESC)`
-  - `(employee_id, created_at DESC)`
-- Use `EXPLAIN` to confirm the intended index is chosen.
-- Do not add speculative indexes. Indexes increase write IO, storage, vacuum
-  work, and maintenance cost.
-- Migrations must use non-destructive, rerunnable statements such as
+### 5.3.6 Indexes Must Match Real Query Shapes
+- Inspect live schema and `pg_stat_statements` first. Composite indexes put
+  equality/tenant columns before range/order columns; confirm with `EXPLAIN`.
+  Never add speculative indexes. Use rerunnable migrations such as
   `CREATE INDEX IF NOT EXISTS`.
 
-### 5.1.7 Cache and Refresh Deliberately
-- Deduplicate identical requests within a page lifecycle by caching the active
-  Promise or result in the module context.
-- Refresh only after the underlying action changes data, when the active tenant
-  changes, or at a documented low-frequency interval.
+### 5.3.7 Cache and Refresh Deliberately
+- **Fetch once, share safely, refresh deliberately.** Reuse one in-flight Promise
+  or page result for identical concurrent callers; clear it in `finally` so
+  failures retry.
+- Batch point reads only when table, tenant scope, lifecycle, authorization, and
+  failure semantics match. Example: fetch several `global_settings` keys with
+  one company-scoped `.in('key', keys)` query and map by key.
+- Cache at the narrowest safe scope. Keys include every result-changing input
+  (`company_id`, user/employee, record, filters, date range); never reuse after
+  user/tenant changes.
+- Refresh only after a relevant successful mutation, user/tenant change, scoped
+  Realtime event, or documented low-frequency expiry—not rerender/reopen/init.
 - Do not implement aggressive polling for sidebar status or counters.
 - Persistent business configuration follows Section 19 and belongs in
   `global_settings`; do not misuse browser storage as a cross-page database cache.
+- Never reduce requests by narrowing authorized visibility. Apply the Section 5.2
+  result-set/workflow contract and test concurrency, refresh, tenant switching,
+  failure/retry, historical identities, and same-tenant records.
 
-### 5.1.8 Mandatory Pre-Deployment Query Audit
+### 5.3.8 Mandatory Pre-Deployment Query Audit
 For any feature that adds or changes database access:
 
-1. Inspect every touched live table with:
-   `node scripts/db-inspect.js <table_name>`.
-2. Search the changed files for:
-   - `.select('*')`
-   - database calls inside loops
-   - missing `company_id` on inserts/upserts
-   - collection queries without `.range()`, `.limit()`, or date bounds
-   - shared/sidebar/auth code loading operational tables
-3. Run targeted ESLint and syntax checks.
-4. Load every affected dashboard route with realistic authenticated data.
-5. Confirm loading states finish, existing records remain visible, and no raw
-   database errors appear.
-6. For high-frequency or high-volume paths, compare `pg_stat_statements` before
-   and after deployment: calls, total time, mean time, shared blocks read/hit,
-   and temporary blocks.
-7. Review Supabase Database Health after a representative business cycle.
+1. Inspect each live table with `node scripts/db-inspect.js <table_name>`.
+2. Audit `.select('*')`, DB calls in loops, missing ownership on writes,
+   unbounded collections, and operational scans in global code.
+3. Run targeted lint/syntax/module-size checks and authenticated affected-route
+   tests; confirm loading completes, records remain visible, and errors are safe.
+4. For high-volume paths, compare `pg_stat_statements` calls, total/mean time,
+   shared/temp blocks, then review Supabase health after a business cycle.
+5. Complete the Section 5.2 before/after visibility and workflow audit.
 
-### 5.1.9 Definition of Done
-A database-backed dashboard feature is not complete unless:
-
-- Tenant ownership is written and filtered explicitly.
-- Collection size is bounded on the server.
-- Payload columns are intentionally selected.
-- No avoidable N+1 access remains.
-- Required composite indexes are verified against the real query.
-- Global components do not perform feature-wide scans.
-- The affected routes are tested with existing production-shaped data.
-- Query growth remains proportional to the requested page/report, not to the
-  tenant's complete lifetime dataset.
+### 5.3.9 Definition of Done
+A feature is complete only when ownership is explicit, collections are bounded,
+projections cover the full contract, avoidable N+1 access is gone, indexes are
+evidence-backed, global code performs no feature scan, production-shaped route
+tests pass, and query growth follows the requested page/report rather than the
+tenant's lifetime dataset.
 
 ---
 
@@ -389,54 +256,11 @@ A database-backed dashboard feature is not complete unless:
 ---
 
 ## 8. Tabs Component Design
-When creating tabs in BrightKey Portal dashboards, follow the tabs design from `/dashboard/fulfillment`:
-
-### HTML Structure
-```html
-<div class="drawer-tabs">
-  <button class="tab-btn active" onclick="switchTab('tab1')">Tab One</button>
-  <button class="tab-btn" onclick="switchTab('tab2')">Tab Two</button>
-  <button class="tab-btn" onclick="switchTab('tab3')">Tab Three</button>
-</div>
-```
-
-### CSS Styling
-Ensure the tabs container and buttons use the following premium styling tokens:
-```css
-/* ── Tab Container Bar ── */
-.drawer-tabs {
-  display: flex;
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-  overflow-x: auto;
-  background: var(--bg-surface);
-}
-
-/* ── Tab Buttons ── */
-.tab-btn {
-  padding: 0.9rem 1.25rem;
-  font-size: 0.82rem;
-  font-weight: 600;
-  color: var(--text-muted);
-  border: none;
-  background: none;
-  cursor: pointer;
-  border-bottom: 2px solid transparent;
-  white-space: nowrap;
-  transition: all 0.15s;
-}
-
-/* ── Active Tab Styling ── */
-.tab-btn.active {
-  color: var(--cyan-light);
-  border-bottom-color: var(--cyan);
-}
-
-/* ── Hover State ── */
-.tab-btn:hover:not(.active) {
-  color: var(--text-secondary);
-}
-```
+Reuse the `/dashboard/fulfillment` `.drawer-tabs`/`.tab-btn` pattern. Required
+behavior: flex row, horizontal overflow, surface background, bottom border;
+nowrap 600-weight buttons with muted text and a transparent 2px underline;
+active tabs use `--cyan-light`/`--cyan`, and inactive hover uses
+`--text-secondary`. Do not invent a parallel tab system.
 
 ---
 
@@ -456,45 +280,25 @@ For ordinary dashboard, JavaScript, CSS, migration, or non-product-page changes,
 
 ## 10. Strict UI Design System Compliance (`DESIGN.md`)
 > [!IMPORTANT]
-> Before modifying or writing any HTML, CSS, front-end JavaScript, layouts, modal animations, or stylesheet overrides, the agent **MUST read `/DESIGN.md` in its entirety**.
-> 
-> You are strictly forbidden from implementing custom scroll configurations, modal transitions, loading overlays, or sticky table columns/headers without verifying the established design systems and code blocks defined in `/DESIGN.md` first. Custom layouts must strictly conform to these patterns to prevent layout bugs.
+> Read `/DESIGN.md` in full before changing HTML, CSS, frontend JS, layouts,
+> animations, or overrides. Reuse its scroll, modal, loading, sticky-table, and
+> layout patterns; do not create competing implementations.
 
 ---
 
 ## 11. HTML Syntax & Tag Validation (Anti-Overcomplication Policy)
 > [!IMPORTANT]
-> Whenever a UI element (like a modal, button, overlay, or panel) is unexpectedly invisible, misaligned, or unresponsive:
-> - **First Action**: Always check the HTML file for missing, misplaced, or unclosed tags (specifically unclosed `</div>` tags).
-> - **Never Overcomplicate**: Do not attempt complex CSS overrides, custom JavaScript frame-reflow logic, or transitions before confirming that the basic HTML DOM nesting structure is 100% syntactically correct.
+> For invisible, misaligned, or unresponsive UI, validate DOM nesting and closing
+> tags first. Do not add CSS/reflow/transition workarounds before syntax is sound.
 
 ---
 
 ## 12. Dashboard Modal Implementation Patterns
-We use two distinct patterns for modal overlays. Do NOT mix them:
-
-### Pattern A: Keyframe-based (Used in `/dashboard/team`)
-- **CSS**: Overlay transitions instantly via `display: none` / `display: flex`. The card handles fading and sliding using a `@keyframes` animation.
-  ```css
-  .modal-overlay { display: none; position: fixed; inset: 0; z-index: 1000; align-items: center; justify-content: center; }
-  .modal-overlay.open { display: flex; }
-  .modal-card { background: var(--bg-surface); animation: modalSlide 0.2s forwards; }
-  @keyframes modalSlide { from { transform: translateY(15px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-  ```
-- **JavaScript**: Toggling the `.open` class is sufficient. No inline styles or timeouts are required.
-  ```javascript
-  modal.classList.add('open');
-  modal.classList.remove('open');
-  ```
-
-### Pattern B: Transition-based (Global Standard in `DESIGN.md`)
-- **CSS**: Overlay is hidden by default using `opacity: 0` and `pointer-events: none` to support fade transitions.
-- **JavaScript**: Requires setting the display, triggering reflow, and adding the class:
-  ```javascript
-  modal.style.display = 'flex';
-  modal.offsetHeight; // reflow
-  modal.classList.add('open');
-  ```
+Do not mix modal systems. `/dashboard/team` uses instant overlay display plus a
+card keyframe, so JS only toggles `.open`. The global `DESIGN.md` transition
+pattern hides with opacity/pointer-events and opens by setting `display: flex`,
+forcing reflow (`modal.offsetHeight`), then adding `.open`. Match the route's
+existing pattern exactly.
 
 ---
 

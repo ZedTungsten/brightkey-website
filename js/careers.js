@@ -671,10 +671,11 @@
     appendListSection(content, 'Project milestones', job.milestones);
 
     const applyCard = createElement('aside', 'job-apply-card');
-    const applyButton = createElement('button', 'btn btn-cyan btn-lg', 'Apply');
+    const applyButton = createElement('button', job.fullyStaffed ? 'btn btn-lg btn-fully-staffed' : 'btn btn-cyan btn-lg', job.fullyStaffed ? 'Fully Staffed' : 'Apply');
     applyButton.type = 'button';
     applyButton.id = 'job-apply-button';
-    applyButton.addEventListener('click', () => openApplicationModal(job));
+    applyButton.disabled = job.fullyStaffed;
+    if (!job.fullyStaffed) applyButton.addEventListener('click', () => openApplicationModal(job));
     applyCard.append(
       createElement('h3', '', 'Interested in this role?'),
       createElement('p', '', 'Send your application to the Brightkey hiring team.'),
@@ -708,7 +709,7 @@
       return;
     }
     try {
-      const [jobs, templates, forms, salaryRanges] = await Promise.all([
+      const [jobs, templates, forms, salaryRanges, fullyStaffed] = await Promise.all([
         callRpc('get_public_job_post', {
           p_company_id: COMPANY_ID,
           p_public_code: code
@@ -724,6 +725,10 @@
         callRpc('get_public_job_salary_range', {
           p_company_id: COMPANY_ID,
           p_public_code: code
+        }),
+        callRpc('is_public_job_fully_staffed', {
+          p_company_id: COMPANY_ID,
+          p_public_code: code
         })
       ]);
       if (!jobs.length) {
@@ -733,6 +738,7 @@
       renderJob({
         ...jobs[0],
         ...(salaryRanges[0] || {}),
+        fullyStaffed: fullyStaffed === true,
         template: templates[0] || null,
         applicationForm: normalizeApplicationForm(forms[0])
       });

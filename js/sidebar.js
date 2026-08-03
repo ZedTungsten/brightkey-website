@@ -1007,24 +1007,21 @@
       messagesOffset: 0,
       hasMoreMessages: true,
       isLoadingMore: false,
-
+      unreadRequest: null,
+      teammatesRequest: null,
       async init() {
         this.initChatTone();
         try {
-          // Reuse cached user session
           this.currentUser = await window.BKAuth.getUser();
           if (!this.currentUser) return;
 
-          // Reuse cached role info
           const roleInfo = await window.BKAuth.getUserRole();
           if (!roleInfo) return;
 
-          // Reuse cached company
           const co = await window.BKAuth.getCompany(roleInfo.tenantId);
           this.companyId = co?.id;
           if (!this.companyId) return;
 
-          // Reuse cached employee details
           const emp = await window.BKAuth.getEmployee(this.currentUser.email);
           this.employeeId = emp?.id;
           if (!this.employeeId) return;
@@ -1034,7 +1031,6 @@
           this.department = emp?.department || '';
           this.reportingTo = emp?.reporting_to || '';
 
-          // Subscribe to a lightweight unread counter after idle / now
           await this.updateUnreadIndicators();
           this.setupLightweightRealtime();
 
@@ -1244,8 +1240,10 @@
       },
 
       async updateUnreadIndicators() {
-        try {
-          const { data, error } = await window.BKAuth.sb
+        if (this.unreadRequest) return this.unreadRequest;
+        this.unreadRequest = (async () => {
+          try {
+            const { data, error } = await window.BKAuth.sb
             .from('chat_thread_members')
             .select('unread_count')
             .eq('employee_id', this.employeeId);
@@ -1263,12 +1261,14 @@
             fabDot.style.display = totalUnread > 0 ? 'inline-block' : 'none';
           }
           return totalUnread;
-        } catch (e) {
-          console.error('Error updating unread indicators:', e);
-          return 0;
-        }
+          } catch (e) {
+            console.error('Error updating unread indicators:', e);
+            return 0;
+          }
+        })();
+        try { return await this.unreadRequest; }
+        finally { this.unreadRequest = null; }
       },
-
       async loadTeammates(silent = false) {
         if (!silent) {
           this.showChatLoading();
@@ -1287,7 +1287,7 @@
         }
 
         try {
-          const [inboxRes, empsRes, presenceRes] = await Promise.all([
+          if (!this.teammatesRequest) this.teammatesRequest = Promise.all([
             window.BKAuth.sb.rpc('get_employee_chat_inbox'),
             window.BKAuth.sb.from('employees')
               .select('id, first_name, last_name, picture_link, status_text, department, reporting_to')
@@ -1296,7 +1296,7 @@
               .neq('id', this.employeeId),
             window.BKAuth.sb.from('employee_presence').select('employee_id, status')
           ]);
-
+          const [inboxRes, empsRes, presenceRes] = await this.teammatesRequest;
           if (inboxRes.error) throw inboxRes.error;
           if (empsRes.error) throw empsRes.error;
 
@@ -1309,10 +1309,8 @@
             });
           }
 
-          // Save to local cache
           localStorage.setItem(cacheKey, JSON.stringify({ inbox, allEmployees, presenceMap }));
 
-          // Keep tracker of thread IDs for quick open
           this.inboxByEmployee = {};
           inbox.forEach(t => {
             this.inboxByEmployee[t.other_employee_id] = t;
@@ -1322,6 +1320,8 @@
         } catch (e) {
           console.error(e);
           this.hideChatLoading();
+        } finally {
+          this.teammatesRequest = null;
         }
       },
 

@@ -104,10 +104,8 @@ function renderConfirmationBlocks(blocks, applicant, jobTitle) {
 }
 
 async function sendApplicationConfirmation(supabase, companyId, template, applicant, jobTitle, companyProfile) {
-  const activeTemplate = template && typeof template === 'object'
-    ? { ...DEFAULT_CONFIRMATION_TEMPLATE, ...template }
-    : DEFAULT_CONFIRMATION_TEMPLATE;
-  if (activeTemplate.active === false) return;
+  if (!template || typeof template !== 'object' || template.active !== true) return;
+  const activeTemplate = { ...DEFAULT_CONFIRMATION_TEMPLATE, ...template };
   const { data: integration, error } = await supabase
     .from('company_integrations')
     .select('hr_sender_name, hr_resend_api_key, hr_resend_from_email, hr_smtp_host, hr_smtp_port, hr_smtp_user, hr_smtp_pass, resend_api_key, resend_from_email, smtp_host, smtp_port, smtp_user, smtp_pass')

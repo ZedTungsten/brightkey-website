@@ -94,12 +94,12 @@
       document.getElementById('det-booked-date').innerText = selectedBooking.created_at ? formatDateFriendly(selectedBooking.created_at) : 'N/A';
       
       // City & Province
-      const addressParts = (selectedBooking.customer_address || '').split(',');
-      let city = 'N/A';
-      let province = 'N/A';
+      const addressParts = (selectedBooking.customer_address || '').split(',').map(part => part.trim()).filter(Boolean);
+      let city = String(selectedBooking.customer_city || '').trim() || 'N/A';
+      let province = String(selectedBooking.customer_province || '').trim() || 'N/A';
       if (addressParts.length >= 2) {
-        city = addressParts[addressParts.length - 2].trim();
-        province = addressParts[addressParts.length - 1].trim();
+        if (city === 'N/A') city = addressParts[addressParts.length - 2];
+        if (province === 'N/A') province = addressParts[addressParts.length - 1];
       }
       document.getElementById('det-city').innerText = city;
       document.getElementById('det-province').innerText = province;

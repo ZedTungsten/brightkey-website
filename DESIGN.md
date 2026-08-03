@@ -35,6 +35,8 @@ Guidelines for styling, icons, modal alerts, and loading components to maintain 
 ## 5. Input Fields & Dark Mode Behavior
 * **Important internal form fields (like those in payment accounts management)** must remain solid white with dark text (`#09090B`) and readable dark-gray placeholders.
 * They should **not** dynamically adapt to user/system dark mode preferences, preventing contrast issues and ensuring consistent visual clarity.
+* **Form control text uses regular weight (`font-weight: 400`) by default**, including readonly, prefilled, date, file, text, select, and textarea values. Do not let a bold parent label cascade into its input value; set the control weight explicitly. Reserve medium or bold weights for labels, headings, and deliberate emphasis.
+* **Required fields use a red asterisk immediately after the field label** (for example, `Date of Birth <span class="required">*</span>`). Do not render a separate `Required` word above or below the control. Preserve the native `required` attribute and accessible validation behavior; the asterisk is only the visual indicator.
 
 ---
 

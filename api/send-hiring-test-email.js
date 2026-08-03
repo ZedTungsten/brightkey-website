@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer';
+import { createHash, randomBytes } from 'crypto';
 import {
   createAuthenticatedClient,
   createServiceClient,
@@ -63,7 +64,7 @@ function renderBlocks(blocks, employee) {
   }).join('');
 }
 
-function renderEmail(subject, preheader, blocks, employee, branding, companyProfile) {
+function renderEmail(subject, preheader, blocks, employee, branding, companyProfile, actionUrl = '') {
   return `<!doctype html>
 <html>
   <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
@@ -74,7 +75,8 @@ function renderEmail(subject, preheader, blocks, employee, branding, companyProf
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;">
           <tr><td style="padding:36px 32px;">
             ${branding.logoHtml}
-            ${renderBlocks(blocks, employee)}
+              ${renderBlocks(blocks, employee)}
+              ${actionUrl ? `<p style="margin:30px 0;text-align:center;"><a href="${esc(actionUrl)}" style="display:inline-block;padding:12px 22px;border-radius:7px;background:#06b6d4;color:#fff;text-decoration:none;font-family:Arial,sans-serif;font-size:16px;font-weight:800;">Register to Directory</a></p>` : ''}
             ${buildEmailFooter(companyProfile)}
           </td></tr>
         </table>
@@ -88,17 +90,22 @@ function renderEmail(subject, preheader, blocks, employee, branding, companyProf
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
 
-  const { companyId, recipient, emailType, subject, preheader = '', blocks } = req.body || {};
-  if (!companyId || !recipient || !ALLOWED_EMAIL_TYPES.has(emailType) || !subject || !Array.isArray(blocks)) {
+  const { companyId, applicationId, recipient, emailType, subject, preheader = '', blocks } = req.body || {};
+  const isApplicantEmail = Boolean(applicationId);
+  const isApplicantStatusEmail = isApplicantEmail && ['next_step', 'hire', 'rejection'].includes(emailType);
+  const emailLabel = emailType === 'rejection' ? 'rejection email' : emailType === 'next_step' ? 'next-step email' : 'hire email';
+  if (!companyId || !ALLOWED_EMAIL_TYPES.has(emailType) || (isApplicantEmail ? !isApplicantStatusEmail : (!recipient || !subject || !Array.isArray(blocks)))) {
     return res.status(400).json({ error: 'Complete the test email details and try again.' });
   }
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(recipient))) {
+  if (!isApplicantEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(recipient))) {
     return res.status(400).json({ error: 'Enter a valid test email address.' });
   }
   let supabase;
+  let usesServiceRole = true;
   try {
     supabase = createServiceClient();
   } catch {
+    usesServiceRole = false;
     const token = getBearerToken(req);
     if (!token) return res.status(401).json({ error: 'Your session has expired. Sign in again and retry.' });
     try {
@@ -116,26 +123,61 @@ export default async function handler(req, res) {
       supabase,
       req,
       res,
-      scope: 'send-hiring-test-email',
+      scope: isApplicantEmail ? 'send-hiring-applicant-email' : 'send-hiring-test-email',
       identifier: `${companyId}:${access.user.id}`,
       limit: 20,
       windowSeconds: 600
     })) return;
 
-    const normalizedRecipient = String(recipient).trim().toLowerCase();
-    const { data: employee, error: employeeError } = await supabase
-      .from('employees')
-      .select('first_name, last_name, email, contact_number, title')
-      .eq('company_id', companyId)
-      .eq('email', normalizedRecipient)
-      .limit(1)
-      .maybeSingle();
-    if (employeeError) {
-      console.error('Hiring test employee lookup failed:', employeeError);
-      return res.status(503).json({ error: 'The employee directory could not be loaded. Try again shortly.' });
-    }
-    if (!employee) {
-      return res.status(400).json({ error: 'Use an email address listed in the Employee Directory.' });
+    let normalizedRecipient = String(recipient || '').trim().toLowerCase();
+    let recipientProfile;
+    let resolvedTemplate = { subject, preheader, blocks };
+    if (isApplicantEmail) {
+      const [applicationResult, templatesResult] = await Promise.all([
+        supabase.from('job_applications')
+          .select('id, first_name, last_name, email, contact_number, job_title, status, current_stage, hired_at')
+          .eq('company_id', companyId).eq('id', applicationId).maybeSingle(),
+        supabase.from('global_settings').select('value')
+          .eq('company_id', companyId).eq('key', 'hiring_email_templates').maybeSingle()
+      ]);
+      if (applicationResult.error || templatesResult.error) {
+        console.error('Hiring applicant email context lookup failed:', applicationResult.error || templatesResult.error);
+        return res.status(503).json({ error: `The ${emailLabel} could not be prepared. Try again shortly.` });
+      }
+      const application = applicationResult.data;
+      const hasRequiredStatus = emailType === 'hire'
+        ? Boolean(application?.hired_at) && application.status === 'approved'
+        : emailType === 'rejection'
+          ? application?.status === 'rejected'
+          : application?.status === 'pending' && Number(application.current_stage) > 1;
+      if (!hasRequiredStatus) {
+        const requiredAction = emailType === 'hire' ? 'Hire' : emailType === 'rejection' ? 'Reject' : 'Move';
+        return res.status(409).json({ error: `${requiredAction} the applicant before sending the ${emailLabel}.` });
+      }
+      const applicantTemplate = templatesResult.data?.value?.[emailType];
+      if (!applicantTemplate || applicantTemplate.active !== true) {
+        return res.status(200).json({ success: true, emailType, skipped: 'inactive' });
+      }
+      normalizedRecipient = String(application.email || '').trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedRecipient)) {
+        return res.status(400).json({ error: 'The applicant does not have a valid email address.' });
+      }
+      recipientProfile = application;
+      resolvedTemplate = applicantTemplate;
+    } else {
+      const { data: employee, error: employeeError } = await supabase
+        .from('employees')
+        .select('first_name, last_name, email, contact_number, title')
+        .eq('company_id', companyId)
+        .eq('email', normalizedRecipient)
+        .limit(1)
+        .maybeSingle();
+      if (employeeError) {
+        console.error('Hiring test employee lookup failed:', employeeError);
+        return res.status(503).json({ error: 'The employee directory could not be loaded. Try again shortly.' });
+      }
+      if (!employee) return res.status(400).json({ error: 'Use an email address listed in the Employee Directory.' });
+      recipientProfile = employee;
     }
 
     const [integrationResult, profileResult] = await Promise.all([
@@ -171,12 +213,37 @@ export default async function handler(req, res) {
     const smtpHost = integration?.hr_smtp_host || integration?.smtp_host;
     const smtpPort = Number(integration?.hr_smtp_port || integration?.smtp_port || 465);
     if (!resendKey && !(smtpUser && smtpPass)) {
-      return res.status(400).json({ error: 'Configure the HR email integration before sending a test.' });
+      return res.status(400).json({ error: `Configure the HR email integration before sending ${isApplicantEmail ? `${emailLabel}s` : 'a test'}.` });
     }
 
-    const resolvedSubject = replaceHiringEmailPlaceholders(String(subject).slice(0, 100), employee);
-    const resolvedPreheader = replaceHiringEmailPlaceholders(String(preheader).slice(0, 150), employee);
-    const html = renderEmail(resolvedSubject, resolvedPreheader, blocks, employee, branding, companyProfile);
+    const resolvedSubject = replaceHiringEmailPlaceholders(String(resolvedTemplate.subject || '').slice(0, 100), recipientProfile);
+    const resolvedPreheader = replaceHiringEmailPlaceholders(String(resolvedTemplate.preheader || '').slice(0, 150), recipientProfile);
+    const resolvedBlocks = Array.isArray(resolvedTemplate.blocks) ? resolvedTemplate.blocks : [];
+    let actionUrl = '';
+    if (isApplicantEmail && emailType === 'hire') {
+      const registrationToken = randomBytes(32).toString('base64url');
+      const registrationHash = createHash('sha256').update(registrationToken).digest('hex');
+      const expiresAt = new Date(Date.now() + (7 * 24 * 60 * 60 * 1000)).toISOString();
+      const registrationResult = usesServiceRole
+        ? await supabase.from('hiring_directory_registrations').upsert({
+          company_id: companyId, application_id: applicationId, token_hash: registrationHash,
+          expires_at: expiresAt, used_at: null
+        }, { onConflict: 'application_id' })
+        : await supabase.rpc('issue_hiring_directory_registration', {
+          p_company_id: companyId,
+          p_application_id: applicationId,
+          p_token_hash: registrationHash,
+          p_expires_at: expiresAt
+        });
+      if (registrationResult.error) {
+        console.error('Hiring directory registration link creation failed:', registrationResult.error);
+        return res.status(503).json({ error: 'The secure Register to Directory link could not be created. Try again shortly.' });
+      }
+      let origin = req.headers.referer ? new URL(req.headers.referer).origin : 'https://www.brightkeysolutions.com';
+      if (origin.includes('localhost') || origin.includes('127.0.0.1')) origin = 'https://www.brightkeysolutions.com';
+      actionUrl = `${origin}/employee-hire-registration.html?application=${encodeURIComponent(applicationId)}&token=${encodeURIComponent(registrationToken)}`;
+    }
+    const html = renderEmail(resolvedSubject, resolvedPreheader, resolvedBlocks, recipientProfile, branding, companyProfile, actionUrl);
     if (smtpUser && smtpPass) {
       const transporter = nodemailer.createTransport({
         host: smtpHost,
@@ -207,22 +274,33 @@ export default async function handler(req, res) {
         })
       });
       if (!response.ok) {
-        console.error('Hiring test email delivery failed:', await response.text());
-        return res.status(502).json({ error: 'The test email could not be delivered. Check the HR email integration and try again.' });
+        console.error('Hiring email delivery failed:', await response.text());
+        return res.status(502).json({ error: `${isApplicantEmail ? `The ${emailLabel}` : 'The test email'} could not be delivered. Check the HR email integration and try again.` });
       }
     }
 
     await writeSecurityAudit(supabase, {
       companyId,
       actorUserId: access.user.id,
-      action: 'hiring_test_email_dispatch',
-      targetType: 'hiring_email_template',
-      targetId: companyId,
-      metadata: { recipient: normalizedRecipient, employee_email: employee.email, email_type: emailType }
+      action: isApplicantEmail ? 'hiring_applicant_email_dispatch' : 'hiring_test_email_dispatch',
+      targetType: isApplicantEmail ? 'job_application' : 'hiring_email_template',
+      targetId: isApplicantEmail ? applicationId : companyId,
+      metadata: { recipient: normalizedRecipient, email_type: emailType }
     });
-    return res.status(200).json({ success: true, emailType });
+    let hireEmailSentAt = null;
+    if (isApplicantEmail && emailType === 'hire') {
+      hireEmailSentAt = new Date().toISOString();
+      const { error: sentStatusError } = await supabase.from('job_applications')
+        .update({ hire_email_sent_at: hireEmailSentAt })
+        .eq('company_id', companyId).eq('id', applicationId);
+      if (sentStatusError) {
+        console.error('Hire email sent-status update failed:', sentStatusError);
+        return res.status(503).json({ error: 'The hire email was delivered, but its sent status could not be saved. Refresh before trying again.' });
+      }
+    }
+    return res.status(200).json({ success: true, emailType, skipped: null, hireEmailSentAt });
   } catch (error) {
-    console.error('Hiring test email failed:', error);
-    return res.status(500).json({ error: 'The test email could not be sent. Check the HR email integration and try again.' });
+    console.error('Hiring email failed:', error);
+    return res.status(500).json({ error: `${isApplicantEmail ? `The ${emailLabel}` : 'The test email'} could not be sent. Check the HR email integration and try again.` });
   }
 }
