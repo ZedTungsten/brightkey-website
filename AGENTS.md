@@ -522,3 +522,36 @@ existing pattern exactly.
 > July 31 is included in July's completed installation count and paid in the
 > first August cutoff. An unfinished July 31 assignment is included in neither
 > completed counts nor payout.
+
+---
+
+## 26. Employee Number Generation Is a Shared Invariant
+> [!CRITICAL]
+> Every employee-creation workflow must use the same company-scoped employee
+> number generator. Employee numbers are persistent business identifiers, not
+> presentation values or page-specific defaults.
+>
+> - **One Generator**: Generate employee numbers only through
+>   `next_company_employee_number(company_id)`. Frontend pages and API routes
+>   must not independently calculate, increment, or guess employee numbers.
+> - **Canonical Configuration**: Read the prefix from the company-owned
+>   `global_settings` record whose key is `hr_config`, using
+>   `value.employee_prefix`. Do not use legacy keys such as
+>   `hr_configuration`. Use `BK` only when the canonical company setting is
+>   genuinely absent or blank.
+> - **Continue the Company Sequence**: The next suffix must follow the highest
+>   existing number with that configured prefix for the same `company_id`.
+>   Never use an unrelated global sequence as the visible company suffix.
+> - **Concurrency and Uniqueness**: Number generation must remain serialized
+>   per company and collision-checked. Do not replace the database function
+>   with client-side read-increment-write logic.
+> - **All Creation Paths**: This rule applies to manual directory creation,
+>   employee account registration, hired-applicant onboarding, imports, and
+>   future employee-creation tools.
+> - **Verify Before Coding**: Inspect the live `employees` and
+>   `global_settings` schemas and confirm the canonical setting key before
+>   modifying employee creation. Do not infer live names from old migrations.
+> - **Regression Check**: Test every affected creation path and verify that the
+>   saved employee number uses the configured company prefix, follows the
+>   current highest suffix, remains unique, and belongs to the intended
+>   company.
