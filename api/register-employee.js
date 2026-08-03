@@ -73,10 +73,14 @@ export default async function handler(req, res) {
     // 1c. Fetch existing employee by email to reuse their information if they exist
     const { data: existingEmp, error: empFetchErr } = await supabase
       .from('employees')
-      .select('*')
+      .select('id, first_name, last_name')
       .eq('company_id', company_id)
       .eq('email', activeEmail)
       .maybeSingle();
+    if (empFetchErr) {
+      console.error('Employee lookup failed:', empFetchErr);
+      return res.status(503).json({ error: 'Your employee record could not be checked. Please try again shortly.' });
+    }
 
     let firstName = 'N/A';
     let lastName = 'N/A';
@@ -89,20 +93,46 @@ export default async function handler(req, res) {
     }
     const fullName = `${firstName} ${lastName}`.trim();
 
-    const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-      email: activeEmail,
-      password,
-      email_confirm: true,
-      user_metadata: {
-        full_name: fullName,
-        needs_password_reset: false
+    let userId = null;
+    let createdAuthUser = false;
+    let reusedAuthUser = null;
+
+    // Removing tenant access intentionally keeps the shared auth identity and
+    // Employee Directory record. A later invitation reconnects that identity
+    // instead of trying to create a duplicate Supabase Auth user.
+    if (existingEmp?.id) {
+      const { data: existingAuthData, error: existingAuthError } = await supabase.auth.admin.getUserById(existingEmp.id);
+      const existingAuthUser = existingAuthData?.user;
+      if (!existingAuthError && existingAuthUser?.email?.toLowerCase().trim() === activeEmail) {
+        userId = existingAuthUser.id;
+        reusedAuthUser = existingAuthUser;
       }
-    });
-    if (authError || !authData?.user) {
-      console.error('Auth User Creation Error:', authError);
-      return res.status(400).json({ error: 'An account with this email already exists or could not be created.' });
     }
-    const userId = authData.user.id;
+
+    if (!userId) {
+      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+        email: activeEmail,
+        password,
+        email_confirm: true,
+        user_metadata: {
+          full_name: fullName,
+          needs_password_reset: false
+        }
+      });
+      if (authError || !authData?.user) {
+        console.error('Auth User Creation Error:', authError);
+        return res.status(400).json({ error: 'This email already has a login that could not be linked automatically. Please contact your administrator.' });
+      }
+      userId = authData.user.id;
+      createdAuthUser = true;
+    }
+
+    const rollbackMembership = async () => {
+      await supabase.from('tenant_members').delete()
+        .eq('tenant_id', tenant_id)
+        .eq('user_id', userId);
+      if (createdAuthUser) await supabase.auth.admin.deleteUser(userId);
+    };
 
     // 3. Create tenant member record
     // Decode the role/access format from the invitation URL:
@@ -127,25 +157,41 @@ export default async function handler(req, res) {
 
     if (tmError) {
       console.error('Tenant Member Insert Error:', tmError);
-      // Rollback auth user
-      await supabase.auth.admin.deleteUser(userId);
-      return res.status(500).json({ error: `Database Error (tenant_members): ${tmError.message}` });
+      if (createdAuthUser) await supabase.auth.admin.deleteUser(userId);
+      return res.status(500).json({ error: 'Workspace access could not be restored. Please ask your administrator to check the existing membership.' });
+    }
+
+    if (reusedAuthUser) {
+      const { error: updateAuthError } = await supabase.auth.admin.updateUserById(reusedAuthUser.id, {
+        password,
+        email_confirm: true,
+        user_metadata: {
+          ...(reusedAuthUser.user_metadata || {}),
+          full_name: fullName,
+          needs_password_reset: false
+        }
+      });
+      if (updateAuthError) {
+        console.error('Existing Auth User Update Error:', updateAuthError);
+        await rollbackMembership();
+        return res.status(400).json({ error: 'Your existing account could not be reactivated. Please ask your administrator to resend the invitation.' });
+      }
     }
 
     // 4. Update or Create employee record
     if (existingEmp) {
-      // Update existing employee ID to match the auth user ID
-      const { error: empUpdateErr } = await supabase
-        .from('employees')
-        .update({ id: userId })
-        .eq('id', existingEmp.id);
+      if (existingEmp.id !== userId) {
+        // Update an unlinked directory record to the newly created auth ID.
+        const { error: empUpdateErr } = await supabase
+          .from('employees')
+          .update({ id: userId })
+          .eq('id', existingEmp.id);
 
-      if (empUpdateErr) {
-        console.error('Failed to link existing employee ID:', empUpdateErr);
-        // Rollback
-        await supabase.from('tenant_members').delete().eq('user_id', userId);
-        await supabase.auth.admin.deleteUser(userId);
-        return res.status(500).json({ error: `Database Error (linking employee): ${empUpdateErr.message}` });
+        if (empUpdateErr) {
+          console.error('Failed to link existing employee ID:', empUpdateErr);
+          await rollbackMembership();
+          return res.status(500).json({ error: 'Your employee record could not be linked to the account. Please contact your administrator.' });
+        }
       }
     } else {
       // Fetch employee prefix from global_settings
@@ -213,8 +259,7 @@ export default async function handler(req, res) {
 
       if (!employeeNumber) {
         // Rollback
-        await supabase.from('tenant_members').delete().eq('user_id', userId);
-        await supabase.auth.admin.deleteUser(userId);
+        await rollbackMembership();
         return res.status(500).json({ error: 'Failed to generate a unique employee number after multiple attempts.' });
       }
 
@@ -242,9 +287,8 @@ export default async function handler(req, res) {
       if (empError) {
         console.error('Employee Insert Error:', empError);
         // Rollback tenant member and auth user
-        await supabase.from('tenant_members').delete().eq('user_id', userId);
-        await supabase.auth.admin.deleteUser(userId);
-        return res.status(500).json({ error: `Database Error (employees): ${empError.message}` });
+        await rollbackMembership();
+        return res.status(500).json({ error: 'Your employee record could not be created. Please contact your administrator.' });
       }
     }
 
