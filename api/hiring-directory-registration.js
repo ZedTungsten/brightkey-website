@@ -123,10 +123,14 @@ export default async function handler(req, res) {
     const [pictureLink, govIdLink, cvLink, payoutLink] = await Promise.all([
       fileUrl(supabase, profile), fileUrl(supabase, govid), fileUrl(supabase, cv), payout ? fileUrl(supabase, payout) : null
     ]);
+    const { data: employeeNumber, error: employeeNumberError } = await supabase.rpc('next_company_employee_number', {
+      p_company_id: registration.company_id
+    });
+    if (employeeNumberError || !employeeNumber) throw new Error('employee_number_unavailable');
     const job = context.job;
     const shiftTime = job.free_hours ? 'Free hours' : [job.reporting_time_start, job.reporting_time_end].filter(Boolean).join(' - ') || null;
     const employee = {
-      id: randomUUID(), company_id: registration.company_id,
+      id: randomUUID(), company_id: registration.company_id, employee_number: employeeNumber,
       first_name: context.application.first_name, middle_name: clean(fields.middleName) || null, last_name: context.application.last_name,
       date_of_birth: fields.dateOfBirth, address: context.application.address, city: clean(fields.city), province: clean(fields.province),
       contact_number: context.application.contact_number,
@@ -154,9 +158,11 @@ export default async function handler(req, res) {
     const invalidUpload = error.message === 'invalid_upload';
     const storageFull = error.message === 'storage_full';
     const storageUnavailable = error.message === 'storage_unavailable';
+    const employeeNumberUnavailable = error.message === 'employee_number_unavailable';
     const message = invalidUpload ? 'Choose a supported file under 3 MB.'
       : storageFull ? 'This company has reached its storage limit. Contact HR before trying again.'
         : storageUnavailable ? 'Storage availability could not be verified. Please try again shortly.'
+          : employeeNumberUnavailable ? 'An employee number could not be generated. Contact HR before trying again.'
           : 'Registration could not be completed. Please try again.';
     return res.status(invalidUpload ? 400 : storageFull ? 413 : storageUnavailable ? 503 : 500).json({ error: message });
   }

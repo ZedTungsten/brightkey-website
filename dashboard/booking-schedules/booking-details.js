@@ -11,6 +11,28 @@
       return address;
     }
 
+    function renderMapPinLink(element, value) {
+      const url = String(value || '').trim();
+      element.replaceChildren();
+      if (!url) {
+        element.textContent = 'No link provided';
+        return;
+      }
+      let parsed;
+      try { parsed = new URL(url); } catch (_) { parsed = null; }
+      if (!parsed || !['http:', 'https:'].includes(parsed.protocol)) {
+        element.textContent = 'Invalid map link';
+        return;
+      }
+      const link = document.createElement('a');
+      link.href = parsed.href;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.textContent = url;
+      link.style.cssText = 'color:var(--blue);font-weight:600;overflow-wrap:anywhere;';
+      element.appendChild(link);
+    }
+
     function isAfternoon(timeStr) {
       if (!timeStr) return false;
       const lower = timeStr.toLowerCase();
@@ -120,11 +142,7 @@
 
       // Google Map Pin
       const mapPinEl = document.getElementById('det-map-pin');
-      if (selectedBooking.google_map_pin_url) {
-        mapPinEl.innerHTML = `<a href="${selectedBooking.google_map_pin_url}" target="_blank" style="color:var(--blue); font-weight:600;">Open Google Map Pin</a>`;
-      } else {
-        mapPinEl.innerText = 'No link provided';
-      }
+      renderMapPinLink(mapPinEl, selectedBooking.google_map_pin_url);
 
       // Notes
       document.getElementById('det-notes').innerText = selectedBooking.notes || 'No notes';
@@ -629,11 +647,7 @@
         // Refresh detail view display
         if (field === 'map-pin') {
           const mapPinEl = document.getElementById('det-map-pin');
-          if (newValue) {
-            mapPinEl.innerHTML = `<a href="${newValue}" target="_blank" style="color:var(--blue); font-weight:600;">Open Google Map Pin</a>`;
-          } else {
-            mapPinEl.innerText = 'No link provided';
-          }
+          renderMapPinLink(mapPinEl, newValue);
         } else if (field === 'notes') {
           document.getElementById('det-notes').innerText = newValue || 'No notes';
         }
