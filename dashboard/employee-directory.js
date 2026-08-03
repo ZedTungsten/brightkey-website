@@ -262,7 +262,11 @@
             btn.innerText = origText;
             return;
           }
-
+          if (!isLinkOnly && !data.email_sent) {
+            toast('The invitation was created, but the email could not be sent. Check the HR email integration and try again.', 'error');
+            btn.disabled = false; btn.innerText = origText;
+            return;
+          }
           if (isLinkOnly) {
             outputUrl.value = data.fallback_link || '';
             outputContainer.style.display = 'flex';
@@ -351,7 +355,10 @@
             toast(data.error || 'Invitation failed.', 'error');
             return;
           }
-
+          if (!data.email_sent) {
+            toast('The invitation was created, but the email could not be sent. Check the HR email integration and try again.', 'error');
+            return;
+          }
           toast(`Invitation email sent successfully to ${email}!`, 'success');
           this.closeInviteModal();
           await this.load();

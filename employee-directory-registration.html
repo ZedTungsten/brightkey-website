@@ -323,25 +323,6 @@
     let inviteEmail = '';
     let inviteSig = '';
 
-    async function generateSignature(tenant, company, role, email) {
-      try {
-        const msg = `${tenant}:${company}:${role}:${email}:brightkey_invite_salt`;
-        const encoder = new TextEncoder();
-        const data = encoder.encode(msg);
-        if (typeof crypto === 'undefined' || !crypto.subtle) {
-          console.warn("crypto.subtle is not supported in this browser context.");
-          return '';
-        }
-        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-        const hashArray = Array.from(new Uint8Array(hashBuffer));
-        const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-        return hashHex;
-      } catch (err) {
-        console.error('Signature generation failed:', err);
-        return '';
-      }
-    }
-
     async function validateInvitation() {
       const params = new URLSearchParams(window.location.search);
       const sig = params.get('sig') || '';
@@ -364,11 +345,8 @@
         return { valid: false, reason: 'missing_params' };
       }
 
-      const expectedSig = await generateSignature(inviteTenant, inviteCompany, inviteRole, inviteEmail);
-      if (!expectedSig || sig !== expectedSig) {
-        return { valid: false, reason: 'invalid_signature' };
-      }
-
+      // Invitation tokens are random, single-use secrets. Only the server can
+      // validate their hashes and expiry; there is no client-side signature.
       try {
         const url = `/api/verify-invitation?tenant=${encodeURIComponent(inviteTenant)}&company=${encodeURIComponent(inviteCompany)}&role=${encodeURIComponent(inviteRole)}&email=${encodeURIComponent(inviteEmail)}&sig=${encodeURIComponent(sig)}`;
         const res = await fetch(url);
@@ -379,7 +357,8 @@
         console.error('Failed to contact verify-invitation API:', err);
       }
 
-      return { valid: true };
+      // Fail closed when the verification service cannot confirm the token.
+      return { valid: false, reason: 'verification_unavailable' };
     }
 
     (async function initForm() {
