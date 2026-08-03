@@ -2430,7 +2430,7 @@ const HiringApp = {
               <section class="hiring-form-section conditional-section employment-dependent" hidden>
                 <h4 class="hiring-section-title">Tags / Relevant Skills</h4>
                 <div class="hiring-field">
-                  <label for="job-tags-input">Skills <span class="field-hint">Press comma or space to add</span></label>
+                  <label for="job-tags-input">Skills <span class="field-hint">Press comma to add</span></label>
                   <div class="tag-editor" id="job-tags-editor" onclick="document.getElementById('job-tags-input').focus()">
                     <div class="tag-pill-list" id="job-tags-list"></div>
                     <input id="job-tags-input" autocomplete="off" placeholder="Type a skill" onkeydown="HiringApp.handleTagKeydown(event)" oninput="HiringApp.handleTagInput(event)" onblur="HiringApp.commitTagInput()" />
@@ -3112,11 +3112,8 @@ const HiringApp = {
   },
 
   handleTagKeydown(event) {
-    if (event.key === ',' || event.key === ' ' || event.key === 'Enter') {
-      event.preventDefault();
-      this.commitTagInput();
-      return;
-    }
+    if (event.key === ',') { event.preventDefault(); this.commitTagInput(); return; }
+    if (event.key === 'Enter') event.preventDefault();
     if (event.key === 'Backspace' && !event.currentTarget.value && this.tagValues.length) {
       this.tagValues.pop();
       this.renderTags();
@@ -3124,9 +3121,9 @@ const HiringApp = {
   },
 
   handleTagInput(event) {
-    if (!/[,\s]/.test(event.currentTarget.value)) return;
-    const tokens = event.currentTarget.value.split(/[,\s]+/).filter(Boolean);
-    event.currentTarget.value = '';
+    const input = event.currentTarget;
+    if (!input.value.includes(',')) return;
+    const tokens = input.value.split(','); input.value = tokens.pop() || '';
     tokens.forEach(token => this.addTag(token));
   },
 
