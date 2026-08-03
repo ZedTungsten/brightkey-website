@@ -875,6 +875,25 @@
         .join(', ');
     }
 
+    function resolveInvoiceCustomerLocation(data) {
+      let city = String(data.customer_city || '').trim();
+      let province = String(data.customer_province || '').trim();
+
+      if ((!city || !province) && data.customer_address) {
+        const addressParts = String(data.customer_address)
+          .split(',')
+          .map(part => part.trim())
+          .filter(Boolean);
+
+        if (addressParts.length >= 3) {
+          if (!province) province = addressParts[addressParts.length - 1];
+          if (!city) city = addressParts[addressParts.length - 2];
+        }
+      }
+
+      return { city, province };
+    }
+
     window.toggleInvoiceCompanyFields = function() {
       const isCompany = document.getElementById('inv-is-company').checked;
       document.getElementById('inv-person-name-fields').style.display = isCompany ? 'none' : 'flex';
@@ -884,6 +903,7 @@
     function setInvoiceCustomerFields(data) {
       const legacyName = splitLegacyCustomerName(data.customer_name);
       const isCompany = Boolean(data.customer_is_company);
+      const location = resolveInvoiceCustomerLocation(data);
       document.getElementById('inv-is-company').checked = isCompany;
       document.getElementById('inv-first-name').value = data.customer_first_name || (!isCompany ? legacyName.firstName : '');
       document.getElementById('inv-last-name').value = data.customer_last_name || (!isCompany ? legacyName.lastName : '');
@@ -894,8 +914,8 @@
       document.getElementById('inv-contact').value = data.customer_phone || '';
       document.getElementById('inv-email').value = data.customer_email || '';
       document.getElementById('inv-address').value = data.customer_address || '';
-      document.getElementById('inv-city').value = data.customer_city || '';
-      document.getElementById('inv-province').value = data.customer_province || '';
+      document.getElementById('inv-city').value = location.city;
+      document.getElementById('inv-province').value = location.province;
       document.getElementById('inv-map-pin').value = data.google_map_pin_url || '';
       toggleInvoiceCompanyFields();
     }
