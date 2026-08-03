@@ -657,8 +657,8 @@
       createElement('p', 'job-detail__summary', job.job_description),
       meta
     );
-    if (heroImage) hero.appendChild(heroImage);
-    hero.append(heroOverlay, heroInner);
+    if (heroImage) hero.append(heroImage, heroOverlay);
+    hero.appendChild(heroInner);
 
     const bodySection = createElement('section', 'section');
     const body = createElement('div', 'container job-detail__body');
