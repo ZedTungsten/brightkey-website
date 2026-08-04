@@ -40,3 +40,10 @@ test('employee registration contains no development bypass credential', () => {
   assert.equal(registration.includes('brightkey_invite_salt'), false);
   assert.equal(verification.includes('brightkey_invite_salt'), false);
 });
+
+test('account-only invitations do not create or update employee records', () => {
+  const accountRegistration = fs.readFileSync(new URL('../api/register-account.js', import.meta.url), 'utf8');
+  assert.equal(accountRegistration.includes("from('employees')"), false);
+  assert.equal(accountRegistration.includes('employee_number'), false);
+  assert.equal(accountRegistration.includes("from('tenant_members').insert"), true);
+});
