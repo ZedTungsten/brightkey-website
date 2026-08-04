@@ -142,6 +142,7 @@ export default async function handler(req, res) {
       : [formatShiftTime(job.reporting_time_start), formatShiftTime(job.reporting_time_end)].filter(Boolean).join(' - ') || null;
     const employee = {
       id: randomUUID(), company_id: registration.company_id, employee_number: employeeNumber,
+      hiring_application_id: context.application.id,
       first_name: context.application.first_name, middle_name: clean(fields.middleName) || null, last_name: context.application.last_name,
       date_of_birth: fields.dateOfBirth, address: context.application.address, city: clean(fields.city), province: clean(fields.province),
       contact_number: context.application.contact_number,

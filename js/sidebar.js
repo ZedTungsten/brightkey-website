@@ -249,7 +249,7 @@
         </button>
         <div class="dash-nav-children">
           <a href="/dashboard" class="dash-nav-child" id="nav-item-home">Dashboard</a>
-          <a href="/dashboard/team" class="dash-nav-child" id="nav-item-team">Team</a>
+          <a href="/dashboard/team" class="dash-nav-child" id="nav-item-team">Tasks</a>
           <a href="/dashboard/attendance" class="dash-nav-child" id="nav-item-attendance">Attendance</a>
           <a href="/dashboard/payouts" class="dash-nav-child" id="nav-item-payouts">Payouts</a>
           <a href="/dashboard/organization" class="dash-nav-child" id="nav-item-organization">Organization</a>
