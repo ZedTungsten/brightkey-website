@@ -64,8 +64,11 @@ We enforce rigorous practices to prevent SQL injections (SQLi) and Cross-Site Sc
 ---
 
 ## 5. Critical Auth Gating: tenantId vs. companyId
-> [!IMPORTANT]
-> A common recurring bug is confusing `tenantId` with `companyId`. Always remember:
+> [!CRITICAL]
+> Confusing `tenantId` with `companyId` is a recurring production failure that
+> breaks access gates, RLS-backed queries, RPCs, warehouse workflows, and UUID
+> filters. Treat tenant/company ownership as part of the data contract, not as
+> interchangeable identifiers or naming variants.
 > - **`window.BKAuth.checkRoleGate()` returns `tenantId`, NOT `companyId`**:
 >   ```javascript
 >   const authInfo = await window.BKAuth.checkRoleGate(['owner', 'admin', 'hr'], '../admin.html');
@@ -85,6 +88,38 @@ We enforce rigorous practices to prevent SQL injections (SQLi) and Cross-Site Sc
 >     return; // Defer or handle gracefully
 >   }
 >   ```
+> - **Never assume every tenant-owned table has `company_id`**:
+>   Inspect the live schema before writing a query, RPC, trigger, or migration.
+>   Some established tables are owned directly by `tenant_id`. In particular,
+>   the live `warehouses` table is tenant-owned and does **not** have
+>   `company_id`. Resolve warehouse-to-company ownership through the verified
+>   relationship:
+>   ```sql
+>   FROM public.warehouses AS warehouse
+>   JOIN public.companies AS company
+>     ON company.tenant_id = warehouse.tenant_id
+>   WHERE warehouse.id = target_warehouse_id
+>     AND company.id = target_company_id
+>   ```
+>   Do not add a duplicate `company_id` column merely to make an incorrect query
+>   compile. Use the authoritative ownership relationship already present in the
+>   live schema.
+> - **Trace ownership end to end before coding**:
+>   1. Run `node scripts/db-inspect.js <table_name>` for every table involved.
+>   2. Identify whether each record is owned by `tenant_id`, `company_id`, or a
+>      verified relational join.
+>   3. Resolve `companyId` once from `authInfo.tenantId`, validate it, and pass
+>      the correct identifier to each downstream query/RPC.
+>   4. Check all SQL function aliases and joins; an expression such as
+>      `warehouse.company_id` is invalid when ownership is actually inherited
+>      through `warehouse.tenant_id`.
+>   5. Test the authenticated route and full workflow against the live schema;
+>      successful SQL creation alone does not prove the function can execute.
+> - **Schema errors must trigger relationship verification, not patch stacking**:
+>   For `42703 undefined_column`, `22P02 invalid UUID`, empty authorized result
+>   sets, or redirect loops, stop and verify the complete ownership chain. Do
+>   not repeatedly add guessed columns, substitute IDs, weaken RLS, or broaden
+>   visibility until the underlying tenant/company relationship is confirmed.
 
 ---
 

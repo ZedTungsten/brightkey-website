@@ -39,6 +39,10 @@
       return `${firstName}${initial}`;
     }
 
+    function isActiveBookingEmployee(employee) {
+      return String(employee?.employment_status || 'Active').trim().toLowerCase() === 'active';
+    }
+
     // Build <option> HTML for door installer dropdowns
     function buildDoorInstallerOptions(selectedId = '') {
       const installerNames = window._installerAssignmentNames || [];
@@ -46,7 +50,7 @@
         installerNames.map(name => String(name || '').trim().toLowerCase()).filter(Boolean)
       );
       const installers = dbEmployees.filter(emp => {
-        const isActive = String(emp.employment_status || 'Active').trim().toLowerCase() === 'active';
+        const isActive = isActiveBookingEmployee(emp);
         if (!isActive && emp.id !== selectedId) return false;
         // Filter by assignment if assignments are configured
         const empAssigns = (emp.assignment || '').split(',').map(s => s.trim());
@@ -504,13 +508,14 @@
       const configuredNames = new Set((window._installerAssignmentNames || []).map(name => String(name).trim().toLowerCase()));
       configuredNames.add('installer');
       configuredNames.add('installers');
-      const installers = dbEmployees.filter(employee => String(employee.assignment || '').split(',')
-        .map(name => name.trim().toLowerCase()).some(name => configuredNames.has(name)));
+      const installers = dbEmployees.filter(employee => isActiveBookingEmployee(employee)
+        && String(employee.assignment || '').split(',')
+          .map(name => name.trim().toLowerCase()).some(name => configuredNames.has(name)));
       const threshold = Number(installerPayoutSettings?.installations_before_crediting ?? 15);
       const leadWeight = Number(installerPayoutSettings?.lead_credit ?? 1);
       const assistWeight = Number(installerPayoutSettings?.assist_credit ?? 0.5);
       const summaries = installers.map(employee => {
-        const summary = { employee, lead: 0, scheduledLead: 0, assist: 0, scheduledAssist: 0, ocular: 0, scheduledOcular: 0, backjobs: 0, scheduledBackjobs: 0, credit: 0, service: 0, lastAssigned: '' };
+        const summary = { employee, lead: 0, scheduledLead: 0, assist: 0, scheduledAssist: 0, serviceJobs: 0, scheduledService: 0, ocular: 0, scheduledOcular: 0, backjobs: 0, scheduledBackjobs: 0, credit: 0, service: 0, lastAssigned: '' };
         dbBookings.forEach(booking => {
           if (String(booking.status || '').toLowerCase() === 'cancelled') return;
           const type = String(booking.product_skus || '').trim().toLowerCase();
@@ -524,6 +529,10 @@
           }
           assignedJobs.forEach(job => {
             if (dayOff) return;
+            if (job.roles.includes('service')) {
+              summary.serviceJobs++;
+              if (!job.completed) summary.scheduledService++;
+            }
             if (ocular) {
               summary.ocular++;
               if (!job.completed) summary.scheduledOcular++;
@@ -554,10 +563,10 @@
         return;
       }
       const formatDate = value => value ? new Date(`${value}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : '—';
-      const metric = (total, scheduled) => `${total}<span class="installer-scheduled-count"> (${scheduled})</span>`;
-      assignmentBody.innerHTML = summaries.map(s => `<tr><td>${installerSummaryPerson(s.employee)}</td><td>${escapeHtml(s.employee.city || '—')}</td><td>${formatDate(s.lastAssigned)}</td><td class="installer-metric-lead">${metric(s.lead, s.scheduledLead)}</td><td class="installer-metric-assist">${metric(s.assist, s.scheduledAssist)}</td><td class="installer-summary-row-total">${metric(s.installationDone, s.installationScheduled)}</td><td class="installer-metric-ocular">${metric(s.ocular, s.scheduledOcular)}</td><td class="installer-metric-backjob">${metric(s.backjobs, s.scheduledBackjobs)}</td><td class="installer-summary-row-total">${s.total}</td><td><span class="installer-metric-lead">${formatInstallerSummaryCredit(s.credit)}</span><span class="installer-threshold-limit">/${formatInstallerSummaryCredit(threshold)}</span></td><td class="installer-metric-assist">${s.service}</td></tr>`).join('');
-      const totals = summaries.reduce((a, s) => ({ lead:a.lead+s.lead, scheduledLead:a.scheduledLead+s.scheduledLead, assist:a.assist+s.assist, scheduledAssist:a.scheduledAssist+s.scheduledAssist, installationDone:a.installationDone+s.installationDone, installationScheduled:a.installationScheduled+s.installationScheduled, ocular:a.ocular+s.ocular, scheduledOcular:a.scheduledOcular+s.scheduledOcular, backjobs:a.backjobs+s.backjobs, scheduledBackjobs:a.scheduledBackjobs+s.scheduledBackjobs, total:a.total+s.total, credit:a.credit+s.credit, service:a.service+s.service, extra:a.extra+s.extra }), { lead:0, scheduledLead:0, assist:0, scheduledAssist:0, installationDone:0, installationScheduled:0, ocular:0, scheduledOcular:0, backjobs:0, scheduledBackjobs:0, total:0, credit:0, service:0, extra:0 });
-      document.getElementById('installer-assignment-tfoot').innerHTML = `<tr><td colspan="3">Total</td><td class="installer-metric-lead">${metric(totals.lead, totals.scheduledLead)}</td><td class="installer-metric-assist">${metric(totals.assist, totals.scheduledAssist)}</td><td>${metric(totals.installationDone, totals.installationScheduled)}</td><td class="installer-metric-ocular">${metric(totals.ocular, totals.scheduledOcular)}</td><td class="installer-metric-backjob">${metric(totals.backjobs, totals.scheduledBackjobs)}</td><td>${totals.total}</td><td>—</td><td class="installer-metric-assist">${totals.service}</td></tr>`;
+      const metric = (done, scheduled) => `${done}<span class="installer-scheduled-count"> (${scheduled})</span>`;
+      assignmentBody.innerHTML = summaries.map(s => `<tr><td>${installerSummaryPerson(s.employee)}</td><td>${escapeHtml(s.employee.city || '—')}</td><td>${formatDate(s.lastAssigned)}</td><td class="installer-metric-lead">${metric(s.lead - s.scheduledLead, s.scheduledLead)}</td><td class="installer-metric-assist">${metric(s.assist - s.scheduledAssist, s.scheduledAssist)}</td><td class="installer-summary-row-total">${metric(s.installationDone, s.installationScheduled)}</td><td class="installer-metric-service">${metric(s.serviceJobs - s.scheduledService, s.scheduledService)}</td><td class="installer-metric-ocular">${metric(s.ocular - s.scheduledOcular, s.scheduledOcular)}</td><td class="installer-metric-backjob">${metric(s.backjobs - s.scheduledBackjobs, s.scheduledBackjobs)}</td><td class="installer-summary-row-total">${s.total}</td><td><span class="installer-metric-lead">${formatInstallerSummaryCredit(s.credit)}</span><span class="installer-threshold-limit">/${formatInstallerSummaryCredit(threshold)}</span></td></tr>`).join('');
+      const totals = summaries.reduce((a, s) => ({ lead:a.lead+s.lead, scheduledLead:a.scheduledLead+s.scheduledLead, assist:a.assist+s.assist, scheduledAssist:a.scheduledAssist+s.scheduledAssist, installationDone:a.installationDone+s.installationDone, installationScheduled:a.installationScheduled+s.installationScheduled, serviceJobs:a.serviceJobs+s.serviceJobs, scheduledService:a.scheduledService+s.scheduledService, ocular:a.ocular+s.ocular, scheduledOcular:a.scheduledOcular+s.scheduledOcular, backjobs:a.backjobs+s.backjobs, scheduledBackjobs:a.scheduledBackjobs+s.scheduledBackjobs, total:a.total+s.total, credit:a.credit+s.credit, service:a.service+s.service, extra:a.extra+s.extra }), { lead:0, scheduledLead:0, assist:0, scheduledAssist:0, installationDone:0, installationScheduled:0, serviceJobs:0, scheduledService:0, ocular:0, scheduledOcular:0, backjobs:0, scheduledBackjobs:0, total:0, credit:0, service:0, extra:0 });
+      document.getElementById('installer-assignment-tfoot').innerHTML = `<tr><td colspan="3">Total</td><td class="installer-metric-lead">${metric(totals.lead - totals.scheduledLead, totals.scheduledLead)}</td><td class="installer-metric-assist">${metric(totals.assist - totals.scheduledAssist, totals.scheduledAssist)}</td><td>${metric(totals.installationDone, totals.installationScheduled)}</td><td class="installer-metric-service">${metric(totals.serviceJobs - totals.scheduledService, totals.scheduledService)}</td><td class="installer-metric-ocular">${metric(totals.ocular - totals.scheduledOcular, totals.scheduledOcular)}</td><td class="installer-metric-backjob">${metric(totals.backjobs - totals.scheduledBackjobs, totals.scheduledBackjobs)}</td><td>${totals.total}</td><td>—</td></tr>`;
       window.drawInstallerAssignmentHistory();
     };
 
@@ -584,8 +593,9 @@
       const configuredNames = new Set((window._installerAssignmentNames || []).map(name => String(name).trim().toLowerCase()));
       configuredNames.add('installer');
       configuredNames.add('installers');
-      const installers = dbEmployees.filter(employee => String(employee.assignment || '').split(',')
-        .map(name => name.trim().toLowerCase()).some(name => configuredNames.has(name)));
+      const installers = dbEmployees.filter(employee => isActiveBookingEmployee(employee)
+        && String(employee.assignment || '').split(',')
+          .map(name => name.trim().toLowerCase()).some(name => configuredNames.has(name)));
 
       const availableIds = new Set(installers.map(employee => employee.id));
       if (installerHistorySelectedIds === null) installerHistorySelectedIds = new Set(availableIds);
@@ -621,15 +631,208 @@
           getInstallerSummaryJobs(booking, employee.id).forEach(job => {
             const roles = isOcular ? ['ocular'] : isBackjob ? ['backjob'] : job.roles.filter(role => role === 'lead' || role === 'assist' || role === 'service');
             if (!roles.length) return;
-            rows.push({ employee, date: booking.scheduled_date || '', customer: booking.customer_name || '—', sku: getInstallerHistorySkus(booking, job), assignment: roles.map(role => role.charAt(0).toUpperCase() + role.slice(1)).join(', ') });
+            rows.push({ employee, date: booking.scheduled_date || '', completed: job.completed, customer: booking.customer_name || '—', sku: getInstallerHistorySkus(booking, job), assignment: roles.map(role => role.charAt(0).toUpperCase() + role.slice(1)).join(', ') });
           });
         });
       });
       rows.sort((a, b) => a.date.localeCompare(b.date) || a.customer.localeCompare(b.customer));
       if (!rows.length) {
-        tbody.innerHTML = '<tr><td colspan="5" class="installer-summary-empty">No assignments found for the selected installers.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" class="installer-summary-empty">No assignments found for the selected installers.</td></tr>';
         return;
       }
       const formatDate = value => value ? new Date(`${value}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : '—';
-      tbody.innerHTML = rows.map(row => `<tr><td>${installerSummaryPerson(row.employee)}</td><td>${formatDate(row.date)}</td><td>${escapeHtml(row.customer)}</td><td class="installer-history-sku">${escapeHtml(row.sku)}</td><td>${escapeHtml(row.assignment)}</td></tr>`).join('');
+      tbody.innerHTML = rows.map(row => `<tr><td>${installerSummaryPerson(row.employee)}</td><td>${formatDate(row.date)}</td><td><span class="installer-history-status-pill ${row.completed ? 'done' : 'scheduled'}">${row.completed ? 'Done' : 'Scheduled'}</span></td><td>${escapeHtml(row.customer)}</td><td class="installer-history-sku">${escapeHtml(row.sku)}</td><td>${escapeHtml(row.assignment)}</td></tr>`).join('');
     }
+
+(() => {
+  'use strict';
+
+  let client;
+  let companyId;
+  let accounts = [];
+  let editing = false;
+
+  const escapeHtml = value => String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+
+  function isActive(employee) {
+    return String(employee.employment_status || '').trim().toLowerCase() === 'active';
+  }
+
+  function fullName(employee) {
+    return [employee.first_name, employee.middle_name, employee.last_name].filter(Boolean).join(' ') || 'Unnamed installer';
+  }
+
+  function formatLastLogin(value) {
+    if (!value) return 'Never';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return 'Never';
+    const dateText = date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: '2-digit',
+      year: 'numeric'
+    });
+    const timeText = date.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
+    return `${dateText} ${timeText}`;
+  }
+
+  function passwordCell(account) {
+    if (editing) {
+      return `<input type="text" class="installer-account-password edit" data-employee-id="${escapeHtml(account.id)}" minlength="4" maxlength="10" placeholder="Type new password" autocomplete="off">`;
+    }
+    if (!account.password) return '<span class="installer-password-missing">Not set</span>';
+    return `<div class="installer-password-field">
+      <input type="password" class="installer-account-password" value="${escapeHtml(account.password)}" readonly tabindex="-1" aria-label="Password for ${escapeHtml(fullName(account))}">
+      <button type="button" class="installer-password-reveal" aria-label="Hold to show password">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+      </button>
+    </div>`;
+  }
+
+  function render() {
+    const body = document.getElementById('installer-accounts-tbody');
+    const filter = document.getElementById('installer-accounts-status')?.value || 'active';
+    if (!body) return;
+    const visible = accounts.filter(account => filter === 'all' || isActive(account));
+    if (!visible.length) {
+      body.innerHTML = '<tr><td colspan="6" class="installer-accounts-state">No installers match this filter.</td></tr>';
+      return;
+    }
+    body.innerHTML = visible.map(account => {
+      const name = fullName(account);
+      const initials = `${String(account.first_name || '').charAt(0)}${String(account.last_name || '').charAt(0)}`.toUpperCase() || 'I';
+      const avatar = account.picture_link
+        ? `<img class="installer-account-avatar" src="${escapeHtml(account.picture_link)}" alt="" loading="lazy">`
+        : `<span class="installer-account-avatar fallback">${escapeHtml(initials)}</span>`;
+      return `<tr>
+        <td>${avatar}</td>
+        <td class="installer-account-name">${escapeHtml(name)}</td>
+        <td>${escapeHtml(account.city || '—')}</td>
+        <td>${escapeHtml(account.province || '—')}</td>
+        <td>${passwordCell(account)}</td>
+        <td>${escapeHtml(formatLastLogin(account.last_login_at))}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  function setEditing(next) {
+    editing = next;
+    document.getElementById('installer-password-edit').hidden = next;
+    document.getElementById('installer-password-confirm').hidden = !next;
+    document.getElementById('installer-password-cancel').hidden = !next;
+    render();
+  }
+
+  function reveal(button, visible) {
+    const input = button.closest('.installer-password-field')?.querySelector('input');
+    if (input) input.type = visible ? 'text' : 'password';
+  }
+
+  async function savePasswords() {
+    const inputs = Array.from(document.querySelectorAll('.installer-account-password.edit'));
+    const changes = inputs.map(input => ({
+      employee_id: input.dataset.employeeId,
+      password: input.value.trim()
+    })).filter(change => change.password);
+    if (!changes.length) {
+      showToast('Type at least one new installer password.', true);
+      return;
+    }
+    const invalid = changes.find(change => change.password.length < 4 || change.password.length > 10);
+    if (invalid) {
+      showToast('Installer passwords must contain 4 to 10 characters.', true);
+      return;
+    }
+    const now = new Date().toISOString();
+    const payload = changes.map(change => ({ ...change, company_id: companyId, updated_at: now }));
+    const confirm = document.getElementById('installer-password-confirm');
+    confirm.disabled = true;
+    try {
+      const { error } = await client.from('installer_accounts').upsert(payload, { onConflict: 'employee_id' });
+      if (error) throw error;
+      const changedById = new Map(changes.map(change => [change.employee_id, change.password]));
+      accounts.forEach(account => {
+        if (changedById.has(account.id)) account.password = changedById.get(account.id);
+      });
+      setEditing(false);
+      showToast('Installer passwords updated successfully.');
+    } catch (error) {
+      const duplicate = error?.code === '23505';
+      showToast(duplicate ? 'Each installer must have a unique password. Choose a different password.' : 'Installer passwords could not be updated. Please try again.', true);
+      console.error('Unable to update installer passwords:', error);
+    } finally {
+      confirm.disabled = false;
+    }
+  }
+
+  function bindEvents() {
+    document.getElementById('installer-accounts-status')?.addEventListener('change', render);
+    document.getElementById('installer-password-edit')?.addEventListener('click', () => setEditing(true));
+    document.getElementById('installer-password-cancel')?.addEventListener('click', () => setEditing(false));
+    document.getElementById('installer-password-confirm')?.addEventListener('click', savePasswords);
+    const body = document.getElementById('installer-accounts-tbody');
+    body?.addEventListener('pointerdown', event => {
+      const button = event.target.closest('.installer-password-reveal');
+      if (button) reveal(button, true);
+    });
+    const concealPasswords = () => {
+      document.querySelectorAll('.installer-password-field input').forEach(input => { input.type = 'password'; });
+    };
+    ['pointerup', 'pointercancel'].forEach(eventName => {
+      document.addEventListener(eventName, concealPasswords);
+    });
+    body?.addEventListener('pointerleave', concealPasswords);
+  }
+
+  async function load() {
+    const body = document.getElementById('installer-accounts-tbody');
+    try {
+      const { data: employees, error: employeeError } = await client
+        .from('employees')
+        .select('id,first_name,middle_name,last_name,picture_link,city,province,employment_status,assignment,title')
+        .eq('company_id', companyId)
+        .or('assignment.ilike.%installer%,title.ilike.%installer%')
+        .order('last_name', { ascending: true })
+        .order('first_name', { ascending: true })
+        .limit(100);
+      if (employeeError) throw employeeError;
+      const ids = (employees || []).map(employee => employee.id).filter(Boolean);
+      let accountRows = [];
+      if (ids.length) {
+        const { data, error } = await client
+          .from('installer_accounts')
+          .select('employee_id,password,last_login_at')
+          .eq('company_id', companyId)
+          .in('employee_id', ids)
+          .limit(100);
+        if (error) throw error;
+        accountRows = data || [];
+      }
+      const accountByEmployee = new Map(accountRows.map(account => [account.employee_id, account]));
+      accounts = (employees || []).map(employee => ({ ...employee, ...(accountByEmployee.get(employee.id) || {}) }));
+      render();
+    } catch (error) {
+      if (body) body.innerHTML = '<tr><td colspan="6" class="installer-accounts-state error">Installer accounts could not be loaded. Refresh the page and try again.</td></tr>';
+      showToast('Installer accounts could not be loaded. Please refresh and try again.', true);
+      console.error('Unable to load installer accounts:', error);
+    }
+  }
+
+  window.BKInstallerAccounts = {
+    async init(context) {
+      client = context.sb;
+      companyId = context.companyId;
+      if (!client || !companyId) return;
+      bindEvents();
+      await load();
+    }
+  };
+})();

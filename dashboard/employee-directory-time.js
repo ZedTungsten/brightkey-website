@@ -13,6 +13,17 @@
     return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')} ${period}`;
   }
 
+  const dayOrder = ['M', 'T', 'W', 'Th', 'F', 'S', 'Su'];
+
+  function syncShiftDays() {
+    const picker = document.getElementById('new-emp-shift-days-picker');
+    const input = document.getElementById('new-emp-shift-days');
+    if (!picker || !input) return;
+    input.value = dayOrder
+      .filter(day => picker.querySelector(`[data-day="${day}"]`)?.classList.contains('active'))
+      .join(',');
+  }
+
   window.BKEmployeeTime = {
     formatRange(value) {
       if (!value || String(value).trim().toLowerCase() === 'free hours') return value || '';
@@ -21,6 +32,21 @@
       const start = formatTime(parts[0]);
       const end = formatTime(parts[1]);
       return start && end ? `${start} - ${end}` : String(value);
+    }
+  };
+
+  window.BKDirectoryShift = {
+    toggle(button) {
+      const active = button.classList.toggle('active');
+      button.setAttribute('aria-pressed', String(active));
+      syncShiftDays();
+    },
+    reset() {
+      document.querySelectorAll('#new-emp-shift-days-picker .day-selector-btn').forEach(button => {
+        button.classList.remove('active');
+        button.setAttribute('aria-pressed', 'false');
+      });
+      syncShiftDays();
     }
   };
 })();

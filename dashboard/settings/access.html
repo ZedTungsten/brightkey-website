@@ -490,12 +490,16 @@
       try {
         const { data: { session } } = await sb.auth.getSession();
         const token = session?.access_token;
-        const res = await fetch('/api/send-invitation', {
+        const invitationEndpoint = /^(localhost|127\.0\.0\.1)$/i.test(window.location.hostname)
+          ? 'https://www.brightkeysolutions.com/api/send-invitation'
+          : '/api/send-invitation';
+        const res = await fetch(invitationEndpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
           body: JSON.stringify({ tenant_id: currentTenantId, company_id: currentCompanyId, email, full_name: fullName, role, invited_by: currentUser.id })
         });
-        const data = await res.json();
+        const responseType = res.headers.get('content-type') || '';
+        const data = responseType.includes('application/json') ? await res.json() : {};
         if (!res.ok) { showToast(data.error || 'Invitation failed.', true); return; }
         showToast(data.email_sent ? `Invitation email sent to ${email}.` : `Member invited! Copy invite link from Actions column.`);
         closeAddMemberModal();

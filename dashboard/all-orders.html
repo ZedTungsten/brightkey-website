@@ -203,6 +203,9 @@
     .toast-success { background: var(--success); }
     .toast-error { background: var(--danger); }
     @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+    .proof-actions { display: none; align-items: center; justify-content: flex-end; gap: 0.6rem; }
+    .proof-remove-btn { border: 0; background: none; color: var(--danger); padding: 0; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+    .proof-remove-btn svg { width: 15px; height: 15px; display: block; }
     .wh-select-dropdown {
       height: 36px;
       padding: 0 2.25rem 0 0.75rem;
@@ -459,6 +462,17 @@
         </div>
       </div>
       <input type="file" id="direct-proof-file-input" accept="image/*" style="display:none;" />
+
+      <div id="remove-proof-confirm-modal" class="modal-overlay" onclick="closeProofRemovalModalOuter(event)" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); backdrop-filter:blur(4px); z-index:10000; align-items:center; justify-content:center;">
+        <div class="modal-content" style="width:100%; max-width:400px; background:var(--bg-surface); border:1px solid var(--border); border-radius:12px; padding:1.75rem; box-shadow:0 12px 48px rgba(0,0,0,0.25); display:flex; flex-direction:column; gap:1.25rem; text-align:center;">
+          <h3 style="margin:0; font-size:1.1rem; font-weight:700; color:var(--danger);">Remove proof photo?</h3>
+          <p id="remove-proof-confirm-message" style="margin:0; font-size:0.85rem; color:var(--text-secondary); line-height:1.5;">This photo will be removed from the order.</p>
+          <div style="display:flex; justify-content:center; gap:0.75rem;">
+            <button type="button" class="btn btn-outline" onclick="closeProofRemovalModal()" style="height:36px; font-size:0.82rem; padding:0 1.5rem;">Cancel</button>
+            <button type="button" id="confirm-proof-remove-btn" class="btn btn-danger" onclick="executeProofRemoval()" style="height:36px; font-size:0.82rem; padding:0 1.5rem; background:var(--danger); color:#fff; border:none; border-radius:6px; font-weight:600; cursor:pointer;">Remove</button>
+          </div>
+        </div>
+      </div>
 
       <!-- Edit Transaction Modal -->
       <div class="modal-overlay" id="edit-tx-modal" onclick="closeEditTxModalOuter(event)" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); backdrop-filter:blur(4px); z-index:9999; align-items:center; justify-content:center;">
@@ -1245,6 +1259,29 @@
       }
     }
 
+    function configureProofActions(type, hasPhoto, txId) {
+      const container = document.getElementById(`proof-${type}-container`);
+      if (!container) return;
+      const card = container.closest('.proof-card');
+      if (!card) return;
+
+      let actions = document.getElementById(`proof-${type}-actions`);
+      if (!actions) {
+        actions = document.createElement('div');
+        actions.id = `proof-${type}-actions`;
+        actions.className = 'proof-actions';
+        actions.innerHTML = `
+          <button type="button" class="proof-remove-btn" aria-label="Remove photo" title="Remove photo">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14H6L5 6"></path><path d="M10 11v6M14 11v6"></path><path d="M9 6V4h6v2"></path></svg>
+          </button>`;
+        card.appendChild(actions);
+      }
+
+      actions.style.display = hasPhoto ? 'flex' : 'none';
+      if (!hasPhoto) return;
+      actions.querySelector('.proof-remove-btn').onclick = () => openProofRemovalModal(type, txId);
+    }
+
     window.showOrderDetailsModal = function(txId) {
       // Clear/Reset all modal DOM elements to prevent stale data leaking from previously viewed modals
       document.getElementById('odetail-order-no').textContent = '—';
@@ -1289,6 +1326,7 @@
       if (delImg) { delImg.src = ''; delImg.style.display = 'none'; }
       if (delPlaceholder) delPlaceholder.style.display = 'flex';
       if (delDate) delDate.textContent = '—';
+      ['qa', 'packed', 'booking', 'pickup', 'delivery'].forEach(type => configureProofActions(type, false, txId));
 
       const t = activeTransactions.find(x => x.id === txId);
       if (!t) return;
@@ -1437,6 +1475,12 @@
         delPlaceholder.innerHTML = `<div style="display:flex; flex-direction:column; align-items:center; gap:0.35rem; color:var(--cyan);"><svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2.5" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg><span style="font-weight:700; font-size:0.75rem; text-transform:uppercase; letter-spacing:0.02em;">Upload Delivery Proof</span></div>`;
         document.getElementById('proof-delivery-container').onclick = () => triggerDirectProofUpload('delivery', t.id);
       }
+
+      configureProofActions('qa', Boolean(t.qa_photo_url), t.id);
+      configureProofActions('packed', Boolean(t.packed_photo_url), t.id);
+      configureProofActions('booking', Boolean(deliveryPhoto), t.id);
+      configureProofActions('pickup', Boolean(pickupPhoto), t.id);
+      configureProofActions('delivery', Boolean(deliveredPhoto), t.id);
 
       // Show modal
       const modal = document.getElementById('order-details-modal');
@@ -1882,6 +1926,91 @@
 
     let currentUploadProofType = null;
     let currentUploadTxId = null;
+    let pendingProofRemoval = null;
+
+    window.openProofRemovalModal = function(type, txId) {
+      const labels = {
+        qa: 'QA inspection proof',
+        packed: 'packed proof',
+        booking: 'booking screenshot',
+        pickup: 'pickup handover photo',
+        delivery: 'delivery proof'
+      };
+      pendingProofRemoval = { type, txId };
+      const message = document.getElementById('remove-proof-confirm-message');
+      if (message) message.textContent = `The ${labels[type] || 'proof photo'} will be removed from this order.`;
+      const modal = document.getElementById('remove-proof-confirm-modal');
+      modal.style.display = 'flex';
+      modal.offsetHeight;
+      modal.classList.add('open');
+    };
+
+    window.closeProofRemovalModal = function() {
+      const modal = document.getElementById('remove-proof-confirm-modal');
+      modal.classList.remove('open');
+      setTimeout(() => {
+        if (!modal.classList.contains('open')) modal.style.display = 'none';
+      }, 150);
+      pendingProofRemoval = null;
+    };
+
+    window.closeProofRemovalModalOuter = function(event) {
+      if (event.target.id === 'remove-proof-confirm-modal') closeProofRemovalModal();
+    };
+
+    window.executeProofRemoval = async function() {
+      if (!pendingProofRemoval) return;
+      const { type, txId } = pendingProofRemoval;
+      const transaction = activeTransactions.find(item => item.id === txId);
+      if (!transaction || !companyId) return;
+
+      const button = document.getElementById('confirm-proof-remove-btn');
+      button.disabled = true;
+      button.textContent = 'Removing...';
+      try {
+        let result;
+        if (type === 'qa') {
+          result = await sb.from('inventory_transactions')
+            .update({ qa_photo_url: null })
+            .eq('id', txId)
+            .eq('company_id', companyId);
+        } else if (type === 'packed') {
+          result = await sb.from('inventory_transactions')
+            .update({ packed_photo_url: null })
+            .eq('id', txId)
+            .eq('company_id', companyId);
+        } else {
+          const matching = dbDeliveryBookings.filter(item => item.reference_id === transaction.reference_id);
+          const booking = type === 'booking'
+            ? matching.find(item => item.delivery_photo_url)
+            : type === 'pickup'
+              ? matching.find(item => Array.isArray(item.pickup_photos) && item.pickup_photos.length)
+              : matching.find(item => item.received_photo_url);
+          if (!booking) throw new Error('The proof record could not be found.');
+          const changes = type === 'booking'
+            ? { delivery_photo_url: null }
+            : type === 'pickup'
+              ? { pickup_photos: [] }
+              : { received_photo_url: null };
+          result = await sb.from('delivery_bookings')
+            .update(changes)
+            .eq('id', booking.id)
+            .eq('company_id', companyId);
+        }
+        if (result.error) throw result.error;
+
+        closeProofRemovalModal();
+        await refreshDashboard();
+        showOrderDetailsModal(txId);
+        showToast('Proof photo removed.');
+      } catch (error) {
+        console.error(error);
+        showToast('The proof photo could not be removed. Please try again.', true);
+      } finally {
+        button.disabled = false;
+        button.textContent = 'Remove';
+      }
+    };
 
     function blobToBase64(blob) {
       return new Promise((resolve, reject) => {
@@ -1950,7 +2079,6 @@
       if (placeholder) {
         placeholder.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2.5" fill="none" style="animation: spin 1s linear infinite; margin-right: 6px;"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg> Uploading...`;
       }
-
       try {
         const compressed = await compressPackedImage(file);
         const base64 = await blobToBase64(compressed);
@@ -1977,19 +2105,23 @@
         if (type === 'qa') {
           const { error } = await sb.from('inventory_transactions')
             .update({ qa_photo_url: uploadResult.url, timestamp_inspect: now })
-            .eq('id', currentUploadTxId);
+            .eq('id', currentUploadTxId)
+            .eq('company_id', companyId);
           if (error) throw error;
         } else if (type === 'packed') {
           const { error } = await sb.from('inventory_transactions')
             .update({ packed_photo_url: uploadResult.url, timestamp_packed: now })
-            .eq('id', currentUploadTxId);
+            .eq('id', currentUploadTxId)
+            .eq('company_id', companyId);
           if (error) throw error;
         } else if (type === 'booking') {
           const matching = dbDeliveryBookings.filter(x => x.reference_id === refId);
           if (matching.length > 0) {
+            const target = matching.find(item => item.delivery_photo_url) || matching[0];
             const { error } = await sb.from('delivery_bookings')
               .update({ delivery_photo_url: uploadResult.url })
-              .eq('id', matching[0].id);
+              .eq('id', target.id)
+              .eq('company_id', companyId);
             if (error) throw error;
           } else {
             const { error } = await sb.from('delivery_bookings')
@@ -2004,9 +2136,11 @@
         } else if (type === 'pickup') {
           const matching = dbDeliveryBookings.filter(x => x.reference_id === refId);
           if (matching.length > 0) {
+            const target = matching.find(item => Array.isArray(item.pickup_photos) && item.pickup_photos.length) || matching[0];
             const { error } = await sb.from('delivery_bookings')
               .update({ pickup_photos: [uploadResult.url], picked_up_at: now })
-              .eq('id', matching[0].id);
+              .eq('id', target.id)
+              .eq('company_id', companyId);
             if (error) throw error;
           } else {
             const { error } = await sb.from('delivery_bookings')
@@ -2022,9 +2156,11 @@
         } else if (type === 'delivery') {
           const matching = dbDeliveryBookings.filter(x => x.reference_id === refId);
           if (matching.length > 0) {
+            const target = matching.find(item => item.received_photo_url) || matching[0];
             const { error } = await sb.from('delivery_bookings')
               .update({ received_photo_url: uploadResult.url, delivered_at: now })
-              .eq('id', matching[0].id);
+              .eq('id', target.id)
+              .eq('company_id', companyId);
             if (error) throw error;
           } else {
             const { error } = await sb.from('delivery_bookings')
@@ -2041,11 +2177,7 @@
 
         showToast('Proof photo uploaded successfully!');
         
-        await loadCoreData();
-
-        if (typeof renderAllOrdersTab === 'function') {
-          renderAllOrdersTab();
-        }
+        await refreshDashboard();
 
         showOrderDetailsModal(currentUploadTxId);
       } catch (err) {

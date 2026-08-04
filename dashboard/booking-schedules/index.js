@@ -101,7 +101,8 @@
     function getCurrentSubpage() {
       const path = window.location.pathname.replace(/\/$/, '');
       if (path.endsWith('/all-bookings')) return 'all-bookings';
-      if (path.endsWith('/installers')) return 'installers';
+      if (path.endsWith('/installers/accounts')) return 'installer-accounts';
+      if (path.endsWith('/installers/assignments') || path.endsWith('/installers')) return 'installer-assignments';
       return 'calendar';
     }
 
@@ -109,27 +110,45 @@
       const monthHash = `#${String(currentMonth + 1).padStart(2, '0')}-${currentYear}`;
       const calendarTab = document.getElementById('tab-calendar');
       const allBookingsTab = document.getElementById('tab-all-bookings');
-      const installersTab = document.getElementById('tab-installers');
+      const installerAssignmentsTab = document.getElementById('tab-installer-assignments');
       if (calendarTab) calendarTab.href = `/dashboard/booking-schedules/calendar${monthHash}`;
       if (allBookingsTab) allBookingsTab.href = `/dashboard/booking-schedules/all-bookings${monthHash}`;
-      if (installersTab) installersTab.href = `/dashboard/booking-schedules/installers${monthHash}`;
+      if (installerAssignmentsTab) installerAssignmentsTab.href = `/dashboard/installers/assignments${monthHash}`;
     }
 
     function renderCurrentSubpage() {
       const currentSubpage = getCurrentSubpage();
       const tabCalendar = document.getElementById('tab-calendar');
       const tabAllBookings = document.getElementById('tab-all-bookings');
-      const tabInstallers = document.getElementById('tab-installers');
       const panelCalendar = document.getElementById('tab-panel-schedules');
       const panelAllBookings = document.getElementById('tab-panel-all-bookings');
       const panelInstallers = document.getElementById('tab-panel-installers');
+      const panelInstallerAccounts = document.getElementById('tab-panel-installer-accounts');
+      const scheduleTabs = document.getElementById('booking-schedule-tabs');
+      const installerTabs = document.getElementById('installer-tabs');
+      const tabInstallerAssignments = document.getElementById('tab-installer-assignments');
+      const tabInstallerAccounts = document.getElementById('tab-installer-accounts');
+      const monthNavigator = document.getElementById('calendar-month-navigator');
+      const pageTitle = document.getElementById('booking-page-title');
+      const isInstallerAssignments = currentSubpage === 'installer-assignments';
+      const isInstallerAccounts = currentSubpage === 'installer-accounts';
+      const isInstallersPage = isInstallerAssignments || isInstallerAccounts;
 
       if (tabCalendar) tabCalendar.classList.toggle('active', currentSubpage === 'calendar');
       if (tabAllBookings) tabAllBookings.classList.toggle('active', currentSubpage === 'all-bookings');
-      if (tabInstallers) tabInstallers.classList.toggle('active', currentSubpage === 'installers');
       if (panelCalendar) panelCalendar.style.display = currentSubpage === 'calendar' ? 'block' : 'none';
       if (panelAllBookings) panelAllBookings.style.display = currentSubpage === 'all-bookings' ? 'block' : 'none';
-      if (panelInstallers) panelInstallers.style.display = currentSubpage === 'installers' ? 'block' : 'none';
+      if (panelInstallers) panelInstallers.style.display = isInstallerAssignments ? 'block' : 'none';
+      if (panelInstallerAccounts) panelInstallerAccounts.style.display = isInstallerAccounts ? 'block' : 'none';
+      if (scheduleTabs) scheduleTabs.style.display = isInstallersPage ? 'none' : 'flex';
+      if (installerTabs) installerTabs.style.display = isInstallersPage ? 'flex' : 'none';
+      if (tabInstallerAssignments) tabInstallerAssignments.classList.toggle('active', isInstallerAssignments);
+      if (tabInstallerAccounts) tabInstallerAccounts.classList.toggle('active', isInstallerAccounts);
+      if (monthNavigator) monthNavigator.style.display = isInstallerAccounts ? 'none' : 'flex';
+      if (pageTitle) pageTitle.textContent = isInstallersPage ? 'Installers' : 'Installation Schedules';
+      document.title = isInstallersPage
+        ? 'Installers — Brightkey Admin'
+        : 'Installation Schedules — Brightkey Admin';
 
     }
 
@@ -187,6 +206,12 @@
         currentCompanyId = companyData[0].id;
       } else {
         showToast('Authentication module missing.', true);
+        return;
+      }
+
+      if (getCurrentSubpage() === 'installer-accounts') {
+        setMonthBookingsLoading(false);
+        await window.BKInstallerAccounts?.init({ sb, companyId: currentCompanyId });
         return;
       }
 

@@ -3,6 +3,29 @@
 
   const modules = ['Business', 'Products', 'Operations', 'Marketing', 'Sales', 'Customer Service', 'Logistics', 'HR', 'Finance'];
 
+  function employeeName(employee) {
+    return [employee.first_name, employee.middle_name, employee.last_name].filter(Boolean).join(' ');
+  }
+
+  function populateReportingManagers(employees) {
+    const select = document.getElementById('new-emp-reporting');
+    if (!select) return;
+    const current = select.value;
+    const managers = (employees || []).filter(employee => {
+      const status = String(employee.employment_status || 'Active').trim().toLowerCase();
+      const role = `${employee.title || ''} ${employee.level || ''}`.trim().toLowerCase();
+      return status === 'active' && /\b(manager|lead|director)\b/.test(role);
+    }).sort((a, b) => employeeName(a).localeCompare(employeeName(b)));
+
+    select.replaceChildren(new Option('No reporting manager', ''));
+    managers.forEach(employee => {
+      const role = employee.title || employee.level || 'Manager';
+      const option = new Option(`${employeeName(employee)} — ${role}`, employee.id);
+      select.appendChild(option);
+    });
+    select.value = managers.some(employee => employee.id === current) ? current : '';
+  }
+
   function sync(prefix, moduleName) {
     const parent = document.querySelector(`.${prefix}-custom-access[data-module="${moduleName}"]`);
     document.querySelectorAll(`.${prefix}-subpage-access[data-module="${moduleName}"]`).forEach(child => {
@@ -81,6 +104,7 @@
       });
     }
   };
+  window.BKDirectoryReporting = { populate: populateReportingManagers };
 
   render('invite');
   render('link-invite');

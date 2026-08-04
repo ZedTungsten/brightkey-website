@@ -515,10 +515,10 @@
           this.dirty = {};
           this.pendingDeletes.clear();
           this.updateDeptFilter();
+          window.BKDirectoryReporting.populate(this.allEmployees);
           this.applyFilters();
           this.updateStats();
           this.renderRequestsTab();
-
           // Show tab navigation if user is HR/Admin/Owner
           const tabNav = document.getElementById('directory-tabs');
           if (tabNav) {
@@ -1738,7 +1738,7 @@
 
         // 2. Reset form
         const form = document.getElementById('add-employee-form');
-        if (form) form.reset();
+        if (form) { form.reset(); window.BKDirectoryShift.reset(); }
 
         // 3. Set default values
         document.getElementById('new-emp-number').value = formattedNum;

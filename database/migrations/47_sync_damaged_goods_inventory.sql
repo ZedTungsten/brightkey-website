@@ -8,6 +8,11 @@ ALTER TABLE public.damaged_goods
   ADD COLUMN IF NOT EXISTS inventory_reserved_warehouse_id UUID,
   ADD COLUMN IF NOT EXISTS inventory_reserved_quantity INTEGER;
 
+-- A warehouse UUID is globally unique, so warehouse + SKU is the stable
+-- inventory identity on both the live tenant-owned schema and clean installs.
+CREATE UNIQUE INDEX IF NOT EXISTS inventory_warehouse_sku_unique
+  ON public.inventory (warehouse_id, sku);
+
 CREATE OR REPLACE FUNCTION public.sync_damaged_goods_inventory(
   p_damage_id UUID,
   p_warehouse_id UUID DEFAULT NULL
@@ -85,8 +90,9 @@ BEGIN
       damage_row.inventory_reserved_quantity,
       0
     )
-    ON CONFLICT (company_id, warehouse_id, sku) DO UPDATE
-    SET available = public.inventory.available + EXCLUDED.available,
+    ON CONFLICT (warehouse_id, sku) DO UPDATE
+    SET company_id = EXCLUDED.company_id,
+        available = public.inventory.available + EXCLUDED.available,
         reserved = GREATEST(0, public.inventory.reserved - damage_row.inventory_reserved_quantity),
         updated_at = now();
 
@@ -140,8 +146,9 @@ BEGIN
   IF NOT EXISTS (
     SELECT 1
     FROM public.warehouses w
+    JOIN public.companies c ON c.tenant_id = w.tenant_id
     WHERE w.id = target_warehouse_id
-      AND w.company_id = damage_row.company_id
+      AND c.id = damage_row.company_id
   ) THEN
     RAISE EXCEPTION 'The selected warehouse is not available for this company.';
   END IF;
@@ -188,8 +195,9 @@ BEGIN
 
     INSERT INTO public.inventory (company_id, warehouse_id, sku, available, reserved)
     VALUES (damage_row.company_id, target_warehouse_id, damage_row.sku, -target_quantity, target_quantity)
-    ON CONFLICT (company_id, warehouse_id, sku) DO UPDATE
-    SET available = public.inventory.available - target_quantity,
+    ON CONFLICT (warehouse_id, sku) DO UPDATE
+    SET company_id = EXCLUDED.company_id,
+        available = public.inventory.available - target_quantity,
         reserved = public.inventory.reserved + target_quantity,
         updated_at = now();
 

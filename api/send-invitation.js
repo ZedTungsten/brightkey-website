@@ -21,11 +21,18 @@ export function accessLabels(role) {
 export function buildInvitationEmail({ fullName, role, inviteLink, branding }) {
   const companyName = branding.companyName || 'BrightKey';
   const labels = accessLabels(role);
-  const accessHtml = labels.length
-    ? `<div style="margin:24px 0;padding:18px 20px;background:#f7f8fa;border:1px solid #e5e7eb;border-radius:8px;"><div style="margin-bottom:10px;color:#27282d;font-size:13px;font-weight:700;">Your assigned access</div><ul style="margin:0;padding-left:20px;color:#3f4148;font-size:14px;line-height:1.65;">${labels.map(label => `<li>${escapeHtml(label)}</li>`).join('')}</ul></div>`
-    : '';
-  const subject = `You're invited to join ${companyName}`.slice(0, 100);
-  const html = `<!doctype html><html><body style="margin:0;padding:0;background:#f3f4f6;"><div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">Set up your account for the ${escapeHtml(companyName)} workspace.</div><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;"><tr><td style="padding:36px 32px;">${branding.logoHtml}<h1 style="margin:0 0 24px;color:#111216;font-family:Arial,sans-serif;font-size:26px;line-height:1.25;font-weight:800;">Create your ${escapeHtml(companyName)} account</h1><p style="margin:0 0 16px;color:#3f4148;font-family:Arial,sans-serif;font-size:15px;line-height:1.65;">Hello ${escapeHtml(fullName)},</p><p style="margin:0 0 16px;color:#3f4148;font-family:Arial,sans-serif;font-size:15px;line-height:1.65;">You have been invited to create a user account for the <strong>${escapeHtml(companyName)}</strong> workspace.</p>${accessHtml}<p style="margin:0 0 24px;color:#3f4148;font-family:Arial,sans-serif;font-size:14px;line-height:1.65;">For security, this single-use invitation expires in 3 days.</p><div style="text-align:center;"><a href="${escapeHtml(inviteLink)}" style="display:inline-block;padding:13px 22px;background:#4ab3d3;color:#fff;font-family:Arial,sans-serif;font-size:15px;font-weight:700;text-decoration:none;border-radius:7px;">Accept invitation</a></div><p style="margin:32px 0 0;padding-top:18px;border-top:1px solid #e5e7eb;color:#9ca3af;font-family:Arial,sans-serif;font-size:12px;line-height:1.6;">If you were not expecting this invitation, you can safely ignore this email.</p></td></tr></table></td></tr></table></body></html>`;
+  const accessText = labels.length ? ` as ${labels.join(', ')}` : '';
+  const subject = `Invitation to Join ${companyName} Workspace`.slice(0, 100);
+  const html = `
+    <div style="font-family:sans-serif;padding:24px;color:#374151;max-width:600px;margin:0 auto;border:1px solid #e5e7eb;border-radius:8px;background-color:#ffffff;">
+      <h2 style="color:#0891b2;font-weight:bold;margin-bottom:20px;text-align:center;">Join ${escapeHtml(companyName)}</h2>
+      <p>Hello ${escapeHtml(fullName)},</p>
+      <p>You have been invited to join the ${escapeHtml(companyName)} workspace${escapeHtml(accessText)}. Please note that this secure invitation link will expire in 3 days (72 hours).</p>
+      <p style="margin-top:24px;text-align:center;">
+        <a href="${escapeHtml(inviteLink)}" style="background-color:#06b6d4;color:white;padding:12px 24px;text-decoration:none;border-radius:6px;font-weight:bold;display:inline-block;">Accept Invitation &amp; Set Up Account</a>
+      </p>
+      <p style="font-size:13px;color:#9ca3af;margin-top:32px;border-top:1px solid #e5e7eb;padding-top:16px;">If you didn't expect this invitation, please ignore this email.</p>
+    </div>`;
   return { subject, html };
 }
 

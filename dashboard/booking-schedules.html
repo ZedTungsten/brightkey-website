@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="/css/style.css" />
   <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg?v=2" />
 
-  <link rel="stylesheet" href="/dashboard/booking-schedules.css?v=5">
+  <link rel="stylesheet" href="/dashboard/booking-schedules.css?v=6">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 </head>
 <body>
@@ -24,17 +24,20 @@
     <div class="dash-main">
       <!-- Top Bar -->
       <div class="top-bar">
-        <span class="top-bar-title">Installation Schedules</span>
+        <span class="top-bar-title" id="booking-page-title">Installation Schedules</span>
         <div style="flex:1"></div>
       </div>
 
       <div class="content-area">
         <main class="main-panel">
           <!-- Tabs -->
-          <div class="drawer-tabs">
+          <div class="drawer-tabs" id="booking-schedule-tabs">
             <a class="tab-btn" id="tab-calendar" href="/dashboard/booking-schedules/calendar">Calendar</a>
             <a class="tab-btn" id="tab-all-bookings" href="/dashboard/booking-schedules/all-bookings">All Bookings</a>
-            <a class="tab-btn" id="tab-installers" href="/dashboard/booking-schedules/installers">Installers</a>
+          </div>
+          <div class="drawer-tabs" id="installer-tabs" style="display: none;">
+            <a class="tab-btn" id="tab-installer-assignments" href="/dashboard/installers/assignments">Assignments</a>
+            <a class="tab-btn" id="tab-installer-accounts" href="/dashboard/installers/accounts">Accounts</a>
           </div>
 
           <div class="scroll-container">
@@ -108,11 +111,11 @@
                         <th>Lead</th>
                         <th>Assist</th>
                         <th>Total</th>
+                        <th>Service</th>
                         <th>Ocular</th>
                         <th>Backjobs</th>
                         <th>All Jobs</th>
                         <th>Completed</th>
-                        <th>Service Jobs</th>
                       </tr>
                     </thead>
                     <tbody id="installer-assignment-tbody"></tbody>
@@ -139,6 +142,7 @@
                       <tr>
                         <th>Installer</th>
                         <th>Install Date</th>
+                        <th>Status</th>
                         <th>Customer Name</th>
                         <th>SKU Assigned</th>
                         <th>Assignment</th>
@@ -149,6 +153,43 @@
                 </div>
               </section>
 
+            </div>
+
+            <div id="tab-panel-installer-accounts" style="display: none; padding-top: 1rem;">
+              <section class="installer-accounts-section">
+                <div class="installer-accounts-toolbar">
+                  <select id="installer-accounts-status" class="form-input" aria-label="Installer status">
+                    <option value="active">Active</option>
+                    <option value="all">All</option>
+                  </select>
+                  <div class="installer-password-actions">
+                    <button type="button" class="btn btn-outline btn-sm" id="installer-password-edit">Edit Password</button>
+                    <button type="button" class="installer-password-action confirm" id="installer-password-confirm" aria-label="Save new passwords" hidden>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    </button>
+                    <button type="button" class="installer-password-action cancel" id="installer-password-cancel" aria-label="Cancel password editing" hidden>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                    </button>
+                  </div>
+                </div>
+                <div class="installer-accounts-table-wrap">
+                  <table class="installer-accounts-table">
+                    <thead>
+                      <tr>
+                        <th>Profile Pic</th>
+                        <th>Name</th>
+                        <th>City</th>
+                        <th>Province</th>
+                        <th>Password</th>
+                        <th>Last Login</th>
+                      </tr>
+                    </thead>
+                    <tbody id="installer-accounts-tbody">
+                      <tr><td colspan="6" class="installer-accounts-state">Loading installer accounts...</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </section>
             </div>
 
               <div class="month-loading-overlay" id="month-loading-overlay" aria-hidden="true">
@@ -634,14 +675,15 @@
   <script src="/dashboard/booking-schedules/booking-assets.js"></script>
   <script src="/dashboard/booking-schedules/booking-actions.js?v=2"></script>
   <script src="/dashboard/booking-schedules/receipt.js"></script>
-  <script src="/dashboard/booking-schedules/installers.js?v=4"></script>
+  <script src="/dashboard/booking-schedules/installers.js?v=7"></script>
   <script>
     // Kept inline so the clean nested route can render the summary even when a local static server caches JS assets.
     window.drawInstallersSummary = function() {
       const assignmentBody = document.getElementById('installer-assignment-tbody');
       if (!assignmentBody) return;
       const names = new Set(['installer', 'installers', ...(window._installerAssignmentNames || []).map(name => String(name).trim().toLowerCase())]);
-      const people = dbEmployees.filter(employee => String(employee.assignment || '').split(',').some(name => names.has(name.trim().toLowerCase())));
+      const people = dbEmployees.filter(employee => isActiveBookingEmployee(employee)
+        && String(employee.assignment || '').split(',').some(name => names.has(name.trim().toLowerCase())));
       const threshold = Number(installerPayoutSettings?.installations_before_crediting ?? 15);
       const leadWeight = Number(installerPayoutSettings?.lead_credit ?? 1);
       const assistWeight = Number(installerPayoutSettings?.assist_credit ?? 0.5);
@@ -668,8 +710,9 @@
         });
       };
       const summaries = people.map(employee => {
-        const summary = { employee, lead:0, scheduledLead:0, assist:0, scheduledAssist:0, ocular:0, scheduledOcular:0, backjobs:0, scheduledBackjobs:0, credit:0, service:0, lastAssigned:'' };
+        const summary = { employee, lead:0, scheduledLead:0, assist:0, scheduledAssist:0, serviceJobs:0, scheduledService:0, ocular:0, scheduledOcular:0, backjobs:0, scheduledBackjobs:0, credit:0, service:0, lastAssigned:'' };
         dbBookings.forEach(booking => {
+          if (String(booking.status || '').toLowerCase() === 'cancelled') return;
           const type = String(booking.product_skus || '').trim().toLowerCase();
           const order = String(booking.order_no || '').toUpperCase();
           const dayOff = type === 'day off' || order.startsWith('DO-');
@@ -679,6 +722,7 @@
           if (!dayOff && assignedJobs.length && booking.scheduled_date && (!summary.lastAssigned || booking.scheduled_date > summary.lastAssigned)) summary.lastAssigned = booking.scheduled_date;
           assignedJobs.forEach(job => {
             if (dayOff) return;
+            if (job.roles.includes('service')) { summary.serviceJobs++; if (!job.completed) summary.scheduledService++; }
             if (ocular) { summary.ocular++; if (!job.completed) summary.scheduledOcular++; }
             else if (backjob) { summary.backjobs++; if (!job.completed) summary.scheduledBackjobs++; }
             else if (job.roles.includes('lead')) { summary.lead++; if (!job.completed) summary.scheduledLead++; }
@@ -702,8 +746,8 @@
       };
       const decimal = value => Number(value || 0).toFixed(1);
       const date = value => value ? new Date(`${value}T00:00:00`).toLocaleDateString('en-US', { month:'short', day:'2-digit', year:'numeric' }) : '—';
-      const metric = (total, scheduled) => `${total}<span class="installer-scheduled-count"> (${scheduled})</span>`;
-      assignmentBody.innerHTML = summaries.map(s => `<tr><td>${person(s.employee)}</td><td>${escapeHtml(s.employee.city || '—')}</td><td>${date(s.lastAssigned)}</td><td class="installer-metric-lead">${metric(s.lead, s.scheduledLead)}</td><td class="installer-metric-assist">${metric(s.assist, s.scheduledAssist)}</td><td class="installer-summary-row-total">${metric(s.installationDone, s.installationScheduled)}</td><td class="installer-metric-ocular">${metric(s.ocular, s.scheduledOcular)}</td><td class="installer-metric-backjob">${metric(s.backjobs, s.scheduledBackjobs)}</td><td class="installer-summary-row-total">${s.total}</td><td><span class="installer-metric-lead">${decimal(s.credit)}</span><span class="installer-threshold-limit">/${decimal(threshold)}</span></td><td class="installer-metric-assist">${s.service}</td></tr>`).join('');
+      const metric = (done, scheduled) => `${done}<span class="installer-scheduled-count"> (${scheduled})</span>`;
+      assignmentBody.innerHTML = summaries.map(s => `<tr><td>${person(s.employee)}</td><td>${escapeHtml(s.employee.city || '—')}</td><td>${date(s.lastAssigned)}</td><td class="installer-metric-lead">${metric(s.lead - s.scheduledLead, s.scheduledLead)}</td><td class="installer-metric-assist">${metric(s.assist - s.scheduledAssist, s.scheduledAssist)}</td><td class="installer-summary-row-total">${metric(s.installationDone, s.installationScheduled)}</td><td class="installer-metric-service">${metric(s.serviceJobs - s.scheduledService, s.scheduledService)}</td><td class="installer-metric-ocular">${metric(s.ocular - s.scheduledOcular, s.scheduledOcular)}</td><td class="installer-metric-backjob">${metric(s.backjobs - s.scheduledBackjobs, s.scheduledBackjobs)}</td><td class="installer-summary-row-total">${s.total}</td><td><span class="installer-metric-lead">${decimal(s.credit)}</span><span class="installer-threshold-limit">/${decimal(threshold)}</span></td></tr>`).join('');
       if (typeof window.drawInstallerAssignmentHistory === 'function') window.drawInstallerAssignmentHistory();
     };
   </script>

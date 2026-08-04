@@ -292,7 +292,7 @@
         <div class="dash-nav-children">
           <a href="/dashboard/booking" class="dash-nav-child">Book</a>
           <a href="/dashboard/orders-invoices" class="dash-nav-child">Orders & Invoices</a>
-          <a href="/dashboard/booking-schedules/calendar" class="dash-nav-child">Calendar</a>
+          <a href="/dashboard/booking-schedules/calendar" class="dash-nav-child">Calendar</a><a href="/dashboard/installers" class="dash-nav-child">Installers</a>
         </div>
       </div>
 
