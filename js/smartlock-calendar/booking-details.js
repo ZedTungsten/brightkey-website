@@ -31,7 +31,8 @@ function openDetailsModal(bookingId) {
   document.getElementById('det-date').innerText = b.scheduled_date ? formatDateFriendly(b.scheduled_date) : 'N/A';
   document.getElementById('det-time').innerText = b.scheduled_time || 'AM Slot';
   document.getElementById('det-name').innerText = b.customer_name || 'N/A';
-  document.getElementById('det-phone').innerText = b.customer_phone || 'N/A';
+  document.getElementById('det-phone-1').innerText = b.customer_phone || 'N/A';
+  document.getElementById('det-phone-2').innerText = b.customer_phone_2 || 'N/A';
   
   const addressParts = (b.customer_address || '').split(',').map(p => p.trim());
   let location = 'N/A';

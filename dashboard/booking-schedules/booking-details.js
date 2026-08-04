@@ -112,7 +112,8 @@
       document.getElementById('det-date').innerText = selectedBooking.scheduled_date ? formatDateFriendly(selectedBooking.scheduled_date) : 'Unscheduled';
       document.getElementById('det-time').innerText = selectedBooking.scheduled_time || 'AM Slot';
       document.getElementById('det-name').innerText = selectedBooking.customer_name || 'N/A';
-      document.getElementById('det-contact').innerText = selectedBooking.customer_phone || selectedBooking.customer_email || 'N/A';
+      document.getElementById('det-contact-1').innerText = selectedBooking.customer_phone || 'N/A';
+      document.getElementById('det-contact-2').innerText = selectedBooking.customer_phone_2 || 'N/A';
       document.getElementById('det-booked-date').innerText = selectedBooking.created_at ? formatDateFriendly(selectedBooking.created_at) : 'N/A';
       
       // City & Province

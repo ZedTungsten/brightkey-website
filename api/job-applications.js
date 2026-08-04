@@ -332,6 +332,21 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Confirm the application certification before submitting.' });
     }
 
+    const { data: existingApplication, error: duplicateCheckError } = await supabase
+      .from('job_applications')
+      .select('id')
+      .eq('job_post_id', context.job.id)
+      .eq('email', email)
+      .limit(1)
+      .maybeSingle();
+    if (duplicateCheckError) throw duplicateCheckError;
+    if (existingApplication) {
+      if (existingApplication.id === applicationId) {
+        return res.status(200).json({ success: true, applicationId, alreadyProcessed: true });
+      }
+      return res.status(409).json({ error: 'An application using this email was already submitted for this job.' });
+    }
+
     const rawAnswers = Array.isArray(req.body?.answers) ? req.body.answers : [];
     const rawByIndex = new Map(rawAnswers.map(item => [Number(item?.index), item]));
     const answers = context.fields.map((field, index) => {
@@ -362,7 +377,17 @@ export default async function handler(req, res) {
     });
     if (insertError) {
       if (insertError.code === '23505') {
-        return res.status(409).json({ error: 'This application was already submitted.' });
+        const { data: processedApplication } = await supabase
+          .from('job_applications')
+          .select('id, email, job_post_id')
+          .eq('id', applicationId)
+          .maybeSingle();
+        if (processedApplication
+          && processedApplication.job_post_id === context.job.id
+          && processedApplication.email?.toLowerCase().trim() === email) {
+          return res.status(200).json({ success: true, applicationId, alreadyProcessed: true });
+        }
+        return res.status(409).json({ error: 'An application using this email was already submitted for this job.' });
       }
       throw insertError;
     }

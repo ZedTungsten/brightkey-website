@@ -430,8 +430,18 @@
 
     submitButton.disabled = true;
     submitButton.textContent = 'Submitting...';
-    const applicationId = crypto.randomUUID();
+    const applicationId = form.dataset.applicationId || crypto.randomUUID();
+    form.dataset.applicationId = applicationId;
+    const normalizedEmail = form.elements.namedItem('email')?.value?.trim().toLowerCase() || '';
+    const submissionKey = `bk_job_application:${COMPANY_ID}:${job.public_code}:${normalizedEmail}`;
     try {
+      try {
+        if (window.localStorage.getItem(submissionKey)) {
+          throw new Error('An application using this email was already submitted for this job.');
+        }
+      } catch (storageError) {
+        if (storageError instanceof Error && storageError.message.includes('already submitted')) throw storageError;
+      }
       const answers = [];
       for (let index = 0; index < applicationForm.customFields.length; index += 1) {
         const field = applicationForm.customFields[index];
@@ -461,6 +471,11 @@
         certified: certificationInput.checked,
         answers
       });
+      try {
+        window.localStorage.setItem(submissionKey, new Date().toISOString());
+      } catch (storageError) {
+        console.warn('Application submission marker could not be stored:', storageError);
+      }
       window.Toast?.show('Your application has been submitted successfully.', 'success');
       closeApplicationModal();
     } catch (error) {
