@@ -113,7 +113,10 @@ export default async function handler(req, res) {
       return res.status(503).json({ error: 'The company invitation settings could not be loaded. Try again shortly.' });
     }
     const integration = integrationResult.data;
-    const branding = buildEmailBranding(profileResult.data?.value || {});
+    // Account invitations should remain attachment-free for better mailbox
+    // placement. Hosted HTTPS logos still render; data-URL logos use the
+    // company-name fallback instead of becoming MIME attachments.
+    const branding = buildEmailBranding(profileResult.data?.value || {}, { allowAttachments: false });
     const invitationEmail = buildInvitationEmail({ fullName: full_name, role, inviteLink, branding });
 
     const activeResendApiKey = integration?.hr_resend_api_key || integration?.resend_api_key || RESEND_API_KEY;
@@ -156,8 +159,7 @@ export default async function handler(req, res) {
           from: finalSmtpFrom,
           to: email,
           subject: invitationEmail.subject,
-          html: invitationEmail.html,
-          attachments: branding.nodemailerAttachments
+          html: invitationEmail.html
         });
 
         emailSent = true;
@@ -178,8 +180,7 @@ export default async function handler(req, res) {
               from: finalFrom,
               to: email,
               subject: invitationEmail.subject,
-              html: invitationEmail.html,
-              attachments: branding.resendAttachments
+              html: invitationEmail.html
             })
           });
 

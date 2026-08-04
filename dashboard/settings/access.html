@@ -335,7 +335,15 @@
         if (normalizedRole === 'admin') return 1;
         return 2;
       };
-      activeData.sort((a, b) => accessPriority(a.role) - accessPriority(b.role));
+      const accessThenDateAdded = (a, b) => {
+        const priorityDifference = accessPriority(a.role) - accessPriority(b.role);
+        if (priorityDifference !== 0) return priorityDifference;
+
+        const aAddedAt = Date.parse(a.created_at || '') || 0;
+        const bAddedAt = Date.parse(b.created_at || '') || 0;
+        return bAddedAt - aAddedAt;
+      };
+      activeData.sort(accessThenDateAdded);
 
       SettingsPage.allTeamMembers = activeData;
 
@@ -354,7 +362,7 @@
 
       const activeEmails = new Set(activeData.map(r => (r.user_email || '').toLowerCase().trim()));
       inviteData = inviteData.filter(r => !activeEmails.has((r.email || '').toLowerCase().trim()));
-      inviteData.sort((a, b) => accessPriority(a.role) - accessPriority(b.role));
+      inviteData.sort(accessThenDateAdded);
 
       tbody.innerHTML = '';
 

@@ -3,6 +3,34 @@ import { createHash } from 'crypto';
 import { setApiCors } from '../lib/api/security.js';
 import { enforceRateLimit } from '../lib/api/rate-limit.js';
 
+const AUTH_USERS_PER_PAGE = 100;
+const AUTH_USER_PAGE_LIMIT = 100;
+
+export async function findAuthUserByEmail(admin, email, candidateId = null) {
+  const normalizedEmail = String(email || '').toLowerCase().trim();
+
+  if (candidateId) {
+    const { data, error } = await admin.getUserById(candidateId);
+    const candidate = data?.user;
+    if (!error && candidate?.email?.toLowerCase().trim() === normalizedEmail) return candidate;
+  }
+
+  // Supabase Auth does not provide an exact-email admin lookup. Use its
+  // documented paginated user listing as a bounded fallback when the Employee
+  // Directory ID is not the preserved Auth ID.
+  for (let page = 1; page <= AUTH_USER_PAGE_LIMIT; page += 1) {
+    const { data, error } = await admin.listUsers({ page, perPage: AUTH_USERS_PER_PAGE });
+    if (error) throw error;
+
+    const users = Array.isArray(data?.users) ? data.users : [];
+    const match = users.find(user => user.email?.toLowerCase().trim() === normalizedEmail);
+    if (match) return match;
+    if (users.length < AUTH_USERS_PER_PAGE) return null;
+  }
+
+  throw new Error('Auth user lookup reached its safety limit.');
+}
+
 export default async function handler(req, res) {
   setApiCors(req, res);
 
@@ -100,13 +128,14 @@ export default async function handler(req, res) {
     // Removing tenant access intentionally keeps the shared auth identity and
     // Employee Directory record. A later invitation reconnects that identity
     // instead of trying to create a duplicate Supabase Auth user.
-    if (existingEmp?.id) {
-      const { data: existingAuthData, error: existingAuthError } = await supabase.auth.admin.getUserById(existingEmp.id);
-      const existingAuthUser = existingAuthData?.user;
-      if (!existingAuthError && existingAuthUser?.email?.toLowerCase().trim() === activeEmail) {
-        userId = existingAuthUser.id;
-        reusedAuthUser = existingAuthUser;
-      }
+    try {
+      reusedAuthUser = await findAuthUserByEmail(supabase.auth.admin, activeEmail, existingEmp?.id || null);
+    } catch (authLookupError) {
+      console.error('Existing Auth User Lookup Error:', authLookupError);
+      return res.status(503).json({ error: 'Your existing login could not be checked. Please try again shortly.' });
+    }
+    if (reusedAuthUser) {
+      userId = reusedAuthUser.id;
     }
 
     if (!userId) {

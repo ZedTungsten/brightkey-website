@@ -275,7 +275,7 @@
     contextCache.statusPromises = {};
     const { error } = await sb.auth.signOut();
     if (error) throw error;
-    window.location.href = 'admin.html';
+    window.location.href = 'https://www.brightkeysolutions.com/admin';
   }
 
   /**
