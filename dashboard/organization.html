@@ -709,7 +709,19 @@
 
         let authInfo;
         if (isViewOnly) {
-          authInfo = await window.BKAuth.checkRoleGate(['Sales', 'Operations', 'Logistics', 'Finance', 'HR', 'Products', 'Marketing', 'Customer Service'], '../admin.html');
+          const user = await window.BKAuth.requireAuth('/admin');
+          if (!user) return;
+          const memberInfo = await window.BKAuth.getUserRole();
+          if (!memberInfo?.tenantId) {
+            window.location.href = '/admin';
+            return;
+          }
+          authInfo = {
+            user,
+            role: memberInfo.role,
+            tenantId: memberInfo.tenantId,
+            modules: memberInfo.modules || []
+          };
           
           // Inject view-only styles dynamically
           const style = document.createElement('style');
