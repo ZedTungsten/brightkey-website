@@ -5,6 +5,172 @@
 
 'use strict';
 
+// BK_EMPLOYMENT_PERIOD_START
+(function registerEmploymentPeriod(root) {
+  const dateKey = value => String(value || '').slice(0, 10);
+  const monthEndKey = (year, zeroBasedMonth) => {
+    const lastDay = new Date(Number(year), Number(zeroBasedMonth) + 1, 0).getDate();
+    return `${Number(year)}-${String(Number(zeroBasedMonth) + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+  };
+
+  root.BKEmploymentPeriod = Object.freeze({
+    isHiredByDate(employee, periodEnd) {
+      const hiredDate = dateKey(employee?.date_hired);
+      return !hiredDate || hiredDate <= dateKey(periodEnd);
+    },
+
+    isHiredByMonthEnd(employee, year, zeroBasedMonth) {
+      return this.isHiredByDate(employee, monthEndKey(year, zeroBasedMonth));
+    }
+  });
+})(globalThis);
+// BK_EMPLOYMENT_PERIOD_END
+
+// BK_OPEX_SALARIES_START
+(function registerOpexSalaryCalculator(root) {
+  root.BKOpexSalaries = Object.freeze({
+    calculateMonth({ employees = [], payslipRecords = [], payoutSchedules = [], specialSchedules = [], regularPayoutState = {}, specialPayoutState = {}, monthKey } = {}) {
+      const schedules = payoutSchedules.map(Number).filter(Number.isFinite);
+      const effectiveSchedules = schedules.length ? schedules : [15, 30];
+      const [year, month] = String(monthKey || '').split('-').map(Number);
+      if (!year || !month) return [];
+
+      return employees
+        .filter(employee => root.BKEmploymentPeriod.isHiredByMonthEnd(employee, year, month - 1))
+        .map(employee => {
+          const record = payslipRecords.find(item => item.employee_id === employee.id && (!item.payout_month || item.payout_month === monthKey));
+          const monthlySalary = Number(employee.salary || employee.monthly_salary) || 0;
+          const salaryPerSchedule = monthlySalary / effectiveSchedules.length;
+          const paidSalaryFromState = effectiveSchedules.reduce((sum, day) => {
+            const isPaid = regularPayoutState?.[monthKey]?.[`${employee.id}_${day}`] === true;
+            return sum + (isPaid ? salaryPerSchedule : 0);
+          }, 0);
+
+          let baseSalary;
+          let specialPayout;
+          if (record) {
+            const recordedBasicPaid = Number(record.basic_paid) || 0;
+            baseSalary = employee.employment_status === 'Active'
+              ? (recordedBasicPaid || Number(record.salary) || monthlySalary)
+              : (recordedBasicPaid || paidSalaryFromState);
+            specialPayout = Number(record.special_payouts) || 0;
+          } else {
+            baseSalary = employee.employment_status === 'Active' ? monthlySalary : paidSalaryFromState;
+            specialPayout = specialSchedules
+              .filter(schedule => schedule.employeeId === employee.id)
+              .reduce((sum, schedule) => {
+                const isPaid = specialPayoutState?.[monthKey]?.[`${employee.id}_${schedule.day}`] === true;
+                return sum + (isPaid ? (Number(schedule.value) || 0) : 0);
+              }, 0);
+          }
+
+          return { employee, baseSalary, specialPayout, total: baseSalary + specialPayout };
+        });
+    }
+  });
+})(globalThis);
+// BK_OPEX_SALARIES_END
+
+// BK_INSTALLER_PAYOUTS_START
+(function registerInstallerPayoutCalculator(root) {
+  function cutoffBucket(dateValue, schedules) {
+    const match = String(dateValue || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!match) return null;
+    let year = Number(match[1]);
+    let month = Number(match[2]);
+    const day = Number(match[3]);
+    const sorted = schedules.map(Number).filter(Boolean).sort((a, b) => a - b);
+    if (!sorted.length) sorted.push(30);
+    const cutoffDay = sorted.find(cutoff => day <= cutoff);
+    if (cutoffDay) return { monthKey: `${year}-${String(month).padStart(2, '0')}`, day: cutoffDay };
+    month += 1;
+    if (month > 12) { month = 1; year += 1; }
+    return { monthKey: `${year}-${String(month).padStart(2, '0')}`, day: sorted[0] };
+  }
+
+  root.BKInstallerPayouts = Object.freeze({
+    calculateMonth({ employees = [], bookings = [], payoutSettings = {}, payoutSchedules = [], monthKey, resolveAssignedDoors } = {}) {
+      if (!monthKey || typeof resolveAssignedDoors !== 'function') return [];
+      const threshold = payoutSettings.installations_before_crediting || 15;
+      const weights = {
+        lead: payoutSettings.lead_credit ?? 1,
+        assist: payoutSettings.assist_credit ?? 0.5,
+        ocular: payoutSettings.ocular_credit ?? 0,
+        repair: payoutSettings.repair_credit ?? 0
+      };
+      const rates = {
+        lead: payoutSettings.lead_rate || 1000,
+        assist: payoutSettings.assist_rate || 500,
+        ocular: payoutSettings.ocular_rate || 0,
+        repair: payoutSettings.repair_rate || 0
+      };
+      const ocularRepairFrom = String(payoutSettings.ocular_repair_effective_from || '');
+      const services = (payoutSettings.extra_services || []).map(service => {
+        let sku = service.sku || service.name || '';
+        if (sku === 'Welding Baseplate Metal') sku = 'BASEPLATE-M';
+        if (sku === 'Welding Baseplate Stainless') sku = 'BASEPLATE-S';
+        return { sku, rate: Number(service.rate) || 0 };
+      });
+      const eligibleBookings = bookings
+        .filter(booking => booking.scheduled_date && String(booking.status || '').toLowerCase() !== 'cancelled')
+        .sort((a, b) => String(a.scheduled_date).localeCompare(String(b.scheduled_date)));
+
+      return employees.map(employee => {
+        let leadCount = 0;
+        let assistCount = 0;
+        let completedCredit = 0;
+        let thresholdEarnings = 0;
+        let serviceEarnings = 0;
+        const serviceCounts = {};
+        const creditBySourceMonth = {};
+
+        eligibleBookings.forEach(booking => {
+          const skus = String(booking.product_skus || '').split('|').map(sku => sku.trim().toLowerCase()).filter(Boolean);
+          const orderNo = String(booking.order_no || '').toUpperCase();
+          const isOcular = skus.includes('ocular');
+          const isRepair = skus.includes('repair');
+          if (skus.includes('day off') || orderNo.startsWith('DO-') || skus.includes('backjob') || orderNo.startsWith('BJ-')) return;
+          if ((isOcular || isRepair) && (!ocularRepairFrom || booking.scheduled_date < ocularRepairFrom)) return;
+
+          resolveAssignedDoors(booking, employee.id).forEach(door => {
+            if (!door.completed) return;
+            const roles = isOcular ? ['ocular'] : isRepair ? ['repair'] : door.roles;
+            const role = ['lead', 'assist', 'ocular', 'repair'].find(value => roles.includes(value));
+            const weight = role ? weights[role] : 0;
+            const sourceMonth = String(booking.scheduled_date).slice(0, 7);
+            const previousCredit = creditBySourceMonth[sourceMonth] || 0;
+            const newCredit = previousCredit + weight;
+            const thresholdPay = newCredit > threshold && role ? rates[role] : 0;
+            creditBySourceMonth[sourceMonth] = newCredit;
+
+            if (sourceMonth === monthKey) {
+              completedCredit += weight;
+              if (roles.includes('lead')) leadCount += 1;
+              else if (roles.includes('assist')) assistCount += 1;
+            }
+
+            const bucket = cutoffBucket(booking.scheduled_date, payoutSchedules);
+            if (!bucket || bucket.monthKey !== monthKey) return;
+            thresholdEarnings += thresholdPay;
+            if (door.roles.includes('service')) {
+              door.skus.forEach(sku => {
+                const service = services.find(item => item.sku === sku);
+                if (service) {
+                  serviceCounts[sku] = (serviceCounts[sku] || 0) + 1;
+                  serviceEarnings += service.rate;
+                }
+              });
+            }
+          });
+        });
+
+        return { employee, leadCount, assistCount, completedCredit, thresholdEarnings, serviceCounts, serviceEarnings, total: thresholdEarnings + serviceEarnings };
+      });
+    }
+  });
+})(globalThis);
+// BK_INSTALLER_PAYOUTS_END
+
 // ── Read URL query parameter for coupon_code ──────────────────
 (function checkCouponQueryParam() {
   const params = new URLSearchParams(window.location.search);
@@ -477,8 +643,6 @@ window.showTheaterImage = function(url) {
       window.WarehousePage.runAutoSyncInBackground();
     } else if (window.DeliveryApp && typeof window.DeliveryApp.loadData === 'function') {
       window.DeliveryApp.loadData();
-    } else if (window.BookkeepingApp && typeof window.BookkeepingApp.loadTransactions === 'function') {
-      window.BookkeepingApp.loadTransactions();
     } else if (window.AttendanceApp && typeof window.AttendanceApp.loadData === 'function') {
       window.AttendanceApp.loadData();
     } else if (window.App && typeof window.App.loadData === 'function') {

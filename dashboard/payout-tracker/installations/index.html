@@ -414,102 +414,24 @@
           return { sku, rate: es.rate };
         });
 
-        // Keep all eligible work so monthly threshold progress is preserved before carryover.
-        const eligibleBookings = this.bookingsList.filter(b => {
-          if (!b.scheduled_date) return false;
-          if (String(b.status || '').toLowerCase() === 'cancelled') return false;
-          return true;
-        }).sort((a, b) => String(a.scheduled_date).localeCompare(String(b.scheduled_date)));
-
-        const activeInstallers = [];
-
-        this.employees.forEach(emp => {
-          let leadCount = 0;
-          let assistCount = 0;
-          let totalCredit = 0;
-          let thresholdEarnings = 0;
-          let serviceEarnings = 0;
-          const serviceCounts = {};
-          const creditBySourceMonth = {};
-
-          eligibleBookings.forEach(b => {
-            const assignmentSkus = String(b.product_skus || '')
-              .split('|')
-              .map((sku) => sku.trim().toLowerCase())
-              .filter(Boolean);
-            const orderNo = String(b.order_no || '').toUpperCase();
-            const isDayOff = assignmentSkus.includes('day off') || orderNo.startsWith('DO-');
-            const isBackjob = assignmentSkus.includes('backjob') || orderNo.startsWith('BJ-');
-            const isOcular = assignmentSkus.includes('ocular');
-            const isRepair = assignmentSkus.includes('repair');
-            if (isDayOff || isBackjob) return;
-            if ((isOcular || isRepair) && (!ocularRepairEffectiveFrom || b.scheduled_date < ocularRepairEffectiveFrom)) return;
-
-            const assignedDoors = this.getAssignedDoorsForBookingAndEmployee(b, emp.id);
-            assignedDoors.forEach(d => {
-              if (!d.completed) return;
-
-              const roles = isOcular ? ['ocular'] : isRepair ? ['repair'] : d.roles;
-              let weight = 0;
-              let jobRate = 0;
-              if (roles.includes('lead')) weight = leadWeight;
-              else if (roles.includes('assist')) weight = assistWeight;
-              else if (roles.includes('ocular')) weight = ocularWeight;
-              else if (roles.includes('repair')) weight = repairWeight;
-              if (roles.includes('lead')) jobRate = leadRateVal;
-              else if (roles.includes('assist')) jobRate = assistRateVal;
-              else if (roles.includes('ocular')) jobRate = ocularRateVal;
-              else if (roles.includes('repair')) jobRate = repairRateVal;
-
-              const sourceMonth = String(b.scheduled_date || '').slice(0, 7);
-              if (!sourceMonth) return;
-              const previousCredit = creditBySourceMonth[sourceMonth] || 0;
-              const newCredit = previousCredit + weight;
-              const thresholdPayForJob = newCredit > thresholdVal ? jobRate : 0;
-              creditBySourceMonth[sourceMonth] = newCredit;
-
-              // Completed Counts represent work completed in the selected calendar
-              // month, matching Smartlock Calendar. Payout eligibility is handled
-              // separately below so work past the final cutoff can roll forward
-              // without disappearing from the source month's completion count.
-              if (sourceMonth === mk) {
-                if (d.roles.includes('lead')) leadCount++;
-                else if (d.roles.includes('assist')) assistCount++;
-                totalCredit += weight;
-              }
-
-              const bucket = this.getCutoffBucket(b.scheduled_date, this.payoutSchedules);
-              if (!bucket || bucket.monthKey !== mk) return;
-
-              thresholdEarnings += thresholdPayForJob;
-
-              if (d.roles.includes('service')) {
-                d.skus.forEach(sku => {
-                  const matchedService = extraServicesList.find(es => es.sku === sku);
-                  if (matchedService) {
-                    serviceCounts[sku] = (serviceCounts[sku] || 0) + 1;
-                    serviceEarnings += matchedService.rate;
-                  }
-                });
-              }
-            });
-          });
-
-          const grandTotal = thresholdEarnings + serviceEarnings;
-
-          if (leadCount > 0 || assistCount > 0 || grandTotal > 0 || Object.keys(serviceCounts).length > 0) {
-            activeInstallers.push({
-              emp,
-              leadCount,
-              assistCount,
-              totalCredit,
-              thresholdEarnings,
-              serviceCounts,
-              serviceEarnings,
-              grandTotal
-            });
-          }
-        });
+        const activeInstallers = window.BKInstallerPayouts.calculateMonth({
+          employees: this.employees,
+          bookings: this.bookingsList,
+          payoutSettings: this.payoutSettings,
+          payoutSchedules: this.payoutSchedules,
+          monthKey: mk,
+          resolveAssignedDoors: (booking, employeeId) => this.getAssignedDoorsForBookingAndEmployee(booking, employeeId)
+        }).filter(row => row.leadCount > 0 || row.assistCount > 0 || row.total > 0 || Object.keys(row.serviceCounts).length > 0)
+          .map(row => ({
+            emp: row.employee,
+            leadCount: row.leadCount,
+            assistCount: row.assistCount,
+            totalCredit: row.completedCredit,
+            thresholdEarnings: row.thresholdEarnings,
+            serviceCounts: row.serviceCounts,
+            serviceEarnings: row.serviceEarnings,
+            grandTotal: row.total
+          }));
 
         if (activeInstallers.length === 0) {
           tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:3rem;color:var(--text-muted);">No installation payouts calculated for this month.</td></tr>`;

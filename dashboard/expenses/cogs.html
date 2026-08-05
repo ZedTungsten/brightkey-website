@@ -329,6 +329,7 @@
   <script src="../../js/auth.js"></script>
   <script src="../../js/sidebar.js"></script>
   <script src="../../js/main.js"></script>
+  <script src="/dashboard/js/financial-calculators.js"></script>
 
   <script>
     (function() {
@@ -355,6 +356,9 @@
         products: [],
         bookings: [],
         costLedger: [],
+        payoutSchedules: [15, 30],
+        dispatchedTxs: [],
+        deliveryRecords: [],
 
         async init() {
           if (!window.BKAuth) return;
@@ -457,7 +461,7 @@
                 .select('employee_id, booking_id, product_index, amount')
                 .eq('company_id', this.companyId),
               sb.from('installation_bookings')
-                .select('id, status, scheduled_date, doors, products, product_skus, installers, installer_id, installer_name')
+                .select('id, order_no, status, scheduled_date, updated_at, created_at, doors, products, product_skus, installers, installer_id, installer_name')
                 .eq('company_id', this.companyId),
               sb.from('payslip_records')
                 .select('employee_id, salary, basic_paid, commissions, adjustments, special_payouts, total_payout, adjustments_list')
@@ -478,10 +482,13 @@
             this.journalEntries = journalRes.data || [];
             this.employees = empRes.data || [];
             this.payoutSettings = payoutSetRes.data?.value || {};
+            this.payoutSchedules = configRes.data?.value?.payoutSchedules || [15, 30];
             this.commissionAssignments = commRes.data || [];
             this.allBookings = allBookingsRes.data || [];
             this.payslipRecords = payslipRes.data || [];
             this.supplierCostAdjustments = adjustmentsRes.data || [];
+            this.dispatchedTxs = dispatchedTxRes.data || [];
+            this.deliveryRecords = deliveryRes.data || [];
 
             // Build shipping list: unique reference_ids dispatched this month (per inventory_transactions),
             // merged with fee amounts from delivery_bookings by reference_id.
@@ -689,7 +696,8 @@
             if (summarySection) summarySection.style.display = 'none';
           }
 
-          return grandTotalCogsCentavos / 100;
+          const monthKey = `${this.currentDate.getFullYear()}-${String(this.currentDate.getMonth() + 1).padStart(2, '0')}`;
+          return window.BKFinancialCalculators.calculateSupplierCostMonth(this.costLedger, this.supplierCostAdjustments, monthKey).total / 100;
         },
 
         renderCogsJournalReports(accounts, journalEntries) {
@@ -852,7 +860,8 @@
             `;
           }
 
-          const grandShippingTotal = baseSum + tip1Sum + tip2Sum + tollSum;
+          const monthKey = `${this.currentDate.getFullYear()}-${String(this.currentDate.getMonth() + 1).padStart(2, '0')}`;
+          const grandShippingTotal = window.BKFinancialCalculators.calculateShippingMonth(this.dispatchedTxs, this.deliveryRecords, monthKey).total;
 
           html += `
             <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1rem 1rem 2rem; box-shadow: var(--shadow-sm);">
@@ -897,7 +906,8 @@
           `;
 
           container.innerHTML = html;
-          return cogsTotal + (grandShippingTotal / 100);
+          const journalCategories = window.BKFinancialCalculators.calculateJournalMonth(accounts, journalEntries, monthKey);
+          return ((journalCategories.COGS?.total || 0) + grandShippingTotal) / 100;
         },
 
         getAssignedDoorsForBookingAndEmployee(b, empId) {
@@ -1039,7 +1049,7 @@
               }
 
               assignedDoors.push({
-                completed: !!door.completed,
+                completed: Boolean(door.completed) || ['done', 'completed', 'finished'].includes(String(b.status || '').toLowerCase()),
                 roles: roles,
                 skus: doorSkus
               });
@@ -1076,18 +1086,21 @@
             return nameA.localeCompare(nameB);
           });
 
-          const thresholdVal = this.payoutSettings.installations_before_crediting || 15;
-          const leadWeight = this.payoutSettings.lead_credit !== undefined ? this.payoutSettings.lead_credit : 1.0;
-          const assistWeight = this.payoutSettings.assist_credit !== undefined ? this.payoutSettings.assist_credit : 0.5;
-          const leadRateVal = this.payoutSettings.lead_rate || 1000;
-          const assistRateVal = this.payoutSettings.assist_rate || 500;
-
-          const extraServicesList = (this.payoutSettings.extra_services || []).map(es => {
-            let sku = es.sku || es.name || '';
-            if (sku === 'Welding Baseplate Metal') sku = 'BASEPLATE-M';
-            if (sku === 'Welding Baseplate Stainless') sku = 'BASEPLATE-S';
-            return { sku, rate: es.rate };
+          const installationRows = window.BKInstallerPayouts.calculateMonth({
+            employees: sortedEmps,
+            bookings: this.allBookings,
+            payoutSettings: this.payoutSettings,
+            payoutSchedules: this.payoutSchedules,
+            monthKey: targetMonthKey,
+            resolveAssignedDoors: (booking, employeeId) => this.getAssignedDoorsForBookingAndEmployee(booking, employeeId)
           });
+          const installationByEmployee = new Map(installationRows.map(row => [row.employee.id, row]));
+          const commissionResult = window.BKFinancialCalculators.calculateCommissionMonth(
+            sortedEmps,
+            this.commissionAssignments,
+            this.allBookings,
+            targetMonthKey
+          );
 
           let grandTotalInstallations = 0;
           let grandTotalCommissions = 0;
@@ -1096,74 +1109,8 @@
           let rowsHtml = '';
 
           sortedEmps.forEach(emp => {
-            const record = this.payslipRecords.find(r => r.employee_id === emp.id);
-
-            let installationPayout = 0;
-            let commissionPayout = 0;
-
-            // 1. Calculate installations
-            const monthBookings = this.allBookings.filter(b => {
-              if (!b.scheduled_date) return false;
-              if (b.status === 'cancelled') return false;
-              const d = new Date(b.scheduled_date);
-              const bookingMonthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-              return bookingMonthKey === targetMonthKey;
-            });
-
-            let leadCount = 0;
-            let assistCount = 0;
-            let serviceEarnings = 0;
-
-            monthBookings.forEach(b => {
-              const assignedDoors = this.getAssignedDoorsForBookingAndEmployee(b, emp.id);
-              assignedDoors.forEach(d => {
-                if (!d.completed) return;
-                if (d.roles.includes('lead')) {
-                  leadCount++;
-                } else if (d.roles.includes('assist')) {
-                  assistCount++;
-                }
-                if (d.roles.includes('service')) {
-                  d.skus.forEach(sku => {
-                    const matchedService = extraServicesList.find(es => es.sku === sku);
-                    if (matchedService) {
-                      serviceEarnings += matchedService.rate;
-                    }
-                  });
-                }
-              });
-            });
-
-            const totalCredit = (leadCount * leadWeight) + (assistCount * assistWeight);
-            let thresholdEarnings = 0;
-            if (totalCredit > thresholdVal) {
-              const extraCredit = totalCredit - thresholdVal;
-              thresholdEarnings = extraCredit * leadRateVal;
-            }
-            installationPayout = thresholdEarnings + serviceEarnings;
-
-            // 2. Calculate commissions
-            const employeeCommAssignments = this.commissionAssignments.filter(a => a.employee_id === emp.id);
-            employeeCommAssignments.forEach(a => {
-              const b = this.allBookings.find(x => x.id === a.booking_id);
-              if (!b || b.status === 'cancelled') return;
-              if (!b.scheduled_date || b.scheduled_date.slice(0, 7) !== targetMonthKey) return;
-
-              let doors = [];
-              if (b.doors) {
-                if (typeof b.doors === 'string') {
-                  try { doors = JSON.parse(b.doors); } catch(_) {}
-                } else if (Array.isArray(b.doors)) {
-                  doors = b.doors;
-                }
-              }
-
-              const door = doors[a.product_index];
-              const isDone = (door && door.completed) || ['done', 'completed', 'finished'].includes(b.status);
-              if (!isDone) return;
-
-              commissionPayout += (Number(a.amount) || 0) / 100;
-            });
+            const installationPayout = installationByEmployee.get(emp.id)?.total || 0;
+            const commissionPayout = (commissionResult.byEmployee.get(emp.id) || 0) / 100;
 
             const totalCogs = installationPayout + commissionPayout;
             // Only show if there is an actual positive value for installations or commissions

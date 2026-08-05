@@ -398,8 +398,6 @@
           <svg class="dash-nav-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
         </button>
         <div class="dash-nav-children">
-          <a href="/dashboard/bookkeeping" class="dash-nav-child" data-role="accounting">Bookkeeping</a>
-          <a href="/dashboard/payment-accounts" class="dash-nav-child" data-role="accounting">Payment Accounts</a>
           <a href="/dashboard/general-journal" class="dash-nav-child" data-role="accounting">General Journal</a>
           <a href="/dashboard/statements/profit-and-loss" class="dash-nav-child" data-role="accounting">Statements</a>
           <a href="/dashboard/expenses/cogs" class="dash-nav-child" data-role="accounting">Expenses</a>

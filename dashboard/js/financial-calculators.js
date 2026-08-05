@@ -2,6 +2,102 @@
 // centralizes COGS, OPEX, and P&L calculations for all statement pages.
 
 window.BKFinancialCalculators = {
+  calculateSupplierCostMonth(ledger = [], adjustments = [], monthKey) {
+    const ledgerTotal = ledger.reduce((sum, entry) => {
+      return String(entry.recognized_at || '').slice(0, 7) === monthKey
+        ? sum + (Number(entry.total_cost_centavos) || 0)
+        : sum;
+    }, 0);
+    const adjustmentTotal = adjustments.reduce((sum, entry) => {
+      return String(entry.adjustment_date || '').slice(0, 7) === monthKey
+        ? sum + (Number(entry.amount_cents) || 0)
+        : sum;
+    }, 0);
+    return { ledgerTotal, adjustmentTotal, total: ledgerTotal + adjustmentTotal };
+  },
+
+  calculateCommissionMonth(employees = [], assignments = [], bookings = [], monthKey) {
+    const byEmployee = new Map(employees.map(employee => [employee.id, 0]));
+    assignments.forEach(assignment => {
+      const booking = bookings.find(item => item.id === assignment.booking_id);
+      if (!booking || String(booking.status || '').toLowerCase() === 'cancelled') return;
+      if (String(booking.scheduled_date || '').slice(0, 7) !== monthKey) return;
+      let doors = [];
+      if (typeof booking.doors === 'string') {
+        try { doors = JSON.parse(booking.doors); } catch (_) {}
+      } else if (Array.isArray(booking.doors)) {
+        doors = booking.doors;
+      }
+      const door = doors[assignment.product_index];
+      const isDone = Boolean(door?.completed) || ['done', 'completed', 'finished'].includes(String(booking.status || '').toLowerCase());
+      if (!isDone) return;
+      byEmployee.set(assignment.employee_id, (byEmployee.get(assignment.employee_id) || 0) + (Number(assignment.amount) || 0));
+    });
+    return { byEmployee, total: [...byEmployee.values()].reduce((sum, value) => sum + value, 0) };
+  },
+
+  calculateShippingMonth(transactions = [], deliveries = [], monthKey) {
+    const deliveryMap = new Map(deliveries.map(delivery => [delivery.reference_id, delivery]));
+    const seen = new Set();
+    const rows = [];
+    transactions.forEach(transaction => {
+      if (String(transaction.timestamp_dispatched || '').slice(0, 7) !== monthKey) return;
+      if (!transaction.reference_id || seen.has(transaction.reference_id)) return;
+      seen.add(transaction.reference_id);
+      const delivery = deliveryMap.get(transaction.reference_id) || {};
+      const base = Number(delivery.base_fee) || 0;
+      const tip1 = Number(delivery.tip_1) || 0;
+      const tip2 = Number(delivery.tip_2) || 0;
+      const toll = Number(delivery.toll) || 0;
+      rows.push({ reference_id: transaction.reference_id, customer_name: delivery.customer_name || transaction.customer_name || '', base, tip1, tip2, toll, total: base + tip1 + tip2 + toll });
+    });
+    return { rows, total: rows.reduce((sum, row) => sum + row.total, 0) };
+  },
+
+  calculateJournalMonth(accounts = [], entries = [], monthKey) {
+    const categoryByAccount = new Map(accounts.map(account => [account.name, account.category]));
+    const categories = {};
+    entries.forEach(entry => {
+      if (String(entry.date || '').slice(0, 7) !== monthKey) return;
+      const debitCentavos = Math.round((Number(entry.debit) || 0) * 100);
+      if (debitCentavos <= 0) return;
+      const category = categoryByAccount.get(entry.account);
+      if (!category) return;
+      categories[category] ||= { total: 0, accounts: {} };
+      categories[category].total += debitCentavos;
+      categories[category].accounts[entry.account] = (categories[category].accounts[entry.account] || 0) + debitCentavos;
+    });
+    return categories;
+  },
+
+  calculateEmployeeAdjustmentsMonth(adjustments = [], monthKey) {
+    const byEmployee = new Map();
+    adjustments.forEach(adjustment => {
+      if (String(adjustment.date || '').slice(0, 7) !== monthKey) return;
+      byEmployee.set(adjustment.employee_id, (byEmployee.get(adjustment.employee_id) || 0) + (Number(adjustment.amount) || 0));
+    });
+    return { byEmployee, total: [...byEmployee.values()].reduce((sum, value) => sum + value, 0) };
+  },
+
+  calculateSoftwareMonth(subscriptions = [], billingRecords = [], monthKey) {
+    const monthStart = `${monthKey}-01`;
+    const [year, month] = monthKey.split('-').map(Number);
+    const monthEnd = `${monthKey}-${String(new Date(year, month, 0).getDate()).padStart(2, '0')}`;
+    const rows = subscriptions.filter(subscription => {
+      const subscribed = (subscription.subscribed_date || '1970-01-01') <= monthEnd;
+      const notUnsubscribed = !subscription.unsubscribed_date || subscription.unsubscribed_date >= monthStart;
+      const hasBilling = billingRecords.some(record => record.subscription_id === subscription.id && String(record.billing_month || '').slice(0, 7) === monthKey && record.mode !== 'unsubscribed');
+      return (subscribed && notUnsubscribed) || hasBilling;
+    }).map(subscription => {
+      const plan = this.resolvePlanForMonth(subscription, monthStart, billingRecords);
+      let cost = 0;
+      if (plan.mode === 'monthly' || plan.mode === 'pay_as_you_go') cost = Number(plan.cost_centavos) || 0;
+      else if (plan.mode === 'annual') cost = Math.round((Number(plan.cost_centavos) || 0) / 12);
+      return { subscription, mode: plan.mode, costCentavos: cost };
+    }).filter(row => row.mode !== 'unsubscribed');
+    return { rows, total: rows.reduce((sum, row) => sum + row.costCentavos, 0) };
+  },
+
   // Resolves software subscriptions plan for a target month (cents)
   resolvePlanForMonth(s, targetMonthStr, billingRecords = []) {
     const subBills = billingRecords.filter(b => b.subscription_id === s.id);

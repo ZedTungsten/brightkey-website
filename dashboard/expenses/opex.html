@@ -463,6 +463,7 @@
   <script src="../../js/auth.js"></script>
   <script src="../../js/sidebar.js"></script>
   <script src="../../js/main.js"></script>
+  <script src="/dashboard/js/financial-calculators.js"></script>
 
   <script>
     (function() {
@@ -589,7 +590,7 @@
             // Fetch everything needed in parallel
             const [empRes, configRes, payoutSetRes, adjRes, commRes, bookingsRes, payslipRes, accountsRes, journalRes, subRes, billRes, regPayoutRes, specPayoutRes] = await Promise.all([
               sb.from('employees')
-                .select('id, first_name, last_name, salary, employment_status')
+                .select('id, first_name, last_name, salary, employment_status, date_hired')
                 .eq('company_id', this.companyId), // Query all employees so we can show terminated ones historically
               sb.from('global_settings')
                 .select('value')
@@ -884,12 +885,25 @@
             return 0;
           }
 
+          const salaryRows = window.BKOpexSalaries.calculateMonth({
+            employees: this.employees,
+            payslipRecords: this.payslipRecords,
+            payoutSchedules: this.payoutSchedules,
+            specialSchedules: this.specialSchedules,
+            regularPayoutState: this.regularPayoutState,
+            specialPayoutState: this.specialPayoutState,
+            monthKey: targetMonthKey
+          });
+          const salaryByEmployee = new Map(salaryRows.map(row => [row.employee.id, row]));
+          const adjustmentResult = window.BKFinancialCalculators.calculateEmployeeAdjustmentsMonth(this.adjustments, targetMonthKey);
+
           // Sort employees alphabetically by name
-          const sortedEmps = [...this.employees].sort((a, b) => {
+          const sortedEmps = salaryRows.map(row => row.employee)
+            .sort((a, b) => {
             const nameA = `${a.first_name || ''} ${a.last_name || ''}`.trim().toLowerCase();
             const nameB = `${b.first_name || ''} ${b.last_name || ''}`.trim().toLowerCase();
             return nameA.localeCompare(nameB);
-          });
+            });
 
           let grandTotalSalaries = 0;
           let grandTotalSpecials = 0;
@@ -906,41 +920,13 @@
           let adjustmentsHtml = '';
 
           sortedEmps.forEach(emp => {
-            const record = this.payslipRecords.find(r => r.employee_id === emp.id);
-            const schedules = this.payoutSchedules.length > 0 ? this.payoutSchedules : [15, 30];
-            const monthlySalary = Number(emp.salary) || 0;
-            const salaryPerSchedule = monthlySalary / schedules.length;
-            const paidSalaryFromState = schedules.reduce((sum, day) => {
-              const isPaid = this.regularPayoutState?.[targetMonthKey]?.[`${emp.id}_${day}`] === true;
-              return sum + (isPaid ? salaryPerSchedule : 0);
-            }, 0);
-
-            let baseSalary = 0;
-            let specialPayout = 0;
+            const salaryRow = salaryByEmployee.get(emp.id);
+            const baseSalary = salaryRow?.baseSalary || 0;
+            const specialPayout = salaryRow?.specialPayout || 0;
             let adjustmentVal = 0;
 
             // 3. Resolve core fields (Salary, Special, Adjustments)
-            adjustmentVal = this.adjustments
-              .filter(a => a.employee_id === emp.id)
-              .reduce((sum, a) => sum + (Number(a.amount) || 0), 0);
-
-            if (record) {
-              const recordedBasicPaid = Number(record.basic_paid) || 0;
-              baseSalary = emp.employment_status === 'Active'
-                ? (recordedBasicPaid || Number(record.salary) || monthlySalary)
-                : (recordedBasicPaid || paidSalaryFromState);
-              specialPayout = Number(record.special_payouts) || 0;
-            } else {
-              baseSalary = emp.employment_status === 'Active' ? monthlySalary : paidSalaryFromState;
-              
-              // Only count special payouts if they are checked/marked as paid in special_payout_state for this month key
-              specialPayout = this.specialSchedules
-                .filter(s => s.employeeId === emp.id)
-                .reduce((sum, s) => {
-                  const isPaid = this.specialPayoutState?.[targetMonthKey]?.[`${emp.id}_${s.day}`] || false;
-                  return sum + (isPaid ? (Number(s.value) || 0) : 0);
-                }, 0);
-            }
+            adjustmentVal = adjustmentResult.byEmployee.get(emp.id) || 0;
 
             const totalEmpCost = baseSalary + specialPayout + adjustmentVal;
             grandTotalCost += totalEmpCost;
@@ -1151,43 +1137,14 @@
           }
 
           container.innerHTML = html;
-          return grandTotalOpex;
+          const monthKey = `${this.currentDate.getFullYear()}-${String(this.currentDate.getMonth() + 1).padStart(2, '0')}`;
+          const sharedCategories = window.BKFinancialCalculators.calculateJournalMonth(accounts, journalEntries, monthKey);
+          return ['OPEX - Admin', 'OPEX - Marketing & Sales', 'OPEX - Operations Support']
+            .reduce((sum, category) => sum + (sharedCategories[category]?.total || 0), 0) / 100;
         },
 
         resolvePlanForMonth(s, targetMonthStr) {
-          const subBills = this.billingRecords.filter(b => b.subscription_id === s.id);
-          
-          // Check for exact override in the target month
-          const exactBill = subBills.find(b => b.billing_month === targetMonthStr);
-          if (exactBill && exactBill.mode !== 'unsubscribed') {
-            return { mode: exactBill.mode, cost_centavos: exactBill.cost_centavos };
-          }
-
-          // Pay-as-you-go is strictly month-to-month and does NOT propagate forward if no override exists
-          if (s.mode === 'pay_as_you_go') {
-            const subStartMonth = (s.subscribed_date || '').slice(0, 7);
-            const targetMonth = targetMonthStr.slice(0, 7);
-            if (subStartMonth === targetMonth) {
-              return { mode: 'pay_as_you_go', cost_centavos: s.cost_centavos };
-            }
-            return { mode: 'pay_as_you_go', cost_centavos: 0 };
-          }
-
-          // Find all past billing overrides on or before the target month
-          const pastBills = subBills.filter(b => b.billing_month <= targetMonthStr && b.mode !== 'unsubscribed');
-          if (pastBills.length > 0) {
-            pastBills.sort((a, b) => b.billing_month.localeCompare(a.billing_month));
-            const latestBill = pastBills[0];
-            
-            if (latestBill.mode === 'pay_as_you_go') {
-              return { mode: 'pay_as_you_go', cost_centavos: 0 };
-            }
-            
-            return { mode: latestBill.mode, cost_centavos: latestBill.cost_centavos };
-          }
-
-          // Default to base settings
-          return { mode: s.mode, cost_centavos: s.cost_centavos };
+          return window.BKFinancialCalculators.resolvePlanForMonth(s, targetMonthStr, this.billingRecords);
         },
 
         toggleSubSort(col) {
@@ -1418,6 +1375,12 @@
               </tr>
             `;
           });
+
+          totalCostCentavos = window.BKFinancialCalculators.calculateSoftwareMonth(
+            this.subscriptions,
+            this.billingRecords,
+            `${year}-${String(month).padStart(2, '0')}`
+          ).total;
 
           // 2. Render Full Manager List
           let totalManagerCost = 0;

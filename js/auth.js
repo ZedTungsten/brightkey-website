@@ -36,8 +36,6 @@
       { key: 'HR:Payout Tracker', label: 'Payout Tracker', routes: ['/dashboard/payout-tracker'] }
     ],
     Finance: [
-      { key: 'Finance:Bookkeeping', label: 'Bookkeeping', routes: ['/dashboard/bookkeeping'] },
-      { key: 'Finance:Payment Accounts', label: 'Payment Accounts', routes: ['/dashboard/payment-accounts'] },
       { key: 'Finance:General Journal', label: 'General Journal', routes: ['/dashboard/general-journal'] },
       { key: 'Finance:Statements', label: 'Statements', routes: ['/dashboard/statements'] },
       { key: 'Finance:Expenses', label: 'Expenses', routes: ['/dashboard/expenses'] },

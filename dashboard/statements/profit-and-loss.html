@@ -281,6 +281,7 @@
   <script src="../../js/auth.js"></script>
   <script src="../../js/sidebar.js"></script>
   <script src="../../js/main.js"></script>
+  <script src="/dashboard/js/financial-calculators.js"></script>
 
   <script>
     (function() {
@@ -468,7 +469,7 @@
               }
 
               assignedDoors.push({
-                completed: !!door.completed,
+                completed: Boolean(door.completed) || ['done', 'completed', 'finished'].includes(String(b.status || '').toLowerCase()),
                 roles: roles,
                 skus: doorSkus,
                 completed_at: door.completed_at || b.updated_at || b.created_at || b.scheduled_date,
@@ -555,161 +556,52 @@
 
           });
 
-          // Recognize supplier cost from the same inventory cost ledger used by Expenses > COGS.
-          (this.inventoryCostLedger || []).forEach(entry => {
-            const mKey = String(entry.recognized_at || '').slice(0, 7);
-            if (!monthlyValues[mKey] || this.lockedStatements.some(ls => ls.month === mKey)) return;
-            monthlyValues[mKey].supplierCost += Number(entry.total_cost_centavos) || 0;
-          });
-
-          // Process Supplier Cost Adjustments
-          (this.supplierCostAdjustments || []).forEach(adj => {
-            if (!adj.adjustment_date) return;
-            const mKey = adj.adjustment_date.slice(0, 7);
-            if (!monthlyValues[mKey]) return;
-            if (this.lockedStatements.some(ls => ls.month === mKey)) return;
-            monthlyValues[mKey].supplierCost += adj.amount_cents;
+          this.months.forEach(month => {
+            if (this.lockedStatements.some(statement => statement.month === month.key)) return;
+            monthlyValues[month.key].supplierCost = window.BKFinancialCalculators.calculateSupplierCostMonth(
+              this.inventoryCostLedger,
+              this.supplierCostAdjustments,
+              month.key
+            ).total;
           });
 
           // 2. Installations
           this.months.forEach(m => {
             const mKey = m.key;
             if (this.lockedStatements.some(ls => ls.month === mKey)) return;
-            const monthBookings = this.bookings.filter(b => {
-              if (!b.scheduled_date) return false;
-              const d = new Date(b.scheduled_date);
-              return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` === mKey;
+            const payoutRows = window.BKInstallerPayouts.calculateMonth({
+              employees: this.employees,
+              bookings: this.bookings,
+              payoutSettings: this.payoutSettings,
+              payoutSchedules: this.trackerConfig.payoutSchedules || [15, 30],
+              monthKey: mKey,
+              resolveAssignedDoors: (booking, employeeId) => this.getAssignedDoorsForEmployee(booking, employeeId)
             });
-
-            this.employees.forEach(emp => {
-              const completedJobs = [];
-              let serviceEarnings = 0;
-
-              monthBookings.forEach(b => {
-                const assignmentSkus = String(b.product_skus || '')
-                  .split('|')
-                  .map((sku) => sku.trim().toLowerCase())
-                  .filter(Boolean);
-                const orderNo = String(b.order_no || '').toUpperCase();
-                const isDayOff = assignmentSkus.includes('day off') || orderNo.startsWith('DO-');
-                const isBackjob = assignmentSkus.includes('backjob') || orderNo.startsWith('BJ-');
-                const isOcular = assignmentSkus.includes('ocular');
-                const isRepair = assignmentSkus.includes('repair');
-                if (isDayOff || isBackjob) return;
-                if ((isOcular || isRepair) && (!ocularRepairEffectiveFrom || b.scheduled_date < ocularRepairEffectiveFrom)) return;
-
-                const assignedDoors = this.getAssignedDoorsForEmployee(b, emp.id);
-                assignedDoors.forEach(d => {
-                  if (!d.completed) return;
-                  const roles = isOcular ? ['ocular'] : isRepair ? ['repair'] : d.roles;
-                  completedJobs.push({ roles, scheduled_date: b.scheduled_date });
-                  if (d.roles.includes('service')) {
-                    d.skus.forEach(sku => {
-                      const matchedService = extraServicesList.find(es => es.sku === sku);
-                      if (matchedService) {
-                        serviceEarnings += matchedService.rate;
-                      }
-                    });
-                  }
-                });
-              });
-
-              completedJobs.sort((a, b) => String(a.scheduled_date).localeCompare(String(b.scheduled_date)));
-              let runningCredit = 0;
-              let thresholdEarnings = 0;
-              completedJobs.forEach(job => {
-                let weight = 0;
-                let jobRate = 0;
-                if (job.roles.includes('lead')) { weight = leadWeight; jobRate = leadRateVal; }
-                else if (job.roles.includes('assist')) { weight = assistWeight; jobRate = assistRateVal; }
-                else if (job.roles.includes('ocular')) { weight = ocularWeight; jobRate = ocularRateVal; }
-                else if (job.roles.includes('repair')) { weight = repairWeight; jobRate = repairRateVal; }
-                runningCredit += weight;
-                if (runningCredit > thresholdVal) thresholdEarnings += jobRate;
-              });
-
-              monthlyValues[mKey].installations += ((thresholdEarnings + serviceEarnings) * 100);
-            });
+            monthlyValues[mKey].installations = Math.round(payoutRows.reduce((sum, row) => sum + row.total, 0) * 100);
           });
 
           // 3. Salaries, Specials, Commissions, Adjustments (Matching OPEX logic per employee)
           this.months.forEach(m => {
             const mKey = m.key;
             if (this.lockedStatements.some(ls => ls.month === mKey)) return;
-            const monthBookings = this.bookings.filter(b => {
-              if (!b.scheduled_date) return false;
-              const d = new Date(b.scheduled_date);
-              return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` === mKey;
+            const opexSalaryRows = window.BKOpexSalaries.calculateMonth({
+              employees: this.employees,
+              payslipRecords: this.payslipRecords,
+              payoutSchedules: this.trackerConfig.payoutSchedules || [],
+              specialSchedules: this.trackerConfig.specialSchedules || [],
+              regularPayoutState: this.regularPayoutState,
+              specialPayoutState: this.specialPayoutState,
+              monthKey: mKey
             });
+            const salaryByEmployee = new Map(opexSalaryRows.map(row => [row.employee.id, row]));
+            const adjustments = window.BKFinancialCalculators.calculateEmployeeAdjustmentsMonth(this.adjustmentsList, mKey);
+            const commissions = window.BKFinancialCalculators.calculateCommissionMonth(this.employees, this.commissionAssignments, this.bookings, mKey);
+            monthlyValues[mKey].adjustments = Math.round(adjustments.total * 100);
+            monthlyValues[mKey].commissions = commissions.total;
 
             this.employees.forEach(emp => {
-              const record = this.payslipRecords.find(r => r.employee_id === emp.id && r.payout_month === mKey);
-              const schedules = (this.trackerConfig.payoutSchedules || [15, 30]).map(Number).filter(Number.isFinite);
-              const monthlySalary = Number(emp.salary || emp.monthly_salary) || 0;
-              const salaryPerSchedule = schedules.length ? monthlySalary / schedules.length : 0;
-              const paidSalaryFromState = schedules.reduce((sum, day) => {
-                const isPaid = this.regularPayoutState?.[mKey]?.[`${emp.id}_${day}`] === true;
-                return sum + (isPaid ? salaryPerSchedule : 0);
-              }, 0);
-
-              let baseSalary = 0;
-              let specialPayout = 0;
-              let adjustmentVal = 0;
-
-              // Resolve adjustments for this employee in the month
-              const empAdjs = this.adjustmentsList.filter(a => a.employee_id === emp.id && a.date && a.date.slice(0, 7) === mKey);
-              adjustmentVal = empAdjs.reduce((sum, a) => sum + Math.round((Number(a.amount) || 0) * 100), 0);
-
-              if (record) {
-                const recordedBasicPaid = Number(record.basic_paid) || 0;
-                const resolvedSalary = emp.employment_status === 'Active'
-                  ? (recordedBasicPaid || Number(record.salary) || monthlySalary)
-                  : (recordedBasicPaid || paidSalaryFromState);
-                baseSalary = Math.round(resolvedSalary * 100);
-                specialPayout = Math.round((Number(record.special_payouts) || 0) * 100);
-              } else {
-                baseSalary = Math.round((emp.employment_status === 'Active' ? monthlySalary : paidSalaryFromState) * 100);
-
-                // Resolve checked special payouts for this employee in the month
-                const specialSchedules = this.trackerConfig.specialSchedules || [];
-                specialPayout = specialSchedules
-                  .filter(s => s.employeeId === emp.id)
-                  .reduce((sum, s) => {
-                    const isPaid = this.specialPayoutState?.[mKey]?.[`${emp.id}_${s.day}`] || false;
-                    return sum + (isPaid ? Math.round((Number(s.value) || 0) * 100) : 0);
-                  }, 0);
-              }
-
-              monthlyValues[mKey].salaries += (baseSalary + specialPayout);
-              monthlyValues[mKey].adjustments += adjustmentVal;
-
-              // Resolve commissions for this employee in the month matching COGS page logic exactly
-              let commissionPayoutCents = 0;
-              const employeeCommAssignments = this.commissionAssignments.filter(a => a.employee_id === emp.id);
-              employeeCommAssignments.forEach(a => {
-                const b = this.bookings.find(x => x.id === a.booking_id);
-                if (!b || b.status === 'cancelled') return;
-                if (!b.scheduled_date) return;
-                const bDate = new Date(b.scheduled_date);
-                const bookingMonthKey = `${bDate.getFullYear()}-${String(bDate.getMonth() + 1).padStart(2, '0')}`;
-                if (bookingMonthKey !== mKey) return;
-
-                let doors = [];
-                if (b.doors) {
-                  if (typeof b.doors === 'string') {
-                    try { doors = JSON.parse(b.doors); } catch(_) {}
-                  } else if (Array.isArray(b.doors)) {
-                    doors = b.doors;
-                  }
-                }
-
-                const door = doors[a.product_index];
-                const isDone = (door && door.completed) || ['done', 'completed', 'finished'].includes(b.status);
-                if (!isDone) return;
-
-                commissionPayoutCents += (Number(a.amount) || 0);
-              });
-              monthlyValues[mKey].commissions += commissionPayoutCents;
+              const salaryRow = salaryByEmployee.get(emp.id);
+              monthlyValues[mKey].salaries += Math.round((salaryRow?.total || 0) * 100);
             });
           });
 
@@ -717,105 +609,41 @@
           this.months.forEach(m => {
             const mKey = m.key;
             if (this.lockedStatements.some(ls => ls.month === mKey)) return;
-            const seenRefIds = new Set();
-            let baseSum = 0;
-            let tip1Sum = 0;
-            let tip2Sum = 0;
-            let tollSum = 0;
-
-            this.dispatchedTxs.forEach(tx => {
-              if (!tx.timestamp_dispatched) return;
-              const txMonthKey = tx.timestamp_dispatched.slice(0, 7);
-              if (txMonthKey !== mKey) return;
-
-              if (!tx.reference_id || seenRefIds.has(tx.reference_id)) return;
-              seenRefIds.add(tx.reference_id);
-
-              const fees = this.deliveryFeeMap[tx.reference_id] || {};
-              const base = fees.base_fee || 0;
-              const tip1 = fees.tip_1 || 0;
-              const tip2 = fees.tip_2 || 0;
-              const toll = fees.toll || 0;
-
-              baseSum += base;
-              tip1Sum += tip1;
-              tip2Sum += tip2;
-              tollSum += toll;
-            });
-
-            monthlyValues[mKey].shipping = baseSum + tip1Sum + tip2Sum + tollSum;
+            monthlyValues[mKey].shipping = window.BKFinancialCalculators.calculateShippingMonth(
+              this.dispatchedTxs,
+              Object.values(this.deliveryFeeMap),
+              mKey
+            ).total;
           });
 
           // 5. General Ledger Mapping
-          const accountCategoryMap = {};
-          this.journalAccounts.forEach(a => {
-            accountCategoryMap[a.name] = a.category;
-          });
-
-          this.generalJournal.forEach(entry => {
-            if (!entry.date) return;
-            const mKey = entry.date.slice(0, 7);
-            if (!monthlyValues[mKey]) return;
-            if (this.lockedStatements.some(ls => ls.month === mKey)) return;
-
-            const category = accountCategoryMap[entry.account];
-            const debitVal = Math.round((parseFloat(entry.debit) || 0) * 100);
-            if (debitVal <= 0) return;
-
-            if (category === 'COGS') {
-              if (entry.account.toLowerCase() === 'gas allowance') {
-                monthlyValues[mKey].gasAllowance += debitVal;
-              } else if (entry.account.toLowerCase() === 'packaging supplies') {
-                monthlyValues[mKey].packagingSupplies += debitVal;
-              } else {
-                monthlyValues[mKey].otherCogs[entry.account] = (monthlyValues[mKey].otherCogs[entry.account] || 0) + debitVal;
-              }
-            } else if (category === 'OPEX - Admin') {
-              monthlyValues[mKey].admin.total += debitVal;
-              monthlyValues[mKey].admin.details[entry.account] = (monthlyValues[mKey].admin.details[entry.account] || 0) + debitVal;
-            } else if (category === 'OPEX - Marketing & Sales') {
-              monthlyValues[mKey].marketingSales.total += debitVal;
-              monthlyValues[mKey].marketingSales.details[entry.account] = (monthlyValues[mKey].marketingSales.details[entry.account] || 0) + debitVal;
-            } else if (category === 'OPEX - Operations Support') {
-              monthlyValues[mKey].operationsSupport.total += debitVal;
-              monthlyValues[mKey].operationsSupport.details[entry.account] = (monthlyValues[mKey].operationsSupport.details[entry.account] || 0) + debitVal;
-            }
+          this.months.forEach(month => {
+            if (this.lockedStatements.some(statement => statement.month === month.key)) return;
+            const categories = window.BKFinancialCalculators.calculateJournalMonth(this.journalAccounts, this.generalJournal, month.key);
+            const cogs = categories.COGS || { accounts: {} };
+            Object.entries(cogs.accounts).forEach(([account, amount]) => {
+              if (account.toLowerCase() === 'gas allowance') monthlyValues[month.key].gasAllowance += amount;
+              else if (account.toLowerCase() === 'packaging supplies') monthlyValues[month.key].packagingSupplies += amount;
+              else monthlyValues[month.key].otherCogs[account] = amount;
+            });
+            const assignOpex = (category, target) => {
+              const result = categories[category] || { total: 0, accounts: {} };
+              target.total = result.total;
+              target.details = { ...result.accounts };
+            };
+            assignOpex('OPEX - Admin', monthlyValues[month.key].admin);
+            assignOpex('OPEX - Marketing & Sales', monthlyValues[month.key].marketingSales);
+            assignOpex('OPEX - Operations Support', monthlyValues[month.key].operationsSupport);
           });
 
           // 6. Software & Apps Subscriptions
           this.months.forEach(m => {
             const mKey = m.key;
-            const currentMonthDateStr = `${mKey}-01`;
-            const currentMonthLastDayStr = `${mKey}-${new Date(m.year, m.month, 0).getDate()}`;
-
-            const activeInMonthSubs = this.softwareSubscriptions.filter(s => {
-              const subDate = s.subscribed_date || '1970-01-01';
-              const unsubDate = s.unsubscribed_date;
-              const isSubscribed = subDate <= currentMonthLastDayStr;
-              const isNotUnsubscribed = !unsubDate || unsubDate >= currentMonthDateStr;
-              const hasMonthBilling = this.softwareBilling.some(b =>
-                b.subscription_id === s.id &&
-                b.billing_month === currentMonthDateStr &&
-                b.mode !== 'unsubscribed'
-              );
-              return (isSubscribed && isNotUnsubscribed) || hasMonthBilling;
-            });
-
-            activeInMonthSubs.forEach(s => {
-              const plan = this.resolvePlanForMonth(s, currentMonthDateStr);
-              const mode = plan.mode;
-              const costCentavos = plan.cost_centavos;
-
-              if (mode === 'unsubscribed') return;
-
-              let resolvedCostCentavos = 0;
-              if (mode === 'pay_as_you_go' || mode === 'monthly') {
-                resolvedCostCentavos = costCentavos;
-              } else if (mode === 'annual') {
-                resolvedCostCentavos = Math.round(costCentavos / 12);
-              }
-              monthlyValues[mKey].softwareApps += resolvedCostCentavos;
-            });
+            monthlyValues[mKey].softwareApps = window.BKFinancialCalculators.calculateSoftwareMonth(
+              this.softwareSubscriptions,
+              this.softwareBilling,
+              mKey
+            ).total;
           });
 
           // Merge locked statements
@@ -946,6 +774,9 @@
               const endRange = sortedUnlocked[sortedUnlocked.length - 1].end;
               const startMonthKey = sortedUnlocked[0].key;
               const endMonthKey = sortedUnlocked[sortedUnlocked.length - 1].key;
+              const rolloverStartDate = new Date(`${startRange}T00:00:00`);
+              rolloverStartDate.setMonth(rolloverStartDate.getMonth() - 1);
+              const bookingStartRange = `${rolloverStartDate.getFullYear()}-${String(rolloverStartDate.getMonth() + 1).padStart(2, '0')}-01`;
 
               const [
                 inventoryCostLedgerRes,
@@ -975,13 +806,13 @@
                   .order('recognized_at', { ascending: false })
                   .limit(sortedUnlocked.length * 5000),
                 sb.from('installation_bookings')
-                  .select('id, created_at, scheduled_date, order_no, grand_total, deposit_amount, balance_due, deduction_labels, deduction_values, status, product_skus, product_qtys, doors, installers, installer_id, products')
+                  .select('id, created_at, updated_at, scheduled_date, order_no, grand_total, deposit_amount, balance_due, deduction_labels, deduction_values, status, product_skus, product_qtys, doors, installers, installer_id, products')
                   .eq('company_id', this.companyId)
                   .neq('status', 'cancelled')
-                  .gte('scheduled_date', startRange)
+                  .gte('scheduled_date', bookingStartRange)
                   .lte('scheduled_date', endRange),
                 sb.from('employees')
-                  .select('id, email, first_name, last_name, salary, employment_status')
+                  .select('id, email, first_name, last_name, salary, employment_status, date_hired')
                   .eq('company_id', this.companyId),
                 sb.from('payslip_records')
                   .select('employee_id, payout_month, salary, basic_paid, commissions, special_payouts, total_payout, adjustments, adjustments_list')

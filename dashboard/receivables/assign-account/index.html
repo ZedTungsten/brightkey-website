@@ -6,8 +6,8 @@
   <title>Assign Account — Brightkey Finance</title>
   <link rel="preconnect" href="https://fonts.bunny.net" />
   <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="../../css/style.css" />
-  <link rel="icon" type="image/svg+xml" href="../../assets/favicon.svg?v=2" />
+  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg?v=2" />
   <style>
     /* ── Tab Container Bar ── */
     .drawer-tabs {
@@ -110,7 +110,7 @@
       <div style="padding: 2rem; max-width: 1000px; width: 100%; margin: 0 auto; box-sizing: border-box;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
           <div>
-            <h2 style="font-size: 1.1rem; font-weight: 800; margin: 0;">Assign General Ledger Accounts to Employees</h2>
+            <h2 style="font-size: 1.1rem; font-weight: 800; margin: 0;">Receivable Accounts</h2>
             <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">Map Due From general ledger accounts to staff members for payroll and payout tracking.</p>
           </div>
           <button onclick="App.saveAssignments()" class="btn btn-cyan btn-sm">Save Assignments</button>
@@ -124,7 +124,31 @@
                 <th>Assigned Employee</th>
               </tr>
             </thead>
-            <tbody id="assign-table-body">
+            <tbody id="receivable-assign-table-body">
+              <tr>
+                <td colspan="2" style="text-align: center; padding: 3rem; color: var(--text-muted); font-style: italic;">Loading ledger accounts and employees...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; margin: 2.5rem 0 1.5rem;">
+          <div>
+            <h2 style="font-size: 1.1rem; font-weight: 800; margin: 0;">Payable Accounts</h2>
+            <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">Map Due To general ledger accounts to staff members for payroll and payout tracking.</p>
+          </div>
+          <button onclick="App.saveAssignments()" class="btn btn-cyan btn-sm">Save Assignments</button>
+        </div>
+
+        <div class="excel-container">
+          <table class="excel-table">
+            <thead>
+              <tr>
+                <th>General Ledger Account</th>
+                <th>Assigned Employee</th>
+              </tr>
+            </thead>
+            <tbody id="payable-assign-table-body">
               <tr>
                 <td colspan="2" style="text-align: center; padding: 3rem; color: var(--text-muted); font-style: italic;">Loading ledger accounts and employees...</td>
               </tr>
@@ -168,7 +192,8 @@
     window.App = {
       tenantId: null,
       companyId: null,
-      accounts: [],
+      receivableAccounts: [],
+      payableAccounts: [],
       employees: [],
       assignments: {},
 
@@ -197,15 +222,16 @@
           if (empErr) throw empErr;
           this.employees = emps || [];
 
-          // Fetch accounts like due from owner or due from staff
-          const { data: accs, error: accErr } = await getSb()
-            .from('journal_accounts')
-            .select('id, name')
-            .eq('company_id', this.companyId)
-            .or('name.ilike.%due from owner%,name.ilike.%due from staff%')
-            .order('name');
-          if (accErr) throw accErr;
-          this.accounts = accs || [];
+          const [receivableResult, payableResult] = await Promise.all([
+            getSb().from('journal_accounts').select('id, name').eq('company_id', this.companyId)
+              .or('name.ilike.%due from owner%,name.ilike.%due from staff%').order('name'),
+            getSb().from('journal_accounts').select('id, name').eq('company_id', this.companyId)
+              .or('name.ilike.%due to owner%,name.ilike.%due to staff%').order('name')
+          ]);
+          if (receivableResult.error) throw receivableResult.error;
+          if (payableResult.error) throw payableResult.error;
+          this.receivableAccounts = receivableResult.data || [];
+          this.payableAccounts = payableResult.data || [];
 
           // Fetch saved assignments config
           const { data: config } = await getSb()
@@ -219,18 +245,26 @@
           this.render();
         } catch (err) {
           console.error(err);
-          document.getElementById('assign-table-body').innerHTML = `<tr><td colspan="2" style="text-align:center;color:var(--danger);padding:2rem;">Failed to load: ${escapeHtml(err.message)}</td></tr>`;
+          const friendlyMessage = 'Accounts could not be loaded. Please refresh and try again.';
+          ['receivable-assign-table-body', 'payable-assign-table-body'].forEach(id => {
+            document.getElementById(id).innerHTML = `<tr><td colspan="2" style="text-align:center;color:var(--danger);padding:2rem;">${friendlyMessage}</td></tr>`;
+          });
         }
       },
 
       render() {
-        const tbody = document.getElementById('assign-table-body');
-        if (this.accounts.length === 0) {
-          tbody.innerHTML = `<tr><td colspan="2" style="text-align: center; padding: 3rem; color: var(--text-muted); font-style: italic;">No matching "Due from Owner" or "Due from Staff" accounts found in General Ledger.</td></tr>`;
+        this.renderTable('receivable-assign-table-body', this.receivableAccounts, 'No matching "Due from Owner" or "Due from Staff" accounts found in General Ledger.');
+        this.renderTable('payable-assign-table-body', this.payableAccounts, 'No matching "Due to Owner" or "Due to Staff" accounts found in General Ledger.');
+      },
+
+      renderTable(tbodyId, accounts, emptyMessage) {
+        const tbody = document.getElementById(tbodyId);
+        if (accounts.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="2" style="text-align: center; padding: 3rem; color: var(--text-muted); font-style: italic;">${emptyMessage}</td></tr>`;
           return;
         }
 
-        tbody.innerHTML = this.accounts.map(acc => {
+        tbody.innerHTML = accounts.map(acc => {
           const selectedEmpId = this.assignments[acc.id] || '';
           
           const options = this.employees.map(emp => {
@@ -254,7 +288,7 @@
 
       async saveAssignments() {
         try {
-          // Fetch existing assignments first to avoid losing assignments from other pages (payables vs receivables)
+          // Merge both tables with the existing configuration so unrelated assignments remain intact.
           const { data: existing } = await getSb()
             .from('global_settings')
             .select('value')
@@ -287,7 +321,7 @@
           showToast('Assignments saved successfully.');
         } catch (e) {
           console.error(e);
-          showToast('Failed to save assignments: ' + e.message, true);
+          showToast('Assignments could not be saved. Please try again.', true);
         }
       }
     };
