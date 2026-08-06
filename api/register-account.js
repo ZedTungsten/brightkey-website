@@ -90,7 +90,7 @@ export default async function handler(req, res) {
     }
 
     const invitedRole = String(invitation.role || '');
-    const memberRole = invitedRole === 'admin' ? 'admin' : null;
+    const memberRole = ['owner', 'admin'].includes(invitedRole) ? invitedRole : null;
     const memberModules = invitedRole.startsWith('access:')
       ? invitedRole.slice(7).split(',').map(value => value.trim()).filter(Boolean)
       : [];

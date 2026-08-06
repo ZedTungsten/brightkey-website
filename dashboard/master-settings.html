@@ -185,6 +185,7 @@
             <a class="tab-btn active" href="/dashboard/master-settings/tiers" id="tab-btn-pricing" style="background: none; border: none; border-bottom: 2px solid var(--cyan); padding: 0.5rem 0.25rem; font-weight: 700; color: var(--text-primary); cursor: pointer; outline: none; text-decoration:none;">Pricing Tiers</a>
             <a class="tab-btn" href="/dashboard/master-settings/tenants" id="tab-btn-tenants" style="background: none; border: none; border-bottom: 2px solid transparent; padding: 0.5rem 0.25rem; font-weight: 600; color: var(--text-secondary); cursor: pointer; outline: none; text-decoration:none;">Tenants</a>
             <a class="tab-btn" href="/dashboard/master-settings/payment" id="tab-btn-payment" style="background: none; border: none; border-bottom: 2px solid transparent; padding: 0.5rem 0.25rem; font-weight: 600; color: var(--text-secondary); cursor: pointer; outline: none; text-decoration:none;">Payment</a>
+            <a class="tab-btn" href="/dashboard/master-settings/email" id="tab-btn-email" style="background: none; border: none; border-bottom: 2px solid transparent; padding: 0.5rem 0.25rem; font-weight: 600; color: var(--text-secondary); cursor: pointer; outline: none; text-decoration:none;">Email</a>
           </div>
 
           <div class="panel-header">
@@ -233,7 +234,6 @@
             <div class="card-table" style="margin-bottom: 1.5rem;">
               <div style="padding: 0.75rem 1rem; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: var(--bg-elevated);">
                 <div style="font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted);">Registered Tenants</div>
-                <div style="font-size: 0.75rem; color: var(--text-muted);">Stored at <code style="background:var(--bg-base);padding:0.1rem 0.3rem;border-radius:3px;">brightkey-assets/companies/{id}/</code></div>
               </div>
               <div class="tenant-table-responsive" role="region" aria-label="Registered tenants table" tabindex="0">
               <table>
@@ -281,6 +281,30 @@
               </section>
             </div>
             <div style="display:flex;justify-content:flex-end;"><button class="btn btn-primary" id="btn-save-platform-payment" type="button" onclick="savePlatformPayment()">Save Payment Settings</button></div>
+          </div>
+
+          <div class="table-scroll" id="email-section" style="display:none;">
+            <section class="payment-card" style="max-width:760px;width:100%;">
+              <h3>Resend Email Integration</h3>
+              <p>Used to send the Create Account email immediately to newly signed-up tenant owners.</p>
+              <div class="form-group">
+                <label class="form-label" for="platform-email-sender-name">Sender Name</label>
+                <input class="form-input" id="platform-email-sender-name" type="text" placeholder="e.g. BrightKey Solutions" autocomplete="organization" maxlength="120" required>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="platform-email-api-key">Resend API Key</label>
+                <div class="payment-input">
+                  <input class="form-input" id="platform-email-api-key" type="password" placeholder="re_..." autocomplete="new-password" maxlength="500" required>
+                  <button class="payment-key-toggle" type="button" onclick="togglePlatformEmailKey()" aria-label="Show or hide Resend API key"><svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"></path><circle cx="12" cy="12" r="3"></circle></svg></button>
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="platform-email-address">Integration Email</label>
+                <input class="form-input" id="platform-email-address" type="email" placeholder="e.g. onboarding@brightkeysolutions.com" autocomplete="email" maxlength="180" required>
+                <div class="form-hint">Use an address verified in the connected Resend account.</div>
+              </div>
+              <div style="display:flex;justify-content:flex-end;"><button class="btn btn-primary" id="btn-save-platform-email" type="button" onclick="savePlatformEmail()">Save Email Settings</button></div>
+            </section>
           </div>
 
         </main>
@@ -340,7 +364,7 @@
 
           <div class="form-group" style="flex-direction: row; align-items: center; gap: 0.5rem; margin-top: 0.5rem;">
             <input type="checkbox" id="tier-visible" style="width: auto; cursor: pointer;" checked />
-            <label class="form-label" for="tier-visible" style="cursor: pointer; margin: 0; text-transform: none; letter-spacing: normal;">Visible on Pricing Page</label>
+            <label class="form-label" for="tier-visible" style="cursor: pointer; margin: 0; text-transform: none; letter-spacing: normal;">Visible on Pricing Page <span style="color: var(--text-muted); font-weight: 400;">(maximum 5 active plans)</span></label>
           </div>
         </div>
         <div class="modal-footer">
@@ -378,6 +402,7 @@
           <div class="form-group"><label class="form-label">Storage Limit</label><div class="form-input" id="tenant-storage-limit-display" style="background:var(--bg-elevated);color:var(--text-muted);cursor:not-allowed;">—</div><div class="form-hint">Controlled by the assigned pricing plan.</div></div>
         </div>
         <div class="modal-footer">
+          <button type="button" class="btn" id="btn-delete-tenant" onclick="requestTenantDelete()" style="margin-right:auto;background:var(--danger);border-color:var(--danger);color:#fff;">Delete Tenant</button>
           <button type="button" class="btn btn-outline" onclick="closeTenantModal()">Cancel</button>
           <button type="submit" class="btn btn-primary" id="btn-save-tenant">Save</button>
         </div>
@@ -484,18 +509,13 @@
     };
 
     document.addEventListener('DOMContentLoaded', async () => {
-      // 1. Authenticate and enforce gate check: Only johnzeustaller@gmail.com can access this page
-      const authInfo = await BKAuth.checkRoleGate([], '/admin');
+      // Platform administration is independent from tenant owner/admin membership.
+      const authInfo = await BKAuth.checkPlatformOwnerGate('/admin');
       if (!authInfo) return;
-
-      if (authInfo.user.email !== 'johnzeustaller@gmail.com') {
-        window.location.href = '/dashboard';
-        return;
-      }
 
       sb = BKAuth.sb;
       const routeTab = window.location.pathname.replace(/\/+$/, '').split('/').pop();
-      const initialTab = routeTab === 'tenants' ? 'tenants' : routeTab === 'payment' ? 'payment' : 'pricing';
+      const initialTab = ['tenants', 'payment', 'email'].includes(routeTab) ? routeTab : 'pricing';
       switchTab(initialTab);
       document.body.style.display = 'block';
 
@@ -589,9 +609,10 @@
       const pricingBtn = document.getElementById('tab-btn-pricing');
       const tenantsBtn = document.getElementById('tab-btn-tenants');
       const paymentBtn = document.getElementById('tab-btn-payment');
+      const emailBtn = document.getElementById('tab-btn-email');
       
       // Reset active styles
-      [pricingBtn, tenantsBtn, paymentBtn].forEach(btn => {
+      [pricingBtn, tenantsBtn, paymentBtn, emailBtn].forEach(btn => {
         if (btn) {
           btn.style.borderBottomColor = 'transparent';
           btn.style.fontWeight = '600';
@@ -603,6 +624,7 @@
       document.getElementById('pricing-section').style.display = 'none';
       document.getElementById('tenants-section').style.display = 'none';
       document.getElementById('payment-section').style.display = 'none';
+      document.getElementById('email-section').style.display = 'none';
       
       // Hide all header buttons
       document.getElementById('btn-add-tier').style.display = 'none';
@@ -628,6 +650,10 @@
         document.getElementById('payment-section').style.display = 'flex';
         document.getElementById('main-panel-title').textContent = 'Tenant Plan Subscription Payments';
         loadPlatformPayment();
+      } else if (tab === 'email') {
+        document.getElementById('email-section').style.display = 'flex';
+        document.getElementById('main-panel-title').textContent = 'Tenant Signup Email';
+        loadPlatformEmail();
       }
     }
 
@@ -687,6 +713,70 @@
         button.disabled = false;
         button.textContent = 'Save Payment Settings';
       }
+    }
+
+    async function platformEmailRequest(method, body) {
+      const { data: sessionData } = await sb.auth.getSession();
+      const token = sessionData?.session?.access_token;
+      if (!token) throw new Error('Your session has expired.');
+      const response = await fetch('/api/platform-email-integration', {
+        method,
+        headers: { Authorization: `Bearer ${token}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
+        body: body ? JSON.stringify(body) : undefined
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok && payload.diagnostic) console.error('Email API diagnostic:', payload.diagnostic);
+      if (!response.ok) throw new Error(payload.error || 'Email settings request failed.');
+      return payload;
+    }
+
+    async function loadPlatformEmail() {
+      try {
+        const payload = await platformEmailRequest('GET');
+        const integration = payload.integration || {};
+        document.getElementById('platform-email-sender-name').value = integration.sender_name || '';
+        document.getElementById('platform-email-api-key').value = integration.api_key || '';
+        document.getElementById('platform-email-address').value = integration.integration_email || '';
+      } catch (error) {
+        console.error('Platform email load failed:', error);
+        showToast(error.message || 'Email settings could not be loaded.', true);
+      }
+    }
+
+    async function savePlatformEmail() {
+      const button = document.getElementById('btn-save-platform-email');
+      const senderInput = document.getElementById('platform-email-sender-name');
+      const apiKeyInput = document.getElementById('platform-email-api-key');
+      const emailInput = document.getElementById('platform-email-address');
+      const invalidInput = [senderInput, apiKeyInput, emailInput].find(input => !input.checkValidity());
+      if (invalidInput) {
+        invalidInput.style.borderColor = 'var(--danger)';
+        invalidInput.focus();
+        showToast('Complete all tenant signup email settings.', true);
+        return;
+      }
+      [senderInput, apiKeyInput, emailInput].forEach(input => { input.style.borderColor = ''; });
+      button.disabled = true;
+      button.textContent = 'Saving...';
+      try {
+        await platformEmailRequest('PUT', {
+          sender_name: senderInput.value.trim(),
+          api_key: apiKeyInput.value.trim(),
+          integration_email: emailInput.value.trim()
+        });
+        showToast('Tenant signup email settings saved.');
+      } catch (error) {
+        console.error('Platform email save failed:', error);
+        showToast(error.message || 'Email settings could not be saved.', true);
+      } finally {
+        button.disabled = false;
+        button.textContent = 'Save Email Settings';
+      }
+    }
+
+    function togglePlatformEmailKey() {
+      const input = document.getElementById('platform-email-api-key');
+      input.type = input.type === 'password' ? 'text' : 'password';
     }
 
     /* --- Tenants, Businesses and Features CRUD Operations --- */
@@ -997,7 +1087,7 @@
 
         const formatStorage = (bytes) => {
           const mb = bytes / (1024 * 1024);
-          return mb >= 1024 ? `${(mb / 1024).toFixed(3)} GB` : `${mb.toFixed(2)} MB`;
+          return mb >= 1024 ? `${(mb / 1024).toFixed(2)} GB` : `${mb.toFixed(2)} MB`;
         };
 
         el.textContent = '';
@@ -1027,23 +1117,25 @@
       if (!tbody) return;
       tbody.innerHTML = '<tr><td colspan="13" style="text-align:center;color:var(--text-muted);padding:2rem;">Loading...</td></tr>';
       try {
-        const { data: tenants, error: tErr } = await sb.from('tenants')
-          .select('id,owner_email,owner_first_name,owner_last_name,mobile_number,street_address,city,province,country,pricing_tier_id,storage_limit_mb,created_at')
-          .order('created_at')
-          .limit(100);
-        if (tErr) throw tErr;
+        const { data: sessionData } = await sb.auth.getSession();
+        const token = sessionData?.session?.access_token;
+        if (!token) throw new Error('Your session has expired.');
+        const response = await fetch('/api/platform-tenants', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          if (payload.diagnostic) console.error('Platform tenant API diagnostic:', payload.diagnostic);
+          throw new Error(payload.error || 'Tenant records could not be loaded.');
+        }
+        const tenants = payload.tenants || [];
         if (!tenants || tenants.length === 0) {
           tbody.innerHTML = '<tr><td colspan="13" style="text-align:center;color:var(--text-muted);padding:2rem;">No tenants found.</td></tr>';
           return;
         }
 
-        const tenantIds = tenants.map(tenant => tenant.id);
-        const [{ data: companies, error: companyError }, { data: plans, error: planError }] = await Promise.all([
-          sb.from('companies').select('id,tenant_id,name,subdomain').in('tenant_id', tenantIds).limit(100),
-          sb.from('pricing_tiers').select('id,name,user_limit,storage_limit_gb').order('price_php').limit(50)
-        ]);
-        if (companyError) throw companyError;
-        if (planError) throw planError;
+        const companies = payload.companies || [];
+        const plans = payload.plans || [];
 
         const companyMap = {};
         (companies || []).forEach(c => { companyMap[c.tenant_id] = c; });
@@ -1134,7 +1226,7 @@
       const display = document.getElementById('tenant-storage-limit-display');
       const storageGb = Number(plan?.storage_limit_gb);
       display.textContent = Number.isFinite(storageGb) && storageGb > 0
-        ? `${storageGb.toLocaleString('en-PH', { maximumFractionDigits: 2 })} GB`
+        ? `${storageGb.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} GB`
         : 'No plan storage assigned';
     };
 
@@ -1142,6 +1234,50 @@
       document.getElementById('tenant-modal').classList.remove('open');
       document.getElementById('tenant-form').reset();
     };
+
+    window.requestTenantDelete = function() {
+      const tenantId = document.getElementById('tenant-edit-id').value;
+      const tenant = tenantRows.find(row => row.id === tenantId);
+      if (!tenant) return;
+      const label = tenant.company?.name || tenant.owner_email || 'this tenant';
+      showConfirmModal(
+        `Permanently delete ${label}? Tenant ID: ${tenantId}. This removes the tenant workspace and its tenant-owned records. This action cannot be undone.`,
+        () => deleteTenant(tenantId)
+      );
+    };
+
+    async function deleteTenant(tenantId) {
+      const button = document.getElementById('btn-delete-tenant');
+      button.disabled = true;
+      button.textContent = 'Deleting...';
+      try {
+        const { data: sessionData } = await sb.auth.getSession();
+        const token = sessionData?.session?.access_token;
+        if (!token) throw new Error('Your session has expired. Sign in again and retry.');
+        const response = await fetch('/api/platform-tenants', {
+          method: 'DELETE',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ tenant_id: tenantId })
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok && payload.diagnostic) {
+          console.error('Tenant delete diagnostic:', payload.diagnostic);
+        }
+        if (!response.ok) throw new Error(payload.error || 'Tenant could not be deleted.');
+        closeTenantModal();
+        showToast('Tenant deleted.');
+        await loadStorageAlloc();
+      } catch (error) {
+        console.error('Tenant delete failed:', error);
+        showToast(error.message || 'Tenant could not be deleted. Please try again.', true);
+      } finally {
+        button.disabled = false;
+        button.textContent = 'Delete Tenant';
+      }
+    }
 
     window.saveTenant = async function(event) {
       event.preventDefault();
@@ -1215,7 +1351,7 @@
           const isChecked = tier.is_visible !== false ? 'checked' : '';
           const isVisibleToggle = `
             <label class="switch">
-              <input type="checkbox" ${isChecked} onchange="toggleTierVisibility('${tier.id}', this.checked)">
+              <input type="checkbox" ${isChecked} onchange="toggleTierVisibility('${tier.id}', this.checked, this)">
               <span class="slider"></span>
             </label>
           `;
@@ -1294,6 +1430,11 @@
         showToast('Select at least one accessible feature or module.', true);
         return;
       }
+      const visibleTierCount = tiersList.filter(tier => tier.is_visible !== false && tier.id !== editingTierId).length;
+      if (isVisible && visibleTierCount >= 5) {
+        showToast('Only five pricing plans can be active at the same time. Turn off another plan first.', true);
+        return;
+      }
 
       const btn = document.getElementById('btn-submit-tier');
       btn.disabled = true;
@@ -1341,7 +1482,13 @@
       });
     }
 
-    async function toggleTierVisibility(tierId, isVisible) {
+    async function toggleTierVisibility(tierId, isVisible, toggle) {
+      const visibleTierCount = tiersList.filter(tier => tier.is_visible !== false && tier.id !== tierId).length;
+      if (isVisible && visibleTierCount >= 5) {
+        if (toggle) toggle.checked = false;
+        showToast('Only five pricing plans can be active at the same time. Turn off another plan first.', true);
+        return;
+      }
       try {
         const { error } = await sb.from('pricing_tiers')
           .update({ is_visible: isVisible })

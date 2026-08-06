@@ -93,7 +93,7 @@
   async function loadPlans() {
     try {
       const db = window.createSupabaseClient();
-      const params = 'select=id,name,price_php,cycle_days,features&is_visible=eq.true&order=price_php.asc&limit=20';
+      const params = 'select=id,name,price_php,cycle_days,features&is_visible=eq.true&order=price_php.asc&limit=5';
       const plans = await db.select('pricing_tiers', params);
       grid.replaceChildren();
       plans.forEach(plan => grid.appendChild(makePlanCard(plan)));
@@ -188,7 +188,7 @@
       const successCopy = successPanel.querySelector('p');
       if (result.signup_mode === 'free' && result.tenant_registered) {
         successTitle.textContent = 'Business registered';
-        successCopy.textContent = 'Your business has been registered. Brightkey will contact you using the information provided to complete account access.';
+        successCopy.textContent = 'Your workspace is ready. Check your email for the secure Create Account link, then set your password to access the BrightKey dashboard.';
       } else {
         successTitle.textContent = 'Subscription request received';
         successCopy.textContent = 'Our team will review your selected plan and contact you with the available payment options.';

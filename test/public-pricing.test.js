@@ -19,8 +19,11 @@ test('public pricing page ships its root-relative assets and subscription form',
 
 test('pricing browser code loads visible plans and submits to the protected API', () => {
   const source = read('js/pricing.js');
+  const masterSettings = read('dashboard/master-settings.html');
   assert.match(source, /is_visible=eq\.true/);
-  assert.match(source, /limit=20/);
+  assert.match(source, /limit=5/);
+  assert.match(masterSettings, /Only five pricing plans can be active/);
+  assert.match(masterSettings, /visibleTierCount >= 5/);
   assert.match(source, /fetch\('\/api\/subscription-requests'/);
   assert.match(source, /body\.consent|consent:/);
 });
@@ -32,4 +35,21 @@ test('subscription API retains validation, throttling, and server-side plan veri
   assert.match(source, /UUID_PATTERN\.test\(planId\)/);
   assert.match(source, /\.eq\('is_visible', true\)/);
   assert.match(source, /register_subscription_request/);
+  assert.match(source, /String\(error\?\.code \|\| ''\) === '23505'/);
+  assert.match(source, /This email is already registered or has an existing subscription request/);
+  assert.match(source, /company_invitations/);
+  assert.match(source, /role:\s*'owner'/);
+  assert.match(source, />Create Account</);
+  assert.match(source, /account_email_sent:\s*freeSignup/);
+  assert.match(source, /platform_email_integrations/);
+  assert.match(source, /const resendApiKey = platformEmail\.api_key/);
+  assert.doesNotMatch(source, /platformEmail\?\.api_key \|\| process\.env\.RESEND_API_KEY/);
+});
+
+test('subscription registration rejects duplicate normalized emails atomically', () => {
+  const migration = read('database/migrations/20260807_unique_subscription_email.sql');
+  assert.match(migration, /pg_advisory_xact_lock/);
+  assert.match(migration, /LOWER\(TRIM\(owner_email\)\) = v_email/);
+  assert.match(migration, /LOWER\(TRIM\(business_email\)\) = v_email/);
+  assert.match(migration, /ERRCODE = '23505'/);
 });
