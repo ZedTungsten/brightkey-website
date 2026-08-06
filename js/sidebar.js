@@ -349,6 +349,7 @@
           <svg class="dash-nav-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
         </button>
         <div class="dash-nav-children">
+          <a href="/dashboard/logistics-calendar/calendar" class="dash-nav-child" data-role="logistics">Calendar</a>
           <a href="/dashboard/warehouse/inspect" class="dash-nav-child" data-role="logistics" style="display: flex; align-items: center; justify-content: space-between;">
             <span>Warehouse</span>
             <span id="warehouse-badge-dot" style="display: none; width: 6px; height: 6px; border-radius: 50%; background-color: #ef4444;"></span>
@@ -357,7 +358,6 @@
             <span>Ship</span>
             <span id="ship-badge-dot" style="display: none; width: 6px; height: 6px; border-radius: 50%; background-color: #ef4444;"></span>
           </a>
-          <a href="/dashboard/logistics-calendar/calendar" class="dash-nav-child" data-role="logistics">Calendar</a>
           <a href="/dashboard/all-orders" class="dash-nav-child" data-role="logistics">All Orders</a>
           <a href="/dashboard/inventory/summary" class="dash-nav-child" data-role="logistics">Inventory</a>
           <a href="/dashboard/qa-guide" class="dash-nav-child" data-role="logistics">QA Guide</a>
@@ -403,7 +403,7 @@
           <a href="/dashboard/expenses/cogs" class="dash-nav-child" data-role="accounting">Expenses</a>
           <a href="/dashboard/ledgers" class="dash-nav-child" data-role="accounting">Ledgers</a>
           <a href="/dashboard/finance-adjustments" class="dash-nav-child" data-role="accounting">Adjustments</a>
-          <a href="/dashboard/receivables" class="dash-nav-child" data-role="accounting">Receivables</a>
+          <a href="/dashboard/ar-ap" class="dash-nav-child" data-role="accounting">AR/AP</a>
           <a href="/dashboard/payables" class="dash-nav-child" data-role="accounting">Payables</a>
           <a href="/dashboard/payout-tracker/payout/" class="dash-nav-child" data-role="accounting" style="display: flex; justify-content: space-between; align-items: center;">
             <span>Payout Tracker</span>
@@ -687,7 +687,8 @@
       '/dashboard/ledgers': [
         '/dashboard/ledgers'
       ],
-      '/dashboard/receivables': [
+      '/dashboard/ar-ap': [
+        '/dashboard/ar-ap',
         '/dashboard/receivables'
       ],
       '/dashboard/payables': [

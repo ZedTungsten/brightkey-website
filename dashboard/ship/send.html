@@ -1362,14 +1362,26 @@
             [this.selectedPickupRefId]: { date, slot, notes }
           };
 
-          // Save to database
-          const { error } = await sb.from('global_settings').upsert({
+          const booking = this.bookings.find(item => item.order_no === this.selectedPickupRefId);
+          if (booking) {
+            const { data: updatedBooking, error: bookingError } = await sb.from('installation_bookings')
+              .update({ pickup_date: date, pickup_time: slot, pickup_notes: notes })
+              .eq('company_id', this.companyId)
+              .eq('order_no', this.selectedPickupRefId)
+              .select('order_no')
+              .maybeSingle();
+            if (bookingError || !updatedBooking) throw bookingError || new Error('The booking schedule was not updated.');
+            Object.assign(booking, { pickup_date: date, pickup_time: slot, pickup_notes: notes });
+          }
+
+          // Preserve the legacy schedule map for supplier shipments and older records.
+          const { error: settingsError } = await sb.from('global_settings').upsert({
             company_id: this.companyId,
             key: 'pickup_schedules',
             value: newSchedules
           }, { onConflict: 'company_id,key' });
-
-          if (error) throw error;
+          if (settingsError && !booking) throw settingsError;
+          if (settingsError) console.warn('Legacy pickup schedule map could not be updated:', settingsError);
 
           this.pickupSchedules = newSchedules;
           Toast.success('Pickup schedule saved successfully.');
@@ -1377,7 +1389,7 @@
           this.renderSendOutQueue();
         } catch (err) {
           console.error(err);
-          Toast.error('Failed to save pickup schedule: ' + err.message);
+          Toast.error('The pickup schedule could not be saved. Please try again.');
         } finally {
           btn.disabled = false;
           btn.textContent = originalText;

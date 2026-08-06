@@ -220,7 +220,8 @@
         const tbody = document.getElementById('special-table-body');
         if (!tbody) return;
 
-        if (this.specialSchedules.length === 0) {
+        const activeSchedules = window.BKSpecialPayoutHistory.activeNow(this.specialSchedules);
+        if (activeSchedules.length === 0) {
           tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:3rem;color:var(--text-muted);">No special payouts configured. Add one with the button above.</td></tr>`;
           return;
         }
@@ -230,7 +231,7 @@
         let bodyHtml = '';
 
         const renderEmpSchedules = (emp) => {
-          const empSpecs = this.specialSchedules.filter(s => s.employeeId === emp.id);
+          const empSpecs = activeSchedules.filter(s => s.employeeId === emp.id);
           if (empSpecs.length === 0) return '';
           return empSpecs.map(spec => `
             <tr class="employee-row" data-emp-id="${esc(emp.id)}">
@@ -309,12 +310,11 @@
         if (!empId || isNaN(val) || isNaN(day) || !label) return;
 
         if (this.editingId) {
-          const spec = this.specialSchedules.find(s => s.id === this.editingId);
-          if (spec) { spec.employeeId = empId; spec.value = val; spec.day = day; spec.label = label; }
+          this.specialSchedules = window.BKSpecialPayoutHistory.edit(this.specialSchedules, this.editingId, { employeeId: empId, value: val, day, label });
           this.editingId = null;
-          toast('Special schedule updated.');
+          toast('Special schedule updated. Previous months were preserved.');
         } else {
-          this.specialSchedules.push({ id: 'spec_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9), employeeId: empId, value: val, day, label });
+          this.specialSchedules = window.BKSpecialPayoutHistory.add(this.specialSchedules, { id: 'spec_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9), employeeId: empId, value: val, day, label });
           toast('Special schedule added.');
         }
 
@@ -324,9 +324,8 @@
       },
 
       async deleteSchedule(specId) {
-        const idx = this.specialSchedules.findIndex(s => s.id === specId);
-        if (idx === -1) return;
-        this.specialSchedules.splice(idx, 1);
+        if (!this.specialSchedules.some(s => s.id === specId)) return;
+        this.specialSchedules = window.BKSpecialPayoutHistory.remove(this.specialSchedules, specId);
         await this.saveConfig();
         this.render();
         toast('Special schedule removed.', 'info');

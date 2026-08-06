@@ -1170,8 +1170,8 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ fileBase64: base64, fileName: file.name, category: 'employees', refId: empId, type: docType, companyId: this.companyId || 'general' })
           });
-          if (!r.ok) throw new Error('Upload failed');
-          const data = await r.json();
+          const data = await r.json().catch(() => ({}));
+          if (!r.ok) throw new Error(data.error || 'The file could not be uploaded. Please try again.');
           if (urlInput) {
             urlInput.value = data.url;
             urlInput.dispatchEvent(new Event('input', { bubbles: true }));
@@ -1786,8 +1786,8 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ fileBase64: base64, fileName: file.name, category: 'employees', refId: refId, type: docType, companyId: this.companyId || 'general' })
           });
-          if (!r.ok) throw new Error('Upload failed');
-          const data = await r.json();
+          const data = await r.json().catch(() => ({}));
+          if (!r.ok) throw new Error(data.error || 'The file could not be uploaded. Please try again.');
           if (targetInput) {
             targetInput.value = data.url;
             targetInput.dispatchEvent(new Event('input', { bubbles: true }));

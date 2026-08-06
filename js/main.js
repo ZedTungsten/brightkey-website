@@ -5,6 +5,55 @@
 
 'use strict';
 
+// BK_SPECIAL_PAYOUT_HISTORY_START
+(function registerSpecialPayoutHistory(root) {
+  const monthKey = value => /^\d{4}-\d{2}$/.test(String(value || '')) ? String(value) : '';
+  const currentMonthKey = () => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  };
+  const previousMonthKey = value => {
+    const [year, month] = monthKey(value).split('-').map(Number);
+    if (!year || !month) return '';
+    const date = new Date(year, month - 2, 1);
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+  };
+  const appliesToMonth = (schedule, value) => {
+    const target = monthKey(value);
+    if (!target) return true;
+    const from = monthKey(schedule?.effectiveFrom);
+    const to = monthKey(schedule?.effectiveTo);
+    return (!from || from <= target) && (!to || to >= target);
+  };
+  const copy = schedule => ({ ...schedule });
+
+  root.BKSpecialPayoutHistory = Object.freeze({
+    currentMonthKey,
+    previousMonthKey,
+    forMonth: (schedules = [], value) => schedules.filter(schedule => appliesToMonth(schedule, value)),
+    activeNow(schedules = []) { return this.forMonth(schedules, currentMonthKey()); },
+    add: (schedules = [], schedule) => [...schedules.map(copy), { ...schedule, effectiveFrom: currentMonthKey() }],
+    edit(schedules = [], id, changes) {
+      const nowKey = currentMonthKey();
+      const existing = schedules.find(schedule => schedule.id === id);
+      if (!existing) return schedules.map(copy);
+      if (monthKey(existing.effectiveFrom) === nowKey) {
+        return schedules.map(schedule => schedule.id === id ? { ...schedule, ...changes } : copy(schedule));
+      }
+      const historical = schedules.map(schedule => schedule.id === id ? { ...schedule, effectiveTo: previousMonthKey(nowKey) } : copy(schedule));
+      return [...historical, { ...existing, ...changes, id: `spec_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`, effectiveFrom: nowKey, effectiveTo: undefined }];
+    },
+    remove(schedules = [], id) {
+      const nowKey = currentMonthKey();
+      const existing = schedules.find(schedule => schedule.id === id);
+      if (!existing) return schedules.map(copy);
+      if (monthKey(existing.effectiveFrom) === nowKey) return schedules.filter(schedule => schedule.id !== id).map(copy);
+      return schedules.map(schedule => schedule.id === id ? { ...schedule, effectiveTo: previousMonthKey(nowKey) } : copy(schedule));
+    }
+  });
+})(globalThis);
+// BK_SPECIAL_PAYOUT_HISTORY_END
+
 // BK_EMPLOYMENT_PERIOD_START
 (function registerEmploymentPeriod(root) {
   const dateKey = value => String(value || '').slice(0, 10);
@@ -56,7 +105,8 @@
             specialPayout = Number(record.special_payouts) || 0;
           } else {
             baseSalary = employee.employment_status === 'Active' ? monthlySalary : paidSalaryFromState;
-            specialPayout = specialSchedules
+            const monthSpecialSchedules = root.BKSpecialPayoutHistory?.forMonth(specialSchedules, monthKey) || specialSchedules;
+            specialPayout = monthSpecialSchedules
               .filter(schedule => schedule.employeeId === employee.id)
               .reduce((sum, schedule) => {
                 const isPaid = specialPayoutState?.[monthKey]?.[`${employee.id}_${schedule.day}`] === true;

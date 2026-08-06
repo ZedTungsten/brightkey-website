@@ -187,7 +187,8 @@ function renderSalaryAndAdjustments(monthKey) {
     addRow(`Salary Cutoff — ${MONTH_NAMES[month - 1]} ${day}`, salaryAllocation(day, index), monthState[`${currentInstaller.id}_${day}`], day);
   });
 
-  (isOwnerInstaller() ? [] : (config.specialSchedules || []).filter(item => item.employeeId === currentInstaller.id)).forEach(item => {
+  const monthSpecialSchedules = window.BKSpecialPayoutHistory?.forMonth(config.specialSchedules || [], monthKey) || config.specialSchedules || [];
+  (isOwnerInstaller() ? [] : monthSpecialSchedules.filter(item => item.employeeId === currentInstaller.id)).forEach(item => {
     addRow(item.label || `Special Payout — Day ${item.day}`, item.value, specialState[`${currentInstaller.id}_${Number(item.day)}`], item.day);
   });
 
@@ -223,7 +224,9 @@ function getReadyPayslipRecord(monthKey) {
   const schedules = payoutTrackerData.config?.payoutSchedules || [15, 30];
   const regularState = payoutTrackerData.regularState?.[monthKey] || {};
   const allSalaryPaid = schedules.every(day => regularState[`${currentInstaller.id}_${Number(day)}`] === true);
-  const employeeSpecials = isOwnerInstaller() ? [] : (payoutTrackerData.config?.specialSchedules || []).filter(item => item.employeeId === currentInstaller.id);
+  const configuredSpecials = payoutTrackerData.config?.specialSchedules || [];
+  const monthSpecials = window.BKSpecialPayoutHistory?.forMonth(configuredSpecials, monthKey) || configuredSpecials;
+  const employeeSpecials = isOwnerInstaller() ? [] : monthSpecials.filter(item => item.employeeId === currentInstaller.id);
   const specialState = payoutTrackerData.specialState?.[monthKey] || {};
   const allSpecialsPaid = employeeSpecials.every(item => specialState[`${currentInstaller.id}_${Number(item.day)}`] === true);
   return allSalaryPaid && allSpecialsPaid ? record : null;
@@ -263,7 +266,9 @@ async function downloadInstallerPayslip() {
     const pesoValue = `₱${(Number(amount) || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     return `<tr><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;font-weight:600;vertical-align:top;">${escapeHtml(type)}</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;color:#4b5563;line-height:1.5;vertical-align:top;">${escapeHtml(description)}</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;text-align:right;font-variant-numeric:tabular-nums;width:120px;vertical-align:top;">${pesoValue}</td></tr>`;
   });
-  const specialSchedules = isOwnerInstaller() ? [] : (payoutTrackerData.config?.specialSchedules || []).filter(item => item.employeeId === currentInstaller.id);
+  const configuredSpecials = payoutTrackerData.config?.specialSchedules || [];
+  const monthSpecials = window.BKSpecialPayoutHistory?.forMonth(configuredSpecials, monthKey) || configuredSpecials;
+  const specialSchedules = isOwnerInstaller() ? [] : monthSpecials.filter(item => item.employeeId === currentInstaller.id);
   const adjustments = (payoutTrackerData.adjustments || []).filter(item => String(item.date || '').startsWith(monthKey));
   const reimbursements = getInstallerReimbursements(monthKey);
   const liveModel = installerPayslipModel?.monthKey === monthKey ? installerPayslipModel : {};

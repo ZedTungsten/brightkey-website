@@ -1069,7 +1069,8 @@
         if (!header || !tbody) return;
 
         const mk = this.monthKey();
-        const specialDays  = [...new Set(this.specialSchedules.map(s => Number(s.day)))].sort((a, b) => a - b);
+        const monthSpecialSchedules = window.BKSpecialPayoutHistory.forMonth(this.specialSchedules, mk);
+        const specialDays  = [...new Set(monthSpecialSchedules.map(s => Number(s.day)))].sort((a, b) => a - b);
         const sortedScheds = [...this.payoutSchedules].sort((a, b) => a - b);
         const colspan = 10 + specialDays.length + sortedScheds.length + 2;
 
@@ -1148,7 +1149,7 @@
           let specialCellsHtml = '';
           let totalSpecials = 0;
           specialDays.forEach(day => {
-            const specVal = isOwner ? 0 : this.specialSchedules.filter(s => s.employeeId === emp.id && Number(s.day) === day).reduce((s, x) => s + (Number(x.value) || 0), 0);
+            const specVal = isOwner ? 0 : monthSpecialSchedules.filter(s => s.employeeId === emp.id && Number(s.day) === day).reduce((s, x) => s + (Number(x.value) || 0), 0);
             const isEligible = this.isCutoffEligibleForEmployee(emp, day, mk);
             if (isEligible) {
               totalSpecials += specVal;
@@ -1499,7 +1500,7 @@
           const salaryPaid   = commissionOnly ? 0 : this.getEmployeeSalaryTotal(emp, sortedScheds, mk);
           const empComms     = isOwner ? 0 : this._commissionForEmpMonth(empId, mk, inactiveDate);
           const empAdjObjs   = commissionOnly ? [] : this.adjustmentsList.filter(a => { const d = new Date(a.date); return a.employeeId === empId && `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}` === mk; });
-          const empSpecs     = isOwner || commissionOnly ? [] : this.specialSchedules.filter(s => s.employeeId === empId);
+          const empSpecs     = isOwner || commissionOnly ? [] : window.BKSpecialPayoutHistory.forMonth(this.specialSchedules, mk).filter(s => s.employeeId === empId);
           const totalAdjs    = empAdjObjs.reduce((s, a) => s + (Number(a.value) || 0), 0);
           const totalSpecs   = empSpecs.reduce((s, x) => s + (Number(x.value) || 0), 0);
 
@@ -1599,7 +1600,7 @@
         const salaryPaid = commissionOnly ? 0 : this.getEmployeeSalaryTotal(emp, schedules, mk);
         const commissions = isOwner ? 0 : this._commissionForEmpMonth(empId, mk, inactiveDate);
         const adjustments = commissionOnly ? [] : this.adjustmentsList.filter(item => item.employeeId === empId && String(item.date || '').startsWith(mk));
-        const specialSchedules = isOwner || commissionOnly ? [] : this.specialSchedules.filter(item => item.employeeId === empId);
+        const specialSchedules = isOwner || commissionOnly ? [] : window.BKSpecialPayoutHistory.forMonth(this.specialSchedules, mk).filter(item => item.employeeId === empId);
         const installationPayouts = isOwner || commissionOnly
           ? { thresholdEarnings: 0, thresholdDescription: '', serviceEarnings: 0, serviceDescription: '', cutoffPayouts: {} }
           : this.calculateInstallerPayouts(empId, mk, schedules);

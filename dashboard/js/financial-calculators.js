@@ -465,7 +465,8 @@ window.BKFinancialCalculators = {
         }
 
         // Resolve checked special payouts for this employee in the month
-        const specialSchedules = trackerConfig.specialSchedules || [];
+        const configuredSpecialSchedules = trackerConfig.specialSchedules || [];
+        const specialSchedules = window.BKSpecialPayoutHistory?.forMonth(configuredSpecialSchedules, mKey) || configuredSpecialSchedules;
         specialSchedules.forEach(spec => {
           if (spec.employeeId === emp.id) {
             const isPaid = specialPayoutState?.[mKey]?.[`${emp.id}_${spec.day}`] || false;

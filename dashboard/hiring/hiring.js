@@ -269,7 +269,7 @@ const HiringApp = {
       ...job,
       application_stages: this.normalizeApplicationStages(postResult.data?.application_stages)
     };
-    this.applications = applicationResult.data || [];
+    this.applications = applicationResult.data || []; await window.BKApplicantStageReconciler.reconcile({ sb: this.sb, companyId: this.companyId, jobPostId: job.job_post_id, applications: this.applications, stageCount: this.selectedApplicantJob.application_stages.length });
     this.renderApplicationsTable(this.selectedApplicantJob);
   },
   renderApplicationsTable(job) {
@@ -282,10 +282,9 @@ const HiringApp = {
     const isHiredStage = activeStage === hiredStage;
     const stageApplications = this.applications.filter(application => isHiredStage
       ? Boolean(application.hired_at) && application.status === 'approved'
-      : !application.hired_at && Number(application.current_stage || 1) === activeStage);
-    const questionCount = stageApplications.reduce((maximum, application) => (
-      Math.max(maximum, Array.isArray(application.answers) ? application.answers.length : 0)
-    ), 0);
+      : !application.hired_at && application.status !== 'rejected' && Math.min(Number(application.current_stage || 1), stages.length) === activeStage);
+    const rejectedApplications = this.applications.filter(application => !application.hired_at && application.status === 'rejected');
+    const questionCount = stageApplications.reduce((maximum, application) => Math.max(maximum, Array.isArray(application.answers) ? application.answers.length : 0), 0);
     const questionHeaders = Array.from({ length: questionCount }, (_, index) => `<th>Q${index + 1}</th>`).join('');
     const stage = isHiredStage ? { name: 'Hired', actions: [] } : stages[activeStage - 1];
     const tasks = stage.actions.slice(0, 5);
@@ -337,6 +336,7 @@ const HiringApp = {
           </table>
         </div>
       </div>
+      ${window.BKRejectedApplicantsTable.render(this, rejectedApplications, stages.length)}
       ${this.applications.length >= 100 ? '<p class="applicant-result-note">Showing the 100 most recent applications.</p>' : ''}`;
   },
   renderApplicationRow(application, questionCount, stageCount) {

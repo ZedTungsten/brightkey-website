@@ -673,6 +673,27 @@
           if (gsErr) throw gsErr;
           this.pickupSchedules = gsData?.value || {};
 
+          // Booking pickup fields are the current source of truth. Legacy settings
+          // remain available for supplier shipments and records created before the
+          // booking columns were introduced.
+          const { data: scheduledBookings, error: scheduledBookingsError } = await sb
+            .from('installation_bookings')
+            .select('order_no, pickup_date, pickup_time, pickup_notes')
+            .eq('company_id', this.companyId)
+            .gte('pickup_date', start)
+            .lte('pickup_date', end)
+            .order('pickup_date', { ascending: true })
+            .range(0, 499);
+          if (scheduledBookingsError) throw scheduledBookingsError;
+          (scheduledBookings || []).forEach(booking => {
+            if (!booking.order_no || !booking.pickup_date) return;
+            this.pickupSchedules[booking.order_no] = {
+              date: booking.pickup_date,
+              slot: booking.pickup_time || 'Morning',
+              notes: booking.pickup_notes || ''
+            };
+          });
+
           // Filter schedules for the current month to load only relevant transactions/bookings
           const activeRefIds = Object.entries(this.pickupSchedules)
             .filter(([refId, sched]) => sched && sched.date && sched.date >= start && sched.date <= end)
