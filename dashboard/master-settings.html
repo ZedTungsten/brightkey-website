@@ -6,8 +6,8 @@
   <title>Master Settings — Brightkey Admin</title>
   <link rel="preconnect" href="https://fonts.bunny.net" />
   <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="../css/style.css" />
-  <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg?v=2" />
+  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg?v=2" />
 
   <style>
     :root {
@@ -49,6 +49,8 @@
     /* Tables */
     .table-scroll { flex: 1; overflow: auto; padding: 1.5rem; display: flex; flex-direction: column; gap: 2rem; }
     .card-table { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+    .tenant-table-responsive { width: 100%; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; }
+    .tenant-table-responsive table { min-width: 1640px; }
     table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
     thead th { background: var(--bg-elevated); color: var(--text-muted); font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; padding: 0.75rem 1rem; text-align: left; border-bottom: 1px solid var(--border); }
     tbody tr { border-bottom: 1px solid var(--border); transition: background 0.1s; }
@@ -61,7 +63,33 @@
     .form-label { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); }
     .form-input { width: 100%; padding: 0.55rem 0.75rem; border: 1px solid var(--border); border-radius: 6px; font-size: 0.85rem; background: var(--bg-base); color: var(--text-primary); outline: none; }
     .form-input:focus { border-color: var(--cyan); }
+    .payment-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+    .payment-card { padding: 1.25rem; background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); }
+    .payment-card h3 { color: var(--text-primary); font-size: 0.95rem; margin-bottom: 0.35rem; }
+    .payment-card > p { color: var(--text-muted); font-size: 0.8rem; line-height: 1.5; margin-bottom: 1.25rem; }
+    .payment-input { position: relative; }
+    .payment-input .form-input { padding-right: 2.75rem; font-weight: 400; }
+    .payment-key-toggle { position: absolute; top: 50%; right: 0.5rem; transform: translateY(-50%); width: 32px; height: 32px; border: 0; background: transparent; color: var(--text-muted); cursor: pointer; }
+    .payment-key-toggle:hover { color: var(--cyan-light); }
+    .payment-key-toggle svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+    .payment-active { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; color: var(--text-secondary); font-size: 0.8rem; margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--border); }
+    .payment-active__copy { display: flex; flex-direction: column; gap: 0.12rem; }
+    .payment-active__copy strong { color: var(--text-primary); font-size: 0.82rem; }
+    .payment-active__copy span { color: var(--text-muted); font-size: 0.72rem; }
+    @media (max-width: 840px) { .payment-grid { grid-template-columns: 1fr; } }
     .form-hint { font-size: 0.75rem; color: var(--text-muted); }
+    .feature-select { position: relative; }
+    .feature-select-trigger { width: 100%; min-height: 38px; padding: 0.55rem 0.75rem; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-base); color: var(--text-primary); display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; font-family: inherit; font-size: 0.85rem; font-weight: 400; text-align: left; cursor: pointer; }
+    .feature-select-trigger:focus { outline: none; border-color: var(--cyan); }
+    .feature-select-trigger.invalid { border-color: var(--danger); }
+    .feature-select-trigger svg { width: 16px; height: 16px; flex: none; fill: none; stroke: var(--text-muted); stroke-width: 2; transition: transform 0.15s; }
+    .feature-select.open .feature-select-trigger svg { transform: rotate(180deg); }
+    .feature-select-panel { display: none; position: absolute; z-index: 30; top: calc(100% + 0.35rem); left: 0; right: 0; max-height: 230px; overflow-y: auto; padding: 0.4rem; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 12px 24px rgba(9, 9, 11, 0.12); overscroll-behavior: contain; }
+    .feature-select.open .feature-select-panel { display: block; }
+    .feature-option { display: flex; align-items: center; gap: 0.6rem; padding: 0.55rem 0.6rem; border-radius: 5px; color: var(--text-secondary); font-size: 0.82rem; font-weight: 400; cursor: pointer; }
+    .feature-option:hover { background: var(--bg-elevated); color: var(--text-primary); }
+    .feature-option input { width: 16px; height: 16px; accent-color: var(--cyan); cursor: pointer; }
+    #tier-modal .modal-card { overflow: visible; }
 
     /* Buttons */
     .btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; padding: 0.55rem 1rem; border-radius: 6px; font-size: 0.82rem; font-weight: 600; cursor: pointer; border: 1px solid transparent; transition: all 0.15s; }
@@ -154,8 +182,9 @@
       <div class="content-area" style="height: calc(100vh - 56px); overflow: hidden;">
         <main class="main-panel">
           <div class="tabs-nav" style="display: flex; gap: 1rem; padding: 0.5rem 1.5rem; border-bottom: 1px solid var(--border); background: var(--bg-surface);">
-            <button class="tab-btn active" onclick="switchTab('pricing')" id="tab-btn-pricing" style="background: none; border: none; border-bottom: 2px solid var(--cyan); padding: 0.5rem 0.25rem; font-weight: 700; color: var(--text-primary); cursor: pointer; outline: none;">Pricing Tiers</button>
-            <button class="tab-btn" onclick="switchTab('tenants')" id="tab-btn-tenants" style="background: none; border: none; border-bottom: 2px solid transparent; padding: 0.5rem 0.25rem; font-weight: 600; color: var(--text-secondary); cursor: pointer; outline: none;">Tenants</button>
+            <a class="tab-btn active" href="/dashboard/master-settings/tiers" id="tab-btn-pricing" style="background: none; border: none; border-bottom: 2px solid var(--cyan); padding: 0.5rem 0.25rem; font-weight: 700; color: var(--text-primary); cursor: pointer; outline: none; text-decoration:none;">Pricing Tiers</a>
+            <a class="tab-btn" href="/dashboard/master-settings/tenants" id="tab-btn-tenants" style="background: none; border: none; border-bottom: 2px solid transparent; padding: 0.5rem 0.25rem; font-weight: 600; color: var(--text-secondary); cursor: pointer; outline: none; text-decoration:none;">Tenants</a>
+            <a class="tab-btn" href="/dashboard/master-settings/payment" id="tab-btn-payment" style="background: none; border: none; border-bottom: 2px solid transparent; padding: 0.5rem 0.25rem; font-weight: 600; color: var(--text-secondary); cursor: pointer; outline: none; text-decoration:none;">Payment</a>
           </div>
 
           <div class="panel-header">
@@ -180,13 +209,16 @@
                   <tr>
                     <th>Plan Name</th>
                     <th>Price (PHP / month)</th>
+                    <th>Cycle (Days)</th>
+                    <th>Users</th>
+                    <th>Storage (GB)</th>
                     <th>Accessible Features / Modules</th>
                     <th style="width: 100px; text-align: center;">Visible</th>
                     <th style="width: 180px; text-align: center;">Actions</th>
                   </tr>
                 </thead>
                 <tbody id="tiers-list-body">
-                  <tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 2rem;">Loading pricing tiers...</td></tr>
+                  <tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 2rem;">Loading pricing tiers...</td></tr>
                 </tbody>
               </table>
             </div>
@@ -200,27 +232,57 @@
             <!-- Storage Allocation Table -->
             <div class="card-table" style="margin-bottom: 1.5rem;">
               <div style="padding: 0.75rem 1rem; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: var(--bg-elevated);">
-                <div style="font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted);">Tenant Storage Allocation</div>
+                <div style="font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted);">Registered Tenants</div>
                 <div style="font-size: 0.75rem; color: var(--text-muted);">Stored at <code style="background:var(--bg-base);padding:0.1rem 0.3rem;border-radius:3px;">brightkey-assets/companies/{id}/</code></div>
               </div>
+              <div class="tenant-table-responsive" role="region" aria-label="Registered tenants table" tabindex="0">
               <table>
                 <thead>
                   <tr>
+                    <th>First Name</th>
+                    <th>Last Name</th>
                     <th>Owner Email</th>
+                    <th>Mobile Number</th>
                     <th>Company</th>
-                    <th>Subdomain</th>
+                    <th>Street Address</th>
+                    <th>City</th>
+                    <th>Province</th>
+                    <th>Country</th>
+                    <th>Plan</th>
                     <th>Used so far (GB)</th>
-                    <th style="width: 180px;">Storage Limit (GB)</th>
-                    <th style="width: 90px; text-align: center;">Action</th>
+                    <th>Storage Limit (GB)</th>
+                    <th style="width: 72px; text-align: center;">Action</th>
                   </tr>
                 </thead>
                 <tbody id="storage-alloc-body">
-                  <tr><td colspan="6" style="text-align:center; color:var(--text-muted); padding:2rem;">Loading tenants...</td></tr>
+                  <tr><td colspan="13" style="text-align:center; color:var(--text-muted); padding:2rem;">Loading tenants...</td></tr>
                 </tbody>
               </table>
+              </div>
             </div>
 
           </div>
+
+          <div class="table-scroll" id="payment-section" style="display:none;">
+            <div class="payment-grid">
+              <section class="payment-card">
+                <h3>PayMongo</h3>
+                <p>Accept BrightKey plan subscription payments from signed-up tenants through PayMongo.</p>
+                <div class="form-group"><label class="form-label" for="platform-paymongo-public">Public Key</label><div class="payment-input"><input class="form-input" id="platform-paymongo-public" type="password" placeholder="pk_live_..." autocomplete="off"><button class="payment-key-toggle" type="button" onclick="togglePaymentKey('platform-paymongo-public')" aria-label="Show or hide PayMongo public key"><svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"></path><circle cx="12" cy="12" r="3"></circle></svg></button></div></div>
+                <div class="form-group"><label class="form-label" for="platform-paymongo-secret">Secret Key</label><div class="payment-input"><input class="form-input" id="platform-paymongo-secret" type="password" placeholder="sk_live_..." autocomplete="new-password"><button class="payment-key-toggle" type="button" onclick="togglePaymentKey('platform-paymongo-secret')" aria-label="Show or hide PayMongo secret key"><svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"></path><circle cx="12" cy="12" r="3"></circle></svg></button></div></div>
+                <div class="payment-active"><div class="payment-active__copy"><strong>Subscription checkout</strong><span>Allow tenants to pay with PayMongo</span></div><label class="switch" aria-label="Enable PayMongo for subscriptions"><input type="checkbox" id="platform-paymongo-active"><span class="slider"></span></label></div>
+              </section>
+              <section class="payment-card">
+                <h3>Stripe</h3>
+                <p>Accept BrightKey plan subscription payments from signed-up tenants through Stripe.</p>
+                <div class="form-group"><label class="form-label" for="platform-stripe-public">Publishable Key</label><div class="payment-input"><input class="form-input" id="platform-stripe-public" type="password" placeholder="pk_live_..." autocomplete="off"><button class="payment-key-toggle" type="button" onclick="togglePaymentKey('platform-stripe-public')" aria-label="Show or hide Stripe publishable key"><svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"></path><circle cx="12" cy="12" r="3"></circle></svg></button></div></div>
+                <div class="form-group"><label class="form-label" for="platform-stripe-secret">Secret Key</label><div class="payment-input"><input class="form-input" id="platform-stripe-secret" type="password" placeholder="sk_live_..." autocomplete="new-password"><button class="payment-key-toggle" type="button" onclick="togglePaymentKey('platform-stripe-secret')" aria-label="Show or hide Stripe secret key"><svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"></path><circle cx="12" cy="12" r="3"></circle></svg></button></div></div>
+                <div class="payment-active"><div class="payment-active__copy"><strong>Subscription checkout</strong><span>Allow tenants to pay with Stripe</span></div><label class="switch" aria-label="Enable Stripe for subscriptions"><input type="checkbox" id="platform-stripe-active"><span class="slider"></span></label></div>
+              </section>
+            </div>
+            <div style="display:flex;justify-content:flex-end;"><button class="btn btn-primary" id="btn-save-platform-payment" type="button" onclick="savePlatformPayment()">Save Payment Settings</button></div>
+          </div>
+
         </main>
       </div>
     </div>
@@ -248,9 +310,32 @@
           </div>
 
           <div class="form-group">
-            <label class="form-label" for="tier-features">Features (Comma-separated)</label>
-            <input type="text" id="tier-features" class="form-input" placeholder="e.g. eCommerce, Marketing, Sales" required />
-            <div class="form-hint" style="margin-top: 0.35rem;">Enter items separated by commas.</div>
+            <label class="form-label" for="tier-cycle-days">Cycle (Days)</label>
+            <input type="number" id="tier-cycle-days" class="form-input" min="1" step="1" placeholder="e.g. 30" required />
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="tier-user-limit">Users</label>
+            <input type="number" id="tier-user-limit" class="form-input" min="1" step="1" placeholder="e.g. 5" required />
+            <div class="form-hint" style="margin-top: 0.35rem;">Maximum number of user accounts allowed for each tenant on this plan.</div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="tier-storage-limit-gb">Storage (GB)</label>
+            <input type="number" id="tier-storage-limit-gb" class="form-input" min="0.5" step="0.5" placeholder="e.g. 5" required />
+            <div class="form-hint" style="margin-top: 0.35rem;">Maximum storage allocation for each tenant owner subscribed to this plan.</div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" id="tier-features-label">Accessible Features / Modules</label>
+            <div class="feature-select" id="tier-features">
+              <button type="button" class="feature-select-trigger" id="tier-features-trigger" aria-labelledby="tier-features-label tier-features-summary" aria-haspopup="listbox" aria-expanded="false" onclick="toggleTierFeatureDropdown()">
+                <span id="tier-features-summary">Select features / modules</span>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
+              </button>
+              <div class="feature-select-panel" id="tier-features-panel" role="listbox" aria-multiselectable="true"></div>
+            </div>
+            <div class="form-hint" style="margin-top: 0.35rem;">Select every feature or module included in this pricing tier.</div>
           </div>
 
           <div class="form-group" style="flex-direction: row; align-items: center; gap: 0.5rem; margin-top: 0.5rem;">
@@ -266,7 +351,39 @@
     </div>
   </div>
 
-
+  <!-- Edit Tenant Modal -->
+  <div class="modal-overlay" id="tenant-modal">
+    <div class="modal-card" style="width:760px;max-width:92vw;">
+      <div class="modal-header">
+        <div class="modal-title">Edit Tenant</div>
+        <button class="modal-close" type="button" onclick="closeTenantModal()" aria-label="Close tenant editor">
+          <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <form id="tenant-form" onsubmit="saveTenant(event)">
+        <div class="modal-body" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem;max-height:65vh;overflow-y:auto;">
+          <input type="hidden" id="tenant-edit-id" />
+          <input type="hidden" id="tenant-edit-company-id" />
+          <input type="hidden" id="tenant-subdomain" />
+          <div class="form-group"><label class="form-label" for="tenant-first-name">First Name</label><input class="form-input" id="tenant-first-name" type="text" maxlength="80" /></div>
+          <div class="form-group"><label class="form-label" for="tenant-last-name">Last Name</label><input class="form-input" id="tenant-last-name" type="text" maxlength="80" /></div>
+          <div class="form-group"><label class="form-label" for="tenant-owner-email">Owner Email</label><input class="form-input" id="tenant-owner-email" type="email" maxlength="180" required /></div>
+          <div class="form-group"><label class="form-label" for="tenant-mobile-number">Mobile Number</label><input class="form-input" id="tenant-mobile-number" type="tel" maxlength="24" /></div>
+          <div class="form-group" style="grid-column:1/-1;"><label class="form-label" for="tenant-company-name">Company</label><input class="form-input" id="tenant-company-name" type="text" maxlength="140" required /></div>
+          <div class="form-group" style="grid-column:1/-1;"><label class="form-label" for="tenant-street-address">Street Address</label><input class="form-input" id="tenant-street-address" type="text" maxlength="180" /></div>
+          <div class="form-group"><label class="form-label" for="tenant-city">City</label><input class="form-input" id="tenant-city" type="text" maxlength="100" /></div>
+          <div class="form-group"><label class="form-label" for="tenant-province">Province</label><input class="form-input" id="tenant-province" type="text" maxlength="100" /></div>
+          <div class="form-group"><label class="form-label" for="tenant-country">Country</label><select class="form-input" id="tenant-country"><option value="">Select country</option></select></div>
+          <div class="form-group"><label class="form-label" for="tenant-plan">Plan</label><select class="form-input" id="tenant-plan" onchange="updateTenantPlanStorageDisplay()"><option value="">No plan assigned</option></select></div>
+          <div class="form-group"><label class="form-label">Storage Limit</label><div class="form-input" id="tenant-storage-limit-display" style="background:var(--bg-elevated);color:var(--text-muted);cursor:not-allowed;">—</div><div class="form-hint">Controlled by the assigned pricing plan.</div></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" onclick="closeTenantModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-save-tenant">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
 
   <!-- Custom Confirmation Dialog Modal -->
   <div class="modal-overlay" id="confirm-modal">
@@ -337,18 +454,38 @@
 
   <!-- Supabase CDN and auth.js -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-  <script src="../js/auth.js"></script>
-  <script src="../js/sidebar.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/sidebar.js"></script>
   <script>
     let sb;
     let tiersList = [];
     let editingTierId = null;
     let currentTab = 'pricing';
     let confirmCallback = null;
+    let tenantRows = [];
+    let tenantPlanRows = [];
+    const COUNTRY_CODES = 'AD,AE,AF,AG,AI,AL,AM,AO,AQ,AR,AS,AT,AU,AW,AX,AZ,BA,BB,BD,BE,BF,BG,BH,BI,BJ,BL,BM,BN,BO,BQ,BR,BS,BT,BV,BW,BY,BZ,CA,CC,CD,CF,CG,CH,CI,CK,CL,CM,CN,CO,CR,CU,CV,CW,CX,CY,CZ,DE,DJ,DK,DM,DO,DZ,EC,EE,EG,EH,ER,ES,ET,FI,FJ,FK,FM,FO,FR,GA,GB,GD,GE,GF,GG,GH,GI,GL,GM,GN,GP,GQ,GR,GS,GT,GU,GW,GY,HK,HM,HN,HR,HT,HU,ID,IE,IL,IM,IN,IO,IQ,IR,IS,IT,JE,JM,JO,JP,KE,KG,KH,KI,KM,KN,KP,KR,KW,KY,KZ,LA,LB,LC,LI,LK,LR,LS,LT,LU,LV,LY,MA,MC,MD,ME,MF,MG,MH,MK,ML,MM,MN,MO,MP,MQ,MR,MS,MT,MU,MV,MW,MX,MY,MZ,NA,NC,NE,NF,NG,NI,NL,NO,NP,NR,NU,NZ,OM,PA,PE,PF,PG,PH,PK,PL,PM,PN,PR,PS,PT,PW,PY,QA,RE,RO,RS,RU,RW,SA,SB,SC,SD,SE,SG,SH,SI,SJ,SK,SL,SM,SN,SO,SR,SS,ST,SV,SX,SY,SZ,TC,TD,TF,TG,TH,TJ,TK,TL,TM,TN,TO,TR,TT,TV,TW,TZ,UA,UG,UM,US,UY,UZ,VA,VC,VE,VG,VI,VN,VU,WF,WS,YE,YT,ZA,ZM,ZW'.split(',');
+    const countryNames = typeof Intl.DisplayNames === 'function' ? new Intl.DisplayNames(['en'], { type: 'region' }) : null;
+    const TIER_FEATURE_OPTIONS = [
+      'Business',
+      'Products',
+      'Operations',
+      'Marketing',
+      'Sales',
+      'Customer Service',
+      'Logistics',
+      'Finance',
+      'HR'
+    ];
+    const TIER_FEATURE_EXPANSIONS = {
+      'eCommerce': ['Products', 'Customer Service', 'Logistics'],
+      'All eCommerce+': ['Products', 'Customer Service', 'Logistics', 'Marketing', 'Sales'],
+      'All eCommerce+ Accounting': ['Products', 'Customer Service', 'Logistics', 'Marketing', 'Sales', 'Finance']
+    };
 
     document.addEventListener('DOMContentLoaded', async () => {
       // 1. Authenticate and enforce gate check: Only johnzeustaller@gmail.com can access this page
-      const authInfo = await BKAuth.checkRoleGate([], '../admin.html');
+      const authInfo = await BKAuth.checkRoleGate([], '/admin');
       if (!authInfo) return;
 
       if (authInfo.user.email !== 'johnzeustaller@gmail.com') {
@@ -356,10 +493,11 @@
         return;
       }
 
-      document.body.style.display = 'block';
-
       sb = BKAuth.sb;
-      loadPricingTiers();
+      const routeTab = window.location.pathname.replace(/\/+$/, '').split('/').pop();
+      const initialTab = routeTab === 'tenants' ? 'tenants' : routeTab === 'payment' ? 'payment' : 'pricing';
+      switchTab(initialTab);
+      document.body.style.display = 'block';
 
       // Hook up confirm modal yes button
       const confirmYes = document.getElementById('btn-confirm-yes');
@@ -369,7 +507,68 @@
           closeConfirmModal();
         });
       }
+
+      document.addEventListener('click', (event) => {
+        const select = document.getElementById('tier-features');
+        if (select?.classList.contains('open') && !select.contains(event.target)) {
+          closeTierFeatureDropdown();
+        }
+      });
     });
+
+    function getSelectedTierFeatures() {
+      return Array.from(document.querySelectorAll('#tier-features-panel input[type="checkbox"]:checked'))
+        .map(input => input.value);
+    }
+
+    function normalizeTierFeatures(features = []) {
+      const expanded = features.flatMap(feature => TIER_FEATURE_EXPANSIONS[feature] || [feature]);
+      return TIER_FEATURE_OPTIONS.filter(feature => expanded.includes(feature));
+    }
+
+    function updateTierFeatureSummary() {
+      const selected = getSelectedTierFeatures();
+      const summary = document.getElementById('tier-features-summary');
+      const trigger = document.getElementById('tier-features-trigger');
+      summary.textContent = selected.length === 0
+        ? 'Select features / modules'
+        : `${selected.length} selected`;
+      trigger.classList.toggle('invalid', false);
+    }
+
+    function renderTierFeatureOptions(selectedFeatures = []) {
+      const panel = document.getElementById('tier-features-panel');
+      panel.replaceChildren();
+      TIER_FEATURE_OPTIONS.forEach(feature => {
+        const label = document.createElement('label');
+        label.className = 'feature-option';
+        label.setAttribute('role', 'option');
+
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.value = feature;
+        checkbox.checked = selectedFeatures.includes(feature);
+        checkbox.addEventListener('change', updateTierFeatureSummary);
+
+        const text = document.createElement('span');
+        text.textContent = feature;
+        label.append(checkbox, text);
+        panel.appendChild(label);
+      });
+      updateTierFeatureSummary();
+    }
+
+    function toggleTierFeatureDropdown() {
+      const select = document.getElementById('tier-features');
+      const willOpen = !select.classList.contains('open');
+      select.classList.toggle('open', willOpen);
+      document.getElementById('tier-features-trigger').setAttribute('aria-expanded', String(willOpen));
+    }
+
+    function closeTierFeatureDropdown() {
+      document.getElementById('tier-features').classList.remove('open');
+      document.getElementById('tier-features-trigger').setAttribute('aria-expanded', 'false');
+    }
 
     function showConfirmModal(message, onConfirm) {
       const msgEl = document.getElementById('confirm-message');
@@ -389,9 +588,10 @@
       currentTab = tab;
       const pricingBtn = document.getElementById('tab-btn-pricing');
       const tenantsBtn = document.getElementById('tab-btn-tenants');
+      const paymentBtn = document.getElementById('tab-btn-payment');
       
       // Reset active styles
-      [pricingBtn, tenantsBtn].forEach(btn => {
+      [pricingBtn, tenantsBtn, paymentBtn].forEach(btn => {
         if (btn) {
           btn.style.borderBottomColor = 'transparent';
           btn.style.fontWeight = '600';
@@ -402,6 +602,7 @@
       // Hide all sections
       document.getElementById('pricing-section').style.display = 'none';
       document.getElementById('tenants-section').style.display = 'none';
+      document.getElementById('payment-section').style.display = 'none';
       
       // Hide all header buttons
       document.getElementById('btn-add-tier').style.display = 'none';
@@ -418,10 +619,73 @@
         document.getElementById('pricing-section').style.display = 'block';
         document.getElementById('btn-add-tier').style.display = 'inline-flex';
         document.getElementById('main-panel-title').textContent = 'Global Subscription Plans (Pricing Tiers)';
+        loadPricingTiers();
       } else if (tab === 'tenants') {
         document.getElementById('tenants-section').style.display = 'block';
         document.getElementById('main-panel-title').textContent = 'Tenants & Storage Configuration';
         loadStorageAlloc();
+      } else if (tab === 'payment') {
+        document.getElementById('payment-section').style.display = 'flex';
+        document.getElementById('main-panel-title').textContent = 'Tenant Plan Subscription Payments';
+        loadPlatformPayment();
+      }
+    }
+
+    function togglePaymentKey(id) {
+      const input = document.getElementById(id);
+      if (input) input.type = input.type === 'password' ? 'text' : 'password';
+    }
+
+    async function platformPaymentRequest(method, body) {
+      const { data: sessionData } = await sb.auth.getSession();
+      const token = sessionData?.session?.access_token;
+      if (!token) throw new Error('Your session has expired.');
+      const response = await fetch('/api/platform-payment-integrations', {
+        method,
+        headers: { Authorization: `Bearer ${token}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
+        body: body ? JSON.stringify(body) : undefined
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok && payload.diagnostic) console.error('Payment API diagnostic:', payload.diagnostic);
+      if (!response.ok) throw new Error(payload.error || 'Payment settings request failed.');
+      return payload;
+    }
+
+    async function loadPlatformPayment() {
+      try {
+        const payload = await platformPaymentRequest('GET');
+        const byProvider = Object.fromEntries((payload.integrations || []).map(item => [item.provider, item]));
+        ['paymongo', 'stripe'].forEach(provider => {
+          const row = byProvider[provider] || {};
+          document.getElementById(`platform-${provider}-public`).value = row.public_key || '';
+          document.getElementById(`platform-${provider}-secret`).value = row.secret_key || '';
+          document.getElementById(`platform-${provider}-active`).checked = Boolean(row.is_active);
+        });
+      } catch (error) {
+        console.error('Platform payment load failed:', error);
+        showToast(error.message || 'Payment settings could not be loaded.', true);
+      }
+    }
+
+    async function savePlatformPayment() {
+      const button = document.getElementById('btn-save-platform-payment');
+      button.disabled = true;
+      button.textContent = 'Saving...';
+      try {
+        const integrations = ['paymongo', 'stripe'].map(provider => ({
+          provider,
+          public_key: document.getElementById(`platform-${provider}-public`).value.trim(),
+          secret_key: document.getElementById(`platform-${provider}-secret`).value.trim(),
+          is_active: document.getElementById(`platform-${provider}-active`).checked
+        }));
+        await platformPaymentRequest('PUT', { integrations });
+        showToast('Subscription payment settings saved.');
+      } catch (error) {
+        console.error('Platform payment save failed:', error);
+        showToast(error.message || 'Payment settings could not be saved.', true);
+      } finally {
+        button.disabled = false;
+        button.textContent = 'Save Payment Settings';
       }
     }
 
@@ -761,42 +1025,60 @@
     async function loadStorageAlloc() {
       const tbody = document.getElementById('storage-alloc-body');
       if (!tbody) return;
-      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:2rem;">Loading...</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="13" style="text-align:center;color:var(--text-muted);padding:2rem;">Loading...</td></tr>';
       try {
-        // Fetch all tenants
-        const { data: tenants, error: tErr } = await sb.from('tenants').select('id, owner_email, storage_limit_mb').order('created_at');
+        const { data: tenants, error: tErr } = await sb.from('tenants')
+          .select('id,owner_email,owner_first_name,owner_last_name,mobile_number,street_address,city,province,country,pricing_tier_id,storage_limit_mb,created_at')
+          .order('created_at')
+          .limit(100);
         if (tErr) throw tErr;
         if (!tenants || tenants.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:2rem;">No tenants found.</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="13" style="text-align:center;color:var(--text-muted);padding:2rem;">No tenants found.</td></tr>';
           return;
         }
-        // Fetch all companies
-        const { data: companies } = await sb.from('companies').select('id, tenant_id, name, subdomain');
+
+        const tenantIds = tenants.map(tenant => tenant.id);
+        const [{ data: companies, error: companyError }, { data: plans, error: planError }] = await Promise.all([
+          sb.from('companies').select('id,tenant_id,name,subdomain').in('tenant_id', tenantIds).limit(100),
+          sb.from('pricing_tiers').select('id,name,user_limit,storage_limit_gb').order('price_php').limit(50)
+        ]);
+        if (companyError) throw companyError;
+        if (planError) throw planError;
+
         const companyMap = {};
         (companies || []).forEach(c => { companyMap[c.tenant_id] = c; });
+        const planMap = {};
+        tenantPlanRows = plans || [];
+        tenantPlanRows.forEach(plan => { planMap[plan.id] = plan; });
+        tenantRows = tenants.map(tenant => ({ ...tenant, company: companyMap[tenant.id] || null, plan: planMap[tenant.pricing_tier_id] || null }));
 
         tbody.innerHTML = '';
-        tenants.forEach(t => {
-          const co = companyMap[t.id];
-          const gbVal = ((t.storage_limit_mb || 5120) / 1024).toFixed(1);
+        tenantRows.forEach(t => {
+          const co = t.company;
+          const planStorageGb = Number(t.plan?.storage_limit_gb);
+          const gbVal = Number.isFinite(planStorageGb) && planStorageGb > 0
+            ? planStorageGb
+            : ((t.storage_limit_mb || 5120) / 1024);
+          const displayValue = value => value ? escapeHtml(String(value)) : '<span style="color:var(--text-muted);">—</span>';
           const tr = document.createElement('tr');
           tr.innerHTML = `
-            <td style="color:var(--text-primary);">${escapeHtml(t.owner_email)}</td>
-            <td>${co ? escapeHtml(co.name) : '<span style="color:var(--text-muted);">—</span>'}</td>
-            <td><code style="font-size:0.78rem;background:var(--bg-elevated);padding:0.1rem 0.35rem;border-radius:3px;">${co ? escapeHtml(co.subdomain || '—') : '—'}</code></td>
+            <td>${displayValue(t.owner_first_name)}</td>
+            <td>${displayValue(t.owner_last_name)}</td>
+            <td style="color:var(--text-primary);">${displayValue(t.owner_email)}</td>
+            <td>${displayValue(t.mobile_number)}</td>
+            <td>${displayValue(co?.name)}</td>
+            <td>${displayValue(t.street_address)}</td>
+            <td>${displayValue(t.city)}</td>
+            <td>${displayValue(t.province)}</td>
+            <td>${displayValue(t.country)}</td>
+            <td>${displayValue(t.plan?.name)}</td>
             <td>
               <span id="used-loader-${escapeHtml(t.id)}" style="font-size:0.82rem;font-weight:600;color:var(--text-secondary);">Calculating...</span>
             </td>
-            <td>
-              <div style="display:flex;align-items:center;gap:0.4rem;">
-                <input type="number" id="gb-input-${escapeHtml(t.id)}" data-company-id="${co ? escapeHtml(co.id) : ''}" value="${gbVal}" min="0.5" step="0.5"
-                  style="width:80px;padding:0.35rem 0.5rem;border:1px solid var(--border);border-radius:5px;font-size:0.82rem;background:var(--bg-base);color:var(--text-primary);" />
-                <span style="font-size:0.8rem;color:var(--text-muted);">GB</span>
-              </div>
-            </td>
+            <td>${escapeHtml(String(gbVal))} GB</td>
             <td style="text-align:center;">
-              <button class="btn btn-primary" style="padding:0.3rem 0.65rem;font-size:0.75rem;" onclick="saveStorageLimit('${escapeHtml(t.id)}')">
-                Save
+              <button type="button" onclick="openTenantModal('${escapeHtml(t.id)}')" aria-label="Edit tenant" title="Edit tenant" style="border:0;background:transparent;color:var(--cyan-light);cursor:pointer;padding:0;">
+                <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
               </button>
             </td>
           `;
@@ -810,48 +1092,119 @@
         });
       } catch (err) {
         console.error('loadStorageAlloc:', err);
-        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--danger);padding:2rem;">Failed to load: ${escapeHtml(err.message)}</td></tr>`;
+        tbody.innerHTML = '<tr><td colspan="13" style="text-align:center;color:var(--danger);padding:2rem;">Tenant records could not be loaded. Please refresh and try again.</td></tr>';
       }
     }
 
-    window.saveStorageLimit = async function(tenantId) {
-      const input = document.getElementById(`gb-input-${tenantId}`);
-      if (!input) return;
-      const gb = parseFloat(input.value);
-      if (isNaN(gb) || gb < 0.5) {
-        showToast('Please enter a valid GB value (minimum 0.5).', true);
+    window.openTenantModal = function(tenantId) {
+      const tenant = tenantRows.find(row => row.id === tenantId);
+      if (!tenant) return;
+      const company = tenant.company || {};
+      const planSelect = document.getElementById('tenant-plan');
+      const countrySelect = document.getElementById('tenant-country');
+      planSelect.replaceChildren(new Option('No plan assigned', ''));
+      tenantPlanRows.forEach(plan => planSelect.add(new Option(plan.name, plan.id)));
+      const countryOptions = COUNTRY_CODES
+        .map(code => countryNames?.of(code))
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b));
+      countrySelect.replaceChildren(new Option('Select country', ''));
+      countryOptions.forEach(country => countrySelect.add(new Option(country, country)));
+      if (tenant.country && !countryOptions.includes(tenant.country)) countrySelect.add(new Option(tenant.country, tenant.country));
+      document.getElementById('tenant-edit-id').value = tenant.id;
+      document.getElementById('tenant-edit-company-id').value = company.id || '';
+      document.getElementById('tenant-first-name').value = tenant.owner_first_name || '';
+      document.getElementById('tenant-last-name').value = tenant.owner_last_name || '';
+      document.getElementById('tenant-owner-email').value = tenant.owner_email || '';
+      document.getElementById('tenant-mobile-number').value = tenant.mobile_number || '';
+      document.getElementById('tenant-company-name').value = company.name || '';
+      document.getElementById('tenant-street-address').value = tenant.street_address || '';
+      document.getElementById('tenant-city').value = tenant.city || '';
+      document.getElementById('tenant-province').value = tenant.province || '';
+      countrySelect.value = tenant.country || '';
+      planSelect.value = tenant.pricing_tier_id || '';
+      document.getElementById('tenant-subdomain').value = company.subdomain || '';
+      updateTenantPlanStorageDisplay();
+      document.getElementById('tenant-modal').classList.add('open');
+    };
+
+    window.updateTenantPlanStorageDisplay = function() {
+      const planId = document.getElementById('tenant-plan').value;
+      const plan = tenantPlanRows.find(row => row.id === planId);
+      const display = document.getElementById('tenant-storage-limit-display');
+      const storageGb = Number(plan?.storage_limit_gb);
+      display.textContent = Number.isFinite(storageGb) && storageGb > 0
+        ? `${storageGb.toLocaleString('en-PH', { maximumFractionDigits: 2 })} GB`
+        : 'No plan storage assigned';
+    };
+
+    window.closeTenantModal = function() {
+      document.getElementById('tenant-modal').classList.remove('open');
+      document.getElementById('tenant-form').reset();
+    };
+
+    window.saveTenant = async function(event) {
+      event.preventDefault();
+      const button = document.getElementById('btn-save-tenant');
+      const tenantId = document.getElementById('tenant-edit-id').value;
+      const selectedPlanId = document.getElementById('tenant-plan').value;
+      const selectedPlan = tenantPlanRows.find(row => row.id === selectedPlanId);
+      const currentTenant = tenantRows.find(row => row.id === tenantId);
+      const storageGb = selectedPlanId
+        ? Number(selectedPlan?.storage_limit_gb)
+        : Number(currentTenant?.storage_limit_mb || 5120) / 1024;
+      if (!Number.isFinite(storageGb) || storageGb < 0.5) {
+        showToast('Assign a plan with a valid storage limit before saving.', true);
         return;
       }
-      const mb = Math.round(gb * 1024);
-      input.disabled = true;
+      button.disabled = true;
+      button.textContent = 'Saving...';
       try {
-        const { error } = await sb.from('tenants').update({ storage_limit_mb: mb }).eq('id', tenantId);
+        const { error } = await sb.rpc('update_platform_tenant_profile', {
+          p_tenant_id: document.getElementById('tenant-edit-id').value,
+          p_company_id: document.getElementById('tenant-edit-company-id').value,
+          p_owner_email: document.getElementById('tenant-owner-email').value.trim().toLowerCase(),
+          p_owner_first_name: document.getElementById('tenant-first-name').value.trim(),
+          p_owner_last_name: document.getElementById('tenant-last-name').value.trim(),
+          p_mobile_number: document.getElementById('tenant-mobile-number').value.trim(),
+          p_company_name: document.getElementById('tenant-company-name').value.trim(),
+          p_street_address: document.getElementById('tenant-street-address').value.trim(),
+          p_city: document.getElementById('tenant-city').value.trim(),
+          p_province: document.getElementById('tenant-province').value.trim(),
+          p_country: document.getElementById('tenant-country').value.trim(),
+          p_pricing_tier_id: document.getElementById('tenant-plan').value || null,
+          p_subdomain: document.getElementById('tenant-subdomain').value.trim() || null,
+          p_storage_limit_mb: Math.round(storageGb * 1024)
+        });
         if (error) throw error;
-        showToast(`Storage limit updated to ${gb} GB.`);
-        if (input.dataset.companyId) {
-          await calculateUsage(input.dataset.companyId, `used-loader-${tenantId}`);
-        }
+        closeTenantModal();
+        showToast('Tenant settings saved.');
+        await loadStorageAlloc();
       } catch (err) {
-        console.error('saveStorageLimit:', err);
-        showToast('Failed to save: ' + err.message, true);
+        console.error('Tenant save failed:', err);
+        showToast('Tenant settings could not be saved. Check the details and try again.', true);
       } finally {
-        input.disabled = false;
+        button.disabled = false;
+        button.textContent = 'Save';
       }
     };
 
     async function loadPricingTiers() {
       const tbody = document.getElementById('tiers-list-body');
-      tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 2rem;">Loading pricing tiers...</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 2rem;">Loading pricing tiers...</td></tr>`;
 
       try {
         const { data, error } = await sb.from('pricing_tiers').select('*').order('price_php', { ascending: true });
         if (error) throw error;
 
-        tiersList = data || [];
+        tiersList = (data || []).map(tier => ({
+          ...tier,
+          features: normalizeTierFeatures(tier.features || [])
+        }));
         tbody.innerHTML = '';
 
         if (tiersList.length === 0) {
-          tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 2rem;">No pricing tiers found. Click "Add Tier" to create one.</td></tr>`;
+          tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 2rem;">No pricing tiers found. Click "Add Tier" to create one.</td></tr>`;
           return;
         }
 
@@ -870,6 +1223,9 @@
           tr.innerHTML = `
             <td><strong style="font-size: 0.9rem; color: var(--text-primary);">${escapeHtml(tier.name)}</strong></td>
             <td>PHP ${tier.price_php.toLocaleString('en-PH', { minimumFractionDigits: 2 })} / mo</td>
+            <td>${tier.cycle_days ? escapeHtml(String(tier.cycle_days)) : '<span style="color:var(--text-muted);">—</span>'}</td>
+            <td>${tier.user_limit ? escapeHtml(String(tier.user_limit)) : '<span style="color:var(--text-muted);">—</span>'}</td>
+            <td>${tier.storage_limit_gb ? escapeHtml(Number(tier.storage_limit_gb).toLocaleString('en-PH', { maximumFractionDigits: 2 })) : '<span style="color:var(--text-muted);">—</span>'}</td>
             <td>${featuresHtml}</td>
             <td style="text-align: center;">${isVisibleToggle}</td>
             <td style="text-align: center;">
@@ -883,7 +1239,7 @@
         });
       } catch (err) {
         console.error("Error loading tiers:", err);
-        tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--danger); padding: 2rem;">Failed to load tiers: ${err.message}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--danger); padding: 2rem;">Failed to load tiers: ${err.message}</td></tr>`;
       }
     }
 
@@ -893,6 +1249,7 @@
       
       editingTierId = tierId;
       form.reset();
+      let selectedFeatures = [];
 
       if (tierId) {
         titleEl.textContent = 'Edit Pricing Tier';
@@ -900,7 +1257,10 @@
         if (tier) {
           document.getElementById('tier-name').value = tier.name;
           document.getElementById('tier-price').value = tier.price_php;
-          document.getElementById('tier-features').value = (tier.features || []).join(', ');
+          document.getElementById('tier-cycle-days').value = tier.cycle_days || '';
+          document.getElementById('tier-user-limit').value = tier.user_limit || '';
+          document.getElementById('tier-storage-limit-gb').value = tier.storage_limit_gb || '';
+          selectedFeatures = tier.features || [];
           document.getElementById('tier-visible').checked = tier.is_visible !== false;
         }
       } else {
@@ -908,10 +1268,13 @@
         document.getElementById('tier-visible').checked = true;
       }
 
+      renderTierFeatureOptions(selectedFeatures);
+      closeTierFeatureDropdown();
       document.getElementById('tier-modal').classList.add('open');
     }
 
     function closeTierModal() {
+      closeTierFeatureDropdown();
       document.getElementById('tier-modal').classList.remove('open');
     }
 
@@ -919,12 +1282,18 @@
       e.preventDefault();
       const name = document.getElementById('tier-name').value.trim();
       const price = parseInt(document.getElementById('tier-price').value);
-      const featuresStr = document.getElementById('tier-features').value;
+      const cycleDays = parseInt(document.getElementById('tier-cycle-days').value);
+      const userLimit = parseInt(document.getElementById('tier-user-limit').value);
+      const storageLimitGb = parseFloat(document.getElementById('tier-storage-limit-gb').value);
+      const features = getSelectedTierFeatures();
       const isVisible = document.getElementById('tier-visible').checked;
-      
-      const features = featuresStr.split(',').map(f => f.trim()).filter(Boolean);
 
-      if (!name || isNaN(price)) return;
+      if (!name || isNaN(price) || isNaN(cycleDays) || cycleDays < 1 || isNaN(userLimit) || userLimit < 1 || isNaN(storageLimitGb) || storageLimitGb < 0.5) return;
+      if (features.length === 0) {
+        document.getElementById('tier-features-trigger').classList.add('invalid');
+        showToast('Select at least one accessible feature or module.', true);
+        return;
+      }
 
       const btn = document.getElementById('btn-submit-tier');
       btn.disabled = true;
@@ -934,12 +1303,12 @@
         let error;
         if (editingTierId) {
           const { error: err } = await sb.from('pricing_tiers')
-            .update({ name, price_php: price, features, is_visible: isVisible })
+            .update({ name, price_php: price, cycle_days: cycleDays, user_limit: userLimit, storage_limit_gb: storageLimitGb, features, is_visible: isVisible })
             .eq('id', editingTierId);
           error = err;
         } else {
           const { error: err } = await sb.from('pricing_tiers')
-            .insert({ name, price_php: price, features, is_visible: isVisible });
+            .insert({ name, price_php: price, cycle_days: cycleDays, user_limit: userLimit, storage_limit_gb: storageLimitGb, features, is_visible: isVisible });
           error = err;
         }
 

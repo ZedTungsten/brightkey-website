@@ -58,6 +58,7 @@
                   <table>
                     <thead>
                       <tr>
+                        <th style="width:56px; text-align:center;">#</th>
                         <th>Email</th>
                         <th>Name</th>
                         <th>Access</th>
@@ -69,7 +70,7 @@
                       </tr>
                     </thead>
                     <tbody id="members-list-body">
-                      <tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 2rem;">Loading team members...</td></tr>
+                      <tr><td colspan="9" style="text-align: center; color: var(--text-muted); padding: 2rem;">Loading team members...</td></tr>
                     </tbody>
                   </table>
                 </div>
@@ -177,6 +178,33 @@
     </div>
   </div>
 
+  <!-- Password Confirmation for Member Removal -->
+  <div class="modal-overlay" id="remove-member-modal">
+    <div class="modal-card" style="width: 430px; max-width: 90%;">
+      <div class="modal-header">
+        <div class="modal-title">Confirm Member Removal</div>
+        <button class="modal-close" type="button" onclick="closeRemoveMemberModal()" aria-label="Close password confirmation">
+          <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <form id="remove-member-form" onsubmit="confirmRemoveMember(event)">
+        <div class="modal-body">
+          <input type="hidden" id="remove-member-id" />
+          <p id="remove-member-message" style="font-size:0.88rem;line-height:1.5;color:var(--text-secondary);margin-bottom:1rem;"></p>
+          <div class="form-group">
+            <label class="form-label" for="remove-member-password">Your Password <span style="color:var(--danger);">*</span></label>
+            <input type="password" id="remove-member-password" class="form-input" autocomplete="current-password" required />
+            <div id="remove-member-error" style="display:none;margin-top:0.4rem;color:var(--danger);font-size:0.78rem;" role="alert"></div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" onclick="closeRemoveMemberModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-confirm-remove-member" style="background:var(--danger);border-color:var(--danger);">Confirm Removal</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <script src="../../js/auth.js"></script>
   <script src="../../js/sidebar.js"></script>
@@ -186,6 +214,7 @@
     'use strict';
 
     let employeePrefix = 'BK';
+    let currentActorRole = '';
     const showToast = (msg, isError) => SettingsPage.showToast(msg, isError);
     const showConfirmModal = (msg, onConfirm) => SettingsPage.showConfirmModal(msg, onConfirm);
     const accessModules = ['Business', 'Products', 'Operations', 'Marketing', 'Sales', 'Customer Service', 'Logistics', 'HR', 'Finance'];
@@ -242,6 +271,18 @@
     }
 
     window.initSettingsPage = async function() {
+      try {
+        const { data: actorMember, error: actorError } = await sb.from('tenant_members')
+          .select('role')
+          .eq('tenant_id', currentTenantId)
+          .eq('user_id', currentUser.id)
+          .maybeSingle();
+        if (actorError) throw actorError;
+        currentActorRole = String(actorMember?.role || '').toLowerCase();
+      } catch (err) {
+        console.error('Current member role could not be loaded:', err);
+      }
+
       // Load Employee Prefix
       try {
         const { data } = await sb.from('global_settings').select('value').eq('key', 'hr_settings').eq('company_id', currentCompanyId).maybeSingle();
@@ -300,7 +341,7 @@
 
     async function loadAllMembers() {
       const tbody = document.getElementById('members-list-body');
-      tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 2rem;">Loading team members...</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="9" style="text-align: center; color: var(--text-muted); padding: 2rem;">Loading team members...</td></tr>`;
 
       let activeData = [];
       let inviteData = [];
@@ -367,11 +408,11 @@
       tbody.innerHTML = '';
 
       if (activeData.length === 0 && inviteData.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 2rem;">No members found. Use "Add Member" to invite your first team member.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="9" style="text-align: center; color: var(--text-muted); padding: 2rem;">No members found. Use "Add Member" to invite your first team member.</td></tr>`;
         return;
       }
 
-      activeData.forEach(row => {
+      activeData.forEach((row, index) => {
         const tr = document.createElement('tr');
         const isSelf = row.user_id === currentUser.id;
         const isOwner = row.role === 'owner';
@@ -418,6 +459,7 @@
           : '<span style="color:var(--text-muted);font-size:0.75rem;">—</span>';
 
         tr.innerHTML = `
+          <td style="text-align:center; color:var(--text-muted);">${index + 1}</td>
           <td><div style="font-weight:600;">${row.user_email || 'No email registered'}</div>${isSelf ? '<div style="font-size:0.75rem;color:var(--text-muted);">You</div>' : ''}</td>
           <td>${row.full_name || '—'}</td>
           <td>${roleCell}</td>
@@ -432,11 +474,11 @@
 
       if (inviteError) {
         const errTr = document.createElement('tr');
-        errTr.innerHTML = `<td colspan="8" style="padding:1rem; background:rgba(220,38,38,0.04); border-top:1px solid rgba(220,38,38,0.15);"><div style="display:flex;align-items:flex-start;gap:0.6rem;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#DC2626" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg><div><div style="font-size:0.8rem;font-weight:700;color:#B91C1C;">Could not load pending invitations</div><div style="font-size:0.75rem;color:#6B7280;margin-top:0.2rem;">${inviteError}</div></div></div></td>`;
+        errTr.innerHTML = `<td colspan="9" style="padding:1rem; background:rgba(220,38,38,0.04); border-top:1px solid rgba(220,38,38,0.15);"><div style="display:flex;align-items:flex-start;gap:0.6rem;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#DC2626" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg><div><div style="font-size:0.8rem;font-weight:700;color:#B91C1C;">Could not load pending invitations</div><div style="font-size:0.75rem;color:#6B7280;margin-top:0.2rem;">${inviteError}</div></div></div></td>`;
         tbody.appendChild(errTr);
       }
 
-      inviteData.forEach(row => {
+      inviteData.forEach((row, index) => {
         const tr = document.createElement('tr');
         tr.style.background = 'rgba(217,119,6,0.03)';
         let inviteRoleCell = '';
@@ -448,6 +490,7 @@
           inviteRoleCell = `<span class="badge badge-gray">${escapeHtml(row.role || 'None')}</span>`;
         }
         tr.innerHTML = `
+          <td style="text-align:center; color:var(--text-muted);">${activeData.length + index + 1}</td>
           <td><div style="font-weight:600;">${row.email}</div><div style="font-size:0.72rem;color:var(--text-muted);">Awaiting registration</div></td>
           <td>${row.full_name || '—'}</td>
           <td>${inviteRoleCell}</td>
@@ -568,16 +611,68 @@
     };
 
     window.removeMember = function(memberId) {
-      showConfirmModal('Are you sure you want to remove this member from your team? They will immediately lose dashboard access.', async () => {
-        try {
-          const { error } = await sb.from('tenant_members').delete().eq('id', memberId);
-          if (error) throw error;
-          showToast('Member removed successfully.');
-          loadAllMembers();
-        } catch (err) {
-          showToast('Failed to remove member.', true);
+      if (!['owner', 'admin'].includes(currentActorRole)) {
+        showToast('Only an owner or administrator can remove members.', true);
+        return;
+      }
+      const member = SettingsPage.allTeamMembers.find(row => row.id === memberId);
+      const memberLabel = member?.user_email || member?.full_name || 'this member';
+      document.getElementById('remove-member-id').value = memberId;
+      document.getElementById('remove-member-message').textContent = `Enter your owner or administrator password to remove ${memberLabel}. They will immediately lose dashboard access.`;
+      document.getElementById('remove-member-password').value = '';
+      const error = document.getElementById('remove-member-error');
+      error.textContent = '';
+      error.style.display = 'none';
+      document.getElementById('remove-member-modal').classList.add('open');
+      requestAnimationFrame(() => document.getElementById('remove-member-password').focus());
+    };
+
+    window.closeRemoveMemberModal = function() {
+      document.getElementById('remove-member-modal').classList.remove('open');
+      document.getElementById('remove-member-form').reset();
+      document.getElementById('remove-member-id').value = '';
+    };
+
+    window.confirmRemoveMember = async function(event) {
+      event.preventDefault();
+      const memberId = document.getElementById('remove-member-id').value;
+      const password = document.getElementById('remove-member-password').value;
+      const button = document.getElementById('btn-confirm-remove-member');
+      const error = document.getElementById('remove-member-error');
+      if (!memberId || !password) return;
+
+      button.disabled = true;
+      button.textContent = 'Verifying...';
+      error.style.display = 'none';
+      try {
+        const { data: verification, error: verificationError } = await sb.auth.signInWithPassword({
+          email: currentUser.email,
+          password
+        });
+        if (verificationError || verification?.user?.id !== currentUser.id) {
+          error.textContent = 'The password is incorrect. Please try again.';
+          error.style.display = 'block';
+          document.getElementById('remove-member-password').select();
+          return;
         }
-      });
+
+        const { error: deleteError } = await sb.from('tenant_members')
+          .delete()
+          .eq('tenant_id', currentTenantId)
+          .eq('id', memberId);
+        if (deleteError) throw deleteError;
+
+        closeRemoveMemberModal();
+        showToast('Member removed successfully.');
+        await loadAllMembers();
+      } catch (err) {
+        console.error('Member removal failed:', err);
+        error.textContent = 'The member could not be removed. Please try again.';
+        error.style.display = 'block';
+      } finally {
+        button.disabled = false;
+        button.textContent = 'Confirm Removal';
+      }
     };
 
     window.addToDirectory = async function(userId, email, fullName) {
