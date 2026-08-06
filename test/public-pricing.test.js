@@ -13,6 +13,8 @@ test('public pricing page ships its root-relative assets and subscription form',
   assert.match(page, /id="subscribe-form"/);
   assert.match(page, /id="subscriber-country"/);
   assert.match(styles, /\.pricing-alert\[hidden\], #subscribe-alert\[hidden\][^{]*\{[^}]*display: none !important/);
+  assert.match(styles, /\.pricing-grid\s*\{[^}]*grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/);
+  assert.doesNotMatch(styles, /\.pricing-card:last-child:nth-child\(odd\)/);
 });
 
 test('pricing browser code loads visible plans and submits to the protected API', () => {
