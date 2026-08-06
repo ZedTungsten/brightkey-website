@@ -1,5 +1,5 @@
 (function() {
-  'use strict';
+  'use strict'; (function loadStorageNotice(attempt = 0) { if (window.BKStorageNotice || document.querySelector('script[data-bk-storage-notice]')) return; const script = document.createElement('script'); script.dataset.bkStorageNotice = 'true'; script.src = `/js/storage-notice.js?v=20260807-${attempt}`; script.onload = () => script.removeAttribute('data-bk-storage-notice'); script.onerror = () => { script.remove(); if (attempt < 2) setTimeout(() => loadStorageNotice(attempt + 1), 500); else console.error('Storage notice could not be loaded.'); }; document.head.appendChild(script); }());
 
   let activeCompanyId = null;
 
@@ -866,6 +866,7 @@
               const company = await window.BKAuth.getCompany(roleInfo.tenantId);
               activeCompanyId = company?.id || null;
               if (activeCompanyId) {
+                window.BKActiveCompanyId = activeCompanyId; window.dispatchEvent(new CustomEvent('bk:company-ready', { detail: { companyId: activeCompanyId } }));
                 // Move expensive badge checks off the initial-load path (delay by 2s)
                 setTimeout(() => {
                   if (shouldCheckIncompleteCommissions()) {
