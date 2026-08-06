@@ -1,7 +1,7 @@
 'use strict';
 
 // --- Calendar Rendering ---
-function changeMonth(direction) {
+async function changeMonth(direction) {
   currentMonth += direction;
   if (currentMonth < 0) {
     currentMonth = 11;
@@ -10,7 +10,16 @@ function changeMonth(direction) {
     currentMonth = 0;
     currentYear++;
   }
+  loadCachedInstallerDayEvents(currentYear, currentMonth);
   drawCalendar();
+  drawAgenda();
+  try {
+    await loadInstallerDayEvents(currentYear, currentMonth);
+    drawCalendar();
+    drawAgenda();
+  } catch (error) {
+    console.error('Day-off reminders could not be synced:', error);
+  }
 }
 
 function drawCalendar() {
@@ -46,12 +55,12 @@ function drawCalendar() {
       if (!aAfternoon && bAfternoon) return -1;
       return 0;
     });
+    const dayOffs = installerDayEvents.filter(event => event.date === dateStr);
     const hasInstallations = dayBookings.length > 0;
+    const hasSchedules = hasInstallations || dayOffs.length > 0;
 
-    let underlineHtml = '';
-    if (hasInstallations) {
-      underlineHtml = '<div style="display:flex; justify-content:center; gap:2px; width:24px; position:absolute; bottom:6px; height:3px;">';
-      dayBookings.forEach(b => {
+    const scheduleMarkerColors = [];
+    dayBookings.forEach(b => {
         let doorsArr = [];
         if (typeof b.doors === 'string') {
           try { doorsArr = JSON.parse(b.doors); } catch(_) {}
@@ -68,12 +77,14 @@ function drawCalendar() {
         } else if (isDone) {
           color = hasUploadedMedia ? '#22c55e' : '#eab308'; // green/yellow
         }
-        underlineHtml += `<div style="flex:1; background:${color}; height:100%; border-radius:2.5px;"></div>`;
-      });
-      underlineHtml += '</div>';
-    }
+        scheduleMarkerColors.push(color);
+    });
+    dayOffs.forEach(() => scheduleMarkerColors.push('#991b1b'));
+    const underlineHtml = scheduleMarkerColors.length > 0
+      ? `<div style="display:flex; justify-content:center; gap:2px; width:24px; position:absolute; bottom:6px; height:3px;">${scheduleMarkerColors.map(color => `<div style="flex:1; background:${color}; height:100%; border-radius:2.5px;"></div>`).join('')}</div>`
+      : '';
 
-    const cellClass = `day-cell${isSelected ? ' selected' : ''}${isToday ? ' today' : ''}${hasInstallations ? ' has-installations' : ''}`;
+    const cellClass = `day-cell${isSelected ? ' selected' : ''}${isToday ? ' today' : ''}${hasSchedules ? ' has-installations' : ''}`;
     
     container.insertAdjacentHTML('beforeend', `
       <div class="${cellClass}" onclick="selectDay(${day})">
@@ -96,7 +107,7 @@ function drawAgenda() {
   const dateStr = formatDateISO(activeDate);
   
   const friendlyDate = activeDate.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' });
-  title.innerText = `Installations for ${friendlyDate}`;
+  title.innerText = `Schedules for ${friendlyDate}`;
   list.innerHTML = '';
 
   const dayBookings = dbBookings.filter(b => b.scheduled_date === dateStr).sort((a, b) => {
@@ -106,11 +117,29 @@ function drawAgenda() {
     if (!aAfternoon && bAfternoon) return -1;
     return 0;
   });
+  const dayOffs = installerDayEvents.filter(event => event.date === dateStr).sort((a, b) => {
+    const aAfternoon = isAfternoon(a.timeSlot);
+    const bAfternoon = isAfternoon(b.timeSlot);
+    return Number(aAfternoon) - Number(bAfternoon);
+  });
 
-  if (dayBookings.length === 0) {
-    list.innerHTML = '<div style="color:var(--text-muted); text-align:center; padding: 2rem 0; font-size:0.88rem;">No installations scheduled for this day.</div>';
+  if (dayBookings.length === 0 && dayOffs.length === 0) {
+    list.innerHTML = '<div style="color:var(--text-muted); text-align:center; padding: 2rem 0; font-size:0.88rem;">No schedules for this day.</div>';
     return;
   }
+
+  dayOffs.forEach(dayOff => {
+    const timeLabel = isAfternoon(dayOff.timeSlot) ? 'Afternoon (PM)' : 'Morning (AM)';
+    list.insertAdjacentHTML('beforeend', `
+      <div class="booking-card day-off">
+        <div class="booking-card-top">
+          <span class="booking-time">${escapeHtml(timeLabel)}</span>
+        </div>
+        <div class="booking-client">Day off</div>
+        <div class="booking-details-summary">Calendar reminder</div>
+      </div>
+    `);
+  });
 
   dayBookings.forEach(b => {
     const addressParts = (b.customer_address || '').split(',');

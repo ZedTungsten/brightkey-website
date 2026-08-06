@@ -8,6 +8,7 @@ let sb;
 // State variables
 let currentInstaller = null; // { id, first_name, last_name, company_id, password }
 let dbBookings = [];
+let installerDayEvents = [];
 let deliveryBookingsMap = {};
 let installerPayoutSettings = null;
 let payoutTrackerData = { config: {}, regularState: {}, specialState: {}, proratedState: {}, adjustments: [], reimbursements: [], payslipRecords: [], companyProfile: {}, payslipConfig: {} };

@@ -4,11 +4,9 @@
       if (!address) return 'N/A';
       const parts = address.split(',');
       if (parts.length >= 2) {
-        // Typically street, city, province. Let's return second to last or smart guess.
-        // Let's clean and return the city/municipality
         return parts[parts.length - 2].trim();
       }
-      return address;
+      return 'N/A';
     }
 
     function renderMapPinLink(element, value) {

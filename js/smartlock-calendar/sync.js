@@ -5,6 +5,7 @@ function loadCachedBookings() {
   if (!currentInstaller) return;
   const cacheKey = `bk_cache_${currentInstaller.id}`;
   const cached = localStorage.getItem(cacheKey);
+  loadCachedInstallerDayEvents(currentYear, currentMonth);
   if (cached) {
     try {
       const { data, timestamp } = JSON.parse(cached);
@@ -44,6 +45,57 @@ function loadCachedBookings() {
   }
 }
 
+function getInstallerDayEventSettingKey(year, monthIndex) {
+  return `booking_calendar_day_events_${year}_${String(monthIndex + 1).padStart(2, '0')}`;
+}
+
+function getInstallerDayEventCacheKey(year, monthIndex) {
+  return `bk_day_events_${currentInstaller.id}_${getInstallerDayEventSettingKey(year, monthIndex)}`;
+}
+
+function filterInstallerDayEvents(events) {
+  return (Array.isArray(events) ? events : []).filter(event => (
+    event?.type === 'day_off'
+    && Array.isArray(event.installers)
+    && event.installers.some(installer => installer?.id === currentInstaller.id)
+  ));
+}
+
+function loadCachedInstallerDayEvents(year, monthIndex) {
+  if (!currentInstaller) return;
+  const cached = localStorage.getItem(getInstallerDayEventCacheKey(year, monthIndex));
+  if (!cached) {
+    installerDayEvents = [];
+    return;
+  }
+  try {
+    installerDayEvents = filterInstallerDayEvents(JSON.parse(cached));
+  } catch (_) {
+    installerDayEvents = [];
+  }
+}
+
+async function loadInstallerDayEvents(year, monthIndex) {
+  if (!currentInstaller || !sb) return;
+  const settingKey = getInstallerDayEventSettingKey(year, monthIndex);
+  const { data, error } = await sb
+    .from('global_settings')
+    .select('value')
+    .eq('company_id', currentInstaller.company_id)
+    .eq('key', settingKey)
+    .maybeSingle();
+
+  if (error) throw error;
+  const filteredEvents = filterInstallerDayEvents(data?.value);
+  localStorage.setItem(
+    getInstallerDayEventCacheKey(year, monthIndex),
+    JSON.stringify(filteredEvents)
+  );
+  if (year === currentYear && monthIndex === currentMonth) {
+    installerDayEvents = filteredEvents;
+  }
+}
+
 async function syncData() {
   if (!currentInstaller || !sb) return;
 
@@ -70,6 +122,12 @@ async function syncData() {
 
     Object.assign(currentInstaller, payoutProfile);
     localStorage.setItem('bk_active_installer', JSON.stringify(currentInstaller));
+
+    try {
+      await loadInstallerDayEvents(currentYear, currentMonth);
+    } catch (dayEventError) {
+      console.error('Day-off reminders could not be synced:', dayEventError);
+    }
 
     // Fetch booking checklist
     const { data: checklistRes } = await sb

@@ -184,10 +184,11 @@
       
       // Filter bookings for this day
       const dayBookings = dbBookings.filter(b => b.scheduled_date === dateStr);
+      const dayReminders = calendarDayEvents.filter(dayEvent => dayEvent.date === dateStr);
       const listContainer = document.getElementById('day-events-list');
       
-      if (dayBookings.length === 0) {
-        listContainer.innerHTML = '<div style="color:var(--text-muted); text-align:center; padding: 1.5rem 0;">No bookings</div>';
+      if (dayBookings.length === 0 && dayReminders.length === 0) {
+        listContainer.innerHTML = '<div style="color:var(--text-muted); text-align:center; padding: 1.5rem 0;">No schedules</div>';
       } else {
         listContainer.innerHTML = '';
         dayBookings.forEach(b => {
@@ -215,6 +216,24 @@
             <div>
               ${isAborted ? '<span style="font-size:0.7rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;">Aborted</span>' : ''}
             </div>
+          `;
+          listContainer.appendChild(item);
+        });
+
+        dayReminders.forEach(dayReminder => {
+          const timeLabel = isAfternoon(dayReminder.timeSlot) ? 'Afternoon (PM)' : 'Morning (AM)';
+          const installerNames = (dayReminder.installers || [])
+            .map(installer => formatInstallerName(installer.name || ''))
+            .filter(Boolean)
+            .join(', ');
+          const item = document.createElement('div');
+          item.style.padding = '0.75rem';
+          item.style.border = '1px solid rgba(239, 68, 68, 0.25)';
+          item.style.borderRadius = '6px';
+          item.style.background = 'rgba(239, 68, 68, 0.06)';
+          item.innerHTML = `
+            <div style="font-weight: 600; color: #b91c1c;">Day off</div>
+            <div style="font-size: 0.75rem; color: var(--text-muted);">${timeLabel}${installerNames ? ` · ${escapeHtml(installerNames)}` : ''}</div>
           `;
           listContainer.appendChild(item);
         });
@@ -326,79 +345,49 @@
         });
       });
 
-      const installerIdStr = installersList.length > 0 ? installersList.map(i => i.id).join(' | ') : null;
-      const installerNameStr = installersList.length > 0 ? installersList.map(i => i.name).join(' | ') : null;
-
       const selectVal = document.getElementById('event-type')?.value || 'Day-off';
-      const eventTypeName = selectVal === 'Day-off' ? 'Day off' : selectVal;
-      const typePrefix = selectVal === 'Day-off' ? 'DO' : 'EV';
-      const customerName = selectVal === 'Day-off' ? 'Day off' : selectVal;
+      if (selectVal !== 'Day-off') return;
+      if (installersList.length === 0) {
+        showToast('Select at least one installer for the Day-off reminder.', true);
+        return;
+      }
 
-      const randomSuffix = Date.now();
-      const folderRefId = `${typePrefix}-${randomSuffix}`;
-      const orderNo = `${typePrefix}-${randomSuffix}`;
-
-      // Product details mapping
-      const installerNamesList = installersList.map(i => formatInstallerName(i.name));
-      const installerNamesJoined = installerNamesList.join(', ');
-      const productName = installerNamesJoined ? `${eventTypeName} - ${installerNamesJoined}` : eventTypeName;
-
-      const customerAddress = 'Day off';
-      const customerCity = '';
-      const customerProvince = '';
-      const customerPhone = '';
-      const customerEmail = '';
-      const googleMapPinUrl = null;
-      const notes = null;
-
-      const payload = {
-        company_id: currentCompanyId,
-        folder_ref_id: folderRefId,
-        order_no: orderNo,
-        customer_name: customerName,
-        customer_address: customerAddress,
-        customer_city: customerCity,
-        customer_province: customerProvince,
-        customer_social: matched ? matched.customer_social : null,
-        customer_email: customerEmail,
-        customer_phone: customerPhone,
-        google_map_pin_url: googleMapPinUrl,
-        notes: notes,
-        scheduled_date: selectedDayDate,
-        scheduled_time: timeSlot,
-        installer_id: installerIdStr,
-        installer_name: installerNameStr,
-        installers: installersList,
-        status: 'scheduled',
-        grand_total: 0,
-        subtotal: 0,
-        product_skus: eventTypeName,
-        product_names: productName,
-        product_qtys: '1',
-        product_unit_prices: '0',
-        product_totals: '0',
-        products: [{
-          sku: eventTypeName,
-          name: productName,
-          quantity: 1,
-          price: 0,
-          total: 0
-        }],
-        doors: []
-      };
+      const eventDate = new Date(`${selectedDayDate}T00:00:00`);
+      const settingKey = getDayEventSettingKey(eventDate.getFullYear(), eventDate.getMonth());
 
       try {
-        const { error } = await sb
-          .from('installation_bookings')
-          .insert([payload]);
+        const { data: currentSetting, error: loadError } = await sb
+          .from('global_settings')
+          .select('value')
+          .eq('company_id', currentCompanyId)
+          .eq('key', settingKey)
+          .maybeSingle();
+
+        if (loadError) throw loadError;
+
+        const existingEvents = Array.isArray(currentSetting?.value) ? currentSetting.value : [];
+        const dayEvent = {
+          id: crypto.randomUUID(),
+          type: 'day_off',
+          date: selectedDayDate,
+          timeSlot,
+          installers: installersList,
+          createdAt: new Date().toISOString()
+        };
+        const { error } = await sb.from('global_settings').upsert({
+          company_id: currentCompanyId,
+          key: settingKey,
+          value: [...existingEvents, dayEvent],
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'company_id,key' });
 
         if (error) throw error;
 
-        showToast(`${eventTypeName} created successfully.`);
+        showToast('Day-off reminder added to the calendar.');
         toggleDayEventsModal(false);
         await loadMonthBookings();
       } catch (err) {
         console.error('Failed to create event:', err);
-        showToast('Failed to create event: ' + err.message, true);
+        showToast('The Day-off reminder could not be saved. Please try again.', true);
       }
     }

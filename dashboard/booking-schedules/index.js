@@ -53,6 +53,7 @@
     let currentCompanyId;
     let dbBookings = [];
     let calendarBookings = [];
+    let calendarDayEvents = [];
     let dbTransactionsMap = new Map();
     let dbEmployees = [];
     let dbProducts = [];
@@ -62,6 +63,7 @@
     let installerPayoutSettings = {};
     let filteredBookings = [];
     let filteredCalendarBookings = [];
+    let filteredCalendarDayEvents = [];
     let selectedBooking = null;
     let selectedDayDate = '';
     let searchQuery = '';
@@ -300,18 +302,48 @@
       }
     }
 
+    function getDayEventSettingKey(year, monthIndex) {
+      return `booking_calendar_day_events_${year}_${String(monthIndex + 1).padStart(2, '0')}`;
+    }
+
+    function getCalendarDayEventSettingKeys(start, end) {
+      const keys = [];
+      const cursor = new Date(`${start}T00:00:00`);
+      const last = new Date(`${end}T00:00:00`);
+      cursor.setDate(1);
+      last.setDate(1);
+      while (cursor <= last) {
+        keys.push(getDayEventSettingKey(cursor.getFullYear(), cursor.getMonth()));
+        cursor.setMonth(cursor.getMonth() + 1);
+      }
+      return keys;
+    }
+
     async function loadMonthBookings() {
       setMonthBookingsLoading(true);
       updateHash();
       const { start, end } = getCalendarDateRange(currentYear, currentMonth);
       const monthRange = getMonthDateRange(currentYear, currentMonth);
       try {
-        const bookingsRes = await sb
-          .from('installation_bookings')
-          .select('*')
-          .eq('company_id', currentCompanyId)
-          .gte('scheduled_date', start)
-          .lte('scheduled_date', end);
+        const dayEventKeys = getCalendarDayEventSettingKeys(start, end);
+        const [bookingsRes, dayEventsRes] = await Promise.all([
+          sb
+            .from('installation_bookings')
+            .select('*')
+            .eq('company_id', currentCompanyId)
+            .gte('scheduled_date', start)
+            .lte('scheduled_date', end),
+          sb
+            .from('global_settings')
+            .select('key,value')
+            .eq('company_id', currentCompanyId)
+            .in('key', dayEventKeys)
+        ]);
+
+        if (dayEventsRes.error) throw dayEventsRes.error;
+        calendarDayEvents = (dayEventsRes.data || []).flatMap(setting => (
+          Array.isArray(setting.value) ? setting.value : []
+        )).filter(event => event?.date >= start && event?.date <= end);
 
         let data = bookingsRes.data;
         if (bookingsRes.error) {
@@ -376,6 +408,7 @@
       if (!searchQuery) {
         filteredBookings = [...dbBookings];
         filteredCalendarBookings = [...calendarBookings];
+        filteredCalendarDayEvents = [...calendarDayEvents];
       } else {
         const matchesSearch = b => {
           const name = (b.customer_name || '').toLowerCase();
@@ -389,6 +422,11 @@
         };
         filteredBookings = dbBookings.filter(matchesSearch);
         filteredCalendarBookings = calendarBookings.filter(matchesSearch);
+        filteredCalendarDayEvents = calendarDayEvents.filter(event => {
+          const type = String(event.type || '').toLowerCase();
+          const installers = (event.installers || []).map(installer => installer.name || '').join(' ').toLowerCase();
+          return type.includes(searchQuery) || installers.includes(searchQuery);
+        });
       }
 
       // Sort filtered bookings by scheduled date and time (AM slot before PM slot)
@@ -538,13 +576,13 @@
         
         // Filter bookings scheduled for this date (from our searched list)
         const dayBookings = filteredCalendarBookings.filter(b => b.scheduled_date === dateStr);
+        const dayEvents = filteredCalendarDayEvents.filter(event => event.date === dateStr);
 
         let amHtml = '';
         let pmHtml = '';
 
         dayBookings.forEach(b => {
-          // Parse city from address or fallback
-          const cityStr = getCityFromAddress(b.customer_address);
+          const cityStr = String(b.customer_city || '').trim() || getCityFromAddress(b.customer_address);
           const alertIcon = (b.needs_work_permit && !b.work_permit_image_url) 
             ? ` <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#DC2626" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block; vertical-align:middle; margin-left: 2px;"><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>` 
             : '';
@@ -662,6 +700,25 @@
           `;
 
           if (isAfternoon(b.scheduled_time)) {
+            pmHtml += slotHtml;
+          } else {
+            amHtml += slotHtml;
+          }
+        });
+
+        dayEvents.forEach(dayEvent => {
+          const installerNames = (dayEvent.installers || [])
+            .map(installer => formatInstallerName(installer.name || ''))
+            .filter(Boolean)
+            .join(', ');
+          const label = installerNames ? `Day off - ${installerNames}` : 'Day off';
+          const slotHtml = `
+            <div class="calendar-slot day-off${isOutsideMonth ? ' adjacent-month-booking' : ''}" title="${escapeHtml(label)}"${isOutsideMonth ? ' aria-disabled="true"' : ''}>
+              <div style="font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; width:100%;">${escapeHtml(label)}</div>
+            </div>
+          `;
+
+          if (isAfternoon(dayEvent.timeSlot)) {
             pmHtml += slotHtml;
           } else {
             amHtml += slotHtml;
