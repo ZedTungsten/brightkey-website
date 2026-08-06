@@ -18,6 +18,8 @@ async function checkDeployedAssets() {
   const checks = [
     ['/js/sidebar.js', 'javascript', 'loadStorageNotice'],
     ['/js/storage-notice.js', 'javascript', 'get_company_storage_notice'],
+    ['/js/pricing.js', 'javascript', '/api/subscription-requests'],
+    ['/pricing', 'text/html', 'id="pricing-grid"'],
     ['/dashboard/master-settings/tenants', 'text/html', 'sidebar.js']
   ];
   for (const [pathname, contentType, marker] of checks) {
