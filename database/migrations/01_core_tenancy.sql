@@ -1,3 +1,11 @@
+-- Consolidated Database Migration: 01_core_tenancy.sql
+-- Generated on 2026-08-06T15:24:48.288Z
+
+
+-- =========================================================================
+-- SOURCE FILE: 01_core_tenancy_and_storage.sql
+-- =========================================================================
+
 -- =============================================================================
 -- BrightKey Consolidated Core Tenancy & Storage Migration (01_core_tenancy_and_storage.sql)
 -- Consolidates tenants, companies, tenant members, customer profiles,
@@ -173,7 +181,7 @@ CREATE OR REPLACE FUNCTION public.is_tenant_admin(usr_id UUID, t_id UUID)
 RETURNS BOOLEAN SECURITY DEFINER AS $$
 BEGIN
   RETURN EXISTS (
-    SELECT 1 FROM public.tenant_members 
+    SELECT 1 FROM public.tenant_members
     WHERE user_id = usr_id AND tenant_id = t_id AND role IN ('owner', 'admin')
   );
 END;
@@ -333,7 +341,7 @@ SECURITY DEFINER
 AS $$
 BEGIN
   RETURN QUERY
-  SELECT 
+  SELECT
     c.tenant_id,
     c.id AS company_id,
     COALESCE(
@@ -342,22 +350,147 @@ BEGIN
         FROM storage.objects
         WHERE bucket_id IN ('brightkey-assets', 'brightkey-internal')
           AND name LIKE 'companies/' || c.id || '/%'
-      ), 
+      ),
       0
     )::BIGINT AS bytes_used
   FROM public.companies c;
 END;
 $$;
 
-CREATE OR REPLACE VIEW public.view_public_integrations 
-WITH (security_invoker = true) 
+CREATE OR REPLACE VIEW public.view_public_integrations
+WITH (security_invoker = true)
 AS
-SELECT 
-  company_id, 
-  (paymongo_public_key IS NOT NULL AND paymongo_secret_key IS NOT NULL) AS paymongo_configured, 
+SELECT
+  company_id,
+  (paymongo_public_key IS NOT NULL AND paymongo_secret_key IS NOT NULL) AS paymongo_configured,
   (stripe_public_key IS NOT NULL AND stripe_secret_key IS NOT NULL) AS stripe_configured,
   paymongo_public_key,
   stripe_public_key
 FROM public.company_integrations;
 
 GRANT SELECT ON public.view_public_integrations TO anon, authenticated;
+
+
+-- =========================================================================
+-- SOURCE FILE: 15_secure_company_invitations.sql
+-- =========================================================================
+
+ALTER TABLE public.company_invitations
+  ADD COLUMN IF NOT EXISTS company_id UUID REFERENCES public.companies(id) ON DELETE CASCADE,
+  ADD COLUMN IF NOT EXISTS token_hash TEXT,
+  ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS used_at TIMESTAMPTZ;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_company_invitations_tenant_email
+  ON public.company_invitations (tenant_id, lower(email));
+
+CREATE INDEX IF NOT EXISTS idx_company_invitations_token_hash
+  ON public.company_invitations (token_hash)
+  WHERE token_hash IS NOT NULL AND used_at IS NULL;
+
+
+-- =========================================================================
+-- SOURCE FILE: 20_api_rate_limits.sql
+-- =========================================================================
+
+CREATE TABLE IF NOT EXISTS public.api_rate_limits (
+  scope TEXT NOT NULL,
+  key_hash TEXT NOT NULL,
+  window_start TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  request_count INTEGER NOT NULL DEFAULT 1 CHECK (request_count > 0),
+  PRIMARY KEY (scope, key_hash)
+);
+
+ALTER TABLE public.api_rate_limits ENABLE ROW LEVEL SECURITY;
+
+CREATE OR REPLACE FUNCTION public.consume_api_rate_limit(
+  p_scope TEXT,
+  p_key_hash TEXT,
+  p_limit INTEGER,
+  p_window_seconds INTEGER
+)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  current_count INTEGER;
+BEGIN
+  IF p_limit < 1 OR p_window_seconds < 1 THEN
+    RETURN FALSE;
+  END IF;
+
+  INSERT INTO public.api_rate_limits AS rate_limit (
+    scope,
+    key_hash,
+    window_start,
+    request_count
+  )
+  VALUES (p_scope, p_key_hash, NOW(), 1)
+  ON CONFLICT (scope, key_hash)
+  DO UPDATE SET
+    window_start = CASE
+      WHEN rate_limit.window_start <= NOW() - make_interval(secs => p_window_seconds)
+        THEN NOW()
+      ELSE rate_limit.window_start
+    END,
+    request_count = CASE
+      WHEN rate_limit.window_start <= NOW() - make_interval(secs => p_window_seconds)
+        THEN 1
+      ELSE rate_limit.request_count + 1
+    END
+  RETURNING request_count INTO current_count;
+
+  RETURN current_count <= p_limit;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.consume_api_rate_limit(TEXT, TEXT, INTEGER, INTEGER) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.consume_api_rate_limit(TEXT, TEXT, INTEGER, INTEGER) TO service_role;
+
+
+-- =========================================================================
+-- SOURCE FILE: 23_security_audit_log.sql
+-- =========================================================================
+
+CREATE TABLE IF NOT EXISTS public.security_audit_log (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id UUID REFERENCES public.companies(id) ON DELETE SET NULL,
+  actor_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  action TEXT NOT NULL,
+  target_type TEXT,
+  target_id TEXT,
+  metadata JSONB NOT NULL DEFAULT '{}'::JSONB,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE public.security_audit_log ENABLE ROW LEVEL SECURITY;
+
+CREATE INDEX IF NOT EXISTS idx_security_audit_company_created
+  ON public.security_audit_log (company_id, created_at DESC);
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'security_audit_log'
+      AND policyname = 'Tenant admins can read security audit log'
+  ) THEN
+    CREATE POLICY "Tenant admins can read security audit log"
+      ON public.security_audit_log
+      FOR SELECT TO authenticated
+      USING (
+        EXISTS (
+          SELECT 1
+          FROM public.companies AS company
+          JOIN public.tenant_members AS member ON member.tenant_id = company.tenant_id
+          WHERE company.id = security_audit_log.company_id
+            AND member.user_id = (SELECT auth.uid())
+            AND member.role IN ('owner', 'admin')
+        )
+      );
+  END IF;
+END
+$$;
