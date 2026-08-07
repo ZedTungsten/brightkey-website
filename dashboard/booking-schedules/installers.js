@@ -145,40 +145,38 @@
       const container = document.getElementById(`door-inst-container-${doorIndex}`);
       if (!container) return;
 
-      const roleLabel = (text) => `<span style="font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text-muted);letter-spacing:0.04em;min-width:36px;flex-shrink:0;">${text}</span>`;
+      const roleLabel = (text) => `<span style="font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text-muted);letter-spacing:0.04em;">${text}</span>`;
+      const roleRowStyle = 'display:grid;grid-template-columns:48px minmax(0,1fr) 28px;gap:0.35rem;align-items:center;';
 
       const serviceHtml = hasServiceProduct ? `
-          <div style="display: flex; gap: 0.35rem; align-items: center;">
+          <div style="${roleRowStyle}">
             ${roleLabel('Service')}
             <select class="form-input" style="height:auto; padding:0.35rem; font-size:0.8rem; flex:1;" id="edit-inst-${doorIndex}-service" data-role="service">
               ${buildDoorInstallerOptions(serviceInst?.id || '')}
             </select>
-            <div style="width: 28px;"></div>
+            <span></span>
           </div>
       ` : '';
 
       container.innerHTML = `
         <div style="display: flex; flex-direction: column; gap: 0.4rem;">
-          <div style="display: flex; gap: 0.35rem; align-items: center;">
+          <div style="${roleRowStyle}">
             ${roleLabel('Lead')}
             <select class="form-input" style="height:auto; padding:0.35rem; font-size:0.8rem; flex:1;" id="edit-inst-${doorIndex}-1" data-role="lead">
               ${buildDoorInstallerOptions(inst1Id)}
             </select>
-            <button type="button" class="btn-minimal btn-success" onclick="saveDoorInstallersEdit(${doorIndex})" title="Save">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-            </button>
             <button type="button" class="btn-minimal btn-danger" onclick="cancelDoorInstallersEdit(${doorIndex})" title="Cancel">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
             </button>
           </div>
-          <div id="edit-inst-2-wrapper-${doorIndex}" style="display: ${hasAssist2 ? 'flex' : 'none'}; gap: 0.35rem; align-items: center;">
+          <div id="edit-inst-2-wrapper-${doorIndex}" style="${roleRowStyle}display:${hasAssist2 ? 'grid' : 'none'};">
             ${roleLabel('Assist')}
             <select class="form-input" style="height:auto; padding:0.35rem; font-size:0.8rem; flex:1;" id="edit-inst-${doorIndex}-2" data-role="assist">
               ${buildDoorInstallerOptions(inst2Id)}
             </select>
             <button type="button" class="btn-minimal btn-danger" onclick="removeAssistInstallerEdit(${doorIndex}, 2)" title="Remove"><svg viewBox="0 0 24 24" style="width:14px;height:14px;display:block;fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
           </div>
-          <div id="edit-inst-3-wrapper-${doorIndex}" style="display: ${hasAssist3 ? 'flex' : 'none'}; gap: 0.35rem; align-items: center;">
+          <div id="edit-inst-3-wrapper-${doorIndex}" style="${roleRowStyle}display:${hasAssist3 ? 'grid' : 'none'};">
             ${roleLabel('Assist')}
             <select class="form-input" style="height:auto; padding:0.35rem; font-size:0.8rem; flex:1;" id="edit-inst-${doorIndex}-3" data-role="assist">
               ${buildDoorInstallerOptions(inst3Id)}
@@ -189,6 +187,8 @@
           <button type="button" class="btn btn-outline btn-sm" id="btn-add-inst-edit-${doorIndex}"
             style="display: ${(hasAssist2 && hasAssist3) ? 'none' : 'inline-flex'}; font-size: 0.72rem; padding: 0.2rem 0.5rem;"
             onclick="addAssistInstallerEdit(${doorIndex})">+ Add Assist</button>
+          <button type="button" class="btn btn-sm" onclick="saveDoorInstallersEdit(${doorIndex})"
+            style="width:100%;justify-content:center;background:var(--success,#16a34a);border-color:var(--success,#16a34a);color:#fff;">Save</button>
         </div>
       `;
     };
@@ -198,9 +198,9 @@
       const w2 = document.getElementById(`edit-inst-2-wrapper-${doorIndex}`);
       const w3 = document.getElementById(`edit-inst-3-wrapper-${doorIndex}`);
       if (w2 && w2.style.display === 'none') {
-        w2.style.display = 'flex';
+        w2.style.display = 'grid';
       } else if (w3 && w3.style.display === 'none') {
-        w3.style.display = 'flex';
+        w3.style.display = 'grid';
       }
       // Hide add btn if both assist slots are now visible
       if (w2 && w3 && w2.style.display !== 'none' && w3.style.display !== 'none') {
@@ -260,30 +260,28 @@
       const container = document.getElementById(`door-inst-container-general-${index}`);
       if (!container) return;
 
-      const roleLabel = (text) => `<span style="font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text-muted);letter-spacing:0.04em;min-width:36px;flex-shrink:0;">${text}</span>`;
+      const roleLabel = (text) => `<span style="font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text-muted);letter-spacing:0.04em;">${text}</span>`;
+      const roleRowStyle = 'display:grid;grid-template-columns:48px minmax(0,1fr) 28px;gap:0.35rem;align-items:center;';
 
       container.innerHTML = `
         <div style="display: flex; flex-direction: column; gap: 0.4rem;">
-          <div style="display: flex; gap: 0.35rem; align-items: center;">
+          <div style="${roleRowStyle}">
             ${roleLabel('Lead')}
             <select class="form-input" style="height:auto; padding:0.35rem; font-size:0.8rem; flex:1;" id="edit-inst-general-${index}-1" data-role="lead">
               ${buildDoorInstallerOptions(inst1Id)}
             </select>
-            <button type="button" class="btn-minimal btn-success" onclick="saveBookingInstallersEdit(${index})" title="Save">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-            </button>
             <button type="button" class="btn-minimal btn-danger" onclick="cancelBookingInstallersEdit(${index})" title="Cancel">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
             </button>
           </div>
-          <div id="edit-inst-2-wrapper-general-${index}" style="display: ${hasAssist2 ? 'flex' : 'none'}; gap: 0.35rem; align-items: center;">
+          <div id="edit-inst-2-wrapper-general-${index}" style="${roleRowStyle}display:${hasAssist2 ? 'grid' : 'none'};">
             ${roleLabel('Assist')}
             <select class="form-input" style="height:auto; padding:0.35rem; font-size:0.8rem; flex:1;" id="edit-inst-general-${index}-2" data-role="assist">
               ${buildDoorInstallerOptions(inst2Id)}
             </select>
             <button type="button" class="btn-minimal btn-danger" onclick="removeBookingAssistInstallerEdit(${index}, 2)" title="Remove"><svg viewBox="0 0 24 24" style="width:14px;height:14px;display:block;fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
           </div>
-          <div id="edit-inst-3-wrapper-general-${index}" style="display: ${hasAssist3 ? 'flex' : 'none'}; gap: 0.35rem; align-items: center;">
+          <div id="edit-inst-3-wrapper-general-${index}" style="${roleRowStyle}display:${hasAssist3 ? 'grid' : 'none'};">
             ${roleLabel('Assist')}
             <select class="form-input" style="height:auto; padding:0.35rem; font-size:0.8rem; flex:1;" id="edit-inst-general-${index}-3" data-role="assist">
               ${buildDoorInstallerOptions(inst3Id)}
@@ -293,6 +291,8 @@
           <button type="button" class="btn btn-outline btn-sm" id="btn-add-inst-edit-general-${index}"
             style="display: ${(hasAssist2 && hasAssist3) ? 'none' : 'inline-flex'}; font-size: 0.72rem; padding: 0.2rem 0.5rem;"
             onclick="addBookingAssistInstallerEdit(${index})">+ Add Assist</button>
+          <button type="button" class="btn btn-sm" onclick="saveBookingInstallersEdit(${index})"
+            style="width:100%;justify-content:center;background:var(--success,#16a34a);border-color:var(--success,#16a34a);color:#fff;">Save</button>
         </div>
       `;
     };
@@ -302,9 +302,9 @@
       const wrap3 = document.getElementById(`edit-inst-3-wrapper-general-${index}`);
       const addBtn = document.getElementById(`btn-add-inst-edit-general-${index}`);
       if (wrap2 && wrap2.style.display === 'none') {
-        wrap2.style.display = 'flex';
+        wrap2.style.display = 'grid';
       } else if (wrap3 && wrap3.style.display === 'none') {
-        wrap3.style.display = 'flex';
+        wrap3.style.display = 'grid';
         if (addBtn) addBtn.style.display = 'none';
       }
     };
