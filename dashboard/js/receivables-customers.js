@@ -147,8 +147,12 @@ const ReceivablesApp = {
 
   resolveDeposit(booking) {
     let total = Math.abs(this.toCents(booking.deposit_amount));
-    const labels = Array.isArray(booking.deduction_labels) ? booking.deduction_labels : [];
-    const values = Array.isArray(booking.deduction_values) ? booking.deduction_values : [];
+    const labels = Array.isArray(booking.deduction_labels)
+      ? booking.deduction_labels
+      : String(booking.deduction_labels || '').split('|');
+    const values = Array.isArray(booking.deduction_values)
+      ? booking.deduction_values
+      : String(booking.deduction_values || '').split('|');
     labels.forEach((label, index) => {
       if (String(label).toLowerCase().includes('deposit')) total += Math.abs(Math.round((Number(values[index]) || 0) * 100));
     });
