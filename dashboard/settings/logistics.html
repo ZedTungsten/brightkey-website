@@ -396,6 +396,7 @@
     let suppliers = [];
     let businessesList = [];
     let supplierQrPhotoBlob = null;
+    let duplicatedSupplierQrUrl = null;
     let supplierQrStream = null;
     let activeWarehouseId = null;
     const showToast = (msg, isError) => SettingsPage.showToast(msg, isError);
@@ -975,10 +976,13 @@
                 No QR Code
               </div>`}
 
-              <!-- Edit button (Pencil icon) -->
-              <div style="display:flex; justify-content:flex-end; width: 100%;">
+              <!-- Supplier actions -->
+              <div style="display:flex; justify-content:flex-end; gap:0.35rem; width: 100%;">
                 <button class="btn btn-outline" onclick="window.editSupplier('${s.id}')" style="width:28px; height:28px; padding:0; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; color:var(--text-secondary); border-color:var(--border);" title="Edit Supplier">
                   <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                </button>
+                <button class="btn btn-outline" onclick="window.duplicateSupplier('${s.id}')" style="width:28px; height:28px; padding:0; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; color:var(--text-secondary); border-color:var(--border);" title="Duplicate Supplier" aria-label="Duplicate Supplier">
+                  <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3"/></svg>
                 </button>
               </div>
             </div>
@@ -1006,6 +1010,7 @@
       document.getElementById('supplier-pay-num').value = '';
       
       supplierQrPhotoBlob = null;
+      duplicatedSupplierQrUrl = null;
       document.getElementById('supplier-qr-photo-preview').style.display = 'none';
       document.getElementById('supplier-qr-photo-preview').src = '';
       document.getElementById('supplier-qr-placeholder').style.display = 'flex';
@@ -1024,12 +1029,9 @@
       document.getElementById('supplier-modal').classList.remove('open');
     };
 
-    window.editSupplier = function(id) {
-      const s = suppliers.find(x => x.id === id);
-      if (!s) return;
-
-      document.getElementById('supplier-id').value = s.id;
-      document.getElementById('supplier-modal-title').textContent = 'Edit Supplier';
+    function openSupplierFromRecord(s, duplicate = false) {
+      document.getElementById('supplier-id').value = duplicate ? '' : s.id;
+      document.getElementById('supplier-modal-title').textContent = duplicate ? 'Duplicate Supplier' : 'Edit Supplier';
       document.getElementById('supplier-business').value = s.business_id || '';
       document.getElementById('supplier-tin').value = s.tin || '';
       document.getElementById('supplier-name').value = s.name || '';
@@ -1046,6 +1048,7 @@
       document.getElementById('supplier-pay-num').value = s.payment_account_number || '';
       
       supplierQrPhotoBlob = null;
+      duplicatedSupplierQrUrl = duplicate ? (s.qr_image_url || null) : null;
       const preview = document.getElementById('supplier-qr-photo-preview');
       const placeholder = document.getElementById('supplier-qr-placeholder');
       
@@ -1059,8 +1062,20 @@
         placeholder.style.display = 'flex';
       }
 
-      document.getElementById('btn-delete-supplier').style.display = 'block';
+      document.getElementById('btn-delete-supplier').style.display = duplicate ? 'none' : 'block';
       document.getElementById('supplier-modal').classList.add('open');
+    }
+
+    window.editSupplier = function(id) {
+      const s = suppliers.find(x => x.id === id);
+      if (!s) return;
+      openSupplierFromRecord(s);
+    };
+
+    window.duplicateSupplier = function(id) {
+      const s = suppliers.find(x => x.id === id);
+      if (!s) return;
+      openSupplierFromRecord(s, true);
     };
 
     window.deleteCurrentSupplier = function() {
@@ -1122,7 +1137,7 @@
       btn.innerHTML = `<span class="bk-spinner" style="width:12px; height:12px; border-width:2px; display:inline-block; vertical-align:middle; margin-right:6px;"></span>Saving...`;
 
       try {
-        let qrImageUrl = null;
+        let qrImageUrl = duplicatedSupplierQrUrl;
         const currentSupplier = id ? suppliers.find(x => x.id === id) : null;
         if (currentSupplier) qrImageUrl = currentSupplier.qr_image_url;
 

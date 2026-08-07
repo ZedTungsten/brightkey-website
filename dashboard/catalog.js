@@ -282,9 +282,11 @@
     applyFilters();
   };
 
-  function populateCategoryFilter() {
+  function populateCategoryFilter(resetSelection = false) {
+    const selectedBusiness = document.getElementById('filter-business')?.value || '';
     const cats = new Set();
     allProducts.forEach(p => {
+      if (selectedBusiness && p.business !== selectedBusiness) return;
       cats.add(p.category || '');
     });
     uniqueCategories = Array.from(cats).sort();
@@ -292,9 +294,14 @@
     const menu = document.getElementById('category-dropdown-menu');
     if (!menu) return;
 
-    if (!isCategoryInitialized) {
+    if (!isCategoryInitialized || resetSelection) {
+      selectedCategories.clear();
       uniqueCategories.forEach(cat => selectedCategories.add(cat));
       isCategoryInitialized = true;
+    } else {
+      selectedCategories = new Set(
+        Array.from(selectedCategories).filter(cat => cats.has(cat))
+      );
     }
 
     const headerHtml = `
@@ -309,8 +316,8 @@
       const checked = selectedCategories.has(cat) ? 'checked' : '';
       return `
         <label style="display: flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0.5rem; font-size: 0.82rem; cursor: pointer; color: var(--text-secondary); user-select: none;">
-          <input type="checkbox" value="${cat}" ${checked} onchange="handleCategoryCheckboxChange(this)" style="cursor: pointer;" />
-          <span style="text-transform: capitalize;">${displayLabel}</span>
+          <input type="checkbox" value="${esc(cat)}" ${checked} onchange="handleCategoryCheckboxChange(this)" style="cursor: pointer;" />
+          <span style="text-transform: capitalize;">${esc(displayLabel)}</span>
         </label>
       `;
     }).join('');
@@ -2596,7 +2603,10 @@
     document.getElementById('drawer-save').addEventListener('click', saveProduct);
 
     document.getElementById('search-input').addEventListener('input', applyFilters);
-    document.getElementById('filter-business').addEventListener('change', applyFilters);
+    document.getElementById('filter-business').addEventListener('change', () => {
+      populateCategoryFilter(true);
+      applyFilters();
+    });
     document.getElementById('filter-status').addEventListener('change', applyFilters);
 
     // Tabs
