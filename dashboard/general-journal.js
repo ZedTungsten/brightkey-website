@@ -319,7 +319,7 @@
 
         this.stagedAttachments.forEach((item, idx) => {
           const div = document.createElement('div');
-          div.setAttribute('style', 'position: relative; display: flex; align-items: center; gap: 0.5rem; background: var(--bg-surface-elevated, #242424); border: 1px solid var(--border); padding: 0.4rem 0.6rem; border-radius: 4px; font-size: 0.78rem; max-width: 180px;');
+          div.setAttribute('style', 'position: relative; display: flex; align-items: center; gap: 0.5rem; background: #fff; color: var(--text-primary); border: 1px solid var(--border); padding: 0.4rem 0.6rem; border-radius: 4px; font-size: 0.78rem; max-width: 180px;');
 
           const icon = item.type.startsWith('image/')
             ? '<svg aria-hidden="true" viewBox="0 0 24 24" style="width:1em;height:1em;display:block;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>'
