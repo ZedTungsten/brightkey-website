@@ -78,10 +78,15 @@ function openDetailsModal(bookingId) {
 
   const grandTotalVal = b.grand_total || 0;
   const collectTotalGroup = document.getElementById('det-collect-total-group');
+  const receiptLink = document.getElementById('det-view-receipt');
   if (collectTotalGroup) {
     if (b.show_total_to_installers !== false) {
       collectTotalGroup.style.display = 'flex';
       document.getElementById('det-collect-total').innerText = (grandTotalVal / 100).toLocaleString('en-PH', { style: 'currency', currency: 'PHP' });
+      if (receiptLink) {
+        const assignmentType = String(b.product_skus || '').trim().toLowerCase();
+        receiptLink.style.display = ['backjob', 'ocular', 'day off'].includes(assignmentType) ? 'none' : 'inline-flex';
+      }
     } else {
       collectTotalGroup.style.display = 'none';
     }

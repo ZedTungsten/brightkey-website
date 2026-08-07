@@ -13,11 +13,14 @@
       // Fetch company invoice_template config (single source of truth)
       let cfg = {};
       try {
+        const receiptCompanyId = typeof currentCompanyId !== 'undefined'
+          ? currentCompanyId
+          : (typeof currentInstaller !== 'undefined' ? currentInstaller?.company_id : null);
         const { data: setting } = await sb
           .from('global_settings')
           .select('value')
           .eq('key', 'invoice_template')
-          .eq('company_id', currentCompanyId)
+          .eq('company_id', receiptCompanyId)
           .maybeSingle();
         if (setting && setting.value) cfg = setting.value;
       } catch(e) { console.warn('Could not load invoice template config:', e); }
