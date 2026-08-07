@@ -512,7 +512,7 @@
 
       <div id="booking-panels-container">
         <!-- Panel: Smart Lock -->
-        <div class="booking-tab-panel active" id="panel-smart-lock">
+        <div class="booking-tab-panel" id="panel-smart-lock">
           <div class="booking-grid">
         
         <!-- Left: Form Input Panels -->
@@ -838,7 +838,7 @@
       <!-- Panel: Placeholder -->
       <div class="booking-tab-panel" id="panel-booking-placeholder">
         <div class="panel" style="text-align: center; padding: 5rem 2rem;">
-          <p style="color: var(--text-muted); font-size: 0.95rem; font-weight: 500;">This business does not have manual booking configuration enabled.</p>
+          <p id="booking-placeholder-message" style="color: var(--text-muted); font-size: 0.95rem; font-weight: 500;">This business does not have manual booking configuration enabled.</p>
         </div>
       </div>
 
@@ -1095,7 +1095,9 @@
 
           // Fetch businesses list dynamically and render tabs
           try {
-            const { data: businesses } = await sb.from('tenant_businesses').select('name').eq('company_id', currentCompanyId).order('name', { ascending: true });
+            if (!currentCompanyId) throw new Error('Company ownership could not be resolved.');
+            const { data: businesses, error: businessesError } = await sb.from('tenant_businesses').select('name').eq('company_id', currentCompanyId).order('name', { ascending: true });
+            if (businessesError) throw businessesError;
             renderBusinessTabs(businesses || []);
           } catch (bizErr) {
             console.error("Error fetching businesses:", bizErr);
@@ -1105,7 +1107,7 @@
           const [productsRes, inventoryRes, employeesRes, assignmentsRes, warehousesRes] = await Promise.all([
             sb.from('products')
               .select('id, sku, title, category, image_main, installation_price, count_inventory')
-              .or(`company_id.eq.${currentCompanyId},company_id.is.null`)
+              .eq('company_id', currentCompanyId)
               .limit(2000),
             sb.from('inventory')
               .select('sku, available, warehouse_id, company_id')
@@ -3034,29 +3036,38 @@
     window.renderBusinessTabs = function(businesses) {
       const container = document.getElementById('booking-business-tabs');
       if (!container) return;
-      
-      const bizList = businesses.length > 0 ? businesses.map(b => b.name) : ['Smart Lock'];
-      if (!bizList.includes('Smart Lock')) {
-        bizList.unshift('Smart Lock');
-      }
+      container.textContent = '';
+      const bizList = businesses.map((business) => String(business.name || '').trim()).filter(Boolean);
 
-      let tabsHtml = '';
-      bizList.forEach(biz => {
-        const activeClass = biz === 'Smart Lock' ? 'active' : '';
-        tabsHtml += `<button class="tab-btn ${activeClass}" id="tab-btn-${sanitizeId(biz)}" onclick="switchBookingTab('${escapeHtml(biz)}')">${escapeHtml(biz)}</button>`;
+      bizList.forEach((biz) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'tab-btn';
+        button.id = `tab-btn-${sanitizeId(biz)}`;
+        button.textContent = biz;
+        button.addEventListener('click', () => switchBookingTab(biz));
+        container.appendChild(button);
       });
-      container.innerHTML = tabsHtml;
+
+      if (bizList.length > 0) {
+        switchBookingTab(bizList[0]);
+      } else {
+        document.querySelectorAll('.booking-tab-panel').forEach(panel => panel.classList.remove('active'));
+        document.getElementById('booking-placeholder-message').textContent = 'No businesses are configured. Add one from Settings > Businesses.';
+        document.getElementById('panel-booking-placeholder').classList.add('active');
+      }
     };
 
     window.switchBookingTab = function(bizName) {
-      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+      document.querySelectorAll('#booking-business-tabs .tab-btn').forEach(btn => btn.classList.remove('active'));
       const activeBtn = document.getElementById(`tab-btn-${sanitizeId(bizName)}`);
       if (activeBtn) activeBtn.classList.add('active');
 
       document.querySelectorAll('.booking-tab-panel').forEach(p => p.classList.remove('active'));
-      if (bizName === 'Smart Lock') {
+      if (sanitizeId(bizName) === 'smart-lock') {
         document.getElementById('panel-smart-lock').classList.add('active');
       } else {
+        document.getElementById('booking-placeholder-message').textContent = `${bizName} does not have manual booking configuration enabled.`;
         document.getElementById('panel-booking-placeholder').classList.add('active');
       }
     };

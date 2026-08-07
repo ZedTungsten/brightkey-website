@@ -16,14 +16,14 @@ function loadCachedBookings() {
     } catch (_) {}
   }
 
-  const cachedChecklist = localStorage.getItem('bk_booking_checklist');
+  const cachedChecklist = localStorage.getItem(`bk_booking_checklist_${currentInstaller.company_id}`);
   if (cachedChecklist) {
     try {
       bookingChecklist = JSON.parse(cachedChecklist);
     } catch (_) {}
   }
 
-  const cachedMediaReqs = localStorage.getItem('bk_booking_media_requirements');
+  const cachedMediaReqs = localStorage.getItem(`bk_booking_media_requirements_${currentInstaller.company_id}`);
   if (cachedMediaReqs) {
     try {
       bookingMediaRequirements = JSON.parse(cachedMediaReqs);
@@ -37,7 +37,7 @@ function loadCachedBookings() {
     } catch (_) {}
   }
 
-  const cachedPayoutSettings = localStorage.getItem('bk_installer_payout_settings');
+  const cachedPayoutSettings = localStorage.getItem(`bk_installer_payout_settings_${currentInstaller.company_id}`);
   if (cachedPayoutSettings) {
     try {
       installerPayoutSettings = JSON.parse(cachedPayoutSettings);
@@ -140,9 +140,9 @@ async function syncData() {
     if (checklistRes && checklistRes.value && Array.isArray(checklistRes.value)) {
       bookingChecklist = checklistRes.value;
     } else {
-      bookingChecklist = defaultChecklist;
+      bookingChecklist = [];
     }
-    localStorage.setItem('bk_booking_checklist', JSON.stringify(bookingChecklist));
+    localStorage.setItem(`bk_booking_checklist_${currentInstaller.company_id}`, JSON.stringify(bookingChecklist));
 
     // Fetch booking media requirements
     try {
@@ -158,7 +158,7 @@ async function syncData() {
       } else {
         bookingMediaRequirements = [];
       }
-      localStorage.setItem('bk_booking_media_requirements', JSON.stringify(bookingMediaRequirements));
+      localStorage.setItem(`bk_booking_media_requirements_${currentInstaller.company_id}`, JSON.stringify(bookingMediaRequirements));
     } catch (mediaErr) {
       console.error('Error syncing media requirements:', mediaErr);
     }
@@ -175,19 +175,9 @@ async function syncData() {
       if (payoutSettingsRes && payoutSettingsRes.value) {
         installerPayoutSettings = payoutSettingsRes.value;
       } else {
-        installerPayoutSettings = {
-          installations_before_crediting: 15,
-          lead_credit: 1.0,
-          assist_credit: 0.5,
-          lead_rate: 1000,
-          assist_rate: 500,
-          extra_services: [
-            { sku: 'BASEPLATE-M', rate: 700 },
-            { sku: 'BASEPLATE-S', rate: 700 }
-          ]
-        };
+        installerPayoutSettings = null;
       }
-      localStorage.setItem('bk_installer_payout_settings', JSON.stringify(installerPayoutSettings));
+      localStorage.setItem(`bk_installer_payout_settings_${currentInstaller.company_id}`, JSON.stringify(installerPayoutSettings));
     } catch (payoutSettingsErr) {
       console.error('Error syncing installer payout settings:', payoutSettingsErr);
     }

@@ -61,6 +61,28 @@
       flex-direction: column;
       min-height: 100vh;
       overflow-y: auto;
+      position: relative;
+    }
+    .missing-profile-overlay {
+      display: none;
+      position: absolute;
+      inset: 0;
+      z-index: 50;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+      background: rgba(250, 250, 250, 0.94);
+    }
+    .missing-profile-overlay.open {
+      display: flex;
+    }
+    .missing-profile-content {
+      width: min(520px, 100%);
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1rem;
     }
 
     /* ── Cover Banner ── */
@@ -587,6 +609,13 @@
 
     <!-- Main Content -->
     <div class="dash-main">
+      <section class="missing-profile-overlay" id="missing-employee-modal" aria-labelledby="missing-employee-title">
+        <div class="missing-profile-content">
+          <h2 id="missing-employee-title" style="font-size: 1.5rem; font-weight: 700; color: var(--text-primary);">Employee directory entry required</h2>
+          <p style="color: var(--text-secondary); line-height: 1.6;">Create an employee directory entry first using your email.</p>
+          <a class="btn btn-primary" href="/dashboard/employee-directory">Go to Employee Directory</a>
+        </div>
+      </section>
       
       <!-- Cover Banner -->
       <div class="profile-cover-banner" id="cover-banner">
@@ -883,6 +912,7 @@
       currentUser: null,
       tenantId: null,
       companyId: null,
+      userRole: null,
       employeeData: null,
       activeTab: 'settings',
       editMode: false,
@@ -899,26 +929,42 @@
 
         const roleInfo = await BKAuth.getUserRole();
         if (roleInfo) {
+          this.userRole = roleInfo.role;
           this.tenantId = roleInfo.tenantId;
           const { data: co } = await this.sb.from('companies').select('id').eq('tenant_id', this.tenantId).limit(1).maybeSingle();
           this.companyId = co?.id;
         }
 
         await this.loadProfile();
-        await this.loadPendingRequestBanner();
+        if (this.employeeData) await this.loadPendingRequestBanner();
       },
 
       async loadProfile() {
         try {
+          if (!this.companyId) {
+            showToast('Your company profile could not be resolved. Refresh the page and try again.', true);
+            return;
+          }
+
           const { data: emp, error } = await this.sb
             .from('employees')
             .select('*')
-            .eq('id', this.currentUser.id)
+            .eq('company_id', this.companyId)
+            .ilike('email', this.currentUser.email)
             .maybeSingle();
 
-          if (error || !emp) {
+          if (error) {
             console.error('Error fetching profile:', error);
             showToast('Failed to load profile details.', true);
+            return;
+          }
+
+          if (!emp) {
+            if (this.userRole === 'owner') {
+              document.getElementById('missing-employee-modal').classList.add('open');
+            } else {
+              showToast('No employee directory entry is linked to your email.', true);
+            }
             return;
           }
 

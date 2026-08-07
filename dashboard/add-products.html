@@ -53,7 +53,7 @@
                   <option value="" disabled selected>Loading business types...</option>
                 </select>
               </div>
-              <button id="btn-download" class="btn btn-outline" style="height: 38px;">Download CSV Template</button>
+              <button id="btn-download" class="btn btn-outline" style="height: 38px;" disabled>Download CSV Template</button>
             </div>
 
             <details style="margin-top: 1.5rem; background: var(--bg-elevated); border: 1px solid var(--border); border-left: 3px solid #38bdf8; border-radius: var(--radius-sm); padding: 0.75rem 1.25rem;">
@@ -144,6 +144,7 @@
     ];
 
     let dynamicFeaturesByBusiness = {};
+    let currentCompanyId = '';
 
     document.getElementById('btn-download').addEventListener('click', () => {
       const selectedBiz = document.getElementById('select-business-download').value;
@@ -182,15 +183,34 @@
 
       // Load dynamic features from database based on Tenants settings
       try {
-        const { data: companyData } = await supabaseClient.from('companies').select('id').eq('subdomain', 'brightkey').limit(1);
-        if (companyData && companyData.length > 0) {
-          const companyId = companyData[0].id;
-          const { data: businesses } = await supabaseClient.from('tenant_businesses').select('id, name').eq('company_id', companyId);
-          const { data: dbFeatures } = await supabaseClient.from('business_features').select('business_id, name');
+        const { data: company, error: companyError } = await supabaseClient
+          .from('companies')
+          .select('id')
+          .eq('tenant_id', authInfo.tenantId)
+          .limit(1)
+          .maybeSingle();
+        if (companyError) throw companyError;
+        currentCompanyId = company?.id || '';
+
+        if (currentCompanyId) {
+          const { data: businesses, error: businessesError } = await supabaseClient
+            .from('tenant_businesses')
+            .select('id, name')
+            .eq('company_id', currentCompanyId)
+            .order('name');
+          if (businessesError) throw businessesError;
+
+          const businessIds = (businesses || []).map((business) => business.id);
+          const { data: dbFeatures, error: featuresError } = businessIds.length
+            ? await supabaseClient.from('business_features').select('business_id, name').in('business_id', businessIds)
+            : { data: [], error: null };
+          if (featuresError) throw featuresError;
 
           if (businesses && dbFeatures) {
             const selectEl = document.getElementById('select-business-download');
-            selectEl.innerHTML = '<option value="" disabled selected>Select a category...</option>';
+            selectEl.innerHTML = businesses.length
+              ? '<option value="" disabled selected>Select a category...</option>'
+              : '<option value="" disabled selected>No businesses configured</option>';
 
             businesses.forEach(biz => {
               const key = biz.name.toLowerCase().replace(/[\s_.-]+/g, '_');
@@ -203,10 +223,17 @@
               opt.textContent = biz.name;
               selectEl.appendChild(opt);
             });
+            document.getElementById('btn-download').disabled = businesses.length === 0;
           }
+        } else {
+          throw new Error('Company ownership could not be resolved.');
         }
       } catch (err) {
         console.error("Error loading dynamic features in add-products page:", err);
+        const selectEl = document.getElementById('select-business-download');
+        selectEl.innerHTML = '<option value="" disabled selected>Businesses unavailable</option>';
+        document.getElementById('btn-download').disabled = true;
+        Toast.error('Business categories could not be loaded. Refresh the page and try again.');
       }
     });
 
@@ -262,6 +289,7 @@
         try {
           // 1. Prepare Core Product Data
           const productPayload = {
+            company_id: currentCompanyId,
             sku,
             slug,
             title: row.title.trim().replace(/\uFFFD/g, '—'),
@@ -318,7 +346,7 @@
           };
 
           // Check if product exists via SKU
-          const { data: existingData, error: findErr } = await supabaseClient.from('products').select('id').eq('sku', sku);
+          const { data: existingData, error: findErr } = await supabaseClient.from('products').select('id').eq('company_id', currentCompanyId).eq('sku', sku);
           if (findErr) throw findErr;
 
           let productId;
@@ -326,7 +354,7 @@
           if (existingData && existingData.length > 0) {
             // Update
             productId = existingData[0].id;
-            const { error: updErr } = await supabaseClient.from('products').update(productPayload).eq('id', productId);
+            const { error: updErr } = await supabaseClient.from('products').update(productPayload).eq('company_id', currentCompanyId).eq('id', productId);
             if (updErr) throw updErr;
             log(`Updated product: ${sku}`);
           } else {
@@ -377,14 +405,14 @@
       if (uploadMode === 'modify') {
         try {
           log('Checking for existing products missing from the CSV...');
-          const { data: allProducts, error: allErr } = await supabaseClient.from('products').select('id, sku, status');
+          const { data: allProducts, error: allErr } = await supabaseClient.from('products').select('id, sku, status').eq('company_id', currentCompanyId);
           if (allErr) throw allErr;
           
           const productsToDraft = allProducts.filter(p => !csvSkus.includes(p.sku) && p.status === 'published');
           
           if (productsToDraft.length > 0) {
             const idsToDraft = productsToDraft.map(p => p.id);
-            const { error: draftErr } = await supabaseClient.from('products').update({ status: 'draft' }).in('id', idsToDraft);
+            const { error: draftErr } = await supabaseClient.from('products').update({ status: 'draft' }).eq('company_id', currentCompanyId).in('id', idsToDraft);
             if (draftErr) throw draftErr;
             log(`<span style="color:#f59e0b">Changed ${productsToDraft.length} missing products to draft status.</span>`);
           } else {

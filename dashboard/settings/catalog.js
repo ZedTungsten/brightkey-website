@@ -1,17 +1,5 @@
 'use strict';
 
-const DEFAULT_CATALOG_SPECIFICATIONS = [
-  { id: 'model', label: 'Model', field: 'spec_model', source: 'column', placeholder: 'e.g. A04-TT' },
-  { id: 'color', label: 'Color', field: 'spec_color', source: 'column', placeholder: 'e.g. Matte Black, Silver' },
-  { id: 'weight', label: 'Weight', field: 'spec_weight', source: 'column', placeholder: 'e.g. 2.5 kg' },
-  { id: 'operating_temperature', label: 'Operating Temperature', field: 'spec_operating_temperature', source: 'column', placeholder: 'e.g. -20°C to 60°C' },
-  { id: 'warranty', label: 'Warranty', field: 'spec_warranty', source: 'column', placeholder: 'e.g. 1 Year' },
-  { id: 'support', label: 'Technical Support', field: 'spec_support', source: 'column', placeholder: 'e.g. Lifetime, 2 Years' },
-  { id: 'material', label: 'Material', field: 'spec_material', source: 'column', placeholder: 'e.g. Aluminum Alloy' },
-  { id: 'voltage', label: 'Voltage', field: 'spec_voltage', source: 'column', placeholder: 'e.g. DC 6V' },
-  { id: 'dimension', label: 'Dimension', field: 'spec_dimension', source: 'column', placeholder: 'e.g. 350 x 75 x 30 mm' }
-];
-
 let selectedBusinessId = '';
 let selectedFeatureId = '';
 let catalogSpecifications = [];
@@ -33,7 +21,7 @@ function normalizeFeatureKey(value) {
 
 function safeSpecificationDefinitions(value) {
   if (!Array.isArray(value?.definitions)) {
-    return DEFAULT_CATALOG_SPECIFICATIONS.map((definition) => ({ ...definition }));
+    return [];
   }
 
   return value.definitions
@@ -75,6 +63,17 @@ async function autosaveSpecifications() {
 function renderSpecifications() {
   const tbody = document.getElementById('specifications-body');
   tbody.textContent = '';
+
+  if (catalogSpecifications.length === 0) {
+    const row = document.createElement('tr');
+    const cell = document.createElement('td');
+    cell.colSpan = 3;
+    cell.className = 'empty-state';
+    cell.textContent = 'No product specifications configured.';
+    row.appendChild(cell);
+    tbody.appendChild(row);
+    return;
+  }
 
   catalogSpecifications.forEach((definition) => {
     const row = document.createElement('tr');
@@ -202,7 +201,7 @@ function renderBusinesses(businesses, features) {
     const cell = document.createElement('td');
     cell.colSpan = 2;
     cell.className = 'empty-state';
-    cell.textContent = 'No businesses configured. Add a business to define its product features.';
+    cell.textContent = 'No businesses configured. Create one from the Businesses settings tab.';
     row.appendChild(cell);
     tbody.appendChild(row);
   }
@@ -271,16 +270,6 @@ async function loadCatalogSettings() {
   }
 }
 
-window.openBusinessModal = function() {
-  document.getElementById('business-name').value = '';
-  document.getElementById('business-modal').classList.add('open');
-  document.getElementById('business-name').focus();
-};
-
-window.closeBusinessModal = function() {
-  document.getElementById('business-modal').classList.remove('open');
-};
-
 window.openFeatureModal = function(businessId, feature = null) {
   selectedBusinessId = businessId;
   selectedFeatureId = feature?.id || '';
@@ -326,32 +315,6 @@ function confirmDeleteFeature(feature) {
     await loadCatalogSettings();
   });
 }
-
-document.getElementById('business-form').addEventListener('submit', async (event) => {
-  event.preventDefault();
-  const name = document.getElementById('business-name').value.trim();
-  if (!name || !SettingsPage.currentCompanyId) return;
-
-  const button = document.getElementById('btn-save-business');
-  button.disabled = true;
-  button.textContent = 'Saving...';
-  try {
-    const { error } = await SettingsPage.sb.from('tenant_businesses').insert({
-      company_id: SettingsPage.currentCompanyId,
-      name
-    });
-    if (error) throw error;
-    closeBusinessModal();
-    SettingsPage.showToast('Business added.');
-    await loadCatalogSettings();
-  } catch (error) {
-    console.error('Error adding catalog business:', error);
-    SettingsPage.showToast('A business with this name may already exist. Use a different name and try again.', true);
-  } finally {
-    button.disabled = false;
-    button.textContent = 'Save Business';
-  }
-});
 
 document.getElementById('feature-form').addEventListener('submit', async (event) => {
   event.preventDefault();

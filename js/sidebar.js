@@ -264,7 +264,6 @@
           <svg class="dash-nav-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
         </button>
         <div class="dash-nav-children">
-          <a href="/dashboard/business" class="dash-nav-child" data-role="business">Overview</a>
           <a href="/dashboard/pricing-strategy/calculator" class="dash-nav-child" data-role="business">Pricing Strategy</a>
         </div>
       </div>
@@ -306,10 +305,6 @@
         <div class="dash-nav-children">
           <a href="/dashboard/global-promo" class="dash-nav-child" data-role="marketing">Promos</a>
           <a href="/dashboard/marketing-logs" class="dash-nav-child" data-role="marketing">Logs Tracker</a>
-          <a class="dash-nav-child" data-role="marketing" style="opacity: 0.5; cursor: not-allowed;">Campaigns</a>
-          <a class="dash-nav-child" data-role="marketing" style="opacity: 0.5; cursor: not-allowed;">Affiliates</a>
-          <a class="dash-nav-child" data-role="marketing" style="opacity: 0.5; cursor: not-allowed;">Social Media Calendar</a>
-          <a class="dash-nav-child" data-role="marketing" style="opacity: 0.5; cursor: not-allowed;">Resources</a>
         </div>
       </div>
 
@@ -649,7 +644,8 @@
         '/dashboard/sales-goals/commissions'
       ],
       '/dashboard/CRM/customers': [
-        '/dashboard/CRM'
+        '/dashboard/CRM',
+        '/dashboard/sales-crm'
       ],
       '/dashboard/warehouse/inspect': [
         '/dashboard/warehouse'

@@ -233,10 +233,7 @@
         
         <!-- Tabs Navigation for Business Units -->
         <div class="drawer-tabs" id="business-tabs">
-          <button class="tab-btn active" onclick="switchBusiness('smart_lock')">Smart Lock</button>
-          <button class="tab-btn" onclick="switchBusiness('solar_power')">Solar Power</button>
-          <button class="tab-btn" onclick="switchBusiness('cctv')">CCTV</button>
-          <button class="tab-btn" onclick="switchBusiness('fire_extinguisher')">Fire Extinguisher</button>
+          <span class="skeleton" style="width:110px;height:18px;margin:0.85rem 1.25rem;border-radius:4px;"></span>
         </div>
 
         <div class="main-panel">
@@ -314,7 +311,7 @@
     let dbProducts = [];
     let dbInventory = {}; // SKU -> total available quantity
     
-    let activeBusiness = 'smart_lock';
+    let activeBusiness = '';
     let searchQuery = '';
     let stockFilterMode = 'all'; // 'all' or 'with_stocks'
     let sortColumn = ''; // 'sku', 'category', 'title', 'available'
@@ -341,11 +338,56 @@
         }
         currentCompanyId = co?.id || null;
 
+        await loadBusinessTabs();
         await loadInventoryData();
       } else {
         showToast('Authentication module missing.', true);
       }
     });
+
+    function businessKey(name) {
+      return String(name || '').toLowerCase().replace(/[\s_.-]+/g, '_');
+    }
+
+    async function loadBusinessTabs() {
+      const container = document.getElementById('business-tabs');
+      const { data: businesses, error } = await sb
+        .from('tenant_businesses')
+        .select('name')
+        .eq('company_id', currentCompanyId)
+        .order('name');
+      if (error) {
+        console.error('Error loading business tabs:', error);
+        container.textContent = '';
+        const unavailable = document.createElement('span');
+        unavailable.className = 'tab-btn';
+        unavailable.textContent = 'Businesses unavailable';
+        container.appendChild(unavailable);
+        activeBusiness = '';
+        showToast('Business tabs could not be loaded. Refresh the page and try again.', true);
+        return;
+      }
+
+      container.textContent = '';
+      (businesses || []).forEach((business, index) => {
+        const key = businessKey(business.name);
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = `tab-btn${index === 0 ? ' active' : ''}`;
+        button.dataset.businessKey = key;
+        button.textContent = business.name;
+        button.addEventListener('click', () => switchBusiness(key));
+        container.appendChild(button);
+      });
+
+      activeBusiness = businesses?.length ? businessKey(businesses[0].name) : '';
+      if (!activeBusiness) {
+        const empty = document.createElement('span');
+        empty.className = 'tab-btn';
+        empty.textContent = 'No businesses configured';
+        container.appendChild(empty);
+      }
+    }
 
     async function loadInventoryData() {
       const tbody = document.getElementById('inventory-tbody');
@@ -364,7 +406,7 @@
         // Fetch products, inventory and commissions config in parallel (inventory compiled across all warehouses under tenant RLS)
         const [prodRes, invRes, commsRes] = await Promise.all([
           sb.from('products').select('sku, title, category, business, image_main, description, tags, installation_price').eq('company_id', currentCompanyId).order('sku'),
-          sb.from('inventory').select('sku, available'),
+          sb.from('inventory').select('sku, available').eq('company_id', currentCompanyId),
           sb.from('global_settings').select('value').eq('key', 'commissions_config').eq('company_id', currentCompanyId).maybeSingle()
         ]);
 
@@ -513,7 +555,7 @@
       // Update active state on tab buttons
       const buttons = document.querySelectorAll('#business-tabs .tab-btn');
       buttons.forEach(btn => {
-        const isActive = btn.getAttribute('onclick').includes(`'${businessKey}'`);
+        const isActive = btn.dataset.businessKey === businessKey;
         btn.classList.toggle('active', isActive);
       });
 

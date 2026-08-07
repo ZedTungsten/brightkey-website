@@ -144,21 +144,9 @@
 
   let lastPublishedAt = null;
   let hasUnpublishedChanges = false;
-  let currentCompanyId = null;
+  let currentCompanyId = null, tenantBusinesses = [];
   let activeTab = 'basic';
   let catalogSpecDefinitions = [];
-
-  const DEFAULT_CATALOG_SPECIFICATIONS = [
-    { id: 'model', label: 'Model', field: 'spec_model', source: 'column', placeholder: 'e.g. A04-TT' },
-    { id: 'color', label: 'Color', field: 'spec_color', source: 'column', placeholder: 'e.g. Matte Black, Silver' },
-    { id: 'weight', label: 'Weight', field: 'spec_weight', source: 'column', placeholder: 'e.g. 2.5 kg' },
-    { id: 'operating_temperature', label: 'Operating Temperature', field: 'spec_operating_temperature', source: 'column', placeholder: 'e.g. -20°C to 60°C' },
-    { id: 'warranty', label: 'Warranty', field: 'spec_warranty', source: 'column', placeholder: 'e.g. 1 Year' },
-    { id: 'support', label: 'Technical Support', field: 'spec_support', source: 'column', placeholder: 'e.g. Lifetime, 2 Years' },
-    { id: 'material', label: 'Material', field: 'spec_material', source: 'column', placeholder: 'e.g. Aluminum Alloy' },
-    { id: 'voltage', label: 'Voltage', field: 'spec_voltage', source: 'column', placeholder: 'e.g. DC 6V' },
-    { id: 'dimension', label: 'Dimension', field: 'spec_dimension', source: 'column', placeholder: 'e.g. 350 x 75 x 30 mm' }
-  ];
 
   function specificationInputId(definition) {
     return `f-spec-${definition.id.replace(/_/g, '-')}`;
@@ -166,7 +154,7 @@
 
   function validSpecificationDefinitions(value) {
     if (!Array.isArray(value?.definitions)) {
-      return DEFAULT_CATALOG_SPECIFICATIONS.map(definition => ({ ...definition }));
+      return [];
     }
     return value.definitions.filter(definition => definition?.id && definition?.label && definition?.field);
   }
@@ -363,7 +351,7 @@
     const { data, error } = await sbClient
       .from('products')
       .select('*')
-      .or(`company_id.eq.${currentCompanyId},company_id.is.null`)
+      .eq('company_id', currentCompanyId)
       .order('created_at', { ascending: false });
     if (error) {
       tbody.innerHTML = `<tr><td colspan="13" style="padding:2rem;text-align:center;color:var(--danger)">Error: ${esc(error.message)}</td></tr>`;
@@ -381,9 +369,8 @@
     document.getElementById('stat-total').textContent = allProducts.length;
     document.getElementById('stat-published').textContent = allProducts.filter(p=>p.status==='published').length;
     document.getElementById('stat-draft').textContent = allProducts.filter(p=>p.status==='draft').length;
-    document.getElementById('stat-smart-lock').textContent = allProducts.filter(p=>p.business==='smart_lock').length;
+    window.BKCatalogBusinessStats.render(tenantBusinesses, allProducts);
   }
-
   function updateParentSkuDatalist() {
     const dl = document.getElementById('parent-skus-list');
     if (!dl) return;
@@ -2100,7 +2087,8 @@
 
       // Dynamically load feature definitions from the database based on Tenants settings
       if (currentCompanyId) {
-        const { data: businesses } = await window.BKAuth.sb.from('tenant_businesses').select('id, name').eq('company_id', currentCompanyId);
+        const { data: businesses } = await window.BKAuth.sb.from('tenant_businesses').select('id, name').eq('company_id', currentCompanyId).order('name');
+        tenantBusinesses = businesses || [];
         const businessIds = (businesses || []).map(business => business.id);
         const { data: dbFeatures } = businessIds.length
           ? await window.BKAuth.sb

@@ -14,18 +14,7 @@ let installerPayoutSettings = null;
 let payoutTrackerData = { config: {}, regularState: {}, specialState: {}, proratedState: {}, adjustments: [], reimbursements: [], payslipRecords: [], companyProfile: {}, payslipConfig: {} };
 let installerPayslipModel = null;
 
-const defaultChecklist = [
-  { text: "Door opens and closes smoothly without obstruction", indent: false },
-  { text: "Smart lock operates properly (locking and unlocking)", indent: false },
-  { text: "Smart lock is successfully connected to the mobile app", indent: false },
-  { text: "I know how to create an account on the app", indent: true },
-  { text: "I have registered RFID card on the device", indent: true },
-  { text: "All components, including the camera, screen, handle, keypad, mechanical unlock, and deadbolt, are free of defects", indent: false },
-  { text: "Screws and fasteners are securely installed", indent: false },
-  { text: "I have been invited to leave a review for LOOCK Cavite and has consented to taking a photo with the device for documentation", indent: false },
-  { text: "Warranty coverage: 1 year on factory defects, 7 days on installation warranty (excludes user-caused damage, service may apply)", indent: false }
-];
-let bookingChecklist = [...defaultChecklist];
+let bookingChecklist = [];
 let bookingMediaRequirements = [];
 
 function getInstallerSessionToken() {

@@ -16,7 +16,7 @@
 -- ── 1. Products Table ────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.products (
   id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  company_id          UUID REFERENCES public.companies(id) ON DELETE SET NULL,
+  company_id          UUID NOT NULL REFERENCES public.companies(id) ON DELETE CASCADE,
   sku                 TEXT UNIQUE NOT NULL,
   slug                TEXT UNIQUE NOT NULL,
   title               TEXT NOT NULL,

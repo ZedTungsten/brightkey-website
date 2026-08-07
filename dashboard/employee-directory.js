@@ -393,7 +393,7 @@
         } catch(e) { this.assignments = []; }
 
         // Load HR configuration for prefix
-        this.employeePrefix = 'BK';
+        this.employeePrefix = 'ID';
         try {
           const { data: hrConf } = await getSb().from('global_settings')
             .select('value')

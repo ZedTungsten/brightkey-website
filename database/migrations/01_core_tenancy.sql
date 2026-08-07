@@ -70,7 +70,8 @@ CREATE TABLE IF NOT EXISTS public.customer_profiles (
 CREATE TABLE IF NOT EXISTS public.tenant_businesses (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   company_id  UUID REFERENCES public.companies(id) ON DELETE CASCADE NOT NULL,
-  name        TEXT NOT NULL, -- e.g. 'Smart Lock', 'CCTV'
+  name        VARCHAR(20) NOT NULL, -- e.g. 'Smart Lock', 'CCTV'
+  description VARCHAR(20) NOT NULL DEFAULT '',
   created_at  TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   CONSTRAINT unique_company_business UNIQUE (company_id, name)
 );
