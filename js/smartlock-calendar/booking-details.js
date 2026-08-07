@@ -34,11 +34,17 @@ function openDetailsModal(bookingId) {
   document.getElementById('det-phone-1').innerText = b.customer_phone || 'N/A';
   document.getElementById('det-phone-2').innerText = b.customer_phone_2 || 'N/A';
   
-  const addressParts = (b.customer_address || '').split(',').map(p => p.trim());
-  let location = 'N/A';
+  const addressParts = (b.customer_address || '').split(',').map(p => p.trim()).filter(Boolean);
+  const explicitCity = String(b.customer_city || '').trim();
+  const explicitProvince = String(b.customer_province || '').trim();
+  const fallbackCity = addressParts.length >= 2 ? addressParts[addressParts.length - 2] : '';
+  const fallbackProvince = addressParts.length >= 2
+    ? addressParts[addressParts.length - 1].replace(/\s*\d+$/, '').trim()
+    : '';
+  let location = [explicitCity || fallbackCity, explicitProvince || fallbackProvince].filter(Boolean).join(', ') || 'N/A';
   let cleanAddress = b.customer_address || 'N/A';
 
-  if (addressParts.length >= 2) {
+  if (!explicitCity && !explicitProvince && addressParts.length >= 2) {
     const lastPart = addressParts[addressParts.length - 1];
     const cleanProvince = lastPart.replace(/\s*\d+$/, '').trim(); 
     const cityPart = addressParts[addressParts.length - 2];

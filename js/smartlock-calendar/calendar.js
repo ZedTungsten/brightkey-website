@@ -142,8 +142,14 @@ function drawAgenda() {
   });
 
   dayBookings.forEach(b => {
-    const addressParts = (b.customer_address || '').split(',');
-    const cityStr = addressParts.length >= 2 ? addressParts[addressParts.length - 2].trim() : 'N/A';
+    const addressParts = (b.customer_address || '').split(',').map(part => part.trim()).filter(Boolean);
+    const fallbackCity = addressParts.length >= 2 ? addressParts[addressParts.length - 2] : '';
+    const fallbackProvince = addressParts.length >= 2
+      ? addressParts[addressParts.length - 1].replace(/\s*\d+$/, '').trim()
+      : '';
+    const city = String(b.customer_city || fallbackCity).trim();
+    const province = String(b.customer_province || fallbackProvince).trim();
+    const cityStr = [city, province].filter(Boolean).join(', ') || 'N/A';
     const timeVal = b.scheduled_time || 'AM Slot';
 
     let doorsArr = [];
