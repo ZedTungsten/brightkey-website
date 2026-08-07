@@ -119,17 +119,9 @@ const ReceivablesApp = {
     const paymentTotal = payments.reduce((sum, entry) => sum + this.toCents(entry.amount_cents), 0);
     const storedGrand = this.toCents(booking.grand_total);
     const contractAmount = storedGrand + Math.abs(baseDeposit);
-    const collected = Math.min(contractAmount, baseDeposit + addedDepositTotal + paymentTotal);
+    const collected = Math.min(contractAmount, addedDepositTotal + paymentTotal);
     const balanceDue = Math.max(0, contractAmount - collected);
     const status = contractAmount > 0 && collected >= contractAmount ? 'paid' : collected > 0 ? 'partial' : 'unpaid';
-    const initialDeposit = baseDeposit > 0 ? [{
-      id: `booking-${booking.id}`,
-      amount_cents: baseDeposit,
-      payment_date: String(booking.created_at || '').slice(0, 10),
-      debited_account: null,
-      reference_number: null,
-      is_initial: true
-    }] : [];
     return {
       id: booking.id,
       orderNumber: booking.order_no || '—',
@@ -140,7 +132,7 @@ const ReceivablesApp = {
       collected,
       balanceDue,
       status,
-      deposits: [...initialDeposit, ...addedDeposits],
+      deposits: addedDeposits,
       payments
     };
   },
@@ -212,7 +204,13 @@ const ReceivablesApp = {
   renderEntries(row, type) {
     const entries = type === 'deposit' ? row.deposits : row.payments;
     if (!entries.length) return this.editMode ? '' : '<span class="empty-ledger-value">—</span>';
-    return entries.map(entry => `<div class="ledger-entry">${this.editMode && !entry.is_initial ? `<button type="button" class="entry-edit" aria-label="Edit entry" title="Edit entry" onclick="ReceivablesApp.openEditEntryModal('${row.id}','${type}','${entry.id}')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg></button>` : '<span class="entry-edit-spacer"></span>'}<strong class="ledger-amount">${this.formatMoney(this.toCents(entry.amount_cents))}</strong><span class="ledger-date">${this.formatShortDate(entry.payment_date)}</span><span class="account-name">${this.escape(entry.debited_account || 'Not connected')}</span></div>`).join('');
+    return entries.map(entry => {
+      const actions = this.editMode
+        ? `<span class="entry-actions"><button type="button" class="entry-edit" aria-label="Edit entry" title="Edit entry" onclick="ReceivablesApp.openEditEntryModal('${row.id}','${type}','${entry.id}')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg></button><button type="button" class="entry-delete" aria-label="Delete entry" title="Delete entry" onclick="ReceivablesApp.stageDeleteEntry('${row.id}','${type}','${entry.id}')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v5M14 11v5"/></svg></button></span>`
+        : '<span class="entry-actions-spacer"></span>';
+      const accountLabel = entry.debited_account || 'Account not connected';
+      return `<div class="ledger-entry">${actions}<strong class="ledger-amount">${this.formatMoney(this.toCents(entry.amount_cents))}</strong><span class="ledger-date">${this.formatShortDate(entry.payment_date)}</span><span class="account-name">${this.escape(accountLabel)}</span></div>`;
+    }).join('');
   },
 
   beginEntryMode() {
@@ -388,6 +386,17 @@ const ReceivablesApp = {
     this.closeModal('entry-modal');
     this.applyFilters();
     window.Toast?.show('Entry deleted from the draft. Click Save to apply changes.', 'success');
+  },
+
+  stageDeleteEntry(bookingId, type, entryId) {
+    const booking = this.rows.find(row => row.id === bookingId) || null;
+    const entries = type === 'deposit' ? booking?.deposits : booking?.payments;
+    const entry = entries?.find(item => String(item.id) === String(entryId)) || null;
+    if (!booking || !entry || entry.is_initial) return;
+    this.activeBooking = booking;
+    this.activeEntryType = type;
+    this.activeEntry = entry;
+    this.deleteEntry();
   },
 
   upsertPendingOperation(operation) {
