@@ -118,8 +118,7 @@ const ReceivablesApp = {
     const addedDepositTotal = addedDeposits.reduce((sum, entry) => sum + this.toCents(entry.amount_cents), 0);
     const paymentTotal = payments.reduce((sum, entry) => sum + this.toCents(entry.amount_cents), 0);
     const storedGrand = this.toCents(booking.grand_total);
-    const fallbackBalance = Math.abs(this.toCents(booking.balance_due));
-    const contractAmount = storedGrand > 0 ? storedGrand : fallbackBalance + baseDeposit;
+    const contractAmount = storedGrand + Math.abs(baseDeposit);
     const collected = Math.min(contractAmount, baseDeposit + addedDepositTotal + paymentTotal);
     const balanceDue = Math.max(0, contractAmount - collected);
     const status = contractAmount > 0 && collected >= contractAmount ? 'paid' : collected > 0 ? 'partial' : 'unpaid';
