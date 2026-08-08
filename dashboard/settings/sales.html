@@ -241,15 +241,32 @@
     let adjustmentRules = [];
     let editingAdjustmentIndex = null;
     window.commissionsProductsData = [];
+    window.commissionsBusinessesData = [];
     const showToast = (msg, isError) => SettingsPage.showToast(msg, isError);
 
+    function commissionBusinessKey(name) {
+      return String(name || '').toLowerCase().replace(/[\s_.-]+/g, '_');
+    }
+
+    function getCommissionBusinessOptions() {
+      return (window.commissionsBusinessesData || []).map(business =>
+        `<option value="biz:${escapeHtml(commissionBusinessKey(business.name))}">${escapeHtml(business.name)}</option>`
+      ).join('');
+    }
+
     window.initSettingsPage = async function() {
-      // Fetch products to populate commissions dropdowns
+      // Fetch tenant products and registered businesses for commission scopes.
       try {
-        const { data: productsData } = await sb.from('products').select('sku, category, tags, business').eq('company_id', currentCompanyId);
-        window.commissionsProductsData = productsData || [];
+        const [productsResult, businessesResult] = await Promise.all([
+          sb.from('products').select('sku, category, tags, business').eq('company_id', currentCompanyId),
+          sb.from('tenant_businesses').select('id, name').eq('company_id', currentCompanyId).order('name')
+        ]);
+        if (productsResult.error) throw productsResult.error;
+        if (businessesResult.error) throw businessesResult.error;
+        window.commissionsProductsData = productsResult.data || [];
+        window.commissionsBusinessesData = businessesResult.data || [];
       } catch (err) {
-        console.error('Error fetching products for commissions:', err);
+        console.error('Error fetching commission scope options:', err);
       }
 
       await loadCommissionsSettings();
@@ -424,10 +441,7 @@
       let dropdownOptionsHtml = `
         <option value="all">All Businesses & Tags</option>
         <optgroup label="Businesses">
-          <option value="biz:smart_lock">Smart Lock</option>
-          <option value="biz:solar_power">Solar Power</option>
-          <option value="biz:cctv">CCTV</option>
-          <option value="biz:fire_extinguisher">Fire Extinguisher</option>
+          ${getCommissionBusinessOptions()}
         </optgroup>
       `;
 
@@ -485,10 +499,7 @@
       let options = `
         <option value="all">All Businesses & Tags</option>
         <optgroup label="Businesses">
-          <option value="biz:smart_lock">Smart Lock</option>
-          <option value="biz:solar_power">Solar Power</option>
-          <option value="biz:cctv">CCTV</option>
-          <option value="biz:fire_extinguisher">Fire Extinguisher</option>
+          ${getCommissionBusinessOptions()}
         </optgroup>
       `;
       if (tags.length > 0) {
@@ -526,7 +537,9 @@
     function adjustmentScopeLabel(rule) {
       if (rule.scope === 'tags') return `Tag: ${rule.tag || '—'}`;
       if (!rule.business || rule.business === 'all') return 'All Businesses & Tags';
-      return rule.business.split('_').map(part => part.charAt(0).toUpperCase() + part.slice(1)).join(' ');
+      const business = (window.commissionsBusinessesData || [])
+        .find(item => commissionBusinessKey(item.name) === rule.business);
+      return business?.name || rule.business.split('_').map(part => part.charAt(0).toUpperCase() + part.slice(1)).join(' ');
     }
 
     function renderAdjustmentTable() {

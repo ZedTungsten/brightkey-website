@@ -74,7 +74,7 @@
       color: var(--text-muted);
       border-bottom: 1px solid var(--border);
       display: flex;
-      justify-content: space-between;
+      justify-content: flex-start;
       align-items: center;
       flex-wrap: wrap;
       gap: 1rem;
@@ -243,7 +243,6 @@
               <!-- Inventory Panel -->
               <div class="panel">
                 <div class="panel-header">
-                  <span>Sales Stocks</span>
                   <div class="controls-row">
                     <!-- Search bar -->
                     <input 
@@ -253,6 +252,10 @@
                       placeholder="Search SKU or title..." 
                       oninput="handleSearch()"
                     />
+
+                    <select id="warehouse-filter" class="filter-select" onchange="handleWarehouseFilter()" aria-label="Warehouse">
+                      <option value="">Loading warehouses...</option>
+                    </select>
 
                     <!-- Stock filter -->
                     <select id="stock-filter" class="filter-select" onchange="handleStockFilter()">
@@ -309,7 +312,8 @@
     let currentCompanyId;
 
     let dbProducts = [];
-    let dbInventory = {}; // SKU -> total available quantity
+    let dbInventory = {}; // SKU -> available quantity in the selected warehouse
+    let activeWarehouseId = null;
     
     let activeBusiness = '';
     let searchQuery = '';
@@ -339,6 +343,7 @@
         currentCompanyId = co?.id || null;
 
         await loadBusinessTabs();
+        await loadWarehouseFilter();
         await loadInventoryData();
       } else {
         showToast('Authentication module missing.', true);
@@ -347,6 +352,33 @@
 
     function businessKey(name) {
       return String(name || '').toLowerCase().replace(/[\s_.-]+/g, '_');
+    }
+
+    async function loadWarehouseFilter() {
+      const select = document.getElementById('warehouse-filter');
+      const { data, error } = await sb.from('warehouses')
+        .select('id, name, is_active')
+        .eq('tenant_id', currentTenantId)
+        .order('created_at', { ascending: true });
+      if (error) throw error;
+
+      const warehouses = (data || []).filter(warehouse => warehouse.is_active);
+      select.textContent = '';
+      warehouses.forEach(warehouse => {
+        const option = document.createElement('option');
+        option.value = warehouse.id;
+        option.textContent = warehouse.name;
+        select.appendChild(option);
+      });
+      activeWarehouseId = warehouses[0]?.id || null;
+      if (activeWarehouseId) select.value = activeWarehouseId;
+      else {
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = 'No warehouse configured';
+        select.appendChild(option);
+        select.disabled = true;
+      }
     }
 
     async function loadBusinessTabs() {
@@ -403,10 +435,16 @@
       `;
 
       try {
-        // Fetch products, inventory and commissions config in parallel (inventory compiled across all warehouses under tenant RLS)
+        let inventoryQuery = sb.from('inventory').select('sku, available, warehouse_id')
+          .or(`company_id.eq.${currentCompanyId},company_id.is.null`);
+        inventoryQuery = activeWarehouseId
+          ? inventoryQuery.eq('warehouse_id', activeWarehouseId)
+          : inventoryQuery.is('warehouse_id', null);
+
+        // Match the same warehouse-scoped inventory snapshot used by Warehouse > Inventory.
         const [prodRes, invRes, commsRes] = await Promise.all([
-          sb.from('products').select('sku, title, category, business, image_main, description, tags, installation_price').eq('company_id', currentCompanyId).order('sku'),
-          sb.from('inventory').select('sku, available').eq('company_id', currentCompanyId),
+          sb.from('products').select('id, sku, title, category, business, image_main, description, tags, installation_price, count_inventory').eq('company_id', currentCompanyId).order('sku'),
+          inventoryQuery,
           sb.from('global_settings').select('value').eq('key', 'commissions_config').eq('company_id', currentCompanyId).maybeSingle()
         ]);
 
@@ -418,9 +456,9 @@
         const eligibilityRules = commissionsConfig.eligibility_rules || [];
 
         const rawProducts = prodRes.data || [];
-        dbProducts = rawProducts.filter(p => checkSkuEligibility(p, eligibilityRules));
+        dbProducts = rawProducts.filter(p => p.count_inventory !== false && checkSkuEligibility(p, eligibilityRules));
 
-        // Sum up available inventory across all warehouses per SKU
+        // A warehouse can contain legacy duplicate SKU rows, so retain safe summing.
         dbInventory = {};
         (invRes.data || []).forEach(item => {
           if (item.sku) {
@@ -570,6 +608,11 @@
     function handleStockFilter() {
       stockFilterMode = document.getElementById('stock-filter').value;
       renderInventoryTable();
+    }
+
+    async function handleWarehouseFilter() {
+      activeWarehouseId = document.getElementById('warehouse-filter').value || null;
+      await loadInventoryData();
     }
 
     function checkSkuEligibility(product, eligibilityRules) {

@@ -144,8 +144,11 @@ function renderFeaturesHtml(featuresRow, configuredLabels = {}) {
   // Strip meta columns
   const skip = new Set(['id', 'product_id']);
   let html = '';
-  for (const [col, val] of Object.entries(featuresRow)) {
+  const configuredColumns = Object.keys(configuredLabels);
+  const remainingColumns = Object.keys(featuresRow).filter(col => !configuredColumns.includes(col));
+  for (const col of [...configuredColumns, ...remainingColumns]) {
     if (skip.has(col)) continue;
+    const val = featuresRow[col];
     if (!val || String(val).trim() === '') continue;
     const valStr = String(val).trim();
     const label  = featureLabel(col, configuredLabels);
@@ -660,8 +663,10 @@ async function buildProducts() {
       if (businessIds.length > 0) {
         const { data, error: featureDefinitionError } = await supabase
           .from('business_features')
-          .select('business_id, name, display_name')
-          .in('business_id', businessIds);
+          .select('business_id, name, display_name, sort_order')
+          .in('business_id', businessIds)
+          .order('sort_order', { ascending: true })
+          .order('name', { ascending: true });
         if (featureDefinitionError) {
           console.warn('Warning: Failed to fetch feature display labels; using generated labels:', featureDefinitionError.message);
         } else {

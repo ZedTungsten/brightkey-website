@@ -7,12 +7,12 @@
   
   <link rel="preconnect" href="https://fonts.bunny.net" />
   <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="../../css/style.css" />
-  <link rel="icon" type="image/svg+xml" href="../../assets/favicon.svg?v=2" />
+  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg?v=2" />
   
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 
-  <link rel="stylesheet" href="shared.css" />
+  <link rel="stylesheet" href="/dashboard/warehouse/shared.css" />
   <style>
     #panel-order {
       height: auto;
@@ -22,6 +22,45 @@
     #panel-order > .panel {
       height: auto;
       min-height: 100%;
+    }
+
+    .reorder-row {
+      display: flex;
+      align-items: stretch;
+      gap: 1rem;
+      overflow-x: auto;
+      padding: 0 0 1rem;
+      scroll-snap-type: x proximity;
+    }
+
+    .supplier-order-panel {
+      flex: 0 0 50vw;
+      width: 50vw;
+      min-width: 50vw;
+      margin-bottom: 0 !important;
+      scroll-snap-align: start;
+    }
+
+    .add-reorder-card {
+      flex: 0 0 220px;
+      min-height: 420px;
+      border: 4px dashed #d4d4d8;
+      border-radius: 8px;
+      background: transparent;
+      color: var(--cyan-dark);
+      font: inherit;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+    }
+
+    .add-reorder-card:hover {
+      border-color: var(--cyan);
+      background: var(--cyan-dim);
     }
   </style>
 </head>
@@ -47,8 +86,8 @@
             </button>
             <select id="wh-select-dropdown" class="wh-select-dropdown" style="display:none;" onchange="switchWarehouse(this.value)"></select>
             
-            <button id="btn-sync" class="btn btn-primary">
-              <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: -2px; margin-right: 6px;"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Refresh
+            <button id="btn-all-supplier-orders" class="btn btn-primary" onclick="submitAllSupplierOrders(this)" disabled>
+              Request Order
             </button>
           </div>
         </div>
@@ -60,56 +99,45 @@
       <div class="main-workspace">
 
         <!-- Level-2 Operation Tab Bar -->
-                <div class="drawer-tabs">
-          <a class="tab-btn " href="/dashboard/warehouse/inspect">Inspect <span id="badge-count-inspect" style="display:none; background:var(--cyan); color:white; font-size:0.75rem; padding:1px 6px; border-radius:10px; margin-left:4px;">0</span></a>
-          <a class="tab-btn " href="/dashboard/warehouse/pack">Pack <span id="badge-count-pack" style="display:none; background:var(--cyan); color:white; font-size:0.75rem; padding:1px 6px; border-radius:10px; margin-left:4px;">0</span></a>
-          <a class="tab-btn " href="/dashboard/warehouse/dispatch">Dispatch <span id="badge-count-dispatch" style="display:none; background:var(--cyan); color:white; font-size:0.75rem; padding:1px 6px; border-radius:10px; margin-left:4px;">0</span></a>
-          <a class="tab-btn " href="/dashboard/warehouse/receive">Receive <span id="badge-count-receive" style="display:none; background:var(--cyan); color:white; font-size:0.75rem; padding:1px 6px; border-radius:10px; margin-left:4px;">0</span></a>
-          <a class="tab-btn " href="/dashboard/warehouse/transfer">Transfer</a>
-          <a class="tab-btn " href="/dashboard/warehouse/return">Return</a>
-          <a class="tab-btn " href="/dashboard/warehouse/damaged">Damaged</a>
-          <a class="tab-btn active" href="/dashboard/warehouse/order">Order</a>
+        <div class="drawer-tabs">
+          <a class="tab-btn" href="/dashboard/inventory/summary">Summary</a>
+          <a class="tab-btn" href="/dashboard/inventory/stats">Stats</a>
+          <a class="tab-btn" href="/dashboard/inventory/forecast">Forecast</a>
+          <a class="tab-btn active" href="/dashboard/inventory/order">Order</a>
+          <a class="tab-btn" href="/dashboard/inventory/forecast#settings">Settings</a>
         </div>
 
         <!-- Table Scroll workspace -->
         <div class="table-scroll">
           <!-- Tab Panel: Order -->
           <div class="tab-panel active" id="panel-order">
-            <div class="panel" style="margin-bottom: 2rem;">
-              <div class="panel-header">Supplier Order Catalog</div>
-              
+            <div class="reorder-row" id="reorder-row">
+            <div class="panel supplier-order-panel">
               <!-- Business & Supplier Selectors -->
               <div style="display: flex; gap: 1rem; padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); background: var(--bg-surface); flex-wrap: wrap;">
                 <div class="form-group" style="flex: 1; min-width: 200px; display: flex; flex-direction: column; gap: 0.4rem;">
                   <label class="form-label" style="font-size: 0.72rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em;">Select Business</label>
-                  <select id="order-business-select" class="form-select" onchange="handleBusinessSelect(this.value)" style="height: 38px; background: var(--bg-base); color: var(--text-primary); border: 1px solid var(--border); padding: 0.5rem 0.75rem; border-radius: 6px; font-size: 0.85rem; outline: none;">
+                  <select data-role="business-select" class="form-select" onchange="handleBusinessSelect(this)" style="height: 38px; background: var(--bg-base); color: var(--text-primary); border: 1px solid var(--border); padding: 0.5rem 0.75rem; border-radius: 6px; font-size: 0.85rem; outline: none;">
                     <option value="">-- Choose Business --</option>
                   </select>
                 </div>
                 <div class="form-group" style="flex: 1; min-width: 200px; display: flex; flex-direction: column; gap: 0.4rem;">
                   <label class="form-label" style="font-size: 0.72rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em;">Select Supplier</label>
-                  <select id="order-supplier-select" class="form-select" onchange="handleSupplierSelect(this.value)" style="height: 38px; background: var(--bg-base); color: var(--text-primary); border: 1px solid var(--border); padding: 0.5rem 0.75rem; border-radius: 6px; font-size: 0.85rem; outline: none;" disabled>
+                  <select data-role="supplier-select" class="form-select" onchange="handleSupplierSelect(this)" style="height: 38px; background: var(--bg-base); color: var(--text-primary); border: 1px solid var(--border); padding: 0.5rem 0.75rem; border-radius: 6px; font-size: 0.85rem; outline: none;" disabled>
                     <option value="">-- Select Business First --</option>
                   </select>
                 </div>
               </div>
 
-              <div id="supplier-catalog-wrapper" style="display: none;">
+              <div data-role="catalog-wrapper" style="display: none;">
                 <!-- Search & Page Stats -->
                 <div style="display: flex; gap: 1rem; align-items: center; justify-content: space-between; padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); flex-wrap: wrap; background: var(--bg-surface);">
                   <div style="display: flex; gap: 0.75rem; align-items: center; flex: 1; min-width: 280px;">
-                    <input type="search" id="supplier-search" placeholder="Search by SKU or title..." oninput="handleSupplierSearch(event)" class="form-input" style="max-width: 380px;" />
-                  <span id="supplier-count-badge" class="badge-status badge-packed" style="background: var(--bg-elevated); color: var(--text-secondary); border: 1px solid var(--border);">0 products</span>
+                    <div class="bk-search-field">
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><line x1="16.5" y1="16.5" x2="21" y2="21"></line></svg>
+                      <input type="search" data-role="supplier-search" placeholder="Search by SKU or title..." oninput="handleSupplierSearch(this)" />
+                    </div>
                 </div>
-                <div id="supplier-page-info" style="font-size: 0.8rem; color: var(--text-muted); font-weight: 600;">Page 1 of 1</div>
-              </div>
-              
-              <!-- Pager Row -->
-              <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1.25rem; border-bottom: 1px solid var(--border); background: var(--bg-surface); flex-wrap: wrap; gap: 0.75rem;">
-                <div id="supplier-pager" style="display: flex; gap: 0.35rem; align-items: center;">
-                  <!-- Pagination buttons injected here -->
-                </div>
-                <div id="supplier-selected-info" style="font-size: 0.8rem; color: var(--text-secondary); font-weight: 600;">No items selected</div>
               </div>
 
               <!-- Product Grid Table -->
@@ -125,7 +153,7 @@
                       <th style="width: 160px; text-align: right;">Line Total</th>
                     </tr>
                   </thead>
-                  <tbody id="supplier-product-list">
+                  <tbody data-role="supplier-product-list">
                     <tr>
                       <td colspan="6">
                         <div class="loading-wrapper">
@@ -138,12 +166,17 @@
                 </table>
               </div>
 
+              <!-- Pager Row -->
+              <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1.25rem; border-top: 1px solid var(--border); background: var(--bg-surface); flex-wrap: wrap; gap: 0.75rem;">
+                <div style="display:flex;align-items:center;gap:0.75rem;">
+                  <div data-role="supplier-pager" style="display: flex; gap: 0.35rem; align-items: center;"></div>
+                  <div data-role="supplier-page-info" style="font-size: 0.8rem; color: var(--text-muted); font-weight: 600;">Page 1 of 1</div>
+                </div>
+                <div data-role="supplier-selected-info" style="font-size: 0.8rem; color: var(--text-secondary); font-weight: 600; margin-left:auto;">No items selected</div>
+              </div>
+
               <!-- Tally Summary Section -->
               <div style="padding: 1.5rem; border-top: 1px solid var(--border); background: var(--bg-elevated);">
-                <div style="font-size: 0.85rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); letter-spacing: 0.05em; margin-bottom: 1rem;">
-                  Tally of Selected Products
-                </div>
-                
                 <!-- Table headers for tally -->
                 <div style="display: flex; align-items: center; gap: 1rem; font-size: 0.75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border);">
                   <div style="width: 180px;">Unit Code</div>
@@ -152,25 +185,20 @@
                   <div style="margin-left: auto; width: 160px; text-align: right;">Amount</div>
                 </div>
 
-                <div id="supplier-tally-list" style="padding-top: 0.5rem;">
+                <div data-role="supplier-tally-list" style="padding-top: 0.5rem;">
                   <div style="font-size: 0.82rem; color: var(--text-muted); padding: 0.5rem 0;">No products selected.</div>
                 </div>
 
                 <!-- Tally Total -->
-                <div id="supplier-tally-total" style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border); text-align: right; font-size: 1.05rem; font-weight: 800; color: var(--text-primary); font-family: var(--font-mono);">
+                <div data-role="supplier-tally-total" style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border); text-align: right; font-size: 1.05rem; font-weight: 800; color: var(--text-primary); font-family: var(--font-mono);">
                   Total: ₱0.00
                 </div>
 
-                <!-- Submit Button -->
-                <div style="margin-top: 1.5rem; text-align: right;">
-                  <span style="font-size: 0.75rem; color: var(--text-muted); margin-right: 1.25rem;">Only items with a quantity greater than 0 will be submitted.</span>
-                  <button id="btn-supplier-order-submit" class="btn btn-primary" style="padding: 0.75rem 2rem; font-size: 0.9rem;" onclick="submitSupplierOrder(this)" disabled>
-                    Request Order
-                  </button>
-                </div>
               </div>
             </div> <!-- End of supplier-catalog-wrapper -->
 
+            </div>
+            <button type="button" class="add-reorder-card" id="add-reorder-card" onclick="addReorderPanel()">+ Add Reorder</button>
             </div>
           </div>
         </div>
@@ -184,10 +212,10 @@
     </div>
   </div>
 
-  <script src="../../js/auth.js"></script>
-  <script src="../../js/sidebar.js"></script>
-  <script src="../../js/main.js"></script>
-  <script src="shared.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/sidebar.js"></script>
+  <script src="/js/main.js"></script>
+  <script src="/dashboard/warehouse/shared.js"></script>
   <script>
     'use strict';
 
@@ -222,14 +250,28 @@
     let warehouseTransfers = [];
 
     // Supplier Order State
-    let supplierOrderSearch = "";
-    let supplierOrderPage = 1;
     const supplierOrderPageSize = 10;
-    let supplierOrderQuantities = {};
-    let supplierOrderPosting = false;
     let suppliersList = [];
-    let selectedBusinessId = null;
-    let selectedSupplierId = null;
+    let businessesList = [];
+    const reorderPanelStates = new WeakMap();
+
+    function createReorderState() {
+      return { search: '', page: 1, quantities: {}, posting: false, businessId: '', supplierId: '' };
+    }
+
+    function getReorderPanel(source) {
+      if (source instanceof Element) return source.closest('.supplier-order-panel');
+      return source?.classList?.contains('supplier-order-panel') ? source : document.querySelector('.supplier-order-panel');
+    }
+
+    function getReorderState(panel) {
+      if (!reorderPanelStates.has(panel)) reorderPanelStates.set(panel, createReorderState());
+      return reorderPanelStates.get(panel);
+    }
+
+    function panelRole(panel, role) {
+      return panel?.querySelector(`[data-role="${role}"]`);
+    }
 
     // Initialize Page
     async function init() {
@@ -248,16 +290,14 @@
 
         // Load Businesses and Suppliers
         const { data: bizData } = await sb.from('tenant_businesses').select('id, name').eq('company_id', companyId).order('name');
-        const bizSelect = document.getElementById('order-business-select');
-        if (bizSelect && bizData) {
-          bizSelect.innerHTML = '<option value="">-- Choose Business --</option>' +
-            bizData.map(b => `<option value="${b.id}">${escapeHtml(b.name)}</option>`).join('');
-        }
+        businessesList = bizData || [];
+        initializeReorderPanel(document.querySelector('.supplier-order-panel'));
         
         const { data: suppliersData } = await sb.from('suppliers').select('*').eq('company_id', companyId).order('name');
         suppliersList = suppliersData || [];
 
         await refreshDashboard();
+        await loadRecommendedOrderHandoff();
         runAutoSyncInBackground();
 
         
@@ -721,58 +761,141 @@
 
 
 
-    window.handleBusinessSelect = function(bizId) {
-      selectedBusinessId = bizId;
-      selectedSupplierId = null;
-      
-      const supplierSelect = document.getElementById('order-supplier-select');
-      const catalogWrapper = document.getElementById('supplier-catalog-wrapper');
-      
-      if (!bizId) {
+    function initializeReorderPanel(panel) {
+      if (!panel) return;
+      reorderPanelStates.set(panel, createReorderState());
+      const businessSelect = panelRole(panel, 'business-select');
+      businessSelect.innerHTML = '<option value="">-- Choose Business --</option>' +
+        businessesList.map(business => `<option value="${business.id}">${escapeHtml(business.name)}</option>`).join('');
+      businessSelect.value = '';
+      const supplierSelect = panelRole(panel, 'supplier-select');
+      supplierSelect.innerHTML = '<option value="">-- Select Business First --</option>';
+      supplierSelect.disabled = true;
+      panelRole(panel, 'catalog-wrapper').style.display = 'none';
+    }
+
+    window.addReorderPanel = function(shouldScroll = true) {
+      const row = document.getElementById('reorder-row');
+      const addButton = document.getElementById('add-reorder-card');
+      const source = row?.querySelector('.supplier-order-panel');
+      if (!row || !addButton || !source) return null;
+      const panel = source.cloneNode(true);
+      panel.querySelectorAll('[id]').forEach(element => element.removeAttribute('id'));
+      const search = panelRole(panel, 'supplier-search');
+      if (search) search.value = '';
+      panelRole(panel, 'supplier-product-list').innerHTML = '<tr><td colspan="6" class="text-center text-muted" style="padding:2rem 0;">Select a business and supplier to begin.</td></tr>';
+      panelRole(panel, 'supplier-tally-list').innerHTML = '<div style="font-size:0.82rem;color:var(--text-muted);padding:0.5rem 0;">No products selected.</div>';
+      panelRole(panel, 'supplier-tally-total').textContent = 'Total: ₱0.00';
+      panelRole(panel, 'supplier-selected-info').textContent = 'No items selected';
+      panelRole(panel, 'supplier-page-info').textContent = 'Page 1 of 1';
+      panelRole(panel, 'supplier-pager').innerHTML = '';
+      row.insertBefore(panel, addButton);
+      initializeReorderPanel(panel);
+      updateAllOrdersButton();
+      if (shouldScroll) panel.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'start' });
+      return panel;
+    };
+
+    async function loadRecommendedOrderHandoff() {
+      const url = new URL(window.location.href);
+      const nonce = url.searchParams.get('recommended');
+      if (!nonce) return;
+      try {
+        const { data, error } = await sb.from('global_settings').select('value')
+          .eq('company_id', companyId).eq('key', 'inventory_reorder_handoff').maybeSingle();
+        if (error) throw error;
+        const handoff = data?.value;
+        const createdAt = Date.parse(handoff?.created_at || '');
+        const isFresh = Number.isFinite(createdAt) && Date.now() - createdAt < 30 * 60 * 1000;
+        if (!handoff || handoff.nonce !== nonce || !isFresh || !Array.isArray(handoff.orders)) {
+          showToast('The recommended reorder draft has expired. Generate it again from Forecast.', true);
+          return;
+        }
+        const sourcePanel = document.querySelector('.supplier-order-panel');
+        handoff.orders.forEach((order, index) => {
+          const panel = index === 0 ? sourcePanel : addReorderPanel(false);
+          if (!panel) return;
+          const businessSelect = panelRole(panel, 'business-select');
+          if (![...businessSelect.options].some(option => option.value === order.business_id)) return;
+          businessSelect.value = order.business_id;
+          handleBusinessSelect(businessSelect);
+          const supplierSelect = panelRole(panel, 'supplier-select');
+          if (![...supplierSelect.options].some(option => option.value === order.supplier_id)) return;
+          supplierSelect.value = order.supplier_id;
+          handleSupplierSelect(supplierSelect);
+          const state = getReorderState(panel);
+          state.quantities = Object.fromEntries((order.items || [])
+            .filter(item => item?.sku && Number(item.qty) > 0)
+            .map(item => [String(item.sku).toUpperCase(), Math.ceil(Number(item.qty))]));
+          renderSupplierOrderTab(panel);
+        });
+        updateAllOrdersButton();
+        url.searchParams.delete('recommended');
+        history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+        showToast('Recommended reorder quantities loaded.');
+      } catch (error) {
+        console.error('Recommended reorder draft could not be loaded:', error);
+        showToast('The recommended reorder draft could not be loaded. Try again.', true);
+      }
+    }
+
+    window.handleBusinessSelect = function(select) {
+      const panel = getReorderPanel(select);
+      const state = getReorderState(panel);
+      state.businessId = select.value;
+      state.supplierId = '';
+      state.quantities = {};
+      state.search = '';
+      state.page = 1;
+      const supplierSelect = panelRole(panel, 'supplier-select');
+      const catalogWrapper = panelRole(panel, 'catalog-wrapper');
+      const search = panelRole(panel, 'supplier-search');
+      if (search) search.value = '';
+      if (!state.businessId) {
         supplierSelect.disabled = true;
         supplierSelect.innerHTML = '<option value="">-- Select Business First --</option>';
         catalogWrapper.style.display = 'none';
-        supplierOrderQuantities = {};
+        updateAllOrdersButton();
         return;
       }
-      
-      // Filter suppliers
-      const filteredSuppliers = suppliersList.filter(s => s.business_id === null || s.business_id === bizId);
+      const filteredSuppliers = suppliersList.filter(supplier => supplier.business_id === null || supplier.business_id === state.businessId);
       supplierSelect.innerHTML = '<option value="">-- Choose Supplier --</option>' +
-        filteredSuppliers.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+        filteredSuppliers.map(supplier => `<option value="${supplier.id}">${escapeHtml(supplier.name)}</option>`).join('');
       supplierSelect.disabled = false;
-      
       catalogWrapper.style.display = 'none';
-      supplierOrderQuantities = {};
+      updateAllOrdersButton();
     };
 
-    window.handleSupplierSelect = function(supplierId) {
-      selectedSupplierId = supplierId;
-      const catalogWrapper = document.getElementById('supplier-catalog-wrapper');
-      
-      if (!supplierId) {
-        catalogWrapper.style.display = 'none';
-        supplierOrderQuantities = {};
-        return;
-      }
-      
-      catalogWrapper.style.display = 'block';
-      supplierOrderQuantities = {};
-      supplierOrderPage = 1;
-      renderSupplierOrderTab();
+    window.handleSupplierSelect = function(select) {
+      const panel = getReorderPanel(select);
+      const state = getReorderState(panel);
+      state.supplierId = select.value;
+      state.quantities = {};
+      state.page = 1;
+      panelRole(panel, 'catalog-wrapper').style.display = state.supplierId ? 'block' : 'none';
+      if (state.supplierId) renderSupplierOrderTab(panel);
+      else updateAllOrdersButton();
     };
 
     // Render Tab 2: Supplier Order Catalog
-    window.renderSupplierOrderTab = function() { if (!document.getElementById('supplier-product-list')) return;
-      const tbody = document.getElementById('supplier-product-list');
-      if (!tbody) return;
+    window.renderSupplierOrderTab = function(targetPanel) {
+      if (!targetPanel) {
+        document.querySelectorAll('.supplier-order-panel').forEach(panel => {
+          if (getReorderState(panel).supplierId) renderSupplierOrderTab(panel);
+        });
+        return;
+      }
+      const panel = getReorderPanel(targetPanel);
+      const state = getReorderState(panel);
+      const tbody = panelRole(panel, 'supplier-product-list');
+      if (!tbody || !state.supplierId) return;
 
       // Filter products by selected business
-      const bizSelect = document.getElementById('order-business-select');
+      const bizSelect = panelRole(panel, 'business-select');
       const selectedBizOption = bizSelect ? bizSelect.options[bizSelect.selectedIndex] : null;
       const bizName = (selectedBizOption && selectedBizOption.value) ? selectedBizOption.text : '';
 
-      const query = supplierOrderSearch.toLowerCase().trim();
+      const query = state.search.toLowerCase().trim();
       const filtered = allProducts.filter(p => {
         if (p.count_inventory === false) return false;
         if (bizName) {
@@ -787,29 +910,28 @@
       // Paginate
       const total = filtered.length;
       const pages = Math.max(1, Math.ceil(total / supplierOrderPageSize));
-      if (supplierOrderPage > pages) supplierOrderPage = pages;
-      if (supplierOrderPage < 1) supplierOrderPage = 1;
+      if (state.page > pages) state.page = pages;
+      if (state.page < 1) state.page = 1;
 
-      const start = (supplierOrderPage - 1) * supplierOrderPageSize;
+      const start = (state.page - 1) * supplierOrderPageSize;
       const paginated = filtered.slice(start, start + supplierOrderPageSize);
 
       // Update counters
-      document.getElementById('supplier-count-badge').innerText = `${total} product${total !== 1 ? 's' : ''}`;
-      document.getElementById('supplier-page-info').innerText = `Page ${supplierOrderPage} of ${pages}`;
+      panelRole(panel, 'supplier-page-info').innerText = `Page ${state.page} of ${pages}`;
 
       // Render Pager Buttons
-      renderSupplierPager(pages, supplierOrderPage);
+      renderSupplierPager(panel, pages, state.page);
 
       // Render Table Rows
       tbody.innerHTML = '';
       if (paginated.length === 0) {
         tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted" style="padding: 2rem 0;">No matching products found.</td></tr>`;
-        renderSupplierTally();
+        renderSupplierTally(panel);
         return;
       }
 
       paginated.forEach(p => {
-        const qty = supplierOrderQuantities[p.sku] !== undefined ? supplierOrderQuantities[p.sku] : "";
+        const qty = state.quantities[p.sku] !== undefined ? state.quantities[p.sku] : "";
         
         // Image absolute path resolution
         let imageSrc = p.image_main;
@@ -829,7 +951,7 @@
             <td><strong style="font-family: var(--font-mono);">${p.sku}</strong></td>
             <td>${p.title}</td>
             <td>
-              <input type="number" class="form-input" min="0" step="1" placeholder="0" value="${qty}" style="width: 90px;" oninput="updateSupplierQty('${p.sku}', this.value)" />
+              <input type="number" class="form-input" min="0" step="1" placeholder="0" value="${qty}" style="width: 90px;" oninput="updateSupplierQty(this, '${p.sku}', this.value)" />
             </td>
             <td style="text-align: right; font-family: var(--font-mono);">${formatMoney(p.dealer_price)}</td>
             <td data-role="line-total" style="text-align: right; font-family: var(--font-mono); font-weight: 700; color: var(--text-primary);">${lineTotalText}</td>
@@ -837,11 +959,12 @@
         `;
       });
 
-      renderSupplierTally();
+      renderSupplierTally(panel);
     };
 
-    function renderSupplierPager(pages, current) {
-      const pagerWrap = document.getElementById('supplier-pager');
+    function renderSupplierPager(panel, pages, current) {
+      const pagerWrap = panelRole(panel, 'supplier-pager');
+      const state = getReorderState(panel);
       if (!pagerWrap) return;
       pagerWrap.innerHTML = '';
 
@@ -855,8 +978,8 @@
         btn.style.fontSize = '0.75rem';
         if (!disabled) {
           btn.onclick = () => {
-            supplierOrderPage = pageNum;
-            renderSupplierOrderTab();
+            state.page = pageNum;
+            renderSupplierOrderTab(panel);
           };
         }
         return btn;
@@ -900,40 +1023,44 @@
       pagerWrap.appendChild(createButton('Next', current + 1, current >= pages, false));
     }
 
-    window.handleSupplierSearch = function(e) {
-      supplierOrderSearch = e.target.value;
-      supplierOrderPage = 1;
-      renderSupplierOrderTab();
+    window.handleSupplierSearch = function(input) {
+      const panel = getReorderPanel(input);
+      const state = getReorderState(panel);
+      state.search = input.value;
+      state.page = 1;
+      renderSupplierOrderTab(panel);
     };
 
-    window.updateSupplierQty = function(sku, value) {
+    window.updateSupplierQty = function(input, sku, value) {
+      const panel = getReorderPanel(input);
+      const state = getReorderState(panel);
       const parsed = parseInt(value);
       if (isNaN(parsed) || parsed <= 0) {
-        delete supplierOrderQuantities[sku];
+        delete state.quantities[sku];
       } else {
-        supplierOrderQuantities[sku] = parsed;
+        state.quantities[sku] = parsed;
       }
 
       // In-place update of the line total column for the changed SKU to preserve cursor focus
-      const row = Array.from(document.querySelectorAll('#supplier-product-list tr')).find(tr => tr.getAttribute('data-sku') === sku);
+      const row = Array.from(panelRole(panel, 'supplier-product-list').querySelectorAll('tr')).find(tr => tr.getAttribute('data-sku') === sku);
       if (row) {
         const lineTotalCell = row.querySelector('td[data-role="line-total"]');
         const prod = allProducts.find(p => p.sku === sku);
         if (lineTotalCell && prod) {
-          const qty = supplierOrderQuantities[sku] || 0;
+          const qty = state.quantities[sku] || 0;
           lineTotalCell.innerText = qty > 0 ? formatMoney(prod.dealer_price * qty) : "";
         }
       }
 
       // Update selection info and tally
-      renderSupplierTally();
+      renderSupplierTally(panel);
     };
 
-    function renderSupplierTally() {
-      const tallyList = document.getElementById('supplier-tally-list');
-      const tallyTotal = document.getElementById('supplier-tally-total');
-      const submitBtn = document.getElementById('btn-supplier-order-submit');
-      const selectedInfo = document.getElementById('supplier-selected-info');
+    function renderSupplierTally(panel) {
+      const state = getReorderState(panel);
+      const tallyList = panelRole(panel, 'supplier-tally-list');
+      const tallyTotal = panelRole(panel, 'supplier-tally-total');
+      const selectedInfo = panelRole(panel, 'supplier-selected-info');
       if (!tallyList) return;
 
       tallyList.innerHTML = '';
@@ -941,7 +1068,7 @@
       let selectedCount = 0;
 
       allProducts.forEach(p => {
-        const qty = supplierOrderQuantities[p.sku];
+        const qty = state.quantities[p.sku];
         if (qty && qty > 0) {
           selectedCount++;
           const price = p.dealer_price || 0;
@@ -963,98 +1090,113 @@
         tallyList.innerHTML = `<div style="font-size: 0.82rem; color: var(--text-muted); padding: 0.5rem 0;">No products selected.</div>`;
         tallyTotal.innerText = 'Total: ₱0.00';
         selectedInfo.innerText = 'No items selected';
-        submitBtn.disabled = true;
-        submitBtn.innerText = 'Request Order';
+        updateAllOrdersButton();
         return;
       }
 
       tallyTotal.innerText = `Total: ${formatMoney(totalCents)}`;
       selectedInfo.innerText = `${selectedCount} item${selectedCount !== 1 ? 's' : ''} selected`;
       
-      if (!supplierOrderPosting) {
-        submitBtn.disabled = false;
-        submitBtn.innerText = 'Request Order';
-      } else {
-        submitBtn.disabled = true;
-        submitBtn.innerText = 'Requesting...';
-      }
+      updateAllOrdersButton();
     }
 
-    window.submitSupplierOrder = async function(btn) {
-      const items = [];
-      allProducts.forEach(p => {
-        const qty = supplierOrderQuantities[p.sku];
+    function getPanelOrderItems(panel) {
+      const state = getReorderState(panel);
+      return allProducts.reduce((items, product) => {
+        const qty = state.quantities[product.sku];
         if (qty && qty > 0) {
-          items.push({ sku: p.sku, qty: qty });
+          items.push({ sku: product.sku, qty });
         }
-      });
+        return items;
+      }, []);
+    }
 
-      if (items.length === 0) return;
+    function updateAllOrdersButton() {
+      const button = document.getElementById('btn-all-supplier-orders');
+      if (!button) return;
+      const panels = [...document.querySelectorAll('.supplier-order-panel')];
+      const hasOrders = panels.some(panel => {
+        const state = getReorderState(panel);
+        return Boolean(state.supplierId) && getPanelOrderItems(panel).length > 0;
+      });
+      button.disabled = !hasOrders || panels.some(panel => getReorderState(panel).posting);
+    }
+
+    async function submitReorderPanel(panel) {
+      const state = getReorderState(panel);
+      const items = getPanelOrderItems(panel);
+      if (!state.supplierId || items.length === 0) return false;
+      state.posting = true;
+      const today = new Date();
+      const yyyy = today.getFullYear();
+      const mm = String(today.getMonth() + 1).padStart(2, '0');
+      const dd = String(today.getDate()).padStart(2, '0');
+      const random = Math.floor(100 + Math.random() * 900);
+      const refOrder = `SUP-${yyyy}${mm}${dd}-${random}`;
+
+      const selectedSup = suppliersList.find(supplier => supplier.id === state.supplierId);
+      const supplierName = selectedSup ? selectedSup.name : 'Supplier';
+
+      const payloads = items.map(item => ({
+        company_id: companyId,
+        reference_id: refOrder,
+        sku: item.sku,
+        quantity: item.qty,
+        type: 'supplier_order',
+        status: 'ordered',
+        customer_name: supplierName,
+        timestamp_ordered: new Date().toISOString(),
+        warehouse_id: activeWarehouseId || null
+      }));
+
+      const { error: txErr } = await sb.from('inventory_transactions').insert(payloads);
+      if (txErr) throw txErr;
+
+      const uniqueSkus = [...new Set(items.map(item => item.sku))];
+      let existQ = sb.from('inventory').select('sku').or(`company_id.eq.${companyId},company_id.is.null`).in('sku', uniqueSkus);
+      if (activeWarehouseId) existQ = existQ.eq('warehouse_id', activeWarehouseId);
+      else existQ = existQ.is('warehouse_id', null);
+      const { data: existingRows, error: checkErr } = await existQ;
+      if (checkErr) throw checkErr;
+
+      const existingSkus = new Set((existingRows || []).map(row => row.sku));
+      const newInventoryRows = uniqueSkus
+        .filter(sku => !existingSkus.has(sku))
+        .map(sku => ({ company_id: companyId, sku, available: 0, warehouse_id: activeWarehouseId || null }));
+
+      if (newInventoryRows.length > 0) {
+        const { error: insErr } = await sb.from('inventory').insert(newInventoryRows);
+        if (insErr) throw insErr;
+      }
+
+      state.quantities = {};
+      state.search = '';
+      state.posting = false;
+      const searchInput = panelRole(panel, 'supplier-search');
+      if (searchInput) searchInput.value = '';
+      const businessSelect = panelRole(panel, 'business-select');
+      businessSelect.value = '';
+      handleBusinessSelect(businessSelect);
+      return true;
+    }
+
+    window.submitAllSupplierOrders = async function(button) {
+      const panels = [...document.querySelectorAll('.supplier-order-panel')]
+        .filter(panel => getReorderState(panel).supplierId && getPanelOrderItems(panel).length > 0);
+      if (panels.length === 0) return;
 
       try {
-        await wrapActionWithLoading(btn, async () => {
-          supplierOrderPosting = true;
-          const today = new Date();
-          const yyyy = today.getFullYear();
-          const mm = String(today.getMonth() + 1).padStart(2, '0');
-          const dd = String(today.getDate()).padStart(2, '0');
-          const random = Math.floor(100 + Math.random() * 900);
-          const refOrder = `SUP-${yyyy}${mm}${dd}-${random}`;
-
-          const selectedSup = suppliersList.find(s => s.id === selectedSupplierId);
-          const supplierName = selectedSup ? selectedSup.name : 'Supplier';
-
-          const payloads = items.map(item => ({
-            company_id: companyId,
-            reference_id: refOrder,
-            sku: item.sku,
-            quantity: item.qty,
-            type: 'supplier_order',
-            status: 'ordered',
-            customer_name: supplierName,
-            timestamp_ordered: new Date().toISOString(),
-            warehouse_id: activeWarehouseId || null
-          }));
-
-          // Bulk insert into Supabase
-          const { error: txErr } = await sb.from('inventory_transactions').insert(payloads);
-          if (txErr) throw txErr;
-
-          // Ensure inventory rows exist for these SKUs in this warehouse
-          const uniqueSkus = [...new Set(items.map(i => i.sku))];
-          let existQ = sb.from('inventory').select('sku').or(`company_id.eq.${companyId},company_id.is.null`).in('sku', uniqueSkus);
-          if (activeWarehouseId) existQ = existQ.eq('warehouse_id', activeWarehouseId);
-          else existQ = existQ.is('warehouse_id', null);
-          const { data: existingRows, error: checkErr } = await existQ;
-          if (checkErr) throw checkErr;
-
-          const existingSkus = new Set((existingRows || []).map(r => r.sku));
-          const newInventoryRows = uniqueSkus
-            .filter(sku => !existingSkus.has(sku))
-            .map(sku => ({ company_id: companyId, sku, available: 0, warehouse_id: activeWarehouseId || null }));
-
-          if (newInventoryRows.length > 0) {
-            const { error: insErr } = await sb.from('inventory').insert(newInventoryRows);
-            if (insErr) throw insErr;
-          }
-
-          // Reset state
-          supplierOrderQuantities = {};
-          supplierOrderSearch = "";
-          const searchInput = document.getElementById('supplier-search');
-          if (searchInput) searchInput.value = "";
-
-          // Reset selections
-          const bizSelect = document.getElementById('order-business-select');
-          if (bizSelect) bizSelect.value = "";
-          handleBusinessSelect("");
-
+        await wrapActionWithLoading(button, async () => {
+          for (const panel of panels) await submitReorderPanel(panel);
           await refreshDashboard();
-          showToast('Supplier order successfully requested!');
+          showToast(`${panels.length} supplier order${panels.length === 1 ? '' : 's'} successfully requested.`);
         });
+      } catch (error) {
+        panels.forEach(panel => { getReorderState(panel).posting = false; });
+        throw error;
       } finally {
-        supplierOrderPosting = false;
-        renderSupplierOrderTab();
+        button.textContent = 'Request Order';
+        updateAllOrdersButton();
       }
     };
 
@@ -1247,25 +1389,6 @@
         await refreshDashboard();
       });
     };
-
-    // Trigger explicit booking sync on demand
-    document.getElementById('btn-sync').addEventListener('click', async () => {
-      document.getElementById('btn-sync').disabled = true;
-      document.getElementById('btn-sync').innerHTML = `<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: -2px; margin-right: 6px; animation: spin 1s linear infinite;"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Refreshing...`;
-      try {
-        await runAutoSync();
-        await refreshDashboard();
-        showToast('Refresh complete!');
-      } catch (err) {
-        console.error(err);
-        showToast('Refresh error: ' + err.message, true);
-      } finally {
-        document.getElementById('btn-sync').disabled = false;
-        document.getElementById('btn-sync').innerHTML = `<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: -2px; margin-right: 6px;"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Refresh`;
-      }
-    });
-
-    
 
     // ── WAREHOUSE TRANSFER TAB FUNCTIONALITY ──
     let directTransferDraft = [];

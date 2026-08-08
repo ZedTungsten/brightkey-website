@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Inventory Forecast — Brightkey ERP</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Commissioner:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="stylesheet" href="/css/dashboard.css" />
+  <link rel="stylesheet" href="/dashboard/inventory-forecast.css" />
+</head>
+<body>
+  <div id="toast-container"></div>
+  <div class="dash-layout">
+    <aside class="dash-sidebar" id="dash-sidebar"></aside>
+    <main class="dash-main">
+      <div class="forecast-page">
+        <header class="forecast-topbar">
+          <h1>Warehouse &amp; Inventory Ledger</h1>
+          <select id="forecast-warehouse" class="forecast-select" aria-label="Warehouse"></select>
+        </header>
+
+        <nav class="drawer-tabs inventory-tabs" aria-label="Inventory sections">
+          <a class="tab-btn" href="/dashboard/inventory/summary">Summary</a>
+          <a class="tab-btn" href="/dashboard/inventory/stats">Stats</a>
+          <button class="tab-btn active" type="button" data-view="forecast">Forecast</button>
+          <a class="tab-btn" href="/dashboard/inventory/order">Order</a>
+          <button class="tab-btn" type="button" data-view="settings">Settings</button>
+        </nav>
+
+        <div class="forecast-scroll">
+          <section id="forecast-view" class="forecast-view active">
+            <div class="forecast-toolbar">
+              <div class="forecast-filters">
+                <label>
+                  <span>Average Daily Sales</span>
+                  <select id="forecast-days" class="forecast-select">
+                    <option value="7">7 days</option>
+                    <option value="14">14 days</option>
+                    <option value="30" selected>30 days</option>
+                    <option value="60">60 days</option>
+                    <option value="90">90 days</option>
+                    <option value="180">180 days</option>
+                    <option value="365">365 days</option>
+                  </select>
+                </label>
+                <div class="status-filter">
+                  <button class="forecast-select status-filter-button" id="status-filter-button" type="button" aria-expanded="false">
+                    <span id="status-filter-label">Status</span>
+                    <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                  </button>
+                  <div class="status-filter-menu" id="status-filter-menu" hidden>
+                    <label><input type="checkbox" value="critical" checked /><span class="status-filter-choice critical">Critical</span></label>
+                    <label><input type="checkbox" value="soon" checked /><span class="status-filter-choice soon">Order Soon</span></label>
+                    <label><input type="checkbox" value="healthy" checked /><span class="status-filter-choice healthy">Healthy</span></label>
+                  </div>
+                </div>
+              </div>
+              <button class="btn-primary" id="order-recommended" type="button" disabled>Order Recommended</button>
+            </div>
+            <div class="forecast-table-wrap">
+              <table class="forecast-table" id="forecast-table">
+                <thead><tr>
+                  <th>SKU</th><th>Product Title</th><th>On Hand</th><th>Reserved</th>
+                  <th>Incoming PO</th><th>Available</th><th class="future-demand-column">Future Available</th>
+                  <th class="metric-divider">Sold</th><th>Avg Daily Sales</th><th>Days Left</th>
+                  <th>Lead Time</th><th>Safety Stock</th><th>Reco. Reorder</th><th class="future-demand-column">Future Demand</th><th>Status</th>
+                </tr></thead>
+                <tbody id="forecast-body"><tr><td colspan="15" class="empty-state">Loading forecast…</td></tr></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section id="settings-view" class="forecast-view">
+            <nav class="drawer-tabs settings-tabs" aria-label="Forecast settings">
+              <button class="tab-btn active" type="button" data-setting="lead-time">General</button>
+              <button class="tab-btn" type="button" data-setting="safety-stock">Safety Stock</button>
+              <button class="tab-btn" type="button" data-setting="future-demand">Future Demand</button>
+              <button class="tab-btn" type="button" data-setting="sku-rules">SKU</button>
+            </nav>
+
+            <div class="settings-panel active" id="setting-lead-time">
+              <div class="settings-heading"><div><h2>Supplier Lead Time</h2><p>Set delivery lead time per business and supplier. Changes save automatically.</p></div></div>
+              <div class="settings-card"><table class="settings-table"><thead><tr><th>Business</th><th>Supplier</th><th>Lead Time (Days)</th></tr></thead><tbody id="lead-time-body"></tbody></table></div>
+              <div class="settings-heading general-default-heading"><div><h2>Default Average Daily Sales</h2><p>Choose the date range selected by default when Inventory Forecast opens. Changes save automatically.</p></div></div>
+              <div class="settings-card general-default-card">
+                <label for="default-forecast-days">Default range</label>
+                <select id="default-forecast-days" class="forecast-select">
+                  <option value="7">7 days</option>
+                  <option value="14">14 days</option>
+                  <option value="30">30 days</option>
+                  <option value="60">60 days</option>
+                  <option value="90">90 days</option>
+                  <option value="180">180 days</option>
+                  <option value="365">365 days</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="settings-panel" id="setting-safety-stock">
+              <div class="settings-heading"><div><h2>Safety Stock</h2><p>Set the critical stock floor for each SKU. Changes save automatically.</p></div></div>
+              <div class="safety-tables">
+                <div class="settings-card"><table class="settings-table safety-table"><thead><tr><th>SKU</th><th>Product Title</th><th>Safety Stock</th></tr></thead><tbody id="safety-stock-body-left" class="safety-stock-body"></tbody></table></div>
+                <div class="settings-card"><table class="settings-table safety-table"><thead><tr><th>SKU</th><th>Product Title</th><th>Safety Stock</th></tr></thead><tbody id="safety-stock-body-right" class="safety-stock-body"></tbody></table></div>
+              </div>
+            </div>
+
+            <div class="settings-panel" id="setting-future-demand">
+              <div class="settings-heading"><div><h2>Future Demand</h2><p>Add dated events that will increase projected demand.</p></div><button class="btn-outline" id="add-demand" type="button">+ Add Event</button></div>
+              <div id="demand-form" class="settings-card demand-form" hidden>
+                <label>End Date<input id="demand-end-date" type="date" /></label>
+                <label>Event Name<input id="demand-name" type="text" maxlength="80" placeholder="Event name" /></label>
+                <label>Projected Demand<div class="inline-fields"><input id="demand-value" type="number" min="0" step="0.01" /><select id="demand-mode"><option value="number">Units</option><option value="percent">Percent</option></select></div></label>
+                <fieldset><legend>SKUs Affected</legend><div id="demand-skus" class="check-grid"></div></fieldset>
+                <div class="form-actions"><button class="btn-outline" id="cancel-demand" type="button">Cancel</button><button class="btn-primary" id="save-demand" type="button">Save Event</button></div>
+              </div>
+              <div id="demand-list" class="settings-list"></div>
+            </div>
+
+            <div class="settings-panel" id="setting-sku-rules">
+              <div class="settings-heading"><div><h2>Forecast SKU Rules</h2><p>Combine related SKUs into one forecast entity or exclude them from forecasting.</p></div></div>
+              <div class="settings-card group-card">
+                <div class="group-card-heading"><div><h3>Star SKU</h3><p>Starred entries appear first in Forecast and Safety Stock.</p></div><button class="btn-primary" id="add-stars" type="button">+ Add Star</button></div>
+                <div class="group-table-wrap"><table class="settings-table group-table star-table"><thead><tr><th>Starred SKU</th><th>Type</th><th>Action</th></tr></thead><tbody id="starred-list"></tbody></table></div>
+              </div>
+              <div class="settings-card group-card">
+                <div class="group-card-heading"><h3>Combine SKUs</h3><button class="btn-primary" id="add-group" type="button">+ Add Group</button></div>
+                <div class="group-table-wrap"><table class="settings-table group-table"><thead><tr><th>Group Name</th><th>SKUs Included</th><th>Action</th></tr></thead><tbody id="group-list"></tbody></table></div>
+              </div>
+              <div class="settings-card group-card">
+                <div class="group-card-heading"><div><h3>Disregard SKUs</h3><p>Excluded SKUs do not appear or contribute to forecast calculations.</p></div><button class="btn-primary" id="add-exclusions" type="button">+ Add Exclusions</button></div>
+                <div class="group-table-wrap"><table class="settings-table group-table exclusion-table"><thead><tr><th>SKU</th><th>Product Title</th><th>Action</th></tr></thead><tbody id="excluded-list"></tbody></table></div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </main>
+  </div>
+  <div class="forecast-modal-overlay" id="group-modal" aria-hidden="true">
+    <section class="forecast-modal" role="dialog" aria-modal="true" aria-labelledby="group-modal-title">
+      <header class="forecast-modal-header"><h2 id="group-modal-title">Add Group</h2><button class="icon-button" id="close-group-modal" type="button" aria-label="Close" title="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></header>
+      <div class="forecast-modal-body">
+        <label class="modal-field">Name of Group<input id="group-name" type="text" maxlength="60" placeholder="Forecast entity name" /></label>
+        <label class="modal-field">Business<select id="group-business"><option value="all" selected>ALL</option></select></label>
+        <fieldset class="sku-fieldset"><legend class="sku-list-heading"><span>SKUs</span><input id="group-sku-search" type="search" placeholder="Search SKU" aria-label="Search SKUs" /></legend><div id="group-skus" class="check-grid"></div></fieldset>
+      </div>
+      <footer class="forecast-modal-actions"><button class="btn-outline" id="cancel-group" type="button">Cancel</button><button class="btn-primary" id="save-group" type="button">Save Group</button></footer>
+    </section>
+  </div>
+  <div class="forecast-modal-overlay" id="star-modal" aria-hidden="true">
+    <section class="forecast-modal" role="dialog" aria-modal="true" aria-labelledby="star-modal-title">
+      <header class="forecast-modal-header"><h2 id="star-modal-title">Add Star</h2><button class="icon-button" id="close-star-modal" type="button" aria-label="Close" title="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></header>
+      <div class="forecast-modal-body"><label class="modal-field">Search<input id="star-search" type="search" placeholder="Search SKU or group" /></label><fieldset class="sku-fieldset"><legend>SKUs and Combined Groups</legend><div id="star-options" class="check-grid"></div></fieldset></div>
+      <footer class="forecast-modal-actions"><button class="btn-outline" id="cancel-stars" type="button">Cancel</button><button class="btn-primary" id="save-stars" type="button">Add Star</button></footer>
+    </section>
+  </div>
+  <div class="forecast-modal-overlay" id="delete-group-modal" aria-hidden="true">
+    <section class="forecast-modal forecast-confirm" role="dialog" aria-modal="true" aria-labelledby="delete-group-title">
+      <div class="forecast-modal-body"><h2 id="delete-group-title">Delete group?</h2><p>This removes the combined SKU group from forecasting.</p></div>
+      <footer class="forecast-modal-actions"><button class="btn-outline" id="cancel-delete-group" type="button">Cancel</button><button class="btn-danger" id="confirm-delete-group" type="button">Delete</button></footer>
+    </section>
+  </div>
+  <div class="forecast-modal-overlay" id="exclusion-modal" aria-hidden="true">
+    <section class="forecast-modal" role="dialog" aria-modal="true" aria-labelledby="exclusion-modal-title">
+      <header class="forecast-modal-header"><h2 id="exclusion-modal-title">Add Exclusions</h2><button class="icon-button" id="close-exclusion-modal" type="button" aria-label="Close" title="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></header>
+      <div class="forecast-modal-body">
+        <label class="modal-field">Search<input id="exclusion-search" type="search" placeholder="Search SKU" /></label>
+        <label class="modal-field">Business<select id="exclusion-business"><option value="all" selected>ALL</option></select></label>
+        <fieldset class="sku-fieldset"><legend>SKUs</legend><div id="exclusion-skus" class="check-grid"></div></fieldset>
+      </div>
+      <footer class="forecast-modal-actions"><button class="btn-outline" id="cancel-exclusions" type="button">Cancel</button><button class="btn-primary" id="save-exclusions" type="button">Add Exclusions</button></footer>
+    </section>
+  </div>
+  <div class="forecast-modal-overlay" id="delete-exclusion-modal" aria-hidden="true">
+    <section class="forecast-modal forecast-confirm" role="dialog" aria-modal="true" aria-labelledby="delete-exclusion-title">
+      <div class="forecast-modal-body"><h2 id="delete-exclusion-title">Remove exclusion?</h2><p>This SKU will return to forecasting.</p></div>
+      <footer class="forecast-modal-actions"><button class="btn-outline" id="cancel-delete-exclusion" type="button">Cancel</button><button class="btn-danger" id="confirm-delete-exclusion" type="button">Remove</button></footer>
+    </section>
+  </div>
+  <div class="forecast-modal-overlay" id="recommended-order-modal" aria-hidden="true">
+    <section class="forecast-modal forecast-confirm-suppliers" role="dialog" aria-modal="true" aria-labelledby="recommended-order-title">
+      <header class="forecast-modal-header"><h2 id="recommended-order-title">Confirm Suppliers</h2><button class="icon-button" id="close-recommended-order" type="button" aria-label="Close" title="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></header>
+      <div class="forecast-modal-body">
+        <p class="recommended-order-copy">Select the supplier for each business included in the visible recommended reorder rows.</p>
+        <div class="recommended-status-filter">
+          <button class="recommended-status-button" id="recommended-status-button" type="button" aria-expanded="false">
+            <span class="recommended-status-summary-label">Includes</span>
+            <span id="recommended-status-pills" class="recommended-status-pills"></span>
+            <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
+          </button>
+          <div class="status-filter-menu recommended-status-menu" id="recommended-status-menu" hidden>
+            <label><input type="checkbox" value="critical" checked /><span class="status-filter-choice critical">Critical</span></label>
+            <label><input type="checkbox" value="soon" checked /><span class="status-filter-choice soon">Order Soon</span></label>
+            <label><input type="checkbox" value="healthy" checked /><span class="status-filter-choice healthy">Healthy</span></label>
+          </div>
+        </div>
+        <div id="recommended-supplier-list" class="recommended-supplier-list"></div>
+      </div>
+      <footer class="forecast-modal-actions"><button class="btn-outline" id="cancel-recommended-order" type="button">Cancel</button><button class="btn-primary" id="continue-recommended-order" type="button">Continue to Order</button></footer>
+    </section>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/sidebar.js"></script>
+  <script src="/js/main.js"></script>
+  <script src="/dashboard/inventory-forecast.js"></script>
+</body>
+</html>

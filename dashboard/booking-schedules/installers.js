@@ -667,6 +667,42 @@
     return [employee.first_name, employee.middle_name, employee.last_name].filter(Boolean).join(' ') || 'Unnamed installer';
   }
 
+  function initialInstallerPassword(employee) {
+    const firstInitial = String(employee.first_name || '').trim().charAt(0).toLowerCase();
+    const lastInitial = String(employee.last_name || '').trim().charAt(0).toLowerCase();
+    const phoneDigits = String(employee.contact_number || '').replace(/\D/g, '');
+    if (!firstInitial || !lastInitial || phoneDigits.length < 4) return '';
+    return `${firstInitial}${lastInitial}${phoneDigits.slice(-4)}`;
+  }
+
+  async function autoSetMissingPasswords() {
+    const existingPasswords = new Set(accounts.map(account => account.password).filter(Boolean));
+    const generatedCounts = new Map();
+    const candidates = accounts
+      .filter(account => !account.password)
+      .map(account => ({ account, password: initialInstallerPassword(account) }))
+      .filter(candidate => candidate.password);
+
+    candidates.forEach(candidate => {
+      generatedCounts.set(candidate.password, (generatedCounts.get(candidate.password) || 0) + 1);
+    });
+    const eligible = candidates.filter(candidate =>
+      generatedCounts.get(candidate.password) === 1 && !existingPasswords.has(candidate.password)
+    );
+    if (eligible.length === 0) return;
+
+    const now = new Date().toISOString();
+    const payload = eligible.map(candidate => ({
+      employee_id: candidate.account.id,
+      company_id: companyId,
+      password: candidate.password,
+      updated_at: now
+    }));
+    const { error } = await client.from('installer_accounts').upsert(payload, { onConflict: 'employee_id' });
+    if (error) throw error;
+    eligible.forEach(candidate => { candidate.account.password = candidate.password; });
+  }
+
   function formatLastLogin(value) {
     if (!value) return 'Never';
     const date = new Date(value);
@@ -797,7 +833,7 @@
     try {
       const { data: employees, error: employeeError } = await client
         .from('employees')
-        .select('id,first_name,middle_name,last_name,picture_link,city,province,employment_status,assignment,title')
+        .select('id,first_name,middle_name,last_name,contact_number,picture_link,city,province,employment_status,assignment,title')
         .eq('company_id', companyId)
         .or('assignment.ilike.%installer%,title.ilike.%installer%')
         .order('last_name', { ascending: true })
@@ -818,6 +854,12 @@
       }
       const accountByEmployee = new Map(accountRows.map(account => [account.employee_id, account]));
       accounts = (employees || []).map(employee => ({ ...employee, ...(accountByEmployee.get(employee.id) || {}) }));
+      try {
+        await autoSetMissingPasswords();
+      } catch (passwordError) {
+        console.error('Unable to auto-set initial installer passwords:', passwordError);
+        showToast('Some initial installer passwords could not be generated. You can set them manually using Edit Password.', true);
+      }
       render();
     } catch (error) {
       if (body) body.innerHTML = '<tr><td colspan="6" class="installer-accounts-state error">Installer accounts could not be loaded. Refresh the page and try again.</td></tr>';

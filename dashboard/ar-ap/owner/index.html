@@ -42,6 +42,16 @@
       min-width: 120px;
       text-align: center;
     }
+    .owner-report-controls {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .owner-filter {
+      width: 220px;
+      height: 46px;
+      font-size: 0.85rem;
+    }
 
     /* ── Excel-style Table ── */
     .excel-container {
@@ -98,6 +108,10 @@
       background: var(--bg-base, #fafafa) !important;
       border-top: 2px solid var(--text-primary) !important;
       border-bottom: 2px double var(--text-primary) !important;
+      position: sticky;
+      bottom: 0;
+      z-index: 9;
+      box-shadow: 0 -2px 6px rgba(9, 9, 11, 0.08);
     }
 
     /* ── Tab Container Bar ── */
@@ -139,6 +153,10 @@
       0% { background-position: 200% 0; }
       100% { background-position: -200% 0; }
     }
+    @media (max-width: 700px) {
+      .owner-report-controls { width: 100%; align-items: stretch; flex-direction: column; }
+      .owner-filter { width: 100%; }
+    }
   </style>
 </head>
 <body class="bg-base text-primary">
@@ -162,17 +180,22 @@
       <div style="padding: 2rem; max-width: 1200px; width: 100%; margin: 0 auto; box-sizing: border-box;">
         <!-- Top controls row -->
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-          <div class="month-nav-container">
-            <button onclick="App.changeMonth(-1)" class="month-nav-btn" aria-label="Previous month">
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-            </button>
-            <span class="month-display-label" id="month-label">---</span>
-            <button onclick="App.changeMonth(1)" class="month-nav-btn" aria-label="Next month">
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-            </button>
+          <div class="owner-report-controls">
+            <div class="month-nav-container">
+              <button onclick="App.changeMonth(-1)" class="month-nav-btn" aria-label="Previous month">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+              </button>
+              <span class="month-display-label" id="month-label">---</span>
+              <button onclick="App.changeMonth(1)" class="month-nav-btn" aria-label="Next month">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+              </button>
+            </div>
+            <select id="owner-filter" class="form-select owner-filter" aria-label="Select owner" onchange="App.changeOwner(this.value)" disabled>
+              <option value="" disabled selected hidden>Select owner...</option>
+            </select>
           </div>
 
-          <button onclick="App.loadData()" class="btn btn-outline btn-sm" style="display: flex; align-items: center; gap: 0.4rem;">
+          <button onclick="App.refreshData()" class="btn btn-outline btn-sm" style="display: flex; align-items: center; gap: 0.4rem;">
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
             Refresh
           </button>
@@ -234,6 +257,10 @@
       companyId: null,
       currentYear: new Date().getFullYear(),
       currentMonth: new Date().getMonth(),
+      owners: [],
+      ownerAccounts: [],
+      accountAssignments: {},
+      selectedOwnerId: '',
 
       async init() {
         try {
@@ -245,8 +272,12 @@
           this.companyId = co?.id || null;
           if (!this.companyId) return;
 
+          await this.loadOwnerOptions();
           await this.loadData();
-        } catch (e) { console.error(e); }
+        } catch (e) {
+          console.error(e);
+          document.getElementById('sections-container').innerHTML = '<p style="color:var(--danger);padding:1rem;">The owner report could not be initialized. Please refresh and try again.</p>';
+        }
       },
 
       changeMonth(delta) {
@@ -256,10 +287,60 @@
         this.loadData();
       },
 
+      changeOwner(ownerId) {
+        this.selectedOwnerId = ownerId || '';
+        this.loadData();
+      },
+
+      async refreshData() {
+        try {
+          await this.loadOwnerOptions();
+          await this.loadData();
+        } catch (error) {
+          console.error(error);
+          document.getElementById('sections-container').innerHTML = '<p style="color:var(--danger);padding:1rem;">The owner report could not be refreshed. Please try again.</p>';
+        }
+      },
+
+      async loadOwnerOptions() {
+        const previousOwnerId = this.selectedOwnerId;
+        const [employeesResult, accountsResult, assignmentsResult] = await Promise.all([
+          getSb().from('employees').select('id,first_name,last_name,assignment').eq('company_id', this.companyId).order('first_name'),
+          getSb().from('journal_accounts').select('id,name').eq('company_id', this.companyId).ilike('name', '%due from owner%').order('name'),
+          getSb().from('global_settings').select('value').eq('key', 'journal_account_employee_assignments').eq('company_id', this.companyId).maybeSingle()
+        ]);
+        if (employeesResult.error) throw employeesResult.error;
+        if (accountsResult.error) throw accountsResult.error;
+        if (assignmentsResult.error) throw assignmentsResult.error;
+        this.owners = (employeesResult.data || []).filter(employee => String(employee.assignment || '').toLowerCase().split(',').some(value => value.trim().includes('owner')));
+        this.ownerAccounts = accountsResult.data || [];
+        this.accountAssignments = assignmentsResult.data?.value?.assignments || {};
+        this.selectedOwnerId = this.owners.some(owner => owner.id === previousOwnerId)
+          ? previousOwnerId
+          : (this.owners[0]?.id || '');
+        const ownerFilter = document.getElementById('owner-filter');
+        ownerFilter.disabled = !this.owners.length;
+        ownerFilter.innerHTML = this.owners.length
+          ? this.owners.map(owner => `<option value="${esc(owner.id)}"${owner.id === this.selectedOwnerId ? ' selected' : ''}>${esc(`${owner.first_name || ''} ${owner.last_name || ''}`.trim())}</option>`).join('')
+          : '<option value="" disabled selected hidden>No owners found</option>';
+      },
+
       async loadData() {
         document.getElementById('month-label').textContent = `${MONTH_NAMES[this.currentMonth]} ${this.currentYear}`;
         const container = document.getElementById('sections-container');
         container.innerHTML = `<div><table class="excel-table" style="width:100%;border:1px solid var(--border);"><tbody><tr class="shimmer-row"><td style="text-align:left;">Loading...</td><td></td><td></td><td></td><td></td><td></td></tr></tbody></table></div>`;
+
+        if (!this.selectedOwnerId) {
+          container.innerHTML = '<p style="color:var(--text-muted);font-style:italic;text-align:center;padding:2rem 0;">No employees with an Owner assignment were found.</p>';
+          return;
+        }
+        const accountIds = this.ownerAccounts
+          .filter(account => String(this.accountAssignments[String(account.id)] || '') === String(this.selectedOwnerId))
+          .map(account => account.id);
+        if (!accountIds.length) {
+          container.innerHTML = '<p style="color:var(--text-muted);font-style:italic;text-align:center;padding:2rem 0;">This owner has no assigned Due from owner account. Assign one under <a href="/dashboard/ar-ap/assign-account" style="color:var(--cyan-light);font-weight:600;">Assign Account</a>.</p>';
+          return;
+        }
 
         const startDate = `${this.currentYear}-${String(this.currentMonth + 1).padStart(2,'0')}-01`;
         const lastDay = new Date(this.currentYear, this.currentMonth + 1, 0).getDate();
@@ -267,8 +348,9 @@
 
         try {
           const { data: entries, error } = await getSb()
-            .from('general_journal').select('*')
+            .from('general_journal').select('id,account_id,account,entry_number,date,debit,credit,description_1,description_2')
             .eq('company_id', this.companyId)
+            .in('account_id', accountIds)
             .ilike('account', '%due from owner%')
             .gte('date', startDate).lte('date', endDate)
             .order('date', { ascending: true })
@@ -279,7 +361,7 @@
           this.renderSections(entries || [], container);
         } catch (err) {
           console.error(err);
-          container.innerHTML = `<p style="color:var(--danger);padding:1rem;">Failed to load: ${esc(err.message)}</p>`;
+          container.innerHTML = '<p style="color:var(--danger);padding:1rem;">The owner report could not be loaded. Please refresh and try again.</p>';
         }
       },
 

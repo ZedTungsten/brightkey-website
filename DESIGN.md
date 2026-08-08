@@ -494,3 +494,29 @@ Rules:
 - After meaningful PDF changes, download the file, confirm it has a nontrivial
   size, render its pages to images, and visually verify that content is visible,
   aligned, readable, and unclipped.
+
+---
+
+## 19. Search Bar Standard
+
+All website and dashboard search fields must use the shared `.bk-search-field`
+component from `css/style.css`.
+
+- Use a white background.
+- Use a fully rounded pill shape (`border-radius: 999px`).
+- Place a gray magnifying-glass SVG at the left of the input.
+- Keep input text at normal font weight.
+- Preserve consistent icon spacing with left input padding.
+- Use the shared cyan focus border and focus ring.
+- Do not substitute emoji, text glyphs, or browser-specific search icons for the
+  SVG.
+
+```html
+<div class="bk-search-field">
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <circle cx="11" cy="11" r="7"></circle>
+    <line x1="16.5" y1="16.5" x2="21" y2="21"></line>
+  </svg>
+  <input type="search" placeholder="Search..." />
+</div>
+```

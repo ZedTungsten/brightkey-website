@@ -657,7 +657,8 @@
         '/dashboard/all-orders'
       ],
       '/dashboard/inventory/summary': [
-        '/dashboard/inventory'
+        '/dashboard/inventory',
+        '/dashboard/inventory/forecast'
       ],
       '/dashboard/hiring': [
         '/dashboard/hiring'

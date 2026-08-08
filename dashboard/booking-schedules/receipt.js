@@ -1,9 +1,8 @@
     'use strict';
 
     // Open receipt using the saved invoice_template as single source of truth
-    async function openViewReceipt() {
-      if (!selectedBooking) return;
-      const b = selectedBooking;
+    async function openBookingReceipt(b, receiptSb, receiptCompanyId, targetWindow) {
+      if (!b || !receiptSb || !receiptCompanyId) return;
 
       const pipe = (str) => str ? str.split('|').map(s => s.trim()).filter(Boolean) : [];
       const esc  = (s) => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -13,10 +12,7 @@
       // Fetch company invoice_template config (single source of truth)
       let cfg = {};
       try {
-        const receiptCompanyId = typeof currentCompanyId !== 'undefined'
-          ? currentCompanyId
-          : (typeof currentInstaller !== 'undefined' ? currentInstaller?.company_id : null);
-        const { data: setting } = await sb
+        const { data: setting } = await receiptSb
           .from('global_settings')
           .select('value')
           .eq('key', 'invoice_template')
@@ -86,7 +82,7 @@
 
       const orderNo = esc(b.order_no || '');
 
-      const w = window.open('', '_blank');
+      const w = targetWindow || window.open('', '_blank');
 
       if (cfg.template) {
         let html = cfg.template;
@@ -161,6 +157,17 @@
         }
       }
     }
+
+    async function openViewReceipt() {
+      if (typeof selectedBooking === 'undefined' || !selectedBooking) return;
+      const receiptCompanyId = typeof currentCompanyId !== 'undefined'
+        ? currentCompanyId
+        : (typeof currentInstaller !== 'undefined' ? currentInstaller?.company_id : null);
+      const receiptSb = typeof sb !== 'undefined' ? sb : window.BKAuth?.sb;
+      return openBookingReceipt(selectedBooking, receiptSb, receiptCompanyId);
+    }
+
+    window.BKBookingReceipt = { open: openBookingReceipt };
 
         // Lightbox actions
     function openLightbox(src) {

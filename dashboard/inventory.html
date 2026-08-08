@@ -238,6 +238,12 @@
       padding-bottom: 2rem;
     }
 
+    #panel-inventory > .panel {
+      width: 980px;
+      max-width: 100%;
+      margin-inline: auto;
+    }
+
     /* Transfer tab has stacked sections, let it size to content */
     #panel-transfer {
       height: auto;
@@ -338,6 +344,26 @@
       flex: 1;
       overflow: auto;
       overscroll-behavior: contain;
+    }
+
+    #panel-inventory .inventory-summary-table {
+      width: 100%;
+      min-width: 0;
+      table-layout: fixed;
+    }
+
+    #panel-inventory .table-responsive {
+      overflow-x: hidden;
+    }
+
+    #panel-inventory .inventory-summary-table th:nth-child(1) { width: 100px; }
+    #panel-inventory .inventory-summary-table th:nth-child(2) { width: 200px; }
+    #panel-inventory .inventory-summary-table th:nth-child(4) { width: 130px; }
+    #panel-inventory .inventory-summary-table th:nth-child(5) { width: 110px; }
+
+    #panel-inventory .inventory-summary-table td:nth-child(2),
+    #panel-inventory .inventory-summary-table td:nth-child(3) {
+      overflow-wrap: anywhere;
     }
 
     table {
@@ -609,6 +635,9 @@
         <div class="drawer-tabs">
           <a class="tab-btn" id="tab-btn-summary" href="/dashboard/inventory/summary">Summary</a>
           <a class="tab-btn" id="tab-btn-stats" href="/dashboard/inventory/stats">Stats</a>
+          <a class="tab-btn" href="/dashboard/inventory/forecast">Forecast</a>
+          <a class="tab-btn" href="/dashboard/inventory/order">Order</a>
+          <a class="tab-btn" href="/dashboard/inventory/forecast#settings">Settings</a>
         </div>
 
         <!-- Table Scroll workspace -->
@@ -635,9 +664,13 @@
                 </div>
                 <div style="display: flex; align-items: center; gap: 1rem; text-transform: none; font-weight: normal; font-size: 0.82rem;">
 
-                  <select id="inventory-business-filter" class="btn btn-outline" style="height:30px; min-width:150px; padding:0.25rem 0.75rem; font-size:0.82rem; font-weight:400;" onchange="handleInventoryBusinessChange(this.value)">
-                    <option value="">All Businesses</option>
-                  </select>
+                  <div class="dropdown" id="business-dropdown-container" style="position: relative;">
+                    <button type="button" id="inventory-business-filter" class="btn btn-outline" style="height: 30px; min-width: 150px; padding: 0.25rem 0.75rem; font-size: 0.82rem; display: inline-flex; align-items: center; justify-content: space-between; gap: 0.35rem; font-weight: 400;" onclick="toggleBusinessDropdown(event)">
+                      <span id="inventory-business-filter-label">All Businesses</span>
+                      <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: middle;"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    </button>
+                    <div id="business-dropdown-menu" style="display: none; position: absolute; top: 34px; right: 0; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); padding: 0.5rem; min-width: 180px; z-index: 1000; max-height: 250px; overflow-y: auto;"></div>
+                  </div>
 
                   <!-- Category Dropdown Container -->
                   <div class="dropdown" id="category-dropdown-container" style="position: relative;">
@@ -672,20 +705,19 @@
                 <div class="inventory-pager" id="inventory-pager"></div>
               </div>
               <div class="table-responsive">
-                <table class="ledger-table tally-table">
+                <table class="ledger-table tally-table inventory-summary-table">
                   <thead>
                     <tr>
                       <th>Image</th>
                       <th class="sortable" onclick="handleSort('sku')">SKU <span id="sort-icon-sku"></span></th>
                       <th class="sortable" onclick="handleSort('title')">Product Title <span id="sort-icon-title"></span></th>
-                      <th class="sortable" onclick="handleSort('category')">Category <span id="sort-icon-category"></span></th>
                       <th class="sortable" onclick="handleSort('business')">Business <span id="sort-icon-business"></span></th>
                       <th class="sortable" onclick="handleSort('available')" style="text-align: center;">Available <span id="sort-icon-available"></span></th>
                     </tr>
                   </thead>
                   <tbody id="inventory-list">
                     <tr>
-                      <td colspan="6">
+                      <td colspan="5">
                         <div class="loading-wrapper">
                           <div class="spinner-cyan"></div>
                           <span>Syncing and loading stock snapshot...</span>
@@ -880,6 +912,7 @@
     let refreshPromise = null;
     let inventoryFilterProducts = [];
     let selectedInventoryBusiness = '';
+    const inventoryBusinessLabels = new Map();
 
     // Initialize Page
     async function init() {
@@ -970,14 +1003,12 @@
         .order('name');
       if (businessError) throw businessError;
 
-      const businessSelect = document.getElementById('inventory-business-filter');
-      if (businessSelect) {
-        businessSelect.innerHTML = '<option value="">All Businesses</option>';
-        (businesses || []).forEach(business => {
-          const key = business.name.toLowerCase().replace(/[\s_.-]+/g, '_');
-          businessSelect.insertAdjacentHTML('beforeend', `<option value="${escFulfillment(key)}">${escFulfillment(business.name)}</option>`);
-        });
-      }
+      inventoryBusinessLabels.clear();
+      (businesses || []).forEach(business => {
+        const key = business.name.toLowerCase().replace(/[\s_.-]+/g, '_');
+        inventoryBusinessLabels.set(key, business.name);
+      });
+      populateBusinessFilter();
       rebuildInventoryCategories(true);
     }
 
@@ -1108,9 +1139,32 @@
 
     window.handleInventoryBusinessChange = function(value) {
       selectedInventoryBusiness = String(value || '');
+      const label = document.getElementById('inventory-business-filter-label');
+      if (label) label.textContent = selectedInventoryBusiness ? getInventoryBusinessLabel(selectedInventoryBusiness) : 'All Businesses';
+      const menu = document.getElementById('business-dropdown-menu');
+      if (menu) menu.style.display = 'none';
       inventoryPage = 1;
       rebuildInventoryCategories(true);
       renderInventorySummary();
+    };
+
+    function populateBusinessFilter() {
+      const menu = document.getElementById('business-dropdown-menu');
+      if (!menu) return;
+      const options = [['', 'All Businesses'], ...inventoryBusinessLabels.entries()];
+      menu.innerHTML = options.map(([value, label]) => `
+        <label style="display: flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0.5rem; font-size: 0.82rem; cursor: pointer; color: var(--text-secondary); user-select: none;">
+          <input type="radio" name="inventory-business-filter-option" value="${escFulfillment(value)}" ${selectedInventoryBusiness === value ? 'checked' : ''} onchange="handleInventoryBusinessChange(this.value)" style="cursor: pointer;" />
+          <span>${escFulfillment(label)}</span>
+        </label>
+      `).join('');
+    }
+
+    window.toggleBusinessDropdown = function(event) {
+      event.stopPropagation();
+      const menu = document.getElementById('business-dropdown-menu');
+      if (!menu) return;
+      menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
     };
 
     // Stock filter state — all active by default (shows everything)
@@ -1215,6 +1269,11 @@
       const catMenu = document.getElementById('category-dropdown-menu');
       if (catMenu && catContainer && !catContainer.contains(e.target)) {
         catMenu.style.display = 'none';
+      }
+      const businessContainer = document.getElementById('business-dropdown-container');
+      const businessMenu = document.getElementById('business-dropdown-menu');
+      if (businessMenu && businessContainer && !businessContainer.contains(e.target)) {
+        businessMenu.style.display = 'none';
       }
       const stockContainer = document.getElementById('stock-filter-container');
       const stockMenu = document.getElementById('stock-filter-menu');
@@ -1469,7 +1528,7 @@
       if (!tbody) return;
       tbody.innerHTML = `
         <tr>
-          <td colspan="11">
+          <td colspan="5">
             <div class="loading-wrapper">
               <div class="spinner-cyan"></div>
               <span>Loading products...</span>
@@ -1479,8 +1538,13 @@
       `;
     }
 
+    function getInventoryBusinessLabel(businessKey) {
+      return inventoryBusinessLabels.get(businessKey) || (businessKey || '—').replace(/_/g, ' ');
+    }
+
     function appendInventoryRow(tbody, p) {
       const inv = allInventory[p.sku] || { available: 0 };
+      const businessLabel = getInventoryBusinessLabel(p.business);
       
       const avail = inv.available || 0;
       let availColor = 'var(--text-primary)';
@@ -1503,8 +1567,7 @@
           </td>
           <td><strong>${p.sku}</strong></td>
           <td>${p.title}</td>
-          <td><span class="badge-status dispatched" style="font-size: 0.72rem; padding: 0.15rem 0.4rem; background: var(--bg-elevated); border: 1px solid var(--border); text-transform: capitalize;">${(p.category || '—').replace(/_/g, ' ')}</span></td>
-          <td><span class="badge-status dispatched" style="font-size: 0.72rem; padding: 0.15rem 0.4rem; background: var(--bg-elevated); border: 1px solid var(--border);">${(p.business || '—').replace(/_/g, ' ')}</span></td>
+          <td><span class="badge-status dispatched" style="font-size: 0.72rem; padding: 0.15rem 0.4rem; background: var(--bg-elevated); border: 1px solid var(--border); text-transform:none;">${escFulfillment(businessLabel)}</span></td>
           <td style="text-align: center; ${styleAvail}">
             ${isEditingAvailable && isStocked ? `<input type="number" class="edit-avail-input" data-sku="${p.sku}" value="${avail}" style="width: 70px; text-align: center; padding: 2px 5px; font-size: 0.82rem; font-weight: bold; border: 1px solid var(--border); border-radius: 4px; background: var(--bg-surface); color: ${availColor};" />` : avail}
           </td>
@@ -1520,7 +1583,7 @@
 
       try {
         if (selectedCategories.size === 0 || activeStockFilters.size === 0) {
-          tbody.innerHTML = `<tr><td colspan="11" class="text-center">No products match the selected filters.</td></tr>`;
+          tbody.innerHTML = `<tr><td colspan="5" class="text-center">No products match the selected filters.</td></tr>`;
           updateSortIndicators();
           renderInventoryPager(0, 1);
           return;
@@ -1542,7 +1605,7 @@
         query = query ? applyInventorySearchFilter(query) : null;
 
         if (!query) {
-          tbody.innerHTML = `<tr><td colspan="6" class="text-center">No products match the selected filters.</td></tr>`;
+          tbody.innerHTML = `<tr><td colspan="5" class="text-center">No products match the selected filters.</td></tr>`;
           updateSortIndicators();
           return;
         }
@@ -1558,7 +1621,7 @@
         tbody.innerHTML = '';
 
         if (allProducts.length === 0) {
-          tbody.innerHTML = `<tr><td colspan="6" class="text-center">No products match the selected filters.</td></tr>`;
+          tbody.innerHTML = `<tr><td colspan="5" class="text-center">No products match the selected filters.</td></tr>`;
           updateSortIndicators();
           return;
         }
@@ -1574,10 +1637,10 @@
         allProducts.forEach(p => appendInventoryRow(tbody, p));
       } catch (err) {
         console.error('Error loading inventory products:', err);
-        tbody.innerHTML = `<tr><td colspan="6" class="text-center" style="color:var(--danger);">Failed to load products: ${escFulfillment(err.message || 'Unknown error')}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="5" class="text-center" style="color:var(--danger);">Failed to load products: ${escFulfillment(err.message || 'Unknown error')}</td></tr>`;
       }
 
-      tbody.innerHTML += `<tr class="table-spacer-row" style="height: auto; border: none; background: transparent !important;"><td colspan="6" style="padding: 0; border: none; background: transparent !important; pointer-events: none;"></td></tr>`;
+      tbody.innerHTML += `<tr class="table-spacer-row" style="height: auto; border: none; background: transparent !important;"><td colspan="5" style="padding: 0; border: none; background: transparent !important; pointer-events: none;"></td></tr>`;
 
       updateSortIndicators();
     }
@@ -2619,7 +2682,7 @@
               <td><strong>${p.sku}</strong></td>
               <td>${p.title}</td>
               <td><span class="badge-status dispatched" style="font-size: 0.72rem; padding: 0.15rem 0.4rem; background: var(--bg-elevated); border: 1px solid var(--border); text-transform: capitalize;">${(p.category || '—').replace(/_/g, ' ')}</span></td>
-              <td><span class="badge-status dispatched" style="font-size: 0.72rem; padding: 0.15rem 0.4rem; background: var(--bg-elevated); border: 1px solid var(--border);">${(p.business || '—').replace(/_/g, ' ')}</span></td>
+              <td><span class="badge-status dispatched" style="font-size: 0.72rem; padding: 0.15rem 0.4rem; background: var(--bg-elevated); border: 1px solid var(--border); text-transform:none;">${escFulfillment(getInventoryBusinessLabel(p.business))}</span></td>
               
               <td style="text-align: center; color: var(--warning); border-left: 1.5px solid var(--border); padding-left: 1.5rem; ${styleVal}">${stats.reserved}</td>
               <td style="text-align: center; color: var(--success); ${styleVal}">${stats.dispatched}</td>

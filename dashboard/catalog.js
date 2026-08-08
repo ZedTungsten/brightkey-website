@@ -379,9 +379,9 @@
     window.BKCatalogBusinessStats.render(tenantBusinesses, allProducts);
   }
   function updateParentSkuDatalist() {
-    const dl = document.getElementById('parent-skus-list');
-    if (!dl) return;
-    const allSkus = [...new Set(allProducts.filter(p => p.sku).map(p => p.sku))];
+    const dl = document.getElementById('parent-skus-list'); if (!dl) return;
+    const selectedBusiness = document.getElementById('f-business')?.value || '', allSkus = [...new Set(allProducts.filter(p => p.sku && selectedBusiness && p.business === selectedBusiness && p.id !== editingId).map(p => p.sku))]
+      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
     dl.innerHTML = allSkus.map(sku => `<option value="${esc(sku)}"></option>`).join('');
   }
 
@@ -466,6 +466,7 @@
     filtered = result;
 
     renderTable();
+    if (document.getElementById('product-drawer')?.classList.contains('open')) updateDrawerNavigation();
   }
 
   let selectedProductIds = [];
@@ -668,11 +669,11 @@
 
     if (prevBtn) {
       prevBtn.style.display = 'flex';
-      prevBtn.disabled = (currentIndex <= 0);
+      prevBtn.disabled = filtered.length === 0 || currentIndex === 0;
     }
     if (nextBtn) {
       nextBtn.style.display = 'flex';
-      nextBtn.disabled = (currentIndex === -1 || currentIndex >= filtered.length - 1);
+      nextBtn.disabled = filtered.length === 0 || currentIndex === filtered.length - 1;
     }
   }
 
@@ -1056,7 +1057,7 @@
     document.getElementById('f-count-inventory').checked = true;
     document.getElementById('f-show-features').checked = true;
     document.getElementById('f-show-specs').checked = true;
-    document.getElementById('f-business').value = '';
+    document.getElementById('f-business').value = ''; updateParentSkuDatalist();
     document.getElementById('f-status').value = 'draft';
     document.getElementById('f-status').classList.remove('mixed-value');
     document.getElementById('f-business').classList.remove('mixed-value');
@@ -1124,12 +1125,12 @@
     document.getElementById('f-count-inventory').checked = p.count_inventory !== false;
     document.getElementById('f-show-features').checked = p.show_features !== false;
     document.getElementById('f-show-specs').checked = p.show_specs !== false;
-    document.getElementById('f-business').value = p.business || '';
+    document.getElementById('f-business').value = p.business || ''; updateParentSkuDatalist();
     document.getElementById('f-status').value = p.status || 'draft';
     updateStatusSelectStyle();
 
     // Highlight parent SKU field if missing
-    const parentExists = !p.parent_sku || allProducts.some(x => x.sku && x.sku.toLowerCase() === p.parent_sku.toLowerCase());
+    const parentExists = !p.parent_sku || allProducts.some(x => x.id !== p.id && x.business === p.business && x.sku && x.sku.toLowerCase() === p.parent_sku.toLowerCase());
     const parentInp = document.getElementById('f-parent-sku');
     if (parentInp) {
       if (!parentExists) {
@@ -2099,9 +2100,9 @@
         const businessIds = (businesses || []).map(business => business.id);
         const { data: dbFeatures } = businessIds.length
           ? await window.BKAuth.sb
-            .from('business_features')
-            .select('business_id, name, display_name')
-            .in('business_id', businessIds)
+            .from('business_features').select('business_id, name, display_name, sort_order').in('business_id', businessIds)
+            .order('sort_order', { ascending: true })
+            .order('name', { ascending: true })
           : { data: [] };
 
         if (businesses && dbFeatures) {
@@ -2332,7 +2333,7 @@
 
     document.getElementById('f-parent-sku').addEventListener('input', (e) => {
       const val = e.target.value.trim();
-      const exists = !val || allProducts.some(x => x.sku && x.sku.toLowerCase() === val.toLowerCase());
+      const business = document.getElementById('f-business').value, exists = !val || allProducts.some(x => x.id !== editingId && x.business === business && x.sku && x.sku.toLowerCase() === val.toLowerCase());
       if (exists) {
         e.target.style.borderColor = '';
         e.target.style.boxShadow = '';
@@ -2348,7 +2349,7 @@
       const currentIndex = filtered.findIndex(x => x.id === editingId);
       if (currentIndex > 0) {
         openDrawerEdit(filtered[currentIndex - 1].id);
-      }
+      } else if (currentIndex === -1 && filtered.length > 0) openDrawerEdit(filtered[filtered.length - 1].id);
     });
 
     document.getElementById('drawer-next').addEventListener('click', () => {
@@ -2357,7 +2358,7 @@
       const currentIndex = filtered.findIndex(x => x.id === editingId);
       if (currentIndex !== -1 && currentIndex < filtered.length - 1) {
         openDrawerEdit(filtered[currentIndex + 1].id);
-      }
+      } else if (currentIndex === -1 && filtered.length > 0) openDrawerEdit(filtered[0].id);
     });
 
     // ─────────────────────────────────────────────────────
@@ -2633,7 +2634,8 @@
 
     // Business change → re-render features tab
     document.getElementById('f-business').addEventListener('change', e => {
-      renderFeaturesTab(e.target.value);
+      renderFeaturesTab(e.target.value); updateParentSkuDatalist();
+      document.getElementById('f-parent-sku').dispatchEvent(new Event('input'));
     });
 
     // Price inputs → live preview

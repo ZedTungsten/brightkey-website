@@ -48,6 +48,10 @@ const ReceivablesApp = {
     document.querySelectorAll('.modal-overlay').forEach(modal => modal.addEventListener('click', event => {
       if (event.target === modal) this.closeModal(modal.id);
     }));
+    document.addEventListener('click', event => {
+      const trigger = event.target.closest('[data-attachment-preview]');
+      if (trigger) this.openAttachmentLightbox(trigger.dataset.attachmentPreview, trigger.querySelector('img')?.alt || 'Attached document');
+    });
   },
 
   async changeMonth(offset) {
@@ -119,8 +123,8 @@ const ReceivablesApp = {
     const paymentTotal = payments.reduce((sum, entry) => sum + this.toCents(entry.amount_cents), 0);
     const storedGrand = this.toCents(booking.grand_total);
     const contractAmount = storedGrand + Math.abs(baseDeposit);
-    const collected = Math.min(contractAmount, addedDepositTotal + paymentTotal);
-    const balanceDue = Math.max(0, contractAmount - collected);
+    const collected = addedDepositTotal + paymentTotal;
+    const balanceDue = contractAmount - collected;
     const status = contractAmount > 0 && collected >= contractAmount ? 'paid' : collected > 0 ? 'partial' : 'unpaid';
     return {
       id: booking.id,
@@ -171,7 +175,7 @@ const ReceivablesApp = {
     const totals = this.rows.reduce((result, row) => {
       result.contract += row.contractAmount;
       result.collected += row.collected;
-      result.outstanding += row.balanceDue;
+      result.outstanding += Math.max(0, row.balanceDue);
       if (row.status !== 'paid') result.open += 1;
       return result;
     }, { contract: 0, collected: 0, outstanding: 0, open: 0 });
@@ -189,12 +193,12 @@ const ReceivablesApp = {
     }
     body.innerHTML = this.filteredRows.map(row => `
       <tr>
-        <td><span class="order-link">${this.escape(row.orderNumber)}</span></td>
+        <td><button type="button" class="order-link" onclick="ReceivablesApp.openReceipt('${row.id}')">${this.escape(row.orderNumber)}</button></td>
         <td><strong>${this.escape(row.name)}</strong></td>
         <td>${this.formatDate(row.orderDate)}</td>
         <td>${this.formatDate(row.installDate)}</td>
         <td class="money contract-value"><strong>${this.formatMoney(row.contractAmount)}</strong></td>
-        <td class="money balance-value${row.balanceDue === 0 ? ' balance-settled' : ''}"><strong>${this.formatMoney(row.balanceDue)}</strong></td>
+        <td class="money balance-value${row.balanceDue < 0 ? ' balance-overpaid' : row.balanceDue === 0 ? ' balance-settled' : ''}"><strong>${this.formatMoney(Math.abs(row.balanceDue))}</strong>${row.balanceDue < 0 ? '<small class="overpaid-label">Overpaid</small>' : ''}</td>
         <td class="ledger-cell">${this.renderEntries(row, 'deposit')}${this.editMode ? `<button class="add-entry" onclick="ReceivablesApp.openEntryModal('${row.id}','deposit')">+ Add Entries</button>` : ''}</td>
         <td class="ledger-cell">${this.renderEntries(row, 'payment')}${this.editMode ? `<button class="add-entry" onclick="ReceivablesApp.openEntryModal('${row.id}','payment')">+ Add Entries</button>` : ''}</td>
         <td><span class="status-pill status-${row.status}">${this.titleCase(row.status)}</span></td>
@@ -207,10 +211,38 @@ const ReceivablesApp = {
     return entries.map(entry => {
       const actions = this.editMode
         ? `<span class="entry-actions"><button type="button" class="entry-edit" aria-label="Edit entry" title="Edit entry" onclick="ReceivablesApp.openEditEntryModal('${row.id}','${type}','${entry.id}')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg></button><button type="button" class="entry-delete" aria-label="Delete entry" title="Delete entry" onclick="ReceivablesApp.stageDeleteEntry('${row.id}','${type}','${entry.id}')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v5M14 11v5"/></svg></button></span>`
-        : '<span class="entry-actions-spacer"></span>';
+        : `<span class="entry-actions"><button type="button" class="entry-view" aria-label="View General Journal entry" title="View General Journal entry" onclick="ReceivablesApp.openJournalDetailsModal('${row.id}','${type}','${entry.id}')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg></button></span>`;
       const accountLabel = entry.debited_account || 'Account not connected';
       return `<div class="ledger-entry">${actions}<strong class="ledger-amount">${this.formatMoney(this.toCents(entry.amount_cents))}</strong><span class="ledger-date">${this.formatShortDate(entry.payment_date)}</span><span class="account-name">${this.escape(accountLabel)}</span></div>`;
     }).join('');
+  },
+
+  async openReceipt(bookingId) {
+    if (!bookingId || !this.companyId || !window.BKBookingReceipt?.open) return;
+    const receiptWindow = window.open('', '_blank');
+    if (!receiptWindow) {
+      window.Toast?.show('Allow pop-ups for BrightKey to open the customer receipt.', 'error');
+      return;
+    }
+    try {
+      const { data: booking, error } = await this.sb
+        .from('installation_bookings')
+        .select('*')
+        .eq('id', bookingId)
+        .eq('company_id', this.companyId)
+        .maybeSingle();
+      if (error) throw error;
+      if (!booking) {
+        receiptWindow.close();
+        window.Toast?.show('That customer receipt is no longer available.', 'error');
+        return;
+      }
+      await window.BKBookingReceipt.open(booking, this.sb, this.companyId, receiptWindow);
+    } catch (error) {
+      receiptWindow.close();
+      console.error('Customer receipt failed to open:', error);
+      window.Toast?.show('The customer receipt could not be opened. Please try again.', 'error');
+    }
   },
 
   beginEntryMode() {
@@ -234,7 +266,7 @@ const ReceivablesApp = {
   updateEntryModeControls(saving = false) {
     const primary = document.getElementById('toggle-entry-mode');
     const cancel = document.getElementById('cancel-entry-mode');
-    primary.textContent = this.editMode ? (saving ? 'Saving...' : 'Save') : 'Add Entries';
+    primary.textContent = this.editMode ? (saving ? 'Saving...' : 'Save') : 'Add / Edit Entries';
     primary.classList.toggle('btn-success', this.editMode);
     primary.classList.toggle('btn-cyan', !this.editMode);
     primary.disabled = saving;
@@ -276,6 +308,26 @@ const ReceivablesApp = {
     this.scheduleJournalLookup(document.getElementById('entry-number').value);
   },
 
+  async openJournalDetailsModal(bookingId, type, entryId) {
+    const booking = this.rows.find(row => row.id === bookingId) || null;
+    const entries = type === 'deposit' ? booking?.deposits : booking?.payments;
+    const entry = entries?.find(item => String(item.id) === String(entryId)) || null;
+    if (!booking || !entry) return;
+    document.getElementById('journal-view-title').textContent = type === 'deposit' ? 'Deposit Details' : 'Payment Details';
+    document.getElementById('journal-view-context').textContent = `${booking.orderNumber} — ${booking.name}`;
+    document.getElementById('journal-view-details').innerHTML = '<div class="loading-state"><span class="loading-spinner"></span>Loading entry...</div>';
+    this.openModal('journal-view-modal');
+    try {
+      const match = await this.loadJournalMatch(Number(entry.journal_entry_number || entry.reference_number));
+      document.getElementById('journal-view-details').innerHTML = match
+        ? this.renderJournalDetails(match)
+        : '<span>No General Journal information was found for this entry.</span>';
+    } catch (error) {
+      console.error('Journal details failed to load:', error);
+      document.getElementById('journal-view-details').innerHTML = '<span>The General Journal information could not be loaded. Please try again.</span>';
+    }
+  },
+
   scheduleJournalLookup(value) {
     clearTimeout(this.journalTimer);
     this.journalMatch = null;
@@ -291,27 +343,71 @@ const ReceivablesApp = {
 
   async lookupJournal(entryNumber) {
     try {
-      const { data, error } = await this.sb.from('general_journal')
-        .select('id,entry_number,date,debit,credit,account,description_1,description_2')
-        .eq('company_id', this.companyId).eq('entry_number', entryNumber).order('id').limit(20);
-      if (error) throw error;
+      const match = await this.loadJournalMatch(entryNumber);
       if (Number(document.getElementById('entry-number').value) !== entryNumber) return;
-      if (!data?.length) {
+      if (!match) {
         document.getElementById('entry-details').innerHTML = '<span>No journal entry was found for this company.</span>';
         return;
       }
-      const debitRow = data.find(row => this.numericAmount(row.debit) > 0) || data[0];
-      const creditRow = data.find(row => this.numericAmount(row.credit) > 0);
-      const amount = data.reduce((sum, row) => sum + this.numericAmount(row.debit), 0);
-      const description1 = this.displayValue(debitRow.description_1) || '—';
-      const description2 = this.displayValue(debitRow.description_2) || '—';
-      this.journalMatch = { id: debitRow.id, entryNumber, date: debitRow.date, amount, description1, description2, creditedAccount: this.displayValue(creditRow?.account) || '—', account: this.displayValue(debitRow.account) || '—' };
-      document.getElementById('entry-details').innerHTML = `<div class="journal-detail-grid"><span>Credited Account</span><strong>${this.escape(this.journalMatch.creditedAccount)}</strong><span>Date</span><strong>${this.formatDate(this.journalMatch.date)}</strong><span>Description 1</span><strong>${this.escape(description1)}</strong><span>Description 2</span><strong>${this.escape(description2)}</strong><span>Amount Debited</span><strong>${this.formatMoney(Math.round(amount * 100))}</strong><span>Debited Account</span><strong>${this.escape(this.journalMatch.account)}</strong></div>`;
+      this.journalMatch = match;
+      document.getElementById('entry-details').innerHTML = this.renderJournalDetails(match);
       document.getElementById('save-entry').disabled = false;
     } catch (error) {
       console.error('Journal lookup failed:', error);
       document.getElementById('entry-details').innerHTML = '<span>That journal entry could not be loaded. Please try again.</span>';
     }
+  },
+
+  async loadJournalMatch(entryNumber) {
+    if (!Number.isInteger(entryNumber) || entryNumber < 1) return null;
+    const { data, error } = await this.sb.from('general_journal')
+      .select('id,entry_number,date,debit,credit,account,description_1,description_2,attachments')
+      .eq('company_id', this.companyId).eq('entry_number', entryNumber).order('id').limit(20);
+    if (error) throw error;
+    if (!data?.length) return null;
+    const debitRow = data.find(row => this.numericAmount(row.debit) > 0) || data[0];
+    const creditRow = data.find(row => this.numericAmount(row.credit) > 0);
+    const attachmentRow = data.find(row => Array.isArray(row.attachments) && row.attachments.length);
+    return {
+      id: debitRow.id,
+      entryNumber,
+      date: debitRow.date,
+      amount: data.reduce((sum, row) => sum + this.numericAmount(row.debit), 0),
+      description1: this.displayValue(debitRow.description_1) || '—',
+      description2: this.displayValue(debitRow.description_2) || '—',
+      creditedAccount: this.displayValue(creditRow?.account) || '—',
+      account: this.displayValue(debitRow.account) || '—',
+      attachments: attachmentRow?.attachments || []
+    };
+  },
+
+  renderJournalDetails(match) {
+    return `<div class="journal-detail-grid"><span>Entry Number</span><strong>${this.escape(match.entryNumber)}</strong><span>Credited Account</span><strong>${this.escape(match.creditedAccount)}</strong><span>Date</span><strong>${this.formatDate(match.date)}</strong><span>Description 1</span><strong>${this.escape(match.description1)}</strong><span>Description 2</span><strong>${this.escape(match.description2)}</strong><span>Amount Debited</span><strong>${this.formatMoney(Math.round(match.amount * 100))}</strong><span>Debited Account</span><strong>${this.escape(match.account)}</strong></div>${this.renderJournalAttachments(match.attachments)}`;
+  },
+
+  renderJournalAttachments(attachments) {
+    const documents = (Array.isArray(attachments) ? attachments : []).map((value, index) => {
+      const url = String(value || '').trim();
+      if (!/^https?:\/\//i.test(url)) return '';
+      let isPdf = false;
+      try { isPdf = new URL(url).pathname.toLowerCase().endsWith('.pdf'); } catch (_) { return ''; }
+      const safeUrl = this.escape(url);
+      const label = `Attached document ${index + 1}`;
+      if (isPdf) {
+        return `<a class="journal-document journal-document-pdf" href="${safeUrl}" target="_blank" rel="noopener noreferrer" aria-label="${label}: PDF"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg><span>View PDF</span></a>`;
+      }
+      return `<button type="button" class="journal-document journal-document-image" data-attachment-preview="${safeUrl}" aria-label="View ${label} in theater mode"><img src="${safeUrl}" alt="${label}" loading="lazy" /></button>`;
+    }).filter(Boolean);
+    if (!documents.length) return '';
+    return `<div class="journal-attachments"><span class="journal-attachments-title">Attached Documents</span><div class="journal-attachments-grid">${documents.join('')}</div></div>`;
+  },
+
+  openAttachmentLightbox(url, label) {
+    if (!/^https?:\/\//i.test(String(url || ''))) return;
+    const image = document.getElementById('attachment-lightbox-image');
+    image.src = url;
+    image.alt = label;
+    this.openModal('attachment-lightbox');
   },
 
   saveEntry(event) {
@@ -407,8 +503,8 @@ const ReceivablesApp = {
 
   recalculateRow(row) {
     const collected = [...row.deposits, ...row.payments].reduce((sum, entry) => sum + this.toCents(entry.amount_cents), 0);
-    row.collected = Math.min(row.contractAmount, collected);
-    row.balanceDue = Math.max(0, row.contractAmount - row.collected);
+    row.collected = collected;
+    row.balanceDue = row.contractAmount - row.collected;
     row.status = row.contractAmount > 0 && row.collected >= row.contractAmount ? 'paid' : row.collected > 0 ? 'partial' : 'unpaid';
   },
 
