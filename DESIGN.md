@@ -317,6 +317,20 @@ Translucent colors may still be used for non-sticky body cells. When creating a 
   </select>
   ```
 
+### Select Text Clipping Checks
+
+When making a native `<select>` compact, do not combine a fixed height with
+vertical padding unless the complete computed text line still fits. Prefer
+`min-height` plus `height: auto`, an explicit readable `line-height`, and
+`box-sizing: border-box`.
+
+Before completing a select styling change, verify:
+
+1. The selected text is fully visible at rest and is not clipped at the top or bottom.
+2. The longest option remains readable without overlapping the native arrow.
+3. The control remains vertically centered at desktop and mobile widths.
+4. Shared `.form-select` padding, line-height, and appearance rules do not conflict with local height overrides.
+
 
 ---
 

@@ -172,7 +172,7 @@
         this.bindFilters();
         this.bindOrphanPop();
         this.bindEditMode();
-        this.bindLogs();
+        this.bindLogs(); window.JournalDocumentViewer?.bind();
         document.getElementById('clear-form-btn').addEventListener('click', () => this.clearForm());
         document.getElementById('ss-create-btn').addEventListener('click', () => this.createSnapshot());
         document.getElementById('ss-delete-btn').addEventListener('click', () => this.deleteSnapshot());
@@ -1587,7 +1587,7 @@
               ? '<svg aria-hidden="true" viewBox="0 0 24 24" style="width:1em;height:1em;display:inline-block;vertical-align:-0.15em;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>'
               : '<svg aria-hidden="true" viewBox="0 0 24 24" style="width:1em;height:1em;display:inline-block;vertical-align:-0.15em;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>';
             const title = isPdf ? 'PDF Receipt' : 'Image Receipt';
-            return `<a href="${url}" target="_blank" rel="noopener noreferrer" title="${title}" style="text-decoration:none; margin: 0 4px; font-size: 0.95rem;">${icon}</a>`;
+            return `<button type="button" class="attachment-view-btn" data-document-url="${esc(url)}" data-document-type="${isPdf ? 'pdf' : 'image'}" title="View ${title}" aria-label="View ${title}" style="font-size:0.95rem;">${icon}</button>`;
           }).join('');
 
           return `<tr class="${rowCls}" data-id="${r.id}" data-entry="${r.entry_number}"${r._isFilterPartner ? ' title="Paired entry shown outside the active account and search filters"' : ''}${oa}>

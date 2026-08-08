@@ -57,7 +57,7 @@
     }
     .excel-table th, .excel-table td {
       border: 1px solid var(--border);
-      padding: 0.75rem 1rem;
+      padding: 0.45rem 0.75rem;
     }
     .excel-table th {
       background: var(--bg-elevated, #fafafa);
@@ -82,6 +82,26 @@
     .excel-table tr:hover td.account-name-unassigned {
       color: var(--danger, #dc2626);
     }
+    .account-type-filter {
+      width: 260px;
+      min-height: 42px;
+      height: auto;
+      margin-top: 0.75rem;
+      padding-top: 0.55rem;
+      padding-bottom: 0.55rem;
+      font-size: 0.85rem;
+      line-height: 1.3;
+      box-sizing: border-box;
+    }
+    .assignment-save-status {
+      min-width: 150px;
+      color: var(--text-muted);
+      font-size: 0.78rem;
+      font-weight: 400;
+      text-align: right;
+    }
+    .assignment-save-status[data-state="saved"] { color: var(--success, #16a34a); }
+    .assignment-save-status[data-state="error"] { color: var(--danger, #dc2626); }
 
     /* Toast Notification */
     #toast-container { position: fixed; top: 1.5rem; right: 1.5rem; z-index: 99999; display: flex; flex-direction: column; gap: 0.5rem; }
@@ -99,36 +119,40 @@
 
     <main class="dash-main">
       <header class="dash-topbar" style="border-bottom: none; height: auto; min-height: 60px; display: flex; flex-direction: column; align-items: stretch; justify-content: space-between; padding-top: 1rem;">
-        <div style="display: flex; align-items: center; gap: 0.75rem; padding-left: 2rem; margin-bottom: 0.75rem;">
-          <h1 style="font-size: 1.1rem; font-weight: 800; letter-spacing: -0.02em;">AR/AP</h1>
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 0 2rem; margin-bottom: 0.75rem;">
+          <h1 style="font-size: 1.1rem; font-weight: 800; letter-spacing: -0.02em;">Finance</h1>
+          <span id="assignment-save-status" class="assignment-save-status" data-state="idle" aria-live="polite">Changes save automatically</span>
         </div>
         <div class="drawer-tabs" style="margin-bottom: 0; padding-left: 2rem; border-top: 1px solid var(--border);">
-          <a href="/dashboard/ar-ap/customers" class="tab-btn">Customers</a>
-          <a href="/dashboard/ar-ap/owner" class="tab-btn">Owner</a>
-          <a href="/dashboard/ar-ap/staff" class="tab-btn">Staff</a>
-          <a href="/dashboard/ar-ap/supplier" class="tab-btn">Supplier</a>
-          <a href="/dashboard/ar-ap/assign-account" class="tab-btn active">Assign Account</a>
+          <a href="/dashboard/assign-account" class="tab-btn active">Assign Account</a>
         </div>
       </header>
 
       <div style="padding: 2rem; max-width: 1000px; width: 100%; margin: 0 auto; box-sizing: border-box;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem;">
           <div>
             <h2 style="font-size: 1.1rem; font-weight: 800; margin: 0;">General Ledger Account Assignment</h2>
-            <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">Assign Due From Owner and Due From Staff ledger accounts to the responsible employees for accurate owner, payroll, and payout reporting.</p>
+            <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">Select an account type, then assign its General Ledger accounts to the responsible employees for accurate financial reporting.</p>
+            <select id="account-type-filter" class="form-select account-type-filter" aria-label="General Ledger account type" onchange="App.changeAccountGroup(this.value)">
+              <option value="due_from">Due From</option>
+              <option value="due_to">Due To</option>
+              <option value="company_loan">Company Loan</option>
+              <option value="company_loan_repayment">Company Loan Repayment</option>
+              <option value="owner_loan">Owner Loan</option>
+              <option value="survival">Survival</option>
+            </select>
           </div>
-          <button onclick="App.saveAssignments()" class="btn btn-cyan btn-sm">Save Assignments</button>
         </div>
 
         <div class="excel-container">
           <table class="excel-table">
             <thead>
               <tr>
-                <th>General Ledger Account</th>
+                <th id="account-type-heading">Due From</th>
                 <th>Assigned Employee</th>
               </tr>
             </thead>
-            <tbody id="receivable-assign-table-body">
+            <tbody id="account-assign-table-body">
               <tr>
                 <td colspan="2" style="text-align: center; padding: 3rem; color: var(--text-muted); font-style: italic;">Loading ledger accounts and employees...</td>
               </tr>
@@ -136,29 +160,6 @@
           </table>
         </div>
 
-        <div style="display: flex; justify-content: space-between; align-items: center; margin: 2.5rem 0 1.5rem;">
-          <div>
-            <h2 style="font-size: 1.1rem; font-weight: 800; margin: 0;">Payable Accounts</h2>
-            <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">Map Due To general ledger accounts to staff members for payroll and payout tracking.</p>
-          </div>
-          <button onclick="App.saveAssignments()" class="btn btn-cyan btn-sm">Save Assignments</button>
-        </div>
-
-        <div class="excel-container">
-          <table class="excel-table">
-            <thead>
-              <tr>
-                <th>General Ledger Account</th>
-                <th>Assigned Employee</th>
-              </tr>
-            </thead>
-            <tbody id="payable-assign-table-body">
-              <tr>
-                <td colspan="2" style="text-align: center; padding: 3rem; color: var(--text-muted); font-style: italic;">Loading ledger accounts and employees...</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
       </div>
     </main>
   </div>
@@ -172,6 +173,14 @@
     'use strict';
 
     const getSb = () => window.BKAuth.sb;
+    const ACCOUNT_GROUPS = {
+      due_from: { label: 'Due From', pattern: '%due from%' },
+      due_to: { label: 'Due To', pattern: '%due to%' },
+      company_loan: { label: 'Company Loan', pattern: '%company loan%' },
+      company_loan_repayment: { label: 'Company Loan Repayment', pattern: '%company loan repayment%' },
+      owner_loan: { label: 'Owner Loan', pattern: '%owner loan%' },
+      survival: { label: 'Survival', pattern: '%survival%' }
+    };
 
     function showToast(msg, isError = false) {
       const container = document.getElementById('toast-container');
@@ -196,14 +205,16 @@
     window.App = {
       tenantId: null,
       companyId: null,
-      receivableAccounts: [],
-      payableAccounts: [],
+      accounts: [],
       employees: [],
       assignments: {},
+      selectedAccountGroup: 'due_from',
+      saveQueue: Promise.resolve(),
+      saveRevision: 0,
 
       async init() {
         try {
-          const authInfo = await window.BKAuth.checkRoleGate(['Owner','Admin','HR','Finance'], '../../admin.html');
+          const authInfo = await window.BKAuth.checkRoleGate(['Owner','Admin','HR','Finance'], '/admin.html');
           if (!authInfo) return;
           this.tenantId = authInfo.tenantId;
 
@@ -211,58 +222,50 @@
           this.companyId = co?.id || null;
           if (!this.companyId) return;
 
-          await this.loadData();
+          await this.loadReferenceData();
+          await this.loadAccounts();
         } catch (e) { console.error(e); }
       },
 
-      async loadData() {
+      async loadReferenceData() {
+        const [employeesResult, configResult] = await Promise.all([
+          getSb().from('employees').select('id,first_name,last_name').eq('company_id', this.companyId).order('first_name'),
+          getSb().from('global_settings').select('value').eq('key', 'journal_account_employee_assignments').eq('company_id', this.companyId).maybeSingle()
+        ]);
+        if (employeesResult.error) throw employeesResult.error;
+        if (configResult.error) throw configResult.error;
+        this.employees = employeesResult.data || [];
+        this.assignments = configResult.data?.value?.assignments || {};
+      },
+
+      changeAccountGroup(group) {
+        if (!ACCOUNT_GROUPS[group]) return;
+        this.selectedAccountGroup = group;
+        this.loadAccounts();
+      },
+
+      async loadAccounts() {
+        const tbody = document.getElementById('account-assign-table-body');
+        const requestedGroup = this.selectedAccountGroup;
+        const group = ACCOUNT_GROUPS[requestedGroup];
+        document.getElementById('account-type-heading').textContent = group.label;
+        tbody.innerHTML = '<tr><td colspan="2" style="text-align:center;padding:2rem;color:var(--text-muted);">Loading accounts...</td></tr>';
         try {
-          // Fetch employees
-          const { data: emps, error: empErr } = await getSb()
-            .from('employees')
-            .select('id, first_name, last_name')
-            .eq('company_id', this.companyId)
-            .order('first_name');
-          if (empErr) throw empErr;
-          this.employees = emps || [];
-
-          const [receivableResult, payableResult] = await Promise.all([
-            getSb().from('journal_accounts').select('id, name').eq('company_id', this.companyId)
-              .or('name.ilike.%due from owner%,name.ilike.%due from staff%').order('name'),
-            getSb().from('journal_accounts').select('id, name').eq('company_id', this.companyId)
-              .or('name.ilike.%due to owner%,name.ilike.%due to staff%').order('name')
-          ]);
-          if (receivableResult.error) throw receivableResult.error;
-          if (payableResult.error) throw payableResult.error;
-          this.receivableAccounts = receivableResult.data || [];
-          this.payableAccounts = payableResult.data || [];
-
-          // Fetch saved assignments config
-          const { data: config } = await getSb()
-            .from('global_settings')
-            .select('value')
-            .eq('key', 'journal_account_employee_assignments')
-            .eq('company_id', this.companyId)
-            .maybeSingle();
-          this.assignments = config?.value?.assignments || {};
-
-          this.render();
+          const { data, error } = await getSb().from('journal_accounts').select('id,name')
+            .eq('company_id', this.companyId).ilike('name', group.pattern).order('name');
+          if (error) throw error;
+          if (this.selectedAccountGroup !== requestedGroup) return;
+          this.accounts = (data || []).filter(account => requestedGroup !== 'company_loan'
+            || !String(account.name || '').toLowerCase().includes('repayment'));
+          this.renderTable(this.accounts, `No ${group.label} accounts found in General Ledger.`);
         } catch (err) {
           console.error(err);
-          const friendlyMessage = 'Accounts could not be loaded. Please refresh and try again.';
-          ['receivable-assign-table-body', 'payable-assign-table-body'].forEach(id => {
-            document.getElementById(id).innerHTML = `<tr><td colspan="2" style="text-align:center;color:var(--danger);padding:2rem;">${friendlyMessage}</td></tr>`;
-          });
+          tbody.innerHTML = '<tr><td colspan="2" style="text-align:center;color:var(--danger);padding:2rem;">Accounts could not be loaded. Please refresh and try again.</td></tr>';
         }
       },
 
-      render() {
-        this.renderTable('receivable-assign-table-body', this.receivableAccounts, 'No matching "Due from Owner" or "Due from Staff" accounts found in General Ledger.');
-        this.renderTable('payable-assign-table-body', this.payableAccounts, 'No matching "Due to Owner" or "Due to Staff" accounts found in General Ledger.');
-      },
-
-      renderTable(tbodyId, accounts, emptyMessage) {
-        const tbody = document.getElementById(tbodyId);
+      renderTable(accounts, emptyMessage) {
+        const tbody = document.getElementById('account-assign-table-body');
         if (accounts.length === 0) {
           tbody.innerHTML = `<tr><td colspan="2" style="text-align: center; padding: 3rem; color: var(--text-muted); font-style: italic;">${emptyMessage}</td></tr>`;
           return;
@@ -280,7 +283,7 @@
             <tr>
               <td class="account-name-cell${selectedEmpId ? '' : ' account-name-unassigned'}" style="font-weight:600; font-size: 0.9rem;">${escapeHtml(acc.name)}</td>
               <td>
-                <select class="form-select employee-assign-select" data-account-id="${acc.id}" onchange="App.updateAssignmentHighlight(this)" style="width: 100%; max-width: 320px; font-size: 0.85rem; padding: 0.35rem 0.5rem; height: auto;">
+                <select class="form-select employee-assign-select" data-account-id="${acc.id}" onchange="App.autosaveAssignment(this)" style="width: 100%; max-width: 320px; font-size: 0.82rem; padding: 0.2rem 0.45rem; height: 32px;">
                   <option value="">Unassigned</option>
                   ${options}
                 </select>
@@ -295,43 +298,46 @@
         accountCell?.classList.toggle('account-name-unassigned', !select.value);
       },
 
-      async saveAssignments() {
+      updateSaveStatus(message, state = 'idle') {
+        const status = document.getElementById('assignment-save-status');
+        status.textContent = message;
+        status.dataset.state = state;
+      },
+
+      async autosaveAssignment(select) {
+        const accountId = select.dataset.accountId;
+        const employeeId = select.value;
+        if (!accountId) return;
+        this.updateAssignmentHighlight(select);
+        const revision = ++this.saveRevision;
+        this.updateSaveStatus('Saving...', 'saving');
+        const saveOperation = this.saveQueue.then(() => this.persistAssignment(accountId, employeeId));
+        this.saveQueue = saveOperation.catch(() => {});
         try {
-          // Merge both tables with the existing configuration so unrelated assignments remain intact.
-          const { data: existing } = await getSb()
-            .from('global_settings')
-            .select('value')
-            .eq('key', 'journal_account_employee_assignments')
-            .eq('company_id', this.companyId)
-            .maybeSingle();
-
-          const existingAssignments = existing?.value?.assignments || {};
-
-          const selects = document.querySelectorAll('.employee-assign-select');
-          selects.forEach(sel => {
-            const accountId = sel.dataset.accountId;
-            const employeeId = sel.value;
-            if (employeeId) {
-              existingAssignments[accountId] = employeeId;
-            } else {
-              delete existingAssignments[accountId];
-            }
-          });
-
-          const { error } = await getSb()
-            .from('global_settings')
-            .upsert({
-              key: 'journal_account_employee_assignments',
-              company_id: this.companyId,
-              value: { assignments: existingAssignments }
-            });
-
-          if (error) throw error;
-          showToast('Assignments saved successfully.');
-        } catch (e) {
-          console.error(e);
-          showToast('Assignments could not be saved. Please try again.', true);
+          await saveOperation;
+          if (revision === this.saveRevision) this.updateSaveStatus('Saved', 'saved');
+        } catch (error) {
+          console.error(error);
+          if (revision === this.saveRevision) this.updateSaveStatus('Could not save', 'error');
+          showToast('This assignment could not be saved. Please try again.', true);
         }
+      },
+
+      async persistAssignment(accountId, employeeId) {
+        const { data: existing, error: readError } = await getSb().from('global_settings')
+          .select('value').eq('key', 'journal_account_employee_assignments')
+          .eq('company_id', this.companyId).maybeSingle();
+        if (readError) throw readError;
+        const assignments = { ...(existing?.value?.assignments || {}) };
+        if (employeeId) assignments[accountId] = employeeId;
+        else delete assignments[accountId];
+        const { error } = await getSb().from('global_settings').upsert({
+          key: 'journal_account_employee_assignments',
+          company_id: this.companyId,
+          value: { assignments }
+        }, { onConflict: 'company_id,key' });
+        if (error) throw error;
+        this.assignments = assignments;
       }
     };
 

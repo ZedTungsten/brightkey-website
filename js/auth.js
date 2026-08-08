@@ -43,7 +43,7 @@
       { key: 'Finance:Expenses', label: 'Expenses', routes: ['/dashboard/expenses'] },
       { key: 'Finance:Ledgers', label: 'Ledgers', routes: ['/dashboard/ledgers'] },
       { key: 'Finance:Adjustments', label: 'Adjustments', routes: ['/dashboard/finance-adjustments'] },
-      { key: 'Finance:Receivables', label: 'AR/AP', routes: ['/dashboard/ar-ap', '/dashboard/receivables'] },
+      { key: 'Finance:Receivables', label: 'AR/AP', routes: ['/dashboard/ar-ap', '/dashboard/receivables', '/dashboard/assign-account'] },
       { key: 'Finance:Payables', label: 'Payables', routes: ['/dashboard/payables'] },
       { key: 'Finance:Payout Tracker', label: 'Payout Tracker', routes: ['/dashboard/payout-tracker'] }
     ]

@@ -398,6 +398,7 @@
           <a href="/dashboard/ledgers" class="dash-nav-child" data-role="accounting">Ledgers</a>
           <a href="/dashboard/finance-adjustments" class="dash-nav-child" data-role="accounting">Adjustments</a>
           <a href="/dashboard/ar-ap" class="dash-nav-child" data-role="accounting">AR/AP</a>
+          <a href="/dashboard/assign-account" class="dash-nav-child" data-role="accounting">Assign</a>
           <a href="/dashboard/payables" class="dash-nav-child" data-role="accounting">Payables</a>
           <a href="/dashboard/payout-tracker/payout/" class="dash-nav-child" data-role="accounting" style="display: flex; justify-content: space-between; align-items: center;">
             <span>Payout Tracker</span>
