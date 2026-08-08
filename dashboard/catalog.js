@@ -1095,7 +1095,7 @@
 
   function fillForm(p) {
     const set = (id, val) => { const el = document.getElementById(id); if(el) el.value = val || ''; };
-    set('f-sku', p.sku);
+    set('f-sku', String(p.sku || '').toUpperCase());
     set('f-slug', productSlug(p.title, p.sku));
     set('f-title', p.title);
     set('f-description', p.description);
@@ -1218,7 +1218,7 @@
     } : null;
 
     return {
-      sku:               g('f-sku'),
+      sku:               g('f-sku').toUpperCase(),
       slug:              slugVal,
       title:             g('f-title'),
       description:       g('f-description'),
@@ -2628,7 +2628,7 @@
         document.getElementById('f-sku').value
       );
     };
-    document.getElementById('f-sku').addEventListener('input', updateGeneratedSlug);
+    document.getElementById('f-sku').addEventListener('input', event => { event.target.value = event.target.value.toUpperCase(); updateGeneratedSlug(); });
     document.getElementById('f-title').addEventListener('input', updateGeneratedSlug);
 
     // Business change → re-render features tab

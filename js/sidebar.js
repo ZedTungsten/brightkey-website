@@ -353,7 +353,6 @@
             <span>Ship</span>
             <span id="ship-badge-dot" style="display: none; width: 6px; height: 6px; border-radius: 50%; background-color: #ef4444;"></span>
           </a>
-          <a href="/dashboard/all-orders" class="dash-nav-child" data-role="logistics">All Orders</a>
           <a href="/dashboard/inventory/summary" class="dash-nav-child" data-role="logistics">Inventory</a>
           <a href="/dashboard/qa-guide" class="dash-nav-child" data-role="logistics">QA Guide</a>
           <a href="/dashboard/shipping-rates" class="dash-nav-child" data-role="logistics">Shipping Rates</a>
@@ -654,9 +653,7 @@
         '/dashboard/ship'
       ],
       '/dashboard/logistics-calendar/calendar': [
-        '/dashboard/logistics-calendar'
-      ],
-      '/dashboard/all-orders': [
+        '/dashboard/logistics-calendar',
         '/dashboard/all-orders'
       ],
       '/dashboard/inventory/summary': [

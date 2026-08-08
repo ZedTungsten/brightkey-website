@@ -13,6 +13,17 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 
   <link rel="stylesheet" href="shared.css" />
+  <style>
+    #panel-order {
+      height: auto;
+      min-height: 100%;
+    }
+
+    #panel-order > .panel {
+      height: auto;
+      min-height: 100%;
+    }
+  </style>
 </head>
 <body>
   <div class="toast-container" id="toast-container"></div>
@@ -43,7 +54,7 @@
         </div>
 
     <!-- Content Area -->
-    <div class="content-area">
+    <div class="content-area" style="padding-bottom: 2rem;">
       
       <!-- Left Workspace (Tables & Stats) -->
       <div class="main-workspace">
@@ -994,6 +1005,7 @@
           const supplierName = selectedSup ? selectedSup.name : 'Supplier';
 
           const payloads = items.map(item => ({
+            company_id: companyId,
             reference_id: refOrder,
             sku: item.sku,
             quantity: item.qty,
@@ -1010,7 +1022,7 @@
 
           // Ensure inventory rows exist for these SKUs in this warehouse
           const uniqueSkus = [...new Set(items.map(i => i.sku))];
-          let existQ = sb.from('inventory').select('sku').in('sku', uniqueSkus);
+          let existQ = sb.from('inventory').select('sku').or(`company_id.eq.${companyId},company_id.is.null`).in('sku', uniqueSkus);
           if (activeWarehouseId) existQ = existQ.eq('warehouse_id', activeWarehouseId);
           else existQ = existQ.is('warehouse_id', null);
           const { data: existingRows, error: checkErr } = await existQ;
@@ -1019,7 +1031,7 @@
           const existingSkus = new Set((existingRows || []).map(r => r.sku));
           const newInventoryRows = uniqueSkus
             .filter(sku => !existingSkus.has(sku))
-            .map(sku => ({ sku, available: 0, warehouse_id: activeWarehouseId || null }));
+            .map(sku => ({ company_id: companyId, sku, available: 0, warehouse_id: activeWarehouseId || null }));
 
           if (newInventoryRows.length > 0) {
             const { error: insErr } = await sb.from('inventory').insert(newInventoryRows);

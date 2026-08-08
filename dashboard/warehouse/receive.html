@@ -70,17 +70,13 @@
                 <table class="ledger-table">
                   <thead>
                     <tr>
-                      <th>Image</th>
-                      <th>Source / Type</th>
-                      <th>SKU</th>
-                      <th>Product</th>
-                      <th>Quantity</th>
-                      <th>State / Origin</th>
-                      <th>Action</th>
+                      <th>Order / Shipment</th>
+                      <th>Items</th>
+                      <th style="text-align:right;">Action</th>
                     </tr>
                   </thead>
                   <tbody id="receive-list">
-                    <tr><td colspan="7" class="text-center text-muted" style="padding:2rem 0;">No incoming items to receive.</td></tr>
+                    <tr><td colspan="3" class="text-center text-muted" style="padding:2rem 0;">No incoming items to receive.</td></tr>
                   </tbody>
                 </table>
               </div>
@@ -143,7 +139,7 @@
   <div id="confirm-receipt-modal" class="modal-overlay" onclick="closeConfirmReceiptModalOuter(event)" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); backdrop-filter:blur(4px); z-index:9999; align-items:center; justify-content:center;">
     <div class="modal-content" style="width: 100%; max-width: 500px; background:var(--bg-surface); border:1px solid var(--border); border-radius:12px; padding:1.75rem; box-shadow:0 12px 48px rgba(0,0,0,0.25); display:flex; flex-direction:column; gap:1rem; position:relative; max-height:85vh; overflow-y:auto;" onclick="event.stopPropagation()">
       <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border); padding-bottom:0.75rem;">
-        <div class="modal-title" style="font-size:1.1rem; font-weight:700; color:var(--text-primary);">Confirm Receipt</div>
+        <div class="modal-title" id="rec-modal-title" style="font-size:1.1rem; font-weight:700; color:var(--text-primary);">Confirm Receipt</div>
         <button class="modal-close" onclick="closeConfirmReceiptModal()" style="background:none; border:none; color:var(--text-muted); cursor:pointer;">
           <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2.5" fill="none"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
@@ -745,6 +741,21 @@
     }
 
     // Render Tab 3: Receive
+    const checkedReceiveTransactions = new Set();
+
+    function shipmentItemsAreChecked(transactions) {
+      return transactions.length > 0 && transactions.every(transaction => checkedReceiveTransactions.has(transaction.id));
+    }
+
+    window.toggleShipmentReceiveItem = function(referenceId, transactionId, checked) {
+      if (checked) checkedReceiveTransactions.add(transactionId);
+      else checkedReceiveTransactions.delete(transactionId);
+      const group = activeTransactions.filter(transaction => transaction.reference_id === referenceId && ['ordered', 'dispatched'].includes(transaction.status));
+      const button = Array.from(document.querySelectorAll('[data-receive-reference]'))
+        .find(candidate => candidate.dataset.receiveReference === referenceId);
+      if (button) button.disabled = !shipmentItemsAreChecked(group);
+    };
+
     function renderReceiveTab() { if (!document.getElementById('receive-list')) return;
       const tbody = document.getElementById('receive-list');
       tbody.innerHTML = '';
@@ -768,52 +779,67 @@
       const incomingTransfers = warehouseTransfers.filter(t => t.status === 'approved' && t.to_warehouse_id === activeWarehouseId);
       
       if (pending.length === 0 && incomingTransfers.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted" style="padding:2rem 0;">No incoming shipments, returns, or transfers to receive.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="3" class="text-center text-muted" style="padding:2rem 0;">No incoming shipments, returns, or transfers to receive.</td></tr>`;
         return;
       }
 
-      pending.forEach(t => {
-        const p = allProducts.find(prod => prod.sku === t.sku) || { title: 'Unknown Product', image_main: '' };
-        let sourceLabel = '';
-        let badgeClass = '';
-        if (t.status === 'ordered' || t.status === 'dispatched') {
-          if (t.reference_id && t.reference_id.startsWith('RCV-')) {
-            sourceLabel = `Incoming Shipment (${t.customer_name || 'Customer'})`;
-            badgeClass = t.status === 'dispatched' ? 'badge-dispatched' : 'badge-ordered';
-          } else if (t.reference_id && t.reference_id.startsWith('SUP-')) {
-            sourceLabel = `Supplier PO (${t.customer_name || 'Supplier'})`;
-            badgeClass = t.status === 'dispatched' ? 'badge-dispatched' : 'badge-ordered';
-          } else {
-            sourceLabel = 'Supplier PO';
-            badgeClass = 'badge-ordered';
-          }
-        } else if (t.status === 'returned') {
-          sourceLabel = `Return (${t.customer_name || 'Customer'})`;
-          badgeClass = 'badge-returned';
-        }
+      const incomingShipments = pending.filter(transaction => transaction.reference_id && (transaction.reference_id.startsWith('RCV-') || transaction.reference_id.startsWith('SUP-')));
+      const shipmentGroups = new Map();
+      incomingShipments.forEach(transaction => {
+        if (!shipmentGroups.has(transaction.reference_id)) shipmentGroups.set(transaction.reference_id, []);
+        shipmentGroups.get(transaction.reference_id).push(transaction);
+      });
 
-        let imageSrc = p.image_main;
-        if (!imageSrc || !imageSrc.match(/^https?:\/\//)) {
-          imageSrc = '../../assets/og-image.png';
-        }
+      shipmentGroups.forEach((transactions, referenceId) => {
+        const first = transactions[0];
+        const sourceLabel = referenceId.startsWith('SUP-') ? 'Supplier Order' : 'Incoming Shipment';
+        const statusClass = first.status === 'dispatched' ? 'badge-dispatched' : 'badge-ordered';
+        const itemsHtml = transactions.map(transaction => {
+          const product = allProducts.find(candidate => candidate.sku === transaction.sku) || { image_main: '', title: '' };
+          const imageSrc = product.image_main && product.image_main.match(/^https?:\/\//) ? product.image_main : '../../assets/og-image.png';
+          return `
+            <label style="display:grid; grid-template-columns:28px 64px minmax(140px,220px) minmax(180px,1fr) 70px; gap:0.75rem; align-items:center; padding:0.55rem 0; border-bottom:1px solid var(--border); cursor:pointer;">
+              <input type="checkbox" ${checkedReceiveTransactions.has(transaction.id) ? 'checked' : ''} onchange="toggleShipmentReceiveItem('${escFulfillment(referenceId)}', '${transaction.id}', this.checked)" aria-label="Confirm ${escFulfillment(transaction.sku)} received" />
+              <img src="${escFulfillment(imageSrc)}" alt="${escFulfillment(transaction.sku)}" style="width:56px; height:42px; object-fit:cover; border-radius:6px; border:1px solid var(--border); background:var(--bg-elevated);" />
+              <code style="font-weight:700; color:var(--text-primary);">${escFulfillment(transaction.sku)}</code>
+              <span style="color:var(--text-secondary);">${escFulfillment(product.title || 'Untitled product')}</span>
+              <strong style="text-align:right;">${transaction.quantity}</strong>
+            </label>`;
+        }).join('');
 
         tbody.innerHTML += `
           <tr>
-            <td>
-              <img src="${imageSrc}" alt="${t.sku}" style="width: 80px; height: 50px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-elevated); display: block;" />
+            <td colspan="3" style="padding:1rem 1.25rem;">
+              <div style="display:grid; grid-template-columns:minmax(170px,0.7fr) minmax(320px,2fr) auto; gap:1.25rem; align-items:start;">
+                <div>
+                  <strong style="display:block; color:var(--text-primary); margin-bottom:0.3rem;">${escFulfillment(referenceId)}</strong>
+                  <span style="display:block; font-size:0.78rem; color:var(--text-secondary); margin-bottom:0.4rem;">${sourceLabel}${first.customer_name ? ` · ${escFulfillment(first.customer_name)}` : ''}</span>
+                  <span class="badge-status ${statusClass}">${escFulfillment(first.status)}</span>
+                </div>
+                <div>
+                  <div style="display:grid; grid-template-columns:28px 64px minmax(140px,220px) minmax(180px,1fr) 70px; gap:0.75rem; padding-bottom:0.4rem; border-bottom:1px solid var(--border); color:var(--text-muted); font-size:0.68rem; font-weight:700; text-transform:uppercase;">
+                    <span></span><span>Image</span><span>SKU</span><span>Product Title</span><span style="text-align:right;">Qty</span>
+                  </div>
+                  ${itemsHtml}
+                </div>
+                <button class="btn btn-cyan btn-sm" data-receive-reference="${escFulfillment(referenceId)}" onclick="openConfirmReceiptModal('${escFulfillment(referenceId)}')" ${shipmentItemsAreChecked(transactions) ? '' : 'disabled'}>
+                  <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  Receive
+                </button>
+              </div>
             </td>
-            <td><strong>${sourceLabel}</strong></td>
-            <td><code>${t.sku}</code></td>
-            <td>${p.title}</td>
-            <td><strong>${t.quantity}</strong></td>
-            <td><span class="badge-status ${badgeClass}">${t.status}</span></td>
-            <td>
-              <button class="btn btn-cyan btn-sm" onclick="receiveItem(this, '${t.id}', '${t.sku}', ${t.quantity}, '${t.status}', '${t.reference_id || ''}')">
-                <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: -2px; margin-right: 6px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Receive
-              </button>
-            </td>
-          </tr>
-        `;
+          </tr>`;
+      });
+
+      pending.filter(transaction => !incomingShipments.includes(transaction)).forEach(transaction => {
+        const product = allProducts.find(candidate => candidate.sku === transaction.sku) || { title: 'Unknown Product', image_main: '' };
+        const imageSrc = product.image_main && product.image_main.match(/^https?:\/\//) ? product.image_main : '../../assets/og-image.png';
+        tbody.innerHTML += `
+          <tr>
+            <td><strong>Return · ${escFulfillment(transaction.customer_name || 'Customer')}</strong></td>
+            <td><div style="display:flex; align-items:center; gap:0.75rem;"><img src="${escFulfillment(imageSrc)}" alt="${escFulfillment(transaction.sku)}" style="width:56px; height:42px; object-fit:cover; border-radius:6px;"/><code>${escFulfillment(transaction.sku)}</code><strong>Qty ${transaction.quantity}</strong></div></td>
+            <td style="text-align:right;"><button class="btn btn-cyan btn-sm" onclick="receiveItem(this, '${transaction.id}', '${escFulfillment(transaction.sku)}', ${transaction.quantity}, '${transaction.status}', '')">Receive Return</button></td>
+          </tr>`;
       });
 
       incomingTransfers.forEach(tr => {
@@ -827,15 +853,9 @@
 
         tbody.innerHTML += `
           <tr>
-            <td>
-              <img src="${imageSrc}" alt="${tr.sku}" style="width: 80px; height: 50px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-elevated); display: block;" />
-            </td>
-            <td><strong>Warehouse Transfer</strong></td>
-            <td><code>${tr.sku}</code></td>
-            <td>${p.title}</td>
-            <td><strong>${tr.quantity}</strong></td>
-            <td><span class="badge-status badge-ordered" style="background-color: var(--cyan); color: white;">from ${sourceWh.name}</span></td>
-            <td>
+            <td><strong>Warehouse Transfer</strong><br><span class="badge-status badge-ordered" style="background-color:var(--cyan); color:white;">from ${escFulfillment(sourceWh.name)}</span></td>
+            <td><div style="display:flex; align-items:center; gap:0.75rem;"><img src="${escFulfillment(imageSrc)}" alt="${escFulfillment(tr.sku)}" style="width:56px; height:42px; object-fit:cover; border-radius:6px;"/><code>${escFulfillment(tr.sku)}</code><strong>Qty ${tr.quantity}</strong></div></td>
+            <td style="text-align:right;">
               <button class="btn btn-cyan btn-sm" onclick="receiveTransfer(this, '${tr.id}', '${tr.sku}', ${tr.quantity})">
                 <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: -2px; margin-right: 6px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Receive Transfer
               </button>
@@ -1083,6 +1103,7 @@
         await wrapActionWithLoading(btn, async () => {
           supplierOrderPosting = true;
           const payloads = items.map(item => ({
+            company_id: companyId,
             sku: item.sku,
             quantity: item.qty,
             type: 'supplier_order',
@@ -1097,7 +1118,7 @@
 
           // Ensure inventory rows exist for these SKUs in this warehouse
           const uniqueSkus = [...new Set(items.map(i => i.sku))];
-          let existQ = sb.from('inventory').select('sku').in('sku', uniqueSkus);
+          let existQ = sb.from('inventory').select('sku').or(`company_id.eq.${companyId},company_id.is.null`).in('sku', uniqueSkus);
           if (activeWarehouseId) existQ = existQ.eq('warehouse_id', activeWarehouseId);
           else existQ = existQ.is('warehouse_id', null);
           const { data: existingRows, error: checkErr } = await existQ;
@@ -1106,7 +1127,7 @@
           const existingSkus = new Set((existingRows || []).map(r => r.sku));
           const newInventoryRows = uniqueSkus
             .filter(sku => !existingSkus.has(sku))
-            .map(sku => ({ sku, available: 0, warehouse_id: activeWarehouseId || null }));
+            .map(sku => ({ company_id: companyId, sku, available: 0, warehouse_id: activeWarehouseId || null }));
 
           if (newInventoryRows.length > 0) {
             const { error: insErr } = await sb.from('inventory').insert(newInventoryRows);
@@ -1131,13 +1152,24 @@
     // ACTION: Warehouse Confirms Receipt
     let recPhotoBlob = null;
     let recStream = null;
+    let currentReceivingShipmentTransactions = [];
 
-    window.openConfirmReceiptModal = function(id, sku, qty, prevStatus, refId) {
-      document.getElementById('rec-tx-id').value = id;
-      document.getElementById('rec-tx-sku').value = sku;
-      document.getElementById('rec-tx-qty').value = qty;
-      document.getElementById('rec-tx-prev-status').value = prevStatus;
+    window.openConfirmReceiptModal = function(refId) {
+      currentReceivingShipmentTransactions = activeTransactions.filter(transaction =>
+        transaction.reference_id === refId && ['ordered', 'dispatched'].includes(transaction.status)
+      );
+      if (!shipmentItemsAreChecked(currentReceivingShipmentTransactions)) {
+        showToast('Check every item in this shipment before receiving it.', true);
+        return;
+      }
+      const tx = currentReceivingShipmentTransactions[0];
+      if (!tx) return;
+      document.getElementById('rec-tx-id').value = currentReceivingShipmentTransactions.map(transaction => transaction.id).join(',');
+      document.getElementById('rec-tx-sku').value = '';
+      document.getElementById('rec-tx-qty').value = '';
+      document.getElementById('rec-tx-prev-status').value = '';
       document.getElementById('rec-tx-ref-id').value = refId;
+      document.getElementById('rec-modal-title').textContent = `Receive Shipment ${refId}`;
 
       // Reset file and preview
       recPhotoBlob = null;
@@ -1146,7 +1178,6 @@
       document.getElementById('rec-placeholder').style.display = 'flex';
 
       // Load packed photo & booking photo
-      const tx = activeTransactions.find(t => t.id === id);
       const booking = deliveryBookings.find(db => db.reference_id === refId);
 
       // Populate details
@@ -1184,10 +1215,11 @@
 
       // Populate fees if booking exists
       if (booking) {
-        document.getElementById('rec-fee-base').value = (booking.base_fee / 100).toFixed(2);
-        document.getElementById('rec-fee-toll').value = (booking.toll / 100).toFixed(2);
-        document.getElementById('rec-fee-tip-1').value = (booking.tip_1 / 100).toFixed(2);
-        document.getElementById('rec-fee-tip-2').value = (booking.tip_2 / 100).toFixed(2);
+        const feeInputValue = value => (Number.isFinite(Number(value)) ? Number(value) / 100 : 0).toFixed(2);
+        document.getElementById('rec-fee-base').value = feeInputValue(booking.base_fee);
+        document.getElementById('rec-fee-toll').value = feeInputValue(booking.toll);
+        document.getElementById('rec-fee-tip-1').value = feeInputValue(booking.tip_1);
+        document.getElementById('rec-fee-tip-2').value = feeInputValue(booking.tip_2);
       } else {
         document.getElementById('rec-fee-base').value = '';
         document.getElementById('rec-fee-toll').value = '';
@@ -1309,14 +1341,17 @@
       const btn = document.getElementById('btn-submit-rec');
       if (btn.disabled) return;
 
-      const id = document.getElementById('rec-tx-id').value;
-      const sku = document.getElementById('rec-tx-sku').value;
-      const qty = parseInt(document.getElementById('rec-tx-qty').value) || 0;
-      const prevStatus = document.getElementById('rec-tx-prev-status').value;
       const refId = document.getElementById('rec-tx-ref-id').value;
+      const transactions = currentReceivingShipmentTransactions.filter(transaction =>
+        transaction.reference_id === refId && ['ordered', 'dispatched'].includes(transaction.status)
+      );
 
       if (!recPhotoBlob) {
         showToast('Receiving photo proof is required.', true);
+        return;
+      }
+      if (!shipmentItemsAreChecked(transactions)) {
+        showToast('Check every item in this shipment before receiving it.', true);
         return;
       }
 
@@ -1346,11 +1381,89 @@
         const uploadResult = await uploadRes.json();
         const receivedPhotoUrl = uploadResult.url;
 
-        // 2. Update inventory transaction
+        const shipmentSkus = [...new Set(transactions.map(transaction => transaction.sku))];
+        const { data: shipmentProducts, error: productError } = await sb.from('products')
+          .select('id,sku,count_inventory')
+          .eq('company_id', companyId)
+          .in('sku', shipmentSkus);
+        if (productError) throw productError;
+        if ((shipmentProducts || []).length !== shipmentSkus.length) {
+          throw new Error('One or more shipment SKUs could not be resolved in this company catalog.');
+        }
+        const stockedSkus = new Set(shipmentProducts.filter(product => product.count_inventory !== false).map(product => product.sku));
+        const quantitiesBySku = new Map();
+        transactions.filter(transaction => stockedSkus.has(transaction.sku)).forEach(transaction => {
+          const current = quantitiesBySku.get(transaction.sku) || { available: 0, dispatched: 0 };
+          current.available += Number(transaction.quantity) || 0;
+          if (transaction.status === 'dispatched') current.dispatched += Number(transaction.quantity) || 0;
+          quantitiesBySku.set(transaction.sku, current);
+        });
+
+        let inventoryQuery = sb.from('inventory').select('*')
+          .or(`company_id.eq.${companyId},company_id.is.null`)
+          .in('sku', Array.from(quantitiesBySku.keys()));
+        if (activeWarehouseId) inventoryQuery = inventoryQuery.eq('warehouse_id', activeWarehouseId);
+        else inventoryQuery = inventoryQuery.is('warehouse_id', null);
+        const { data: rawInventoryRows, error: inventoryError } = quantitiesBySku.size > 0
+          ? await inventoryQuery
+          : { data: [], error: null };
+        if (inventoryError) throw inventoryError;
+
+        const inventoryBySku = new Map();
+        (rawInventoryRows || []).forEach(row => {
+          const existing = inventoryBySku.get(row.sku);
+          if (!existing || (!existing.company_id && row.company_id === companyId)) inventoryBySku.set(row.sku, row);
+        });
+        const legacyRowsToClaim = Array.from(inventoryBySku.values()).filter(row => !row.company_id);
+        if (legacyRowsToClaim.length > 0) {
+          const { error: claimError } = await sb.from('inventory')
+            .update({ company_id: companyId, updated_at: now })
+            .in('id', legacyRowsToClaim.map(row => row.id))
+            .is('company_id', null);
+          if (claimError) throw claimError;
+          legacyRowsToClaim.forEach(row => { row.company_id = companyId; });
+        }
+
+        const missingInventorySkus = Array.from(quantitiesBySku.keys()).filter(sku => !inventoryBySku.has(sku));
+        if (missingInventorySkus.length > 0) {
+          if (!activeWarehouseId) throw new Error('Select a warehouse before receiving this shipment.');
+          const { data: createdRows, error: createError } = await sb.from('inventory').insert(
+            missingInventorySkus.map(sku => ({ company_id: companyId, warehouse_id: activeWarehouseId, sku, available: 0 }))
+          ).select('*');
+          if (createError) throw createError;
+          (createdRows || []).forEach(row => inventoryBySku.set(row.sku, row));
+        }
+
+        const inventoryUpdates = Array.from(inventoryBySku.values()).map(inventoryRow => {
+          const quantities = quantitiesBySku.get(inventoryRow.sku);
+          return {
+            id: inventoryRow.id,
+            company_id: inventoryRow.company_id,
+            warehouse_id: inventoryRow.warehouse_id,
+            sku: inventoryRow.sku,
+            available: (Number(inventoryRow.available) || 0) + quantities.available,
+            dispatched: Math.max(0, (Number(inventoryRow.dispatched) || 0) - quantities.dispatched),
+            returned: Number(inventoryRow.returned) || 0,
+            cancelled: Number(inventoryRow.cancelled) || 0,
+            updated_at: now
+          };
+        });
+
+        // 2. Claim legacy unowned rows, then update every transaction in this order together.
+        const legacyTransactionIds = transactions.filter(transaction => !transaction.company_id).map(transaction => transaction.id);
+        if (legacyTransactionIds.length > 0) {
+          const { error: transactionClaimError } = await sb.from('inventory_transactions')
+            .update({ company_id: companyId, updated_at: now })
+            .in('id', legacyTransactionIds)
+            .is('company_id', null);
+          if (transactionClaimError) throw transactionClaimError;
+        }
         const { error: txErr } = await sb.from('inventory_transactions').update({
           status: 'received',
           timestamp_received: now
-        }).eq('id', id);
+        }).eq('company_id', companyId)
+          .eq('reference_id', refId)
+          .in('id', transactions.map(transaction => transaction.id));
         if (txErr) throw txErr;
 
         // 3. Update delivery_bookings
@@ -1367,32 +1480,17 @@
           toll: Math.round(tollVal * 100),
           tip_1: Math.round(tip1Val * 100),
           tip_2: Math.round(tip2Val * 100)
-        }).eq('reference_id', refId);
+        }).eq('company_id', companyId).eq('reference_id', refId);
         if (dbErr) throw dbErr;
 
-        // 4. Update inventory row
-        let invQ = sb.from('inventory').select('*').eq('sku', sku);
-        if (activeWarehouseId) invQ = invQ.eq('warehouse_id', activeWarehouseId);
-        else invQ = invQ.is('warehouse_id', null);
-        const { data: invRow, error: invErr } = await invQ;
-        if (invErr || !invRow || invRow.length === 0) {
-          throw new Error('Error fetching inventory item for this warehouse');
+        // 4. Apply all SKU quantity changes in one request.
+        if (inventoryUpdates.length > 0) {
+          const { error: updErr } = await sb.from('inventory').upsert(inventoryUpdates, { onConflict: 'id' });
+          if (updErr) throw updErr;
         }
 
-        const inv = invRow[0];
-        const updates = { available: inv.available + qty };
-        if (prevStatus === 'returned') {
-          updates.returned = Math.max(0, inv.returned - qty);
-        } else if (prevStatus === 'cancelled') {
-          updates.cancelled = Math.max(0, inv.cancelled - qty);
-        } else if (prevStatus === 'dispatched') {
-          updates.dispatched = Math.max(0, (inv.dispatched || 0) - qty);
-        }
-
-        const { error: updErr } = await sb.from('inventory').update(updates).eq('id', inv.id);
-        if (updErr) throw updErr;
-
-        showToast('Item successfully received!');
+        transactions.forEach(transaction => checkedReceiveTransactions.delete(transaction.id));
+        showToast('Shipment successfully received!');
         closeConfirmReceiptModal();
         await refreshDashboard();
       } catch (err) {
@@ -1407,7 +1505,7 @@
     window.receiveItem = async function(btn, id, sku, qty, prevStatus, refId) {
       const isIncoming = (refId && (refId.startsWith('RCV-') || refId.startsWith('SUP-')));
       if (isIncoming) {
-        openConfirmReceiptModal(id, sku, qty, prevStatus, refId);
+        openConfirmReceiptModal(refId);
         return;
       }
 

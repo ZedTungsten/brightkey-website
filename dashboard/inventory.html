@@ -234,6 +234,10 @@
       display: block;
     }
 
+    #panel-inventory {
+      padding-bottom: 2rem;
+    }
+
     /* Transfer tab has stacked sections, let it size to content */
     #panel-transfer {
       height: auto;
@@ -612,11 +616,8 @@
           <!-- Tab Panel: Summary (Inventory) -->
           <div class="tab-panel active" id="panel-inventory">
             <div class="panel">
-              <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center;">
-                <span>Warehouse Tally <span id="panel-wh-name" style="font-weight:400; color:var(--text-muted); font-size:0.85em; margin-left:0.4rem;"></span></span>
-                <div style="display: flex; align-items: center; gap: 1rem; text-transform: none; font-weight: normal; font-size: 0.82rem;">
-
-                  <!-- Search Products -->
+              <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center; gap:1rem;">
+                <div style="display:flex; align-items:center; gap:1rem; min-width:0;">
                   <div class="inventory-search-wrap">
                     <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round">
                       <circle cx="11" cy="11" r="7"></circle>
@@ -631,6 +632,12 @@
                       oninput="handleInventorySearch(this.value)"
                     />
                   </div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 1rem; text-transform: none; font-weight: normal; font-size: 0.82rem;">
+
+                  <select id="inventory-business-filter" class="btn btn-outline" style="height:30px; min-width:150px; padding:0.25rem 0.75rem; font-size:0.82rem; font-weight:400;" onchange="handleInventoryBusinessChange(this.value)">
+                    <option value="">All Businesses</option>
+                  </select>
 
                   <!-- Category Dropdown Container -->
                   <div class="dropdown" id="category-dropdown-container" style="position: relative;">
@@ -871,6 +878,8 @@
     let inventorySearch = "";
     let inventorySearchTimer = null;
     let refreshPromise = null;
+    let inventoryFilterProducts = [];
+    let selectedInventoryBusiness = '';
 
     // Initialize Page
     async function init() {
@@ -952,15 +961,24 @@
     async function loadCoreData() {
       await WarehousePage.loadCoreData({ loadEmployees: false });
       const coreProducts = WarehousePage.allProducts || [];
-      const cats = new Set();
-      coreProducts
-        .filter(p => p.count_inventory !== false)
-        .forEach(p => {
-          cats.add(p.category || '');
-          productMetaBySku[p.sku] = p;
+      inventoryFilterProducts = coreProducts.filter(product => product.count_inventory !== false);
+      inventoryFilterProducts.forEach(product => { productMetaBySku[product.sku] = product; });
+
+      const { data: businesses, error: businessError } = await sb.from('tenant_businesses')
+        .select('id,name')
+        .eq('company_id', companyId)
+        .order('name');
+      if (businessError) throw businessError;
+
+      const businessSelect = document.getElementById('inventory-business-filter');
+      if (businessSelect) {
+        businessSelect.innerHTML = '<option value="">All Businesses</option>';
+        (businesses || []).forEach(business => {
+          const key = business.name.toLowerCase().replace(/[\s_.-]+/g, '_');
+          businessSelect.insertAdjacentHTML('beforeend', `<option value="${escFulfillment(key)}">${escFulfillment(business.name)}</option>`);
         });
-      uniqueCategories = Array.from(cats).sort();
-      populateCategoryFilter();
+      }
+      rebuildInventoryCategories(true);
     }
 
     async function loadProductMetaForSkus(skus) {
@@ -1073,6 +1091,28 @@
     let uniqueCategories = [];
     let isCategoryInitialized = false;
 
+    function rebuildInventoryCategories(resetSelection = false) {
+      const categories = new Set();
+      inventoryFilterProducts.forEach(product => {
+        if (selectedInventoryBusiness && product.business !== selectedInventoryBusiness) return;
+        categories.add(product.category || '');
+      });
+      uniqueCategories = Array.from(categories).sort();
+      if (resetSelection) {
+        selectedCategories.clear();
+        uniqueCategories.forEach(category => selectedCategories.add(category));
+        isCategoryInitialized = true;
+      }
+      populateCategoryFilter();
+    }
+
+    window.handleInventoryBusinessChange = function(value) {
+      selectedInventoryBusiness = String(value || '');
+      inventoryPage = 1;
+      rebuildInventoryCategories(true);
+      renderInventorySummary();
+    };
+
     // Stock filter state — all active by default (shows everything)
     const activeStockFilters = new Set(['with_stocks', 'no_stocks', 'with_dispatched']);
 
@@ -1141,8 +1181,8 @@
         const checked = selectedCategories.has(cat) ? 'checked' : '';
         return `
           <label style="display: flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0.5rem; font-size: 0.82rem; cursor: pointer; color: var(--text-secondary); user-select: none;">
-            <input type="checkbox" value="${cat}" ${checked} onchange="handleCategoryCheckboxChange(this)" style="cursor: pointer;" />
-            <span style="text-transform: capitalize;">${displayLabel}</span>
+            <input type="checkbox" value="${escFulfillment(cat)}" ${checked} onchange="handleCategoryCheckboxChange(this)" style="cursor: pointer;" />
+            <span style="text-transform: capitalize;">${escFulfillment(displayLabel)}</span>
           </label>
         `;
       }).join('');
@@ -1493,8 +1533,10 @@
         let query = sb
           .from('products')
           .select('id, sku, title, category, business, image_main, dealer_price, count_inventory', { count: 'exact' })
+          .eq('company_id', companyId)
           .or('count_inventory.is.null,count_inventory.neq.false');
 
+        if (selectedInventoryBusiness) query = query.eq('business', selectedInventoryBusiness);
         query = applyInventoryCategoryFilter(query);
         query = query ? applyInventoryStockFilter(query) : null;
         query = query ? applyInventorySearchFilter(query) : null;
