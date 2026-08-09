@@ -104,6 +104,7 @@
       const path = window.location.pathname.replace(/\/$/, '');
       if (path.endsWith('/all-bookings')) return 'all-bookings';
       if (path.endsWith('/installers/accounts')) return 'installer-accounts';
+      if (path.endsWith('/installers/notes')) return 'installer-notes';
       if (path.endsWith('/installers/assignments') || path.endsWith('/installers')) return 'installer-assignments';
       return 'calendar';
     }
@@ -126,15 +127,18 @@
       const panelAllBookings = document.getElementById('tab-panel-all-bookings');
       const panelInstallers = document.getElementById('tab-panel-installers');
       const panelInstallerAccounts = document.getElementById('tab-panel-installer-accounts');
+      const panelInstallerNotes = document.getElementById('tab-panel-installer-notes');
       const scheduleTabs = document.getElementById('booking-schedule-tabs');
       const installerTabs = document.getElementById('installer-tabs');
       const tabInstallerAssignments = document.getElementById('tab-installer-assignments');
       const tabInstallerAccounts = document.getElementById('tab-installer-accounts');
+      const tabInstallerNotes = document.getElementById('tab-installer-notes');
       const monthNavigator = document.getElementById('calendar-month-navigator');
       const pageTitle = document.getElementById('booking-page-title');
       const isInstallerAssignments = currentSubpage === 'installer-assignments';
       const isInstallerAccounts = currentSubpage === 'installer-accounts';
-      const isInstallersPage = isInstallerAssignments || isInstallerAccounts;
+      const isInstallerNotes = currentSubpage === 'installer-notes';
+      const isInstallersPage = isInstallerAssignments || isInstallerAccounts || isInstallerNotes;
 
       if (tabCalendar) tabCalendar.classList.toggle('active', currentSubpage === 'calendar');
       if (tabAllBookings) tabAllBookings.classList.toggle('active', currentSubpage === 'all-bookings');
@@ -142,11 +146,13 @@
       if (panelAllBookings) panelAllBookings.style.display = currentSubpage === 'all-bookings' ? 'block' : 'none';
       if (panelInstallers) panelInstallers.style.display = isInstallerAssignments ? 'block' : 'none';
       if (panelInstallerAccounts) panelInstallerAccounts.style.display = isInstallerAccounts ? 'block' : 'none';
+      if (panelInstallerNotes) panelInstallerNotes.style.display = isInstallerNotes ? 'block' : 'none';
       if (scheduleTabs) scheduleTabs.style.display = isInstallersPage ? 'none' : 'flex';
       if (installerTabs) installerTabs.style.display = isInstallersPage ? 'flex' : 'none';
       if (tabInstallerAssignments) tabInstallerAssignments.classList.toggle('active', isInstallerAssignments);
       if (tabInstallerAccounts) tabInstallerAccounts.classList.toggle('active', isInstallerAccounts);
-      if (monthNavigator) monthNavigator.style.display = isInstallerAccounts ? 'none' : 'flex';
+      if (tabInstallerNotes) tabInstallerNotes.classList.toggle('active', isInstallerNotes);
+      if (monthNavigator) monthNavigator.style.display = (isInstallerAccounts || isInstallerNotes) ? 'none' : 'flex';
       if (pageTitle) pageTitle.textContent = isInstallersPage ? 'Installers' : 'Installation Schedules';
       document.title = isInstallersPage
         ? 'Installers — Brightkey Admin'
@@ -214,6 +220,12 @@
       if (getCurrentSubpage() === 'installer-accounts') {
         setMonthBookingsLoading(false);
         await window.BKInstallerAccounts?.init({ sb, companyId: currentCompanyId });
+        return;
+      }
+
+      if (getCurrentSubpage() === 'installer-notes') {
+        setMonthBookingsLoading(false);
+        await window.BKInstallerNotes?.init({ sb, companyId: currentCompanyId });
         return;
       }
 
