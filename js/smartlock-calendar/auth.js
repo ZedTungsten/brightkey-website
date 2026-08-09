@@ -194,7 +194,16 @@ function renderInstallerNotes() {
     return;
   }
 
-  list.replaceChildren(...installerNotes.map(note => {
+  const query = String(document.getElementById('installer-notes-search-input')?.value || '').trim().toLowerCase();
+  const filteredNotes = query
+    ? installerNotes.filter(note => note.search_text.includes(query))
+    : installerNotes;
+  if (!filteredNotes.length) {
+    list.innerHTML = '<div class="installer-notes-empty">No notes match your search.</div>';
+    return;
+  }
+
+  list.replaceChildren(...filteredNotes.map(note => {
     const card = document.createElement('button');
     const title = document.createElement('span');
     card.type = 'button';
@@ -221,7 +230,16 @@ async function loadInstallerNotes() {
     try {
       const { data, error } = await sb.rpc('get_installer_notes', { p_token: getInstallerSessionToken() });
       if (error) throw error;
-      installerNotes = (data || []).map(note => ({ ...note, content_html: sanitizeInstallerNoteHtml(note.content_html) }));
+      installerNotes = (data || []).map(note => {
+        const contentHtml = sanitizeInstallerNoteHtml(note.content_html);
+        const content = document.createElement('div');
+        content.innerHTML = contentHtml;
+        return {
+          ...note,
+          content_html: contentHtml,
+          search_text: `${note.title} ${content.textContent || ''}`.toLowerCase()
+        };
+      });
       installerNotesLoaded = true;
       renderInstallerNotes();
     } catch (error) {
@@ -255,6 +273,8 @@ function resetInstallerNotes() {
   installerNotes = [];
   installerNotesLoaded = false;
   installerNotesLoading = null;
+  const search = document.getElementById('installer-notes-search-input');
+  if (search) search.value = '';
   const list = document.getElementById('installer-notes-list');
   if (list) list.innerHTML = '<div class="installer-notes-loading"><span class="installer-notes-spinner"></span><span>Loading notes...</span></div>';
   const modal = document.getElementById('installer-note-detail-modal');
