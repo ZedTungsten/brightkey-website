@@ -143,6 +143,29 @@
     .tab-btn:hover:not(.active) {
       color: var(--text-secondary);
     }
+    .owner-subtabs { margin: 0; padding-left: 2rem; border-top: 0; }
+    .owner-subtabs .tab-btn { padding-top: 0.65rem; padding-bottom: 0.65rem; font-size: 0.78rem; }
+    .owner-subtabs .tab-btn[aria-selected="true"] { color: var(--cyan-light); border-bottom-color: var(--cyan); }
+    .owner-view[hidden] { display: none; }
+    .accrual-card {
+      background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md);
+      padding: 1.5rem; box-shadow: var(--shadow-sm);
+    }
+    .accrual-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap; }
+    .accrual-header__left, .accrual-header__actions { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+    .accrual-owner-filter { width: 240px; }
+    .accrual-range { min-width: 120px; text-align: center; font-size: 0.82rem; font-weight: 700; color: var(--text-secondary); }
+    .accrual-table-wrap { width: 100%; overflow-x: auto; border: 1px solid var(--border); }
+    .accrual-table { width: 100%; min-width: 860px; border-collapse: collapse; font-size: 0.82rem; }
+    .accrual-table th, .accrual-table td { border: 1px solid var(--border); padding: 0.55rem 0.75rem; text-align: right; }
+    .accrual-table th { background: var(--bg-base); color: var(--text-secondary); text-transform: uppercase; font-size: 0.72rem; letter-spacing: 0.05em; }
+    .accrual-table th:first-child, .accrual-table td:first-child { text-align: left; min-width: 220px; background: var(--bg-base); font-weight: 600; position: sticky; left: 0; z-index: 2; }
+    .accrual-table .accrual-actions th { padding: 0.45rem 0.6rem; text-align: center; }
+    .accrual-table .is-locked { background: rgba(6, 182, 212, 0.09); }
+    .accrual-table .is-prestart { background: #f4f4f5 !important; color: #a1a1aa !important; }
+    .accrual-table .calculation-limit { color: var(--danger); font-size: 0.68rem; font-weight: 700; white-space: nowrap; }
+    .accrual-table .total-row td { font-weight: 800; border-top: 2px solid var(--text-primary); }
+    .accrual-empty { padding: 2.5rem 1rem; text-align: center; color: var(--text-muted); font-style: italic; }
 
     .shimmer-row td {
       background: linear-gradient(90deg, var(--bg-surface) 25%, var(--bg-base) 50%, var(--bg-surface) 75%);
@@ -174,9 +197,13 @@
           <a href="/dashboard/ar-ap/staff" class="tab-btn">Staff</a>
           <a href="/dashboard/ar-ap/supplier" class="tab-btn">Supplier</a>
         </div>
+        <div class="drawer-tabs owner-subtabs" role="tablist" aria-label="Owner report views">
+          <button type="button" class="tab-btn active" id="owner-monthly-tab" role="tab" aria-selected="true" aria-controls="monthly-view" onclick="window.location.hash='monthly'">Monthly</button>
+          <button type="button" class="tab-btn" id="owner-accrual-tab" role="tab" aria-selected="false" aria-controls="accrual-view" onclick="window.location.hash='accrual'">Accrual</button>
+        </div>
       </header>
 
-      <div style="padding: 2rem; max-width: 1200px; width: 100%; margin: 0 auto; box-sizing: border-box;">
+      <div id="monthly-view" class="owner-view" role="tabpanel" aria-labelledby="owner-monthly-tab" style="padding: 2rem; max-width: 1200px; width: 100%; margin: 0 auto; box-sizing: border-box;">
         <!-- Top controls row -->
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
           <div class="owner-report-controls">
@@ -214,6 +241,44 @@
           </div>
         </div>
       </div>
+
+      <div id="accrual-view" class="owner-view" role="tabpanel" aria-labelledby="owner-accrual-tab" hidden style="padding: 2rem; max-width: 1600px; width: 100%; margin: 0 auto; box-sizing: border-box;">
+        <section class="accrual-card" aria-labelledby="accrual-title">
+          <div class="accrual-header">
+            <div class="accrual-header__left">
+              <div class="month-nav-container" aria-label="Accrual focused month">
+                <button type="button" id="accrual-older" onclick="OwnerAccrualApp.changeFocusMonth(1)" class="month-nav-btn" aria-label="Previous month">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                </button>
+                <span class="accrual-range" id="accrual-range">Current month</span>
+                <button type="button" id="accrual-newer" onclick="OwnerAccrualApp.changeFocusMonth(-1)" class="month-nav-btn" aria-label="Next month" disabled>
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                </button>
+              </div>
+              <select id="accrual-owner-filter" class="form-select accrual-owner-filter" aria-label="Select owner for accrual report" onchange="OwnerAccrualApp.changeOwner(this.value)" disabled>
+                <option value="" disabled selected hidden>Select owner...</option>
+              </select>
+            </div>
+            <div class="accrual-header__actions">
+              <button type="button" id="accrual-lock-mode" onclick="OwnerAccrualApp.toggleLockMode()" class="btn btn-outline btn-sm" style="display:flex;align-items:center;gap:0.4rem;">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                Lock Months
+              </button>
+              <button type="button" onclick="OwnerAccrualApp.loadData()" class="btn btn-outline btn-sm">Refresh</button>
+            </div>
+          </div>
+          <h2 id="accrual-title" style="font-size:1rem;font-weight:800;margin:0 0 1rem;">Owner Accrual</h2>
+          <div class="accrual-table-wrap">
+            <table class="accrual-table">
+              <thead id="accrual-table-head"></thead>
+              <tbody id="accrual-table-body"><tr><td class="accrual-empty">Select the Accrual tab to load the report.</td></tr></tbody>
+            </table>
+          </div>
+          <p style="margin:0.75rem 0 0;color:var(--text-muted);font-size:0.76rem;font-weight:400;line-height:1.5;">
+            Calculations support up to 24 unlocked months. Lock a calculated month to save its closing balance and continue calculating the next 24 months from that snapshot.
+          </p>
+        </section>
+      </div>
     </main>
   </div>
 
@@ -221,6 +286,7 @@
   <script src="/js/auth.js"></script>
   <script src="/js/sidebar.js"></script>
   <script src="/js/main.js"></script>
+  <script src="/dashboard/owner-accrual.js?v=20260809-4"></script>
 
   <script>
     'use strict';
@@ -430,7 +496,15 @@
       }
     };
 
-    document.addEventListener('DOMContentLoaded', () => App.init());
+    document.addEventListener('DOMContentLoaded', async () => {
+      await App.init();
+      const showHashView = () => OwnerViewTabs.show(window.location.hash === '#accrual' ? 'accrual' : 'monthly');
+      if (!['#monthly', '#accrual'].includes(window.location.hash)) {
+        window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#monthly`);
+      }
+      await showHashView();
+      window.addEventListener('hashchange', showHashView);
+    });
   </script>
 </body>
 </html>

@@ -131,8 +131,7 @@
       editMode:       false,
       pendingChanges: {},
       pendingDeletes: new Set(),
-      userIp:         'unknown',
-      deviceInfo:     'unknown',
+      loggedInUserFullName: 'Unknown user',
       /* ── Account filter state ── */
       selectedAccounts: new Set(),
       /* ── Sort + page size ── */
@@ -149,6 +148,15 @@
           if (!authInfo) return;
           sb = window.BKAuth.sb;
           this.tenantId = authInfo.tenantId;
+
+          const metadataName = String(authInfo.user?.user_metadata?.full_name || '').trim();
+          if (metadataName) {
+            this.loggedInUserFullName = metadataName;
+          } else {
+            const employee = await window.BKAuth.getEmployee(authInfo.user?.email);
+            const employeeName = [employee?.first_name, employee?.last_name].filter(Boolean).join(' ').trim();
+            if (employeeName) this.loggedInUserFullName = employeeName;
+          }
 
           try {
             const { data: co } = await sb
@@ -179,8 +187,6 @@
         document.getElementById('export-csv-btn').addEventListener('click', () => this.exportToCSV());
         document.getElementById('ss-month').addEventListener('change', () => this.checkSnapshotStatus());
         document.getElementById('ss-year').addEventListener('change', () => this.checkSnapshotStatus());
-        // Detect IP + browser silently
-        this.detectUser();
         await this.loadAccounts();
         await this.loadEntries();
         await this.refreshNextBadge();
@@ -709,11 +715,13 @@
         };
         const fromEl = document.getElementById('f-date-from');
         const toEl   = document.getElementById('f-date-to');
+        const lastValid = { from: '', to: '' };
 
         const resetDates = () => {
           const defaultFrom = addDays(today, -45);
           toEl.value = today;
           fromEl.value = defaultFrom;
+          lastValid.from = defaultFrom; lastValid.to = today;
           toEl.setAttribute('min', defaultFrom);
           toEl.setAttribute('max', today);
           fromEl.removeAttribute('min');
@@ -723,28 +731,21 @@
         // Auto-select default 45-day range on load
         resetDates();
 
-        fromEl.addEventListener('change', () => {
-          const from = fromEl.value;
-          if (from) {
-            toEl.setAttribute('min', from);
-            toEl.setAttribute('max', today);
-          } else {
-            toEl.removeAttribute('min');
-            toEl.setAttribute('max', today);
-          }
-          apply();
-        });
-
-        toEl.addEventListener('change', () => {
-          const to = toEl.value;
-          if (to) {
-            fromEl.setAttribute('max', to);
-          } else {
-            fromEl.removeAttribute('min');
-            fromEl.setAttribute('max', today);
-          }
-          apply();
-        });
+        const bindDate = (el, key, syncLimits) => {
+          el.addEventListener('change', () => {
+            if (!el.checkValidity()) return;
+            lastValid[key] = el.value;
+            syncLimits(el.value);
+            apply();
+          });
+          el.addEventListener('blur', () => {
+            if (el.checkValidity()) return;
+            el.value = lastValid[key];
+            window.Toast?.show('Enter a valid calendar date within the allowed range.', 'error');
+          });
+        };
+        bindDate(fromEl, 'from', from => { if (from) toEl.setAttribute('min', from); else toEl.removeAttribute('min'); });
+        bindDate(toEl, 'to', to => { fromEl.setAttribute('max', to || today); });
 
         let timer;
         document.getElementById('f-search').addEventListener('input', () => {
@@ -803,6 +804,18 @@
           this.renderAccountFilter();
           this.updateAccountFilterBtn();
           apply();
+        });
+        document.getElementById('acct-filter-search').addEventListener('input', e => {
+          const query = e.target.value.trim().toLocaleLowerCase();
+          panel.querySelectorAll('.acct-filter-group').forEach(group => {
+            const groupMatch = group.textContent.trim().toLocaleLowerCase().includes(query),
+              items = panel.querySelectorAll(`input[data-acct][data-group="${CSS.escape(group.querySelector('.group-cb').dataset.group)}"]`);
+            let hasMatch = false; items.forEach(input => {
+              const matches = groupMatch || input.dataset.acct.toLocaleLowerCase().includes(query);
+              input.closest('.acct-filter-item').hidden = !matches;
+              hasMatch ||= matches;
+            }); group.hidden = !hasMatch;
+          });
         });
       },
 
@@ -1925,23 +1938,6 @@
       /* ── Year filter (from DB) ── */
       async loadYears() { /* removed — year/month dropdowns no longer used */ },
 
-      /* ── User detection (IP + browser) ── */
-      async detectUser() {
-        try {
-          const r = await fetch('https://api.ipify.org?format=json');
-          const j = await r.json();
-          this.userIp = j.ip || 'unknown';
-        } catch { this.userIp = 'unknown'; }
-        const ua = navigator.userAgent;
-        let browser = 'Unknown';
-        if      (ua.includes('Edg'))                           browser = 'Edge';
-        else if (ua.includes('Chrome') && !ua.includes('Edg')) browser = 'Chrome';
-        else if (ua.includes('Firefox'))                       browser = 'Firefox';
-        else if (ua.includes('Safari') && !ua.includes('Chrome')) browser = 'Safari';
-        const mobile = /Mobi|Android|iPad/i.test(ua);
-        this.deviceInfo = `${browser} · ${mobile ? 'Mobile' : 'Desktop'}`;
-      },
-
       /* ── Bind Edit mode controls ── */
       bindEditMode() {
         document.getElementById('edit-toggle-btn').addEventListener('click', () => {
@@ -2074,8 +2070,7 @@
             field_changed: fieldChanged,
             old_value:     oldValue !== null && oldValue !== undefined ? String(oldValue) : null,
             new_value:     newValue !== null && newValue !== undefined ? String(newValue) : null,
-            ip_address:    this.userIp,
-            device_info:   this.deviceInfo,
+            actor_name:    this.loggedInUserFullName,
             logged_at:     new Date().toISOString(), // explicit — works even without DB DEFAULT
           });
         } catch(e) {
@@ -2395,7 +2390,7 @@
               } else if (r.action === 'EDIT') {
                 desc = `${badge} <strong>${esc(r.entry_label || '')}</strong> &mdash; ${esc(r.field_changed || '')}: <span class="log-diff-inline"><s>${esc(r.old_value ?? '—')}</s> &rarr; <ins>${esc(r.new_value ?? '—')}</ins></span>`;
               }
-              const who = [r.ip_address, r.device_info].filter(Boolean).join(' · ');
+              const who = r.actor_name || 'Unknown user';
               return `<div class="log-entry">
                 <div class="log-entry__time">${this.fmtLogTime(r.logged_at)}</div>
                 <div class="log-entry__desc">${desc}</div>

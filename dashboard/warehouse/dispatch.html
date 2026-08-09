@@ -408,7 +408,7 @@
 
       const bookingsQuery = companyId
         ? sb.from('installation_bookings')
-          .select('order_no, scheduled_date, scheduled_time, status, customer_name, customer_city, customer_address, notes, pickup_notes')
+          .select('order_no, scheduled_date, scheduled_time, status, customer_name, customer_city, customer_address, notes, pickup_date, pickup_time, pickup_notes')
           .eq('company_id', companyId)
         : Promise.resolve({ data: [], error: null });
 
@@ -923,9 +923,14 @@
 
       orderGroups.forEach(group => {
         const packedDate = formatDispatchDate(group.timestamp_packed, true);
-        const pickupSchedule = pickupSchedules[group.reference_id];
-        const pickupDate = formatDispatchSchedule(pickupSchedule?.date, pickupSchedule?.slot);
         const installation = bookingByOrder.get(group.reference_id);
+        const legacyPickupSchedule = pickupSchedules[group.reference_id];
+        const pickupSchedule = {
+          date: installation?.pickup_date || legacyPickupSchedule?.date || '',
+          slot: installation?.pickup_time || legacyPickupSchedule?.slot || '',
+          notes: installation?.pickup_notes || legacyPickupSchedule?.notes || ''
+        };
+        const pickupDate = formatDispatchSchedule(pickupSchedule.date, pickupSchedule.slot);
         const delivery = deliveryByOrder.get(group.reference_id);
         const installDate = formatDispatchSchedule(installation?.scheduled_date, installation?.scheduled_time);
         const addressParts = String(installation?.customer_address || '').split(',').map(part => part.trim()).filter(Boolean);
@@ -954,7 +959,7 @@
           ? `<img src="${escFulfillment(group.packed_photo_url)}" alt="Packed order ${escFulfillment(group.reference_id)}" style="width: 80px; height: 50px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-elevated); display: block; cursor: pointer;" onclick="maximizePhoto(this.src)" title="View packed image" />`
           : '<span style="color: var(--text-muted);">No image</span>';
 
-        const notes = pickupSchedule?.notes || installation?.pickup_notes || '—';
+        const notes = pickupSchedule.notes || '—';
 
         tbody.innerHTML += `
           <tr>

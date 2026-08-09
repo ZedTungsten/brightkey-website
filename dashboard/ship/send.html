@@ -256,7 +256,7 @@
               <!-- Book Tab Content -->
               <div class="tab-content" id="tab-content-book">
                 <div class="panel">
-                  <div class="panel-header">Packed Orders Awaiting Delivery</div>
+                  <div class="panel-header">Orders</div>
                   <div class="table-responsive">
                     <table>
                       <thead>
@@ -267,6 +267,7 @@
                           <th>City</th>
                           <th>SKU</th>
                           <th>Qty</th>
+                          <th>Status</th>
                           <th>Pickup Date</th>
                           <th>Notes</th>
                           <th>Install Date / Time</th>
@@ -275,7 +276,7 @@
                       </thead>
                       <tbody id="sendout-list">
                         <tr>
-                          <td colspan="10">
+                          <td colspan="11">
                             <div class="loading-wrapper">
                               <div class="spinner-cyan"></div>
                               <span>Loading dispatch queue…</span>
@@ -693,6 +694,7 @@
       itemsPerPage: 10,
       pickupSchedules: {},
       dispatchSupplies: {},
+      productCategories: new Map(),
       selectedPickupRefId: null,
       selectedSuppliesRefId: null,
       modalDataLoaded: false,
@@ -729,15 +731,14 @@
         try {
           const sb = window.BKAuth.sb;
 
-          const [transactionsResult, bookingsResult, deliveryBookingsResult, settingsResult, damagedResult, suppliersResult] = await Promise.all([
+          const [transactionsResult, bookingsResult, deliveryBookingsResult, settingsResult, damagedResult, suppliersResult, productsResult] = await Promise.all([
             sb.from('inventory_transactions')
               .select('reference_id, sku, quantity, type, status, customer_name, customer_city, packed_photo_url, warehouse_id, created_at')
               .eq('company_id', this.companyId)
-              .in('type', ['customer_order', 'supplier_order'])
-              .in('status', ['packed', 'reserved', 'inspect', 'ordered'])
+              .eq('type', 'customer_order')
               .range(0, 499),
             sb.from('installation_bookings')
-              .select('order_no, scheduled_date, scheduled_time, customer_address, customer_phone, google_map_pin_url, pickup_date, pickup_time, pickup_notes')
+              .select('order_no, customer_name, customer_city, status, product_skus, product_qtys, scheduled_date, scheduled_time, customer_address, customer_phone, google_map_pin_url, pickup_date, pickup_time, pickup_notes, created_at')
               .eq('company_id', this.companyId)
               .order('created_at', { ascending: false })
               .range(0, 499),
@@ -756,7 +757,12 @@
               .is('archived_at', null),
             sb.from('suppliers')
               .select('id, name, street_address, city, province, contact_number')
-              .eq('company_id', this.companyId)
+              .eq('company_id', this.companyId),
+            sb.from('products')
+              .select('sku, category')
+              .or(`company_id.eq.${this.companyId},company_id.is.null`)
+              .order('sku')
+              .limit(1000)
           ]);
 
           const { data: txs, error: txErr } = transactionsResult;
@@ -778,8 +784,10 @@
           this.dispatchSupplies = settingsMap.get('dispatch_supplies') || {};
           if (damagedResult.error) throw damagedResult.error;
           if (suppliersResult.error) throw suppliersResult.error;
+          if (productsResult.error) throw productsResult.error;
           this.damagedShipments = damagedResult.data || [];
           this.suppliers = suppliersResult.data || [];
+          this.productCategories = new Map((productsResult.data || []).map(product => [String(product.sku || '').trim().toUpperCase(), String(product.category || '').trim().toLowerCase()]));
 
           this.updateBadgeCounts();
           this.renderSendOutQueue();
@@ -787,7 +795,7 @@
           console.error(err);
           const tbody = document.getElementById('sendout-list');
           if (tbody) {
-            tbody.innerHTML = `<tr><td colspan="10" style="text-align:center; padding:3rem; color:var(--text-muted);">Unable to load the dispatch queue. Please refresh and try again.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="11" style="text-align:center; padding:3rem; color:var(--text-muted);">Unable to load the orders. Please refresh and try again.</td></tr>`;
           }
           Toast.error('Unable to load the dispatch queue. Please refresh and try again.');
         }
@@ -836,7 +844,7 @@
 
         tbody.innerHTML = `
           <tr>
-            <td colspan="10">
+            <td colspan="11">
               <div class="loading-wrapper">
                 <div class="spinner-cyan"></div>
                 <span>Loading dispatch queue…</span>
@@ -849,25 +857,41 @@
         if (pagination) pagination.innerHTML = '';
       },
 
-      updateBadgeCounts() {
-        // 1. Calculate Send Count
-        const sendQueue = this.activeTransactions.filter(t => {
-          if (t.type !== 'customer_order') return false;
-          if (t.status !== 'packed') return false;
-          if (t.reference_id && t.reference_id.startsWith('RCV-')) return false;
-          const isBooked = this.deliveryBookings.some(db => db.reference_id === t.reference_id);
-          if (isBooked) return false;
+      isHiddenOrderFamily(orderNo) {
+        const normalized = String(orderNo || '').trim().toUpperCase();
+        return normalized.startsWith('OC-') || normalized.startsWith('DO-');
+      },
 
-          if (t.reference_id) {
-            const hasUnpacked = this.activeTransactions.some(other => 
-              other.reference_id === t.reference_id && 
-              ['reserved', 'inspect'].includes(other.status)
-            );
-            if (hasUnpacked) return false;
-          }
-          return true;
+      isServiceSku(sku) {
+        return this.productCategories.get(String(sku || '').trim().toUpperCase()) === 'service';
+      },
+
+      visibleItemsForBooking(booking) {
+        let items = this.activeTransactions.filter(item => item.reference_id === booking.order_no);
+        if (!items.length) {
+          const skus = String(booking.product_skus || '').split('|').map(value => value.trim()).filter(Boolean);
+          const qtys = String(booking.product_qtys || '').split('|').map(value => Number(value.trim()) || 0);
+          items = skus.map((sku, index) => ({ sku, quantity: qtys[index] || 0, status: booking.status || 'scheduled' }));
+        }
+        return items.filter(item => !this.isServiceSku(item.sku));
+      },
+
+      latestOrderStatus(booking, items = []) {
+        const ranks = { scheduled: 0, confirmed: 1, ordered: 2, reserved: 3, inspect: 4, packed: 5, dispatched: 6, in_progress: 7, received: 8, completed: 9, returned: 10, cancelled: 11 };
+        return items.reduce((latest, item) => (ranks[item.status] ?? -1) > (ranks[latest] ?? -1) ? item.status : latest, booking?.status || 'scheduled');
+      },
+
+      isHiddenSendStatus(status) {
+        return ['received', 'completed', 'cancelled'].includes(status);
+      },
+
+      updateBadgeCounts() {
+        // Keep the badge equivalent to the visible Send order list.
+        const visibleBookings = this.bookings.filter(booking => {
+          const items = this.visibleItemsForBooking(booking);
+          return !this.isHiddenOrderFamily(booking.order_no) && items.length && !this.isHiddenSendStatus(this.latestOrderStatus(booking, items));
         });
-        const sendCount = [...new Set(sendQueue.map(t => t.reference_id))].length;
+        const sendCount = new Set(visibleBookings.map(booking => booking.order_no).filter(Boolean)).size;
 
         // 2. Calculate Receive Count
         const receiveQueue = this.activeTransactions.filter(t => {
@@ -907,50 +931,45 @@
         if (!tbody) return;
         tbody.innerHTML = '';
 
-        const dispatchQueue = this.activeTransactions.filter(t => {
-          if (t.type !== 'customer_order') return false;
-          if (t.status !== 'packed') return false;
-          if (t.reference_id && t.reference_id.startsWith('RCV-')) return false;
-          const isBooked = this.deliveryBookings.some(db => db.reference_id === t.reference_id);
-          if (isBooked) return false;
-
-          if (t.reference_id) {
-            const hasUnpacked = this.activeTransactions.some(other => 
-              other.reference_id === t.reference_id && 
-              ['reserved', 'inspect'].includes(other.status)
-            );
-            if (hasUnpacked) return false;
-          }
-          return true;
-        });
-
-        if (dispatchQueue.length === 0) {
-          tbody.innerHTML = `<tr><td colspan="10" style="text-align:center; padding:3rem; color:var(--text-muted);">No packed orders ready for delivery.</td></tr>`;
+        if (this.bookings.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="11" style="text-align:center; padding:3rem; color:var(--text-muted);">No booked orders found.</td></tr>`;
           this.renderPagination(0, this.currentPageSendOut, 'sendout-pagination');
           return;
         }
 
         const groups = {};
-        dispatchQueue.forEach(t => {
-          const refId = t.reference_id || 'N/A';
-          if (!groups[refId]) {
-            groups[refId] = {
-              reference_id: refId,
-              customer_name: t.customer_name || 'N/A',
-              customer_city: t.customer_city || 'N/A',
-              packed_photo_url: t.packed_photo_url || '',
-              items: []
-            };
-          }
-          groups[refId].items.push(t);
-          if (t.packed_photo_url && !groups[refId].packed_photo_url) {
-            groups[refId].packed_photo_url = t.packed_photo_url;
+        this.bookings.forEach(booking => {
+          if (!booking.order_no || this.isHiddenOrderFamily(booking.order_no)) return;
+          groups[booking.order_no] = {
+            reference_id: booking.order_no,
+            customer_name: booking.customer_name || 'N/A',
+            customer_city: booking.customer_city || 'N/A',
+            packed_photo_url: '',
+            booking,
+            items: []
+          };
+        });
+        this.activeTransactions.forEach(t => {
+          const group = groups[t.reference_id];
+          if (!group) return;
+          group.items.push(t);
+          if (t.customer_name) group.customer_name = t.customer_name;
+          if (t.customer_city) group.customer_city = t.customer_city;
+          if (t.packed_photo_url && !group.packed_photo_url) {
+            group.packed_photo_url = t.packed_photo_url;
           }
         });
 
-        const groupList = Object.values(groups).sort((a, b) => {
-          const bookingA = this.bookings.find(booking => booking.order_no === a.reference_id);
-          const bookingB = this.bookings.find(booking => booking.order_no === b.reference_id);
+        Object.values(groups).forEach(group => {
+          group.items = this.visibleItemsForBooking(group.booking);
+        });
+
+        const groupList = Object.values(groups).filter(group => group.items.length && !this.isHiddenSendStatus(this.latestOrderStatus(group.booking, group.items))).sort((a, b) => {
+          const bookingA = a.booking;
+          const bookingB = b.booking;
+          const pickupA = bookingA?.pickup_date || this.pickupSchedules[a.reference_id]?.date || '';
+          const pickupB = bookingB?.pickup_date || this.pickupSchedules[b.reference_id]?.date || '';
+          if (Boolean(pickupA) !== Boolean(pickupB)) return pickupA ? 1 : -1;
           const dateA = bookingA?.scheduled_date ? new Date(bookingA.scheduled_date).getTime() : Number.POSITIVE_INFINITY;
           const dateB = bookingB?.scheduled_date ? new Date(bookingB.scheduled_date).getTime() : Number.POSITIVE_INFINITY;
 
@@ -968,6 +987,11 @@
 
           return a.reference_id.localeCompare(b.reference_id);
         });
+        if (!groupList.length) {
+          tbody.innerHTML = `<tr><td colspan="11" style="text-align:center; padding:3rem; color:var(--text-muted);">No active orders found.</td></tr>`;
+          this.renderPagination(0, this.currentPageSendOut, 'sendout-pagination');
+          return;
+        }
         const totalItems = groupList.length;
 
         const maxPage = Math.ceil(totalItems / this.itemsPerPage) || 1;
@@ -982,6 +1006,11 @@
         paginatedGroups.forEach(group => {
           const skusHtml = group.items.map(t => `<code>${t.sku}</code>`).join('<br/>');
           const qtysHtml = group.items.map(t => `<strong>${t.quantity}</strong>`).join('<br/>');
+          const latestStatus = this.latestOrderStatus(group.booking, group.items);
+          const statusLabel = String(latestStatus || 'scheduled').replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase());
+          const statusColors = ['completed', 'received'].includes(latestStatus)
+            ? 'background:#ECFDF5;color:#047857;' : ['cancelled', 'returned'].includes(latestStatus)
+              ? 'background:#FEF2F2;color:#B91C1C;' : 'background:#E6F7FB;color:var(--cyan-light);';
           
           const booking = this.bookings.find(b => b.order_no === group.reference_id);
           const dateFriendly = booking?.scheduled_date 
@@ -1022,6 +1051,15 @@
           if (group.packed_photo_url) {
             photoHtml = `<img src="${group.packed_photo_url}" alt="Packed Proof" style="width:80px; height:50px; object-fit:cover; border-radius:6px; border:1px solid var(--border); cursor:pointer;" onclick="maximizePhoto('${esc(group.packed_photo_url)}')" />`;
           }
+          const isFullyPacked = group.items.length > 0 && group.items.every(item => item.status === 'packed');
+          const hasDeliveryBooking = this.deliveryBookings.some(item => item.reference_id === group.reference_id);
+          const dispatchActions = isFullyPacked && !hasDeliveryBooking ? `
+                <button class="btn btn-sm" onclick="DeliveryApp.openAddSuppliesModal('${group.reference_id}')" style="justify-content:center; background:#FEF3C7; color:#92400E; border:none;">
+                  Add Supplies
+                </button>
+                <button class="btn btn-cyan btn-sm" onclick="DeliveryApp.openBookingModal('${group.reference_id}')" style="justify-content:center;">
+                  Book Delivery
+                </button>` : '';
 
           const tr = document.createElement('tr');
           tr.innerHTML = `
@@ -1031,6 +1069,7 @@
             <td>${esc(group.customer_city)}</td>
             <td>${skusHtml}</td>
             <td>${qtysHtml}</td>
+            <td><span style="display:inline-flex;padding:0.25rem 0.55rem;border-radius:999px;font-size:0.72rem;font-weight:600;white-space:nowrap;${statusColors}">${esc(statusLabel)}</span></td>
             <td>${scheduledHtml}</td>
             <td style="font-size:0.8rem; color:var(--text-secondary); max-width:200px; white-space:pre-wrap;">${esc(sched?.notes || booking?.pickup_notes || '—')}</td>
             <td><strong>${dateFriendly} ${installTime}</strong></td>
@@ -1039,12 +1078,7 @@
                 <button class="${schedBtnClass}" onclick="DeliveryApp.openSchedulePickupModal('${group.reference_id}')" style="${schedBtnStyle}">
                   ${schedBtnText}
                 </button>
-                <button class="btn btn-sm" onclick="DeliveryApp.openAddSuppliesModal('${group.reference_id}')" style="justify-content:center; background:#FEF3C7; color:#92400E; border:none;">
-                  Add Supplies
-                </button>
-                <button class="btn btn-cyan btn-sm" onclick="DeliveryApp.openBookingModal('${group.reference_id}')" style="justify-content:center;">
-                  Book Delivery
-                </button>
+                ${dispatchActions}
               </div>
             </td>
           `;
@@ -1084,7 +1118,7 @@
       },
 
       openBookingModal(referenceId) {
-        const matchingTx = this.activeTransactions.find(t => t.reference_id === referenceId);
+        const matchingTx = this.activeTransactions.find(t => t.reference_id === referenceId && !this.isServiceSku(t.sku));
         if (!matchingTx) return;
 
         const booking = this.bookings.find(b => b.order_no === referenceId);
@@ -1109,7 +1143,7 @@
           customer_name: matchingTx.customer_name || 'N/A',
           customer_city: city,
           packed_photo_url: matchingTx.packed_photo_url || '',
-          items: this.activeTransactions.filter(t => t.reference_id === referenceId && t.status === 'packed')
+          items: this.activeTransactions.filter(t => t.reference_id === referenceId && t.status === 'packed' && !this.isServiceSku(t.sku))
         };
 
         this.deliveryPhotoBlob = null;
@@ -1155,7 +1189,7 @@
 
       openSchedulePickupModal(referenceId) {
         this.selectedPickupRefId = referenceId;
-        const matchingItems = this.activeTransactions.filter(t => t.reference_id === referenceId && t.status === 'packed');
+        const matchingItems = this.activeTransactions.filter(t => t.reference_id === referenceId && !this.isServiceSku(t.sku));
         const matchingTx = matchingItems[0];
         const booking = this.bookings.find(b => b.order_no === referenceId);
         const damaged = this.damagedShipments.find(item => item.reference_id === referenceId);
@@ -1163,7 +1197,8 @@
         const supplierAddress = supplier
           ? [supplier.street_address, supplier.city, supplier.province].filter(Boolean).join(', ')
           : '';
-        const skus = [...new Set(matchingItems.map(item => item.sku).filter(Boolean))].join(', ');
+        const skus = [...new Set(matchingItems.map(item => item.sku).filter(Boolean))].join(', ')
+          || String(booking?.product_skus || '').split('|').map(value => value.trim()).filter(Boolean).join(', ');
         const installDate = booking?.scheduled_date
           ? new Date(booking.scheduled_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
           : 'N/A';
@@ -1173,8 +1208,8 @@
           : 'N/A';
 
         document.getElementById('schedule-order-no').textContent = referenceId;
-        document.getElementById('schedule-customer-name').textContent = matchingTx?.customer_name || 'N/A';
-        document.getElementById('schedule-customer-city').textContent = matchingTx?.customer_city || 'N/A';
+        document.getElementById('schedule-customer-name').textContent = matchingTx?.customer_name || booking?.customer_name || 'N/A';
+        document.getElementById('schedule-customer-city').textContent = matchingTx?.customer_city || booking?.customer_city || 'N/A';
         document.getElementById('schedule-customer-address').textContent = booking?.customer_address || supplierAddress || 'N/A';
         
         const pinContainer = document.getElementById('schedule-google-pin-container');
@@ -1217,7 +1252,7 @@
       },
 
       getSupplyWarehouseId(referenceId) {
-        return this.activeTransactions.find(t => t.reference_id === referenceId && t.status === 'packed')?.warehouse_id || null;
+        return this.activeTransactions.find(t => t.reference_id === referenceId && t.status === 'packed' && !this.isServiceSku(t.sku))?.warehouse_id || null;
       },
 
       getSupplyAvailable(sku, warehouseId) {
@@ -1239,7 +1274,7 @@
           return;
         }
         this.selectedSuppliesRefId = referenceId;
-        const matchingItems = this.activeTransactions.filter(t => t.reference_id === referenceId && t.status === 'packed');
+        const matchingItems = this.activeTransactions.filter(t => t.reference_id === referenceId && t.status === 'packed' && !this.isServiceSku(t.sku));
         const matchingTx = matchingItems[0];
         const booking = this.bookings.find(b => b.order_no === referenceId);
         const skus = [...new Set(matchingItems.map(item => item.sku).filter(Boolean))].join(', ');
