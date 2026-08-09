@@ -6,6 +6,7 @@ import {
   isAllowedRedirectUrl,
   setApiCors
 } from '../lib/api/security.js';
+import { signCheckoutPayload, verifyCheckoutPayload } from '../lib/api/checkout-pricing.js';
 
 test('bearer tokens are parsed strictly', () => {
   assert.equal(getBearerToken({ headers: { authorization: 'Bearer token-value' } }), 'token-value');
@@ -30,6 +31,41 @@ test('CORS reflects only approved origins', () => {
   const deniedRes = { setHeader: (key, value) => { deniedHeaders[key] = value; } };
   setApiCors({ headers: { origin: 'https://attacker.example' } }, deniedRes);
   assert.equal(deniedHeaders['Access-Control-Allow-Origin'], undefined);
+});
+
+test('checkout payload signatures reject altered totals and cart data', () => {
+  const secret = 'test-checkout-signing-secret';
+  const payload = {
+    company_id: '00000000-0000-4000-8000-000000000001',
+    total_cents: 125000,
+    shipping_cents: 15000,
+    discount_cents: 0,
+    coupon_code: '',
+    cart_items: [{ id: '00000000-0000-4000-8000-000000000002', quantity: 1, price: 110000 }]
+  };
+  const signature = signCheckoutPayload(payload, secret);
+  assert.equal(verifyCheckoutPayload(payload, signature, secret), true);
+  assert.equal(verifyCheckoutPayload({ ...payload, total_cents: 100 }, signature, secret), false);
+});
+
+test('sensitive settings and journal rows are not anonymously readable', () => {
+  const migration = fs.readFileSync(new URL('../database/migrations/20260809_security_and_query_hardening.sql', import.meta.url), 'utf8');
+  assert.match(migration, /Allow public storefront settings read/);
+  assert.match(migration, /FOR SELECT\s+TO anon\s+USING \(key IN/);
+  assert.match(migration, /ALTER TABLE public\.general_journal ENABLE ROW LEVEL SECURITY/);
+  assert.match(migration, /Allow tenant members journal access/);
+  assert.doesNotMatch(migration, /FOR SELECT USING \(true\)/);
+});
+
+test('checkout APIs rebuild prices from server-side catalog data', () => {
+  const paymongo = fs.readFileSync(new URL('../api/create-checkout-session.js', import.meta.url), 'utf8');
+  const stripe = fs.readFileSync(new URL('../api/create-stripe-checkout-session.js', import.meta.url), 'utf8');
+  const webhook = fs.readFileSync(new URL('../api/paymongo-webhook.js', import.meta.url), 'utf8');
+  assert.match(paymongo, /buildServerCheckout/);
+  assert.match(stripe, /buildServerCheckout/);
+  assert.match(webhook, /verifyCheckoutPayload/);
+  assert.doesNotMatch(paymongo, /const \{ company_id, billing, line_items/);
+  assert.doesNotMatch(stripe, /const \{ company_id, line_items/);
 });
 
 test('employee registration contains no development bypass credential', () => {

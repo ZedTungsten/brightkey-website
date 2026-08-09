@@ -63,3 +63,31 @@
 
   window.JournalDocumentViewer = viewer;
 })();
+
+window.JournalSummary = {
+  async load({ app, filters, dateFrom, dateTo, snapshotEntryNumbers, snapshotMonths, parseEntry }) {
+    const cleanedSearch = String(filters.search || '').replace(/,/g, '');
+    const parsedSearchNumber = cleanedSearch === '' ? NaN : Number(cleanedSearch);
+    const { data, error } = await window.BKAuth.sb.rpc('get_general_journal_summary', {
+      p_company_id: app.companyId,
+      p_date_from: dateFrom || null,
+      p_date_to: dateTo || null,
+      p_year: (!dateFrom && !dateTo && filters.year) ? Number(filters.year) : null,
+      p_month: (!dateFrom && !dateTo && filters.month) ? Number(filters.month) : null,
+      p_accounts: filters.selectedAccounts?.size ? [...filters.selectedAccounts] : null,
+      p_search: filters.search || null,
+      p_search_entry_number: filters.search ? parseEntry(filters.search) : null,
+      p_search_number: Number.isFinite(parsedSearchNumber) ? parsedSearchNumber : null,
+      p_search_is_integer: Number.isInteger(parsedSearchNumber),
+      p_snapshot_entry_numbers: snapshotEntryNumbers?.length ? snapshotEntryNumbers : null,
+      p_snapshot_months: snapshotMonths?.length ? snapshotMonths : null
+    });
+    if (error) throw error;
+    const summary = data?.[0] || {};
+    return {
+      sumDebit: Number(summary.sum_debit || 0),
+      sumCredit: Number(summary.sum_credit || 0),
+      rowCount: Number(summary.row_count || 0)
+    };
+  }
+};

@@ -418,8 +418,8 @@ async function getFreeShippingConfig() {
     await ensureSupabase();
     const sb = getSupabaseClient();
     if (!sb) { _freeShippingConfig = null; return null; }
-    const { data } = await sb.from('global_settings').select('value').eq('key', 'free_shipping').single();
-    _freeShippingConfig = data?.value || null;
+    const companyId = await window.BKStorefront.getCompanyId(); if (!companyId) { _freeShippingConfig = null; return null; }
+    const { data } = await sb.from('global_settings').select('value').eq('key', 'free_shipping').eq('company_id', companyId).maybeSingle(); _freeShippingConfig = data?.value || null;
   } catch { _freeShippingConfig = null; }
   return _freeShippingConfig;
 }
@@ -517,8 +517,8 @@ async function getFreeGiftsConfig() {
     await ensureSupabase();
     const sb = getSupabaseClient();
     if (!sb) { _freeGiftsConfig = null; return null; }
-    const { data } = await sb.from('global_settings').select('value').eq('key', 'free_gifts').single();
-    _freeGiftsConfig = data?.value || null;
+    const companyId = await window.BKStorefront.getCompanyId(); if (!companyId) { _freeGiftsConfig = null; return null; }
+    const { data } = await sb.from('global_settings').select('value').eq('key', 'free_gifts').eq('company_id', companyId).maybeSingle(); _freeGiftsConfig = data?.value || null;
   } catch { _freeGiftsConfig = null; }
   return _freeGiftsConfig;
 }
@@ -879,8 +879,8 @@ async function getUpsellCrossSellConfig() {
     await ensureSupabase();
     const sb = getSupabaseClient();
     if (!sb) { _upsellCrossSellConfig = null; return null; }
-    const { data } = await sb.from('global_settings').select('value').eq('key', 'upsell_cross_sell').single();
-    _upsellCrossSellConfig = data?.value || null;
+    const companyId = await window.BKStorefront.getCompanyId(); if (!companyId) { _upsellCrossSellConfig = null; return null; }
+    const { data } = await sb.from('global_settings').select('value').eq('key', 'upsell_cross_sell').eq('company_id', companyId).maybeSingle(); _upsellCrossSellConfig = data?.value || null;
   } catch (err) {
     console.error('getUpsellCrossSellConfig error:', err);
     _upsellCrossSellConfig = null;

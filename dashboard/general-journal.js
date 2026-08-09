@@ -1065,8 +1065,8 @@
         if (!f.prioritizeSnapshot) {
           return {
             filter: 'entry_number=gt.0',
-            dateFrom: f.dateFrom,
-            dateTo: f.dateTo
+            dateFrom: f.dateFrom, dateTo: f.dateTo,
+            snapshotEntryNumbers: [], snapshotMonths: []
           };
         }
 
@@ -1127,8 +1127,9 @@
 
               return {
                 filter: `or=(entry_number.in.(${ssNums.join(',')}),and(entry_number.gt.0,not.or(${ssConditions})))`,
-                dateFrom: adjustedFrom,
-                dateTo: adjustedTo
+                dateFrom: adjustedFrom, dateTo: adjustedTo,
+                snapshotEntryNumbers: ssNums,
+                snapshotMonths: activeSnapshots.map(s => `${s.year}-${String(s.month).padStart(2, '0')}`)
               };
             }
           }
@@ -1138,8 +1139,8 @@
 
         return {
           filter: 'entry_number=gt.0',
-          dateFrom: f.dateFrom,
-          dateTo: f.dateTo
+          dateFrom: f.dateFrom, dateTo: f.dateTo,
+          snapshotEntryNumbers: [], snapshotMonths: []
         };
       },
 
@@ -1490,17 +1491,11 @@
         const f = this.getFilters();
         const offset = (this.page - 1) * this.pageSize;
         try {
-          const { filter: ssFilter, dateFrom, dateTo } = await this.getQueryFilterString(f);
+          const { filter: ssFilter, dateFrom, dateTo, snapshotEntryNumbers, snapshotMonths } = await this.getQueryFilterString(f);
           const filterQS = this.buildFilterQS(f, { dateFrom, dateTo });
 
-          const totalUrl = `general_journal?select=debit,credit&${filterQS}&${ssFilter}`;
-          const all = await sbGet(
-            totalUrl,
-            { 'Range': '0-49999', 'Range-Unit': 'items' }
-          );
-          let sumD = 0, sumC = 0;
-          all.forEach(r => { sumD += parseFloat(r.debit || 0); sumC += parseFloat(r.credit || 0); });
-          const rowCount = all.length;
+          const summary = await window.JournalSummary.load({ app: this, filters: f, dateFrom, dateTo, snapshotEntryNumbers, snapshotMonths, parseEntry });
+          const { sumDebit: sumD, sumCredit: sumC, rowCount } = summary;
           this.totalCount = rowCount;
           const diff = sumD - sumC;
           document.getElementById('total-debit').textContent  = php(sumD);
@@ -1516,7 +1511,7 @@
           this.entries = await sbGet(pageUrl);
           this.renderTable();
           this.renderPagination();
-        } catch(e) {
+        } catch(e) { console.error('Failed to load General Journal entries:', e);
           const tblHeight = (this.pageSize * 37.6);
           tbody.innerHTML = `<tr><td colspan="${cols}" class="tbl-state error" style="height: ${tblHeight}px; vertical-align: middle; text-align: center;">Error: ${esc(e.message)}</td></tr>`;
         }

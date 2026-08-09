@@ -101,6 +101,31 @@ CREATE TABLE IF NOT EXISTS public.company_integrations (
   updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+ALTER TABLE public.company_integrations ENABLE ROW LEVEL SECURITY;
+
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'company_integrations' AND policyname = 'Allow tenant members integrations access'
+  ) THEN
+    CREATE POLICY "Allow tenant members integrations access" ON public.company_integrations
+      FOR ALL TO authenticated
+      USING (
+        company_id IN (
+          SELECT c.id FROM public.companies c
+          JOIN public.tenant_members tm ON c.tenant_id = tm.tenant_id
+          WHERE tm.user_id = auth.uid()
+        )
+      )
+      WITH CHECK (
+        company_id IN (
+          SELECT c.id FROM public.companies c
+          JOIN public.tenant_members tm ON c.tenant_id = tm.tenant_id
+          WHERE tm.user_id = auth.uid()
+        )
+      );
+  END IF;
+END $$;
+
 -- ── 9. Global Settings Table ─────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.global_settings (
   key                 TEXT NOT NULL,
@@ -117,7 +142,10 @@ DO $$ BEGIN
     SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'global_settings' AND policyname = 'Allow public read for settings'
   ) THEN
     CREATE POLICY "Allow public read for settings" ON public.global_settings
-      FOR SELECT USING (true);
+      FOR SELECT TO anon USING (key IN (
+        'free_shipping', 'free_gifts', 'upsell_cross_sell',
+        'delivery_lead_time', 'promo_popup', 'invoice_template'
+      ));
   END IF;
 
   IF NOT EXISTS (
@@ -359,7 +387,7 @@ END;
 $$;
 
 CREATE OR REPLACE VIEW public.view_public_integrations
-WITH (security_invoker = true)
+WITH (security_invoker = false)
 AS
 SELECT
   company_id,

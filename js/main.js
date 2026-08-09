@@ -485,6 +485,21 @@ var SUPABASE_ANON   = window.SUPABASE_ANON || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXV
 window.SUPABASE_URL = SUPABASE_URL;
 window.SUPABASE_ANON = SUPABASE_ANON;
 
+var storefrontCompanyPromise = null;
+window.BKStorefront = window.BKStorefront || {
+  async getCompanyId() {
+    if (window.BKStorefrontCompanyId) return window.BKStorefrontCompanyId;
+    if (!storefrontCompanyPromise) storefrontCompanyPromise = (async () => {
+      const host = window.location.hostname, parts = host.split('.');
+      const subdomain = (parts.length > 1 && host !== 'localhost' && host !== '127.0.0.1') ? parts[0] : 'brightkey';
+      const rows = await SupabaseREST.select('companies', `subdomain=eq.${encodeURIComponent(subdomain)}&select=id&limit=1`);
+      return (window.BKStorefrontCompanyId = rows?.[0]?.id || null);
+    })();
+    try { return await storefrontCompanyPromise; }
+    finally { storefrontCompanyPromise = null; }
+  }
+};
+
 /**
  * Returns a lightweight Supabase REST helper.
  * Usage:

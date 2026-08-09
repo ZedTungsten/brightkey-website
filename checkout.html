@@ -561,6 +561,7 @@
         const compData = await compRes.json();
         if (compData && compData.length > 0) {
           currentCompanyId = compData[0].id;
+          window.BKStorefrontCompanyId = currentCompanyId;
         }
 
         if (currentCompanyId) {
@@ -675,9 +676,9 @@
       }
 
       renderSummary();
+      await checkPaymentIntegrations();
       await loadShippingRates();
       await checkFreeShippingEligibility();
-      await checkPaymentIntegrations();
 
       // Prefill saved info
       const savedInfo = sessionStorage.getItem('bk_order_info');
@@ -750,7 +751,8 @@
     async function loadShippingRates() {
       try {
         // Fetch active zones
-        const zonesRes = await fetch(`${SUPABASE_URL}/rest/v1/shipping_zones?is_active=eq.true&select=id,fee`, {
+        if (!currentCompanyId) return;
+        const zonesRes = await fetch(`${SUPABASE_URL}/rest/v1/shipping_zones?company_id=eq.${currentCompanyId}&is_active=eq.true&select=id,fee`, {
           headers: { 'apikey': SUPABASE_ANON, 'Authorization': `Bearer ${SUPABASE_ANON}` }
         });
         if (!zonesRes.ok) throw new Error();
@@ -762,7 +764,7 @@
         });
 
         // Fetch areas
-        const areasRes = await fetch(`${SUPABASE_URL}/rest/v1/shipping_areas?select=name,zone_id`, {
+        const areasRes = await fetch(`${SUPABASE_URL}/rest/v1/shipping_areas?company_id=eq.${currentCompanyId}&select=name,zone_id`, {
           headers: { 'apikey': SUPABASE_ANON, 'Authorization': `Bearer ${SUPABASE_ANON}` }
         });
         if (!areasRes.ok) throw new Error();
@@ -787,7 +789,8 @@
 
     async function checkFreeShippingEligibility() {
       try {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/global_settings?key=eq.free_shipping&select=value`, {
+        if (!currentCompanyId) return;
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/global_settings?company_id=eq.${currentCompanyId}&key=eq.free_shipping&select=value`, {
           headers: { 'apikey': SUPABASE_ANON, 'Authorization': `Bearer ${SUPABASE_ANON}` }
         });
         if (!res.ok) return;
@@ -924,7 +927,8 @@
       btn.textContent = '...';
 
       try {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/coupons?code=eq.${encodeURIComponent(code)}&select=*`, {
+        if (!currentCompanyId) throw new Error('Store configuration is unavailable.');
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/coupons?company_id=eq.${currentCompanyId}&code=eq.${encodeURIComponent(code)}&select=*`, {
           headers: { 'apikey': SUPABASE_ANON, 'Authorization': `Bearer ${SUPABASE_ANON}` }
         });
         const rows = await res.json();
@@ -1222,33 +1226,6 @@
         }
       }
 
-      // Flatten each item to qty=1 with line total so we can distribute the discount
-      const lineItems = cartData
-        .filter(item => !item.isFreeGift)
-        .map(item => ({
-          name: item.title,
-          quantity: 1,
-          amount: item.price * item.quantity,
-          currency: 'PHP'
-        }));
-
-      // PayMongo forbids negative amounts — distribute discount proportionally across items
-      if (discountCents > 0 && appliedCoupon) {
-        const itemsSubtotal = lineItems.reduce((s, li) => s + li.amount, 0);
-        let remaining = discountCents;
-        for (let i = 0; i < lineItems.length; i++) {
-          const share = i < lineItems.length - 1
-            ? Math.round((lineItems[i].amount / itemsSubtotal) * discountCents)
-            : remaining;
-          lineItems[i].amount -= share;
-          remaining -= share;
-        }
-      }
-
-      if (shippingCents > 0) {
-        lineItems.push({ name: 'Shipping', quantity: 1, amount: shippingCents, currency: 'PHP' });
-      }
-
       const origin = window.location.origin;
 
       try {
@@ -1258,7 +1235,9 @@
           body: JSON.stringify({
             company_id: currentCompanyId,
             billing: { name: info.name, email: info.email, phone: info.phone },
-            line_items: lineItems,
+            cart_items: cartData,
+            shipping_city: info.city,
+            coupon_code: appliedCoupon ? appliedCoupon.code : '',
             success_url: `${origin}/checkout?payment=success`,
             cancel_url: `${origin}/checkout`,
             description: 'Brightkey Order',
@@ -1268,11 +1247,6 @@
               customer_phone:   info.phone,
               shipping_city:    info.city,
               shipping_address: info.address,
-              shipping_cents:   String(shippingCents),
-              discount_cents:   String(discountCents),
-              coupon_code:      appliedCoupon ? appliedCoupon.code : '',
-              total_cents:      String(totalCents),
-              cart_items:       JSON.stringify(cartData),
               billing_info:     info.billingInfo ? JSON.stringify(info.billingInfo) : 'same'
             }
           })
@@ -1297,32 +1271,6 @@
 
       const info = JSON.parse(sessionStorage.getItem('bk_order_info'));
       
-      const lineItems = cartData
-        .filter(item => !item.isFreeGift)
-        .map(item => ({
-          name: item.title,
-          quantity: item.quantity,
-          amount: Math.round(item.price * 100), // Stripe unit price in cents
-          currency: 'PHP'
-        }));
-
-      if (discountCents > 0 && appliedCoupon) {
-        const itemsSubtotal = lineItems.reduce((s, li) => s + (li.amount * li.quantity), 0);
-        let remaining = discountCents;
-        for (let i = 0; i < lineItems.length; i++) {
-          const itemTotal = lineItems[i].amount * lineItems[i].quantity;
-          const share = i < lineItems.length - 1
-            ? Math.round((itemTotal / itemsSubtotal) * discountCents)
-            : remaining;
-          lineItems[i].amount -= Math.round(share / lineItems[i].quantity);
-          remaining -= share;
-        }
-      }
-
-      if (shippingCents > 0) {
-        lineItems.push({ name: 'Shipping', quantity: 1, amount: shippingCents, currency: 'PHP' });
-      }
-
       const origin = window.location.origin;
 
       try {
@@ -1331,7 +1279,9 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             company_id: currentCompanyId,
-            line_items: lineItems,
+            cart_items: cartData,
+            shipping_city: info.city,
+            coupon_code: appliedCoupon ? appliedCoupon.code : '',
             success_url: `${origin}/checkout?payment=success`,
             cancel_url: `${origin}/checkout`
           })

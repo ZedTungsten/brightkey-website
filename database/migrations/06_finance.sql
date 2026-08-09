@@ -38,6 +38,31 @@ CREATE TABLE IF NOT EXISTS public.general_journal (
   created_at    TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+ALTER TABLE public.general_journal ENABLE ROW LEVEL SECURITY;
+
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'general_journal' AND policyname = 'Allow tenant members journal access'
+  ) THEN
+    CREATE POLICY "Allow tenant members journal access" ON public.general_journal
+      FOR ALL TO authenticated
+      USING (
+        company_id IN (
+          SELECT c.id FROM public.companies c
+          JOIN public.tenant_members tm ON c.tenant_id = tm.tenant_id
+          WHERE tm.user_id = auth.uid()
+        )
+      )
+      WITH CHECK (
+        company_id IN (
+          SELECT c.id FROM public.companies c
+          JOIN public.tenant_members tm ON c.tenant_id = tm.tenant_id
+          WHERE tm.user_id = auth.uid()
+        )
+      );
+  END IF;
+END $$;
+
 CREATE TABLE IF NOT EXISTS public.journal_audit_log (
   id            SERIAL PRIMARY KEY,
   company_id    UUID REFERENCES public.companies(id) ON DELETE CASCADE,
