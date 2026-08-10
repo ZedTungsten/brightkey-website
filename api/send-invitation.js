@@ -61,10 +61,15 @@ export default async function handler(req, res) {
     })) return;
 
     // 1. Verify user's session token and identity
-    const access = await requireCompanyAccess(req, supabase, company_id, { roles: ['owner', 'admin'] });
+    const access = await requireCompanyAccess(req, supabase, company_id, { roles: ['owner', 'admin'], modules: ['HR', 'HR:Directory'] });
     if (access.error) return sendAccessError(res, access);
     if (access.company.tenant_id !== tenant_id) {
       return res.status(403).json({ error: 'The selected company does not belong to this tenant.' });
+    }
+    const actorRole = String(access.member.role || '').toLowerCase();
+    const actorIsAdmin = actorRole === 'owner' || actorRole === 'admin';
+    if (!actorIsAdmin && !(invite_type === 'full' && role === 'employee')) {
+      return res.status(403).json({ error: 'You do not have permission to create this type of invitation.' });
     }
 
     const inviteToken = randomBytes(32).toString('base64url');

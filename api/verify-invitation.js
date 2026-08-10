@@ -55,7 +55,18 @@ export default async function handler(req, res) {
       return res.status(200).json({ valid: false, reason: 'expired' });
     }
 
-    return res.status(200).json({ valid: true });
+    const { data: existingMember, error: memberError } = await supabase
+      .from('tenant_members')
+      .select('id')
+      .eq('tenant_id', tenant)
+      .eq('user_email', email.toLowerCase().trim())
+      .maybeSingle();
+    if (memberError) {
+      console.error('Invitation membership lookup failed:', memberError);
+      return res.status(503).json({ valid: false, reason: 'verification_unavailable' });
+    }
+
+    return res.status(200).json({ valid: true, existing_member: Boolean(existingMember) });
 
   } catch (err) {
     console.error('Verify invitation crash:', err);

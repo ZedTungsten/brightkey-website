@@ -56,7 +56,7 @@ export default async function handler(req, res) {
     employee_payload
   } = req.body;
 
-  if (!tenant_id || !company_id || !email || !signature || !password) {
+  if (!tenant_id || !company_id || !email || !signature) {
     return res.status(400).json({ error: 'Missing required registration parameters.' });
   }
 
@@ -123,6 +123,7 @@ export default async function handler(req, res) {
 
     let userId = null;
     let createdAuthUser = false;
+    let createdMembership = false;
     let reusedAuthUser = null;
 
     // Removing tenant access intentionally keeps the shared auth identity and
@@ -139,6 +140,9 @@ export default async function handler(req, res) {
     }
 
     if (!userId) {
+      if (!password) {
+        return res.status(400).json({ error: 'Create a password to finish setting up this new BrightKey account.' });
+      }
       const { data: authData, error: authError } = await supabase.auth.admin.createUser({
         email: activeEmail,
         password,
@@ -157,9 +161,11 @@ export default async function handler(req, res) {
     }
 
     const rollbackMembership = async () => {
-      await supabase.from('tenant_members').delete()
-        .eq('tenant_id', tenant_id)
-        .eq('user_id', userId);
+      if (createdMembership) {
+        await supabase.from('tenant_members').delete()
+          .eq('tenant_id', tenant_id)
+          .eq('user_id', userId);
+      }
       if (createdAuthUser) await supabase.auth.admin.deleteUser(userId);
     };
 
@@ -175,22 +181,35 @@ export default async function handler(req, res) {
       memberModules = invitedRole.substring(7).split(',').map(s => s.trim()).filter(Boolean);
     }
 
-    const { error: tmError } = await supabase.from('tenant_members').insert({
-      tenant_id: tenant_id,
-      user_id: userId,
-      role: memberRole,
-      accessible_modules: memberModules,
-      user_email: activeEmail,
-      full_name: fullName
-    });
-
-    if (tmError) {
-      console.error('Tenant Member Insert Error:', tmError);
+    const { data: existingMembership, error: membershipLookupError } = await supabase.from('tenant_members')
+      .select('id').eq('tenant_id', tenant_id).eq('user_id', userId).maybeSingle();
+    if (membershipLookupError) {
+      console.error('Tenant Member Lookup Error:', membershipLookupError);
       if (createdAuthUser) await supabase.auth.admin.deleteUser(userId);
-      return res.status(500).json({ error: 'Workspace access could not be restored. Please ask your administrator to check the existing membership.' });
+      return res.status(503).json({ error: 'Workspace access could not be checked. Please try again shortly.' });
+    }
+    if (reusedAuthUser && !existingMembership && !password) {
+      return res.status(400).json({ error: 'Create a password to restore access to this BrightKey account.' });
+    }
+    if (!existingMembership) {
+      const { error: tmError } = await supabase.from('tenant_members').insert({
+        tenant_id: tenant_id,
+        user_id: userId,
+        role: memberRole,
+        accessible_modules: memberModules,
+        user_email: activeEmail,
+        full_name: fullName
+      });
+
+      if (tmError) {
+        console.error('Tenant Member Insert Error:', tmError);
+        if (createdAuthUser) await supabase.auth.admin.deleteUser(userId);
+        return res.status(500).json({ error: 'Workspace access could not be restored. Please ask your administrator to check the existing membership.' });
+      }
+      createdMembership = true;
     }
 
-    if (reusedAuthUser) {
+    if (reusedAuthUser && password) {
       const { error: updateAuthError } = await supabase.auth.admin.updateUserById(reusedAuthUser.id, {
         password,
         email_confirm: true,
@@ -348,7 +367,7 @@ export default async function handler(req, res) {
                 <h2 style="color: #0891b2; font-weight: bold; margin-bottom: 20px;">Welcome to BrightKey Solutions!</h2>
                 <p>Hello ${employee_payload.first_name},</p>
                 <p>Your employee profile has been created and your account is now active.</p>
-                <p>You can access your dashboard at any time by signing in with your email and the password you created:</p>
+                <p>You can access your dashboard at any time by signing in with your email and ${existingMembership ? 'your existing BrightKey password' : 'the password you created'}:</p>
                 <p style="margin-top: 20px;">
                   <a href="https://www.brightkeysolutions.com/login" style="background-color: #06b6d4; color: white; padding: 10px 20px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">
                     Access Your Dashboard

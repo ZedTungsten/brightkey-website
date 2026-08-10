@@ -9,7 +9,7 @@
   <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="../css/style.css" />
   <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg?v=2" />
-  <link rel="stylesheet" href="/dashboard/employee-directory.css">
+  <link rel="stylesheet" href="/dashboard/employee-directory.css?v=2">
 </head>
 
 <body>
@@ -378,13 +378,41 @@
     </div>
   </div>
 
+  <!-- Choose how the employee is linked before opening the full form -->
+  <div class="confirm-overlay" id="employee-entry-choice-modal" role="dialog" aria-modal="true" aria-labelledby="employee-entry-choice-title">
+    <div class="confirm-box employee-entry-choice-box">
+      <div class="confirm-box__title" id="employee-entry-choice-title">Add New Employee to Directory</div>
+      <p class="employee-entry-choice-copy">Choose how you want to add this employee.</p>
+      <div class="employee-entry-options" role="radiogroup" aria-label="BrightKey access status">
+        <div class="employee-entry-option employee-entry-option-with-account">
+          <label class="employee-entry-option-main"><input type="radio" name="employee-entry-type" value="existing" onchange="BKDirectoryAccess.updateEmployeeEntryChoice()" /><span><strong>Already added to Settings &gt; Access</strong><small>Link the directory profile to an existing BrightKey account.</small></span></label>
+          <label class="employee-entry-account" id="employee-entry-account-wrap" for="employee-entry-account" hidden>
+            <span>BrightKey account</span>
+            <select id="employee-entry-account" class="form-input" onchange="BKDirectoryAccess.updateEmployeeEntryChoice()"></select>
+            <small id="employee-entry-account-help">Only Access users who are not yet in the directory are shown.</small>
+          </label>
+        </div>
+        <label class="employee-entry-option"><input type="radio" name="employee-entry-type" value="new" onchange="BKDirectoryAccess.updateEmployeeEntryChoice()" /><span><strong>New Employee</strong><small>Produce a registration link for an employee without BrightKey access.</small></span></label>
+        <label class="employee-entry-option"><input type="radio" name="employee-entry-type" value="manual" onchange="BKDirectoryAccess.updateEmployeeEntryChoice()" /><span><strong>Fill out details myself</strong><small>Open the complete employee form and enter the details now.</small></span></label>
+      </div>
+      <label class="employee-entry-link" id="employee-entry-link-output" for="employee-entry-link-url" hidden>
+        <span>Employee registration link</span>
+        <div class="employee-entry-link-row">
+          <input type="text" id="employee-entry-link-url" class="form-input" readonly />
+          <button type="button" class="btn btn-outline btn-sm" onclick="BKDirectoryAccess.copyProducedEmployeeLink(App.showToast)">Copy Link</button>
+        </div>
+      </label>
+      <div class="confirm-box__actions">
+        <button type="button" class="btn btn-discard btn-sm" onclick="BKDirectoryAccess.closeEmployeeEntryChooser()">Cancel</button>
+        <button type="button" class="btn btn-save btn-sm" id="employee-entry-continue" onclick="BKDirectoryAccess.continueEmployeeEntry()" disabled>Produce Link</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Add New Employee Modal Overlay -->
   <div class="confirm-overlay" id="add-employee-modal" role="dialog" aria-modal="true" style="display:none;">
     <div class="confirm-box" style="max-width: 750px; border-radius:12px; text-align: left; padding: 2rem; width: calc(100% - 2rem); max-height: 90vh; display: flex; flex-direction: column;">
-      <div class="confirm-box__title" style="margin-bottom: 1.5rem; font-size: 1.2rem; font-weight: 800; border-bottom: 1px solid var(--border); padding-bottom: 0.75rem; display: flex; justify-content: space-between; align-items: center;">
-        <span>Add New Employee</span>
-        <button type="button" class="btn btn-outline btn-sm" onclick="App.openInviteLinkModal()" style="font-size: 0.78rem; padding: 0.4rem 0.85rem;">Send Link</button>
-      </div>
+      <div class="confirm-box__title" style="margin-bottom: 1.5rem; font-size: 1.2rem; font-weight: 800; border-bottom: 1px solid var(--border); padding-bottom: 0.75rem;">Add New Employee</div>
       
       <form id="add-employee-form" style="overflow-y: auto; flex: 1; padding-right: 0.5rem; margin-bottom: 1.5rem;">
         
@@ -427,7 +455,8 @@
           </div>
           <div class="form-group">
             <label class="form-label" for="new-emp-email" style="font-size: 0.72rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); display: block; margin-bottom: 0.25rem;">Email Address <span style="color:var(--danger)">*</span></label>
-            <input type="email" id="new-emp-email" class="form-input" style="width:100%; border:1px solid var(--border); border-radius:6px; padding:0.55rem 0.75rem;" required />
+            <input type="hidden" id="new-emp-account" value="" />
+            <input type="email" id="new-emp-email" class="form-input" style="width:100%; border:1px solid var(--border); border-radius:6px; padding:0.55rem 0.75rem;" placeholder="Enter email address" required />
           </div>
           <div class="form-group">
             <label class="form-label" for="new-emp-emergency-contact-name" style="font-size: 0.72rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); display: block; margin-bottom: 0.25rem;">Emergency Contact Name <span style="color:var(--danger)">*</span></label>
@@ -606,6 +635,7 @@
       </form>
 
       <div class="confirm-box__actions" style="border-top: 1px solid var(--border); padding-top: 1rem; display: flex; justify-content: flex-end; gap: 0.75rem;">
+        <button type="button" class="btn btn-ghost btn-sm" onclick="BKDirectoryAccess.backToEmployeeEntryChooser(App.allEmployees)">Back</button>
         <button type="button" class="btn btn-discard btn-sm" onclick="App.closeAddEmployeeModal()">Cancel</button>
         <button type="button" class="btn btn-save btn-sm" onclick="App.submitAddEmployeeForm()">Save Employee</button>
       </div>
@@ -616,9 +646,9 @@
   <script src="../js/auth.js"></script>
   <script src="../js/sidebar.js"></script>
   <script src="../js/main.js"></script>
-  <script src="/dashboard/employee-directory-access.js"></script>
+  <script src="/dashboard/employee-directory-access.js?v=5"></script>
   <script src="/dashboard/employee-directory-time.js"></script>
-  <script src="/dashboard/employee-directory.js"></script>
+  <script src="/dashboard/employee-directory.js?v=4"></script>
 
   <script defer src="/_vercel/speed-insights/script.js"></script>
 </body>

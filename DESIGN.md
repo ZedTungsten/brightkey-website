@@ -97,6 +97,28 @@ tr.table-spacer-row td {
 }
 ```
 
+### Page-Embedded Viewers Must Not Trap Vertical Scrolling
+
+Document, image, PDF, report, and template previews embedded in a normally
+scrolling page must leave vertical wheel and trackpad gestures to the page,
+even while the pointer is over the viewer. The viewer may own horizontal
+overflow for wide content, but it must not become a competing vertical scroll
+container.
+
+```css
+.page-viewer {
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+}
+```
+
+Do not use `overflow: auto` or `overscroll-behavior: contain` on this kind of
+viewer. Those declarations capture vertical gestures and make the surrounding
+page appear stuck. This rule is different from a deliberately fixed-height
+table, drawer, or modal body whose contents are explicitly intended to scroll
+inside their own region.
+
 **Bonus — prevent page jump on drawer open/close:** Save and restore the scroll container's `scrollTop` around the close transition, since removing a `position: fixed` overlay can trigger a layout reflow that resets scroll position:
 ```js
 function closeDrawer() {

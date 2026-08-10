@@ -549,7 +549,7 @@
     <form id="emp-form">
 
       <!-- ── SECTION 1: Personal Information ── -->
-      <div class="form-section">
+      <div class="form-section" id="password-section">
         <div class="section-head">
           <div class="section-icon">
             <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
@@ -903,6 +903,7 @@
     let inviteRole = '';
     let inviteEmail = '';
     let inviteSig = '';
+    let existingAccessAccount = false;
 
     async function validateInvitation() {
       const params = new URLSearchParams(window.location.search);
@@ -958,23 +959,34 @@
         }
         return;
       }
+      existingAccessAccount = Boolean(inviteStatus.existing_member);
 
-      // Check if user has already created their account (exists in tenant_members)
-      try {
-        const { data: member, error } = await sb
-          .from('tenant_members')
-          .select('id')
-          .eq('user_email', inviteEmail.toLowerCase().trim())
-          .eq('tenant_id', inviteTenant)
-          .limit(1);
+      // Legacy invitations still stop accounts that have already registered.
+      // Directory links for verified Access users continue so they can supply
+      // employee details without replacing their current password.
+      if (!existingAccessAccount) {
+        try {
+          const { data: member, error } = await sb
+            .from('tenant_members')
+            .select('id')
+            .eq('user_email', inviteEmail.toLowerCase().trim())
+            .eq('tenant_id', inviteTenant)
+            .limit(1);
 
-        if (!error && member && member.length > 0) {
-          document.getElementById('registration-page').style.display = 'none';
-          document.getElementById('already-registered-state').style.display = 'block';
-          return;
+          if (!error && member && member.length > 0) {
+            document.getElementById('registration-page').style.display = 'none';
+            document.getElementById('already-registered-state').style.display = 'block';
+            return;
+          }
+        } catch (err) {
+          console.error('Error checking existing membership:', err);
         }
-      } catch (err) {
-        console.error('Error checking existing membership:', err);
+      }
+
+      if (existingAccessAccount) {
+        document.getElementById('password-section').hidden = true;
+        document.getElementById('new-password').required = false;
+        document.getElementById('confirm-password').required = false;
       }
 
       // Pre-fill email and freeze it (unless it is a placeholder link-only invite)
@@ -1300,8 +1312,8 @@
       const pass = document.getElementById('new-password').value;
       const confirm = document.getElementById('confirm-password').value;
       const { lengthValid, capitalValid, lowercaseValid, numberValid, symbolValid } = validatePassword(pass);
-      const passValid = lengthValid && capitalValid && lowercaseValid && numberValid && symbolValid;
-      const matchValid = pass === confirm && pass !== '';
+      const passValid = existingAccessAccount || (lengthValid && capitalValid && lowercaseValid && numberValid && symbolValid);
+      const matchValid = existingAccessAccount || (pass === confirm && pass !== '');
 
       const fgPass = document.getElementById('fg-new-password');
       const fgConfirm = document.getElementById('fg-confirm-password');
@@ -1334,7 +1346,7 @@
       hideAlert();
 
       if (!validateAll()) {
-        showAlert('error', 'Please fill in all required fields and ensure password requirements are met.');
+        showAlert('error', existingAccessAccount ? 'Please fill in all required fields.' : 'Please fill in all required fields and ensure password requirements are met.');
         document.querySelector('.has-error')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
         return;
       }
@@ -1390,7 +1402,7 @@
           philhealth:        document.getElementById('philhealth-number').value.trim() || null,
         };
 
-        const chosenPassword = document.getElementById('new-password').value;
+        const chosenPassword = existingAccessAccount ? null : document.getElementById('new-password').value;
 
         const apiRes = await fetch('/api/register-employee', {
           method: 'POST',
@@ -1411,6 +1423,12 @@
         const apiData = await apiRes.json();
         if (!apiRes.ok) {
           throw new Error(apiData.error || 'Server rejected registration.');
+        }
+
+        if (existingAccessAccount) {
+          submitBtn.textContent = 'Employee profile saved! Redirecting...';
+          window.location.href = 'login.html';
+          return;
         }
 
         // Show success loading state and login

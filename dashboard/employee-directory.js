@@ -86,6 +86,7 @@
        DirectoryApp
      ══════════════════════════════════════════════════ */
     const App = {
+      showToast: toast,
       allEmployees: [],
       filtered: [],
       page: 1,
@@ -453,10 +454,7 @@
           this.activeUserEmails = new Set();
           this.invitedEmails = new Set();
           try {
-            const { data: tmData } = await getSb()
-              .from('tenant_members')
-              .select('user_email')
-              .eq('tenant_id', this.tenantId);
+            const tmData = await window.BKDirectoryAccess.loadDirectoryMembers(getSb(), this.tenantId);
             if (tmData) {
               tmData.forEach(m => {
                 if (m.user_email) this.activeUserEmails.add(m.user_email.toLowerCase().trim());
@@ -1721,7 +1719,8 @@
         }
       },
 
-      openAddEmployeeModal() {
+      openAddEmployeeModal(accountMode = '', accountId = '') {
+        if (!accountMode) { window.BKDirectoryAccess.openEmployeeEntryChooser(this.allEmployees); return; }
         // 1. Calculate next employee number
         let maxNum = 0;
         const regex = new RegExp(`^${this.employeePrefix}-(\\d+)`);
@@ -1744,7 +1743,7 @@
         document.getElementById('new-emp-number').value = formattedNum;
         document.getElementById('new-emp-dob').value = '2000-01-01';
         document.getElementById('new-emp-date-hired').value = new Date().toISOString().split('T')[0];
-        document.getElementById('new-emp-email').value = `${formattedNum.toLowerCase()}@brightkey.com`;
+        window.BKDirectoryAccess.configureEmployeeAccount(accountMode, accountId);
         document.getElementById('new-emp-status').value = 'Active';
 
         // 4. Open modal overlay
@@ -1870,8 +1869,8 @@
         if (this.companyId) {
           insertBody.company_id = this.companyId;
         }
-
         try {
+          window.BKDirectoryAccess.applySelectedEmployeeAccount(insertBody);
           const insertedRows = await sbInsert(insertBody);
           if (insertedRows && insertedRows.length > 0) {
             const realRecord = insertedRows[0];

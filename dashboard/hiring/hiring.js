@@ -20,6 +20,7 @@ const HiringApp = {
   hiringEmailSaveTimer: null,
   hiringEmailEditSnapshot: null,
   hiringEmailPlaceholderTarget: null,
+  hiringEmailPreviewEmployee: {},
   applicationSummaries: [],
   applications: [],
   selectedApplicantJobCode: '',
@@ -68,14 +69,14 @@ const HiringApp = {
     }
     const path = window.location.pathname.replace(/\/+$/, '');
     let activeTab = 'job-post';
-    if (path.endsWith('/applicants')) activeTab = 'applicants';
-    if (path.endsWith('/templates')) activeTab = 'templates';
-    if (path.endsWith('/settings')) activeTab = 'settings';
+    if (path.endsWith('/applicants')) activeTab = 'applicants'; else if (path.endsWith('/templates')) activeTab = 'templates';
+    else if (path.endsWith('/forms')) activeTab = 'forms'; else if (path.endsWith('/settings')) activeTab = 'settings';
+    if (activeTab === 'templates' && window.location.hash === '#forms') return window.location.replace('/dashboard/hiring/forms');
     this.setActiveTab(activeTab);
     if (activeTab === 'job-post') {
       this.renderJobPostPage();
       this.renderModals();
-      await Promise.all([this.loadEmployees(), this.loadJobPosts()]);
+      await Promise.all([this.loadEmployees(), this.loadJobPosts(), window.BKHiringJobApplicationForm?.init(this)]);
     } else if (activeTab === 'applicants') {
       this.renderApplicantsPage();
       await this.loadApplicationSummaries();
@@ -84,19 +85,16 @@ const HiringApp = {
         this.applicantHashListenerBound = true;
       }
     } else if (activeTab === 'templates') {
-      const templateTab = window.location.hash === '#forms'
-        ? 'forms'
-        : window.location.hash === '#email'
-          ? 'email'
-          : 'posting';
+      const templateTab = window.location.hash === '#email' ? 'email' : window.location.hash === '#contract' ? 'contract' : 'posting';
       this.renderTemplateSubtabs(templateTab);
       this.renderTemplatesPage(templateTab);
       if (templateTab === 'posting') await this.loadTemplateData();
-      if (templateTab === 'forms') await this.loadApplicationForms();
       if (templateTab === 'email') await this.loadHiringEmailTemplates();
+      if (templateTab === 'contract') await window.BKHiringContractTemplate?.init(this);
+    } else if (activeTab === 'forms') {
+      this.renderTemplatesPage('forms'); await this.loadApplicationForms();
     } else if (activeTab === 'settings') {
-      this.renderSettingsPage();
-      await this.loadHiringInformation();
+      this.renderSettingsPage(); await this.loadHiringInformation(); await window.BKHiringSignatureSettings?.init(this);
     }
   },
   setActiveTab(activeTab) {
@@ -573,7 +571,7 @@ const HiringApp = {
         <div class="hiring-page-header">
           <div>
             <h2>Settings</h2>
-            <p class="hiring-page-description">Manage the contact details shown with your hiring information.</p>
+            <p class="hiring-page-description">Manage hiring contact details and employment contract signatures.</p>
           </div>
         </div>
         <div class="hiring-panel settings-panel">
@@ -619,7 +617,7 @@ const HiringApp = {
         <div class="settings-actions">
           <button class="btn btn-primary" id="save-hiring-information" type="submit">Save Changes</button>
         </div>
-      </form>`;
+      </form><div id="hiring-signature-settings"></div>`;
     document.getElementById('hiring-email').value = this.hiringInformation.email;
     document.getElementById('hiring-contact-number').value = this.hiringInformation.contactNumber;
     document.getElementById('hiring-page-website').value = this.hiringInformation.hiringPageWebsite;
@@ -682,14 +680,14 @@ const HiringApp = {
     this.showToast('Hiring information saved.');
   },
   async switchTemplateSubtab(tab) {
-    const nextTab = ['forms', 'email'].includes(tab) ? tab : 'posting';
+    const nextTab = ['email', 'contract'].includes(tab) ? tab : 'posting';
     const nextHash = nextTab === 'posting' ? window.location.pathname : `#${nextTab}`;
     history.replaceState(null, '', nextHash);
     this.renderTemplateSubtabs(nextTab);
     this.renderTemplatesPage(nextTab);
     if (nextTab === 'posting') await this.loadTemplateData();
-    if (nextTab === 'forms') await this.loadApplicationForms();
     if (nextTab === 'email') await this.loadHiringEmailTemplates();
+    if (nextTab === 'contract') await window.BKHiringContractTemplate?.init(this);
   },
   renderTemplateSubtabs(templateTab = 'posting') {
     document.querySelector('.hiring-template-subtabs')?.remove();
@@ -698,11 +696,11 @@ const HiringApp = {
     const subtabBar = document.createElement('nav');
     subtabBar.className = 'hiring-template-subtabs';
     subtabBar.setAttribute('aria-label', 'Template sections');
-    ['posting', 'forms', 'email'].forEach((tab) => {
+    ['posting', 'email', 'contract'].forEach((tab) => {
       const button = document.createElement('button');
       button.className = `template-subtab${templateTab === tab ? ' active' : ''}`;
       button.type = 'button';
-      button.textContent = tab === 'posting' ? 'Posting' : tab === 'forms' ? 'Forms' : 'Email';
+      button.textContent = tab.charAt(0).toUpperCase() + tab.slice(1);
       button.addEventListener('click', () => this.switchTemplateSubtab(tab));
       subtabBar.appendChild(button);
     });
@@ -713,6 +711,7 @@ const HiringApp = {
     if (!content) return;
     const isForms = templateTab === 'forms';
     const isEmail = templateTab === 'email';
+    if (templateTab === 'contract') return window.BKHiringContractTemplate?.render(this);
     if (isEmail) {
       content.innerHTML = `
         <div class="hiring-page template-page hiring-email-page">
@@ -781,8 +780,8 @@ const HiringApp = {
         <div class="hiring-page template-page application-form-page">
           <div class="hiring-page-header application-form-page-header">
             <div>
-              <h2>Applicant Form</h2>
-              <p>Build the application form for each job post. Changes save automatically.</p>
+              <h2>Form Instructions</h2>
+              <p>Set the instructions applicants see before completing a job application.</p>
             </div>
             <div class="application-form-actions">
               <button class="btn btn-outline application-view-form-btn" type="button" onclick="HiringApp.viewApplicationForm()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 12s3.5-6.5 9.5-6.5S21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="2.8"/></svg>Preview Form</button>
@@ -954,7 +953,7 @@ const HiringApp = {
   async loadHiringEmailTemplates() {
     const workspace = document.getElementById('hiring-email-workspace');
     if (!workspace) return;
-    const [templatesResult, profileResult] = await Promise.all([
+    const [templatesResult, profileResult, employeeResult] = await Promise.all([
       this.sb
         .from('global_settings')
         .select('value')
@@ -966,7 +965,8 @@ const HiringApp = {
         .select('value')
         .eq('company_id', this.companyId)
         .eq('key', 'company_profile_config')
-        .maybeSingle()
+        .maybeSingle(),
+      this.sb.from('employees').select('first_name, last_name, email, contact_number, title').eq('company_id', this.companyId).ilike('email', this.authInfo.user.email).limit(1).maybeSingle()
     ]);
     const { data, error } = templatesResult;
     if (error) {
@@ -974,10 +974,10 @@ const HiringApp = {
       workspace.innerHTML = '<div class="hiring-empty">Email templates could not be loaded. Refresh the page and try again.</div>';
       return;
     }
-    if (profileResult.error) {
-      console.error('Hiring email company profile load failed:', profileResult.error);
-    }
+    if (profileResult.error) console.error('Hiring email company profile load failed:', profileResult.error);
+    if (employeeResult.error) console.error('Hiring email employee preview load failed:', employeeResult.error);
     this.companyProfile = profileResult.data?.value || {};
+    this.hiringEmailPreviewEmployee = employeeResult.data || {};
     const defaults = this.getDefaultHiringEmailTemplates();
     const saved = data?.value && typeof data.value === 'object' ? data.value : {};
     this.hiringEmailTemplates = Object.fromEntries(
@@ -1067,8 +1067,8 @@ const HiringApp = {
         </aside>` : ''}
       <section class="hiring-email-viewer" aria-label="Rendered email preview">
         <div class="hiring-email-envelope" id="hiring-email-envelope">
-          <div><span>Subject</span><strong>${this.esc(template.subject)}</strong></div>
-          <div><span>Preview</span><p>${this.esc(template.preheader)}</p></div>
+          <div><span>Subject</span><strong>${this.esc(this.resolveHiringEmailPlaceholders(template.subject))}</strong></div>
+          <div><span>Preview</span><p>${this.esc(this.resolveHiringEmailPlaceholders(template.preheader))}</p></div>
         </div>
         <div class="hiring-email-canvas">
           ${brandingPreview}
@@ -1226,20 +1226,18 @@ const HiringApp = {
     return '';
   },
   renderHiringEmailRichText(value) {
-    const placeholders = [];
-    let text = String(value || '').replace(/\{\{(?:first_name|last_name|email|contact_number|job_title)\}\}/g, match => {
-      placeholders.push(match);
-      return `ZZHIRINGPLACEHOLDER${placeholders.length - 1}ZZ`;
-    });
-    text = this.esc(text)
+    return this.esc(this.resolveHiringEmailPlaceholders(value))
       .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
       .replace(/_([^_\n]+)_/g, '<em>$1</em>')
       .replace(/&lt;u&gt;([\s\S]+?)&lt;\/u&gt;/g, '<u>$1</u>')
       .replace(/\n/g, '<br>');
-    placeholders.forEach((placeholder, index) => {
-      text = text.replace(`ZZHIRINGPLACEHOLDER${index}ZZ`, this.esc(placeholder));
-    });
-    return text;
+  },
+  resolveHiringEmailPlaceholders(value) {
+    const employee = this.hiringEmailPreviewEmployee || {};
+    const user = this.authInfo?.user || {};
+    const metadata = user.user_metadata || {};
+    const values = { first_name: employee.first_name || String(metadata.full_name || metadata.name || '').split(/\s+/)[0] || 'Employee', last_name: employee.last_name || String(metadata.full_name || metadata.name || '').split(/\s+/).slice(1).join(' '), email: employee.email || user.email || '', contact_number: employee.contact_number || metadata.phone || '', job_title: employee.title || metadata.title || this.authInfo?.role || 'Employee' };
+    return String(value || '').replace(/\{\{(first_name|last_name|email|contact_number|job_title)\}\}/g, (_match, key) => values[key] || '—');
   },
   handleHiringEmailInput(kind, field, input) {
     if (kind === 'meta') this.updateHiringEmailMeta(field, input.value, input);
@@ -1485,13 +1483,10 @@ const HiringApp = {
     const form = this.getActiveApplicationForm();
     const post = this.jobPosts.find(item => item.id === this.selectedApplicationFormId);
     if (!builder || !form || !post) return;
-    const qualifications = Array.isArray(post.qualifications)
-      ? post.qualifications.map(item => typeof item === 'string' ? item : item?.item).filter(Boolean)
-      : [];
     builder.innerHTML = `
       <section class="application-form-section">
         <div class="application-form-section-heading">
-          <div><h3>Application content</h3></div>
+          <div><h3>Instructions</h3></div>
           <span class="application-form-save-status" id="application-form-save-status">Saved</span>
         </div>
         <label class="application-instructions-field" for="application-form-instructions">
@@ -1499,17 +1494,7 @@ const HiringApp = {
           <textarea id="application-form-instructions" rows="3" placeholder="Please complete this application truthfully and accurately. Inaccurate or false information may affect the evaluation of your application or result in disqualification." oninput="HiringApp.updateApplicationInstructions(this.value)">${this.esc(form.instructions)}</textarea>
         </label>
       </section>
-      <section class="application-form-section application-qualifications-section">
-        <div class="application-form-section-heading"><div><h3>Required qualifications</h3></div></div>
-        ${qualifications.length ? `<div class="application-qualification-list">${qualifications.map((qualification, index) => this.renderApplicationQualification(qualification, index, form.requiredQualifications.includes(qualification))).join('')}</div>` : '<div class="application-fields-empty">This job post has no qualifications yet.</div>'}
-      </section>
-      <section class="application-form-section">
-        <div class="application-form-section-heading application-custom-fields-heading"><div><h3>Questions</h3></div></div>
-        <div class="application-custom-fields" id="application-custom-fields">
-          ${form.customFields.length ? form.customFields.map((field, index) => this.renderApplicationCustomField(field, index)).join('') : '<div class="application-fields-empty">Add a custom question, date, choice, or rating field.</div>'}
-        </div>
-        <div class="application-add-field-row"><button class="btn btn-outline btn-sm" type="button" onclick="HiringApp.addApplicationField()">Add Field</button></div>
-      </section>`;
+      `;
   },
 
   renderApplicationQualification(qualification, index, isRequired) {
@@ -2442,6 +2427,12 @@ const HiringApp = {
                 </div>
               </section>
 
+              <section class="hiring-form-section conditional-section employment-dependent job-post-application-form-section" hidden>
+                <h4 class="hiring-section-title">Application Form</h4>
+                <p class="hiring-section-description">Choose required qualifications and add the questions applicants must answer.</p>
+                <div id="job-post-application-form-builder" class="application-form-builder"></div>
+              </section>
+
               <section class="hiring-form-section conditional-section employment-dependent" hidden>
                 <div class="application-stages-heading">
                   <div>
@@ -2694,6 +2685,7 @@ const HiringApp = {
   openCreateModal() {
     this.editingId = null;
     this.resetForm();
+    window.BKHiringJobApplicationForm?.open();
     document.getElementById('job-post-modal-title').textContent = 'Create Job Post';
     document.getElementById('post-job-btn').textContent = 'Post';
     this.openModal('job-post-modal');
@@ -2705,6 +2697,7 @@ const HiringApp = {
     this.editingId = id;
     this.resetForm();
     this.fillForm(post);
+    window.BKHiringJobApplicationForm?.open(id);
     document.getElementById('job-post-modal-title').textContent = 'Edit Job Post';
     document.getElementById('post-job-btn').textContent = 'Save Changes';
     this.openModal('job-post-modal');
@@ -2904,7 +2897,7 @@ const HiringApp = {
             <circle cx="4" cy="19" r="1.5"></circle><circle cx="12" cy="19" r="1.5"></circle>
           </svg>
         </button>
-        <input data-field="item" maxlength="200" placeholder="e.g., Detail-oriented with basic spreadsheet skills" value="${this.esc(qualification)}" />
+        <input data-field="item" maxlength="200" placeholder="e.g., Detail-oriented with basic spreadsheet skills" value="${this.esc(qualification)}" onchange="BKHiringJobApplicationForm.syncQualifications()" />
         ${this.removeBuilderButton()}
       </div>`);
   },
@@ -3426,9 +3419,9 @@ const HiringApp = {
     const payload = this.buildPayload();
 
     const request = this.editingId
-      ? this.sb.from('job_posts').update(payload).eq('id', this.editingId).eq('company_id', this.companyId)
-      : this.sb.from('job_posts').insert(payload);
-    const { error } = await request;
+      ? this.sb.from('job_posts').update(payload).eq('id', this.editingId).eq('company_id', this.companyId).select('id').single()
+      : this.sb.from('job_posts').insert(payload).select('id').single();
+    const { data: savedPost, error } = await request;
 
     button.disabled = false;
     button.textContent = this.editingId ? 'Save Changes' : 'Post';
@@ -3442,6 +3435,11 @@ const HiringApp = {
         true
       );
       return;
+    }
+
+    const applicationFormSaved = await window.BKHiringJobApplicationForm?.save(savedPost?.id || this.editingId);
+    if (applicationFormSaved === false) {
+      this.showToast('The job post was saved, but its application questions could not be saved. Please edit the post and try again.', true);
     }
 
     this.closeModal('job-post-modal');
