@@ -93,7 +93,6 @@
       pageSize: 20,
       editMode: false,
       dirty: {},
-      employeePrefix: 'BK',
       assignments: [],  // [{ id, name, visibility[] }] loaded from employee_assignments
       pendingDeletes: new Set(),
       sortCol: 'employee_number',
@@ -392,19 +391,6 @@
             .order('created_at', { ascending: true });
           this.assignments = aData || [];
         } catch(e) { this.assignments = []; }
-
-        // Load HR configuration for prefix
-        this.employeePrefix = 'ID';
-        try {
-          const { data: hrConf } = await getSb().from('global_settings')
-            .select('value')
-            .eq('key', 'hr_config')
-            .eq('company_id', this.companyId || '')
-            .maybeSingle();
-          if (hrConf && hrConf.value && hrConf.value.employee_prefix) {
-            this.employeePrefix = hrConf.value.employee_prefix.toUpperCase();
-          }
-        } catch(e) { console.error('Failed to load HR prefix settings:', e); }
 
         this.bindToolbar();
         this.bindEditMode();
@@ -1719,25 +1705,20 @@
         }
       },
 
-      openAddEmployeeModal(accountMode = '', accountId = '') {
+      async openAddEmployeeModal(accountMode = '', accountId = '') {
         if (!accountMode) { window.BKDirectoryAccess.openEmployeeEntryChooser(this.allEmployees); return; }
-        // 1. Calculate next employee number
-        let maxNum = 0;
-        const regex = new RegExp(`^${this.employeePrefix}-(\\d+)`);
-        this.allEmployees.forEach(emp => {
-          const numStr = emp.employee_number || '';
-          const match = numStr.match(regex) || numStr.match(/^[A-Z]{1,3}-(\d+)/);
-          if (match) {
-            const val = parseInt(match[1], 10);
-            if (val > maxNum) maxNum = val;
-          }
-        });
-        const nextNum = maxNum + 1;
-        const formattedNum = `${this.employeePrefix}-${String(nextNum).padStart(4, '0')}`;
+        let formattedNum;
+        try {
+          formattedNum = await window.BKDirectoryAccess.fetchNextEmployeeNumber(getSb(), this.companyId);
+        } catch (error) {
+          toast(error.message, 'error');
+          return;
+        }
 
         // 2. Reset form
         const form = document.getElementById('add-employee-form');
         if (form) { form.reset(); window.BKDirectoryShift.reset(); }
+        window.BKDirectoryAccess.updatePayoutMode();
 
         // 3. Set default values
         document.getElementById('new-emp-number').value = formattedNum;
@@ -1804,6 +1785,11 @@
         const form = document.getElementById('add-employee-form');
         if (!form) return;
         if (!form.reportValidity()) return;
+        const payoutMode = document.querySelector('input[name="new-emp-payout-mode"]:checked')?.value || 'account';
+        if (payoutMode === 'qr' && !document.getElementById('new-emp-payout-image').value.trim()) {
+          toast('Upload a payout QR code before saving the employee.', 'error');
+          return;
+        }
 
         toast('Saving employee...', 'info');
 
@@ -1858,8 +1844,8 @@
           gov_id_link: document.getElementById('new-emp-gov-link').value.trim(),
           cv_link: document.getElementById('new-emp-cv-link').value.trim(),
           
-          payout_details: document.getElementById('new-emp-payout').value.trim(),
-          payout_details_image: document.getElementById('new-emp-payout-image').value.trim(),
+          payout_details: payoutMode === 'account' ? document.getElementById('new-emp-payout').value.trim() : null,
+          payout_details_image: payoutMode === 'qr' ? document.getElementById('new-emp-payout-image').value.trim() : null,
           
           shift_days: document.getElementById('new-emp-shift-days').value.trim(),
           shift_time_1: shift_time_1
@@ -1870,6 +1856,7 @@
           insertBody.company_id = this.companyId;
         }
         try {
+          insertBody.employee_number = await window.BKDirectoryAccess.fetchNextEmployeeNumber(getSb(), this.companyId);
           window.BKDirectoryAccess.applySelectedEmployeeAccount(insertBody);
           const insertedRows = await sbInsert(insertBody);
           if (insertedRows && insertedRows.length > 0) {

@@ -109,6 +109,7 @@
             </select>
             <div id="invite-custom-access-container" class="custom-access-container" style="display:none;">
               <label class="form-label" style="margin-bottom:0.2rem;">Select Access Modules</label>
+              <div style="font-size:0.75rem; color:var(--text-muted); margin-bottom:0.65rem;">Leave all modules unchecked to allow access to Home and Resources only.</div>
               <div id="invite-access-options" class="access-options-grid"></div>
             </div>
           </div>
@@ -148,6 +149,7 @@
             </select>
             <div id="edit-custom-access-container" class="custom-access-container" style="display:none;">
               <label class="form-label" style="margin-bottom:0.2rem;">Select Access Modules</label>
+              <div style="font-size:0.75rem; color:var(--text-muted); margin-bottom:0.65rem;">Leave all modules unchecked to allow access to Home and Resources only.</div>
               <div id="edit-access-options" class="access-options-grid"></div>
             </div>
           </div>
@@ -214,7 +216,6 @@
   <script>
     'use strict';
 
-    let employeePrefix = 'BK';
     let currentActorRole = '';
     const showToast = (msg, isError) => SettingsPage.showToast(msg, isError);
     const showConfirmModal = (msg, onConfirm) => SettingsPage.showConfirmModal(msg, onConfirm);
@@ -266,7 +267,7 @@
     }
 
     function formatAccessModules(modules) {
-      const values = Array.isArray(modules) ? modules : [];
+      const values = (Array.isArray(modules) ? modules : []).map(value => String(value).trim()).filter(Boolean);
       const scopedParents = new Set(values.filter(value => String(value).includes(':')).map(value => String(value).split(':')[0]));
       return values.filter(value => !scopedParents.has(value)).map(value => String(value).replace(':', ': '));
     }
@@ -283,14 +284,6 @@
       } catch (err) {
         console.error('Current member role could not be loaded:', err);
       }
-
-      // Load Employee Prefix
-      try {
-        const { data } = await sb.from('global_settings').select('value').eq('key', 'hr_settings').eq('company_id', currentCompanyId).maybeSingle();
-        if (data && data.value && data.value.employeePrefix) {
-          employeePrefix = data.value.employeePrefix;
-        }
-      } catch (err) { console.warn('Prefix load failed:', err); }
 
       renderAccessOptions('invite');
       renderAccessOptions('edit');
@@ -428,7 +421,7 @@
           const displayModules = formatAccessModules(rowModules);
           const listItems = displayModules.length
             ? displayModules.map(m => `<li style="font-weight:400; color:var(--text-secondary); margin-bottom:0.1rem;">${escapeHtml(m)}</li>`).join('')
-            : '<li style="font-weight:400; color:var(--text-muted);">No Access</li>';
+            : '<li style="font-weight:400; color:var(--text-muted);">Home &amp; Resources only</li>';
           roleInnerHtml = `<div><div style="font-weight:700; color:var(--text-primary);">User</div><ul style="margin:0.2rem 0 0 0.5rem; padding-left:0.75rem; list-style-type:disc; font-size:0.8rem;">${listItems}</ul></div>`;
         }
 
@@ -486,7 +479,8 @@
         if (row.role === 'admin') inviteRoleCell = `<span class="badge badge-gray">Administrator</span>`;
         else if (row.role && row.role.startsWith('access:')) {
           const mods = formatAccessModules(row.role.substring(7).split(',').map(s => s.trim()));
-          inviteRoleCell = `<div><div style="font-weight:700; color:var(--text-primary);">User</div><ul style="margin:0.2rem 0 0 0.5rem; padding-left:0.75rem; list-style-type:disc; font-size:0.8rem;">${mods.map(m => `<li>${escapeHtml(m)}</li>`).join('')}</ul></div>`;
+          const listItems = mods.length ? mods.map(m => `<li>${escapeHtml(m)}</li>`).join('') : '<li>Home &amp; Resources only</li>';
+          inviteRoleCell = `<div><div style="font-weight:700; color:var(--text-primary);">User</div><ul style="margin:0.2rem 0 0 0.5rem; padding-left:0.75rem; list-style-type:disc; font-size:0.8rem;">${listItems}</ul></div>`;
         } else {
           inviteRoleCell = `<span class="badge badge-gray">${escapeHtml(row.role || 'None')}</span>`;
         }
@@ -522,12 +516,6 @@
 
       if (role === 'custom') {
         const checkedModules = collectAccessModules('invite');
-        if (checkedModules.length === 0) {
-          showToast('Please check at least one access module for Custom role.', true);
-          btn.disabled = false;
-          btn.innerText = 'Send Invitation';
-          return;
-        }
         role = 'access:' + checkedModules.join(',');
       }
 
@@ -683,16 +671,15 @@
       const firstName = parts.join(' ') || '';
       try {
         showToast('Adding employee to directory...');
-        let empNum = '';
-        try {
-          const { data, error: seqError } = await sb.rpc('generate_employee_number');
-          if (!seqError && data) empNum = data;
-        } catch (seqErr) { console.warn('RPC generate_employee_number failed:', seqErr); }
-        if (!empNum) {
-          const { count, error: countErr } = await sb.from('employees').select('*', { count: 'exact', head: true });
-          if (countErr) throw countErr;
-          empNum = employeePrefix + '-' + String((count || 0) + 1).padStart(4, '0');
-        }
+        const { data: { session } } = await sb.auth.getSession();
+        const numberResponse = await fetch('/api/next-employee-number', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token || ''}` },
+          body: JSON.stringify({ company_id: currentCompanyId })
+        });
+        const numberResult = await numberResponse.json().catch(() => ({}));
+        if (!numberResponse.ok || !numberResult.employee_number) throw new Error(numberResult.error || 'The employee number could not be generated.');
+        const empNum = numberResult.employee_number;
         const insertPayload = {
           email: email.toLowerCase().trim(),
           first_name: firstName || 'N/A',
@@ -751,7 +738,6 @@
         newRole = 'admin';
       } else {
         newModules = collectAccessModules('edit');
-        if (newModules.length === 0) { showToast('Please check at least one access module.', true); return; }
       }
       try {
         const { data: savedMember, error } = await sb.from('tenant_members').update({

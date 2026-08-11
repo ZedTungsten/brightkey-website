@@ -84,8 +84,8 @@ test('employee registration uploads require a valid invitation and keep governme
   assert.match(upload, /from\('company_invitations'\)/);
   assert.match(upload, /createHash\('sha256'\)/);
   assert.match(upload, /invite\.role !== 'employee'/);
-  assert.match(upload, /\['profile', 'gov-id', 'cv'\]\.includes\(type\)/);
-  assert.match(upload, /\['govid', 'gov-id', 'cv', 'id'\]/);
+  assert.match(upload, /\['profile', 'gov-id', 'cv', 'payout'\]\.includes\(type\)/);
+  assert.match(upload, /\['govid', 'gov-id', 'cv', 'id', 'payout', 'qr'\]/);
   assert.match(registration, /invitation:\s*\{/);
   assert.match(registration, /signature:\s*inviteSig/);
 });
@@ -95,6 +95,52 @@ test('account-only invitations do not create or update employee records', () => 
   assert.equal(accountRegistration.includes("from('employees')"), false);
   assert.equal(accountRegistration.includes('employee_number'), false);
   assert.equal(accountRegistration.includes("from('tenant_members').insert"), true);
+});
+
+test('zero-module users can be invited with Home and Resources access only', () => {
+  const accessPage = fs.readFileSync(new URL('../dashboard/settings/access.html', import.meta.url), 'utf8');
+  const accountRegistration = fs.readFileSync(new URL('../api/register-account.js', import.meta.url), 'utf8');
+  const resources = fs.readFileSync(new URL('../dashboard/resources.js', import.meta.url), 'utf8');
+  assert.match(accessPage, /role = 'access:' \+ checkedModules\.join\(','\)/);
+  assert.doesNotMatch(accessPage, /checkedModules\.length === 0/);
+  assert.doesNotMatch(accessPage, /newModules\.length === 0/);
+  assert.match(accessPage, /Home &amp; Resources only/);
+  assert.match(accountRegistration, /\.filter\(Boolean\)/);
+  assert.match(resources, /BKAuth\.requireAuth/);
+});
+
+test('all employee creation paths use the company-scoped employee number generator', () => {
+  const serverPaths = [
+    '../api/register-employee.js',
+    '../api/create-employee-account.js',
+    '../api/hiring-directory-registration.js',
+    '../api/next-employee-number.js'
+  ];
+  serverPaths.forEach(file => {
+    const source = fs.readFileSync(new URL(file, import.meta.url), 'utf8');
+    assert.match(source, /next_company_employee_number/);
+    assert.doesNotMatch(source, /rpc\('generate_employee_number'\)/);
+  });
+  const directory = fs.readFileSync(new URL('../dashboard/employee-directory-access.js', import.meta.url), 'utf8');
+  const access = fs.readFileSync(new URL('../dashboard/settings/access.html', import.meta.url), 'utf8');
+  assert.match(directory, /\/api\/next-employee-number/);
+  assert.match(access, /\/api\/next-employee-number/);
+  assert.doesNotMatch(directory, /employeePrefix/);
+  assert.doesNotMatch(access, /employeePrefix \+ '-'/);
+});
+
+test('all Directory employee forms require account details or a private payout QR', () => {
+  const registration = fs.readFileSync(new URL('../employee-registration.html', import.meta.url), 'utf8');
+  const directoryForm = fs.readFileSync(new URL('../dashboard/employee-directory.html', import.meta.url), 'utf8');
+  const directoryCode = fs.readFileSync(new URL('../dashboard/employee-directory.js', import.meta.url), 'utf8');
+  const upload = fs.readFileSync(new URL('../api/upload.js', import.meta.url), 'utf8');
+  [registration, directoryForm].forEach(source => {
+    assert.match(source, /value="account"/);
+    assert.match(source, /value="qr"/);
+  });
+  assert.match(registration, /payout_details_image/);
+  assert.match(directoryCode, /payoutMode === 'qr'/);
+  assert.match(upload, /'payout', 'qr'/);
 });
 
 test('free subscription owner invitations retain owner dashboard access', () => {

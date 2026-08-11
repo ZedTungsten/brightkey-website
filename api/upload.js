@@ -40,7 +40,7 @@ export default async function handler(req, res) {
         return res.status(401).json({ error: 'Your session has expired. Sign in again before uploading.' });
       }
     } else if (category === 'employees' && invitation) {
-      if (!['profile', 'gov-id', 'cv'].includes(type)) {
+      if (!['profile', 'gov-id', 'cv', 'payout'].includes(type)) {
         return res.status(400).json({ error: 'This file type is not supported by employee registration.' });
       }
       const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
@@ -175,6 +175,8 @@ export default async function handler(req, res) {
         folderPath = `${prefix}/employees/${safeRefId}/govid`;
       } else if (type === 'cv') {
         folderPath = `${prefix}/employees/${safeRefId}/cv`;
+      } else if (type === 'payout' || type === 'qr') {
+        folderPath = `${prefix}/employees/${safeRefId}/payout`;
       } else if (type === 'id') {
         folderPath = `${prefix}/employees/${safeRefId}/id`;
       } else {
@@ -187,7 +189,7 @@ export default async function handler(req, res) {
     }
 
     // Sensitive employee documents go to the private bucket; everything else stays public
-    const SENSITIVE_TYPES = ['govid', 'gov-id', 'cv', 'id'];
+    const SENSITIVE_TYPES = ['govid', 'gov-id', 'cv', 'id', 'payout', 'qr'];
     const isInternal = category === 'employees' && SENSITIVE_TYPES.includes(type);
     const bucketName = isInternal ? 'brightkey-internal' : 'brightkey-assets';
     // A unique name keeps uploads on the INSERT policy path. Replacing an

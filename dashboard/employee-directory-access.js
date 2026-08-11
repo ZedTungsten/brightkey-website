@@ -264,6 +264,29 @@
         toast('The link could not be copied. Select it and copy it manually.', 'error');
       }
     },
+    async fetchNextEmployeeNumber(sb, companyId) {
+      const { data: { session } } = await sb.auth.getSession();
+      if (!session?.access_token || !companyId) throw new Error('Your company or session could not be verified. Refresh and try again.');
+      const response = await fetch('/api/next-employee-number', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+        body: JSON.stringify({ company_id: companyId })
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.employee_number) throw new Error(result.error || 'The next employee number could not be generated.');
+      return result.employee_number;
+    },
+    updatePayoutMode() {
+      const mode = document.querySelector('input[name="new-emp-payout-mode"]:checked')?.value || 'account';
+      const accountWrap = document.getElementById('new-emp-payout-account-wrap');
+      const qrWrap = document.getElementById('new-emp-payout-qr-wrap');
+      const details = document.getElementById('new-emp-payout');
+      const qrUrl = document.getElementById('new-emp-payout-image');
+      if (accountWrap) accountWrap.hidden = mode === 'qr';
+      if (qrWrap) qrWrap.hidden = mode !== 'qr';
+      if (details) details.required = mode === 'account';
+      if (qrUrl) qrUrl.required = mode === 'qr';
+    },
     collect(prefix) {
       const selected = Array.from(document.querySelectorAll(`.${prefix}-custom-access:checked`)).map(input => input.value);
       Object.keys(window.BKAuth?.subpageAccess || {}).forEach(moduleName => {

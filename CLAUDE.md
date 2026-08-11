@@ -196,3 +196,19 @@ When generating and saving high-fidelity A4/Letter PDF files from dynamic HTML p
 > Never use destructive `DROP TABLE IF EXISTS ... CASCADE;` statement patterns in migration files, especially for established dashboard tables (like `software_subscriptions`). 
 > - **Always Use Safe Alterations**: Use `CREATE TABLE IF NOT EXISTS`, and add new columns or attributes using `ALTER TABLE public.<table_name> ADD COLUMN IF NOT EXISTS <column_name> <type>;` statements to preserve existing records and test data.
 > - **Conditional Policy Updates**: Use `DO $$` PL/pgSQL blocks to conditionally check and create policies `IF NOT EXISTS` to prevent execution crashes when rerun.
+
+---
+
+## 13. Employee Number Generation Is a Shared Invariant
+> [!CRITICAL]
+> Every current and future employee-creation workflow must obtain the employee
+> number from `next_company_employee_number(company_id)`. Never hardcode `BK`,
+> call the legacy `generate_employee_number`, or calculate a suffix in browser
+> code or an API route.
+>
+> The canonical prefix is the company-scoped `global_settings` record with key
+> `hr_config`, stored at `value.employee_prefix`. This HR-mandated prefix applies
+> to manual Directory entries, Access-to-Directory actions, invitation
+> registration, hiring onboarding, imports, and future employee creation tools.
+> `BK` is only the database generator's fallback when that canonical setting is
+> genuinely missing or blank.

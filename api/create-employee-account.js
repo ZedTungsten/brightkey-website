@@ -124,18 +124,13 @@ export default async function handler(req, res) {
       const lastName = parts.pop() || '';
       const firstName = parts.join(' ') || '';
 
-      // Generate employee number
-      let empNum = '';
-      try {
-        const { data } = await supabase.rpc('generate_employee_number');
-        if (data) empNum = data;
-      } catch (seqErr) {
-        console.warn('RPC generate_employee_number failed during auto-registration fallback');
-      }
-
-      if (!empNum) {
-        const { count } = await supabase.from('employees').select('*', { count: 'exact', head: true });
-        empNum = 'BK-' + String((count || 0) + 1).padStart(4, '0');
+      const { data: empNum, error: employeeNumberError } = await supabase.rpc('next_company_employee_number', {
+        p_company_id: company_id
+      });
+      if (employeeNumberError || !empNum) {
+        await supabase.from('tenant_members').delete().eq('tenant_id', tenant_id).eq('user_id', newUserId);
+        await supabase.auth.admin.deleteUser(newUserId);
+        return res.status(503).json({ error: 'The employee number could not be generated. Please try again shortly.' });
       }
 
       await supabase.from('employees').insert({

@@ -451,6 +451,11 @@
       width: 0%; transition: width 0.3s ease;
     }
 
+    .payout-choice-row { display: flex; flex-wrap: wrap; gap: 0.65rem; margin-bottom: 1rem; }
+    .payout-choice { display: inline-flex; flex-direction: row; align-items: center; gap: 0.45rem; padding: 0.65rem 0.8rem; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); cursor: pointer; font-size: 0.78rem; font-weight: 700; }
+    .payout-choice input { width: auto; margin: 0; accent-color: var(--cyan); }
+    [hidden] { display: none !important; }
+
     /* ── Responsive ── */
     @media (max-width: 640px) {
       .grid-2 { grid-template-columns: 1fr; }
@@ -780,6 +785,41 @@
         <div class="upload-progress" id="cv-progress"><div class="upload-progress__bar" id="cv-bar"></div></div>
       </div>
 
+      <!-- ── SECTION 6: Payout Details ── -->
+      <div class="form-section">
+        <div class="section-head">
+          <div class="section-icon">
+            <svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+          </div>
+          <div class="section-title-wrap">
+            <div class="section-title">Payout Details <span class="req" style="font-size:0.7rem; color:var(--danger);">*</span></div>
+            <div class="section-desc">Choose how you want to provide the account HR should use for payouts</div>
+          </div>
+        </div>
+        <div class="payout-choice-row" role="radiogroup" aria-label="Payout detail type">
+          <label class="payout-choice"><input type="radio" name="payout-mode" value="account" checked /> Account Details</label>
+          <label class="payout-choice"><input type="radio" name="payout-mode" value="qr" /> QR Code</label>
+        </div>
+        <div id="payout-account-wrap" class="form-group">
+          <label class="form-label" for="payout-details">Account Details <span class="req">*</span></label>
+          <textarea id="payout-details" class="form-input" maxlength="500" placeholder="Bank or e-wallet, account name, and account number" required></textarea>
+        </div>
+        <div id="payout-qr-wrap" hidden>
+          <div class="upload-zone" id="payout-qr-zone">
+            <input type="file" id="payout-qr-input" accept="image/jpeg,image/png,image/webp" />
+            <div class="upload-zone__icon"><svg viewBox="0 0 24 24"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg></div>
+            <div class="upload-zone__label"><span>Click to upload</span> or drag and drop</div>
+            <div class="upload-zone__hint">JPG, PNG, or WebP · Max 10 MB</div>
+          </div>
+          <div class="file-preview" id="payout-file-preview" style="margin-top:0.75rem;">
+            <span class="file-preview__icon"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/></svg></span>
+            <span class="file-preview__name" id="payout-file-name"></span>
+            <span class="file-preview__size" id="payout-file-size"></span>
+            <button type="button" class="file-preview__remove" id="payout-file-remove" aria-label="Remove payout QR"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+          </div>
+        </div>
+      </div>
+
       <!-- ── SECTION 5: Create Password ── -->
       <div class="form-section" id="password-section">
         <div class="section-head">
@@ -945,7 +985,7 @@
     }
 
     /* ── File store ────────────────────────────────────────────────────── */
-    const files = { profile: null, govId: null, cv: null };
+    const files = { profile: null, govId: null, cv: null, payout: null };
 
     (async function initEmpNumber() {
       // Validate secure invite link first
@@ -1068,6 +1108,26 @@
       removeId:  'cv-file-remove',
       key:       'cv',
     });
+
+    setupFileUpload({
+      zoneId:    'payout-qr-zone',
+      inputId:   'payout-qr-input',
+      previewId: 'payout-file-preview',
+      nameId:    'payout-file-name',
+      sizeId:    'payout-file-size',
+      removeId:  'payout-file-remove',
+      key:       'payout',
+    });
+
+    const payoutMode = () => document.querySelector('input[name="payout-mode"]:checked')?.value || 'account';
+    function updatePayoutMode() {
+      const isQr = payoutMode() === 'qr';
+      document.getElementById('payout-account-wrap').hidden = isQr;
+      document.getElementById('payout-qr-wrap').hidden = !isQr;
+      document.getElementById('payout-details').required = !isQr;
+    }
+    document.querySelectorAll('input[name="payout-mode"]').forEach(input => input.addEventListener('change', updatePayoutMode));
+    updatePayoutMode();
 
     function setupFileUpload({ zoneId, inputId, previewId, nameId, sizeId, removeId, key }) {
       const zone    = document.getElementById(zoneId);
@@ -1366,6 +1426,17 @@
         document.getElementById('gov-id-zone').scrollIntoView({ behavior: 'smooth', block: 'center' });
         return;
       }
+      const selectedPayoutMode = payoutMode();
+      if (selectedPayoutMode === 'account' && !document.getElementById('payout-details').value.trim()) {
+        showAlert('error', 'Please enter your payout account details.');
+        document.getElementById('payout-account-wrap').scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
+      if (selectedPayoutMode === 'qr' && !files.payout) {
+        showAlert('error', 'Please upload your payout QR code.');
+        document.getElementById('payout-qr-wrap').scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
 
       // Loading state
       submitBtn.disabled = true;
@@ -1376,10 +1447,11 @@
         const uploadFolderId = inviteEmail.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
 
         // Upload files
-        const [profileUrl, govIdUrl, cvUrl] = await Promise.all([
+        const [profileUrl, govIdUrl, cvUrl, payoutUrl] = await Promise.all([
           uploadToSupabase(files.profile, uploadFolderId, 'profile', null),
           uploadToSupabase(files.govId,   uploadFolderId, 'gov-id', 'govid-bar'),
           files.cv ? uploadToSupabase(files.cv, uploadFolderId, 'cv', 'cv-bar') : Promise.resolve(null),
+          selectedPayoutMode === 'qr' ? uploadToSupabase(files.payout, uploadFolderId, 'payout', null) : Promise.resolve(null),
         ]);
 
         const emergencyName = document.getElementById('emergency-contact-name').value.trim();
@@ -1401,6 +1473,8 @@
           picture_link:      profileUrl,
           gov_id_link:       govIdUrl,
           cv_link:           cvUrl,
+          payout_details:    selectedPayoutMode === 'account' ? document.getElementById('payout-details').value.trim() : null,
+          payout_details_image: selectedPayoutMode === 'qr' ? payoutUrl : null,
           tin:               document.getElementById('tin-number').value.trim() || null,
           sss:               document.getElementById('sss-number').value.trim() || null,
           pagibig:           document.getElementById('pagibig-number').value.trim() || null,
