@@ -77,6 +77,19 @@ test('employee registration contains no development bypass credential', () => {
   assert.equal(verification.includes('brightkey_invite_salt'), false);
 });
 
+test('employee registration uploads require a valid invitation and keep government IDs private', () => {
+  const upload = fs.readFileSync(new URL('../api/upload.js', import.meta.url), 'utf8');
+  const registration = fs.readFileSync(new URL('../employee-registration.html', import.meta.url), 'utf8');
+  assert.match(upload, /employee-registration-upload/);
+  assert.match(upload, /from\('company_invitations'\)/);
+  assert.match(upload, /createHash\('sha256'\)/);
+  assert.match(upload, /invite\.role !== 'employee'/);
+  assert.match(upload, /\['profile', 'gov-id', 'cv'\]\.includes\(type\)/);
+  assert.match(upload, /\['govid', 'gov-id', 'cv', 'id'\]/);
+  assert.match(registration, /invitation:\s*\{/);
+  assert.match(registration, /signature:\s*inviteSig/);
+});
+
 test('account-only invitations do not create or update employee records', () => {
   const accountRegistration = fs.readFileSync(new URL('../api/register-account.js', import.meta.url), 'utf8');
   assert.equal(accountRegistration.includes("from('employees')"), false);

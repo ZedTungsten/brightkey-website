@@ -1,4 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
+import { createHash } from 'crypto';
+import { enforceRateLimit } from '../lib/api/rate-limit.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://ymjlosnxuhsybkzkoofq.supabase.co';
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inltamxvc254dWhzeWJremtvb2ZxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ0MDY1MzYsImV4cCI6MjA4OTk4MjUzNn0.srhk9SVvFuZRcfeRGbVDGPr5pYrFhs8vzcOiMK3A91w';
@@ -18,24 +20,66 @@ export default async function handler(req, res) {
   }
 
   try {
+    const { fileBase64, fileName, category, refId, type, companyId, invitation } = req.body;
     const authorization = req.headers.authorization || '';
     const accessToken = authorization.replace(/^Bearer\s+/i, '').trim();
-    if (!accessToken) {
+    let invitationAuthorized = false;
+    let userData = null;
+    let supabase;
+
+    if (accessToken) {
+      // Dashboard uploads use the signed-in user's token so tenant-scoped
+      // Storage RLS validates the company path.
+      supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+        global: { headers: { Authorization: `Bearer ${accessToken}` } },
+        auth: { persistSession: false, autoRefreshToken: false }
+      });
+      const { data, error: userError } = await supabase.auth.getUser(accessToken);
+      userData = data;
+      if (userError || !userData?.user) {
+        return res.status(401).json({ error: 'Your session has expired. Sign in again before uploading.' });
+      }
+    } else if (category === 'employees' && invitation) {
+      if (!['profile', 'gov-id', 'cv'].includes(type)) {
+        return res.status(400).json({ error: 'This file type is not supported by employee registration.' });
+      }
+      const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
+      const tenantId = String(invitation.tenantId || '').trim();
+      const inviteEmail = String(invitation.email || '').toLowerCase().trim();
+      const inviteSignature = String(invitation.signature || '').trim();
+      if (!serviceRoleKey || !tenantId || !inviteEmail || !inviteSignature || !companyId) {
+        return res.status(401).json({ error: 'This registration link could not authorize the upload. Reopen the link or ask for a new invitation.' });
+      }
+
+      supabase = createClient(SUPABASE_URL, serviceRoleKey, {
+        auth: { persistSession: false, autoRefreshToken: false }
+      });
+      if (!await enforceRateLimit({
+        supabase,
+        req,
+        res,
+        scope: 'employee-registration-upload',
+        identifier: inviteEmail,
+        limit: 30,
+        windowSeconds: 3600
+      })) return;
+
+      const tokenHash = createHash('sha256').update(inviteSignature).digest('hex');
+      const { data: invite, error: inviteError } = await supabase
+        .from('company_invitations')
+        .select('role, expires_at, used_at')
+        .eq('tenant_id', tenantId)
+        .eq('company_id', companyId)
+        .eq('email', inviteEmail)
+        .eq('token_hash', tokenHash)
+        .maybeSingle();
+      if (inviteError || !invite || invite.role !== 'employee' || invite.used_at || !invite.expires_at || new Date(invite.expires_at).getTime() <= Date.now()) {
+        return res.status(401).json({ error: 'This registration link is invalid or expired. Ask your administrator for a new invitation.' });
+      }
+      invitationAuthorized = true;
+    } else {
       return res.status(401).json({ error: 'Your session has expired. Sign in again before uploading.' });
     }
-
-    // Use the signed-in user's token so tenant-scoped Storage RLS validates the
-    // company path. This also works locally without a service-role secret.
-    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      global: { headers: { Authorization: `Bearer ${accessToken}` } },
-      auth: { persistSession: false, autoRefreshToken: false }
-    });
-    const { data: userData, error: userError } = await supabase.auth.getUser(accessToken);
-    if (userError || !userData?.user) {
-      return res.status(401).json({ error: 'Your session has expired. Sign in again before uploading.' });
-    }
-
-    const { fileBase64, fileName, category, refId, type, companyId } = req.body;
 
     if (!fileBase64 || !fileName) {
       return res.status(400).json({ error: 'Missing fileBase64 or fileName.' });
@@ -69,7 +113,7 @@ export default async function handler(req, res) {
       allowedModules = ['Operations'];
     }
 
-    if (allowedModules.length > 0) {
+    if (allowedModules.length > 0 && !invitationAuthorized) {
       const accessChecks = await Promise.all(allowedModules.map(moduleName => (
         supabase.rpc('has_module_access', {
           p_user_id: userData.user.id,
@@ -125,9 +169,9 @@ export default async function handler(req, res) {
         folderPath = `${prefix}/installations/${safeRefId}`;
       }
     } else if (category === 'employees') {
-      if (type === 'photo') {
+      if (type === 'photo' || type === 'profile') {
         folderPath = `${prefix}/employees/${safeRefId}/photo`;
-      } else if (type === 'govid') {
+      } else if (type === 'govid' || type === 'gov-id') {
         folderPath = `${prefix}/employees/${safeRefId}/govid`;
       } else if (type === 'cv') {
         folderPath = `${prefix}/employees/${safeRefId}/cv`;
@@ -143,7 +187,7 @@ export default async function handler(req, res) {
     }
 
     // Sensitive employee documents go to the private bucket; everything else stays public
-    const SENSITIVE_TYPES = ['govid', 'cv', 'id'];
+    const SENSITIVE_TYPES = ['govid', 'gov-id', 'cv', 'id'];
     const isInternal = category === 'employees' && SENSITIVE_TYPES.includes(type);
     const bucketName = isInternal ? 'brightkey-internal' : 'brightkey-assets';
     // A unique name keeps uploads on the INSERT policy path. Replacing an
