@@ -762,6 +762,26 @@
                   <label class="form-label" for="inp-pagibig">HDMF Pag-IBIG</label>
                   <input type="text" id="inp-pagibig" class="form-input" disabled />
                 </div>
+
+                <div class="form-group" style="grid-column: span 2;">
+                  <label class="form-label">Payout Details</label>
+                  <div id="payout-mode-controls" style="display:none; flex-wrap:wrap; gap:0.65rem; margin-bottom:0.75rem;" role="radiogroup" aria-label="Payout detail type">
+                    <label style="display:inline-flex; flex-direction:row; align-items:center; gap:0.45rem; padding:0.55rem 0.75rem; border:1px solid var(--border); border-radius:8px; cursor:pointer; font-size:0.78rem; font-weight:700;"><input type="radio" name="profile-payout-mode" value="account" onchange="App.updatePayoutMode()" style="width:auto; margin:0; accent-color:var(--cyan);" /> Account Details</label>
+                    <label style="display:inline-flex; flex-direction:row; align-items:center; gap:0.45rem; padding:0.55rem 0.75rem; border:1px solid var(--border); border-radius:8px; cursor:pointer; font-size:0.78rem; font-weight:700;"><input type="radio" name="profile-payout-mode" value="qr" onchange="App.updatePayoutMode()" style="width:auto; margin:0; accent-color:var(--cyan);" /> QR Code</label>
+                  </div>
+                  <div id="profile-payout-account-wrap">
+                    <textarea id="inp-payout-details" class="form-input" rows="3" maxlength="500" placeholder="No payout account details saved" disabled style="resize:vertical;"></textarea>
+                  </div>
+                  <div id="profile-payout-qr-wrap" hidden>
+                    <img id="profile-payout-image" alt="Saved payout QR code" style="display:none; width:min(240px,100%); max-height:240px; object-fit:contain; border:1px solid var(--border); border-radius:10px; background:#fff; padding:0.5rem;" />
+                    <div id="profile-payout-empty" style="color:var(--text-muted); font-size:0.82rem;">No payout QR code saved.</div>
+                    <label id="profile-payout-upload-label" class="btn btn-outline btn-sm" style="display:none; width:max-content; margin-top:0.75rem; cursor:pointer;">
+                      Upload New QR
+                      <input id="profile-payout-file" type="file" accept="image/jpeg,image/png,image/webp" style="display:none;" onchange="App.uploadPayoutQr(this)" />
+                    </label>
+                    <input id="inp-payout-image" type="hidden" />
+                  </div>
+                </div>
                 
               </div>
 
@@ -1017,6 +1037,23 @@
           document.getElementById('inp-sss').value = emp.sss || '';
           document.getElementById('inp-philhealth').value = emp.philhealth || '';
           document.getElementById('inp-pagibig').value = emp.pagibig || '';
+          document.getElementById('inp-payout-details').value = emp.payout_details || '';
+          document.getElementById('inp-payout-image').value = emp.payout_details_image || '';
+          const payoutImage = document.getElementById('profile-payout-image');
+          const payoutEmpty = document.getElementById('profile-payout-empty');
+          if (emp.payout_details_image) {
+            payoutImage.src = emp.payout_details_image;
+            payoutImage.style.display = 'block';
+            payoutEmpty.style.display = 'none';
+          } else {
+            payoutImage.removeAttribute('src');
+            payoutImage.style.display = 'none';
+            payoutEmpty.style.display = 'block';
+          }
+          const savedPayoutMode = emp.payout_details_image ? 'qr' : 'account';
+          const savedPayoutRadio = document.querySelector(`input[name="profile-payout-mode"][value="${savedPayoutMode}"]`);
+          if (savedPayoutRadio) savedPayoutRadio.checked = true;
+          this.updatePayoutMode();
           // Populate employment form inputs dynamically from the Org Map structure
           let resolvedDept = emp.department || 'N/A';
           let resolvedReportingTo = emp.reporting_to || 'N/A';
@@ -1378,6 +1415,49 @@
       },
 
       /* ── Directory Edits (Moderated via HR Approval Requests) ── */
+      updatePayoutMode() {
+        const mode = document.querySelector('input[name="profile-payout-mode"]:checked')?.value || (this.employeeData?.payout_details_image ? 'qr' : 'account');
+        document.getElementById('profile-payout-account-wrap').hidden = mode === 'qr';
+        document.getElementById('profile-payout-qr-wrap').hidden = mode !== 'qr';
+        document.getElementById('inp-payout-details').required = this.editMode && mode === 'account';
+      },
+
+      async uploadPayoutQr(input) {
+        const file = input.files?.[0];
+        if (!file) return;
+        if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 3 * 1024 * 1024) {
+          showToast('Choose a JPG, PNG, or WebP QR image smaller than 3 MB.', true);
+          input.value = '';
+          return;
+        }
+        try {
+          showToast('Uploading payout QR code...');
+          const fileBase64 = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          });
+          const response = await window.BKAuth.authenticatedFetch('/api/profile-payout-upload', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ company_id: this.companyId, file_name: file.name, file_base64: fileBase64 })
+          });
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok || !result.url) throw new Error(result.error || 'The payout QR image could not be uploaded.');
+          document.getElementById('inp-payout-image').value = result.url;
+          const image = document.getElementById('profile-payout-image');
+          image.src = result.url;
+          image.style.display = 'block';
+          document.getElementById('profile-payout-empty').style.display = 'none';
+          showToast('Payout QR code uploaded. Submit the update request to save it.');
+        } catch (error) {
+          showToast(error.message || 'The payout QR image could not be uploaded.', true);
+        } finally {
+          input.value = '';
+        }
+      },
+
       enableEditMode() {
         this.editMode = true;
         document.getElementById('btn-edit').style.display = 'none';
@@ -1389,6 +1469,10 @@
         fields.forEach(f => {
           document.getElementById(f).removeAttribute('disabled');
         });
+        document.getElementById('inp-payout-details').removeAttribute('disabled');
+        document.getElementById('payout-mode-controls').style.display = 'flex';
+        document.getElementById('profile-payout-upload-label').style.display = 'inline-flex';
+        this.updatePayoutMode();
       },
 
       disableEditMode() {
@@ -1401,6 +1485,9 @@
         fields.forEach(f => {
           document.getElementById(f).setAttribute('disabled', 'true');
         });
+        document.getElementById('inp-payout-details').setAttribute('disabled', 'true');
+        document.getElementById('payout-mode-controls').style.display = 'none';
+        document.getElementById('profile-payout-upload-label').style.display = 'none';
 
         // Reset inputs
         this.loadProfile();
@@ -1410,6 +1497,15 @@
         e.preventDefault();
         if (!this.employeeData) return;
 
+        const payoutMode = document.querySelector('input[name="profile-payout-mode"]:checked')?.value || 'account';
+        if (payoutMode === 'account' && !document.getElementById('inp-payout-details').value.trim()) {
+          showToast('Enter payout account details before submitting.', true);
+          return;
+        }
+        if (payoutMode === 'qr' && !document.getElementById('inp-payout-image').value.trim()) {
+          showToast('Upload a payout QR code before submitting.', true);
+          return;
+        }
         const payload = {
           first_name: document.getElementById('inp-firstname').value.trim(),
           last_name: document.getElementById('inp-lastname').value.trim(),
@@ -1420,7 +1516,9 @@
           tin: document.getElementById('inp-tin').value.trim(),
           sss: document.getElementById('inp-sss').value.trim(),
           philhealth: document.getElementById('inp-philhealth').value.trim(),
-          pagibig: document.getElementById('inp-pagibig').value.trim()
+          pagibig: document.getElementById('inp-pagibig').value.trim(),
+          payout_details: payoutMode === 'account' ? document.getElementById('inp-payout-details').value.trim() : null,
+          payout_details_image: payoutMode === 'qr' ? document.getElementById('inp-payout-image').value.trim() : null
         };
 
         // Filter only actual changes to show in the request compare

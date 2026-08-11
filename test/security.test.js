@@ -143,6 +143,17 @@ test('all Directory employee forms require account details or a private payout Q
   assert.match(upload, /'payout', 'qr'/);
 });
 
+test('employee profile payout QR replacement is self-scoped and privately stored', () => {
+  const api = fs.readFileSync(new URL('../api/profile-payout-upload.js', import.meta.url), 'utf8');
+  const profile = fs.readFileSync(new URL('../dashboard/profile.html', import.meta.url), 'utf8');
+  assert.match(api, /\.eq\('company_id', companyId\)\.ilike\('email', user\.email\)/);
+  assert.match(api, /from\('brightkey-internal'\)/);
+  assert.match(api, /check_company_storage_quota/);
+  assert.match(profile, /\/api\/profile-payout-upload/);
+  assert.match(profile, /payout_details_image/);
+  assert.match(profile, /Upload New QR/);
+});
+
 test('free subscription owner invitations retain owner dashboard access', () => {
   const source = fs.readFileSync(new URL('../api/register-account.js', import.meta.url), 'utf8');
   assert.match(source, /\['owner', 'admin'\]\.includes\(invitedRole\)/);
