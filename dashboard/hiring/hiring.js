@@ -2651,9 +2651,7 @@ const HiringApp = {
 
       return `<tr>
         <td><span class="job-type-pill${isProject ? ' project' : ''}">${typeLabel}</span></td>
-        <td>${post.public_code
-          ? `<a class="job-title-cell" href="/careers/${this.esc(post.public_code)}" target="_blank" rel="noopener noreferrer">${this.esc(post.job_title)}</a>`
-          : `<span class="job-title-cell">${this.esc(post.job_title)}</span>`}</td>
+        <td><button class="job-title-cell" type="button" onclick="HiringApp.openEditModal('${this.esc(post.id)}')" aria-label="Edit ${this.esc(post.job_title)}">${this.esc(post.job_title)}</button></td>
         <td>${this.esc(departmentTeam)}</td>
         <td>${post.visibility_level ? `<span class="job-level-pill">Level ${post.visibility_level}</span>` : '—'}</td>
         <td>${this.esc(compensation)}</td>
@@ -2668,11 +2666,13 @@ const HiringApp = {
         </td>
         <td>
           <div class="hiring-action-group">
+            ${post.public_code ? `<a class="hiring-icon-btn" href="/careers/${this.esc(post.public_code)}" target="_blank" rel="noopener noreferrer" title="Open live job post" aria-label="Open live job post for ${this.esc(post.job_title)}">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.07.07l2-2A5 5 0 0 0 12 4l-1.15 1.15"/><path d="M14 11a5 5 0 0 0-7.07-.07l-2 2A5 5 0 0 0 12 20l1.15-1.15"/></svg>
+            </a>` : `<button class="hiring-icon-btn" type="button" title="Live job post unavailable" aria-label="Live job post unavailable for ${this.esc(post.job_title)}" disabled>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.07.07l2-2A5 5 0 0 0 12 4l-1.15 1.15"/><path d="M14 11a5 5 0 0 0-7.07-.07l-2 2A5 5 0 0 0 12 20l1.15-1.15"/></svg>
+            </button>`}
             <button class="hiring-icon-btn" type="button" title="Preview template" aria-label="Preview template for ${this.esc(post.job_title)}" onclick="HiringApp.openTemplatePreview('${this.esc(post.id)}')">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.5"/></svg>
-            </button>
-            <button class="hiring-icon-btn" type="button" title="Edit" aria-label="Edit ${this.esc(post.job_title)}" onclick="HiringApp.openEditModal('${this.esc(post.id)}')">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
             </button>
             <button class="hiring-icon-btn danger" type="button" title="Delete" aria-label="Delete ${this.esc(post.job_title)}" onclick="HiringApp.openDeleteModal('${this.esc(post.id)}')">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v5M14 11v5"/></svg>
