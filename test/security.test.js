@@ -157,7 +157,7 @@ test('employee profile payout QR replacement is self-scoped and privately stored
 test('contract snippets are company scoped, sanitized, and bounded', () => {
   const source = fs.readFileSync(new URL('../dashboard/hiring/contracts/contracts.js', import.meta.url), 'utf8');
   assert.match(source, /\.from\('job_posts'\)[\s\S]*?\.eq\('company_id', state\.app\.companyId\)[\s\S]*?\.limit\(100\)/);
-  assert.match(source, /\.from\('global_settings'\)[\s\S]*?\.eq\('company_id', state\.app\.companyId\)[\s\S]*?\.in\('key', \[SETTINGS_KEY, JOB_CONTRACTS_KEY\]\)\.limit\(2\)/);
+  assert.match(source, /\.from\('global_settings'\)[\s\S]*?\.eq\('company_id', state\.app\.companyId\)[\s\S]*?\.in\('key', \[SETTINGS_KEY, JOB_CONTRACTS_KEY, TEMPLATES_KEY\]\)\.limit\(3\)/);
   assert.match(source, /upsert\(\{ company_id: state\.app\.companyId, key: SETTINGS_KEY/);
   assert.match(source, /items\.slice\(0, 100\)/);
   assert.match(source, /\.slice\(0, 40\)\.map\(normalizeBlock\)/);
@@ -206,6 +206,15 @@ test('contract snippets are company scoped, sanitized, and bounded', () => {
   assert.match(source, /key: JOB_CONTRACTS_KEY/);
   assert.match(source, /function loadClause/);
   assert.match(source, /function dragClause/);
+  assert.match(source, /function openTemplateEditor/);
+  assert.match(source, /function saveAsTemplate/);
+  assert.match(source, /function loadTemplateIntoJob/);
+  assert.match(source, /function insertPage/);
+  assert.match(source, /state\.pages\.splice\(state\.currentPage \+ 1, 0, \[\]\)/);
+  assert.doesNotMatch(source, /up to 20 pages|pages\.length >= 20|pages\.length < 20|slice\(0, 19\)|slice\(0, 20\)/);
+  const templates = fs.readFileSync(new URL('../dashboard/hiring/contract-templates.js', import.meta.url), 'utf8');
+  assert.match(templates, /Loading a template will discard all current unsaved contract pages and blocks/);
+  assert.match(templates, /Load Template/);
   assert.match(source, /contract-status-dot\$\{hasContract \? ' has-contract' : ''\}/);
   assert.match(source, /payload\.startsWith\('clause:'\)/);
   assert.match(source, /if \(readOnly\) bodyPages = bodyPages\.filter\(page => !pageIsBlank\(page\)\)/);

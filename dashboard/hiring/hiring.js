@@ -74,9 +74,9 @@ const HiringApp = {
     if (activeTab === 'templates' && window.location.hash === '#forms') return window.location.replace('/dashboard/hiring/forms');
     this.setActiveTab(activeTab);
     if (activeTab === 'job-post') {
-      this.renderJobPostPage();
-      this.renderModals();
-      await Promise.all([this.loadEmployees(), this.loadJobPosts(), window.BKHiringJobApplicationForm?.init(this)]);
+      this.renderJobPostPage(); this.renderModals();
+      const employeesPromise = this.loadEmployees(), jobPostsPromise = this.loadJobPosts();
+      await Promise.all([window.BKHiringUncoveredPositions ? window.BKHiringUncoveredPositions.load(this, employeesPromise, jobPostsPromise) : Promise.all([employeesPromise, jobPostsPromise]), window.BKHiringJobApplicationForm?.init(this)]);
     } else if (activeTab === 'applicants') {
       this.renderApplicantsPage();
       await this.loadApplicationSummaries();
@@ -142,6 +142,7 @@ const HiringApp = {
             </table>
           </div>
         </div>
+        <section class="uncovered-positions" aria-labelledby="uncovered-positions-title"><div class="uncovered-positions-header"><div><h2 id="uncovered-positions-title">No Job Post Yet</h2><p>Positions found in the employee directory that still need responsibilities, forms, and contracts.</p></div><span class="uncovered-positions-count" id="uncovered-positions-count" aria-label="Loading uncovered positions">—</span></div><div id="uncovered-positions-list"><div class="loading-wrapper"><span class="spinner-cyan"></span><span>Checking employee positions</span></div></div></section>
       </div>`;
   },
   renderApplicantsPage() {
@@ -354,7 +355,7 @@ const HiringApp = {
       const value = answer?.answer;
       return `<td>${value ? this.esc(value) : '—'}</td>`;
     }).join('');
-    return `<tr>
+    return `<tr class="${application.hired_at && application.status === 'approved' ? 'applicant-row-hired' : application.status === 'rejected' ? 'applicant-row-rejected' : 'applicant-row-stage'}">
       <td>${this.formatLongDate(application.submitted_at)}</td>
       <td>${this.esc(application.first_name)}</td>
       <td>${this.esc(application.last_name)}</td>
@@ -2533,7 +2534,7 @@ const HiringApp = {
     const [employeesResult, structureResult] = await Promise.all([
       this.sb
         .from('employees')
-        .select('id, first_name, last_name, title, department, employment_status')
+        .select('id, first_name, last_name, title, department, employment_status, salary, reporting_to, shift_days, shift_time_1, job_post_id, level, job_description')
         .eq('company_id', this.companyId)
         .order('first_name', { ascending: true }),
       this.sb
@@ -2547,7 +2548,7 @@ const HiringApp = {
     if (employeesResult.error) {
       console.error('Hiring employees load failed:', employeesResult.error);
       this.showToast('Employee options could not be loaded. Refresh the page before selecting a hiring manager.', true);
-      return;
+      return false;
     }
 
     this.employees = (employeesResult.data || []).filter((employee) =>
@@ -2562,7 +2563,7 @@ const HiringApp = {
     const departments = Array.isArray(structureResult.data?.value?.departments)
       ? structureResult.data.value.departments
       : [];
-    this.organizationDepartments = departments
+    this.organizationStructure = departments; this.organizationDepartments = departments
       .map(department => String(department?.name || '').trim())
       .filter(Boolean);
     this.organizationTeams = departments
@@ -2570,7 +2571,7 @@ const HiringApp = {
       .map(team => String(team?.name || '').trim())
       .filter(Boolean);
 
-    this.populateEmployeeOptions();
+    this.populateEmployeeOptions(); return true;
   },
 
   populateEmployeeOptions() {
@@ -2619,13 +2620,12 @@ const HiringApp = {
     if (error) {
       console.error('Job posts load failed:', error);
       body.innerHTML = `<tr><td colspan="10"><div class="hiring-empty">Job posts are not available yet. Apply the Hiring database migration, then refresh this page.</div></td></tr>`;
-      return;
+      return false;
     }
 
     this.jobPosts = data || [];
-    this.renderJobPosts();
+    this.renderJobPosts(); return true;
   },
-
   renderJobPosts() {
     const body = document.getElementById('job-posts-body');
     if (!body) return;
@@ -2685,7 +2685,7 @@ const HiringApp = {
     }).join('');
   },
   openCreateModal() {
-    this.editingId = null;
+    this.editingId = null; window.BKHiringUncoveredPositions?.clearSelection();
     this.resetForm();
     window.BKHiringJobApplicationForm?.open();
     document.getElementById('job-post-modal-title').textContent = 'Create Job Post';
@@ -3439,13 +3439,13 @@ const HiringApp = {
       return;
     }
 
-    const applicationFormSaved = await window.BKHiringJobApplicationForm?.save(savedPost?.id || this.editingId);
+    const directoryEmployeesLinked = await window.BKHiringUncoveredPositions?.linkCreatedPost(this, savedPost?.id, Boolean(this.editingId)) ?? true; const applicationFormSaved = await window.BKHiringJobApplicationForm?.save(savedPost?.id || this.editingId);
     if (applicationFormSaved === false) {
       this.showToast('The job post was saved, but its application questions could not be saved. Please edit the post and try again.', true);
     }
 
     this.closeModal('job-post-modal');
-    this.showToast(this.editingId ? 'Job post updated.' : 'Job post published.');
+    this.showToast(directoryEmployeesLinked ? (this.editingId ? 'Job post updated.' : 'Job post published.') : 'The job post was published, but its directory employees could not be connected. Assign it from Employee Directory and try again.', !directoryEmployeesLinked);
     await this.loadJobPosts();
   },
 

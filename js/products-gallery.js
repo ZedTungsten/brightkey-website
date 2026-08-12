@@ -8,6 +8,7 @@
     fire_extinguisher: 'fireextinguisher_features'
   };
   const PAGE_SIZE = 9;
+  const PRICE_THUMB_DIAMETER = 20;
 
   const FEATURE_LABELS = {
     app_control: 'App Control',
@@ -305,6 +306,14 @@
     dom.priceFill.style.right = `${100 - (max / ceiling) * 100}%`;
   }
 
+  function priceHandleGap() {
+    const trackWidth = document.getElementById('price-range')?.clientWidth || 1;
+    const step = Number(dom.minPrice.step) || 100;
+    const thumbTravel = Math.max(1, trackWidth - PRICE_THUMB_DIAMETER);
+    const visualGap = (PRICE_THUMB_DIAMETER / thumbTravel) * state.priceCeiling;
+    return Math.max(step, Math.ceil(visualGap / step) * step);
+  }
+
   function hasActiveFilters() {
     return Boolean(
       state.query
@@ -500,15 +509,13 @@
     dom.category.addEventListener('change', applyFilters);
     dom.sort.addEventListener('change', applyFilters);
     dom.minPrice.addEventListener('input', () => {
-      if (Number(dom.minPrice.value) > Number(dom.maxPrice.value)) {
-        dom.minPrice.value = dom.maxPrice.value;
-      }
+      const maximum = Number(dom.maxPrice.value) - priceHandleGap();
+      dom.minPrice.value = String(Math.min(Number(dom.minPrice.value), maximum));
       applyFilters();
     });
     dom.maxPrice.addEventListener('input', () => {
-      if (Number(dom.maxPrice.value) < Number(dom.minPrice.value)) {
-        dom.maxPrice.value = dom.minPrice.value;
-      }
+      const minimum = Number(dom.minPrice.value) + priceHandleGap();
+      dom.maxPrice.value = String(Math.max(Number(dom.maxPrice.value), minimum));
       applyFilters();
     });
     dom.reset.addEventListener('click', resetFilters);

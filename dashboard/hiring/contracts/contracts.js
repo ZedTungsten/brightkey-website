@@ -1,8 +1,8 @@
 (function () {
   'use strict';
-
   const SETTINGS_KEY = 'contract_snippets';
   const JOB_CONTRACTS_KEY = 'job_contract_documents';
+  const TEMPLATES_KEY = 'contract_document_templates';
   const BLOCK_TYPES = { title: 'Title', header1: 'Header 1', header2: 'Header 2', paragraph: 'Paragraph', list: 'List', numbered: 'Numbered List', signatures: 'Signatures' };
   const PERSONALIZATION_FIELDS = [
     ['date_hired', 'Date Hired'], ['salary', 'Salary'], ['first_name', 'First Name'], ['last_name', 'Last Name'],
@@ -10,10 +10,8 @@
     ['email', 'Email'], ['title_position', 'Title / Position'], ['date_of_birth', 'Date of Birth']
   ];
   const state = { app: null, jobs: [], snippets: [], jobContracts: {}, pages: [[]], currentPage: 0, history: [], redoHistory: [], personalizationRange: null, selectionListenerBound: false, shortcutListenerBound: false, templateReady: false, draggedBlock: null, dropIndex: null, editingId: null, activeJobId: null, builderMode: 'clause', readOnly: false, deletingId: null, saving: false };
-
   const esc = value => state.app?.esc(value) || '';
   const uid = () => globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-
   function normalizeBlock(block) {
     const requestedType = block?.type === 'header' ? 'header2' : block?.type;
     const type = Object.hasOwn(BLOCK_TYPES, requestedType) ? requestedType : 'paragraph';
@@ -22,21 +20,19 @@
     const id = String(block?.id || uid());
     return { id, sourceId: String(block?.sourceId || id), type, html: legacyPlaceholders.has(html) ? '' : html };
   }
-
   function normalizeSnippet(item) {
     const sourcePages = Array.isArray(item?.pages) && item.pages.length ? item.pages : [Array.isArray(item?.blocks) ? item.blocks : []];
     return {
       id: String(item?.id || uid()),
       title: String(item?.title || '').trim().slice(0, 120),
-      pages: sourcePages.slice(0, 20).map(page => (Array.isArray(page) ? page : []).slice(0, 40).map(normalizeBlock)),
+      pages: sourcePages.map(page => (Array.isArray(page) ? page : []).slice(0, 40).map(normalizeBlock)),
       updatedAt: String(item?.updatedAt || new Date().toISOString())
     };
   }
-
   function currentBlocks() { return state.pages[state.currentPage] || []; }
+  function isCoverPage() { return ['job', 'template'].includes(state.builderMode) && state.currentPage === 0; }
   function plainText(html) { const node = document.createElement('div'); node.innerHTML = sanitizeHtml(html); return (node.textContent || '').replace(/\u00a0/g, ' ').trim(); }
   function pageIsBlank(page) { return !page.length || page.every(block => block.type !== 'signatures' && !plainText(block.html)); }
-
   function sanitizeHtml(value) {
     const template = document.createElement('template');
     template.innerHTML = String(value || '').replace(/\u200b/g, '');
@@ -47,13 +43,11 @@
     });
     return template.innerHTML.slice(0, 10000);
   }
-
   function renderPersonalizationPills(html) {
     if (state.readOnly) return window.BKHiringContractTemplate?.personalizeHtml(html) || String(html || '');
     const allowed = new Set(PERSONALIZATION_FIELDS.map(([token]) => token));
     return String(html || '').replace(/\{\{([a-z_]+)\}\}/g, (match, token) => allowed.has(token) ? `<span class="personalization-pill" contenteditable="false" data-token="${token}">${match}</span>` : match);
   }
-
   function renderPage() {
     const content = document.querySelector('.hiring-content');
     if (!content) return;
@@ -63,22 +57,21 @@
           <div class="contracts-column-header"><div><h2 id="contract-jobs-title">Jobs</h2><p>Select a job post to build its contract later.</p></div></div>
           <div id="contract-job-cards" class="contract-card-list"><div class="contracts-skeleton"><i></i><i></i><i></i></div></div>
         </section>
-        <section class="contracts-column" aria-labelledby="contract-snippets-title">
+        <div class="contracts-side-stack"><section class="contracts-column" aria-labelledby="contract-snippets-title">
           <div class="contracts-column-header"><div><h2 id="contract-snippets-title">Contract Clauses</h2><p>Reusable clauses for employment contracts.</p></div>
             <button class="btn btn-primary" id="create-clause-button" type="button" disabled onclick="BKHiringContracts.openBuilder()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Create Clause</button>
           </div>
           <div id="contract-snippet-cards" class="contract-card-list"><div class="contracts-skeleton"><i></i><i></i></div></div>
-        </section>
+        </section>${window.BKContractTemplates?.sectionMarkup() || ''}</div>
       </div>
-      ${builderModal()}${deleteModal()}
+      ${builderModal()}${deleteModal()}${window.BKContractTemplates?.modalsMarkup() || ''}
     </div>`;
   }
-
   function builderModal() {
     return `<div class="hiring-modal-overlay snippet-builder-overlay" id="snippet-builder-modal" role="dialog" aria-modal="true" aria-labelledby="snippet-builder-title" style="display:none">
       <div class="hiring-modal-card snippet-builder-card">
           <div class="hiring-modal-header"><div><h3 id="snippet-builder-title">Create Contract Clause</h3><p id="snippet-builder-description">Drag content blocks into the contract preview.</p></div>
-          <button class="hiring-icon-btn" type="button" aria-label="Close builder" onclick="BKHiringContracts.closeBuilder()"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+          <div class="snippet-header-actions"><button class="btn btn-outline btn-sm" id="load-job-template" type="button" hidden onclick="BKContractTemplates.beginLoad()">Load Template</button><button class="btn btn-outline btn-sm" id="save-job-template" type="button" hidden onclick="BKHiringContracts.saveAsTemplate()">Save Template</button><button class="hiring-icon-btn" type="button" aria-label="Close builder" onclick="BKHiringContracts.closeBuilder()"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
         </div>
         <div class="snippet-builder-body">
           <label class="snippet-title-field"><span>Title <b>*</b></span><input id="snippet-title" type="text" maxlength="120" placeholder="e.g. Non-compete clause" required /></label>
@@ -96,7 +89,7 @@
                 <button class="snippet-indent-button" id="snippet-indent-decrease" type="button" hidden aria-label="Decrease indent" title="Decrease indent" onmousedown="event.preventDefault()" onclick="BKHiringContracts.indentList('outdent')"><svg viewBox="0 0 24 24"><path d="M10 6h10M10 12h10M10 18h10M7 9l-3 3 3 3"/></svg></button>
                 <button class="snippet-indent-button" id="snippet-indent-increase" type="button" hidden aria-label="Increase indent" title="Increase indent" onmousedown="event.preventDefault()" onclick="BKHiringContracts.indentList('indent')"><svg viewBox="0 0 24 24"><path d="M10 6h10M10 12h10M10 18h10M4 9l3 3-3 3"/></svg></button>
                 <button class="snippet-personalization-button" type="button" onclick="BKHiringContracts.togglePersonalization(event, this)">Personalization</button>
-                <div class="snippet-page-controls"><button id="snippet-page-previous" type="button" aria-label="Previous page" title="Previous page" onclick="BKHiringContracts.changePage(-1)"><svg viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg></button><span id="snippet-page-status">Page 1 of 1</span><button id="snippet-page-next" type="button" aria-label="Next page" title="Next page" onclick="BKHiringContracts.nextPage()"><svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></button></div>
+                <div class="snippet-page-controls"><button class="snippet-insert-page" id="snippet-insert-page" type="button" onclick="BKHiringContracts.insertPage()">Insert Page</button><button id="snippet-page-previous" type="button" aria-label="Previous page" title="Previous page" onclick="BKHiringContracts.changePage(-1)"><svg viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg></button><span id="snippet-page-status">Page 1 of 1</span><button id="snippet-page-next" type="button" aria-label="Next page" title="Next page" onclick="BKHiringContracts.nextPage()"><svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></button></div>
               </div>
               <div class="snippet-page-stage"><div id="snippet-preview" ondragover="BKHiringContracts.allowDrop(event)" ondrop="BKHiringContracts.drop(event)"></div></div>
             </section>
@@ -107,11 +100,9 @@
       </div>
     </div>`;
   }
-
   function deleteModal() {
     return `<div class="hiring-modal-overlay clause-delete-overlay" id="clause-delete-modal" role="dialog" aria-modal="true" aria-labelledby="clause-delete-title" style="display:none"><div class="hiring-modal-card clause-delete-card"><div class="hiring-modal-header"><h3 id="clause-delete-title">Delete Clause</h3><button class="hiring-icon-btn" type="button" aria-label="Close" onclick="BKHiringContracts.closeDelete()"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div><div class="clause-delete-body"><p>This clause will be permanently removed from your reusable contract clauses.</p></div><div class="hiring-modal-footer"><button class="btn btn-outline" type="button" onclick="BKHiringContracts.closeDelete()">Cancel</button><button class="btn clause-delete-confirm" type="button" onclick="BKHiringContracts.confirmDelete()">Delete Clause</button></div></div></div>`;
   }
-
   async function init(app) {
     state.app = app;
     state.templateReady = false;
@@ -129,7 +120,6 @@
     const createButton = document.getElementById('create-clause-button');
     if (createButton) createButton.disabled = false;
   }
-
   async function loadJobs() {
     const host = document.getElementById('contract-job-cards');
     const { data, error } = await state.app.sb.from('job_posts').select('id, job_title, department_name, team_name, employment_type, status, public_code').eq('company_id', state.app.companyId).order('created_at', { ascending: false }).limit(100);
@@ -141,7 +131,6 @@
     state.jobs = data || [];
     renderJobs();
   }
-
   function renderJobs() {
     const host = document.getElementById('contract-job-cards');
     if (!host) return;
@@ -152,9 +141,8 @@
       return `<article class="contract-list-card contract-job-card"><div><h3>${esc(job.job_title)}</h3><code>${esc(job.public_code || 'Draft')}</code></div><div class="clause-card-actions"><span class="contract-status-dot${hasContract ? ' has-contract' : ''}" title="${hasContract ? 'Contract saved' : 'Contract not yet created'}" aria-label="${hasContract ? 'Contract saved' : 'Contract not yet created'}"></span><button type="button" aria-label="View ${esc(job.job_title)} contract" title="View contract" onclick="BKHiringContracts.openJobContract('${esc(job.id)}', true)"><svg viewBox="0 0 24 24"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.5"/></svg></button><button type="button" aria-label="Edit ${esc(job.job_title)} contract" title="Edit contract" onclick="BKHiringContracts.openJobContract('${esc(job.id)}', false)"><svg viewBox="0 0 24 24"><path d="m4 16-.8 4.8L8 20l11-11-4-4L4 16Z"/><path d="m13.5 6.5 4 4"/></svg></button></div></article>`;
     }).join('');
   }
-
   async function loadSnippets() {
-    const { data, error } = await state.app.sb.from('global_settings').select('key,value').eq('company_id', state.app.companyId).in('key', [SETTINGS_KEY, JOB_CONTRACTS_KEY]).limit(2);
+    const { data, error } = await state.app.sb.from('global_settings').select('key,value').eq('company_id', state.app.companyId).in('key', [SETTINGS_KEY, JOB_CONTRACTS_KEY, TEMPLATES_KEY]).limit(3);
     if (error) {
       console.error('Contract snippets load failed:', error);
       state.app.showToast('Contract snippets could not be loaded. Refresh the page and try again.', true);
@@ -163,10 +151,10 @@
     const items = Array.isArray(settings[SETTINGS_KEY]?.items) ? settings[SETTINGS_KEY].items : [];
     state.snippets = items.slice(0, 100).map(normalizeSnippet).filter(item => item.title && item.pages.some(page => page.length));
     state.jobContracts = settings[JOB_CONTRACTS_KEY] && typeof settings[JOB_CONTRACTS_KEY] === 'object' ? settings[JOB_CONTRACTS_KEY] : {};
+    window.BKContractTemplates?.init(state.app, settings[TEMPLATES_KEY], openTemplateEditor, loadTemplateIntoJob);
     renderJobs();
     renderSnippets();
   }
-
   function renderSnippets() {
     const host = document.getElementById('contract-snippet-cards');
     if (!host) return;
@@ -174,7 +162,6 @@
     const sorted = [...state.snippets].sort((a, b) => a.title.localeCompare(b.title, undefined, { numeric: true, sensitivity: 'base' }));
     host.innerHTML = sorted.map(item => `<article class="contract-list-card snippet-card"><div class="clause-card-content"><h3>${esc(item.title)}</h3></div><div class="clause-card-actions"><button type="button" aria-label="Edit ${esc(item.title)}" title="Edit clause" onclick="BKHiringContracts.openBuilder('${esc(item.id)}')"><svg viewBox="0 0 24 24"><path d="m4 16-.8 4.8L8 20l11-11-4-4L4 16Z"/><path d="m13.5 6.5 4 4"/></svg></button><button class="delete" type="button" aria-label="Delete ${esc(item.title)}" title="Delete clause" onclick="BKHiringContracts.openDelete('${esc(item.id)}')"><svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3m-8 0 1 13h8l1-13M10 11v5M14 11v5"/></svg></button></div></article>`).join('');
   }
-
   function openBuilder(id = '') {
     if (!state.templateReady) { state.app.showToast('The company contract template is still loading. Please try again in a moment.', true); return; }
     state.builderMode = 'clause';
@@ -194,6 +181,8 @@
     document.querySelector('.snippet-title-field').hidden = false;
     const saveButton = document.getElementById('save-snippet-button');
     if (saveButton) { saveButton.hidden = false; saveButton.textContent = 'Save Clause'; }
+    document.getElementById('save-job-template').hidden = true;
+    document.getElementById('load-job-template').hidden = true;
     renderPreview();
     const modal = document.getElementById('snippet-builder-modal');
     if (!modal) return;
@@ -208,7 +197,7 @@
     const job = state.jobs.find(item => item.id === id);
     if (!job) return;
     const stored = state.jobContracts[id];
-    let bodyPages = (Array.isArray(stored?.pages) && stored.pages.length ? stored.pages : [[]]).slice(0, 19).map(page => (Array.isArray(page) ? page : []).map(normalizeBlock));
+    let bodyPages = (Array.isArray(stored?.pages) && stored.pages.length ? stored.pages : [[]]).map(page => (Array.isArray(page) ? page : []).map(normalizeBlock));
     if (readOnly) bodyPages = bodyPages.filter(page => !pageIsBlank(page));
     state.builderMode = 'job';
     state.readOnly = Boolean(readOnly);
@@ -223,7 +212,39 @@
     document.querySelector('.snippet-title-field').hidden = true;
     const button = document.getElementById('save-snippet-button');
     if (button) { button.hidden = readOnly; button.textContent = 'Save Contract'; }
+    document.getElementById('save-job-template').hidden = Boolean(readOnly);
+    document.getElementById('load-job-template').hidden = Boolean(readOnly);
     openModal();
+  }
+
+  function openTemplateEditor(item = null) {
+    if (!state.templateReady) return;
+    state.builderMode = 'template'; state.readOnly = false; state.activeJobId = null; state.editingId = item?.id || null;
+    state.pages = [[], ...((item?.pages?.length ? item.pages : [[]]).map(page => page.map(normalizeBlock)))];
+    state.currentPage = 0; state.history = []; state.redoHistory = [];
+    const title = document.getElementById('snippet-title');
+    title.value = item?.title || ''; title.style.borderColor = '';
+    document.getElementById('snippet-builder-title').textContent = item ? 'Edit Contract Template' : 'Create Contract Template';
+    document.getElementById('snippet-builder-description').hidden = false;
+    document.querySelector('.snippet-title-field').hidden = false;
+    document.getElementById('save-job-template').hidden = true;
+    document.getElementById('load-job-template').hidden = true;
+    const button = document.getElementById('save-snippet-button'); button.hidden = false; button.textContent = 'Save Template';
+    openModal();
+  }
+
+  function saveAsTemplate() {
+    if (state.builderMode !== 'job' || state.readOnly) return;
+    syncCurrentPage();
+    const pages = state.pages.slice(1).filter(page => !pageIsBlank(page));
+    window.BKContractTemplates?.askName(JSON.parse(JSON.stringify(pages)));
+  }
+
+  function loadTemplateIntoJob(item) {
+    if (state.builderMode !== 'job' || state.readOnly) return;
+    const sources = new Map();
+    state.pages = [[], ...item.pages.map(page => page.map(block => { const key = block.sourceId || block.id; if (!sources.has(key)) sources.set(key, uid()); return normalizeBlock({ ...block, id: uid(), sourceId: sources.get(key) }); }))];
+    state.currentPage = 0; state.history = []; state.redoHistory = []; renderPreview();
   }
 
   function openModal() {
@@ -279,7 +300,7 @@
   }
 
   function addBlock(type, index = null) {
-    if (state.readOnly || (state.builderMode === 'job' && state.currentPage === 0)) return;
+    if (state.readOnly || isCoverPage()) return;
     const blocks = currentBlocks();
     if (!Object.hasOwn(BLOCK_TYPES, type) || blocks.length >= 40) return;
     const target = Number.isInteger(index) ? Math.max(0, Math.min(index, blocks.length)) : blocks.length;
@@ -304,7 +325,7 @@
   }
 
   function allowDrop(event) {
-    if (state.readOnly || (state.builderMode === 'job' && state.currentPage === 0)) return;
+    if (state.readOnly || isCoverPage()) return;
     event.preventDefault();
     event.dataTransfer.dropEffect = state.draggedBlock ? 'move' : 'copy';
     const content = event.currentTarget.querySelector('.snippet-template-content');
@@ -327,7 +348,7 @@
     content.insertBefore(line, reference || null);
   }
   function drop(event) {
-    if (state.readOnly || (state.builderMode === 'job' && state.currentPage === 0)) return;
+    if (state.readOnly || isCoverPage()) return;
     event.preventDefault();
     const payload = event.dataTransfer.getData('text/plain');
     const insertionIndex = Number.isInteger(state.dropIndex) ? state.dropIndex : currentBlocks().length;
@@ -444,7 +465,7 @@
   }
 
   function removeBlock(id) {
-    if (state.readOnly || (state.builderMode === 'job' && state.currentPage === 0)) return;
+    if (state.readOnly || isCoverPage()) return;
     const pageIndex = state.currentPage;
     const sourceId = currentBlocks().find(block => block.id === id)?.sourceId;
     recordHistory();
@@ -481,13 +502,13 @@
     const host = document.getElementById('snippet-preview');
     if (!host) return;
     const card = document.querySelector('.snippet-builder-card');
-    const cover = state.builderMode === 'job' && state.currentPage === 0;
+    const cover = isCoverPage();
     card?.classList.toggle('is-locked-page', cover || state.readOnly);
     card?.classList.toggle('is-readonly', state.readOnly);
     const clauseList = document.getElementById('snippet-clause-list');
     if (clauseList) clauseList.innerHTML = state.snippets.length ? [...state.snippets].sort((a, b) => a.title.localeCompare(b.title)).map(item => `<button type="button" draggable="true" ondragstart="BKHiringContracts.dragClause(event, '${esc(item.id)}')" ondragend="BKHiringContracts.endDrag()" onclick="BKHiringContracts.loadClause('${esc(item.id)}')" title="Drag or click to add ${esc(item.title)}"><svg viewBox="0 0 12 20" aria-hidden="true"><circle cx="3" cy="3" r="1.3"/><circle cx="9" cy="3" r="1.3"/><circle cx="3" cy="10" r="1.3"/><circle cx="9" cy="10" r="1.3"/><circle cx="3" cy="17" r="1.3"/><circle cx="9" cy="17" r="1.3"/></svg><span>${esc(item.title)}</span></button>`).join('') : '<small>No clauses saved yet.</small>';
     const clauseLoader = document.getElementById('snippet-clause-loader');
-    if (clauseLoader) clauseLoader.hidden = state.builderMode !== 'job' || cover || state.readOnly;
+    if (clauseLoader) clauseLoader.hidden = state.builderMode === 'clause' || cover || state.readOnly;
     if (cover) {
       host.innerHTML = renderPersonalizationPills(window.BKHiringContractTemplate?.renderCoverPage() || '');
     } else {
@@ -498,11 +519,13 @@
     const status = document.getElementById('snippet-page-status');
     const previous = document.getElementById('snippet-page-previous');
     const next = document.getElementById('snippet-page-next');
+    const insert = document.getElementById('snippet-insert-page');
     if (status) status.textContent = `Page ${state.currentPage + 1} of ${state.pages.length}`;
     if (previous) previous.disabled = state.currentPage === 0;
+    if (insert) { insert.hidden = state.readOnly; insert.disabled = state.currentPage === state.pages.length - 1; }
     if (next) {
       const atEnd = state.currentPage === state.pages.length - 1;
-      const canAdd = atEnd && !state.readOnly && state.pages.length < 20;
+      const canAdd = atEnd && !state.readOnly;
       next.disabled = atEnd && !canAdd;
       next.classList.toggle('snippet-add-page', canAdd);
       next.setAttribute('aria-label', canAdd ? 'Add page' : 'Next page');
@@ -531,10 +554,13 @@
     if (state.currentPage < state.pages.length - 1) changePage(1);
     else if (!state.readOnly) addPage();
   }
+  function insertPage() {
+    if (state.readOnly || state.currentPage >= state.pages.length - 1) return;
+    syncCurrentPage(); recordHistory(); state.pages.splice(state.currentPage + 1, 0, []); state.currentPage += 1; renderPreview();
+  }
 
   function addPage() {
     if (state.readOnly) return;
-    if (state.pages.length >= 20) { state.app.showToast('A contract can contain up to 20 pages.', true); return; }
     syncCurrentPage();
     recordHistory();
     state.pages.push([]);
@@ -563,7 +589,7 @@
   }
 
   function format(command) {
-    if (state.readOnly || (state.builderMode === 'job' && state.currentPage === 0)) return;
+    if (state.readOnly || isCoverPage()) return;
     const selection = window.getSelection();
     const range = selection?.rangeCount ? selection.getRangeAt(0) : null;
     const anchor = selection?.anchorNode;
@@ -873,7 +899,7 @@
     const originBlockId = blockId;
     let pageIndex = state.currentPage;
     let activeId = blockId;
-    while (pageIndex < 20) {
+    while (pageIndex <= state.pages.length) {
       state.currentPage = pageIndex;
       renderPreview();
       if (!pageOverflows()) break;
@@ -917,6 +943,17 @@
 
   async function save() {
     if (state.saving) return;
+    if (state.builderMode === 'template') {
+      syncCurrentPage();
+      while (state.pages.length > 2 && pageIsBlank(state.pages.at(-1))) state.pages.pop();
+      const title = document.getElementById('snippet-title'); const name = title.value.trim();
+      if (!name) { title.style.borderColor = 'var(--danger)'; title.focus(); return; }
+      const pages = state.pages.slice(1);
+      if (!pages.some(page => !pageIsBlank(page))) { state.app.showToast('Add template content on page 2 before saving.', true); return; }
+      const saved = await window.BKContractTemplates?.save(state.editingId, name, pages);
+      if (saved) { closeBuilder(); state.app.showToast(state.editingId ? 'Contract template updated.' : 'Contract template saved.'); }
+      return;
+    }
     if (state.builderMode === 'job') {
       syncCurrentPage();
       while (state.pages.length > 2 && pageIsBlank(state.pages.at(-1))) state.pages.pop();
@@ -957,5 +994,5 @@
     state.editingId = null;
   }
 
-  window.BKHiringContracts = { init, openBuilder, openJobContract, closeBuilder, openDelete, closeDelete, confirmDelete, addBlock, addPage, changePage, nextPage, loadClause, dragNew, dragClause, dragExisting, endDrag, allowDrop, drop, updateBlock, editorInput, removeBlock, format, indentList, togglePersonalization, insertPersonalization, pastePlainText, paragraphKeydown, editorKeydown, beforeInput, ensureListItem, undo, redo, save };
+  window.BKHiringContracts = { init, openBuilder, openJobContract, openTemplateEditor, saveAsTemplate, loadTemplateIntoJob, closeBuilder, openDelete, closeDelete, confirmDelete, addBlock, addPage, insertPage, changePage, nextPage, loadClause, dragNew, dragClause, dragExisting, endDrag, allowDrop, drop, updateBlock, editorInput, removeBlock, format, indentList, togglePersonalization, insertPersonalization, pastePlainText, paragraphKeydown, editorKeydown, beforeInput, ensureListItem, undo, redo, save };
 })();

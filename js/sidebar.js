@@ -253,6 +253,7 @@
           <a href="/dashboard/attendance" class="dash-nav-child" id="nav-item-attendance">Attendance</a>
           <a href="/dashboard/payouts" class="dash-nav-child" id="nav-item-payouts">Payouts</a>
           <a href="/dashboard/organization" class="dash-nav-child" id="nav-item-organization">Organization</a>
+          <a href="/dashboard/onboarding" class="dash-nav-child" id="nav-item-onboarding">Onboarding</a>
         </div>
       </div>
 
@@ -371,7 +372,7 @@
           <a href="/dashboard/organization-map.html" class="dash-nav-child" data-role="hr">Org Map</a>
           <a href="/dashboard/attendance-leaves" class="dash-nav-child" data-role="hr">Attendance & Leaves</a>
           <a href="/dashboard/events/company" class="dash-nav-child" data-role="hr">Events</a>
-          <a href="/dashboard/hiring" class="dash-nav-child" data-role="hr">Hiring</a>
+          <a href="/dashboard/hiring/job-post" class="dash-nav-child" data-role="hr">Hiring</a>
           <a href="/dashboard/payout-tracker/payout/" class="dash-nav-child" data-role="hr" style="display: flex; justify-content: space-between; align-items: center;">
             <span>Payout Tracker</span>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.6; margin-left: 0.5rem;" title="Shared with other roles">
@@ -661,7 +662,7 @@
         '/dashboard/inventory',
         '/dashboard/inventory/forecast'
       ],
-      '/dashboard/hiring': [
+      '/dashboard/hiring/job-post': [
         '/dashboard/hiring'
       ],
       '/dashboard/events/company': [

@@ -383,14 +383,16 @@
           this.companyId = co?.id || null;
         } catch(e) { this.companyId = null; }
 
-        // Load assignments for the Assignment column dropdown
+        // Load company-scoped edit options.
         try {
-          const { data: aData } = await getSb().from('employee_assignments')
-            .select('id, name, visibility')
-            .eq('company_id', this.companyId || '')
-            .order('created_at', { ascending: true });
-          this.assignments = aData || [];
-        } catch(e) { this.assignments = []; }
+          const [assignmentsResult, jobPostsResult] = await Promise.all([
+            getSb().from('employee_assignments').select('id, name, visibility').eq('company_id', this.companyId || '').order('created_at', { ascending: true }),
+            getSb().from('job_posts').select('id, job_title, public_code').eq('company_id', this.companyId || '').order('job_title', { ascending: true }).limit(100)
+          ]);
+          this.assignments = assignmentsResult.data || [];
+          this.jobPosts = jobPostsResult.data || [];
+          if (jobPostsResult.error) throw jobPostsResult.error;
+        } catch(e) { this.assignments = []; this.jobPosts = []; }
 
         this.bindToolbar();
         this.bindEditMode();
@@ -920,6 +922,18 @@
           return `<td class="grp-hr cell-empty">—</td>`;
         };
 
+        const jobPostCell = () => {
+          const selectedPost = this.jobPosts.find(post => post.id === emp.job_post_id);
+          if (!isEdit) {
+            return selectedPost
+              ? `<td class="grp-hr"><code class="cell-job-post-code" title="${esc(selectedPost.job_title)}">${esc(selectedPost.public_code || selectedPost.job_title)}</code></td>`
+              : '<td class="grp-hr cell-empty">—</td>';
+          }
+          return `<td class="grp-hr"><select class="cell-input cell-select" data-id="${esc(id)}" data-field="job_post_id">
+            <option value="">—</option>
+            ${this.jobPosts.map(post => `<option value="${esc(post.id)}" ${post.id === emp.job_post_id ? 'selected' : ''}>${esc(post.job_title)} — ${esc(post.public_code || 'No code')}</option>`).join('')}
+          </select></td>`;
+        };
         /* Employee number cell — editable in edit mode */
         const cellEmpNum = () => {
           if (!isEdit) {
@@ -990,6 +1004,7 @@
           ${cell(emp.contact_number, 'contact_number', 'text', 'grp-personal col-contact')}
           ${cell(emp.emergency_contact_number, 'emergency_contact_number', 'text', 'grp-personal')}
           ${cell(emp.email, 'email', 'text', 'grp-personal col-email')}
+          ${jobPostCell()}
           ${departmentCell()}
           ${teamsCell()}
           ${cell(emp.title, 'title')}
@@ -1214,7 +1229,7 @@
               const { id: _, isNewRow: __, ...insertBody } = merged;
               // Only null out UUID/date/numeric columns when empty — text columns stay as ''
               // to satisfy NOT NULL constraints on the table
-              const nullIfEmpty = ['reporting_to', 'date_of_birth', 'date_hired', 'date_inactive', 'salary', 'level'];
+              const nullIfEmpty = ['job_post_id', 'reporting_to', 'date_of_birth', 'date_hired', 'date_inactive', 'salary', 'level'];
               for (const key of nullIfEmpty) {
                 if (insertBody[key] === '' || insertBody[key] === undefined) insertBody[key] = null;
               }
@@ -1253,7 +1268,7 @@
               for (const key in changes) {
                 if (key !== 'id' && key !== 'isNewRow') {
                   let val = changes[key];
-                  if (key === 'reporting_to' || key === 'date_of_birth' || key === 'date_hired' || key === 'date_inactive' || key === 'salary' || key === 'level') {
+                  if (key === 'job_post_id' || key === 'reporting_to' || key === 'date_of_birth' || key === 'date_hired' || key === 'date_inactive' || key === 'salary' || key === 'level') {
                     if (val === '' || val === undefined) val = null;
                   }
                   if (key === 'level' && val !== null) {
