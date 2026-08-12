@@ -69,7 +69,7 @@ const HiringApp = {
     }
     const path = window.location.pathname.replace(/\/+$/, '');
     let activeTab = 'job-post';
-    if (path.endsWith('/applicants')) activeTab = 'applicants'; else if (path.endsWith('/templates')) activeTab = 'templates';
+    if (path.endsWith('/applicants')) activeTab = 'applicants'; else if (path.endsWith('/contracts')) activeTab = 'contracts'; else if (path.endsWith('/templates')) activeTab = 'templates';
     else if (path.endsWith('/forms')) activeTab = 'forms'; else if (path.endsWith('/settings')) activeTab = 'settings';
     if (activeTab === 'templates' && window.location.hash === '#forms') return window.location.replace('/dashboard/hiring/forms');
     this.setActiveTab(activeTab);
@@ -84,6 +84,8 @@ const HiringApp = {
         window.addEventListener('hashchange', () => this.handleApplicantHashChange());
         this.applicantHashListenerBound = true;
       }
+    } else if (activeTab === 'contracts') {
+      await window.BKHiringContracts?.init(this);
     } else if (activeTab === 'templates') {
       const templateTab = window.location.hash === '#email' ? 'email' : window.location.hash === '#contract' ? 'contract' : 'posting';
       this.renderTemplateSubtabs(templateTab);

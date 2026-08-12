@@ -88,9 +88,9 @@
     return `<svg viewBox="0 0 24 24" aria-hidden="true">${paths[type]}</svg>`;
   }
 
-  function coverPage() {
+  function coverPage(employeeOverride = null) {
     const company = contact();
-    const employee = signedInEmployee();
+    const employee = employeeOverride || signedInEmployee();
     const items = contactItems();
     return `<article class="contract-sheet contract-cover">
       <div class="contract-cover-rail"></div>
@@ -104,7 +104,7 @@
     </article>`;
   }
 
-  function bodyPage() {
+  function bodyPage(customContent = null) {
     const company = contact();
     const employee = signedInEmployee();
     const items = contactItems();
@@ -114,17 +114,22 @@
         <img src="${esc(safeLogo())}" alt="${esc(company.name)} logo">
         <div><span>Employment Contract</span><i>|</i><strong>${esc(employee.name)}</strong></div>
       </header>
-      <main class="contract-body-content">
+      <main class="contract-body-content">${customContent == null ? `
         <p class="contract-body-date">Effective date: <strong>Month DD, YYYY</strong></p>
         <h2>Employment Agreement</h2>
         <p>This Employment Contract is entered into between <strong>${esc(company.name)}</strong> and the employee identified in this agreement.</p>
         <section><span>01</span><div><h3>Position and responsibilities</h3><p>The employee agrees to perform the duties of the assigned position with professionalism, care, and fidelity to the company.</p></div></section>
         <section><span>02</span><div><h3>Compensation and benefits</h3><p>Compensation, benefits, and applicable allowances will follow the terms stated in the finalized employee agreement.</p></div></section>
         <section><span>03</span><div><h3>Terms of employment</h3><p>Employment conditions, working arrangements, confidentiality, and termination provisions are detailed in the succeeding contract pages.</p></div></section>
-        <div class="contract-signatures"><div><div class="contract-signature-space">${signatureImage ? `<img src="${esc(signatureImage)}" alt="Authorized signature">` : ''}</div><i></i><strong>${esc(state.signature.signatoryName || 'Company Representative')}</strong><span>Authorized Signature</span></div><div><div class="contract-signature-space"></div><i></i><strong>Employee</strong></div></div>
+        ${signatureBlock(signatureImage, esc(employee.name), esc(employee.title))}` : customContent}
       </main>
       <footer class="contract-body-footer" style="grid-template-columns:repeat(${Math.max(items.length, 1)},minmax(0,1fr))">${items.map(item => `<div>${icon(item.type === 'city' ? 'address' : item.type, item.label)}<span>${esc(item.value)}</span></div>`).join('')}</footer>
     </article>`;
+  }
+
+  function signatureBlock(signatureImage = '', employeeName = '{{first_name}} {{last_name}}', employeeTitle = '{{title_position}}') {
+    const safeSignature = /^data:image\/(?:png|jpeg|webp);base64,/i.test(signatureImage || state.signature.imageUrl) ? (signatureImage || state.signature.imageUrl) : '';
+    return `<div class="contract-signatures"><div><div class="contract-signature-space">${safeSignature ? `<img src="${esc(safeSignature)}" alt="Authorized signature">` : ''}</div><i></i><strong>${esc(state.signature.signatoryName || 'Company Representative')}</strong><span>Authorized Signature</span></div><div><div class="contract-signature-space"></div><i></i><strong>${employeeName}</strong><span>${employeeTitle}</span></div></div>`;
   }
 
   function draw() {
@@ -167,10 +172,10 @@
     </div>`;
   }
 
-  async function init(app) {
+  async function ensureLoaded(app) {
     state.app = app;
     const user = app.authInfo?.user;
-    if (state.companyId === app.companyId && state.userId === user?.id) { draw(); return; }
+    if (state.companyId === app.companyId && state.userId === user?.id) return;
     state.userId = user?.id || null;
     state.employee = null;
     const { data: settingsRows, error: settingsError } = await app.sb.from('global_settings').select('key,value').eq('company_id', app.companyId).in('key', ['contract_template_config', 'contract_signature_config']).limit(2);
@@ -180,7 +185,7 @@
     const signatureValue = signatureData?.value && typeof signatureData.value === 'object' ? signatureData.value : {};
     state.signature = { signatoryName: String(signatureValue.signatoryName || ''), imageUrl: String(signatureValue.imageUrl || '') };
     if (user?.email) {
-      const { data, error } = await app.sb.from('employees').select('first_name, last_name, title').eq('company_id', app.companyId).ilike('email', user.email).limit(1).maybeSingle();
+      const { data, error } = await app.sb.from('employees').select('first_name, last_name, email, contact_number, title, address, city, province, date_of_birth, date_hired, salary').eq('company_id', app.companyId).ilike('email', user.email).limit(1).maybeSingle();
       if (error) console.error('Contract template employee load failed:', error);
       state.employee = data || null;
     }
@@ -188,7 +193,6 @@
       state.companyId = app.companyId;
       state.profile = app.companyProfile;
       state.contacts = normalizeContacts(contactData?.value);
-      draw();
       return;
     }
     const { data, error } = await app.sb.from('global_settings').select('value').eq('company_id', app.companyId).eq('key', 'company_profile_config').maybeSingle();
@@ -199,7 +203,46 @@
     state.companyId = app.companyId;
     state.profile = data?.value || {};
     state.contacts = normalizeContacts(contactData?.value);
+  }
+
+  async function init(app) {
+    state.app = app;
+    await ensureLoaded(app);
     draw();
+  }
+
+  function renderBodyPage(contentHtml = '') {
+    const palette = colors();
+    return `<div class="contract-template-preview" style="--contract-primary:${palette.primary};--contract-secondary:${palette.secondary};--contract-highlight:${palette.highlight}">${bodyPage(contentHtml)}</div>`;
+  }
+
+  function renderCoverPage() {
+    const palette = colors();
+    const employee = { name: '{{first_name}} {{last_name}}', title: '{{title_position}}' };
+    return `<div class="contract-template-preview" style="--contract-primary:${palette.primary};--contract-secondary:${palette.secondary};--contract-highlight:${palette.highlight}">${coverPage(employee)}</div>`;
+  }
+
+  function renderSignatures() { return signatureBlock(); }
+
+  function fullDate(value) {
+    const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!match) return String(value || '');
+    const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+    return new Intl.DateTimeFormat('en-US', { month: 'long', day: '2-digit', year: 'numeric', timeZone: 'UTC' }).format(date);
+  }
+
+  function personalizeHtml(html) {
+    const user = state.app?.authInfo?.user || {};
+    const metadata = user.user_metadata || {};
+    const employee = state.employee || {};
+    const values = {
+      date_hired: fullDate(employee.date_hired), salary: employee.salary ?? '',
+      first_name: employee.first_name || metadata.first_name || '', last_name: employee.last_name || metadata.last_name || '',
+      street_address: employee.address || '', city: employee.city || '', province: employee.province || '',
+      contact_number: employee.contact_number || metadata.phone || '', email: employee.email || user.email || '',
+      title_position: employee.title || metadata.title || state.app?.authInfo?.role || '', date_of_birth: employee.date_of_birth || ''
+    };
+    return String(html || '').replace(/\{\{([a-z_]+)\}\}/g, (match, token) => Object.hasOwn(values, token) ? esc(values[token]) : match);
   }
 
   async function saveContacts() {
@@ -235,7 +278,7 @@
     draw();
   }
 
-  window.BKHiringContractTemplate = Object.freeze({ init, render, switchPage, toggleContact, selectSocial, toggleContactPanel, moveContact });
+  window.BKHiringContractTemplate = Object.freeze({ init, ensureLoaded, renderBodyPage, renderCoverPage, renderSignatures, personalizeHtml, render, switchPage, toggleContact, selectSocial, toggleContactPanel, moveContact });
 })();
 
 (function () {
