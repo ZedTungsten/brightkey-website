@@ -10,14 +10,11 @@
     ['email', 'Email'], ['title_position', 'Title / Position'], ['date_of_birth', 'Date of Birth']
   ];
   const state = { app: null, jobs: [], snippets: [], jobContracts: {}, pages: [[]], currentPage: 0, history: [], redoHistory: [], personalizationRange: null, selectionListenerBound: false, shortcutListenerBound: false, templateReady: false, draggedBlock: null, dropIndex: null, editingId: null, activeJobId: null, builderMode: 'clause', readOnly: false, deletingId: null, saving: false };
-  const esc = value => state.app?.esc(value) || '';
-  const uid = () => globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const esc = value => state.app?.esc(value) || ''; const uid = () => globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   function normalizeBlock(block) {
-    const requestedType = block?.type === 'header' ? 'header2' : block?.type;
-    const type = Object.hasOwn(BLOCK_TYPES, requestedType) ? requestedType : 'paragraph';
+    const requestedType = block?.type === 'header' ? 'header2' : block?.type; const type = Object.hasOwn(BLOCK_TYPES, requestedType) ? requestedType : 'paragraph';
     const legacyPlaceholders = new Set(['Section heading', 'Write contract text here.', 'List item']);
-    const html = block && Object.hasOwn(block, 'html') ? sanitizeHtml(block.html) : '';
-    const id = String(block?.id || uid());
+    const html = block && Object.hasOwn(block, 'html') ? sanitizeHtml(block.html) : ''; const id = String(block?.id || uid());
     return { id, sourceId: String(block?.sourceId || id), type, html: legacyPlaceholders.has(html) ? '' : html };
   }
   function normalizeSnippet(item) {
@@ -55,7 +52,7 @@
       <div class="contracts-grid">
         <section class="contracts-column" aria-labelledby="contract-jobs-title">
           <div class="contracts-column-header"><div><h2 id="contract-jobs-title">Jobs</h2><p>Select a job post to build its contract later.</p></div></div>
-          <div id="contract-job-cards" class="contract-card-list"><div class="contracts-skeleton"><i></i><i></i><i></i></div></div>
+          <div id="contract-job-cards" class="contract-jobs-table-wrap"><div class="contracts-skeleton"><i></i><i></i><i></i></div></div>
         </section>
         <div class="contracts-side-stack"><section class="contracts-column" aria-labelledby="contract-snippets-title">
           <div class="contracts-column-header"><div><h2 id="contract-snippets-title">Contract Clauses</h2><p>Reusable clauses for employment contracts.</p></div>
@@ -135,11 +132,13 @@
     const host = document.getElementById('contract-job-cards');
     if (!host) return;
     if (!state.jobs.length) { host.innerHTML = '<div class="hiring-empty">No job posts yet.</div>'; return; }
-    host.innerHTML = state.jobs.map(job => {
-      const pages = state.jobContracts[job.id]?.pages;
-      const hasContract = Array.isArray(pages) && pages.some(page => !pageIsBlank(Array.isArray(page) ? page : []));
-      return `<article class="contract-list-card contract-job-card"><div><h3>${esc(job.job_title)}</h3><code>${esc(job.public_code || 'Draft')}</code></div><div class="clause-card-actions"><span class="contract-status-dot${hasContract ? ' has-contract' : ''}" title="${hasContract ? 'Contract saved' : 'Contract not yet created'}" aria-label="${hasContract ? 'Contract saved' : 'Contract not yet created'}"></span><button type="button" aria-label="View ${esc(job.job_title)} contract" title="View contract" onclick="BKHiringContracts.openJobContract('${esc(job.id)}', true)"><svg viewBox="0 0 24 24"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.5"/></svg></button><button type="button" aria-label="Edit ${esc(job.job_title)} contract" title="Edit contract" onclick="BKHiringContracts.openJobContract('${esc(job.id)}', false)"><svg viewBox="0 0 24 24"><path d="m4 16-.8 4.8L8 20l11-11-4-4L4 16Z"/><path d="m13.5 6.5 4 4"/></svg></button></div></article>`;
+    const rows = state.jobs.map(job => {
+      const contract = state.jobContracts[job.id];
+      const pages = Array.isArray(contract?.pages) ? contract.pages.filter(page => !pageIsBlank(Array.isArray(page) ? page : [])) : [];
+      const changed = contract?.updatedAt ? new Date(contract.updatedAt) : null; const lastChanged = changed && !Number.isNaN(changed.getTime()) ? changed.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '—';
+      return `<tr><td><strong>${esc(job.job_title)}</strong></td><td><code>${esc(job.public_code || 'Draft')}</code></td><td>${esc(lastChanged)}</td><td>${pages.length || '-'}</td><td><div class="contract-job-actions"><button type="button" aria-label="View ${esc(job.job_title)} contract" title="View contract" onclick="BKHiringContracts.openJobContract('${esc(job.id)}', true)"><svg viewBox="0 0 24 24"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.5"/></svg></button><button type="button" aria-label="Edit ${esc(job.job_title)} contract" title="Edit contract" onclick="BKHiringContracts.openJobContract('${esc(job.id)}', false)"><svg viewBox="0 0 24 24"><path d="m4 16-.8 4.8L8 20l11-11-4-4L4 16Z"/><path d="m13.5 6.5 4 4"/></svg></button></div></td></tr>`;
     }).join('');
+    host.innerHTML = `<table class="contract-jobs-table"><thead><tr><th>Job Title</th><th>Job Code</th><th>Last Changed</th><th>Pages</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table>`;
   }
   async function loadSnippets() {
     const { data, error } = await state.app.sb.from('global_settings').select('key,value').eq('company_id', state.app.companyId).in('key', [SETTINGS_KEY, JOB_CONTRACTS_KEY, TEMPLATES_KEY]).limit(3);
@@ -959,18 +958,21 @@
       while (state.pages.length > 2 && pageIsBlank(state.pages.at(-1))) state.pages.pop();
       const bodyPages = state.pages.slice(1);
       if (!bodyPages.some(page => !pageIsBlank(page))) { state.app.showToast('Add contract content on page 2 before saving.', true); return; }
-      const job = state.jobs.find(item => item.id === state.activeJobId);
-      state.jobContracts[state.activeJobId] = { pages: bodyPages, jobTitle: job?.job_title || '', updatedAt: new Date().toISOString() };
+      const job = state.jobs.find(item => item.id === state.activeJobId); const contractSettings = { key: JOB_CONTRACTS_KEY };
+      const previous = state.jobContracts[state.activeJobId] || null;
+      const changed = JSON.stringify(previous?.pages || []) !== JSON.stringify(bodyPages);
+      state.jobContracts[state.activeJobId] = { pages: bodyPages, jobTitle: job?.job_title || '', updatedAt: changed || !previous?.updatedAt ? new Date().toISOString() : previous.updatedAt };
       const button = document.getElementById('save-snippet-button');
       state.saving = true;
       if (button) { button.disabled = true; button.textContent = 'Saving…'; }
-      const { error } = await state.app.sb.from('global_settings').upsert({ company_id: state.app.companyId, key: JOB_CONTRACTS_KEY, value: state.jobContracts }, { onConflict: 'company_id,key' });
+      const { error, signatureError } = await window.BKHiringContractSignatures.persist(state.app, state.jobContracts, state.activeJobId, changed, previous, contractSettings.key);
       state.saving = false;
       if (button) { button.disabled = false; button.textContent = 'Save Contract'; }
       if (error) { console.error('Job contract save failed:', error); state.app.showToast('The contract could not be saved. Please try again.', true); return; }
+      if (signatureError) { console.error('Changed contract signature invalidation failed:', signatureError); state.app.showToast('The contract was not changed because existing signatures could not be reset. Please try again.', true); return; }
       renderJobs();
       closeBuilder();
-      state.app.showToast('Job contract saved.');
+      state.app.showToast(changed && previous ? 'Contract updated. Existing employee signatures were reset.' : 'Job contract saved.');
       return;
     }
     const title = document.getElementById('snippet-title');

@@ -3,10 +3,9 @@
 
   const TABS = [
     { key: 'contracts', label: 'Contracts', href: '/dashboard/hr-onboarding/contracts' },
-    { key: 'handbook', label: 'Handbook', href: '/dashboard/hr-onboarding/handbook' },
     { key: 'materials', label: 'Materials', href: '/dashboard/hr-onboarding/materials' }
   ];
-  const state = { sb: null, authInfo: null, companyId: null, employees: [], jobs: new Map(), signatures: new Map(), signaturesLoaded: false, contracts: null, contractRequest: null, pdfRequest: null, structure: { departments: [] }, departmentByEmployee: {}, teamsByEmployee: {}, department: '', team: '', selectedEmployee: null, currentPage: 0 };
+  const state = { sb: null, authInfo: null, companyId: null, employees: [], jobs: new Map(), signatures: new Map(), signaturesLoaded: false, contracts: null, contractRequest: null, pdfExporting: false, structure: { departments: [] }, departmentByEmployee: {}, teamsByEmployee: {}, department: '', team: '', selectedEmployee: null, currentPage: 0 };
   const esc = value => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
   const showToast = (message, isError = false) => window.Toast ? window.Toast.show(message, isError ? 'error' : 'success') : console[isError ? 'error' : 'log'](message);
   const templateApp = { get sb(){return state.sb;}, get authInfo(){return state.authInfo;}, get companyId(){return state.companyId;}, companyProfile: {}, esc, showToast };
@@ -134,6 +133,21 @@
     return [personalizeTemplate(window.BKHiringContractTemplate.renderCoverPage()), ...bodyPages];
   }
 
+  function compactPdfPages(pages) {
+    const assets = [];
+    const indexes = new Map();
+    const compactPages = pages.map(page => page.replace(/data:image\/[a-z0-9.+-]+;base64,[a-z0-9+/=]+/gi, dataUrl => {
+      let index = indexes.get(dataUrl);
+      if (index === undefined) {
+        index = assets.length;
+        indexes.set(dataUrl, index);
+        assets.push(dataUrl);
+      }
+      return `__BK_PDF_ASSET_${index}__`;
+    }));
+    return { pages: compactPages, assets };
+  }
+
   function renderViewerPage() {
     const pages = state.selectedEmployee ? contractPages(state.selectedEmployee) : [];
     const host = document.getElementById('hr-contract-viewer-page');
@@ -208,72 +222,52 @@
     document.querySelector('.hr-contract-viewer-body')?.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
-  async function waitForImages(host) {
-    await Promise.all([...host.querySelectorAll('img')].map(image => image.complete ? Promise.resolve() : new Promise(resolve => { image.onload = image.onerror = resolve; })));
-  }
-
-  function ensurePdfLibrary() {
-    if (typeof html2canvas === 'function' && typeof window.jspdf?.jsPDF === 'function') return Promise.resolve();
-    if (state.pdfRequest) return state.pdfRequest;
-    const loadScript = src => new Promise((resolve, reject) => {
-      const script = document.createElement('script');
-      script.src = src;
-      script.onload = resolve;
-      script.onerror = () => reject(new Error('PDF library failed to load'));
-      document.head.appendChild(script);
-    });
-    const requests = [];
-    if (typeof html2canvas !== 'function') requests.push(loadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js'));
-    if (typeof window.jspdf?.jsPDF !== 'function') requests.push(loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'));
-    state.pdfRequest = Promise.all(requests).then(() => {
-      if (typeof html2canvas !== 'function' || typeof window.jspdf?.jsPDF !== 'function') throw new Error('PDF library did not initialize');
-    }).finally(() => { state.pdfRequest = null; });
-    return state.pdfRequest;
-  }
-
   async function savePdf(employeeId, button) {
+    if (state.pdfExporting) return;
     const employee = state.employees.find(item => item.id === employeeId);
     if (!employee) return;
+    state.pdfExporting = true;
     const originalText = button?.textContent;
     if (button) { button.disabled = true; button.textContent = 'Loading…'; }
     try {
-      const [contract] = await Promise.all([loadContractFor(employee), ensurePdfLibrary()]);
+      const contract = await loadContractFor(employee);
       if (!contract) {
         if (button) { button.disabled = false; button.textContent = originalText; }
+        state.pdfExporting = false;
         return showToast('No published contract is assigned to this employee.', true);
       }
     } catch (error) {
       console.error('Employee contract load failed:', error);
       if (button) { button.disabled = false; button.textContent = originalText; }
-      const message = String(error?.message || '').startsWith('PDF library')
-        ? 'The PDF tools could not be loaded. Check your connection and try again.'
-        : 'The employee contract could not be loaded. Please try again.';
-      return showToast(message, true);
+      state.pdfExporting = false;
+      return showToast('The employee contract could not be loaded. Please try again.', true);
     }
     if (button) button.textContent = 'Saving…';
-    const host = document.createElement('div');
-    host.className = 'hr-contract-pdf-host';
-    host.innerHTML = '<div class="hr-contract-pdf-document"></div>';
-    document.body.appendChild(host);
     try {
       const filename = `Employment_Contract_${employeeName(employee).replace(/[^a-z0-9]+/gi, '_').replace(/^_|_$/g, '')}.pdf`;
-      const documentElement = host.firstElementChild;
-      const pageHtml = contractPages(employee);
-      const pdf = new window.jspdf.jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait', compress: true });
-      for (let index = 0; index < pageHtml.length; index += 1) {
-        documentElement.innerHTML = `<section class="hr-contract-pdf-page">${pageHtml[index]}</section>`;
-        await waitForImages(documentElement);
-        const page = documentElement.firstElementChild;
-        const canvas = await html2canvas(page, { scale: .75, useCORS: true, letterRendering: true, scrollX: 0, scrollY: 0, width: page.scrollWidth, height: page.scrollHeight, windowWidth: page.scrollWidth, windowHeight: page.scrollHeight, backgroundColor: '#ffffff' });
-        if (index > 0) pdf.addPage('a4', 'portrait');
-        pdf.addImage(canvas.toDataURL('image/jpeg', .98), 'JPEG', 0, 0, 210, 297, undefined, 'FAST');
+      const payload = compactPdfPages(contractPages(employee));
+      const response = await window.BKAuth.authenticatedFetch('/api/hr-contract-pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ company_id: state.companyId, employee_id: employee.id, job_post_id: employee.job_post_id, filename, ...payload })
+      });
+      if (!response.ok) {
+        const result = await response.json().catch(() => ({}));
+        throw new Error(result.error || 'The contract PDF could not be generated.');
       }
-      pdf.save(filename);
+      const blobUrl = URL.createObjectURL(await response.blob());
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
     } catch (error) {
       console.error('Contract PDF generation failed:', error);
-      showToast('The contract PDF could not be saved. Please try again.', true);
+      showToast(error?.message || 'The contract PDF could not be saved. Please try again.', true);
     } finally {
-      host.remove();
+      state.pdfExporting = false;
       if (button) { button.disabled = false; button.textContent = originalText; }
     }
   }
@@ -315,10 +309,13 @@
     if (!state.authInfo) return;
     state.sb = window.BKAuth.sb;
     renderShell();
-    if (activeTab() !== 'contracts') return;
     const company = await window.BKAuth.getCompany(state.authInfo.tenantId);
     state.companyId = company?.id || null;
     if (!state.companyId) return showToast('No active company was found for this account.', true);
+    if (activeTab() !== 'contracts') {
+      document.dispatchEvent(new CustomEvent('bk:hr-onboarding-ready', { detail: { sb: state.sb, companyId: state.companyId } }));
+      return;
+    }
     try { await loadContracts(); }
     catch (error) {
       console.error('HR contracts load failed:', error);

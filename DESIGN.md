@@ -495,41 +495,50 @@ This means the typical approach of adding `border-right` and `box-shadow` to a s
 
 ---
 
-## 18. Off-Screen PDF Generation
+## 18. HTML Viewer to PDF Generation
 
-> [!IMPORTANT]
-> When generating PDFs with `html2pdf` or `html2canvas`, never render the source
-> inside an element or iframe using `display: none`, zero dimensions, or another
-> non-rendered layout state. These libraries require a measurable layout surface;
-> hidden sources can produce blank PDF pages.
-
-Use the direct detached-element pattern established by Smart-lock Calendar:
-
-```javascript
-const sheet = document.createElement('div');
-sheet.innerHTML = `<div style="width:210mm;background:#fff;">...</div>`;
-
-await html2pdf()
-  .set({
-    margin: [10, 10, 10, 10],
-    filename: 'Payslip.pdf',
-    image: { type: 'jpeg', quality: 0.98 },
-    html2canvas: { scale: 2, useCORS: true, letterRendering: true },
-    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-  })
-  .from(sheet)
-  .save();
-```
+> [!CRITICAL]
+> Generate production PDFs from HTML viewers with authenticated server-side
+> Chromium and Puppeteer's native `page.pdf()`. The reference implementation is
+> `api/hr-contract-pdf.js`. Do not use `html2canvas`, `html2pdf`, jsPDF image
+> capture, hidden iframes, off-screen capture containers, or browser print dialogs
+> for a downloadable production PDF unless the user explicitly requires a legacy
+> client-only workflow.
 
 Rules:
 
-- Build and populate the complete PDF source before calling `.from(sheet)`.
-- Keep the user on the current page; do not redirect solely to generate a file.
-- Do not use a `display:none` iframe as the PDF rendering surface.
-- Use `useCORS: true` for approved remote logos and signature images.
-- After meaningful PDF changes, download the file, confirm it has a nontrivial
-  size, render its pages to images, and visually verify that content is visible,
-  aligned, readable, and unclipped.
+- Reuse the viewer's semantic HTML and print CSS so preview and PDF share one
+  layout source. Do not screenshot or rasterize the viewer.
+- Render each document page at its physical size. For A4 use `210mm × 297mm`,
+  `@page { size: A4; margin: 0; }`, explicit page breaks, and
+  `preferCSSPageSize: true` with `printBackground: true`.
+- Wait for network assets and `document.fonts.ready` before calling `page.pdf()`.
+  Text and SVG output should remain vector-sharp; do not introduce arbitrary
+  1.25×/2× canvas quality settings.
+- Generate on the server without inserting or scanning pages in the user's
+  visible/off-screen browser DOM. One click must produce one file download.
+- Protect the endpoint with the caller's bearer token, existing RLS, company
+  scope, and the route's required module/role gate. Prefer an authenticated
+  Supabase client when the operation only reads data the caller may already read;
+  do not require a service-role secret unnecessarily.
+- Sanitize submitted HTML, disable page JavaScript, bound pages and payload size,
+  and verify the requested record belongs to the authenticated company.
+- Deduplicate repeated Base64 logos/signatures in the client payload and restore
+  them server-side before rendering. Do not lower asset quality merely to fit the
+  request limit.
+- Use `puppeteer-core` with `@sparticuz/chromium-min` in the runtime. Build the
+  hosted Chromium pack from `@sparticuz/chromium` during `postinstall`; do not
+  bundle the full development package into the function.
+- Select Chromium by actual platform: installed Chrome (or
+  `CHROME_EXECUTABLE_PATH`) for local macOS/Windows development, and the packaged
+  Linux binary only in Vercel's Linux runtime. `VERCEL=1` alone does not prove the
+  process is running on Linux because `vercel dev` also sets it locally.
+- Any function assets must be declared through a valid Vercel `includeFiles`
+  string/glob, never an array. Confirm `vercel dev` accepts the configuration.
+- Verify both environments: render a local PDF, inspect its page count/size and
+  rasterized pages, then test the authenticated deployed endpoint and download on
+  the live site. A local render alone is not proof that the Chromium pack URL,
+  environment variables, function timeout, memory, or bundled CSS work live.
 
 ---
 

@@ -398,13 +398,25 @@ existing pattern exactly.
 > - **Sidebar Active State Must Follow Directory Changes**: Every time a dashboard route is added, renamed, moved into a subdirectory, or given nested subpages, verify that `js/sidebar.js` highlights the correct sidebar item and expands its parent group for every resulting URL. Nested routes must inherit the nearest matching sidebar page (for example, both `/dashboard/attendance-leaves/logs` and `/dashboard/attendance-leaves/settings` highlight `Attendance & Leaves`). Use longest-prefix matching or an explicit route-family alias where paths differ; never use a broad prefix that allows a shorter sibling such as `/dashboard/attendance` to steal the active state from `/dashboard/attendance-leaves`.
 > - **Never Rewrite a Clean Route to an `.html` Destination**: When `vercel.json` has `"cleanUrls": true`, a rewrite such as `{"source":"/dashboard/booking-schedules/calendar","destination":"/dashboard/booking-schedules.html"}` can cause Vercel to redirect the internal `.html` destination back to its clean URL. If that clean URL also redirects to the source route, it creates a redirect/rewrite cycle that resolves as a production 404. Point rewrites to the clean destination instead: `{"source":"/dashboard/booking-schedules/calendar","destination":"/dashboard/booking-schedules"}`.
 > - **Keep Redirects and Rewrites One-Way**: Redirects are only for legacy incoming URLs. Never use a redirect target as a rewrite source or point a rewrite destination to a route that redirects back to the original source. Before committing `vercel.json`, trace every changed route from public source to final static destination and confirm there is no cycle.
+> - **Respect the Vercel Configuration Schema**: Do not infer a property's JSON type from similar configuration fields. Check the current Vercel schema or run `vercel dev` after every `vercel.json` change. In particular, `functions.<function>.includeFiles` must be a single string, not an array. To include multiple files or directories, use one supported glob string, including brace expansion when appropriate:
+>   ```json
+>   {
+>     "functions": {
+>       "api/example.js": {
+>         "includeFiles": "dashboard/{feature-a/styles.css,feature-b/print.css}"
+>       }
+>     }
+>   }
+>   ```
+>   Never write `"includeFiles": ["file-a", "file-b"]`; Vercel rejects the entire configuration before the development server or deployment starts.
 > - **Mandatory Pre-Deployment Route Audit**: Whenever `vercel.json`, a dashboard route, or a nested page is added or changed, validate all of the following before pushing:
 >   1. `vercel.json` parses as valid JSON.
->   2. No rewrite destination ends in `.html` while `"cleanUrls": true`.
->   3. Every rewrite destination resolves to an existing static page or valid handler.
->   4. No redirect/rewrite pair forms a circular route.
->   5. Nested pages use root-relative asset URLs.
->   6. Every new or changed route highlights exactly one correct sidebar item and expands the correct sidebar group.
+>   2. `vercel dev` accepts the complete configuration schema, including property types and function settings.
+>   3. No rewrite destination ends in `.html` while `"cleanUrls": true`.
+>   4. Every rewrite destination resolves to an existing static page or valid handler.
+>   5. No redirect/rewrite pair forms a circular route.
+>   6. Nested pages use root-relative asset URLs.
+>   7. Every new or changed route highlights exactly one correct sidebar item and expands the correct sidebar group.
 > - **Prefer Automated Route Validation**: If a route-validation script is available, it must run as part of the pre-deployment or CI checks and fail the deployment for `.html` rewrite destinations, missing targets, or redirect/rewrite cycles. Documentation review alone is not sufficient protection.
 > - **Verify Production Routes After Deployment**: After changing redirects or rewrites, verify the deployed route directly and confirm it returns HTTP `200`, rather than assuming a valid `vercel.json` guarantees correct production routing.
 
@@ -590,3 +602,18 @@ existing pattern exactly.
 >   saved employee number uses the configured company prefix, follows the
 >   current highest suffix, remains unique, and belongs to the intended
 >   company.
+
+---
+
+## 27. Production HTML-to-PDF Uses Native Server-Side Chromium
+> [!CRITICAL]
+> For every future request to produce, print, save, or download a PDF from an
+> HTML viewer, use the native server-side Chromium method defined in `DESIGN.md`
+> section 18 and exemplified by `api/hr-contract-pdf.js`.
+>
+> Do not reintroduce `html2canvas`, `html2pdf`, jsPDF screenshot capture, hidden
+> iframes, off-screen capture DOM, raster quality multipliers, or repeated
+> per-page Base64 assets. Preserve semantic HTML/shared CSS, generate one vector
+> PDF per request, authenticate and company-scope the endpoint, use the compact
+> Vercel Chromium runtime, and verify the complete workflow both locally and on
+> the deployed live site.

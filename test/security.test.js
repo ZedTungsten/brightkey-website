@@ -215,7 +215,8 @@ test('contract snippets are company scoped, sanitized, and bounded', () => {
   const templates = fs.readFileSync(new URL('../dashboard/hiring/contract-templates.js', import.meta.url), 'utf8');
   assert.match(templates, /Loading a template will discard all current unsaved contract pages and blocks/);
   assert.match(templates, /Load Template/);
-  assert.match(source, /contract-status-dot\$\{hasContract \? ' has-contract' : ''\}/);
+  assert.match(source, /<th>Job Title<\/th><th>Job Code<\/th><th>Last Changed<\/th><th>Pages<\/th><th>Actions<\/th>/);
+  assert.match(source, /<td>\$\{pages\.length \|\| '-'\}<\/td>/);
   assert.match(source, /payload\.startsWith\('clause:'\)/);
   assert.match(source, /if \(readOnly\) bodyPages = bodyPages\.filter\(page => !pageIsBlank\(page\)\)/);
   assert.match(source, /if \(state\.readOnly\) return window\.BKHiringContractTemplate\?\.personalizeHtml/);
@@ -223,6 +224,15 @@ test('contract snippets are company scoped, sanitized, and bounded', () => {
   assert.match(template, /function fullDate/);
   assert.match(template, /date_hired: fullDate\(employee\.date_hired\)/);
   assert.doesNotMatch(source, /localStorage|sessionStorage/);
+});
+
+test('contract PDF export permits HR or the assigned employee only', () => {
+  const source = fs.readFileSync(new URL('../api/hr-contract-pdf.js', import.meta.url), 'utf8');
+  assert.match(source, /requireCompanyAccess\(req, supabase, companyId\)/);
+  assert.match(source, /select\('id,job_post_id,email'\)/);
+  assert.match(source, /canManageContracts/);
+  assert.match(source, /employee\.email[\s\S]*?access\.user\?\.email/);
+  assert.match(source, /sendAccessError\(res, \{ error: 'forbidden' \}\)/);
 });
 
 test('free subscription owner invitations retain owner dashboard access', () => {

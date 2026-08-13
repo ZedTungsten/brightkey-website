@@ -172,21 +172,21 @@ Ensure the tabs container and buttons use the following premium styling tokens:
 
 ---
 
-## 11. Saving PDF Files from On-Screen Preview HTML
-When generating and saving high-fidelity A4/Letter PDF files from dynamic HTML preview components (e.g. Invoices, Receipts, Payslips) using client-side libraries like `html2pdf.js`, follow this off-screen rendering architecture:
+## 11. Saving PDF Files from HTML Viewers
 
-### The Problem with On-Screen / Iframe Previews
-1. **Layout Scaling**: Live preview panes often zoom/scale the page down (e.g., `transform: scale(0.6)`) to fit the dashboard layout. Rendering this element directly captures the scaled-down sizing, resulting in massive whitespace borders on the output PDF.
-2. **Iframe Barriers**: Capturing elements from inside sandboxed iframes triggers stylesheet resolution failures, web font loading blocks, and cross-origin CORS limitations.
-3. **CORS on Storage Assets**: External assets (like logos or signatures loaded from Supabase storage) trigger canvas taining blocks.
+Use authenticated server-side Chromium with Puppeteer's native `page.pdf()` for
+all new production HTML-to-PDF and viewer-to-PDF work. Follow the complete shared
+rules in `DESIGN.md` section 18 and the reference implementation in
+`api/hr-contract-pdf.js`.
 
-### The Solution: Parent DOM Off-Screen Rendering
-1. **Base64 Asset Prefetching**: Convert dynamic external image URLs to Base64 data URIs during page initialization or payload fetch (e.g., using `FileReader` and `fetch`), bypassing CORS canvas taint blocks.
-2. **Hidden Capture Container**: Place a hidden, unscaled container in the parent document body positioned off-screen (e.g., `left: -9999px`) styled at full 1:1 layout size (e.g., `width: 794px` for A4).
-3. **Injected Print Flow**:
-   * Copy the compiled HTML string containing the custom styles and Base64 assets into the hidden parent DOM element.
-   * Run `html2pdf.js` directly on the off-screen parent target.
-   * Instantly clear the container's contents in the `finally` block to keep the DOM clean.
+Do not use `html2canvas`, `html2pdf`, jsPDF screenshot capture, hidden iframes,
+or off-screen browser DOM production. Those raster pipelines caused duplicated
+downloads, visible page scanning, font-baseline drift, clipped footers, blank
+pages, large files, and inconsistent preview/PDF layouts.
+
+Required outcome: a single authenticated request returns one vector PDF generated
+from the viewer's semantic HTML and shared CSS, with repeated Base64 assets
+deduplicated in transit. Verify it locally and through the deployed live endpoint.
 
 ---
 
