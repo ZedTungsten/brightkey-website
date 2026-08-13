@@ -312,6 +312,20 @@ test('platform tenant deletion is ID-scoped, owner-gated, and protects the activ
   assert.match(page, /method: 'DELETE'/);
 });
 
+test('platform tenant deletion removes company-scoped Storage objects first', () => {
+  const apiSource = fs.readFileSync(new URL('../api/platform-tenants.js', import.meta.url), 'utf8');
+  const migrationSource = fs.readFileSync(new URL('../database/migrations/20260813_platform_tenant_storage_deletion.sql', import.meta.url), 'utf8');
+
+  assert.match(apiSource, /TENANT_STORAGE_BUCKETS = \['brightkey-assets', 'brightkey-internal'\]/);
+  assert.match(apiSource, /const prefix = `companies\/\$\{companyId\}`/);
+  assert.ok(apiSource.indexOf('if (activeOwnerMembership ||') < apiSource.indexOf('await deleteTenantStorage(authClient.storage, companyIds)'));
+  assert.match(apiSource, /await deleteTenantStorage\(authClient\.storage, companyIds\)/);
+  assert.match(apiSource, /await authClient\.rpc\('delete_platform_tenant'/);
+  assert.ok(apiSource.indexOf('await deleteTenantStorage(authClient.storage, companyIds)') < apiSource.indexOf("await authClient.rpc('delete_platform_tenant'"));
+  assert.match(migrationSource, /Platform owner can list tenant storage/);
+  assert.match(migrationSource, /Platform owner can delete tenant storage/);
+});
+
 test('platform signup email credentials stay owner-gated and feed subscription invitations', () => {
   const api = fs.readFileSync(new URL('../api/platform-email-integration.js', import.meta.url), 'utf8');
   const migration = fs.readFileSync(new URL('../database/migrations/20260807_platform_email_integration.sql', import.meta.url), 'utf8');
@@ -347,9 +361,35 @@ test('login choices include authoritative tenant ownership without requiring ten
 
   assert.match(apiSource, /from\('tenant_members'\)/);
   assert.match(apiSource, /from\('tenants'\)/);
-  assert.match(apiSource, /eq\('owner_email', email\)/);
+  assert.match(apiSource, /String\(row\.owner_email \|\| ''\)\.trim\(\)\.toLowerCase\(\) !== email/);
   assert.match(apiSource, /role: 'owner'/);
+  assert.match(apiSource, /createAuthenticatedClient\(accessToken\)/);
+  assert.doesNotMatch(apiSource, /createServiceClient/);
   assert.match(authSource, /fetch\('\/api\/account-memberships'/);
   assert.match(migrationSource, /CREATE OR REPLACE FUNCTION public\.is_tenant_owner/);
   assert.match(migrationSource, /CREATE POLICY %I[\s\S]*FOR ALL TO authenticated/);
+});
+
+test('company API authorization accepts authoritative tenant owners without a membership row', () => {
+  const securitySource = fs.readFileSync(new URL('../lib/api/security.js', import.meta.url), 'utf8');
+  const createEmployeeSource = fs.readFileSync(new URL('../api/create-employee-account.js', import.meta.url), 'utf8');
+
+  assert.match(securitySource, /from\('tenants'\)[\s\S]*select\('id, owner_email'\)/);
+  assert.match(securitySource, /String\(ownerTenant\.owner_email \|\| ''\)[\s\S]*String\(user\.email \|\| ''\)/);
+  assert.match(securitySource, /ownsTenant[\s\S]*role: 'owner'/);
+  assert.match(createEmployeeSource, /const hasOwnerAccess = Boolean\([\s\S]*ownerTenant\.owner_email/);
+  assert.match(createEmployeeSource, /!hasOwnerAccess && !hasAdministrativeMembership/);
+});
+
+test('tenant owner authority is consistent across APIs, settings, and database helpers', () => {
+  const financeSource = fs.readFileSync(new URL('../api/finance-cash-ledger.js', import.meta.url), 'utf8');
+  const settingsSource = fs.readFileSync(new URL('../dashboard/settings/access.html', import.meta.url), 'utf8');
+  const migrationSource = fs.readFileSync(new URL('../database/migrations/20260813_authoritative_tenant_owner_authority.sql', import.meta.url), 'utf8');
+
+  assert.match(financeSource, /requireCompanyAccess\(req, admin, companyId/);
+  assert.match(settingsSource, /currentActorRole = String\(currentRole \|\| ''\)/);
+  assert.match(migrationSource, /CREATE OR REPLACE FUNCTION public\.get_user_tenants/);
+  assert.match(migrationSource, /CREATE OR REPLACE FUNCTION public\.is_tenant_admin/);
+  assert.match(migrationSource, /CREATE OR REPLACE FUNCTION public\.has_module_access/);
+  assert.match(migrationSource, /IF public\.is_tenant_admin\(p_user_id, v_tenant_id\) THEN RETURN true/);
 });

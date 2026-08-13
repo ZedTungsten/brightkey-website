@@ -45,14 +45,26 @@ export default async function handler(req, res) {
     }
 
     // 2. Authorize the caller (must be owner or admin of this tenant)
-    const { data: member, error: memberError } = await supabase
+    const [{ data: member, error: memberError }, { data: ownerTenant, error: ownerError }] = await Promise.all([
+      supabase
       .from('tenant_members')
       .select('role')
       .eq('tenant_id', tenant_id)
       .eq('user_id', user.id)
-      .limit(1);
+      .limit(1),
+      supabase
+        .from('tenants')
+        .select('id, owner_email')
+        .eq('id', tenant_id)
+        .maybeSingle()
+    ]);
 
-    if (memberError || !member || member.length === 0 || !['owner', 'admin'].includes(member[0].role)) {
+    const hasOwnerAccess = Boolean(
+      ownerTenant
+      && String(ownerTenant.owner_email || '').trim().toLowerCase() === String(user.email || '').trim().toLowerCase()
+    );
+    const hasAdministrativeMembership = Boolean(member?.length && ['owner', 'admin'].includes(member[0].role));
+    if (memberError || ownerError || (!hasOwnerAccess && !hasAdministrativeMembership)) {
       return res.status(403).json({ error: 'Forbidden: You do not have permissions to create member accounts.' });
     }
 

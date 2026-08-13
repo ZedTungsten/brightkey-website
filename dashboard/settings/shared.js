@@ -4,6 +4,7 @@ window.SettingsPage = {
   sb: null,
   currentUser: null,
   currentTenantId: null,
+  currentRole: null,
   currentCompanyId: '',
   allTeamMembers: [],
 
@@ -51,6 +52,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   SettingsPage.sb = BKAuth.sb;
   SettingsPage.currentUser = authInfo.user;
   SettingsPage.currentTenantId = authInfo.tenantId;
+  SettingsPage.currentRole = authInfo.role;
 
   try {
     const { data: companyData } = await SettingsPage.sb.from('companies').select('id').eq('tenant_id', SettingsPage.currentTenantId).limit(1);
@@ -71,6 +73,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Bridge globals
   Object.defineProperty(window, 'sb', { get() { return SettingsPage.sb; } });
   Object.defineProperty(window, 'currentTenantId', { get() { return SettingsPage.currentTenantId; } });
+  Object.defineProperty(window, 'currentRole', { get() { return SettingsPage.currentRole; } });
   Object.defineProperty(window, 'currentUser', { get() { return SettingsPage.currentUser; } });
   Object.defineProperty(window, 'currentCompanyId', { get() { return SettingsPage.currentCompanyId; } });
 

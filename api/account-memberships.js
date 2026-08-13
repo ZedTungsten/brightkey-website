@@ -1,4 +1,4 @@
-import { createServiceClient, getBearerToken, setApiCors } from '../lib/api/security.js';
+import { createAuthenticatedClient, getBearerToken, setApiCors } from '../lib/api/security.js';
 
 export default async function handler(req, res) {
   setApiCors(req, res, 'GET, OPTIONS');
@@ -9,7 +9,7 @@ export default async function handler(req, res) {
     const accessToken = getBearerToken(req);
     if (!accessToken) return res.status(401).json({ error: 'Your session has expired. Sign in again.' });
 
-    const supabase = createServiceClient();
+    const supabase = createAuthenticatedClient(accessToken);
     const { data: userData, error: userError } = await supabase.auth.getUser(accessToken);
     const user = userData?.user;
     const email = String(user?.email || '').trim().toLowerCase();
@@ -18,7 +18,7 @@ export default async function handler(req, res) {
     const [{ data: memberRows, error: memberError }, { data: ownerRows, error: ownerError }] = await Promise.all([
       supabase.from('tenant_members').select('tenant_id, role, accessible_modules, created_at')
         .eq('user_id', user.id).order('created_at', { ascending: true }).limit(50),
-      supabase.from('tenants').select('id').eq('owner_email', email).limit(50)
+      supabase.from('tenants').select('id, owner_email').limit(50)
     ]);
     if (memberError || ownerError) throw memberError || ownerError;
 
@@ -33,7 +33,7 @@ export default async function handler(req, res) {
       });
     }
     for (const row of ownerRows || []) {
-      if (!row.id) continue;
+      if (!row.id || String(row.owner_email || '').trim().toLowerCase() !== email) continue;
       byTenant.set(row.id, { tenantId: row.id, role: 'owner', modules: [], createdAt: byTenant.get(row.id)?.createdAt || null });
     }
 

@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { requireCompanyAccess } from '../lib/api/security.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
@@ -50,21 +51,8 @@ export default async function handler(req, res) {
     const { data: userData, error: userError } = await admin.auth.getUser(token);
     if (userError || !userData?.user) return jsonError(res, 401, 'Your session has expired. Please sign in again.');
 
-    const { data: company, error: companyError } = await admin
-      .from('companies')
-      .select('id, tenant_id')
-      .eq('id', companyId)
-      .maybeSingle();
-    if (companyError || !company) return jsonError(res, 403, 'The selected company is unavailable.');
-
-    const { data: member, error: memberError } = await admin
-      .from('tenant_members')
-      .select('user_id')
-      .eq('tenant_id', company.tenant_id)
-      .eq('user_id', userData.user.id)
-      .limit(1)
-      .maybeSingle();
-    if (memberError || !member) return jsonError(res, 403, 'You do not have access to this company report.');
+    const access = await requireCompanyAccess(req, admin, companyId, { modules: ['Finance'] });
+    if (access.error) return jsonError(res, 403, 'You do not have access to this company report.');
 
     const { start, end } = monthBounds(period);
     const caller = createClient(supabaseUrl, publishableKey, {
