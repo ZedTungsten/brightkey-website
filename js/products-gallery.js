@@ -7,6 +7,7 @@
     cctv: 'cctv_features',
     fire_extinguisher: 'fireextinguisher_features'
   };
+  const BUSINESS_LABELS = { smart_lock: 'Smart Lock', solar_power: 'Solar Power', cctv: 'CCTV', fire_extinguisher: 'Fire Extinguisher' };
   const PAGE_SIZE = 9;
   const PRICE_THUMB_DIAMETER = 20;
 
@@ -37,6 +38,8 @@
     products: [],
     filtered: [],
     selectedFeatures: new Set(),
+    featureBusiness: '',
+    businessLabels: new Map(),
     query: '',
     category: '',
     minPrice: 0,
@@ -57,6 +60,7 @@
     maxPrice: document.getElementById('price-max'),
     priceLabel: document.getElementById('price-range-label'),
     priceFill: document.getElementById('price-range-fill'),
+    featureBusinesses: document.getElementById('feature-businesses'),
     features: document.getElementById('feature-filters'),
     clearFeatures: document.getElementById('clear-features'),
     reset: document.getElementById('reset-filters'),
@@ -96,6 +100,15 @@
       .replace(/\bUsb\b/g, 'USB')
       .replace(/\bPin\b/g, 'PIN')
       .replace(/\b3d\b/gi, '3D');
+  }
+
+  function businessKey(value) {
+    return String(value || '').trim().toLowerCase().replace(/[\s_.-]+/g, '_');
+  }
+
+  function businessLabel(value) {
+    const key = businessKey(value);
+    return state.businessLabels.get(key) || BUSINESS_LABELS[key] || formatWords(value);
   }
 
   function formatFeature(column, value) {
@@ -203,7 +216,15 @@
       'order=sku.asc'
     ].join('&');
     const products = await fetchJson(`${SUPABASE_URL}/rest/v1/products?${query}`);
-    const features = await loadFeatureData(products);
+    const companyIds = [...new Set(products.map(product => product.company_id).filter(Boolean))];
+    const businessQuery = companyIds.length ? `company_id=in.(${companyIds.join(',')})&select=name` : '';
+    const [features, businesses] = await Promise.all([
+      loadFeatureData(products),
+      businessQuery ? fetchJson(`${SUPABASE_URL}/rest/v1/tenant_businesses?${businessQuery}`).catch(error => {
+        console.warn('Could not load storefront business names.', error); return [];
+      }) : []
+    ]);
+    state.businessLabels = new Map((businesses || []).map(business => [businessKey(business.name), business.name]));
 
     products.forEach((product, index) => {
       product._index = index;
@@ -239,7 +260,7 @@
 
   function renderFeatureFilters() {
     const counts = new Map();
-    state.products.forEach(product => {
+    state.products.filter(product => product.business === state.featureBusiness).forEach(product => {
       new Set(productFeatures(product)).forEach(feature => {
         counts.set(feature, (counts.get(feature) || 0) + 1);
       });
@@ -279,6 +300,31 @@
 
       label.append(checkbox, name, total);
       dom.features.appendChild(label);
+    });
+  }
+
+  function renderFeatureBusinesses() {
+    const businesses = [...new Set(state.products.map(product => product.business)
+      .filter(business => business && FEATURE_TABLES[business]))]
+      .sort((a, b) => businessLabel(a).localeCompare(businessLabel(b)));
+    if (!businesses.includes(state.featureBusiness)) state.featureBusiness = businesses[0] || '';
+    dom.featureBusinesses.textContent = '';
+    businesses.forEach((business, index) => {
+      const label = document.createElement('label');
+      label.className = 'feature-business-pill';
+      const radio = document.createElement('input');
+      radio.type = 'radio'; radio.name = 'feature-business'; radio.value = business;
+      radio.checked = business === state.featureBusiness; radio.id = `feature-business-${index}`;
+      radio.addEventListener('change', () => {
+        if (!radio.checked || business === state.featureBusiness) return;
+        state.featureBusiness = business;
+        state.selectedFeatures.clear();
+        renderFeatureBusinesses();
+        renderFeatureFilters();
+        applyFilters();
+      });
+      const text = document.createElement('span'); text.textContent = businessLabel(business);
+      label.append(radio, text); dom.featureBusinesses.appendChild(label);
     });
   }
 
@@ -361,9 +407,10 @@
       const features = productFeatures(product);
       const matchesSearch = !state.query || product._search.includes(state.query);
       const matchesCategory = !state.category || category === state.category;
+      const matchesBusiness = !state.featureBusiness || product.business === state.featureBusiness;
       const matchesPrice = product._price >= state.minPrice && product._price <= state.maxPrice;
       const matchesFeatures = [...state.selectedFeatures].every(feature => features.includes(feature));
-      return matchesSearch && matchesCategory && matchesPrice && matchesFeatures;
+      return matchesSearch && matchesCategory && matchesBusiness && matchesPrice && matchesFeatures;
     });
 
     state.filtered = sortProducts(filtered);
@@ -556,6 +603,7 @@
     try {
       state.products = await loadProducts();
       renderCategories();
+      renderFeatureBusinesses();
       renderFeatureFilters();
       setupPriceRange();
       applyFilters();
