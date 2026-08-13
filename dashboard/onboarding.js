@@ -65,7 +65,7 @@
   }
 
   async function init() {
-    state.authInfo = await window.BKAuth.checkRoleGate([], '/admin.html');
+    state.authInfo = await window.BKAuth.checkMemberGate('/admin.html');
     if (!state.authInfo) return;
     state.sb = window.BKAuth.sb;
     const company = await window.BKAuth.getCompany(state.authInfo.tenantId);

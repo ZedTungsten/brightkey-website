@@ -420,6 +420,22 @@
     /* ── States ── */
     .auth-state { display: none; animation: state-in 0.3s ease both; }
     .auth-state.active { display: block; }
+    .business-select-list { display: grid; gap: 0.65rem; max-height: min(340px, 48vh); margin-top: 1.25rem; overflow-y: auto; }
+    .business-option { width: 100%; display: flex; align-items: center; gap: 0.8rem; padding: 0.85rem; color: #18181b; text-align: left; background: #fff; border: 1px solid #e4e4e7; border-radius: 9px; cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s; }
+    .business-option:hover, .business-option:focus-visible { border-color: #0891b2; box-shadow: 0 0 0 3px rgba(8,145,178,0.12); outline: none; }
+    .business-option:disabled { cursor: wait; opacity: 0.65; }
+    .business-option-icon { width: 38px; height: 38px; flex: 0 0 auto; display: grid; place-items: center; color: #0891b2; background: #ecfeff; border-radius: 8px; }
+    .business-option-icon svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .business-option-copy { min-width: 0; flex: 1; }
+    .business-option-name { display: block; overflow: hidden; font-size: 0.86rem; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+    .business-option-role { display: block; margin-top: 0.15rem; color: #71717a; font-size: 0.7rem; font-weight: 500; }
+    .business-option-arrow { width: 16px; height: 16px; flex: 0 0 auto; fill: none; stroke: #a1a1aa; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .business-select-skeleton { padding: 0.9rem; border: 1px solid #e4e4e7; border-radius: 9px; }
+    .business-select-skeleton span { display: block; width: 42%; height: 10px; border-radius: 999px; background: linear-gradient(90deg,#f4f4f5 25%,#e4e4e7 50%,#f4f4f5 75%); background-size: 200% 100%; animation: business-skeleton 1.2s linear infinite; }
+    .business-select-skeleton span:last-child { width: 25%; height: 8px; margin-top: 0.5rem; }
+    @keyframes business-skeleton { to { background-position: -200% 0; } }
+    .business-select-signout { display: block; margin: 1rem auto 0; padding: 0.3rem; color: #71717a; font: inherit; font-size: 0.72rem; font-weight: 600; background: none; border: 0; cursor: pointer; }
+    .business-select-signout:hover { color: #18181b; }
     @keyframes state-in {
       from { opacity: 0; transform: translateY(8px); }
       to   { opacity: 1; transform: translateY(0); }
@@ -635,6 +651,17 @@
           </form>
         </div>
 
+        <!-- ── STATE 5: Select business ── -->
+        <div class="auth-state" id="state-select-business">
+          <h1 class="card-title">Select a business</h1>
+          <p class="card-sub">Choose the business you want to access for this session</p>
+          <div class="business-select-list" id="business-select-list" aria-live="polite">
+            <div class="business-select-skeleton" aria-label="Loading businesses"><span></span><span></span></div>
+            <div class="business-select-skeleton" aria-hidden="true"><span></span><span></span></div>
+          </div>
+          <button class="business-select-signout" id="business-select-signout" type="button">Sign out</button>
+        </div>
+
       </div><!-- /.card -->
     </div><!-- /.card-tilt -->
   </div><!-- /.card-perspective -->
@@ -698,12 +725,89 @@
       document.getElementById(spinnerId).style.display  = loading ? 'block' : 'none';
     }
 
+    function displayBusinessRole(role) {
+      const normalized = String(role || '').trim().toLowerCase();
+      if (normalized === 'owner') return 'Tenant Owner';
+      if (normalized === 'admin') return 'Administrator';
+      return 'Employee';
+    }
+
+    function createBusinessOption(membership) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'business-option';
+      button.setAttribute('aria-label', `Continue to ${membership.companyName} as ${displayBusinessRole(membership.role)}`);
+
+      const icon = document.createElement('span');
+      icon.className = 'business-option-icon';
+      icon.innerHTML = '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 21h18"></path><path d="M6 21V7l6-4 6 4v14"></path><path d="M9 10h1"></path><path d="M14 10h1"></path><path d="M9 14h1"></path><path d="M14 14h1"></path><path d="M10 21v-3h4v3"></path></svg>';
+
+      const copy = document.createElement('span');
+      copy.className = 'business-option-copy';
+      const name = document.createElement('span');
+      name.className = 'business-option-name';
+      name.textContent = membership.companyName;
+      const role = document.createElement('span');
+      role.className = 'business-option-role';
+      role.textContent = displayBusinessRole(membership.role);
+      copy.append(name, role);
+
+      const arrow = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      arrow.setAttribute('class', 'business-option-arrow');
+      arrow.setAttribute('viewBox', '0 0 24 24');
+      arrow.setAttribute('aria-hidden', 'true');
+      arrow.innerHTML = '<path d="m9 18 6-6-6-6"></path>';
+
+      button.append(icon, copy, arrow);
+      button.addEventListener('click', async () => {
+        document.querySelectorAll('.business-option').forEach(option => { option.disabled = true; });
+        hideAlert();
+        try {
+          await BKAuth.selectTenant(membership.tenantId);
+          window.location.href = '/dashboard';
+        } catch (error) {
+          console.error('Business selection failed:', error);
+          showAlert('error', BKFriendlyError(error, 'The business could not be selected. Please try again.'));
+          document.querySelectorAll('.business-option').forEach(option => { option.disabled = false; });
+        }
+      });
+      return button;
+    }
+
+    async function showBusinessSelection() {
+      showState('state-select-business');
+      const list = document.getElementById('business-select-list');
+      try {
+        const memberships = await BKAuth.getMemberships();
+        if (memberships.length === 1) {
+          await BKAuth.selectTenant(memberships[0].tenantId);
+          window.location.href = '/dashboard';
+          return;
+        }
+        if (!memberships.length) {
+          list.textContent = '';
+          showAlert('error', 'No business access is connected to this account. Contact an administrator.');
+          return;
+        }
+        list.textContent = '';
+        memberships.forEach(membership => list.appendChild(createBusinessOption(membership)));
+      } catch (error) {
+        console.error('Business memberships could not be loaded:', error);
+        list.textContent = '';
+        showAlert('error', BKFriendlyError(error, 'The businesses connected to your account could not be loaded. Sign out and try again.'));
+      }
+    }
+
     /* ── Check confirmation / recovery link in hash ── */
     (async function checkHash() {
       const hash = window.location.hash;
       if (!hash) {
         const { data: { session } } = await BKAuth.sb.auth.getSession();
-        if (session) window.location.href = 'dashboard.html';
+        if (session && new URLSearchParams(window.location.search).get('select_business') === '1') {
+          await showBusinessSelection();
+        } else if (session) {
+          window.location.href = await BKAuth.getPostLoginDestination('dashboard.html');
+        }
         return;
       }
       const params = new URLSearchParams(hash.slice(1));
@@ -754,9 +858,9 @@
       hideAlert();
       try {
         await BKAuth.signIn(email, password);
-        window.location.href = 'dashboard.html';
+        window.location.href = await BKAuth.getPostLoginDestination('dashboard.html');
       } catch (err) {
-        showAlert('error', err.message || 'Incorrect email or password.');
+        showAlert('error', BKFriendlyError(err, 'Incorrect email or password.'));
         setLoading('btn-signin', 'btn-signin-content', 'btn-signin-spinner', false);
       }
     });
@@ -795,6 +899,13 @@
       document.getElementById('input-email').focus();
     });
 
+    document.getElementById('business-select-signout').addEventListener('click', () => {
+      BKAuth.signOut().catch(error => {
+        console.error('Sign out failed:', error);
+        showAlert('error', BKFriendlyError(error, 'Sign out could not be completed. Please try again.'));
+      });
+    });
+
     /* ── STATE 4: Set password ── */
     document.getElementById('setpass-form').addEventListener('submit', async e => {
       e.preventDefault();
@@ -807,9 +918,9 @@
       try {
         const { error } = await BKAuth.sb.auth.updateUser({ password });
         if (error) throw error;
-        window.location.href = 'dashboard.html';
+        window.location.href = await BKAuth.getPostLoginDestination('dashboard.html');
       } catch (err) {
-        showAlert('error', err.message || 'Failed to set password. Please try again.');
+        showAlert('error', BKFriendlyError(err, 'Your password could not be updated. Please try again.'));
         setLoading('btn-setpass', 'btn-setpass-content', 'btn-setpass-spinner', false);
       }
     });

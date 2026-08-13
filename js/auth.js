@@ -18,6 +18,7 @@
   var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 
   let cachedUserPromise = null;
+  let cachedMembershipsPromise = null;
   let cachedUserRolePromise = null;
   let cachedRoleGatePromises = {};
 
@@ -244,7 +245,7 @@
       })();
     }
     const user = await cachedUserPromise;
-    if (user) window.location.href = to;
+    if (user) window.location.href = await getPostLoginDestination(to);
   }
 
   /**
@@ -252,11 +253,17 @@
    */
   async function signIn(email, password) {
     cachedUserPromise = null;
+    cachedMembershipsPromise = null;
     cachedUserRolePromise = null;
     cachedRoleGatePromises = {};
     const { data, error } = await sb.auth.signInWithPassword({ email, password });
     if (error) throw error;
-    return data.user;
+    const { data: updated, error: updateError } = await sb.auth.updateUser({
+      data: { active_tenant_id: null }
+    });
+    if (updateError) throw updateError;
+    cachedUserPromise = Promise.resolve(updated.user || data.user);
+    return updated.user || data.user;
   }
 
   /**
@@ -281,6 +288,7 @@
    */
   async function signOut() {
     cachedUserPromise = null;
+    cachedMembershipsPromise = null;
     cachedUserRolePromise = null;
     cachedRoleGatePromises = {};
     contextCache.companyPromises = {};
@@ -290,6 +298,67 @@
     const { error } = await sb.auth.signOut();
     if (error) throw error;
     window.location.href = 'https://www.brightkeysolutions.com/admin';
+  }
+
+  async function getMemberships() {
+    if (!cachedMembershipsPromise) {
+      cachedMembershipsPromise = (async () => {
+        const user = await getUser();
+        if (!user) return [];
+
+        const { data: memberships, error } = await sb
+          .from('tenant_members')
+          .select('role, tenant_id, accessible_modules, created_at')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: true })
+          .limit(50);
+        if (error) throw error;
+        if (!memberships?.length) return [];
+
+        const tenantIds = [...new Set(memberships.map(member => member.tenant_id).filter(Boolean))];
+        const { data: companies, error: companyError } = await sb
+          .from('companies')
+          .select('id, tenant_id, name')
+          .in('tenant_id', tenantIds)
+          .limit(50);
+        if (companyError) throw companyError;
+
+        const companyByTenant = new Map((companies || []).map(company => [company.tenant_id, company]));
+        return memberships.map(member => ({
+          role: member.role,
+          tenantId: member.tenant_id,
+          modules: member.accessible_modules || [],
+          companyId: companyByTenant.get(member.tenant_id)?.id || null,
+          companyName: companyByTenant.get(member.tenant_id)?.name || 'Company'
+        }));
+      })();
+    }
+    return cachedMembershipsPromise;
+  }
+
+  async function getPostLoginDestination(defaultDestination = '/dashboard') {
+    const memberships = await getMemberships();
+    return memberships.length > 1 ? '/admin?select_business=1' : defaultDestination;
+  }
+
+  async function selectTenant(tenantId) {
+    const memberships = await getMemberships();
+    const selected = memberships.find(member => member.tenantId === tenantId);
+    if (!selected) throw new Error('Select a company connected to your account.');
+
+    const { data, error } = await sb.auth.updateUser({
+      data: { active_tenant_id: selected.tenantId }
+    });
+    if (error) throw error;
+
+    cachedUserPromise = Promise.resolve(data.user);
+    cachedUserRolePromise = null;
+    cachedRoleGatePromises = {};
+    contextCache.companyPromises = {};
+    contextCache.employeePromises = {};
+    contextCache.employeeIdPromises = {};
+    contextCache.statusPromises = {};
+    return selected;
   }
 
   /**
@@ -305,19 +374,19 @@
         const user = await getUser();
         if (!user) return null;
 
-        const { data, error } = await sb
-          .from('tenant_members')
-          .select('role, tenant_id, accessible_modules')
-          .eq('user_id', user.id)
-          .limit(1)
-          .maybeSingle();
+        const memberships = await getMemberships();
+        if (!memberships.length) return null;
+        if (memberships.length === 1) return memberships[0];
 
-        if (error || !data) return null;
-        return {
-          role: data.role,
-          tenantId: data.tenant_id,
-          modules: data.accessible_modules || []
-        };
+        const activeTenantId = String(user.user_metadata?.active_tenant_id || '');
+        const selected = memberships.find(member => member.tenantId === activeTenantId);
+        if (!selected) {
+          if (normalizeAccessPath(window.location.pathname) !== '/admin') {
+            window.location.href = '/admin?select_business=1';
+          }
+          return null;
+        }
+        return selected;
       })();
     }
     return cachedUserRolePromise;
@@ -344,6 +413,11 @@
 
         const memberInfo = await getUserRole();
         if (!memberInfo) {
+          const memberships = await getMemberships();
+          if (memberships.length > 1) {
+            window.location.href = '/admin?select_business=1';
+            return null;
+          }
           window.location.href = redirectTo;
           return null;
         }
@@ -374,6 +448,24 @@
     return cachedRoleGatePromises[gateKey];
   }
 
+  /**
+   * Gate pages that are available to every authenticated tenant member.
+   * Unlike checkRoleGate([]), this does not require owner/admin access.
+   */
+  async function checkMemberGate(redirectTo = '../../admin.html') {
+    const user = await requireAuth(redirectTo);
+    if (!user) return null;
+
+    const memberInfo = await getUserRole();
+    if (memberInfo) return { user, ...memberInfo };
+
+    const memberships = await getMemberships();
+    window.location.href = memberships.length > 1
+      ? '/admin?select_business=1'
+      : redirectTo;
+    return null;
+  }
+
   function getCompany(tenantId) {
     if (!tenantId) return Promise.resolve(null);
     if (!contextCache.companyPromises[tenantId]) {
@@ -393,20 +485,27 @@
 
   function getEmployee(email) {
     if (!email) return Promise.resolve(null);
-    const key = email.toLowerCase().trim();
-    if (!contextCache.employeePromises[key]) {
-      contextCache.employeePromises[key] = (async () => {
-        const { data, error } = await sb
-          .from('employees')
-          .select('id, first_name, last_name, department, reporting_to, picture_link')
-          .eq('email', key)
-          .limit(1)
-          .maybeSingle();
-        if (error || !data) return null;
-        return data;
-      })();
-    }
-    return contextCache.employeePromises[key];
+    const normalizedEmail = email.toLowerCase().trim();
+    return getUserRole().then(async roleInfo => {
+      if (!roleInfo?.tenantId) return null;
+      const company = await getCompany(roleInfo.tenantId);
+      if (!company?.id) return null;
+      const key = `${company.id}:${normalizedEmail}`;
+      if (!contextCache.employeePromises[key]) {
+        contextCache.employeePromises[key] = (async () => {
+          const { data, error } = await sb
+            .from('employees')
+            .select('id, first_name, last_name, department, reporting_to, picture_link')
+            .eq('company_id', company.id)
+            .eq('email', normalizedEmail)
+            .limit(1)
+            .maybeSingle();
+          if (error || !data) return null;
+          return data;
+        })();
+      }
+      return contextCache.employeePromises[key];
+    });
   }
 
   function getEmployeeById(userId) {
@@ -509,7 +608,11 @@
     signUp,
     signOut,
     getUser,
+    getMemberships,
+    getPostLoginDestination,
+    selectTenant,
     getUserRole,
+    checkMemberGate,
     checkRoleGate,
     checkPlatformOwnerGate,
     hasModuleAccessForPath,
