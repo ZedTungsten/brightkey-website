@@ -560,6 +560,7 @@
       allProducts: [],
       existingCustomers: [],
       warehouses: [],
+      inventoryForecastConfig: { lead_times: [] },
       cshipPhotoBlob: null,
       cshipStream: null,
       cshipDelPhotoBlob: null,
@@ -636,11 +637,17 @@
           if (wErr) throw wErr;
           this.warehouses = wData || [];
 
-          const { data: supsData, error: supsErr } = await sb.from('suppliers')
-            .select('id, name, city')
-            .eq('company_id', this.companyId);
+          const [{ data: supsData, error: supsErr }, { data: forecastData, error: forecastErr }] = await Promise.all([
+            sb.from('suppliers').select('id, name, city, business_id').eq('company_id', this.companyId),
+            sb.from('global_settings').select('value').eq('company_id', this.companyId)
+              .eq('key', 'inventory_forecast_config').maybeSingle()
+          ]);
           if (supsErr) throw supsErr;
+          if (forecastErr) throw forecastErr;
           this.suppliers = supsData || [];
+          this.inventoryForecastConfig = forecastData?.value && typeof forecastData.value === 'object'
+            ? forecastData.value
+            : { lead_times: [] };
 
           this.updateBadgeCounts();
           this.renderReceiveQueue();
@@ -701,6 +708,27 @@
             receiveEl.style.display = 'none';
           }
         }
+      },
+
+      getReceiveByDate(group) {
+        const orderedAt = new Date(group.items[0]?.created_at);
+        if (Number.isNaN(orderedAt.getTime())) return '—';
+
+        const supplierOrder = group.items.some(item => item.type === 'supplier_order');
+        if (supplierOrder) {
+          const supplier = (this.suppliers || []).find(item => item.name === group.customer_name);
+          const leadTimes = Array.isArray(this.inventoryForecastConfig?.lead_times)
+            ? this.inventoryForecastConfig.lead_times
+            : [];
+          const configured = supplier ? leadTimes.find(item => (
+            item.supplier_id === supplier.id
+            && (!item.business_id || !supplier.business_id || item.business_id === supplier.business_id)
+          )) : null;
+          const days = Math.max(0, Math.round(Number(configured?.days) || 0));
+          orderedAt.setDate(orderedAt.getDate() + days);
+        }
+
+        return orderedAt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
       },
 
       renderReceiveQueue() {
@@ -764,10 +792,7 @@
           const skusHtml = group.items.map(t => `<code>${t.sku}</code>`).join('<br/>');
           const qtysHtml = group.items.map(t => `<strong>${t.quantity}</strong>`).join('<br/>');
           
-          const booking = this.bookings.find(b => b.order_no === group.reference_id);
-          const dateFriendly = booking?.scheduled_date 
-            ? new Date(booking.scheduled_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) 
-            : new Date(group.items[0].created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+          const dateFriendly = this.getReceiveByDate(group);
 
           let photoHtml = '—';
           if (group.packed_photo_url) {

@@ -215,12 +215,18 @@
   function ensurePdfLibrary() {
     if (typeof html2canvas === 'function' && typeof window.jspdf?.jsPDF === 'function') return Promise.resolve();
     if (state.pdfRequest) return state.pdfRequest;
-    state.pdfRequest = new Promise((resolve, reject) => {
+    const loadScript = src => new Promise((resolve, reject) => {
       const script = document.createElement('script');
-      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
-      script.onload = () => resolve();
+      script.src = src;
+      script.onload = resolve;
       script.onerror = () => reject(new Error('PDF library failed to load'));
       document.head.appendChild(script);
+    });
+    const requests = [];
+    if (typeof html2canvas !== 'function') requests.push(loadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js'));
+    if (typeof window.jspdf?.jsPDF !== 'function') requests.push(loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'));
+    state.pdfRequest = Promise.all(requests).then(() => {
+      if (typeof html2canvas !== 'function' || typeof window.jspdf?.jsPDF !== 'function') throw new Error('PDF library did not initialize');
     }).finally(() => { state.pdfRequest = null; });
     return state.pdfRequest;
   }
@@ -239,7 +245,10 @@
     } catch (error) {
       console.error('Employee contract load failed:', error);
       if (button) { button.disabled = false; button.textContent = originalText; }
-      return showToast('The employee contract could not be loaded. Please try again.', true);
+      const message = String(error?.message || '').startsWith('PDF library')
+        ? 'The PDF tools could not be loaded. Check your connection and try again.'
+        : 'The employee contract could not be loaded. Please try again.';
+      return showToast(message, true);
     }
     if (button) button.textContent = 'Saving…';
     const host = document.createElement('div');
