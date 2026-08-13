@@ -882,6 +882,18 @@
         return items.reduce((latest, item) => (ranks[item.status] ?? -1) > (ranks[latest] ?? -1) ? item.status : latest, booking?.status || 'scheduled');
       },
 
+      getCalendarStatusColors(status, hasDeliveryBooking = false) {
+        if (status === 'packed' && hasDeliveryBooking) return { background: '#eab308', color: '#000' };
+        if (['scheduled', 'confirmed', 'ordered', 'reserved', 'returned', 'cancelled'].includes(status)) {
+          return { background: '#ef4444', color: '#fff' };
+        }
+        if (status === 'inspect') return { background: '#a855f7', color: '#fff' };
+        if (status === 'packed') return { background: '#f97316', color: '#fff' };
+        if (['dispatched', 'in_progress'].includes(status)) return { background: '#06b6d4', color: '#fff' };
+        if (['received', 'completed'].includes(status)) return { background: '#22c55e', color: '#fff' };
+        return { background: 'var(--text-muted)', color: '#fff' };
+      },
+
       isHiddenSendStatus(status) {
         return ['received', 'completed', 'cancelled'].includes(status);
       },
@@ -1009,9 +1021,8 @@
           const qtysHtml = group.items.map(t => `<strong>${t.quantity}</strong>`).join('<br/>');
           const latestStatus = this.latestOrderStatus(group.booking, group.items);
           const statusLabel = String(latestStatus || 'scheduled').replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase());
-          const statusColors = ['completed', 'received'].includes(latestStatus)
-            ? 'background:#ECFDF5;color:#047857;' : ['cancelled', 'returned'].includes(latestStatus)
-              ? 'background:#FEF2F2;color:#B91C1C;' : 'background:#E6F7FB;color:var(--cyan-light);';
+          const hasDeliveryBooking = this.deliveryBookings.some(item => item.reference_id === group.reference_id);
+          const statusColors = this.getCalendarStatusColors(latestStatus, hasDeliveryBooking);
           
           const booking = this.bookings.find(b => b.order_no === group.reference_id);
           const dateFriendly = booking?.scheduled_date 
@@ -1053,7 +1064,6 @@
             photoHtml = `<img src="${group.packed_photo_url}" alt="Packed Proof" style="width:80px; height:50px; object-fit:cover; border-radius:6px; border:1px solid var(--border); cursor:pointer;" onclick="maximizePhoto('${esc(group.packed_photo_url)}')" />`;
           }
           const isFullyPacked = group.items.length > 0 && group.items.every(item => item.status === 'packed');
-          const hasDeliveryBooking = this.deliveryBookings.some(item => item.reference_id === group.reference_id);
           const dispatchActions = isFullyPacked && !hasDeliveryBooking ? `
                 <button class="btn btn-sm" onclick="DeliveryApp.openAddSuppliesModal('${group.reference_id}')" style="justify-content:center; background:#FEF3C7; color:#92400E; border:none;">
                   Add Supplies
@@ -1070,7 +1080,7 @@
             <td>${esc(group.customer_city)}</td>
             <td>${skusHtml}</td>
             <td>${qtysHtml}</td>
-            <td><span style="display:inline-flex;padding:0.25rem 0.55rem;border-radius:999px;font-size:0.72rem;font-weight:600;white-space:nowrap;${statusColors}">${esc(statusLabel)}</span></td>
+            <td><span style="display:inline-flex;padding:0.25rem 0.55rem;border-radius:999px;font-size:0.72rem;font-weight:700;white-space:nowrap;background:${statusColors.background};color:${statusColors.color};">${esc(statusLabel)}</span></td>
             <td>${scheduledHtml}</td>
             <td style="font-size:0.8rem; color:var(--text-secondary); max-width:200px; white-space:pre-wrap;">${esc(sched?.notes || booking?.pickup_notes || '—')}</td>
             <td><strong>${dateFriendly} ${installTime}</strong></td>
