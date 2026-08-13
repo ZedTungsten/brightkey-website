@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { createHash } from 'crypto';
 import { setApiCors } from '../lib/api/security.js';
 import { enforceRateLimit } from '../lib/api/rate-limit.js';
+import { findAuthUserByEmail } from './register-employee.js';
 
 export default async function handler(req, res) {
   setApiCors(req, res, 'GET, OPTIONS');
@@ -66,7 +67,19 @@ export default async function handler(req, res) {
       return res.status(503).json({ valid: false, reason: 'verification_unavailable' });
     }
 
-    return res.status(200).json({ valid: true, existing_member: Boolean(existingMember) });
+    let existingAccount = false;
+    try {
+      existingAccount = Boolean(await findAuthUserByEmail(supabase.auth.admin, email.toLowerCase().trim()));
+    } catch (authLookupError) {
+      console.error('Invitation Auth lookup failed:', authLookupError);
+      return res.status(503).json({ valid: false, reason: 'verification_unavailable' });
+    }
+
+    return res.status(200).json({
+      valid: true,
+      existing_member: Boolean(existingMember),
+      existing_account: existingAccount
+    });
 
   } catch (err) {
     console.error('Verify invitation crash:', err);

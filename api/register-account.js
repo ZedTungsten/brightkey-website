@@ -12,11 +12,8 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
 
   const { tenant_id, company_id, email, signature, password } = req.body || {};
-  if (!tenant_id || !company_id || !email || !signature || !password) {
+  if (!tenant_id || !company_id || !email || !signature) {
     return res.status(400).json({ error: 'Missing required registration parameters.' });
-  }
-  if (!PASSWORD_PATTERN.test(password)) {
-    return res.status(400).json({ error: 'Use at least 8 characters with uppercase, lowercase, number, and special-character values.' });
   }
 
   try {
@@ -74,7 +71,25 @@ export default async function handler(req, res) {
     let userId = authUser?.id || null;
     let createdAuthUser = false;
     const fullName = String(invitation.full_name || normalizedEmail).trim();
-    if (!userId) {
+    if (authUser) {
+      const accessToken = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim();
+      if (!accessToken) {
+        return res.status(401).json({
+          code: 'EXISTING_ACCOUNT_SIGN_IN_REQUIRED',
+          error: 'Sign in with your existing BrightKey password before adding this workspace access.'
+        });
+      }
+      const { data: signedInData, error: signedInError } = await supabase.auth.getUser(accessToken);
+      const signedInUser = signedInData?.user;
+      if (signedInError || !signedInUser || signedInUser.id !== authUser.id || String(signedInUser.email || '').toLowerCase().trim() !== normalizedEmail) {
+        return res.status(403).json({
+          error: 'The signed-in account does not match this invitation. Sign out, then use the invited email address and its existing password.'
+        });
+      }
+    } else {
+      if (!PASSWORD_PATTERN.test(String(password || ''))) {
+        return res.status(400).json({ error: 'Use at least 8 characters with uppercase, lowercase, number, and special-character values.' });
+      }
       const { data: authData, error: authError } = await supabase.auth.admin.createUser({
         email: normalizedEmail,
         password,
@@ -107,23 +122,6 @@ export default async function handler(req, res) {
       console.error('Contractor membership creation failed:', membershipError);
       if (createdAuthUser) await supabase.auth.admin.deleteUser(userId);
       return res.status(500).json({ error: 'Workspace access could not be created. Ask your administrator to check the invitation.' });
-    }
-
-    if (authUser) {
-      const { error: authUpdateError } = await supabase.auth.admin.updateUserById(userId, {
-        password,
-        email_confirm: true,
-        user_metadata: {
-          ...(authUser.user_metadata || {}),
-          full_name: fullName,
-          needs_password_reset: false
-        }
-      });
-      if (authUpdateError) {
-        console.error('Contractor Auth update failed:', authUpdateError);
-        await supabase.from('tenant_members').delete().eq('tenant_id', tenant_id).eq('user_id', userId);
-        return res.status(400).json({ error: 'Your existing login could not be reactivated. Ask your administrator to resend the invitation.' });
-      }
     }
 
     const { error: invitationUpdateError } = await supabase

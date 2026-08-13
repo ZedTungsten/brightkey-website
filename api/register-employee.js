@@ -228,19 +228,11 @@ export default async function handler(req, res) {
 
     // 4. Update or Create employee record
     if (existingEmp) {
-      if (existingEmp.id !== userId) {
-        // Update an unlinked directory record to the newly created auth ID.
-        const { error: empUpdateErr } = await supabase
-          .from('employees')
-          .update({ id: userId })
-          .eq('id', existingEmp.id);
-
-        if (empUpdateErr) {
-          console.error('Failed to link existing employee ID:', empUpdateErr);
-          await rollbackMembership();
-          return res.status(500).json({ error: 'Your employee record could not be linked to the account. Please contact your administrator.' });
-        }
-      }
+      // Hiring and Directory workflows may create the employee before the Auth
+      // identity. Preserve that employee primary key because contracts,
+      // attendance, leave, payroll, and other historical rows may reference it.
+      // Runtime identity resolution is company + normalized email, while
+      // tenant_members.user_id remains the Auth identity used for access gates.
     } else {
       const { data: employeeNumber, error: employeeNumberError } = await supabase.rpc('next_company_employee_number', {
         p_company_id: company_id

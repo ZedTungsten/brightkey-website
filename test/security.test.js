@@ -75,6 +75,8 @@ test('employee registration contains no development bypass credential', () => {
   assert.equal(verification.includes('dev-bypass-key'), false);
   assert.equal(registration.includes('brightkey_invite_salt'), false);
   assert.equal(verification.includes('brightkey_invite_salt'), false);
+  assert.doesNotMatch(registration, /from\('employees'\)[\s\S]{0,160}\.update\(\{ id: userId \}\)/);
+  assert.match(registration, /Preserve that employee primary key/);
 });
 
 test('employee registration uploads require a valid invitation and keep government IDs private', () => {
@@ -107,9 +109,17 @@ test('employee registration normalizes images and translates upload failures', (
 
 test('account-only invitations do not create or update employee records', () => {
   const accountRegistration = fs.readFileSync(new URL('../api/register-account.js', import.meta.url), 'utf8');
+  const accountPage = fs.readFileSync(new URL('../employee-directory-registration.html', import.meta.url), 'utf8');
+  const verification = fs.readFileSync(new URL('../api/verify-invitation.js', import.meta.url), 'utf8');
   assert.equal(accountRegistration.includes("from('employees')"), false);
   assert.equal(accountRegistration.includes('employee_number'), false);
   assert.equal(accountRegistration.includes("from('tenant_members').insert"), true);
+  assert.match(accountRegistration, /EXISTING_ACCOUNT_SIGN_IN_REQUIRED/);
+  assert.match(accountRegistration, /signedInUser\.id !== authUser\.id/);
+  assert.doesNotMatch(accountRegistration, /updateUserById/);
+  assert.match(accountPage, /Add Workspace Access/);
+  assert.match(accountPage, /Authorization.*Bearer/);
+  assert.match(verification, /existing_account: existingAccount/);
 });
 
 test('zero-module users can be invited with Home and Resources access only', () => {
