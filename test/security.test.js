@@ -114,12 +114,17 @@ test('account-only invitations do not create or update employee records', () => 
 
 test('zero-module users can be invited with Home and Resources access only', () => {
   const accessPage = fs.readFileSync(new URL('../dashboard/settings/access.html', import.meta.url), 'utf8');
+  const directoryPage = fs.readFileSync(new URL('../dashboard/employee-directory.html', import.meta.url), 'utf8');
+  const directoryCode = fs.readFileSync(new URL('../dashboard/employee-directory.js', import.meta.url), 'utf8');
   const accountRegistration = fs.readFileSync(new URL('../api/register-account.js', import.meta.url), 'utf8');
   const resources = fs.readFileSync(new URL('../dashboard/resources.js', import.meta.url), 'utf8');
   assert.match(accessPage, /role = 'access:' \+ checkedModules\.join\(','\)/);
   assert.doesNotMatch(accessPage, /checkedModules\.length === 0/);
   assert.doesNotMatch(accessPage, /newModules\.length === 0/);
   assert.match(accessPage, /Home &amp; Resources only/);
+  assert.match(directoryCode, /role = 'access:' \+ checkedModules\.join\(','\)/);
+  assert.doesNotMatch(directoryCode, /Please check at least one access module/);
+  assert.match(directoryPage, /Home &amp; Resources only/);
   assert.match(accountRegistration, /\.filter\(Boolean\)/);
   assert.match(resources, /BKAuth\.requireAuth/);
 });
@@ -139,6 +144,8 @@ test('all employee creation paths use the company-scoped employee number generat
   const directory = fs.readFileSync(new URL('../dashboard/employee-directory-access.js', import.meta.url), 'utf8');
   const access = fs.readFileSync(new URL('../dashboard/settings/access.html', import.meta.url), 'utf8');
   assert.match(directory, /\/api\/next-employee-number/);
+  assert.match(directory, /button\.dataset\.action = linkCreated \? 'close' : 'produce'/);
+  assert.match(directory, /button\.textContent = linkCreated \? 'Close' : originalText/);
   assert.match(access, /\/api\/next-employee-number/);
   assert.doesNotMatch(directory, /employeePrefix/);
   assert.doesNotMatch(access, /employeePrefix \+ '-'/);

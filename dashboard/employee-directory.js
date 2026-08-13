@@ -226,12 +226,6 @@
         let role = roleSelect.value;
         if (role === 'custom') {
           const checkedModules = window.BKDirectoryAccess.collect('link-invite');
-          if (checkedModules.length === 0) {
-            toast('Please check at least one access module for Custom role.', 'error');
-            btn.disabled = false;
-            btn.innerText = origText;
-            return;
-          }
           role = 'access:' + checkedModules.join(',');
         }
 
@@ -321,12 +315,6 @@
 
         if (role === 'custom') {
           const checkedModules = window.BKDirectoryAccess.collect('invite');
-          if (checkedModules.length === 0) {
-            toast('Please check at least one access module for Custom role.', 'error');
-            btn.disabled = false;
-            btn.innerText = origText;
-            return;
-          }
           role = 'access:' + checkedModules.join(',');
         }
 

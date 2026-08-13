@@ -154,6 +154,7 @@
       const actionButton = document.getElementById('employee-entry-continue');
       actionButton.disabled = true;
       actionButton.textContent = 'Produce Link';
+      actionButton.dataset.action = 'produce';
       const help = document.getElementById('employee-entry-account-help');
       if (help) help.textContent = available.length ? 'Only Access users who are not yet in the directory are shown.' : 'All Access users are already linked to directory profiles.';
       modal.classList.add('open');
@@ -171,10 +172,16 @@
       const button = document.getElementById('employee-entry-continue');
       if (button) {
         button.textContent = type === 'manual' ? 'Fill out form' : 'Produce Link';
+        button.dataset.action = type === 'manual' ? 'manual' : 'produce';
         button.disabled = !type || (type === 'existing' && !accountId);
       }
     },
     async continueEmployeeEntry() {
+      const actionButton = document.getElementById('employee-entry-continue');
+      if (actionButton?.dataset.action === 'close') {
+        this.closeEmployeeEntryChooser();
+        return;
+      }
       const type = document.querySelector('input[name="employee-entry-type"]:checked')?.value || '';
       const accountId = document.getElementById('employee-entry-account')?.value || '';
       if (!type || (type === 'existing' && !accountId)) return;
@@ -208,6 +215,7 @@
     },
     async createEmployeeRegistrationLink({ button, tenantId, companyId, accountId = '', sb, toast }) {
       const originalText = button?.textContent || 'Produce Link';
+      let linkCreated = false;
       if (button) { button.disabled = true; button.textContent = 'Creating link…'; }
       try {
         if (!tenantId || !companyId) {
@@ -245,12 +253,17 @@
         const linkField = document.getElementById('employee-entry-link-url');
         if (linkField) linkField.value = result.fallback_link;
         if (linkOutput) linkOutput.hidden = false;
+        linkCreated = true;
         toast('Employee registration link created.', 'success');
       } catch (error) {
         console.error('Employee registration link creation failed:', error);
         toast('The employee registration link could not be created. Please try again.', 'error');
       } finally {
-        if (button) { button.disabled = false; button.textContent = originalText; }
+        if (button) {
+          button.disabled = false;
+          button.textContent = linkCreated ? 'Close' : originalText;
+          button.dataset.action = linkCreated ? 'close' : 'produce';
+        }
       }
     },
     async copyProducedEmployeeLink(toast) {
