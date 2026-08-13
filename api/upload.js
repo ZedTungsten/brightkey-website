@@ -5,6 +5,13 @@ import { enforceRateLimit } from '../lib/api/rate-limit.js';
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://ymjlosnxuhsybkzkoofq.supabase.co';
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inltamxvc254dWhzeWJremtvb2ZxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ0MDY1MzYsImV4cCI6MjA4OTk4MjUzNn0.srhk9SVvFuZRcfeRGbVDGPr5pYrFhs8vzcOiMK3A91w';
 
+const EMPLOYEE_UPLOAD_MIME_TYPES = {
+  profile: ['image/jpeg', 'image/png'],
+  'gov-id': ['image/jpeg', 'image/png', 'application/pdf'],
+  cv: ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+  payout: ['image/jpeg', 'image/png']
+};
+
 export default async function handler(req, res) {
   // Allow requests from localhost and production
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -95,6 +102,17 @@ export default async function handler(req, res) {
     const base64Data = hasPrefix ? fileBase64.split(';base64,').pop() : fileBase64;
     const buffer = Buffer.from(base64Data, 'base64');
 
+    if (category === 'employees' && invitationAuthorized) {
+      const allowedMimeTypes = EMPLOYEE_UPLOAD_MIME_TYPES[type] || [];
+      if (!allowedMimeTypes.includes(contentType)) {
+        return res.status(415).json({
+          code: 'UNSUPPORTED_FILE_TYPE',
+          field: type,
+          error: 'The selected employee document format is not accepted by storage.'
+        });
+      }
+    }
+
     if (!companyId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(companyId)) {
       return res.status(400).json({ error: 'A valid company is required before uploading a file.' });
     }
@@ -142,6 +160,7 @@ export default async function handler(req, res) {
     }
     if (!quotaRows?.[0]?.allowed) {
       return res.status(413).json({
+        code: 'FILE_TOO_LARGE',
         error: 'This company has reached its storage limit. Remove files or increase the tenant storage allocation before uploading.'
       });
     }
@@ -231,6 +250,22 @@ export default async function handler(req, res) {
 
   } catch (error) {
     console.error('Supabase Storage Upload Error:', error);
-    return res.status(500).json({ error: error.message || 'Internal server error during upload.' });
+    const rawMessage = String(error?.message || '').toLowerCase();
+    if (rawMessage.includes('mime type') || rawMessage.includes('not supported')) {
+      return res.status(415).json({
+        code: 'UNSUPPORTED_FILE_TYPE',
+        error: 'The selected file format is not accepted by storage.'
+      });
+    }
+    if (rawMessage.includes('payload too large') || rawMessage.includes('maximum allowed size')) {
+      return res.status(413).json({
+        code: 'FILE_TOO_LARGE',
+        error: 'The selected file exceeds the upload size limit.'
+      });
+    }
+    return res.status(500).json({
+      code: 'UPLOAD_FAILED',
+      error: 'The upload service could not save this file. Please retry with a smaller supported file.'
+    });
   }
 }

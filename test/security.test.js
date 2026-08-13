@@ -90,6 +90,21 @@ test('employee registration uploads require a valid invitation and keep governme
   assert.match(registration, /signature:\s*inviteSig/);
 });
 
+test('employee registration normalizes images and translates upload failures', () => {
+  const page = fs.readFileSync(new URL('../employee-registration.html', import.meta.url), 'utf8');
+  const uploadApi = fs.readFileSync(new URL('../api/upload.js', import.meta.url), 'utf8');
+
+  assert.match(page, /normalizeRegistrationImage/);
+  assert.match(page, /canvas\.toBlob\([\s\S]*'image\/jpeg'/);
+  assert.doesNotMatch(page, /compressImageToWebP/);
+  assert.match(page, /friendlyRegistrationError/);
+  assert.match(page, /Profile picture/);
+  assert.match(page, /Government-issued ID/);
+  assert.match(page, /Payout QR code/);
+  assert.match(uploadApi, /UNSUPPORTED_FILE_TYPE/);
+  assert.doesNotMatch(uploadApi, /error\.message \|\| 'Internal server error during upload\.'/);
+});
+
 test('account-only invitations do not create or update employee records', () => {
   const accountRegistration = fs.readFileSync(new URL('../api/register-account.js', import.meta.url), 'utf8');
   assert.equal(accountRegistration.includes("from('employees')"), false);

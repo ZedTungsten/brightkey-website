@@ -336,6 +336,8 @@ export default async function handler(req, res) {
 
   } catch (err) {
     console.error('Registration processing crash:', err);
-    return res.status(500).json({ error: `Server crash: ${err.message}` });
+    return res.status(500).json({
+      error: 'The employee account could not be saved because the registration service encountered an unexpected problem. Keep the page open and try again; if it continues, ask HR to produce a new registration link.'
+    });
   }
 }

@@ -262,6 +262,25 @@
     .upload-zone__label { font-size: 0.82rem; font-weight: 600; color: var(--text-2); margin-bottom: 0.2rem; }
     .upload-zone__label span { color: var(--cyan); }
     .upload-zone__hint { font-size: 0.72rem; color: var(--text-m); }
+    .gov-id-image-preview {
+      display: none;
+      width: 100%;
+      height: 210px;
+      object-fit: contain;
+      object-position: center;
+    }
+    #gov-id-zone.has-image-preview {
+      min-height: 238px;
+      padding: 0.75rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--elevated);
+    }
+    #gov-id-zone.has-image-preview .gov-id-image-preview { display: block; }
+    #gov-id-zone.has-image-preview .upload-zone__icon,
+    #gov-id-zone.has-image-preview .upload-zone__label,
+    #gov-id-zone.has-image-preview .upload-zone__hint { display: none; }
 
     /* ── Profile picture upload ── */
     .profile-upload-wrap {
@@ -700,6 +719,7 @@
         <div class="upload-zone" id="gov-id-zone">
           <input type="file" id="gov-id-input" name="government_id"
             accept="image/jpeg,image/png,image/webp,application/pdf,image/heic,image/heif,.heic,.heif" />
+          <img class="gov-id-image-preview" id="gov-id-image-preview" src="" alt="Government-issued ID preview" />
           <div class="upload-zone__icon">
             <svg viewBox="0 0 24 24"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
           </div>
@@ -1096,6 +1116,7 @@
       sizeId:    'govid-file-size',
       removeId:  'govid-file-remove',
       key:       'govId',
+      imagePreviewId: 'gov-id-image-preview',
     });
 
     /* ── CV upload handler ──────────────────────────────────────────────── */
@@ -1129,13 +1150,30 @@
     document.querySelectorAll('input[name="payout-mode"]').forEach(input => input.addEventListener('change', updatePayoutMode));
     updatePayoutMode();
 
-    function setupFileUpload({ zoneId, inputId, previewId, nameId, sizeId, removeId, key }) {
+    function setupFileUpload({ zoneId, inputId, previewId, nameId, sizeId, removeId, key, imagePreviewId = null }) {
       const zone    = document.getElementById(zoneId);
       const input   = document.getElementById(inputId);
       const preview = document.getElementById(previewId);
       const nameEl  = document.getElementById(nameId);
       const sizeEl  = document.getElementById(sizeId);
       const removeBtn = document.getElementById(removeId);
+      const imagePreview = imagePreviewId ? document.getElementById(imagePreviewId) : null;
+
+      function renderImagePreview(file) {
+        if (!imagePreview) return;
+        if (!file?.type?.startsWith('image/')) {
+          imagePreview.removeAttribute('src');
+          zone.classList.remove('has-image-preview');
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = event => {
+          imagePreview.src = event.target.result;
+          zone.classList.add('has-image-preview');
+        };
+        reader.onerror = () => zone.classList.remove('has-image-preview');
+        reader.readAsDataURL(file);
+      }
 
       input.addEventListener('change', function() {
         const file = this.files[0];
@@ -1144,6 +1182,7 @@
         nameEl.textContent = file.name;
         sizeEl.textContent = fmtSize(file.size);
         preview.classList.add('visible');
+        renderImagePreview(file);
       });
 
       zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
@@ -1157,6 +1196,7 @@
           nameEl.textContent = file.name;
           sizeEl.textContent = fmtSize(file.size);
           preview.classList.add('visible');
+          renderImagePreview(file);
         }
       });
 
@@ -1164,10 +1204,12 @@
         files[key] = null;
         input.value = '';
         preview.classList.remove('visible');
+        if (imagePreview) imagePreview.removeAttribute('src');
+        zone.classList.remove('has-image-preview');
       });
     }
 
-    function compressImageToWebP(file, maxW = 1200, maxH = 1200, quality = 0.8) {
+    function normalizeRegistrationImage(file, maxW = 1200, maxH = 1200, quality = 0.82) {
       return new Promise((resolve) => {
         if (!file.type.startsWith('image/')) return resolve(file);
         const reader = new FileReader();
@@ -1189,27 +1231,29 @@
             canvas.width = width;
             canvas.height = height;
             const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, width, height);
             ctx.drawImage(img, 0, 0, width, height);
             canvas.toBlob((blob) => {
               try {
                 if (!blob) return resolve(file);
                 const nameWithoutExt = file.name.substring(0, file.name.lastIndexOf('.')) || 'image';
-                const webpFile = new File([blob], `${nameWithoutExt}.webp`, {
-                  type: 'image/webp',
+                const jpegFile = new File([blob], `${nameWithoutExt}.jpg`, {
+                  type: 'image/jpeg',
                   lastModified: Date.now()
                 });
-                resolve(webpFile);
+                resolve(jpegFile);
               } catch (err) {
                 console.warn("File constructor error (expected on some Safari versions), falling back to blob decoration:", err);
                 try {
                   const nameWithoutExt = file.name.substring(0, file.name.lastIndexOf('.')) || 'image';
-                  blob.name = `${nameWithoutExt}.webp`;
+                  blob.name = `${nameWithoutExt}.jpg`;
                   resolve(blob);
                 } catch (fallbackErr) {
                   resolve(file);
                 }
               }
-            }, 'image/webp', quality);
+            }, 'image/jpeg', quality);
           };
           img.onerror = () => resolve(file);
           img.src = e.target.result;
@@ -1253,7 +1297,7 @@
 
       if (finalFile.type.startsWith('image/')) {
         try {
-          finalFile = await compressImageToWebP(finalFile);
+          finalFile = await normalizeRegistrationImage(finalFile);
         } catch (e) {
           console.warn("Employee image compression bypassed.", e);
         }
@@ -1292,14 +1336,27 @@
             }
             if (bar) bar.style.width = '100%';
             setTimeout(() => { if (progress) progress.classList.remove('visible'); }, 400);
-            if (!res.ok) throw new Error(data.error || 'Upload failed');
+            if (!res.ok) {
+              const uploadError = new Error(data.error || 'The upload service rejected the file.');
+              uploadError.code = data.code || '';
+              uploadError.uploadType = type;
+              uploadError.fileName = file.name;
+              throw uploadError;
+            }
             resolve(data.url);
           } catch (err) {
             if (progress) progress.classList.remove('visible');
+            err.uploadType = err.uploadType || type;
+            err.fileName = err.fileName || file.name;
             reject(err);
           }
         };
-        reader.onerror = () => reject(new Error('Could not read file. Please save it directly to your device and try again.'));
+        reader.onerror = () => {
+          const readError = new Error('Could not read file. Please save it directly to your device and try again.');
+          readError.uploadType = type;
+          readError.fileName = file.name;
+          reject(readError);
+        };
         reader.readAsDataURL(finalFile);
       });
     }
@@ -1315,6 +1372,47 @@
     }
     function hideAlert() {
       alertEl.className = 'alert alert--hidden';
+    }
+
+    const uploadFieldNames = {
+      profile: 'Profile picture',
+      'gov-id': 'Government-issued ID',
+      cv: 'CV',
+      payout: 'Payout QR code'
+    };
+
+    function friendlyRegistrationError(err) {
+      const rawMessage = String(err?.message || '').trim();
+      const normalized = rawMessage.toLowerCase();
+      const field = uploadFieldNames[err?.uploadType] || 'File';
+      const fileDetail = err?.fileName ? ` (${err.fileName})` : '';
+
+      if (err?.code === 'UNSUPPORTED_FILE_TYPE' || /mime type|unsupported.*(file|format|type)|not supported/.test(normalized)) {
+        const allowed = err?.uploadType === 'cv' ? 'PDF, DOC, or DOCX' : 'JPG or PNG';
+        return `${field} upload failed${fileDetail}: the selected file format is not accepted by storage. Convert the file to ${allowed}, then upload it again.`;
+      }
+      if (err?.code === 'FILE_TOO_LARGE' || /too large|payload too large|storage limit/.test(normalized)) {
+        return `${field} upload failed${fileDetail}: the file exceeds the allowed size or available company storage. Choose a smaller file under 4.5 MB, then try again.`;
+      }
+      if (/could not read file|failed to read|not readable/.test(normalized)) {
+        return `${field} upload failed${fileDetail}: the browser could not read the selected file. Save it directly to this device, select it again, and retry.`;
+      }
+      if (/invalid or expired|registration link|invitation/.test(normalized)) {
+        return 'Registration could not continue: this employee access link is invalid, expired, or already used. Ask HR or an administrator to produce a new registration link under Access.';
+      }
+      if (/already exists|already registered|duplicate|email.*used/.test(normalized)) {
+        return 'Account creation failed: an employee or login account already uses this email address. Sign in with the existing account, or ask HR to verify the employee record and email.';
+      }
+      if (/login failed|invalid login credentials/.test(normalized)) {
+        return 'Registration was saved, but automatic sign-in failed. Open the login page and sign in with the password you just created; if that fails, reset the password.';
+      }
+      if (/failed to fetch|networkerror|network request failed|service unavailable/.test(normalized)) {
+        return 'Registration could not reach the server. Check your internet connection, keep this page open, and submit again in a moment.';
+      }
+      if (err?.uploadType) {
+        return `${field} upload failed${fileDetail}: the upload service could not save the file. Re-select it and try again; if it continues, use a smaller supported file.`;
+      }
+      return 'Registration could not be completed: the server could not save the employee account. Review the required fields and try again; if it continues, ask HR to produce a new registration link.';
     }
 
     /* ── Validation helpers ─────────────────────────────────────────────── */
@@ -1527,7 +1625,7 @@
 
       } catch (err) {
         console.error('Registration error:', err);
-        showAlert('error', err.message || 'Submission failed. Please try again.');
+        showAlert('error', friendlyRegistrationError(err));
         submitBtn.disabled = false;
         document.getElementById('btn-submit-content').style.display = 'flex';
         document.getElementById('btn-submit-spinner').style.display = 'none';
