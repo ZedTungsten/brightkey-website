@@ -904,6 +904,7 @@
 
           this.consolidatedOrders.push({
             reference_id: refId,
+            isSupplierOrder: refId.startsWith('SUP-') || txs.some(t => t.type === 'supplier_order'),
             customer_name: customerName,
             customer_city: city,
             txs: txs,
@@ -958,7 +959,7 @@
           const statusHtml = `<span style="font-weight: 700; color: ${statusColors[order.status] || 'var(--text-secondary)'};">${statusText}</span>`;
 
           let actionHtml = '<div style="display: inline-flex; align-items: center; gap: 0.5rem;">';
-          if (order.status !== 'received') {
+          if (order.status !== 'received' && !order.isSupplierOrder) {
             const targetId = db ? db.id : `REF:${order.reference_id}`;
             actionHtml += `
               <button class="btn btn-cyan btn-sm" onclick="DeliveryApp.openDoneModal('${targetId}')" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">
@@ -1017,6 +1018,8 @@
           booking = this.deliveryBookings.find(b => b.id === idOrRef);
         }
         if (!booking) return;
+        const selectedOrder = this.consolidatedOrders.find(order => order.reference_id === booking.reference_id);
+        if (selectedOrder?.isSupplierOrder) return;
 
         this.selectedBooking = booking;
         this.donePhotoBlob = null;
