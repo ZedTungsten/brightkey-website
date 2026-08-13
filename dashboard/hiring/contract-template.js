@@ -224,6 +224,21 @@
 
   function renderSignatures() { return signatureBlock(); }
 
+  function setEmployee(employee) {
+    state.employee = employee && typeof employee === 'object' ? employee : null;
+  }
+
+  function configureContext(app, settings = {}) {
+    state.app = app;
+    state.companyId = app.companyId;
+    state.userId = app.authInfo?.user?.id || null;
+    state.profile = settings.companyProfile && typeof settings.companyProfile === 'object' ? settings.companyProfile : {};
+    state.contacts = normalizeContacts(settings.contacts);
+    const signature = settings.signature && typeof settings.signature === 'object' ? settings.signature : {};
+    state.signature = { signatoryName: String(signature.signatoryName || ''), imageUrl: String(signature.imageUrl || '') };
+    state.employee = null;
+  }
+
   function fullDate(value) {
     const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
     if (!match) return String(value || '');
@@ -278,7 +293,7 @@
     draw();
   }
 
-  window.BKHiringContractTemplate = Object.freeze({ init, ensureLoaded, renderBodyPage, renderCoverPage, renderSignatures, personalizeHtml, render, switchPage, toggleContact, selectSocial, toggleContactPanel, moveContact });
+  window.BKHiringContractTemplate = Object.freeze({ init, ensureLoaded, configureContext, setEmployee, renderBodyPage, renderCoverPage, renderSignatures, personalizeHtml, render, switchPage, toggleContact, selectSocial, toggleContactPanel, moveContact });
 })();
 
 (function () {
