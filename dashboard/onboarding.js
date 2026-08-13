@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const state = { sb: null, authInfo: null, companyId: null, employee: null, jobPost: null, contract: null, signature: null, drawing: false, hasInk: false };
+  const state = { sb: null, authInfo: null, companyId: null, employee: null, jobPost: null, contract: null, signature: null, currentPage: 0, drawing: false, hasInk: false };
   const esc = value => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
   const showToast = (message, isError = false) => window.Toast ? window.Toast.show(message, isError ? 'error' : 'success') : console[isError ? 'error' : 'log'](message);
   const app = { get sb(){return state.sb;}, get authInfo(){return state.authInfo;}, get companyId(){return state.companyId;}, companyProfile:{}, esc, showToast };
@@ -25,6 +25,10 @@
     return window.BKHiringContractTemplate?.personalizeHtml(sanitizeHtml(html)) || sanitizeHtml(html);
   }
 
+  function personalizeTemplate(html) {
+    return window.BKHiringContractTemplate?.personalizeHtml(String(html || '')) || String(html || '');
+  }
+
   function renderBlock(block) {
     if (!block || typeof block !== 'object') return '';
     if (block.type === 'signatures') return renderSignatures();
@@ -42,18 +46,65 @@
     const columns = template.querySelectorAll('.contract-signatures > div');
     if (columns[1]) {
       const space = columns[1].querySelector('.contract-signature-space');
-      if (space) space.outerHTML = `<button class="onboarding-signature-button" type="button" onclick="OnboardingApp.openSignature()" aria-label="${state.signature ? 'View or replace your signature' : 'Sign employment contract'}">${state.signature ? `<img src="${esc(state.signature.signature_data_url)}" alt="Employee signature">` : '<span>Click to sign</span>'}</button>`;
+      if (space) space.outerHTML = state.signature
+        ? `<div class="onboarding-signed-signature"><img src="${esc(state.signature.signature_data_url)}" alt="Employee signature"></div>`
+        : '<button class="onboarding-signature-button" type="button" onclick="OnboardingApp.openSignature()" aria-label="Sign employment contract"><span>Click to sign</span></button>';
     }
-    return personalize(template.innerHTML);
+    return personalizeTemplate(template.innerHTML);
   }
 
   function renderContract() {
     const host = document.getElementById('onboarding-content');
-    const pages = Array.isArray(state.contract?.pages) ? state.contract.pages : [];
     const status = state.signature ? 'Signed' : 'Not Signed';
-    const cover = personalize(window.BKHiringContractTemplate?.renderCoverPage() || '');
-    const bodyPages = pages.map(page => window.BKHiringContractTemplate?.renderBodyPage(`<div class="snippet-template-content">${(Array.isArray(page) ? page : []).map(renderBlock).join('')}</div>`) || '').join('');
-    host.innerHTML = `<div class="onboarding-contract-header"><div><h2>${esc(state.jobPost.job_title)} Contract</h2><p>Review every page, then select the employee signature block to sign.</p></div><span class="contract-sign-status${state.signature ? ' signed' : ''}">${status}</span></div><div class="onboarding-contract-stage"><div class="contract-template-preview">${cover}${bodyPages}</div></div>${signatureModal()}`;
+    const cover = personalizeTemplate(window.BKHiringContractTemplate?.renderCoverPage() || '');
+    host.innerHTML = `<div class="onboarding-card-layout"><section class="onboarding-contract-card" aria-labelledby="contract-card-title"><div class="onboarding-card-header"><div><h2 id="contract-card-title">Contract</h2><p>${esc(state.jobPost.job_title)}</p></div><span class="contract-sign-status${state.signature ? ' signed' : ''}">${status}</span></div><button class="onboarding-cover-button" type="button" onclick="OnboardingApp.openViewer()" aria-label="Open ${esc(state.jobPost.job_title)} contract"><div class="onboarding-cover-preview">${cover}</div><span class="onboarding-open-label">Open contract</span></button></section></div>${viewerModal()}${signatureModal()}`;
+  }
+
+  function viewerModal() {
+    return `<div class="onboarding-viewer" id="onboarding-viewer" role="dialog" aria-modal="true" aria-labelledby="onboarding-viewer-title" style="display:none"><div class="onboarding-viewer-card"><header class="onboarding-viewer-header"><div><h2 id="onboarding-viewer-title">Contract</h2><p>${esc(state.jobPost.job_title)}</p></div><button type="button" onclick="OnboardingApp.closeViewer()" aria-label="Close contract viewer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button></header><div class="onboarding-viewer-body"><div class="onboarding-page-controls"><button id="onboarding-page-previous" type="button" onclick="OnboardingApp.changePage(-1)" aria-label="Previous contract page"><svg viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg></button><span id="onboarding-page-status"></span><button id="onboarding-page-next" type="button" onclick="OnboardingApp.changePage(1)" aria-label="Next contract page"><svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></button></div><div class="onboarding-viewer-stage"><div id="onboarding-viewer-page" class="contract-template-preview"></div></div></div></div></div>`;
+  }
+
+  function contractPageCount() {
+    return 1 + (Array.isArray(state.contract?.pages) ? state.contract.pages.length : 0);
+  }
+
+  function renderViewerPage() {
+    const host = document.getElementById('onboarding-viewer-page');
+    if (!host) return;
+    const pages = Array.isArray(state.contract?.pages) ? state.contract.pages : [];
+    host.innerHTML = state.currentPage === 0
+      ? personalizeTemplate(window.BKHiringContractTemplate?.renderCoverPage() || '')
+      : window.BKHiringContractTemplate?.renderBodyPage(`<div class="snippet-template-content">${(Array.isArray(pages[state.currentPage - 1]) ? pages[state.currentPage - 1] : []).map(renderBlock).join('')}</div>`) || '';
+    const status = document.getElementById('onboarding-page-status');
+    const previous = document.getElementById('onboarding-page-previous');
+    const next = document.getElementById('onboarding-page-next');
+    if (status) status.textContent = `Page ${state.currentPage + 1} of ${contractPageCount()}`;
+    if (previous) previous.disabled = state.currentPage === 0;
+    if (next) next.disabled = state.currentPage === contractPageCount() - 1;
+  }
+
+  function openViewer() {
+    state.currentPage = 0;
+    renderViewerPage();
+    const viewer = document.getElementById('onboarding-viewer');
+    if (!viewer) return;
+    viewer.style.display = 'flex';
+    void viewer.offsetHeight;
+    viewer.classList.add('open');
+  }
+
+  function closeViewer() {
+    const viewer = document.getElementById('onboarding-viewer');
+    viewer?.classList.remove('open');
+    setTimeout(() => { if (viewer) viewer.style.display = 'none'; }, 150);
+  }
+
+  function changePage(direction) {
+    const nextPage = state.currentPage + direction;
+    if (nextPage < 0 || nextPage >= contractPageCount()) return;
+    state.currentPage = nextPage;
+    renderViewerPage();
+    document.querySelector('.onboarding-viewer-body')?.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   function signatureModal() {
@@ -109,21 +160,22 @@
     if (state.signature?.signature_data_url) { const image = new Image(); image.onload = () => context.drawImage(image, 0, 0, rect.width, rect.height); image.src = state.signature.signature_data_url; state.hasInk = true; }
   }
 
-  function openSignature() { const modal = document.getElementById('signature-modal'); modal.style.display = 'flex'; void modal.offsetHeight; modal.classList.add('open'); requestAnimationFrame(setupCanvas); }
+  function openSignature() { if (state.signature) return; const modal = document.getElementById('signature-modal'); modal.style.display = 'flex'; void modal.offsetHeight; modal.classList.add('open'); requestAnimationFrame(setupCanvas); }
   function closeSignature() { const modal = document.getElementById('signature-modal'); modal?.classList.remove('open'); setTimeout(() => { if (modal) modal.style.display = 'none'; }, 150); }
-  function clearSignature() { const canvas = document.getElementById('employee-signature-canvas'); canvas?.getContext('2d').clearRect(0, 0, canvas.width, canvas.height); state.hasInk = false; }
+  function clearSignature() { if (state.signature) return; const canvas = document.getElementById('employee-signature-canvas'); canvas?.getContext('2d').clearRect(0, 0, canvas.width, canvas.height); state.hasInk = false; }
 
   async function saveSignature() {
+    if (state.signature) return showToast('This contract has already been signed.', true);
     if (!state.hasInk) return showToast('Draw your signature before saving.', true);
     const button = document.getElementById('save-employee-signature'); const canvas = document.getElementById('employee-signature-canvas');
     button.disabled = true; button.textContent = 'Saving…';
     const payload = { company_id: state.companyId, employee_id: state.employee.id, job_post_id: state.jobPost.id, signature_data_url: canvas.toDataURL('image/png'), signed_at: new Date().toISOString(), updated_at: new Date().toISOString() };
-    const { data, error } = await state.sb.from('employee_contract_signatures').upsert(payload, { onConflict: 'company_id,employee_id,job_post_id' }).select('signature_data_url,signed_at').single();
+    const { data, error } = await state.sb.from('employee_contract_signatures').insert(payload).select('signature_data_url,signed_at').single();
     button.disabled = false; button.textContent = 'Save Signature';
-    if (error) { console.error('Employee contract signature save failed:', error); return showToast('Your signature could not be saved. Please try again.', true); }
+    if (error) { console.error('Employee contract signature save failed:', error); return showToast(error.code === '23505' ? 'This contract has already been signed.' : 'Your signature could not be saved. Please try again.', true); }
     state.signature = data; closeSignature(); renderContract(); showToast('Contract signed successfully.');
   }
 
-  window.OnboardingApp = Object.freeze({ init, openSignature, closeSignature, clearSignature, saveSignature });
+  window.OnboardingApp = Object.freeze({ init, openViewer, closeViewer, changePage, openSignature, closeSignature, clearSignature, saveSignature });
   document.addEventListener('DOMContentLoaded', init);
 })();

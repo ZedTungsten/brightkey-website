@@ -373,6 +373,7 @@
           <a href="/dashboard/attendance-leaves" class="dash-nav-child" data-role="hr">Attendance & Leaves</a>
           <a href="/dashboard/events/company" class="dash-nav-child" data-role="hr">Events</a>
           <a href="/dashboard/hiring/job-post" class="dash-nav-child" data-role="hr">Hiring</a>
+          <a href="/dashboard/hr-onboarding" class="dash-nav-child" data-role="hr">Onboarding</a>
           <a href="/dashboard/payout-tracker/payout/" class="dash-nav-child" data-role="hr" style="display: flex; justify-content: space-between; align-items: center;">
             <span>Payout Tracker</span>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.6; margin-left: 0.5rem;" title="Shared with other roles">

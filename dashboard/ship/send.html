@@ -534,7 +534,7 @@
 
       <!-- Upload Delivery Details Photo -->
       <div class="form-group">
-        <label class="form-label">Delivery Information Screenshot</label>
+        <label class="form-label" for="delivery-file-input">Delivery Information Screenshot <span style="color:var(--danger);">*</span></label>
         <div id="upload-container" style="width:100%; aspect-ratio:16/10; background:var(--bg-elevated); border:2px dashed var(--border); border-radius:8px; display:flex; flex-direction:column; align-items:center; justify-content:center; overflow:hidden; position:relative; cursor:pointer; flex-shrink: 0;" onclick="document.getElementById('delivery-file-input').click()">
           <img id="delivery-photo-preview" src="" style="width:100%; height:100%; object-fit:cover; display:none;" />
           
@@ -542,8 +542,9 @@
             <svg viewBox="0 0 24 24" width="28" height="28" stroke="currentColor" stroke-width="1.5" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
             <span style="font-size:0.78rem; font-weight:600;">Drag & drop photo here or click to select</span>
           </div>
-          <input type="file" id="delivery-file-input" accept="image/*" style="display:none;" onchange="handleDeliveryFileSelect(event)" />
+          <input type="file" id="delivery-file-input" accept="image/*" required aria-required="true" style="display:none;" onchange="handleDeliveryFileSelect(event)" />
         </div>
+        <p id="delivery-file-error" style="display:none; margin:.4rem 0 0; color:var(--danger); font-size:.72rem; font-weight:600;">Upload the delivery information screenshot before confirming the booking.</p>
       </div>
 
       <!-- Fee inputs -->
@@ -569,7 +570,7 @@
       <!-- Actions -->
       <div style="display: flex; justify-content: flex-end; gap: 0.75rem; border-top: 1px solid var(--border); padding-top: 1rem; margin-top: 0.25rem;">
         <button type="button" class="btn btn-outline" onclick="closeBookingModal()">Cancel</button>
-        <button type="button" id="btn-confirm-booking" class="btn btn-primary" onclick="confirmBooking()" disabled>Confirm Booking</button>
+        <button type="button" id="btn-confirm-booking" class="btn btn-primary" onclick="confirmBooking()">Confirm Booking</button>
       </div>
     </div>
   </div>
@@ -1182,7 +1183,9 @@
         document.getElementById('tip-2').value = '';
         document.getElementById('toll').value = '';
 
-        document.getElementById('btn-confirm-booking').disabled = true;
+        document.getElementById('btn-confirm-booking').disabled = false;
+        document.getElementById('upload-container').style.borderColor = 'var(--border)';
+        document.getElementById('delivery-file-error').style.display = 'none';
 
         document.getElementById('booking-modal').classList.add('open');
       },
@@ -2011,6 +2014,8 @@
       if (!file) return;
       
       DeliveryApp.deliveryPhotoBlob = file;
+      document.getElementById('upload-container').style.borderColor = 'var(--border)';
+      document.getElementById('delivery-file-error').style.display = 'none';
 
       const reader = new FileReader();
       reader.onload = function(evt) {
@@ -2018,14 +2023,20 @@
         img.src = evt.target.result;
         img.style.display = 'block';
         document.getElementById('upload-placeholder').style.display = 'none';
-        document.getElementById('btn-confirm-booking').disabled = false;
       };
       reader.readAsDataURL(file);
     };
 
     window.confirmBooking = async function() {
       const btn = document.getElementById('btn-confirm-booking');
-      if (btn.disabled || !DeliveryApp.selectedOrder || !DeliveryApp.deliveryPhotoBlob) return;
+      if (btn.disabled || !DeliveryApp.selectedOrder) return;
+      if (!DeliveryApp.deliveryPhotoBlob) {
+        const uploadContainer = document.getElementById('upload-container');
+        uploadContainer.style.borderColor = 'var(--danger)';
+        document.getElementById('delivery-file-error').style.display = 'block';
+        uploadContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
 
       btn.disabled = true;
       const originalText = btn.textContent;

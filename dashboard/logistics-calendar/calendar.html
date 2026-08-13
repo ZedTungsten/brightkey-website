@@ -203,6 +203,27 @@
       color: #1d4ed8;
       border-left: 3px solid #3b82f6;
     }
+    .calendar-slot.leave {
+      background: #fee2e2;
+      color: #991b1b;
+      border-left: 3px solid #991b1b;
+      cursor: default;
+    }
+    .calendar-slot.leave:hover {
+      transform: none;
+    }
+    .leave-pill {
+      display: inline-block;
+      margin-top: 2px;
+      padding: 2px 6px;
+      border-radius: 999px;
+      background: #fecaca;
+      color: #991b1b;
+      font-size: 0.62rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+    }
 
     /* ── Modal Overlay ── */
     .modal-overlay {
@@ -590,6 +611,7 @@
       activeTransactions: [],
       deliveryBookings: [],
       installationBookings: [],
+      warehouseStaffLeaves: [],
       products: [],
       currentDate: new Date(),
 
@@ -695,6 +717,14 @@
             };
           });
 
+          const { data: warehouseLeaves, error: warehouseLeavesError } = await sb.rpc('get_warehouse_staff_approved_leaves', {
+            p_company_id: this.companyId,
+            p_start_date: start,
+            p_end_date: end
+          });
+          if (warehouseLeavesError) throw warehouseLeavesError;
+          this.warehouseStaffLeaves = warehouseLeaves || [];
+
           // Filter schedules for the current month to load only relevant transactions/bookings
           const activeRefIds = Object.entries(this.pickupSchedules)
             .filter(([refId, sched]) => sched && sched.date && sched.date >= start && sched.date <= end)
@@ -743,7 +773,7 @@
           this.renderCalendar();
         } catch (err) {
           console.error(err);
-          this.showToast('Failed to load data: ' + err.message, true);
+          this.showToast('Calendar data could not be loaded. Refresh the page and try again.', true);
         } finally {
           this.hideLoadingOverlay();
         }
@@ -832,6 +862,12 @@
 
           let amHtml = '';
           let pmHtml = '';
+
+          this.warehouseStaffLeaves
+            .filter(leave => leave.date_from <= dateStr && leave.date_to >= dateStr)
+            .forEach(leave => {
+              amHtml += `<div class="calendar-slot leave"><div style="font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; width:100%;">${esc(leave.employee_name)}</div><span class="leave-pill">Leave</span></div>`;
+            });
 
           matches.forEach(([refId, sched]) => {
             const txs = this.activeTransactions.filter(t => t.reference_id === refId);
