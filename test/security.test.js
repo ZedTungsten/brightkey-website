@@ -139,6 +139,19 @@ test('zero-module users can be invited with Home and Resources access only', () 
   assert.match(resources, /BKAuth\.requireAuth/);
 });
 
+test('job-post employee registration creates default workspace access', () => {
+  const registrationApi = fs.readFileSync(new URL('../api/hiring-directory-registration.js', import.meta.url), 'utf8');
+  const registrationPage = fs.readFileSync(new URL('../employee-hire-registration.html', import.meta.url), 'utf8');
+
+  assert.match(registrationApi, /from\('tenant_members'\)\.insert/);
+  assert.match(registrationApi, /accessible_modules: \[\]/);
+  assert.match(registrationApi, /tenant_id: context\.company\.tenant_id/);
+  assert.match(registrationApi, /findAuthUserByEmail/);
+  assert.match(registrationPage, /Home and Resources/);
+  assert.match(registrationPage, /id="password"/);
+  assert.match(registrationPage, /signInWithPassword/);
+});
+
 test('all employee creation paths use the company-scoped employee number generator', () => {
   const serverPaths = [
     '../api/register-employee.js',
@@ -325,4 +338,18 @@ test('platform owner gate permits the designated dual-role account without affec
   assert.doesNotMatch(masterSettings, /BKAuth\.checkRoleGate\(\[\], '\/admin'\)/);
   assert.doesNotMatch(auth, /PLATFORM_SETTINGS_PATH/);
   assert.doesNotMatch(auth, /platformRouteAllowed/);
+});
+
+test('login choices include authoritative tenant ownership without requiring tenant_members', () => {
+  const apiSource = fs.readFileSync(new URL('../api/account-memberships.js', import.meta.url), 'utf8');
+  const authSource = fs.readFileSync(new URL('../js/auth.js', import.meta.url), 'utf8');
+  const migrationSource = fs.readFileSync(new URL('../database/migrations/20260813_tenant_owner_access_without_membership.sql', import.meta.url), 'utf8');
+
+  assert.match(apiSource, /from\('tenant_members'\)/);
+  assert.match(apiSource, /from\('tenants'\)/);
+  assert.match(apiSource, /eq\('owner_email', email\)/);
+  assert.match(apiSource, /role: 'owner'/);
+  assert.match(authSource, /fetch\('\/api\/account-memberships'/);
+  assert.match(migrationSource, /CREATE OR REPLACE FUNCTION public\.is_tenant_owner/);
+  assert.match(migrationSource, /CREATE POLICY %I[\s\S]*FOR ALL TO authenticated/);
 });

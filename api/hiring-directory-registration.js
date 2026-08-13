@@ -1,9 +1,11 @@
 import { createHash, randomUUID } from 'crypto';
 import { createServiceClient, setApiCors } from '../lib/api/security.js';
 import { enforceRateLimit } from '../lib/api/rate-limit.js';
+import { findAuthUserByEmail } from './register-employee.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PASSWORD_PATTERN = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/;
 const MAX_FILE_BYTES = 3 * 1024 * 1024;
 const UPLOAD_TYPES = {
   profile: { bucket: 'brightkey-assets', mimes: ['image/jpeg', 'image/png', 'image/webp'], field: 'picture_link' },
@@ -47,17 +49,20 @@ async function loadContext(supabase, registration) {
   const { data: job } = await supabase.from('job_posts')
     .select('id, company_id, employment_type, position, department_name, visibility_level, job_title, job_description, salary_mode, monthly_salary, fixed_price, reporting_days, reporting_time_start, reporting_time_end, free_hours')
     .eq('company_id', registration.company_id).eq('id', application.job_post_id).maybeSingle();
-  return job ? { application, job } : null;
+  const { data: company } = await supabase.from('companies').select('id, tenant_id')
+    .eq('id', registration.company_id).maybeSingle();
+  return job && company?.tenant_id ? { application, job, company } : null;
 }
 
-function publicContext(context) {
+async function publicContext(supabase, context) {
   const { application } = context;
   return {
     firstName: application.first_name,
     lastName: application.last_name,
     email: application.email,
     address: application.address,
-    contactNumber: application.contact_number
+    contactNumber: application.contact_number,
+    existingAccount: Boolean(await findAuthUserByEmail(supabase.auth.admin, application.email))
   };
 }
 
@@ -109,13 +114,14 @@ export default async function handler(req, res) {
     if (!registration) return res.status(410).json({ error: 'This registration link is invalid, expired, or already used.' });
     const context = await loadContext(supabase, registration);
     if (!context) return res.status(409).json({ error: 'This applicant is not eligible for Directory registration.' });
-    if (req.method === 'GET') return res.status(200).json({ success: true, applicant: publicContext(context) });
+    if (req.method === 'GET') return res.status(200).json({ success: true, applicant: await publicContext(supabase, context) });
     if (req.body?.action === 'upload') {
       const upload = await uploadFile(supabase, registration, req.body);
       return res.status(200).json({ success: true, upload });
     }
     if (req.body?.action !== 'complete') return res.status(400).json({ error: 'Choose a valid registration action.' });
     const fields = req.body.fields || {};
+    const password = String(fields.password || '');
     const profile = validateUpload(req.body.uploads?.profile, registration, 'profile');
     const govid = validateUpload(req.body.uploads?.govid, registration, 'govid');
     const cv = validateUpload(req.body.uploads?.cv, registration, 'cv');
@@ -123,12 +129,40 @@ export default async function handler(req, res) {
     const payoutMode = fields.payoutMode === 'qr' ? 'qr' : fields.payoutMode === 'account' ? 'account' : '';
     const required = ['city', 'province', 'emergencyContactName'];
     const payoutValid = payoutMode === 'qr' ? Boolean(payout) : payoutMode === 'account' && Boolean(clean(fields.payoutDetails, 500));
-    if (required.some(key => !clean(fields[key])) || !validDate(fields.dateOfBirth) || !validPhone(fields.emergencyContactNumber) || !profile || !govid || !cv || !payoutValid || !EMAIL.test(context.application.email)) {
+    if (required.some(key => !clean(fields[key])) || !validDate(fields.dateOfBirth) || !validPhone(fields.emergencyContactNumber) || !profile || !govid || !cv || !payoutValid || !EMAIL.test(context.application.email) || !password) {
       return res.status(400).json({ error: 'Complete all required fields and uploads before registering.' });
     }
     const { data: existing } = await supabase.from('employees').select('id')
       .eq('company_id', registration.company_id).eq('email', context.application.email.toLowerCase()).maybeSingle();
     if (existing) return res.status(409).json({ error: 'An Employee Directory entry already exists for this email.' });
+    const normalizedEmail = context.application.email.toLowerCase().trim();
+    let authUser = await findAuthUserByEmail(supabase.auth.admin, normalizedEmail);
+    let createdAuthUser = false;
+    if (authUser) {
+      const accessToken = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim();
+      const { data: signedInData, error: signedInError } = accessToken
+        ? await supabase.auth.getUser(accessToken)
+        : { data: null, error: new Error('Missing access token') };
+      if (signedInError || signedInData?.user?.id !== authUser.id || String(signedInData?.user?.email || '').toLowerCase().trim() !== normalizedEmail) {
+        return res.status(403).json({ error: 'This email already has a BrightKey account. Enter its current password to attach your employee access.' });
+      }
+    } else {
+      if (!PASSWORD_PATTERN.test(password)) {
+        return res.status(400).json({ error: 'Use at least 8 characters with uppercase, lowercase, number, and special-character values.' });
+      }
+      const { data: createdAuth, error: authError } = await supabase.auth.admin.createUser({
+        email: normalizedEmail,
+        password,
+        email_confirm: true,
+        user_metadata: {
+          full_name: `${context.application.first_name} ${context.application.last_name}`.trim(),
+          needs_password_reset: false
+        }
+      });
+      if (authError || !createdAuth?.user) throw new Error('auth_account_unavailable');
+      authUser = createdAuth.user;
+      createdAuthUser = true;
+    }
     const [pictureLink, govIdLink, cvLink, payoutLink] = await Promise.all([
       fileUrl(supabase, profile), fileUrl(supabase, govid), fileUrl(supabase, cv), payout ? fileUrl(supabase, payout) : null
     ]);
@@ -162,7 +196,27 @@ export default async function handler(req, res) {
     const { error: insertError } = await supabase.from('employees').insert(employee);
     if (insertError) {
       await supabase.from('hiring_directory_registrations').update({ used_at: null }).eq('id', registration.id);
+      if (createdAuthUser) await supabase.auth.admin.deleteUser(authUser.id);
       throw insertError;
+    }
+    const { data: existingMembership, error: membershipLookupError } = await supabase.from('tenant_members')
+      .select('id').eq('tenant_id', context.company.tenant_id).eq('user_id', authUser.id).maybeSingle();
+    if (membershipLookupError) throw membershipLookupError;
+    if (!existingMembership) {
+      const { error: membershipError } = await supabase.from('tenant_members').insert({
+        tenant_id: context.company.tenant_id,
+        user_id: authUser.id,
+        role: null,
+        accessible_modules: [],
+        user_email: normalizedEmail,
+        full_name: `${context.application.first_name} ${context.application.last_name}`.trim()
+      });
+      if (membershipError) {
+        await supabase.from('employees').delete().eq('id', employee.id).eq('company_id', registration.company_id);
+        await supabase.from('hiring_directory_registrations').update({ used_at: null }).eq('id', registration.id);
+        if (createdAuthUser) await supabase.auth.admin.deleteUser(authUser.id);
+        throw new Error('workspace_access_unavailable');
+      }
     }
     return res.status(201).json({ success: true });
   } catch (error) {
@@ -171,10 +225,14 @@ export default async function handler(req, res) {
     const storageFull = error.message === 'storage_full';
     const storageUnavailable = error.message === 'storage_unavailable';
     const employeeNumberUnavailable = error.message === 'employee_number_unavailable';
+    const authAccountUnavailable = error.message === 'auth_account_unavailable';
+    const workspaceAccessUnavailable = error.message === 'workspace_access_unavailable';
     const message = invalidUpload ? 'Choose a supported file under 3 MB.'
       : storageFull ? 'This company has reached its storage limit. Contact HR before trying again.'
         : storageUnavailable ? 'Storage availability could not be verified. Please try again shortly.'
           : employeeNumberUnavailable ? 'An employee number could not be generated. Contact HR before trying again.'
+            : authAccountUnavailable ? 'Your BrightKey login could not be created. Contact HR and try again.'
+              : workspaceAccessUnavailable ? 'Your employee record was ready, but workspace access could not be attached. Contact HR and try again.'
           : 'Registration could not be completed. Please try again.';
     return res.status(invalidUpload ? 400 : storageFull ? 413 : storageUnavailable ? 503 : 500).json({ error: message });
   }

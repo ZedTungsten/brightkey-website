@@ -258,6 +258,7 @@
     cachedRoleGatePromises = {};
     const { data, error } = await sb.auth.signInWithPassword({ email, password });
     if (error) throw error;
+
     const { data: updated, error: updateError } = await sb.auth.updateUser({
       data: { active_tenant_id: null }
     });
@@ -306,31 +307,15 @@
         const user = await getUser();
         if (!user) return [];
 
-        const { data: memberships, error } = await sb
-          .from('tenant_members')
-          .select('role, tenant_id, accessible_modules, created_at')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: true })
-          .limit(50);
-        if (error) throw error;
-        if (!memberships?.length) return [];
-
-        const tenantIds = [...new Set(memberships.map(member => member.tenant_id).filter(Boolean))];
-        const { data: companies, error: companyError } = await sb
-          .from('companies')
-          .select('id, tenant_id, name')
-          .in('tenant_id', tenantIds)
-          .limit(50);
-        if (companyError) throw companyError;
-
-        const companyByTenant = new Map((companies || []).map(company => [company.tenant_id, company]));
-        return memberships.map(member => ({
-          role: member.role,
-          tenantId: member.tenant_id,
-          modules: member.accessible_modules || [],
-          companyId: companyByTenant.get(member.tenant_id)?.id || null,
-          companyName: companyByTenant.get(member.tenant_id)?.name || 'Company'
-        }));
+        const { data: sessionData } = await sb.auth.getSession();
+        const accessToken = sessionData?.session?.access_token;
+        if (!accessToken) return [];
+        const response = await fetch('/api/account-memberships', {
+          headers: { Authorization: `Bearer ${accessToken}` }
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.error || 'Your workspace access could not be loaded.');
+        return Array.isArray(payload.memberships) ? payload.memberships : [];
       })();
     }
     return cachedMembershipsPromise;

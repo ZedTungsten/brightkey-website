@@ -71,10 +71,20 @@
           <div id="payout-account-wrap"><label><span class="label-line">Account Details <span class="required" aria-hidden="true">*</span></span><input id="payout-details" maxlength="500" placeholder="Bank or e-wallet, account name, and account number" /></label></div>
           <div id="payout-qr-wrap" hidden><label class="upload"><span class="label-line">QR Code Image <span class="required" aria-hidden="true">*</span></span><input id="payout-image" type="file" accept="image/jpeg,image/png,image/webp" /><small>JPG, PNG, or WebP; maximum 3 MB.</small></label></div>
         </section>
+        <section class="card">
+          <h2 id="password-card-title">Create your BrightKey password</h2>
+          <p class="card-desc" id="password-card-description">This login automatically includes Home and Resources. HR can add more access later.</p>
+          <div class="grid">
+            <label><span class="label-line" id="password-label">Password <span class="required" aria-hidden="true">*</span></span><input id="password" type="password" autocomplete="new-password" required /></label>
+            <label id="confirm-password-wrap"><span class="label-line">Confirm Password <span class="required" aria-hidden="true">*</span></span><input id="confirm-password" type="password" autocomplete="new-password" required /></label>
+          </div>
+          <p class="card-desc" style="margin:.75rem 0 0;">Use at least 8 characters with uppercase, lowercase, a number, and a special character.</p>
+        </section>
         <button id="submit" class="submit" type="submit">Create Employee Directory Entry</button>
       </form>
     </div>
   </main>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <script>
     'use strict';
     const params = new URLSearchParams(location.search);
@@ -86,6 +96,9 @@
     const alertBox = document.getElementById('alert');
     const form = document.getElementById('registration-form');
     const submit = document.getElementById('submit');
+    const sb = window.supabase.createClient('https://ymjlosnxuhsybkzkoofq.supabase.co', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJ5bWpsb3NueHVoc3lia3prb29mcSIsInJvbGUiOiJhbm9uIiwiaWF0IjoxNzc0NDA2NTM2LCJleHAiOjIwODk5ODI1MzZ9.srhk9SVvFuZRcfeRGbVDGPr5pYrFhs8vzcOiMK3A91w');
+    let existingAccount = false;
+    let registrationAccessToken = '';
     const value = id => document.getElementById(id).value.trim();
     const payoutMode = () => document.querySelector('input[name="payout-mode"]:checked')?.value || 'account';
 
@@ -93,7 +106,10 @@
     function showInvalid() { view.hidden = true; invalidState.classList.add('show'); }
     async function request(body) {
       const response = await fetch('/api/hiring-directory-registration', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: {
+          'Content-Type': 'application/json',
+          ...(registrationAccessToken ? { 'Authorization': `Bearer ${registrationAccessToken}` } : {})
+        },
         body: JSON.stringify({ applicationId, token, ...body })
       });
       const data = await response.json();
@@ -131,6 +147,15 @@
         document.getElementById('last-name').value = data.applicant.lastName || '';
         document.getElementById('email').value = data.applicant.email || '';
         document.getElementById('address').value = data.applicant.address || '';
+        existingAccount = Boolean(data.applicant.existingAccount);
+        if (existingAccount) {
+          document.getElementById('password-card-title').textContent = 'Confirm your existing BrightKey account';
+          document.getElementById('password-card-description').textContent = 'Enter your current password. It will not be changed; this attaches Home and Resources access to your existing login.';
+          document.getElementById('password-label').childNodes[0].nodeValue = 'Current Password ';
+          document.getElementById('confirm-password-wrap').hidden = true;
+          document.getElementById('confirm-password').required = false;
+          document.getElementById('password').autocomplete = 'current-password';
+        }
         view.hidden = false;
       } catch { showInvalid(); }
     }
@@ -147,8 +172,17 @@
       event.preventDefault(); alertBox.className = 'alert';
       if (!form.reportValidity()) return;
       if (!/^\+?[0-9 ()-]{7,24}$/.test(value('emergency-number'))) return showAlert('Enter a valid emergency contact number.');
+      const password = document.getElementById('password').value;
+      const confirmPassword = document.getElementById('confirm-password').value;
+      if (!existingAccount && !/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/.test(password)) return showAlert('Use at least 8 characters with uppercase, lowercase, a number, and a special character.');
+      if (!existingAccount && password !== confirmPassword) return showAlert('The password confirmation does not match.');
       submit.disabled = true; submit.textContent = 'Uploading and registering…';
       try {
+        if (existingAccount) {
+          const { data: loginData, error: loginError } = await sb.auth.signInWithPassword({ email: value('email'), password });
+          if (loginError || !loginData?.session?.access_token) throw new Error('The current password is incorrect. Use your original BrightKey password or reset it from the login page.');
+          registrationAccessToken = loginData.session.access_token;
+        }
         const selectedPayoutMode = payoutMode();
         const [profile, govid, cv, payout] = await Promise.all([
           upload('profile', 'profile', true), upload('govid', 'govid', true), upload('cv', 'cv', true),
@@ -158,8 +192,9 @@
           middleName: value('middle-name'), dateOfBirth: value('date-of-birth'), city: value('city'), province: value('province'),
           emergencyContactName: value('emergency-name'), emergencyContactNumber: value('emergency-number'),
           tin: value('tin'), sss: value('sss'), pagibig: value('pagibig'), philhealth: value('philhealth'),
-          payoutMode: selectedPayoutMode, payoutDetails: selectedPayoutMode === 'account' ? value('payout-details') : ''
+          payoutMode: selectedPayoutMode, payoutDetails: selectedPayoutMode === 'account' ? value('payout-details') : '', password
         }});
+        if (!existingAccount) await sb.auth.signInWithPassword({ email: value('email'), password });
         view.hidden = true; successState.classList.add('show');
       } catch (error) {
         showAlert(error.message || 'Registration could not be completed.'); submit.disabled = false; submit.textContent = 'Create Employee Directory Entry';
