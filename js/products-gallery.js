@@ -40,6 +40,7 @@
     selectedFeatures: new Set(),
     featureBusiness: '',
     businessLabels: new Map(),
+    specDefinitions: new Map(),
     query: '',
     category: '',
     minPrice: 0,
@@ -154,13 +155,13 @@
   }
 
   function productSpecs(product) {
-    return [
-      ['Dimension', product.spec_dimension],
-      ['Warranty', product.spec_warranty],
-      ['Technical Support', product.spec_support],
-      ['Material', product.spec_material],
-      ['Voltage', product.spec_voltage]
-    ].filter(([, value]) => value && String(value).trim());
+    const definitions = state.specDefinitions.get(product.company_id) || [];
+    return definitions.map(definition => [
+      definition.label,
+      definition.source === 'column'
+        ? product[definition.field]
+        : product.specifications?.[definition.field]
+    ]).filter(([label, value]) => label && value && String(value).trim());
   }
 
   function featureTableRowsToMap(rows) {
@@ -206,7 +207,8 @@
     const fields = [
       'id', 'company_id', 'business', 'category', 'sku', 'slug', 'title', 'description',
       'image_main', 'installation_price', 'sale_price', 'discounted_price', 'before_price',
-      'spec_dimension', 'spec_warranty', 'spec_support', 'spec_material', 'spec_voltage'
+      'spec_model', 'spec_color', 'spec_weight', 'spec_operating_temperature',
+      'spec_dimension', 'spec_warranty', 'spec_support', 'spec_material', 'spec_voltage', 'specifications'
     ].join(',');
     const query = [
       'status=eq.published',
@@ -218,13 +220,28 @@
     const products = await fetchJson(`${SUPABASE_URL}/rest/v1/products?${query}`);
     const companyIds = [...new Set(products.map(product => product.company_id).filter(Boolean))];
     const businessQuery = companyIds.length ? `company_id=in.(${companyIds.join(',')})&select=name` : '';
-    const [features, businesses] = await Promise.all([
+    const settingsQuery = companyIds.length
+      ? `company_id=in.(${companyIds.join(',')})&key=eq.catalog_spec_definitions&select=company_id,value`
+      : '';
+    const [features, businesses, specificationSettings] = await Promise.all([
       loadFeatureData(products),
       businessQuery ? fetchJson(`${SUPABASE_URL}/rest/v1/tenant_businesses?${businessQuery}`).catch(error => {
         console.warn('Could not load storefront business names.', error); return [];
+      }) : [],
+      settingsQuery ? fetchJson(`${SUPABASE_URL}/rest/v1/global_settings?${settingsQuery}`).catch(error => {
+        console.warn('Could not load storefront preview-card specifications.', error); return [];
       }) : []
     ]);
     state.businessLabels = new Map((businesses || []).map(business => [businessKey(business.name), business.name]));
+    state.specDefinitions = new Map((specificationSettings || []).map(setting => {
+      const definitions = Array.isArray(setting.value?.definitions) ? setting.value.definitions : [];
+      const previewIds = Array.isArray(setting.value?.preview_card_ids)
+        ? new Set(setting.value.preview_card_ids.map(String))
+        : new Set(definitions
+          .filter(definition => ['spec_dimension', 'spec_warranty', 'spec_support', 'spec_material', 'spec_voltage'].includes(definition.field))
+          .map(definition => String(definition.id)));
+      return [setting.company_id, definitions.filter(definition => previewIds.has(String(definition.id)))];
+    }));
 
     products.forEach((product, index) => {
       product._index = index;

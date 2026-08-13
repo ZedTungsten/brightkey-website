@@ -4,6 +4,7 @@ let selectedBusinessId = '';
 let selectedFeatureId = '';
 let selectedSpecificationId = '';
 let catalogSpecifications = [];
+let previewCardSpecificationIds = new Set();
 let draggedSpecificationId = '';
 let draggedFeatureId = '';
 
@@ -48,7 +49,10 @@ async function autosaveSpecifications() {
   const { error } = await SettingsPage.sb.from('global_settings').upsert({
     company_id: SettingsPage.currentCompanyId,
     key: 'catalog_spec_definitions',
-    value: { definitions: catalogSpecifications }
+    value: {
+      definitions: catalogSpecifications,
+      preview_card_ids: [...previewCardSpecificationIds]
+    }
   }, { onConflict: 'company_id,key' });
 
   if (error) {
@@ -120,6 +124,21 @@ function renderSpecifications() {
     edit.innerHTML = '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z"></path></svg>';
     edit.addEventListener('click', () => openSpecificationModal(definition));
 
+    const preview = document.createElement('button');
+    const isShownOnPreviewCard = previewCardSpecificationIds.has(definition.id);
+    preview.type = 'button';
+    preview.className = `spec-preview${isShownOnPreviewCard ? ' active' : ''}`;
+    preview.title = isShownOnPreviewCard ? 'Shown on preview cards' : 'Not shown on preview cards';
+    preview.setAttribute('aria-label', `${isShownOnPreviewCard ? 'Hide' : 'Show'} ${definition.label} on product preview cards`);
+    preview.setAttribute('aria-pressed', String(isShownOnPreviewCard));
+    preview.innerHTML = '<svg aria-hidden="true" viewBox="0 0 24 24"><line x1="4" y1="7" x2="20" y2="7"></line><line x1="4" y1="12" x2="16" y2="12"></line><line x1="4" y1="17" x2="12" y2="17"></line></svg>';
+    preview.addEventListener('click', async () => {
+      if (previewCardSpecificationIds.has(definition.id)) previewCardSpecificationIds.delete(definition.id);
+      else previewCardSpecificationIds.add(definition.id);
+      renderSpecifications();
+      await autosaveSpecifications();
+    });
+
     const remove = document.createElement('button');
     remove.type = 'button';
     remove.className = 'spec-delete';
@@ -128,7 +147,7 @@ function renderSpecifications() {
     remove.innerHTML = '<svg aria-hidden="true" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14H6L5 6"></path><path d="M9 6V4h6v2"></path></svg>';
     remove.addEventListener('click', () => confirmDeleteSpecification(definition));
     actionCell.className = 'spec-actions';
-    actionCell.append(edit, remove);
+    actionCell.append(preview, edit, remove);
 
     row.addEventListener('dragstart', (event) => {
       draggedSpecificationId = definition.id;
@@ -197,6 +216,12 @@ async function loadSpecifications() {
   }
 
   catalogSpecifications = safeSpecificationDefinitions(data?.value);
+  const savedPreviewIds = data?.value?.preview_card_ids;
+  previewCardSpecificationIds = new Set(Array.isArray(savedPreviewIds)
+    ? savedPreviewIds.map(String)
+    : catalogSpecifications
+      .filter((definition) => ['spec_dimension', 'spec_warranty', 'spec_support', 'spec_material', 'spec_voltage'].includes(definition.field))
+      .map((definition) => definition.id));
   renderSpecifications();
   setSpecificationSaveStatus('Autosaved', 'saved');
 }
@@ -204,6 +229,7 @@ async function loadSpecifications() {
 function confirmDeleteSpecification(definition) {
   SettingsPage.showConfirmModal(`Delete the ${definition.label} specification from the catalog? Existing product values will be retained.`, async () => {
     catalogSpecifications = catalogSpecifications.filter((item) => item.id !== definition.id);
+    previewCardSpecificationIds.delete(definition.id);
     renderSpecifications();
     await autosaveSpecifications();
   });
