@@ -81,7 +81,7 @@
   }
   function handbookCard(file, index) {
     const isRead = Boolean(state.handbookReads[file.id]);
-    return `<button class="onboarding-material-card" type="button" onclick="OnboardingApp.openHandbook(${index})" aria-label="Open ${esc(file.name)}"><div class="onboarding-material-card-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 2h8l4 4v16H6z"/><path d="M14 2v5h5M9 12h6M9 16h6"/></svg></div><div class="onboarding-material-meta"><strong title="${esc(file.name)}">${esc(file.name)}</strong><span class="handbook-read-status${isRead ? ' read' : ''}">${isRead ? 'Read' : 'Not Yet Accessed'}</span></div></button>`;
+    return `<button class="onboarding-material-card" type="button" onclick="OnboardingApp.openHandbook(${index})" aria-label="Open ${esc(file.name)}"><div class="onboarding-material-card-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 2h8l4 4v16H6z"/><path d="M14 2v5h5M9 12h6M9 16h6"/></svg></div><div class="onboarding-material-meta"><strong title="${esc(file.name)}">${esc(file.name)}</strong><span class="handbook-read-status${isRead ? ' read' : ''}" id="material-access-status-${index}">${isRead ? 'Accessed' : 'Not Yet Accessed'}</span></div></button>`;
   }
 
   function handbookViewerModal() {
@@ -135,12 +135,25 @@
     document.querySelector('.onboarding-viewer-body')?.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
-  async function markHandbookRead(file) {
+  function updateMaterialAccessStatus(index, accessed) {
+    const status = document.getElementById(`material-access-status-${index}`);
+    if (!status) return;
+    status.classList.toggle('read', accessed);
+    status.textContent = accessed ? 'Accessed' : 'Not Yet Accessed';
+  }
+  async function markHandbookRead(file, index) {
     if (!file || state.handbookReads[file.id]) return;
-    const previous = { ...state.handbookReads };
     state.handbookReads[file.id] = new Date().toISOString();
-    const { error } = await state.sb.from('global_settings').upsert({ company_id: state.companyId, key: `employee_handbook_reads_${state.employee.id}`, value: state.handbookReads }, { onConflict: 'company_id,key' });
-    if (error) { state.handbookReads = previous; console.error('Handbook read status save failed:', error); showToast('Your handbook read status could not be saved. Please try again.', true); }
+    updateMaterialAccessStatus(index, true);
+    try {
+      const { error } = await state.sb.from('global_settings').upsert({ company_id: state.companyId, key: `employee_handbook_reads_${state.employee.id}`, value: state.handbookReads }, { onConflict: 'company_id,key' });
+      if (error) throw error;
+    } catch (error) {
+      delete state.handbookReads[file.id];
+      updateMaterialAccessStatus(index, false);
+      console.error('Material access status save failed:', error);
+      showToast('This material was opened, but its Accessed status could not be saved. Please try opening it again.', true);
+    }
   }
   function renderHandbookViewer() {
     const file = state.handbookFiles[state.handbookIndex]; if (!file) return;
@@ -150,15 +163,14 @@
     document.getElementById('onboarding-handbook-previous').style.display = state.handbookIndex > 0 ? 'flex' : 'none';
     document.getElementById('onboarding-handbook-next').style.display = state.handbookIndex < state.handbookFiles.length - 1 ? 'flex' : 'none';
   }
-  async function openHandbook(index) {
+  function openHandbook(index) {
     if (index < 0 || index >= state.handbookFiles.length) return;
     state.handbookIndex = index; renderHandbookViewer();
     document.getElementById('onboarding-handbook-viewer').style.display = 'flex';
-    await markHandbookRead(state.handbookFiles[index]); renderContract();
-    state.handbookIndex = index; renderHandbookViewer(); document.getElementById('onboarding-handbook-viewer').style.display = 'flex';
+    void markHandbookRead(state.handbookFiles[index], index);
   }
   function closeHandbook() { const viewer = document.getElementById('onboarding-handbook-viewer'); if (viewer) viewer.style.display = 'none'; const body = document.getElementById('onboarding-handbook-body'); if (body) body.innerHTML = ''; }
-  async function changeHandbook(direction) { const index = state.handbookIndex + direction; if (index < 0 || index >= state.handbookFiles.length) return; state.handbookIndex = index; renderHandbookViewer(); await markHandbookRead(state.handbookFiles[index]); }
+  function changeHandbook(direction) { const index = state.handbookIndex + direction; if (index < 0 || index >= state.handbookFiles.length) return; state.handbookIndex = index; renderHandbookViewer(); void markHandbookRead(state.handbookFiles[index], index); }
 
   function pdfPages() {
     const pages = Array.isArray(state.contract?.pages) ? state.contract.pages : [];
