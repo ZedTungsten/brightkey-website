@@ -64,10 +64,18 @@ function getInstallerDayEventCacheKey(year, monthIndex) {
 
 function filterInstallerDayEvents(events) {
   return (Array.isArray(events) ? events : []).filter(event => (
-    event?.type === 'day_off'
+    event?.date
     && Array.isArray(event.installers)
     && event.installers.some(installer => installer?.id === currentInstaller.id)
   ));
+}
+
+function getInstallerDayEventName(event) {
+  if (event?.name) return String(event.name).trim();
+  if (event?.type === 'day_off') return 'Day off';
+  return String(event?.type || 'Event')
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, character => character.toUpperCase());
 }
 
 function loadCachedInstallerDayEvents(year, monthIndex) {
@@ -150,7 +158,7 @@ async function syncData() {
     try {
       await loadInstallerDayEvents(currentYear, currentMonth);
     } catch (dayEventError) {
-      console.error('Day-off reminders could not be synced:', dayEventError);
+      console.error('Calendar events could not be synced:', dayEventError);
     }
 
     // Fetch booking checklist

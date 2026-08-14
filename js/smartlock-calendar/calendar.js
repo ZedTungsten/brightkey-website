@@ -18,7 +18,7 @@ async function changeMonth(direction) {
     drawCalendar();
     drawAgenda();
   } catch (error) {
-    console.error('Day-off reminders could not be synced:', error);
+    console.error('Calendar events could not be synced:', error);
   }
 }
 
@@ -55,9 +55,9 @@ function drawCalendar() {
       if (!aAfternoon && bAfternoon) return -1;
       return 0;
     });
-    const dayOffs = installerDayEvents.filter(event => event.date === dateStr);
+    const dayEvents = installerDayEvents.filter(event => event.date === dateStr);
     const hasInstallations = dayBookings.length > 0;
-    const hasSchedules = hasInstallations || dayOffs.length > 0;
+    const hasSchedules = hasInstallations || dayEvents.length > 0;
 
     const scheduleMarkerColors = [];
     dayBookings.forEach(b => {
@@ -79,7 +79,7 @@ function drawCalendar() {
         }
         scheduleMarkerColors.push(color);
     });
-    dayOffs.forEach(() => scheduleMarkerColors.push('#991b1b'));
+    dayEvents.forEach(() => scheduleMarkerColors.push('#991b1b'));
     const underlineHtml = scheduleMarkerColors.length > 0
       ? `<div style="display:flex; justify-content:center; gap:2px; width:24px; position:absolute; bottom:6px; height:3px;">${scheduleMarkerColors.map(color => `<div style="flex:1; background:${color}; height:100%; border-radius:2.5px;"></div>`).join('')}</div>`
       : '';
@@ -117,25 +117,26 @@ function drawAgenda() {
     if (!aAfternoon && bAfternoon) return -1;
     return 0;
   });
-  const dayOffs = installerDayEvents.filter(event => event.date === dateStr).sort((a, b) => {
+  const dayEvents = installerDayEvents.filter(event => event.date === dateStr).sort((a, b) => {
     const aAfternoon = isAfternoon(a.timeSlot);
     const bAfternoon = isAfternoon(b.timeSlot);
     return Number(aAfternoon) - Number(bAfternoon);
   });
 
-  if (dayBookings.length === 0 && dayOffs.length === 0) {
+  if (dayBookings.length === 0 && dayEvents.length === 0) {
     list.innerHTML = '<div style="color:var(--text-muted); text-align:center; padding: 2rem 0; font-size:0.88rem;">No schedules for this day.</div>';
     return;
   }
 
-  dayOffs.forEach(dayOff => {
-    const timeLabel = isAfternoon(dayOff.timeSlot) ? 'Afternoon (PM)' : 'Morning (AM)';
+  dayEvents.forEach(dayEvent => {
+    const timeLabel = isAfternoon(dayEvent.timeSlot) ? 'Afternoon (PM)' : 'Morning (AM)';
+    const eventName = getInstallerDayEventName(dayEvent);
     list.insertAdjacentHTML('beforeend', `
       <div class="booking-card day-off">
         <div class="booking-card-top">
           <span class="booking-time">${escapeHtml(timeLabel)}</span>
         </div>
-        <div class="booking-client">Day off</div>
+        <div class="booking-client">${escapeHtml(eventName)}</div>
         <div class="booking-details-summary">Calendar reminder</div>
       </div>
     `);
