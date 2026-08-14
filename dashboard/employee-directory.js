@@ -98,7 +98,7 @@
       sortCol: 'employee_number',
       sortDir: 'asc',
       pendingDeleteId: null,
-
+      unsavedGuard: null,
       toggleShiftDay(btn, id, day) {
         const row = btn.closest('tr');
         const input = row.querySelector(`input[data-field="shift_days"]`);
@@ -384,6 +384,8 @@
 
         this.bindToolbar();
         this.bindEditMode();
+        this.unsavedGuard = window.BKDirectoryUnsavedGuard?.create(this) || null;
+        this.unsavedGuard?.bind();
         this.bindExport();
         this.bindDeleteConfirm();
         this.updateSortHeaders();
@@ -1172,7 +1174,7 @@
         }
       },
 
-      async saveAll() {
+      async saveAll({ keepHistoryGuard = false } = {}) {
         const ids = Object.keys(this.dirty);
         const deletes = Array.from(this.pendingDeletes);
 
@@ -1184,7 +1186,8 @@
           const toggleBtn = document.getElementById('btn-edit-toggle');
           if (toggleBtn) toggleBtn.classList.remove('btn-edit-active');
           this.render();
-          return;
+          if (!keepHistoryGuard) this.unsavedGuard?.release();
+          return true;
         }
 
         toast('Saving changes...', 'info');
@@ -1293,13 +1296,17 @@
           const toggleBtn = document.getElementById('btn-edit-toggle');
           if (toggleBtn) toggleBtn.classList.remove('btn-edit-active');
           this.render();
+          if (!keepHistoryGuard) this.unsavedGuard?.release();
+          return true;
         } else {
           toast(`Saved ${saved} change${saved !== 1 ? 's' : ''}, failed on ${failed} change${failed !== 1 ? 's' : ''}.`, 'error');
+          return false;
         }
       },
 
       updateDirtyInfo() {
         const n = Object.keys(this.dirty).length + this.pendingDeletes.size;
+        if (n > 0 && this.editMode) this.unsavedGuard?.armIfNeeded();
         const el = document.getElementById('edit-dirty-info');
         if (el) {
           if (n > 0) {
@@ -1422,7 +1429,10 @@
           this.editMode = !this.editMode;
           bar.classList.toggle('active', this.editMode);
           toggleBtn.classList.toggle('btn-edit-active', this.editMode);
-          if (this.editMode) this.updateDirtyInfo();
+          if (this.editMode) {
+            this.unsavedGuard?.arm();
+            this.updateDirtyInfo();
+          }
           else {
             // Confirm discard if dirty or has pending deletes
             if (Object.keys(this.dirty).length > 0 || this.pendingDeletes.size > 0) {
@@ -1440,6 +1450,7 @@
               }
               this.dirty = {};
               this.pendingDeletes.clear();
+              this.unsavedGuard?.release();
             }
           }
           this.render();
@@ -1462,6 +1473,7 @@
           this.editMode = false;
           bar.classList.remove('active');
           document.getElementById('btn-edit-toggle').classList.remove('btn-edit-active');
+          this.unsavedGuard?.release();
           this.render();
         });
       },

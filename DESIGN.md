@@ -565,3 +565,66 @@ component from `css/style.css`.
   <input type="search" placeholder="Search..." />
 </div>
 ```
+
+---
+
+## 20. Form Back / Refresh Guard for Unsaved Changes
+
+> [!CRITICAL]
+> When a form or edit-mode page must protect unsaved changes, use the exact
+> Employee Directory guard pattern in
+> `dashboard/employee-directory-unsaved-guard.js`. Do not substitute a guard
+> that is armed only after ordinary form bookkeeping or only during unload.
+
+Required behavior:
+
+- Install a same-document history boundary with `history.pushState()` as soon
+  as the page guard is initialized. Do not wait for the first field change.
+- Arm the guard again when edit mode opens. Repeated calls must be idempotent so
+  they do not create multiple guard entries.
+- Detect edits independently in capture-phase `input` and `change` listeners
+  (`addEventListener(..., true)`). Scope these listeners to the page's editable
+  controls and set an internal dirty flag before later renderer/form handlers
+  run.
+- Treat the internal dirty flag plus the page's pending update/delete state as
+  authoritative. Do not make protection depend solely on a visual edit-mode
+  class or toggle remaining active.
+- On browser Back (`popstate`), restore the history boundary immediately and
+  show the page's styled Unsaved Changes modal. The actions are:
+  - **Cancel**: close the modal and remain on the form with edits intact.
+  - **Save Changes**: await the existing save routine; leave only when the
+    complete save succeeds. If any item fails, keep the modal/page available and
+    preserve the remaining unsaved edits.
+- Intercept ordinary same-tab page links in the capture phase while dirty and
+  use the same Cancel / Save Changes modal. After a successful save, replace the
+  temporary guard history entry when navigating so returning to the form does
+  not require pressing Back twice.
+- Add `beforeunload` while dirty for Refresh, tab/window close, direct address
+  navigation, and browser-controlled cross-document navigation. Browsers require
+  their native generic confirmation for this event; custom text, custom button
+  labels, and asynchronous Save Changes actions are not available there.
+- Set an explicit allow-unload flag only after a successful save-before-leave
+  action so the intended navigation does not trigger a second warning.
+- On a normal successful save or confirmed discard, clear the internal dirty
+  flag and release the temporary history boundary without navigating away.
+- Keep the guard in a route-specific JavaScript module when the main page module
+  is near its size limit. Load it before the page module and cache-bust both
+  scripts when their integration changes.
+
+Verification required before completion:
+
+1. Enter edit mode, change a field, press Back, and confirm the custom modal
+   appears without leaving the page.
+2. Choose Cancel and confirm all edits remain.
+3. Repeat, choose Save Changes, and confirm navigation occurs only after the
+   save succeeds.
+4. Simulate a failed/partial save and confirm the page does not leave.
+5. Change a field and click a same-tab sidebar/page link; confirm the same modal
+   and save-before-leave behavior.
+6. Change a field and refresh/close; confirm the browser's native unsaved-change
+   warning appears.
+7. Save or discard normally, then verify Back and Refresh no longer warn.
+
+Do not use `alert()`, `confirm()`, or `prompt()` for the custom Back/link flow.
+The native `beforeunload` dialog is the only exception because browser security
+rules do not permit replacing it with an application modal.

@@ -57,11 +57,16 @@
   }
 
   function filteredEmployees() {
-    return state.employees.filter(employee => {
-      if (state.department && employeeDepartment(employee) !== state.department) return false;
-      if (state.team && !employeeTeams(employee).includes(state.team)) return false;
-      return true;
-    });
+    return state.employees
+      .filter(employee => {
+        if (state.department && employeeDepartment(employee) !== state.department) return false;
+        if (state.team && !employeeTeams(employee).includes(state.team)) return false;
+        return true;
+      })
+      .sort((left, right) => {
+        const statusOrder = Number(Boolean(signatureFor(right))) - Number(Boolean(signatureFor(left)));
+        return statusOrder || employeeName(left).localeCompare(employeeName(right), undefined, { sensitivity: 'base' });
+      });
   }
 
   function renderContracts() {
