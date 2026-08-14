@@ -34,9 +34,9 @@ window.WarehousePage = {
     this._activeTransactions = (val || []).filter(tx => {
       if (tx.type === 'customer_order') {
         return tx.reference_id && (
-          tx.reference_id.startsWith('ORD-') || 
+          tx.reference_id.startsWith('ORD-') ||
           tx.reference_id.startsWith('OC-') ||
-          tx.reference_id.startsWith('RCV-') || 
+          tx.reference_id.startsWith('RCV-') ||
           tx.reference_id.startsWith('SND-')
         );
       }
@@ -239,9 +239,20 @@ window.WarehousePage = {
 
         if (!error && data && data.length > 0) {
           const row = data[0];
+          const inspectCount = document.getElementById('inspect-list')
+            ? [...new Set(this.activeTransactions.filter(transaction => (
+              transaction.status === 'reserved' &&
+              transaction.type === 'customer_order' &&
+              transaction.reference_id &&
+              !window.isNonInventoryItem(
+                transaction.sku,
+                this.allProducts.find(product => product.sku === transaction.sku)
+              )
+            )).map(transaction => transaction.reference_id))].length
+            : Number(row.inspect_count || 0);
           renderBadges(
             Number(row.receive_count || 0),
-            Number(row.inspect_count || 0),
+            inspectCount,
             Number(row.pack_count || 0),
             Number(row.dispatch_count || 0)
           );
