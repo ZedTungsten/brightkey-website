@@ -1,5 +1,97 @@
 'use strict';
 
+(function registerInstallerPayoutRules(root) {
+  function normalizeSku(value) {
+    let sku = String(value || '').trim();
+    if (sku === 'Welding Baseplate Metal') sku = 'BASEPLATE-M';
+    if (sku === 'Welding Baseplate Stainless') sku = 'BASEPLATE-S';
+    return sku.toUpperCase();
+  }
+
+  function isEffective(rule, workDate) {
+    return !rule?.effective_from || !workDate || String(workDate).slice(0, 10) >= String(rule.effective_from).slice(0, 10);
+  }
+
+  function ruleKey(rule) {
+    const assignment = String(rule?.assignment || '').toLowerCase();
+    return `${assignment}:${assignment === 'service' ? normalizeSku(rule?.sku) : ''}`;
+  }
+
+  function latestEffectiveRule(rules, target, workDate) {
+    const targetKey = ruleKey(target);
+    return rules
+      .filter(rule => ruleKey(rule) === targetKey && isEffective(rule, workDate))
+      .sort((a, b) => String(b.effective_from || '').localeCompare(String(a.effective_from || '')))[0] || null;
+  }
+
+  function creditRules(settings) {
+    if (Array.isArray(settings.credit_rule_history) && settings.credit_rule_history.length) return settings.credit_rule_history;
+    if (Array.isArray(settings.credit_rules) && settings.credit_rules.length) return settings.credit_rules;
+    const effective = settings.ocular_repair_effective_from || null;
+    return [
+      { assignment: 'Lead', credit: settings.lead_credit ?? 1 },
+      { assignment: 'Assist', credit: settings.assist_credit ?? 0.5 },
+      { assignment: 'Service', sku: 'OCULAR', credit: settings.ocular_credit ?? 0, effective_from: effective },
+      { assignment: 'Service', sku: 'REPAIR', credit: settings.repair_credit ?? 0, effective_from: effective },
+      ...(settings.service_credit_rules || [])
+    ];
+  }
+
+  function payoutRules(settings) {
+    if (Array.isArray(settings.payout_rule_history) && settings.payout_rule_history.length) return settings.payout_rule_history;
+    if (Array.isArray(settings.extra_payout_rules) && settings.extra_payout_rules.length) return settings.extra_payout_rules;
+    const effective = settings.ocular_repair_effective_from || null;
+    return [
+      { assignment: 'Lead', amount: settings.lead_rate || 1000 },
+      { assignment: 'Assist', amount: settings.assist_rate || 500 },
+      { assignment: 'Service', sku: 'OCULAR', amount: settings.ocular_rate || 0, effective_from: effective },
+      { assignment: 'Service', sku: 'REPAIR', amount: settings.repair_rate || 0, effective_from: effective },
+      ...(settings.extra_services || []).map(rule => ({ ...rule, assignment: 'Service', amount: rule.amount ?? rule.rate }))
+    ];
+  }
+
+  function assignmentFor(roles, skus) {
+    const normalizedRoles = (roles || []).map(role => String(role).toLowerCase());
+    const normalizedSkus = (skus || []).map(normalizeSku);
+    if (normalizedRoles.includes('ocular') || normalizedSkus.includes('OCULAR')) return { assignment: 'Service', sku: 'OCULAR' };
+    if (normalizedRoles.includes('repair') || normalizedSkus.includes('REPAIR')) return { assignment: 'Service', sku: 'REPAIR' };
+    if (normalizedRoles.includes('lead')) return { assignment: 'Lead', sku: '' };
+    if (normalizedRoles.includes('assist')) return { assignment: 'Assist', sku: '' };
+    if (normalizedRoles.includes('service')) return { assignment: 'Service', sku: normalizedSkus[0] || '', skus: normalizedSkus };
+    return { assignment: '', sku: '', skus: normalizedSkus };
+  }
+
+  root.BKInstallerPayoutRules = Object.freeze({
+    serviceRules(settings = {}) {
+      const skus = [...new Set(payoutRules(settings).filter(rule => String(rule.assignment).toLowerCase() === 'service').map(rule => normalizeSku(rule.sku)))];
+      return skus.map(sku => latestEffectiveRule(payoutRules(settings), { assignment: 'Service', sku }, new Date().toISOString().slice(0, 10))).filter(Boolean).map(rule => ({ sku: normalizeSku(rule.sku), rate: Number(rule.amount ?? rule.rate ?? rule.value) || 0, effective_from: rule.effective_from || null }));
+    },
+    creditForJob(settings = {}, job = {}) {
+      const target = assignmentFor(job.roles, job.skus);
+      const candidates = target.assignment === 'Service'
+        ? (target.skus || [target.sku]).map(sku => latestEffectiveRule(creditRules(settings), { assignment: 'Service', sku }, job.workDate)).filter(Boolean)
+        : [latestEffectiveRule(creditRules(settings), target, job.workDate)].filter(Boolean);
+      return Number(candidates[0]?.credit ?? candidates[0]?.value) || 0;
+    },
+    thresholdRateForJob(settings = {}, job = {}) {
+      const target = assignmentFor(job.roles, job.skus);
+      const candidates = target.assignment === 'Service'
+        ? (target.skus || [target.sku]).map(sku => latestEffectiveRule(payoutRules(settings), { assignment: 'Service', sku }, job.workDate)).filter(Boolean)
+        : [latestEffectiveRule(payoutRules(settings), target, job.workDate)].filter(Boolean);
+      return Number(candidates[0]?.amount ?? candidates[0]?.rate ?? candidates[0]?.value) || 0;
+    },
+    servicePayoutsForJob(settings = {}, job = {}) {
+      if (!(job.roles || []).some(role => String(role).toLowerCase() === 'service')) return [];
+      return (job.skus || []).map(normalizeSku).map(sku => latestEffectiveRule(payoutRules(settings), { assignment: 'Service', sku }, job.workDate)).filter(Boolean).map(rule => ({ sku: normalizeSku(rule.sku), amount: Number(rule.amount ?? rule.rate ?? rule.value) || 0 }));
+    },
+    thresholdForDate(settings = {}, workDate) {
+      const history = Array.isArray(settings.threshold_history) ? settings.threshold_history : [];
+      const rule = history.filter(item => isEffective(item, workDate)).sort((a, b) => String(b.effective_from || '').localeCompare(String(a.effective_from || '')))[0];
+      return Number(rule?.value ?? settings.installations_before_crediting ?? 15) || 0;
+    }
+  });
+})(globalThis);
+
 function isOwnerInstaller() {
   return String(currentInstaller?.assignment || '').split(',').some(value => value.trim().toLowerCase() === 'owner');
 }
@@ -386,12 +478,8 @@ function drawPayouts() {
   };
 
   const thresholdVal = config.installations_before_crediting || 15;
-  const leadWeight = config.lead_credit !== undefined ? config.lead_credit : 1.0;
-  const assistWeight = config.assist_credit !== undefined ? config.assist_credit : 0.5;
   const ocularWeight = config.ocular_credit !== undefined ? config.ocular_credit : 0;
   const repairWeight = config.repair_credit !== undefined ? config.repair_credit : 0;
-  const leadRateVal = config.lead_rate || 1000;
-  const assistRateVal = config.assist_rate || 500;
   const ocularRateVal = config.ocular_rate || 0;
   const repairRateVal = config.repair_rate || 0;
   const ocularRepairEffectiveFrom = String(config.ocular_repair_effective_from || '');
@@ -402,9 +490,6 @@ function drawPayouts() {
   const extraServicesList = window.BKInstallerPayoutRules.serviceRules(config);
 
   // Update threshold settings labels in UI
-  document.getElementById('payout-lead-weight').textContent = leadWeight.toFixed(1);
-  document.getElementById('payout-assist-weight').textContent = assistWeight.toFixed(1);
-  document.getElementById('payout-target-threshold').textContent = thresholdVal + ' Counts';
 
   // Keep all Done work available so threshold eligibility can be calculated in
   // its installation month before a post-cutoff payout is carried forward.
@@ -444,15 +529,39 @@ function drawPayouts() {
   // Sort doorJobs chronologically by scheduled_date
   doorJobs.sort((a, b) => new Date(a.scheduled_date) - new Date(b.scheduled_date));
 
-  let leadCount = 0;
-  let assistCount = 0;
+  let leadCredit = 0;
+  let assistCredit = 0;
+  let creditedServiceCredit = 0;
   let serviceEarnings = 0;
   const serviceCounts = {};
 
   let completedMonthCredit = 0;
-  const creditBySourceMonth = {};
+  const settledCreditBySourceMonth = {};
+  doorJobs.forEach(job => {
+    const sourceMonth = String(job.scheduled_date || '').slice(0, 7);
+    if (!sourceMonth) return;
+    const payoutBucket = getInstallerPayoutCutoffBucket(job.scheduled_date, payoutSchedules);
+    if (payoutBucket?.monthKey !== sourceMonth) return;
+    const weight = window.BKInstallerPayoutRules.creditForJob(config, { roles: job.roles, skus: job.skus, workDate: job.scheduled_date });
+    settledCreditBySourceMonth[sourceMonth] = (settledCreditBySourceMonth[sourceMonth] || 0) + weight;
+  });
+
+  let creditRollover = 0;
+  const creditRolloverByMonth = {};
+  doorJobs.forEach(job => {
+    const sourceMonth = String(job.scheduled_date || '').slice(0, 7);
+    const payoutBucket = getInstallerPayoutCutoffBucket(job.scheduled_date, payoutSchedules);
+    const threshold = window.BKInstallerPayoutRules.thresholdForDate(config, job.scheduled_date);
+    if (!sourceMonth || sourceMonth === targetMonthKey || payoutBucket?.monthKey !== targetMonthKey || (settledCreditBySourceMonth[sourceMonth] || 0) >= threshold) return;
+    const weight = window.BKInstallerPayoutRules.creditForJob(config, { roles: job.roles, skus: job.skus, workDate: job.scheduled_date });
+    creditRollover += weight;
+    creditRolloverByMonth[sourceMonth] = (creditRolloverByMonth[sourceMonth] || 0) + weight;
+  });
+
+  const runningCreditBySourceMonth = {};
   let payoutEligibleExtraCredit = 0;
   let thresholdEarnings = 0;
+  const thresholdRolloverByMonth = {};
   const cutoffPayouts = {};
   payoutSchedules.forEach(day => { cutoffPayouts[day] = 0; });
 
@@ -463,17 +572,21 @@ function drawPayouts() {
 
     const sourceMonth = String(job.scheduled_date || '').slice(0, 7);
     if (!sourceMonth) return;
-    const previousCredit = creditBySourceMonth[sourceMonth] || 0;
+    const previousCredit = sourceMonth === targetMonthKey
+      ? (runningCreditBySourceMonth[sourceMonth] || creditRollover)
+      : (runningCreditBySourceMonth[sourceMonth] || 0);
     const newCredit = previousCredit + weight;
     const jobThreshold = window.BKInstallerPayoutRules.thresholdForDate(config, job.scheduled_date);
-    const thresholdPayForJob = !isOwner && newCredit > jobThreshold ? jobRate : 0;
-    creditBySourceMonth[sourceMonth] = newCredit;
+    const sourceReachedThreshold = sourceMonth === targetMonthKey || (settledCreditBySourceMonth[sourceMonth] || 0) >= jobThreshold;
+    const thresholdPayForJob = !isOwner && sourceReachedThreshold && newCredit > jobThreshold ? jobRate : 0;
+    runningCreditBySourceMonth[sourceMonth] = newCredit;
 
     // Completion progress belongs to the scheduled installation month.
     if (sourceMonth === targetMonthKey) {
       completedMonthCredit += weight;
-      if (job.roles.includes('lead')) leadCount++;
-      else if (job.roles.includes('assist')) assistCount++;
+      if (job.roles.includes('lead')) leadCredit += weight;
+      else if (job.roles.includes('assist')) assistCredit += weight;
+      else if (weight > 0) creditedServiceCredit += weight;
     }
 
     // Money follows the cutoff bucket. For example, a Done July 31 job remains
@@ -482,7 +595,15 @@ function drawPayouts() {
     if (!payoutBucket || payoutBucket.monthKey !== targetMonthKey) return;
 
     thresholdEarnings += thresholdPayForJob;
-    if (thresholdPayForJob > 0) payoutEligibleExtraCredit += weight;
+    if (thresholdPayForJob > 0) {
+      payoutEligibleExtraCredit += weight;
+      if (sourceMonth !== targetMonthKey) {
+        const rollover = thresholdRolloverByMonth[sourceMonth] || { credit: 0, amount: 0 };
+        rollover.credit += weight;
+        rollover.amount += thresholdPayForJob;
+        thresholdRolloverByMonth[sourceMonth] = rollover;
+      }
+    }
 
     let servicePayForJob = 0;
     if (!isOwner) window.BKInstallerPayoutRules.servicePayoutsForJob(config, ruleJob).forEach(service => {
@@ -493,14 +614,14 @@ function drawPayouts() {
     cutoffPayouts[payoutBucket.day] = (cutoffPayouts[payoutBucket.day] || 0) + thresholdPayForJob + servicePayForJob;
   });
 
-  const totalCredit = completedMonthCredit;
+  const totalCredit = completedMonthCredit + creditRollover;
   
   // Update Threshold Progress
   const thresholdSummary = `${totalCredit.toFixed(1)} / ${thresholdVal} Counts`;
   document.getElementById('payout-threshold-summary').textContent = thresholdSummary;
-  document.getElementById('payout-lead-count').textContent = leadCount;
-  document.getElementById('payout-assist-count').textContent = assistCount;
-  document.getElementById('payout-accumulated-credit').textContent = totalCredit.toFixed(1);
+  document.getElementById('payout-lead-count').textContent = leadCredit.toFixed(1);
+  document.getElementById('payout-assist-count').textContent = assistCredit.toFixed(1);
+  document.getElementById('payout-credited-service-count').textContent = creditedServiceCredit.toFixed(1);
 
   // Render gamified progress bar
   const percent = Math.min(100, Math.max(0, (totalCredit / thresholdVal) * 100));
@@ -511,25 +632,56 @@ function drawPayouts() {
 
   // 2. Calculate threshold earnings (extra works past threshold)
   let thresholdEarningsDetailsHtml = '';
+  let earningsCalculationText = '';
 
   if (thresholdEarnings > 0) {
+    const rolloverEntries = Object.entries(thresholdRolloverByMonth).sort(([a], [b]) => a.localeCompare(b));
+    const rolloverCreditTotal = rolloverEntries.reduce((sum, [, rollover]) => sum + rollover.credit, 0);
+    const rolloverAmountTotal = rolloverEntries.reduce((sum, [, rollover]) => sum + rollover.amount, 0);
+    const currentExtraCredit = payoutEligibleExtraCredit - rolloverCreditTotal;
+    const currentExtraAmount = thresholdEarnings - rolloverAmountTotal;
+    const calculationAmounts = [];
+    let currentMonthDetailsHtml = '';
+    if (currentExtraAmount > 0) {
+      calculationAmounts.push(currentExtraAmount);
+      currentMonthDetailsHtml = `
+        <div style="display:flex; justify-content:space-between;">
+          <span>This month:</span>
+          <span>+${currentExtraCredit.toFixed(1)} cr = ₱${currentExtraAmount.toLocaleString()}</span>
+        </div>
+      `;
+    }
+    const rolloverDetailsHtml = rolloverEntries.map(([monthKey, rollover]) => {
+      const [year, month] = monthKey.split('-').map(Number);
+      const monthLabel = new Date(year, month - 1, 1).toLocaleDateString(undefined, { month: 'long' });
+      calculationAmounts.push(rollover.amount);
+      return `
+        <div style="display:flex; justify-content:space-between;">
+          <span>Rollover from ${escapeHtml(monthLabel)}:</span>
+          <span>+${rollover.credit.toFixed(1)} cr = ₱${rollover.amount.toLocaleString()}</span>
+        </div>
+      `;
+    }).join('');
+    earningsCalculationText = `${calculationAmounts.map(amount => `₱${amount.toLocaleString()}`).join(' + ')} = ₱${thresholdEarnings.toLocaleString()}`;
     thresholdEarningsDetailsHtml = `
-      <div style="display:flex; justify-content:space-between;">
-        <span>Payout-eligible Extra Credits:</span>
-        <strong>+${payoutEligibleExtraCredit.toFixed(1)}</strong>
-      </div>
-      <div style="display:flex; justify-content:space-between; font-size:0.78rem; color:var(--text-muted);">
-        <span>Lead Payout Rate (1.0 cr):</span>
-        <span>₱${leadRateVal.toLocaleString()}</span>
-      </div>
-      <div style="display:flex; justify-content:space-between; font-size:0.78rem; color:var(--text-muted);">
-        <span>Assist Payout Rate (0.5 cr):</span>
-        <span>₱${assistRateVal.toLocaleString()}</span>
-      </div>
+      ${currentMonthDetailsHtml}
+      ${rolloverDetailsHtml}
     `;
   } else {
     thresholdEarningsDetailsHtml = `<div style="font-style:italic; color:var(--text-muted); font-size:0.8rem;">No threshold earnings are payable in this month's cutoff buckets.</div>`;
   }
+
+  const creditRolloverDetailsHtml = Object.entries(creditRolloverByMonth).sort(([a], [b]) => a.localeCompare(b)).map(([monthKey, credit]) => {
+    const [year, month] = monthKey.split('-').map(Number);
+    const monthLabel = new Date(year, month - 1, 1).toLocaleDateString(undefined, { month: 'long' });
+    return `
+      <div style="display:flex; justify-content:space-between; font-size:0.78rem; color:var(--text-secondary);">
+        <span>Credit rollover from ${escapeHtml(monthLabel)}:</span>
+        <span>+${credit.toFixed(1)} cr (not yet payable)</span>
+      </div>
+    `;
+  }).join('');
+  thresholdEarningsDetailsHtml = creditRolloverDetailsHtml + thresholdEarningsDetailsHtml;
 
   const peso = value => `₱${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   document.getElementById('payout-extra-total').textContent = peso(thresholdEarnings);
@@ -566,7 +718,7 @@ function drawPayouts() {
     monthKey: targetMonthKey,
     thresholdEarnings,
     thresholdDescription: thresholdEarnings > 0
-      ? `₱${leadRateVal.toLocaleString()} per extra work`
+      ? earningsCalculationText
       : `Threshold of ${thresholdVal} counts not reached`,
     serviceEarnings,
     serviceDescription: serviceDescription || 'No extra paid services recorded',

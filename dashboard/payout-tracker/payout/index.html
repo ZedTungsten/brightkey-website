@@ -213,7 +213,7 @@
   <script src="/js/dashboard-ui.js?v=20260731-payslip-4"></script>
   <script src="/js/auth.js"></script>
   <script src="/js/sidebar.js"></script>
-  <script src="/js/main.js"></script>
+  <script src="/js/main.js?v=20260815-1"></script>
   <script>
     'use strict';
 
@@ -629,7 +629,24 @@
         let completedMonthLeadCount = 0;
         let completedMonthAssistCount = 0;
         let payoutEligibleCredit = 0;
-        const creditBySourceMonth = {};
+        const settledCreditBySourceMonth = {};
+        doorJobs.forEach(job => {
+          const sourceMonth = String(job.scheduled_date || '').slice(0, 7);
+          if (!sourceMonth) return;
+          const bucket = this.getCutoffBucket(job.scheduled_date, sortedScheds);
+          if (bucket?.monthKey !== sourceMonth) return;
+          const weight = window.BKInstallerPayoutRules.creditForJob(payoutSettings, { roles: job.roles, skus: job.skus, workDate: job.scheduled_date });
+          settledCreditBySourceMonth[sourceMonth] = (settledCreditBySourceMonth[sourceMonth] || 0) + weight;
+        });
+        let rolloverCredit = 0;
+        doorJobs.forEach(job => {
+          const sourceMonth = String(job.scheduled_date || '').slice(0, 7);
+          const bucket = this.getCutoffBucket(job.scheduled_date, sortedScheds);
+          const threshold = window.BKInstallerPayoutRules.thresholdForDate(payoutSettings, job.scheduled_date);
+          if (!sourceMonth || sourceMonth === monthKey || bucket?.monthKey !== monthKey || (settledCreditBySourceMonth[sourceMonth] || 0) >= threshold) return;
+          rolloverCredit += window.BKInstallerPayoutRules.creditForJob(payoutSettings, { roles: job.roles, skus: job.skus, workDate: job.scheduled_date });
+        });
+        const runningCreditBySourceMonth = {};
         let totalThresholdEarnings = 0;
         let totalServiceEarnings = 0;
         const cutoffPayouts = {};
@@ -649,14 +666,17 @@
           // Determine threshold eligibility in the work's original calendar month.
           const sourceMonth = String(job.scheduled_date || '').slice(0, 7);
           if (!sourceMonth) return;
-          const previousCredit = creditBySourceMonth[sourceMonth] || 0;
+          const previousCredit = sourceMonth === monthKey
+            ? (runningCreditBySourceMonth[sourceMonth] || rolloverCredit)
+            : (runningCreditBySourceMonth[sourceMonth] || 0);
           const newCredit = previousCredit + weight;
           let thresholdPayForJob = 0;
           const jobThreshold = window.BKInstallerPayoutRules.thresholdForDate(payoutSettings, job.scheduled_date);
-          if (newCredit > jobThreshold) {
+          const sourceReachedThreshold = sourceMonth === monthKey || (settledCreditBySourceMonth[sourceMonth] || 0) >= jobThreshold;
+          if (sourceReachedThreshold && newCredit > jobThreshold) {
             thresholdPayForJob = jobRate;
           }
-          creditBySourceMonth[sourceMonth] = newCredit;
+          runningCreditBySourceMonth[sourceMonth] = newCredit;
 
           // Completion belongs to the scheduled installation month. Cutoff
           // bucketing below controls only when that completed work is paid.
@@ -715,7 +735,8 @@
         }
 
         return {
-          totalCredit: completedMonthCredit,
+          totalCredit: completedMonthCredit + rolloverCredit,
+          rolloverCredit,
           completedLeadCount: completedMonthLeadCount,
           completedAssistCount: completedMonthAssistCount,
           payoutEligibleCredit,

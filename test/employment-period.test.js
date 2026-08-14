@@ -96,3 +96,44 @@ test('shared installer payout rolls work after the final cutoff into next month'
   assert.equal(row.completedCredit, 0);
   assert.equal(row.thresholdEarnings, 1000);
 });
+
+test('shared installer payout carries post-cutoff work as credit when the prior month missed threshold', () => {
+  const [row] = context.BKInstallerPayouts.calculateMonth({
+    employees: [{ id: 'installer' }],
+    bookings: [
+      { id: 'july-on-time', status: 'done', scheduled_date: '2026-07-30', product_skus: '' },
+      { id: 'july-late', status: 'done', scheduled_date: '2026-07-31', product_skus: '' }
+    ],
+    payoutSettings: { installations_before_crediting: 3, lead_credit: 1, lead_rate: 1000 },
+    payoutSchedules: [15, 30],
+    monthKey: '2026-08',
+    resolveAssignedDoors: () => [{ completed: true, roles: ['lead'], skus: [] }]
+  });
+
+  assert.equal(row.completedCredit, 0);
+  assert.equal(row.rolloverCredit, 1);
+  assert.equal(row.totalCredit, 1);
+  assert.equal(row.thresholdEarnings, 0);
+});
+
+test('shared installer payout applies credit-only rollover before current-month work', () => {
+  const [row] = context.BKInstallerPayouts.calculateMonth({
+    employees: [{ id: 'installer' }],
+    bookings: [
+      { id: 'july-on-time', status: 'done', scheduled_date: '2026-07-30', product_skus: '' },
+      { id: 'july-late', status: 'done', scheduled_date: '2026-07-31', product_skus: '' },
+      { id: 'august-1', status: 'done', scheduled_date: '2026-08-01', product_skus: '' },
+      { id: 'august-2', status: 'done', scheduled_date: '2026-08-02', product_skus: '' },
+      { id: 'august-3', status: 'done', scheduled_date: '2026-08-03', product_skus: '' }
+    ],
+    payoutSettings: { installations_before_crediting: 3, lead_credit: 1, lead_rate: 1000 },
+    payoutSchedules: [15, 30],
+    monthKey: '2026-08',
+    resolveAssignedDoors: () => [{ completed: true, roles: ['lead'], skus: [] }]
+  });
+
+  assert.equal(row.completedCredit, 3);
+  assert.equal(row.rolloverCredit, 1);
+  assert.equal(row.totalCredit, 4);
+  assert.equal(row.thresholdEarnings, 1000);
+});

@@ -247,7 +247,8 @@
         let thresholdEarnings = 0;
         let serviceEarnings = 0;
         const serviceCounts = {};
-        const creditBySourceMonth = {};
+        const settledCreditBySourceMonth = {};
+        const jobs = [];
 
         eligibleBookings.forEach(booking => {
           const skus = String(booking.product_skus || '').split('|').map(sku => sku.trim().toLowerCase()).filter(Boolean);
@@ -263,11 +264,35 @@
             const jobSkus = isOcular ? ['OCULAR'] : isRepair ? ['REPAIR'] : door.skus;
             const weight = rulesApi.creditForJob(payoutSettings, { roles, skus: jobSkus, workDate: booking.scheduled_date });
             const sourceMonth = String(booking.scheduled_date).slice(0, 7);
+            jobs.push({ booking, door, roles, jobSkus, weight, sourceMonth });
+            const bucket = cutoffBucket(booking.scheduled_date, payoutSchedules);
+            if (bucket?.monthKey === sourceMonth) {
+              settledCreditBySourceMonth[sourceMonth] = (settledCreditBySourceMonth[sourceMonth] || 0) + weight;
+            }
+          });
+        });
+
+        let rolloverCredit = 0;
+        jobs.forEach(job => {
+          const bucket = cutoffBucket(job.booking.scheduled_date, payoutSchedules);
+          const threshold = rulesApi.thresholdForDate(payoutSettings, job.booking.scheduled_date);
+          if (job.sourceMonth !== monthKey && bucket?.monthKey === monthKey && (settledCreditBySourceMonth[job.sourceMonth] || 0) < threshold) {
+            rolloverCredit += job.weight;
+          }
+        });
+
+        const runningCreditByMonth = {};
+        jobs.forEach(({ booking, door, roles, jobSkus, weight, sourceMonth }) => {
             const threshold = rulesApi.thresholdForDate(payoutSettings, booking.scheduled_date);
-            const previousCredit = creditBySourceMonth[sourceMonth] || 0;
+            const previousCredit = sourceMonth === monthKey
+              ? (runningCreditByMonth[sourceMonth] || rolloverCredit)
+              : (runningCreditByMonth[sourceMonth] || 0);
             const newCredit = previousCredit + weight;
-            const thresholdPay = newCredit > threshold ? rulesApi.thresholdRateForJob(payoutSettings, { roles, skus: jobSkus, workDate: booking.scheduled_date }) : 0;
-            creditBySourceMonth[sourceMonth] = newCredit;
+            const sourceReachedThreshold = sourceMonth === monthKey || (settledCreditBySourceMonth[sourceMonth] || 0) >= threshold;
+            const thresholdPay = sourceReachedThreshold && newCredit > threshold
+              ? rulesApi.thresholdRateForJob(payoutSettings, { roles, skus: jobSkus, workDate: booking.scheduled_date })
+              : 0;
+            runningCreditByMonth[sourceMonth] = newCredit;
 
             if (sourceMonth === monthKey) {
               completedCredit += weight;
@@ -282,10 +307,10 @@
               serviceCounts[service.sku] = (serviceCounts[service.sku] || 0) + 1;
               serviceEarnings += service.amount;
             });
-          });
+
         });
 
-        return { employee, leadCount, assistCount, completedCredit, thresholdEarnings, serviceCounts, serviceEarnings, total: thresholdEarnings + serviceEarnings };
+        return { employee, leadCount, assistCount, completedCredit, rolloverCredit, totalCredit: completedCredit + rolloverCredit, thresholdEarnings, serviceCounts, serviceEarnings, total: thresholdEarnings + serviceEarnings };
       });
     }
   });

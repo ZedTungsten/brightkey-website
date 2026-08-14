@@ -121,6 +121,15 @@ function switchView(view) {
   payoutsTab.style.display = view === 'payouts' ? 'flex' : 'none';
   notesTab.style.display = view === 'notes' ? 'flex' : 'none';
 
+  menuItems.forEach(item => {
+    if (item.getAttribute('onclick').includes(view)) {
+      item.classList.add('active');
+    } else {
+      item.classList.remove('active');
+    }
+  });
+  toggleSidebar(false);
+
   if (view === 'job-tracker') {
     drawJobTracker();
   } else if (view === 'profile') {
@@ -131,18 +140,6 @@ function switchView(view) {
     loadInstallerNotes();
   }
   
-  // Close sidebar drawer after switching view
-  toggleSidebar(false);
-
-  menuItems.forEach(item => {
-    if (item.getAttribute('onclick').includes(view)) {
-      item.classList.add('active');
-    } else {
-      item.classList.remove('active');
-    }
-  });
-
-  toggleSidebar(false);
 }
 
 function populateProfile() {
