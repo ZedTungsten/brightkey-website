@@ -49,6 +49,34 @@ We enforce rigorous practices to prevent SQL injections (SQLi) and Cross-Site Sc
   ```
 - **Sanitizing Injected Data**: When HTML templates are rendered dynamically, pass all values through escaping helper routines (e.g., `esc(value)`) to convert `<` and `>` into HTML entities.
 
+### Security Hardening Must Preserve Valid Image Rendering
+> [!IMPORTANT]
+> Replacing unsafe image markup must not silently reject image formats already
+> produced by the application. Company logos, signatures, employee documents,
+> previews, and uploaded media may be stored as HTTPS URLs or Base64
+> `data:image/...` values.
+
+- Prefer `document.createElement('img')`, `.src`, `.alt`, and
+  `replaceChildren()` over interpolating image URLs through `innerHTML`.
+- Do not apply a blanket `http:`/`https:`-only check when the existing upload
+  workflow stores valid Base64 images. That turns an XSS hardening change into a
+  rendering regression.
+- Explicitly allow only the source types required by the feature. For persisted
+  raster uploads, validate an exact allowlist such as PNG, JPEG, GIF, or WebP
+  Base64 data URLs plus approved HTTP/HTTPS URLs. Never broadly allow arbitrary
+  `data:`, `javascript:`, HTML, or unvalidated SVG payloads.
+- Treat temporary `blob:` preview URLs separately and allow them only where the
+  browser creates and owns the preview lifecycle; revoke them when finished.
+- Preserve a readable fallback (company name, placeholder, or error state) when
+  an image fails to load instead of leaving a blank component.
+- Before completing an image-related security fix, test all relevant existing
+  source shapes: stored HTTPS URL, uploaded Base64 image, temporary local
+  preview when applicable, missing image fallback, and a rejected malicious or
+  unsupported source.
+- Compare the secured renderer with the upstream form or upload method that
+  writes the image value. Security validation and storage output must share the
+  same data contract.
+
 ---
 
 ## 4. Protected Profiles & Sensitive Key Obfuscation

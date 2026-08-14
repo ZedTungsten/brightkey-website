@@ -64,6 +64,13 @@
     host.innerHTML = `<div class="onboarding-card-layout"><section class="onboarding-contract-card" aria-labelledby="contract-card-title"><div class="onboarding-card-header"><div class="onboarding-contract-details"><h2 id="contract-card-title">Contract</h2><p>${esc(state.jobPost.job_title)}</p><span>Date Published: ${esc(formatDate(state.contract.updatedAt))}</span>${signedDate}</div><span class="contract-sign-status${state.signature ? ' signed' : ''}">${status}</span></div><button class="onboarding-cover-button" type="button" onclick="OnboardingApp.openViewer()" aria-label="Open ${esc(state.jobPost.job_title)} contract"><div class="onboarding-cover-preview">${cover}</div><span class="onboarding-open-label">Open contract</span></button></section>${materials}</div>${viewerModal()}${handbookViewerModal()}${signatureModal()}`;
   }
 
+  function renderContractUnavailable(title, message) {
+    const host = document.getElementById('onboarding-content');
+    const handbookCards = state.handbookFiles.map((file, index) => handbookCard(file, index)).join('');
+    const materials = handbookCards ? `<section class="onboarding-materials-area" aria-labelledby="onboarding-materials-title"><h2 id="onboarding-materials-title">Materials</h2><div class="onboarding-materials-grid">${handbookCards}</div></section>` : '';
+    host.innerHTML = `<div class="onboarding-card-layout"><section class="onboarding-contract-card onboarding-contract-empty" aria-labelledby="contract-card-title"><div><h2 id="contract-card-title">${esc(title)}</h2><p>${esc(message)}</p></div></section>${materials}</div>${handbookViewerModal()}`;
+  }
+
   function driveFileId(url) { try { return String(url || '').match(/\/d\/([a-zA-Z0-9_-]+)/)?.[1] || new URL(url).searchParams.get('id') || ''; } catch { return ''; } }
   function handbookEmbedUrl(file) {
     const url = file.file_url;
@@ -74,7 +81,7 @@
   }
   function handbookCard(file, index) {
     const isRead = Boolean(state.handbookReads[file.id]);
-    return `<button class="onboarding-material-card" type="button" onclick="OnboardingApp.openHandbook(${index})" aria-label="Open ${esc(file.name)}"><div class="onboarding-material-card-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 2h8l4 4v16H6z"/><path d="M14 2v5h5M9 12h6M9 16h6"/></svg></div><div class="onboarding-material-meta"><strong title="${esc(file.name)}">${esc(file.name)}</strong><span class="handbook-read-status${isRead ? ' read' : ''}">${isRead ? 'Read' : 'Not Yet Read'}</span></div></button>`;
+    return `<button class="onboarding-material-card" type="button" onclick="OnboardingApp.openHandbook(${index})" aria-label="Open ${esc(file.name)}"><div class="onboarding-material-card-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 2h8l4 4v16H6z"/><path d="M14 2v5h5M9 12h6M9 16h6"/></svg></div><div class="onboarding-material-meta"><strong title="${esc(file.name)}">${esc(file.name)}</strong><span class="handbook-read-status${isRead ? ' read' : ''}">${isRead ? 'Read' : 'Not Yet Accessed'}</span></div></button>`;
   }
 
   function handbookViewerModal() {
@@ -213,15 +220,20 @@
     const { data: employee, error: employeeError } = await state.sb.from('employees').select('id, company_id, first_name, last_name, email, contact_number, title, address, city, province, date_of_birth, date_hired, salary, job_post_id').eq('company_id', state.companyId).ilike('email', email).limit(1).maybeSingle();
     if (employeeError) { console.error('Onboarding employee load failed:', employeeError); return renderEmpty('Contract unavailable', 'Your employee profile could not be loaded. Refresh the page or contact HR.'); }
     state.employee = employee;
-    if (!employee?.job_post_id) return renderEmpty('No contract assigned', 'Your Employee Directory profile is not connected to a job post yet. Ask HR to assign one.');
+    if (!employee) return renderEmpty('Contract unavailable', 'Your employee account could not be identified. Contact HR for assistance.');
 
     const handbookReadKey = `employee_handbook_reads_${employee.id}`;
     const [jobResult, settingsResult, signatureResult] = await Promise.all([
-      state.sb.from('job_posts').select('id, job_title').eq('company_id', state.companyId).eq('id', employee.job_post_id).maybeSingle(),
+      employee.job_post_id
+        ? state.sb.from('job_posts').select('id, job_title').eq('company_id', state.companyId).eq('id', employee.job_post_id).maybeSingle()
+        : Promise.resolve({ data: null, error: null }),
       state.sb.from('global_settings').select('key,value').eq('company_id', state.companyId).in('key', ['job_contract_documents', 'company_profile_config', 'contract_template_config', 'contract_signature_config', 'hr_onboarding_handbook_files', 'hr_onboarding_job_materials', handbookReadKey]).limit(7),
-      state.sb.from('employee_contract_signatures').select('signature_data_url,signed_at').eq('company_id', state.companyId).eq('employee_id', employee.id).eq('job_post_id', employee.job_post_id).maybeSingle()
+      employee.job_post_id
+        ? state.sb.from('employee_contract_signatures').select('signature_data_url,signed_at').eq('company_id', state.companyId).eq('employee_id', employee.id).eq('job_post_id', employee.job_post_id).maybeSingle()
+        : Promise.resolve({ data: null, error: null })
     ]);
-    if (jobResult.error || settingsResult.error) { console.error('Onboarding contract load failed:', jobResult.error || settingsResult.error); return renderEmpty('Contract unavailable', 'Your employment contract could not be loaded. Refresh the page or contact HR.'); }
+    if (settingsResult.error) { console.error('Onboarding materials load failed:', settingsResult.error); return renderEmpty('Onboarding unavailable', 'Your onboarding information could not be loaded. Refresh the page or contact HR.'); }
+    if (jobResult.error) console.error('Onboarding contract assignment load failed:', jobResult.error);
     if (signatureResult.error && signatureResult.error.code !== 'PGRST205') console.error('Onboarding signature load failed:', signatureResult.error);
     state.jobPost = jobResult.data;
     const settings = Object.fromEntries((settingsResult.data || []).map(row => [row.key, row.value]));
@@ -233,7 +245,8 @@
     state.handbookReads = settings[handbookReadKey] && typeof settings[handbookReadKey] === 'object' ? settings[handbookReadKey] : {};
     app.companyProfile = settings.company_profile_config || {};
     await window.BKHiringContractTemplate?.ensureLoaded(app);
-    if (!state.jobPost || !Array.isArray(state.contract?.pages) || !state.contract.pages.length) return renderEmpty('Contract not ready', 'HR has not published a contract for your job post yet.');
+    if (!employee.job_post_id || !state.jobPost) return renderContractUnavailable('No contract assigned', 'Your Employee Directory profile is not connected to a job post yet. Ask HR to assign one.');
+    if (!Array.isArray(state.contract?.pages) || !state.contract.pages.length) return renderContractUnavailable('Contract not ready', 'HR has not published a contract for your job post yet.');
     renderContract();
   }
 
