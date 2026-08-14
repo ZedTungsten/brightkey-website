@@ -318,6 +318,21 @@
       return `booking_calendar_day_events_${year}_${String(monthIndex + 1).padStart(2, '0')}`;
     }
 
+    let calendarEventTypes = ['Day-off'];
+
+    function renderCalendarEventTypeOptions() {
+      const select = document.getElementById('event-type');
+      if (!select) return;
+      const selected = select.value;
+      select.replaceChildren(...calendarEventTypes.map(name => {
+        const option = document.createElement('option');
+        option.value = name;
+        option.textContent = name;
+        return option;
+      }));
+      if (calendarEventTypes.includes(selected)) select.value = selected;
+    }
+
     function getCalendarDayEventSettingKeys(start, end) {
       const keys = [];
       const cursor = new Date(`${start}T00:00:00`);
@@ -338,7 +353,7 @@
       const monthRange = getMonthDateRange(currentYear, currentMonth);
       try {
         const dayEventKeys = getCalendarDayEventSettingKeys(start, end);
-        const [bookingsRes, dayEventsRes] = await Promise.all([
+        const [bookingsRes, dayEventsRes, eventTypesRes] = await Promise.all([
           sb
             .from('installation_bookings')
             .select('*')
@@ -349,10 +364,20 @@
             .from('global_settings')
             .select('key,value')
             .eq('company_id', currentCompanyId)
-            .in('key', dayEventKeys)
+            .in('key', dayEventKeys),
+          sb
+            .from('global_settings')
+            .select('value')
+            .eq('company_id', currentCompanyId)
+            .eq('key', 'booking_calendar_event_types')
+            .maybeSingle()
         ]);
 
         if (dayEventsRes.error) throw dayEventsRes.error;
+        if (eventTypesRes.error) throw eventTypesRes.error;
+        const savedEventTypes = Array.isArray(eventTypesRes.data?.value) ? eventTypesRes.data.value.map(value => String(value || '').trim()).filter(Boolean) : [];
+        calendarEventTypes = ['Day-off', ...savedEventTypes.filter(value => value.toLowerCase() !== 'day-off')];
+        renderCalendarEventTypeOptions();
         calendarDayEvents = (dayEventsRes.data || []).flatMap(setting => (
           Array.isArray(setting.value) ? setting.value : []
         )).filter(event => event?.date >= start && event?.date <= end);
@@ -723,7 +748,8 @@
             .map(installer => formatInstallerName(installer.name || ''))
             .filter(Boolean)
             .join(', ');
-          const label = installerNames ? `Day off - ${installerNames}` : 'Day off';
+          const eventName = String(dayEvent.name || dayEvent.type || 'Day-off').replace(/_/g, ' ').trim();
+          const label = installerNames ? `${eventName} - ${installerNames}` : eventName;
           const slotHtml = `
             <div class="calendar-slot day-off${isOutsideMonth ? ' adjacent-month-booking' : ''}" title="${escapeHtml(label)}"${isOutsideMonth ? ' aria-disabled="true"' : ''}>
               <div style="font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; width:100%;">${escapeHtml(label)}</div>

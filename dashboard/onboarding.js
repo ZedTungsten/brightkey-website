@@ -81,7 +81,11 @@
   }
   function handbookCard(file, index) {
     const isRead = Boolean(state.handbookReads[file.id]);
-    return `<button class="onboarding-material-card" type="button" onclick="OnboardingApp.openHandbook(${index})" aria-label="Open ${esc(file.name)}"><div class="onboarding-material-card-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 2h8l4 4v16H6z"/><path d="M14 2v5h5M9 12h6M9 16h6"/></svg></div><div class="onboarding-material-meta"><strong title="${esc(file.name)}">${esc(file.name)}</strong><span class="handbook-read-status${isRead ? ' read' : ''}" id="material-access-status-${index}">${isRead ? 'Accessed' : 'Not Yet Accessed'}</span></div></button>`;
+    const isVideo = file.source === 'youtube' || ['youtube', 'video'].includes(file.file_type);
+    const icon = isVideo
+      ? '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="1.5"/><path d="M7 4v4M7 12v4M17 4v4M17 12v4M3 9h4M17 9h4M3 15h4M17 15h4"/><path d="m10 9 5 3-5 3Z"/></svg>'
+      : '<svg viewBox="0 0 24 24"><path d="M6 2h8l4 4v16H6z"/><path d="M14 2v5h5M9 12h6M9 16h6"/></svg>';
+    return `<button class="onboarding-material-card" type="button" onclick="OnboardingApp.openHandbook(${index})" aria-label="Open ${esc(file.name)}"><div class="onboarding-material-card-icon" aria-hidden="true">${icon}</div><div class="onboarding-material-meta"><strong title="${esc(file.name)}">${esc(file.name)}</strong><span class="handbook-read-status${isRead ? ' read' : ''}" id="material-access-status-${index}">${isRead ? 'Accessed' : 'Not Yet Accessed'}</span></div></button>`;
   }
 
   function handbookViewerModal() {
@@ -158,7 +162,9 @@
   function renderHandbookViewer() {
     const file = state.handbookFiles[state.handbookIndex]; if (!file) return;
     document.getElementById('onboarding-handbook-title').textContent = file.name;
-    const link = document.getElementById('onboarding-handbook-drive-link'); link.href = file.file_url;
+    const link = document.getElementById('onboarding-handbook-drive-link');
+    link.href = file.file_url;
+    link.textContent = file.source === 'youtube' || file.file_type === 'youtube' ? 'Open in YouTube' : 'View in Google Drive';
     document.getElementById('onboarding-handbook-body').innerHTML = `<iframe src="${esc(handbookEmbedUrl(file))}" title="${esc(file.name)}"></iframe>`;
     document.getElementById('onboarding-handbook-previous').style.display = state.handbookIndex > 0 ? 'flex' : 'none';
     document.getElementById('onboarding-handbook-next').style.display = state.handbookIndex < state.handbookFiles.length - 1 ? 'flex' : 'none';

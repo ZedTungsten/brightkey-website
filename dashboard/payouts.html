@@ -588,12 +588,7 @@
         const repairRateVal = payoutSettings.repair_rate || 0;
         const ocularRepairEffectiveFrom = String(payoutSettings.ocular_repair_effective_from || '');
 
-        const extraServicesList = (payoutSettings.extra_services || []).map(es => {
-          let sku = es.sku || es.name || '';
-          if (sku === 'Welding Baseplate Metal') sku = 'BASEPLATE-M';
-          if (sku === 'Welding Baseplate Stainless') sku = 'BASEPLATE-S';
-          return { sku, rate: es.rate };
-        });
+        const extraServicesList = window.BKInstallerPayoutRules.serviceRules(payoutSettings);
 
         const monthBookings = this.bookingsList.filter(b => {
           if (!b.scheduled_date) return false;
@@ -637,34 +632,23 @@
         sortedScheds.forEach(day => { cutoffPayouts[day] = 0; });
 
         doorJobs.forEach(job => {
-          let weight = 0;
-          let jobRate = 0;
-          if (job.roles.includes('lead')) weight = leadWeight;
-          else if (job.roles.includes('assist')) weight = assistWeight;
-          else if (job.roles.includes('ocular')) weight = ocularWeight;
-          else if (job.roles.includes('repair')) weight = repairWeight;
-          if (job.roles.includes('lead')) jobRate = leadRateVal;
-          else if (job.roles.includes('assist')) jobRate = assistRateVal;
-          else if (job.roles.includes('ocular')) jobRate = ocularRateVal;
-          else if (job.roles.includes('repair')) jobRate = repairRateVal;
+          const ruleJob = { roles: job.roles, skus: job.skus, workDate: job.scheduled_date };
+          const weight = window.BKInstallerPayoutRules.creditForJob(payoutSettings, ruleJob);
+          const jobRate = window.BKInstallerPayoutRules.thresholdRateForJob(payoutSettings, ruleJob);
 
           // 1. Service pay
           let servicePayForJob = 0;
-          if (job.roles.includes('service')) {
-            job.skus.forEach(sku => {
-              const matchedService = extraServicesList.find(es => es.sku === sku);
-              if (matchedService) {
-                serviceCounts[sku] = (serviceCounts[sku] || 0) + 1;
-                servicePayForJob += matchedService.rate;
-              }
-            });
-          }
+          window.BKInstallerPayoutRules.servicePayoutsForJob(payoutSettings, ruleJob).forEach(service => {
+            serviceCounts[service.sku] = (serviceCounts[service.sku] || 0) + 1;
+            servicePayForJob += service.amount;
+          });
 
           // 2. Extra threshold pay
           let thresholdPayForJob = 0;
           const previousCredit = runningCredit;
           const newCredit = previousCredit + weight;
-          if (newCredit > thresholdVal) {
+          const jobThreshold = window.BKInstallerPayoutRules.thresholdForDate(payoutSettings, job.scheduled_date);
+          if (newCredit > jobThreshold) {
             thresholdPayForJob = jobRate;
           }
           runningCredit = newCredit;

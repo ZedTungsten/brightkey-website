@@ -1,5 +1,13 @@
 'use strict';
 
+// Offline fallback for cached bookings. A successfully synced tenant catalog
+// replaces this snapshot, so newly added Service SKUs remain dynamic online.
+const TRACKER_SERVICE_SKU_FALLBACK = Object.freeze([
+  'ADD-ON LABOR', 'BACKJOB', 'BASEPLATE-M', 'BASEPLATE-S', 'DEMO',
+  'FACEPLATE WELDING', 'INSTALL-G', 'INSTALL-M', 'INSTALL-W',
+  'MAGNETIC LABOR', 'OCULAR', 'REPAIR', 'SERVICE', 'TRAINING INSTALLER'
+]);
+
 function populateTrackerMonthSelect() {
   const trackerInput = document.getElementById('tracker-month-select');
   const payoutInput = document.getElementById('payouts-month-select');
@@ -42,6 +50,14 @@ function changeTrackerMonth(direction) {
   drawJobTracker();
 }
 
+function getTrackerServiceSkuSet() {
+  const catalogSkus = (installerServiceCatalog || []).map(product => String(product.sku || '').trim().toUpperCase()).filter(Boolean);
+  if (catalogSkus.length) return new Set(catalogSkus);
+  const configuredRules = window.BKInstallerPayoutRules?.serviceRules(installerPayoutSettings || {}) || [];
+  const configuredSkus = configuredRules.map(rule => String(rule.sku || '').trim().toUpperCase()).filter(Boolean);
+  return new Set(configuredSkus.length ? configuredSkus : TRACKER_SERVICE_SKU_FALLBACK);
+}
+
 function drawJobTracker() {
   if (!currentInstaller) return;
   const select = document.getElementById('tracker-month-select');
@@ -52,10 +68,11 @@ function drawJobTracker() {
 
   let leadCount = 0;
   let assistCount = 0;
-  let ocularCount = 0;
-  let backjobCount = 0;
+  let serviceCount = 0;
+  const serviceBreakdown = {};
   let totalCount = 0;
   let listHtml = '';
+  const serviceSkuSet = getTrackerServiceSkuSet();
 
   // Filter from dbBookings
   const monthBookings = dbBookings.filter(b => {
@@ -80,11 +97,22 @@ function drawJobTracker() {
         totalCount++;
       }
 
-      if (isOcular) {
-        ocularCount++;
-      } else if (isBackjob) {
-        backjobCount++;
-      } else if (!excludeFromRoleCounts) {
+      const matchedServiceSkus = d.roles.includes('service')
+        ? [...new Set((d.skus || [])
+          .map(sku => String(sku).trim().toUpperCase())
+          .filter(sku => serviceSkuSet.has(sku)))]
+        : [];
+      if (d.roles.includes('service') && isOcular && serviceSkuSet.has('OCULAR') && !matchedServiceSkus.includes('OCULAR')) matchedServiceSkus.push('OCULAR');
+      if (d.roles.includes('service') && isBackjob && serviceSkuSet.has('BACKJOB') && !matchedServiceSkus.includes('BACKJOB')) matchedServiceSkus.push('BACKJOB');
+      if (d.roles.includes('service')) {
+        serviceCount++;
+      }
+      if (matchedServiceSkus.length) {
+        matchedServiceSkus.forEach(label => {
+          serviceBreakdown[label] = (serviceBreakdown[label] || 0) + 1;
+        });
+      }
+      if (!excludeFromRoleCounts) {
         if (d.roles.includes('lead')) {
           leadCount++;
         } else if (d.roles.includes('assist')) {
@@ -146,17 +174,16 @@ function drawJobTracker() {
   const elTotal = document.getElementById('tracker-total-count');
   if (elTotal) elTotal.textContent = totalCount;
 
-  const elBkLeads = document.getElementById('tracker-breakdown-leads');
-  if (elBkLeads) elBkLeads.textContent = leadCount;
+  const elService = document.getElementById('tracker-service-count');
+  if (elService) elService.textContent = serviceCount;
 
-  const elBkAssists = document.getElementById('tracker-breakdown-assists');
-  if (elBkAssists) elBkAssists.textContent = assistCount;
-
-  const elBkOcular = document.getElementById('tracker-breakdown-ocular');
-  if (elBkOcular) elBkOcular.textContent = ocularCount;
-
-  const elBkBackjobs = document.getElementById('tracker-breakdown-backjobs');
-  if (elBkBackjobs) elBkBackjobs.textContent = backjobCount;
+  const elServiceBreakdown = document.getElementById('tracker-service-breakdown');
+  if (elServiceBreakdown) {
+    const services = Object.entries(serviceBreakdown).sort(([a], [b]) => a.localeCompare(b));
+    elServiceBreakdown.innerHTML = services.length
+      ? services.map(([label, count]) => `<div style="display:flex; align-items:center; justify-content:space-between; gap:0.75rem; padding:0.7rem 0.8rem; border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--bg-muted, #F7F7F8);"><span style="min-width:0; overflow:hidden; color:var(--text-secondary); font-size:0.76rem; font-weight:600; text-overflow:ellipsis; white-space:nowrap;" title="${escapeHtml(label)}">${escapeHtml(label)}</span><strong style="color:#7E22CE; font-size:0.9rem; font-weight:800;">${count}</strong></div>`).join('')
+      : '<div style="color:var(--text-muted); font-size:0.78rem; font-style:italic;">No Service assignments recorded for this month.</div>';
+  }
 
   const elJobList = document.getElementById('tracker-job-list');
   if (elJobList) elJobList.innerHTML = listHtml;

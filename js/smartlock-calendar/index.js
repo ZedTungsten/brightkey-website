@@ -11,6 +11,7 @@ let dbBookings = [];
 let installerDayEvents = [];
 let deliveryBookingsMap = {};
 let installerPayoutSettings = null;
+let installerServiceCatalog = [];
 let payoutTrackerData = { config: {}, regularState: {}, specialState: {}, proratedState: {}, adjustments: [], reimbursements: [], payslipRecords: [], companyProfile: {}, payslipConfig: {} };
 let installerPayslipModel = null;
 

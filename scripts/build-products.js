@@ -4,17 +4,33 @@ import { createClient } from '@supabase/supabase-js';
 import * as dotenv from 'dotenv';
 import * as cheerio from 'cheerio';
 
+// Vercel CLI writes pulled development variables to .env.local by default.
+// Load it first, then use .env only for values that are still missing.
+dotenv.config({ path: '.env.local' });
 dotenv.config();
 
 const SUPABASE_URL     = process.env.SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_ANON;
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
 
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-  console.warn('Warning: SUPABASE_URL / SUPABASE_ANON_KEY not set — skipping products SSG.');
+  throw new Error('Product generation requires SUPABASE_URL and SUPABASE_ANON_KEY.');
+}
+
+if (!SUPABASE_SERVICE_ROLE_KEY) {
+  const isDeploymentBuild = ['production', 'preview'].includes(String(process.env.VERCEL_ENV || '').toLowerCase()) || Boolean(process.env.CI);
+  if (isDeploymentBuild) {
+    throw new Error('Production product generation requires SUPABASE_SERVICE_ROLE_KEY so tenant branding is never replaced by an RLS fallback.');
+  }
+  console.warn('Skipping local product regeneration because SUPABASE_SERVICE_ROLE_KEY is not configured. Existing generated pages were preserved. Run `npx vercel env pull .env.local --environment=development` after adding the key to Vercel Development environment variables.');
   process.exit(0);
 }
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// This client exists only inside the trusted build process. The generated pages
+// embed SUPABASE_ANON_KEY below; the service-role key must never be serialized.
+const buildSupabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+  auth: { autoRefreshToken: false, persistSession: false }
+});
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -583,7 +599,7 @@ async function buildProducts() {
   console.log('Fetching products from Supabase...');
 
   // 1. Fetch all published products
-  const { data: products, error } = await supabase
+  const { data: products, error } = await buildSupabase
     .from('products')
     .select('*')
     .eq('status', 'published');
@@ -605,14 +621,14 @@ async function buildProducts() {
   const companySpecDefinitions = {};
   const companyFeatureLabels = {};
   if (companyIds.length > 0) {
-    const { data: profileRows, error: profileError } = await supabase
+    const { data: profileRows, error: profileError } = await buildSupabase
       .from('global_settings')
       .select('company_id, value')
       .eq('key', 'company_profile_config')
       .in('company_id', companyIds);
 
     if (profileError) {
-      console.warn('Warning: Failed to fetch company branding; using the default logo:', profileError.message);
+      throw new Error(`Failed to load tenant branding. Product pages were not regenerated: ${profileError.message}`);
     } else {
       (profileRows || []).forEach(row => {
         companyProfiles[row.company_id] = row.value || {};
@@ -636,7 +652,7 @@ async function buildProducts() {
       }));
     }
 
-    const { data: specRows, error: specError } = await supabase
+    const { data: specRows, error: specError } = await buildSupabase
       .from('global_settings')
       .select('company_id, value')
       .eq('key', 'catalog_spec_definitions')
@@ -651,7 +667,7 @@ async function buildProducts() {
       });
     }
 
-    const { data: businessRows, error: businessError } = await supabase
+    const { data: businessRows, error: businessError } = await buildSupabase
       .from('tenant_businesses')
       .select('id, company_id, name')
       .in('company_id', companyIds);
@@ -661,7 +677,7 @@ async function buildProducts() {
       const businessIds = (businessRows || []).map(row => row.id);
       let featureDefinitionRows = [];
       if (businessIds.length > 0) {
-        const { data, error: featureDefinitionError } = await supabase
+        const { data, error: featureDefinitionError } = await buildSupabase
           .from('business_features')
           .select('business_id, name, display_name, sort_order')
           .in('business_id', businessIds)
@@ -691,7 +707,7 @@ async function buildProducts() {
 
   // 2. Fetch inventory by SKU (single query)
   const skus = products.map(p => p.sku).filter(Boolean);
-  const { data: inventoryRows } = await supabase
+  const { data: inventoryRows } = await buildSupabase
     .from('inventory')
     .select('sku, available, ordered_past_month')
     .in('sku', skus);
@@ -705,12 +721,18 @@ async function buildProducts() {
   for (const [biz, table] of Object.entries(FEATURE_TABLE)) {
     const bizIds = products.filter(p => p.business === biz).map(p => p.id);
     if (bizIds.length === 0) continue;
-    const { data: rows } = await supabase.from(table).select('*').in('product_id', bizIds);
-    (rows || []).forEach(row => { featuresMap[row.product_id] = row; });
+    const { data: rows } = await buildSupabase.from(table).select('*').in('product_id', bizIds);
+    (rows || []).forEach(row => {
+      const existing = featuresMap[row.product_id] || {};
+      const populatedValues = Object.fromEntries(Object.entries(row).filter(([column, value]) => {
+        return ['id', 'product_id'].includes(column) || (value !== null && value !== undefined && String(value).trim() !== '');
+      }));
+      featuresMap[row.product_id] = { ...existing, ...populatedValues, product_id: row.product_id };
+    });
   }
 
   // 4. Fetch approved reviews (all at once)
-  const { data: allReviews } = await supabase
+  const { data: allReviews } = await buildSupabase
     .from('product_reviews')
     .select('*')
     .eq('is_approved', true)

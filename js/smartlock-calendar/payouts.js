@@ -399,12 +399,7 @@ function drawPayouts() {
     .map(Number)
     .filter(Boolean)
     .sort((a, b) => a - b);
-  const extraServicesList = (config.extra_services || []).map(es => {
-    let sku = es.sku || es.name || '';
-    if (sku === 'Welding Baseplate Metal') sku = 'BASEPLATE-M';
-    if (sku === 'Welding Baseplate Stainless') sku = 'BASEPLATE-S';
-    return { sku, rate: es.rate };
-  });
+  const extraServicesList = window.BKInstallerPayoutRules.serviceRules(config);
 
   // Update threshold settings labels in UI
   document.getElementById('payout-lead-weight').textContent = leadWeight.toFixed(1);
@@ -462,22 +457,16 @@ function drawPayouts() {
   payoutSchedules.forEach(day => { cutoffPayouts[day] = 0; });
 
   doorJobs.forEach(job => {
-    let weight = 0;
-    let jobRate = 0;
-    if (job.roles.includes('lead')) weight = leadWeight;
-    else if (job.roles.includes('assist')) weight = assistWeight;
-    else if (job.roles.includes('ocular')) weight = ocularWeight;
-    else if (job.roles.includes('repair')) weight = repairWeight;
-    if (job.roles.includes('lead')) jobRate = leadRateVal;
-    else if (job.roles.includes('assist')) jobRate = assistRateVal;
-    else if (job.roles.includes('ocular')) jobRate = ocularRateVal;
-    else if (job.roles.includes('repair')) jobRate = repairRateVal;
+    const ruleJob = { roles: job.roles, skus: job.skus, workDate: job.scheduled_date };
+    const weight = window.BKInstallerPayoutRules.creditForJob(config, ruleJob);
+    const jobRate = window.BKInstallerPayoutRules.thresholdRateForJob(config, ruleJob);
 
     const sourceMonth = String(job.scheduled_date || '').slice(0, 7);
     if (!sourceMonth) return;
     const previousCredit = creditBySourceMonth[sourceMonth] || 0;
     const newCredit = previousCredit + weight;
-    const thresholdPayForJob = !isOwner && newCredit > thresholdVal ? jobRate : 0;
+    const jobThreshold = window.BKInstallerPayoutRules.thresholdForDate(config, job.scheduled_date);
+    const thresholdPayForJob = !isOwner && newCredit > jobThreshold ? jobRate : 0;
     creditBySourceMonth[sourceMonth] = newCredit;
 
     // Completion progress belongs to the scheduled installation month.
@@ -496,16 +485,11 @@ function drawPayouts() {
     if (thresholdPayForJob > 0) payoutEligibleExtraCredit += weight;
 
     let servicePayForJob = 0;
-    if (!isOwner && job.roles.includes('service')) {
-      job.skus.forEach(sku => {
-        const matchedService = extraServicesList.find(es => es.sku === sku);
-        if (matchedService) {
-          serviceCounts[sku] = (serviceCounts[sku] || 0) + 1;
-          serviceEarnings += matchedService.rate;
-          servicePayForJob += matchedService.rate;
-        }
-      });
-    }
+    if (!isOwner) window.BKInstallerPayoutRules.servicePayoutsForJob(config, ruleJob).forEach(service => {
+      serviceCounts[service.sku] = (serviceCounts[service.sku] || 0) + 1;
+      serviceEarnings += service.amount;
+      servicePayForJob += service.amount;
+    });
     cutoffPayouts[payoutBucket.day] = (cutoffPayouts[payoutBucket.day] || 0) + thresholdPayForJob + servicePayForJob;
   });
 

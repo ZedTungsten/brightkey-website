@@ -123,6 +123,100 @@
 
 // BK_INSTALLER_PAYOUTS_START
 (function registerInstallerPayoutCalculator(root) {
+  function normalizeSku(value) {
+    let sku = String(value || '').trim();
+    if (sku === 'Welding Baseplate Metal') sku = 'BASEPLATE-M';
+    if (sku === 'Welding Baseplate Stainless') sku = 'BASEPLATE-S';
+    return sku.toUpperCase();
+  }
+
+  function isEffective(rule, workDate) {
+    return !rule?.effective_from || !workDate || String(workDate).slice(0, 10) >= String(rule.effective_from).slice(0, 10);
+  }
+
+  function ruleKey(rule) {
+    const assignment = String(rule?.assignment || '').toLowerCase();
+    return `${assignment}:${assignment === 'service' ? normalizeSku(rule?.sku) : ''}`;
+  }
+
+  function latestEffectiveRule(rules, target, workDate) {
+    const targetKey = ruleKey(target);
+    return rules
+      .filter(rule => ruleKey(rule) === targetKey && isEffective(rule, workDate))
+      .sort((a, b) => String(b.effective_from || '').localeCompare(String(a.effective_from || '')))[0] || null;
+  }
+
+  function creditRules(settings) {
+    if (Array.isArray(settings.credit_rule_history) && settings.credit_rule_history.length) return settings.credit_rule_history;
+    if (Array.isArray(settings.credit_rules) && settings.credit_rules.length) return settings.credit_rules;
+    const effective = settings.ocular_repair_effective_from || null;
+    return [
+      { assignment: 'Lead', credit: settings.lead_credit ?? 1 },
+      { assignment: 'Assist', credit: settings.assist_credit ?? 0.5 },
+      { assignment: 'Service', sku: 'OCULAR', credit: settings.ocular_credit ?? 0, effective_from: effective },
+      { assignment: 'Service', sku: 'REPAIR', credit: settings.repair_credit ?? 0, effective_from: effective },
+      ...(settings.service_credit_rules || [])
+    ];
+  }
+
+  function payoutRules(settings) {
+    if (Array.isArray(settings.payout_rule_history) && settings.payout_rule_history.length) return settings.payout_rule_history;
+    if (Array.isArray(settings.extra_payout_rules) && settings.extra_payout_rules.length) return settings.extra_payout_rules;
+    const effective = settings.ocular_repair_effective_from || null;
+    return [
+      { assignment: 'Lead', amount: settings.lead_rate || 1000 },
+      { assignment: 'Assist', amount: settings.assist_rate || 500 },
+      { assignment: 'Service', sku: 'OCULAR', amount: settings.ocular_rate || 0, effective_from: effective },
+      { assignment: 'Service', sku: 'REPAIR', amount: settings.repair_rate || 0, effective_from: effective },
+      ...(settings.extra_services || []).map(rule => ({ ...rule, assignment: 'Service', amount: rule.amount ?? rule.rate }))
+    ];
+  }
+
+  function assignmentFor(roles, skus) {
+    const normalizedRoles = (roles || []).map(role => String(role).toLowerCase());
+    const normalizedSkus = (skus || []).map(normalizeSku);
+    if (normalizedRoles.includes('ocular') || normalizedSkus.includes('OCULAR')) return { assignment: 'Service', sku: 'OCULAR' };
+    if (normalizedRoles.includes('repair') || normalizedSkus.includes('REPAIR')) return { assignment: 'Service', sku: 'REPAIR' };
+    if (normalizedRoles.includes('lead')) return { assignment: 'Lead', sku: '' };
+    if (normalizedRoles.includes('assist')) return { assignment: 'Assist', sku: '' };
+    if (normalizedRoles.includes('service')) return { assignment: 'Service', sku: normalizedSkus[0] || '', skus: normalizedSkus };
+    return { assignment: '', sku: '', skus: normalizedSkus };
+  }
+
+  const rulesApi = Object.freeze({
+    serviceRules(settings = {}) {
+      const skus = [...new Set(payoutRules(settings).filter(rule => String(rule.assignment).toLowerCase() === 'service').map(rule => normalizeSku(rule.sku)))];
+      return skus.map(sku => latestEffectiveRule(payoutRules(settings), { assignment: 'Service', sku }, new Date().toISOString().slice(0, 10))).filter(Boolean).map(rule => ({ sku: normalizeSku(rule.sku), rate: Number(rule.amount ?? rule.rate ?? rule.value) || 0, effective_from: rule.effective_from || null }));
+    },
+    creditForJob(settings = {}, job = {}) {
+      const target = assignmentFor(job.roles, job.skus);
+      const candidates = target.assignment === 'Service'
+        ? (target.skus || [target.sku]).map(sku => latestEffectiveRule(creditRules(settings), { assignment: 'Service', sku }, job.workDate)).filter(Boolean)
+        : [latestEffectiveRule(creditRules(settings), target, job.workDate)].filter(Boolean);
+      const rule = candidates[0];
+      return Number(rule?.credit ?? rule?.value) || 0;
+    },
+    thresholdRateForJob(settings = {}, job = {}) {
+      const target = assignmentFor(job.roles, job.skus);
+      const candidates = target.assignment === 'Service'
+        ? (target.skus || [target.sku]).map(sku => latestEffectiveRule(payoutRules(settings), { assignment: 'Service', sku }, job.workDate)).filter(Boolean)
+        : [latestEffectiveRule(payoutRules(settings), target, job.workDate)].filter(Boolean);
+      const rule = candidates[0];
+      return Number(rule?.amount ?? rule?.rate ?? rule?.value) || 0;
+    },
+    servicePayoutsForJob(settings = {}, job = {}) {
+      if (!(job.roles || []).some(role => String(role).toLowerCase() === 'service')) return [];
+      const skus = (job.skus || []).map(normalizeSku);
+      return skus.map(sku => latestEffectiveRule(payoutRules(settings), { assignment: 'Service', sku }, job.workDate)).filter(Boolean).map(rule => ({ sku: normalizeSku(rule.sku), amount: Number(rule.amount ?? rule.rate ?? rule.value) || 0 }));
+    },
+    thresholdForDate(settings = {}, workDate) {
+      const history = Array.isArray(settings.threshold_history) ? settings.threshold_history : [];
+      const rule = history.filter(item => isEffective(item, workDate)).sort((a, b) => String(b.effective_from || '').localeCompare(String(a.effective_from || '')))[0];
+      return Number(rule?.value ?? settings.installations_before_crediting ?? 15) || 0;
+    }
+  });
+  root.BKInstallerPayoutRules = rulesApi;
+
   function cutoffBucket(dateValue, schedules) {
     const match = String(dateValue || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
     if (!match) return null;
@@ -141,26 +235,7 @@
   root.BKInstallerPayouts = Object.freeze({
     calculateMonth({ employees = [], bookings = [], payoutSettings = {}, payoutSchedules = [], monthKey, resolveAssignedDoors } = {}) {
       if (!monthKey || typeof resolveAssignedDoors !== 'function') return [];
-      const threshold = payoutSettings.installations_before_crediting || 15;
-      const weights = {
-        lead: payoutSettings.lead_credit ?? 1,
-        assist: payoutSettings.assist_credit ?? 0.5,
-        ocular: payoutSettings.ocular_credit ?? 0,
-        repair: payoutSettings.repair_credit ?? 0
-      };
-      const rates = {
-        lead: payoutSettings.lead_rate || 1000,
-        assist: payoutSettings.assist_rate || 500,
-        ocular: payoutSettings.ocular_rate || 0,
-        repair: payoutSettings.repair_rate || 0
-      };
       const ocularRepairFrom = String(payoutSettings.ocular_repair_effective_from || '');
-      const services = (payoutSettings.extra_services || []).map(service => {
-        let sku = service.sku || service.name || '';
-        if (sku === 'Welding Baseplate Metal') sku = 'BASEPLATE-M';
-        if (sku === 'Welding Baseplate Stainless') sku = 'BASEPLATE-S';
-        return { sku, rate: Number(service.rate) || 0 };
-      });
       const eligibleBookings = bookings
         .filter(booking => booking.scheduled_date && String(booking.status || '').toLowerCase() !== 'cancelled')
         .sort((a, b) => String(a.scheduled_date).localeCompare(String(b.scheduled_date)));
@@ -185,12 +260,13 @@
           resolveAssignedDoors(booking, employee.id).forEach(door => {
             if (!door.completed) return;
             const roles = isOcular ? ['ocular'] : isRepair ? ['repair'] : door.roles;
-            const role = ['lead', 'assist', 'ocular', 'repair'].find(value => roles.includes(value));
-            const weight = role ? weights[role] : 0;
+            const jobSkus = isOcular ? ['OCULAR'] : isRepair ? ['REPAIR'] : door.skus;
+            const weight = rulesApi.creditForJob(payoutSettings, { roles, skus: jobSkus, workDate: booking.scheduled_date });
             const sourceMonth = String(booking.scheduled_date).slice(0, 7);
+            const threshold = rulesApi.thresholdForDate(payoutSettings, booking.scheduled_date);
             const previousCredit = creditBySourceMonth[sourceMonth] || 0;
             const newCredit = previousCredit + weight;
-            const thresholdPay = newCredit > threshold && role ? rates[role] : 0;
+            const thresholdPay = newCredit > threshold ? rulesApi.thresholdRateForJob(payoutSettings, { roles, skus: jobSkus, workDate: booking.scheduled_date }) : 0;
             creditBySourceMonth[sourceMonth] = newCredit;
 
             if (sourceMonth === monthKey) {
@@ -202,15 +278,10 @@
             const bucket = cutoffBucket(booking.scheduled_date, payoutSchedules);
             if (!bucket || bucket.monthKey !== monthKey) return;
             thresholdEarnings += thresholdPay;
-            if (door.roles.includes('service')) {
-              door.skus.forEach(sku => {
-                const service = services.find(item => item.sku === sku);
-                if (service) {
-                  serviceCounts[sku] = (serviceCounts[sku] || 0) + 1;
-                  serviceEarnings += service.rate;
-                }
-              });
-            }
+            rulesApi.servicePayoutsForJob(payoutSettings, { roles: door.roles, skus: door.skus, workDate: booking.scheduled_date }).forEach(service => {
+              serviceCounts[service.sku] = (serviceCounts[service.sku] || 0) + 1;
+              serviceEarnings += service.amount;
+            });
           });
         });
 

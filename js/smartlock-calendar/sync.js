@@ -43,6 +43,15 @@ function loadCachedBookings() {
       installerPayoutSettings = JSON.parse(cachedPayoutSettings);
     } catch (_) {}
   }
+
+  const cachedServiceCatalog = localStorage.getItem(`bk_installer_service_catalog_${currentInstaller.company_id}`);
+  if (cachedServiceCatalog) {
+    try {
+      installerServiceCatalog = JSON.parse(cachedServiceCatalog);
+    } catch (_) {
+      installerServiceCatalog = [];
+    }
+  }
 }
 
 function getInstallerDayEventSettingKey(year, monthIndex) {
@@ -105,6 +114,21 @@ async function syncData() {
   banner.classList.remove('offline');
 
   try {
+    try {
+      const { data: serviceCatalog, error: serviceCatalogError } = await sb.rpc('get_installer_service_catalog', {
+        p_token: getInstallerSessionToken()
+      });
+      if (serviceCatalogError) throw serviceCatalogError;
+      installerServiceCatalog = Array.isArray(serviceCatalog) ? serviceCatalog : [];
+      localStorage.setItem(
+        `bk_installer_service_catalog_${currentInstaller.company_id}`,
+        JSON.stringify(installerServiceCatalog)
+      );
+      drawJobTracker();
+    } catch (serviceCatalogError) {
+      console.error('Service catalog could not be synced:', serviceCatalogError);
+    }
+
     const { data: payoutProfile, error: payoutProfileError } = await sb
       .rpc('get_installer_payout_profile', {
         p_token: getInstallerSessionToken()

@@ -8,6 +8,16 @@ import {
 } from '../lib/api/security.js';
 import { signCheckoutPayload, verifyCheckoutPayload } from '../lib/api/checkout-pricing.js';
 
+test('product generation authenticates build-time tenant reads and preserves generated pages without local credentials', () => {
+  const source = fs.readFileSync(new URL('../scripts/build-products.js', import.meta.url), 'utf8');
+  assert.match(source, /SUPABASE_SERVICE_ROLE_KEY\s*=\s*process\.env\.SUPABASE_SERVICE_ROLE_KEY\s*\|\|\s*process\.env\.SUPABASE_SERVICE_KEY/);
+  assert.match(source, /createClient\(SUPABASE_URL,\s*SUPABASE_SERVICE_ROLE_KEY/);
+  assert.doesNotMatch(source, /createClient\(SUPABASE_URL,\s*SUPABASE_ANON_KEY\)/);
+  assert.match(source, /\['production', 'preview'\]\.includes\(String\(process\.env\.VERCEL_ENV/);
+  assert.match(source, /Existing generated pages were preserved/);
+  assert.match(source, /throw new Error\(`Failed to load tenant branding\./);
+});
+
 test('bearer tokens are parsed strictly', () => {
   assert.equal(getBearerToken({ headers: { authorization: 'Bearer token-value' } }), 'token-value');
   assert.equal(getBearerToken({ headers: { authorization: 'Basic token-value' } }), null);

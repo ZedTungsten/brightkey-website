@@ -212,3 +212,17 @@ deduplicated in transit. Verify it locally and through the deployed live endpoin
 > registration, hiring onboarding, imports, and future employee creation tools.
 > `BK` is only the database generator's fallback when that canonical setting is
 > genuinely missing or blank.
+
+---
+
+## 14. Safe Build-Time Generation
+> [!CRITICAL]
+> Before modifying any script that generates deployable files from database or
+> external-service data, read and follow
+> `docs/build-time-generation-guardrails.md` in full.
+>
+> Production must fail closed when required privileged build credentials are
+> missing. Local execution without those credentials must preserve existing
+> generated artifacts and exit safely instead of overwriting them with empty,
+> incomplete, default-branded, or RLS-filtered content. Fetch and validate all
+> required source data before replacing any generated file.

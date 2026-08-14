@@ -320,6 +320,7 @@
       document.getElementById('day-events-create-form').style.display = 'flex';
       
       // Clear inputs
+      document.getElementById('event-type').value = calendarEventTypes[0] || 'Day-off';
       document.getElementById('event-time-slot').value = 'Morning';
       
       // Uncheck all checkboxes
@@ -346,9 +347,8 @@
       });
 
       const selectVal = document.getElementById('event-type')?.value || 'Day-off';
-      if (selectVal !== 'Day-off') return;
       if (installersList.length === 0) {
-        showToast('Select at least one installer for the Day-off reminder.', true);
+        showToast(`Select at least one installer for the ${selectVal} event.`, true);
         return;
       }
 
@@ -368,7 +368,8 @@
         const existingEvents = Array.isArray(currentSetting?.value) ? currentSetting.value : [];
         const dayEvent = {
           id: crypto.randomUUID(),
-          type: 'day_off',
+          type: selectVal.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, ''),
+          name: selectVal,
           date: selectedDayDate,
           timeSlot,
           installers: installersList,
@@ -383,11 +384,11 @@
 
         if (error) throw error;
 
-        showToast('Day-off reminder added to the calendar.');
+        showToast(`${selectVal} added to the calendar.`);
         toggleDayEventsModal(false);
         await loadMonthBookings();
       } catch (err) {
         console.error('Failed to create event:', err);
-        showToast('The Day-off reminder could not be saved. Please try again.', true);
+        showToast(`The ${selectVal} event could not be saved. Please try again.`, true);
       }
     }
