@@ -6,6 +6,7 @@
   const showToast = (message, isError = false) => window.Toast ? window.Toast.show(message, isError ? 'error' : 'success') : console[isError ? 'error' : 'log'](message);
   const app = { get sb(){return state.sb;}, get authInfo(){return state.authInfo;}, get companyId(){return state.companyId;}, companyProfile:{}, esc, showToast };
   const formatDate = value => { const date = value ? new Date(value) : null; return date && !Number.isNaN(date.getTime()) ? date.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : '—'; };
+  const formatSignatureDate = value => { const date = value ? new Date(value) : null; return date && !Number.isNaN(date.getTime()) ? date.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }) : 'MM/DD/YYYY'; };
 
   function sanitizeHtml(value) {
     const doc = new DOMParser().parseFromString(`<div>${String(value || '')}</div>`, 'text/html');
@@ -47,9 +48,11 @@
     const columns = template.querySelectorAll('.contract-signatures > div');
     if (columns[1]) {
       const space = columns[1].querySelector('.contract-signature-space');
+      const signedDate = columns[1].querySelector('.contract-signature-date');
       if (space) space.outerHTML = state.signature
         ? `<div class="onboarding-signed-signature"><img src="${esc(state.signature.signature_data_url)}" alt="Employee signature"></div>`
         : '<button class="onboarding-signature-button" type="button" onclick="OnboardingApp.openSignature()" aria-label="Sign employment contract"><span>Click to sign</span></button>';
+      if (signedDate && state.signature) signedDate.textContent = `Date signed: ${formatSignatureDate(state.signature.signed_at)}`;
     }
     return personalizeTemplate(template.innerHTML);
   }
@@ -59,16 +62,27 @@
     const status = state.signature ? 'Signed' : 'Not Signed';
     const cover = personalizeTemplate(window.BKHiringContractTemplate?.renderCoverPage() || '');
     const signedDate = state.signature ? `<span class="onboarding-contract-signed-date">Date Signed: ${esc(formatDate(state.signature.signed_at))}</span>` : '';
-    const handbookCards = state.handbookFiles.map((file, index) => handbookCard(file, index)).join('');
-    const materials = handbookCards ? `<section class="onboarding-materials-area" aria-labelledby="onboarding-materials-title"><h2 id="onboarding-materials-title">Materials</h2><div class="onboarding-materials-grid">${handbookCards}</div></section>` : '';
+    const materials = materialsMarkup();
     host.innerHTML = `<div class="onboarding-card-layout"><section class="onboarding-contract-card" aria-labelledby="contract-card-title"><div class="onboarding-card-header"><div class="onboarding-contract-details"><h2 id="contract-card-title">Contract</h2><p>${esc(state.jobPost.job_title)}</p><span>Date Published: ${esc(formatDate(state.contract.updatedAt))}</span>${signedDate}</div><span class="contract-sign-status${state.signature ? ' signed' : ''}">${status}</span></div><button class="onboarding-cover-button" type="button" onclick="OnboardingApp.openViewer()" aria-label="Open ${esc(state.jobPost.job_title)} contract"><div class="onboarding-cover-preview">${cover}</div><span class="onboarding-open-label">Open contract</span></button></section>${materials}</div>${viewerModal()}${handbookViewerModal()}${signatureModal()}`;
   }
 
   function renderContractUnavailable(title, message) {
     const host = document.getElementById('onboarding-content');
-    const handbookCards = state.handbookFiles.map((file, index) => handbookCard(file, index)).join('');
-    const materials = handbookCards ? `<section class="onboarding-materials-area" aria-labelledby="onboarding-materials-title"><h2 id="onboarding-materials-title">Materials</h2><div class="onboarding-materials-grid">${handbookCards}</div></section>` : '';
+    const materials = materialsMarkup();
     host.innerHTML = `<div class="onboarding-card-layout"><section class="onboarding-contract-card onboarding-contract-empty" aria-labelledby="contract-card-title"><div><h2 id="contract-card-title">${esc(title)}</h2><p>${esc(message)}</p></div></section>${materials}</div>${handbookViewerModal()}`;
+  }
+
+  function materialGroup(file) { return String(file?.group || '').trim() || 'Ungrouped'; }
+  function materialsMarkup() {
+    if (!state.handbookFiles.length) return '';
+    const grouped = new Map();
+    state.handbookFiles.forEach((file, index) => {
+      const group = materialGroup(file);
+      if (!grouped.has(group)) grouped.set(group, []);
+      grouped.get(group).push({ file, index });
+    });
+    const groupsHtml = [...grouped.entries()].map(([group, entries]) => `<section class="onboarding-material-group"><header class="onboarding-material-group-header"><h3>${esc(group)}</h3></header><div class="onboarding-materials-grid">${entries.map(({ file, index }) => handbookCard(file, index)).join('')}</div></section>`).join('');
+    return `<section class="onboarding-materials-area" aria-labelledby="onboarding-materials-title"><h2 id="onboarding-materials-title">Materials</h2><div class="onboarding-material-groups">${groupsHtml}</div></section>`;
   }
 
   function driveFileId(url) { try { return String(url || '').match(/\/d\/([a-zA-Z0-9_-]+)/)?.[1] || new URL(url).searchParams.get('id') || ''; } catch { return ''; } }
@@ -83,9 +97,9 @@
     const isRead = Boolean(state.handbookReads[file.id]);
     const isVideo = file.source === 'youtube' || ['youtube', 'video'].includes(file.file_type);
     const icon = isVideo
-      ? '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="1.5"/><path d="M7 4v4M7 12v4M17 4v4M17 12v4M3 9h4M17 9h4M3 15h4M17 15h4"/><path d="m10 9 5 3-5 3Z"/></svg>'
+      ? '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="m10 8 6 4-6 4Z"/></svg>'
       : '<svg viewBox="0 0 24 24"><path d="M6 2h8l4 4v16H6z"/><path d="M14 2v5h5M9 12h6M9 16h6"/></svg>';
-    return `<button class="onboarding-material-card" type="button" onclick="OnboardingApp.openHandbook(${index})" aria-label="Open ${esc(file.name)}"><div class="onboarding-material-card-icon" aria-hidden="true">${icon}</div><div class="onboarding-material-meta"><strong title="${esc(file.name)}">${esc(file.name)}</strong><span class="handbook-read-status${isRead ? ' read' : ''}" id="material-access-status-${index}">${isRead ? 'Accessed' : 'Not Yet Accessed'}</span></div></button>`;
+    return `<button class="onboarding-material-card" type="button" onclick="OnboardingApp.openHandbook(${index})" aria-label="Open ${esc(file.name)}"><div class="onboarding-material-card-icon ${isVideo ? 'is-video' : 'is-document'}" aria-hidden="true">${icon}</div><div class="onboarding-material-meta"><strong title="${esc(file.name)}">${esc(file.name)}</strong><span class="handbook-read-status${isRead ? ' read' : ''}" id="material-access-status-${index}">${isRead ? 'Accessed' : 'Not Yet Accessed'}</span></div></button>`;
   }
 
   function handbookViewerModal() {

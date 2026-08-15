@@ -129,7 +129,7 @@
 
   function signatureBlock(signatureImage = '', employeeName = '{{first_name}} {{last_name}}', employeeTitle = '{{title_position}}') {
     const safeSignature = /^data:image\/(?:png|jpeg|webp);base64,/i.test(signatureImage || state.signature.imageUrl) ? (signatureImage || state.signature.imageUrl) : '';
-    return `<div class="contract-signatures"><div><div class="contract-signature-space">${safeSignature ? `<img src="${esc(safeSignature)}" alt="Authorized signature">` : ''}</div><i></i><strong>${esc(state.signature.signatoryName || 'Company Representative')}</strong><span>Authorized Signature</span></div><div><div class="contract-signature-space"></div><i></i><strong>${employeeName}</strong><span>${employeeTitle}</span></div></div>`;
+    return `<div class="contract-signatures"><div><div class="contract-signature-space">${safeSignature ? `<img src="${esc(safeSignature)}" alt="Authorized signature">` : ''}</div><i></i><strong>${esc(state.signature.signatoryName || 'Company Representative')}</strong><span>Authorized Signature</span></div><div><div class="contract-signature-space"></div><i></i><strong>${employeeName}</strong><span>${employeeTitle}</span><span class="contract-signature-date">Date signed: MM/DD/YYYY</span></div></div>`;
   }
 
   function draw() {
