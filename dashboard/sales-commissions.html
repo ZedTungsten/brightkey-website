@@ -199,6 +199,21 @@
       background: var(--bg-elevated) !important;
     }
 
+    #commissions-table .commission-type-column {
+      width: 260px;
+      min-width: 260px;
+      max-width: none;
+    }
+    #commissions-table td.commission-type-column > div {
+      min-width: 230px !important;
+    }
+    #commissions-table tbody tr.commission-row-locked td,
+    #commissions-table tbody tr.commission-row-locked:hover td,
+    #commissions-table tbody tr.commission-row-locked td:nth-child(1),
+    #commissions-table tbody tr.commission-row-locked td:nth-child(2) {
+      background: #f5fcf7 !important;
+    }
+
     .btn {
       display: inline-flex;
       align-items: center;
@@ -1415,13 +1430,6 @@
         <th>Date installed</th>
         <th>Full Name</th>
         <th>Order No.</th>
-        <th>City</th>
-        <th>SKU</th>
-        <th>Qty</th>
-        <th>Receipt</th>
-        <th>Total Price</th>
-        <th>Total Eligible</th>
-        <th>Status</th>
       `;
       headerRow.innerHTML = headersHtml;
 
@@ -1430,9 +1438,20 @@
       // Append dynamic headers
       rates.forEach(r => {
         const th = document.createElement('th');
+        th.className = 'commission-type-column';
         th.textContent = `${r.label} (${r.value}%)`;
         headerRow.appendChild(th);
       });
+
+      headerRow.insertAdjacentHTML('beforeend', `
+        <th>City</th>
+        <th>SKU</th>
+        <th>Qty</th>
+        <th>Receipt</th>
+        <th>Total Price</th>
+        <th>Total Eligible</th>
+        <th>Status</th>
+      `);
 
       if (currentUserCanLock) {
         const th = document.createElement('th');
@@ -1486,8 +1505,7 @@
 
       filteredBookings.forEach(b => {
         const dateInstalled = b.scheduled_date ? new Date(b.scheduled_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
-        const addressParts = (b.customer_address || '').split(',');
-        const city = addressParts.length >= 2 ? addressParts[addressParts.length - 2].trim() : '';
+        const city = String(b.customer_city || '').trim() || '—';
         
         const skus = (b.product_skus || '').split(' | ').map(s => s.trim());
         const qtys = (b.product_qtys || '').split(' | ').map(s => s.trim());
@@ -1578,7 +1596,7 @@
                   ${employeeOptionsHtml}
                 </select>
                 ${currentId !== 'none' ? `
-                  <span style="font-weight: 600; color: var(--text-primary); font-size: 0.8rem; white-space: nowrap;">
+                    <span style="font-weight: 600; color: var(--cyan-light); font-size: 0.8rem; white-space: nowrap;">
                     ${fmtPHP(splitCommAmountCentavos)}
                   </span>
                   ${adjHtml}
@@ -1616,7 +1634,7 @@
             `;
 
             ratesCellsHtml += `
-              <td>
+              <td class="commission-type-column">
                 <div style="display: flex; align-items: center; gap: 0.5rem; min-width: 150px;">
                   ${controlHtml}
                   <div>${cellContentHtml} ${adjHtml}</div>
@@ -1638,7 +1656,7 @@
                 namesHtml.push(`
                   <div style="display: flex; align-items: center; gap: 0.35rem; margin-bottom: 0.15rem;">
                     <span style="font-weight: 600; color: var(--text-primary); font-size: 0.78rem;">${escapeHtml(fullName)}</span>
-                    <span style="font-weight: 700; color: var(--success); font-size: 0.78rem;">
+                    <span style="font-weight: 700; color: var(--cyan-light); font-size: 0.78rem;">
                       ${fmtPHP(splitCommAmountCentavos)}
                     </span>
                     ${adjHtml}
@@ -1659,7 +1677,7 @@
             }
 
             ratesCellsHtml += `
-              <td>
+              <td class="commission-type-column">
                 <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; min-width: 150px;">
                   <div>${readOnlyHtml}</div>
                   ${actionControlHtml}
@@ -1669,7 +1687,7 @@
           } else {
             // Edit mode
             ratesCellsHtml += `
-              <td>
+              <td class="commission-type-column">
                 <div style="display: flex; flex-direction: column; gap: 0.35rem; align-items: flex-start; min-width: 180px; border: 1px solid var(--border); border-radius: 6px; padding: 0.5rem; background: var(--bg-elevated);">
                   <div style="display: flex; align-items: center; justify-content: space-between; width: 100%; border-bottom: 1px solid var(--border); padding-bottom: 0.25rem; margin-bottom: 0.25rem;">
                     <span style="font-size: 0.65rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.05em;">Editing</span>
@@ -1699,10 +1717,11 @@
         const skuBadges = eligibleSkusList.map(s => `<span class="sku-badge" style="font-family: var(--font-mono); font-weight: 700; font-size: 0.78rem; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 4px; padding: 0.15rem 0.4rem; color: var(--text-primary); margin-right: 0.25rem;">${escapeHtml(s)}</span>`).join('');
 
         rowsHtml.push(`
-          <tr>
+          <tr class="${b.commissions_locked ? 'commission-row-locked' : ''}">
             <td>${escapeHtml(dateInstalled)}</td>
             <td title="${escapeHtml(b.customer_name || '')}">${escapeHtml(b.customer_name || '—')}</td>
             <td>${escapeHtml(b.order_no || '—')}</td>
+            ${ratesCellsHtml}
             <td>${escapeHtml(city)}</td>
             <td><div style="display: flex; flex-wrap: wrap; gap: 0.25rem;">${skuBadges}</div></td>
             <td>${eligibleQtySum}</td>
@@ -1712,7 +1731,6 @@
               ${fmtPHP(finalEligibleCentavos)}
             </td>
             ${statusHtml}
-            ${ratesCellsHtml}
             ${currentUserCanLock ? `
               <td style="text-align: center;">
                 <button type="button" class="btn-toggle-lock" data-booking-id="${b.id}" data-locked="${!!b.commissions_locked}" style="background: none; border: none; cursor: pointer; padding: 0.3rem; display: inline-flex; align-items: center; justify-content: center;" title="${b.commissions_locked ? 'Unlock commissions' : 'Lock commissions'}">

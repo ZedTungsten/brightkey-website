@@ -154,7 +154,9 @@
             <select class="form-input" style="height:auto; padding:0.35rem; font-size:0.8rem; flex:1;" id="edit-inst-${doorIndex}-service" data-role="service">
               ${buildDoorInstallerOptions(serviceInst?.id || '')}
             </select>
-            <span></span>
+            <button type="button" class="btn-minimal btn-danger" onclick="clearDoorInstallerEdit(${doorIndex}, 'service')" title="Remove service assignment">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
           </div>
       ` : '';
 
@@ -165,7 +167,7 @@
             <select class="form-input" style="height:auto; padding:0.35rem; font-size:0.8rem; flex:1;" id="edit-inst-${doorIndex}-1" data-role="lead">
               ${buildDoorInstallerOptions(inst1Id)}
             </select>
-            <button type="button" class="btn-minimal btn-danger" onclick="cancelDoorInstallersEdit(${doorIndex})" title="Cancel">
+            <button type="button" class="btn-minimal btn-danger" onclick="clearDoorInstallerEdit(${doorIndex}, 'lead')" title="Remove lead assignment">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
             </button>
           </div>
@@ -189,8 +191,16 @@
             onclick="addAssistInstallerEdit(${doorIndex})">+ Add Assist</button>
           <button type="button" class="btn btn-sm" onclick="saveDoorInstallersEdit(${doorIndex})"
             style="width:100%;justify-content:center;background:var(--success,#16a34a);border-color:var(--success,#16a34a);color:#fff;">Save</button>
+          <button type="button" class="btn btn-sm" onclick="cancelDoorInstallersEdit(${doorIndex})"
+            style="width:100%;justify-content:center;background:var(--danger,#dc2626);border-color:var(--danger,#dc2626);color:#fff;">Cancel</button>
         </div>
       `;
+    };
+
+    window.clearDoorInstallerEdit = function(doorIndex, role) {
+      const selectorId = role === 'service' ? `edit-inst-${doorIndex}-service` : `edit-inst-${doorIndex}-1`;
+      const select = document.getElementById(selectorId);
+      if (select) select.value = '';
     };
 
     window.addAssistInstallerEdit = function(doorIndex) {
@@ -270,7 +280,7 @@
             <select class="form-input" style="height:auto; padding:0.35rem; font-size:0.8rem; flex:1;" id="edit-inst-general-${index}-1" data-role="lead">
               ${buildDoorInstallerOptions(inst1Id)}
             </select>
-            <button type="button" class="btn-minimal btn-danger" onclick="cancelBookingInstallersEdit(${index})" title="Cancel">
+            <button type="button" class="btn-minimal btn-danger" onclick="clearBookingInstallerEdit(${index})" title="Remove lead assignment">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
             </button>
           </div>
@@ -293,8 +303,15 @@
             onclick="addBookingAssistInstallerEdit(${index})">+ Add Assist</button>
           <button type="button" class="btn btn-sm" onclick="saveBookingInstallersEdit(${index})"
             style="width:100%;justify-content:center;background:var(--success,#16a34a);border-color:var(--success,#16a34a);color:#fff;">Save</button>
+          <button type="button" class="btn btn-sm" onclick="cancelBookingInstallersEdit(${index})"
+            style="width:100%;justify-content:center;background:var(--danger,#dc2626);border-color:var(--danger,#dc2626);color:#fff;">Cancel</button>
         </div>
       `;
+    };
+
+    window.clearBookingInstallerEdit = function(index) {
+      const select = document.getElementById(`edit-inst-general-${index}-1`);
+      if (select) select.value = '';
     };
 
     window.addBookingAssistInstallerEdit = function(index) {
