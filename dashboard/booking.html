@@ -2572,6 +2572,7 @@
           warehouseItems.get(p.warehouse_id).push({ sku: p.sku, quantity: p.qty });
         }
 
+        const expectedReservations = [];
         for (const [warehouseId, items] of warehouseItems) {
           const { error: reservationError } = await inventorySb.rpc('reserve_customer_order_inventory', {
             p_company_id: currentCompanyId,
@@ -2583,9 +2584,35 @@
             p_items: items
           });
           if (reservationError) throw reservationError;
+          items.forEach(item => expectedReservations.push({
+            warehouseId,
+            sku: String(item.sku || '').trim().toUpperCase()
+          }));
+        }
+
+        if (expectedReservations.length > 0) {
+          const { data: reservationRows, error: verificationError } = await inventorySb
+            .from('inventory_transactions')
+            .select('warehouse_id,sku,status')
+            .eq('company_id', currentCompanyId)
+            .eq('reference_id', receiptNo)
+            .eq('type', 'customer_order')
+            .in('status', ['reserved', 'inspect', 'packed', 'dispatched']);
+          if (verificationError) throw verificationError;
+
+          const reservationKeys = new Set((reservationRows || []).map(row => (
+            `${row.warehouse_id}:${String(row.sku || '').trim().toUpperCase()}`
+          )));
+          const missingReservations = expectedReservations.filter(item => (
+            !reservationKeys.has(`${item.warehouseId}:${item.sku}`)
+          ));
+          if (missingReservations.length > 0) {
+            throw new Error('Inventory reservation verification failed.');
+          }
         }
       } catch (invErr) {
-        console.warn('Inventory reservation error (non-blocking):', invErr);
+        console.error('Inventory reservation failed:', invErr);
+        throw new Error('The booking was saved, but its inventory reservation did not complete. Do not create another booking. Open Warehouse Inspect and use Sync to retry this order.');
       }
 
       if (schedBtn) {
