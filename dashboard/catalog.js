@@ -570,7 +570,7 @@
 
       return `<tr class="${isChild ? 'row-child' : ''} ${selectedProductIds.includes(p.id) ? 'row-selected' : ''}">
         <td style="text-align: center; vertical-align: middle;"><input type="checkbox" class="row-checkbox" data-id="${p.id}" style="cursor: pointer;" ${selectedProductIds.includes(p.id) ? 'checked' : ''} /></td>
-        <td class="product-image-cell"><img class="product-main-thumb" src="${esc(mainImage)}" alt="${esc(p.sku || 'Product')} main image" loading="lazy" /></td>
+        <td class="product-image-cell"><button type="button" class="product-image-trigger" aria-label="View ${esc(p.sku || 'product')} image" title="View image"><img class="product-main-thumb" src="${esc(mainImage)}" alt="${esc(p.sku || 'Product')} main image" loading="lazy" /></button></td>
         <td class="cell-sku"><span class="sku-badge">${esc(p.sku || 'NO-SKU')}</span>${parentWarningHtml}</td>
         <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${titleHtml}</td>
         <td>${esc(p.category || '—')}</td>
