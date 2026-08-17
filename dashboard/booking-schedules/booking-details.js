@@ -52,6 +52,27 @@
       return description === normalizedSku ? '' : description;
     }
 
+    function doorHasCompletionAssignment(door, booking, allDoors) {
+      const parseList = value => {
+        if (Array.isArray(value)) return value;
+        try {
+          const parsed = JSON.parse(value || '[]');
+          return Array.isArray(parsed) ? parsed : [];
+        } catch (_) {
+          return [];
+        }
+      };
+      const hasRole = list => parseList(list).some(installer => {
+        const role = String(installer?.role || 'lead').trim().toLowerCase();
+        return ['lead', 'assist', 'service'].includes(role);
+      });
+      if (hasRole(door?.installers)) return true;
+
+      const anyDoorAssigned = parseList(allDoors).some(item => parseList(item?.installers).length > 0);
+      if (anyDoorAssigned) return false;
+      return hasRole(booking?.installers) || Boolean(String(booking?.installer_id || '').trim());
+    }
+
     // Modal helpers
     function navigateBooking(direction) {
       if (!selectedBooking || !filteredBookings || filteredBookings.length === 0) return;
@@ -260,8 +281,23 @@
             }
           }
 
+          const canCompleteWithoutSignature = !door?.completed
+            && doorProducts.length > 0
+            && doorProducts.some(product => !product.cancelled)
+            && !doorHasCompletionAssignment(door, selectedBooking, doorsArr);
+          const completionActionHtml = door?.completed
+            ? '<span style="font-size:0.68rem;font-weight:700;color:var(--success);text-transform:uppercase;">Completed</span>'
+            : (canCompleteWithoutSignature ? `
+              <button type="button" class="btn btn-sm" id="btn-door-done-${i}" title="Mark done and upload completion proof" style="width:auto;height:28px;padding:0.25rem 0.65rem;background:var(--success);border-color:var(--success);color:#fff;" onclick="openDoorCompletionProofModal(${i})">Done</button>
+            ` : '');
+
           // Build product cell content
-          let productCellHtml = `<div style="font-weight: 800; color: var(--cyan); margin-bottom: 0.4rem; font-size: 0.85rem;">Door ${i + 1}</div>`;
+          let productCellHtml = `
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:0.5rem;margin-bottom:0.4rem;">
+              <div style="font-weight:800;color:var(--cyan);font-size:0.85rem;">Door ${i + 1}</div>
+              <div style="display:flex;align-items:center;justify-content:flex-end;">${completionActionHtml}</div>
+            </div>
+          `;
           
           if (doorProducts.length === 0) {
             productCellHtml += `<span style="color:var(--text-muted); font-size:0.75rem;">No products attached</span>`;
@@ -462,13 +498,21 @@
           }
 
           const isBraceletOrAccessory = !isCancelled;
+          const canCompleteUnallocated = !isCancelled
+            && !doorHasCompletionAssignment(null, selectedBooking, doorsArr);
+          const unallocatedDoneHtml = canCompleteUnallocated ? `
+            <button type="button" class="btn btn-sm" id="btn-unallocated-done-${i}" data-sku="${escapeHtml(sku)}" title="Mark done and upload completion proof" style="width:auto;height:28px;padding:0.25rem 0.65rem;background:var(--success);border-color:var(--success);color:#fff;" onclick="openDoorCompletionProofModal(-1, this.dataset.sku)">Done</button>
+          ` : '';
           const instCellHtml = isBraceletOrAccessory ? `
             <div id="door-inst-container-general-${i}">
               <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;">
                 <span id="door-inst-text-general-${i}">${escapeHtml(generalInstallersHtml)}</span>
-                <button type="button" class="btn-minimal" onclick="editBookingInstallers(${i})" title="Edit Installers">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
-                </button>
+                <div style="display:flex;align-items:center;gap:0.5rem;">
+                  ${unallocatedDoneHtml}
+                  <button type="button" class="btn-minimal" onclick="editBookingInstallers(${i})" title="Edit Installers">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                  </button>
+                </div>
               </div>
             </div>
           ` : escapeHtml(generalInstallersHtml);

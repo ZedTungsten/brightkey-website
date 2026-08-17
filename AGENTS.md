@@ -236,6 +236,51 @@ visibility change requires separate approval and product/security testing.
   collections. Run audits on feature routes; use company-scoped counts, boolean
   RPCs, cached summaries, or materialized summaries globally.
 
+### 5.3.1.1 Initialize Only the Active Route and Active Tab
+> [!CRITICAL]
+> **A PAGE LOAD MUST DO ONLY THE WORK REQUIRED BY THE VISIBLE ROUTE**:
+> Sharing one HTML shell, JavaScript bundle, layout, or tab system does not grant
+> permission to initialize every feature represented in that shell. Hidden tabs,
+> sibling clean routes, drawers, modals, reports, calendars, and admin panels are
+> inactive features and must remain idle until the user actually opens them.
+
+- Resolve the active clean route/subpage before starting feature loaders. Put the
+  route gate before loading indicators, database calls, RPCs, subscriptions,
+  timers, event-driven refreshes, media libraries, or background promises:
+  ```javascript
+  const subpage = getCurrentSubpage();
+
+  if (subpage === 'installer-notes') {
+    await initInstallerNotes({ sb, companyId });
+    return;
+  }
+
+  // Booking-only initialization begins after unrelated routes have returned.
+  await Promise.all([loadBookingConfig(), loadMonthBookings()]);
+  ```
+- Hidden DOM is not an initialization signal. Do not fetch data merely because a
+  hidden panel, modal, table, counter, or form exists in the shared document.
+- Inactive tabs must not run their queries during the parent page load. Initialize
+  a tab on first activation, cache only at the narrowest safe tenant/user/filter
+  scope, and refresh it only for the events defined in Section 5.3.7.
+- Route-specific scripts, large libraries, styles, media helpers, subscriptions,
+  listeners, observers, polling, and timers should be loaded or registered only
+  by routes that use them. A shared shell may load auth, navigation, and genuinely
+  global UI primitives; it must not eagerly download or execute every feature
+  chunk bundled into sibling pages.
+- Loading states must describe real active work. Never show a calendar/bookings/
+  report loader on a notes, settings, or other unrelated route, even briefly.
+- Do not use a broad `DOMContentLoaded`, top-level async IIFE, sidebar callback,
+  or shared `init()` to bypass route isolation. Every feature initializer remains
+  independently route-gated even when its query is delayed or fire-and-forget.
+- On route or tab changes, dispose feature-owned Realtime channels, observers,
+  intervals, object URLs, media streams, and listeners that are no longer needed.
+- Verification is network-based, not visual only. For each changed route, reload
+  with an authenticated session and confirm that the browser requests only auth,
+  tenant/company context, genuinely global summaries, and the active feature's
+  data. Confirm sibling-table queries, RPCs, subscriptions, and feature chunks do
+  not run; then activate the sibling tab and confirm its work begins exactly once.
+
 ### 5.3.2 Tenant Ownership Is Mandatory on Reads and Writes
 - Validate `companyId` first. Every company-owned read includes the company
   boundary in addition to RLS; every insert/upsert writes `company_id`.

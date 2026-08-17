@@ -173,6 +173,7 @@
     const y = currentDate.getFullYear();
     const m = currentDate.getMonth();
     const daysInMonth = new Date(y, m + 1, 0).getDate();
+    const today = new Date();
 
     for (let d = 1; d <= daysInMonth; d++) {
       const dateString = `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
@@ -190,7 +191,10 @@
 
       const tr = document.createElement('tr');
       if (log.starred) {
-        tr.className = 'row-starred';
+        tr.classList.add('row-starred');
+      }
+      if (y === today.getFullYear() && m === today.getMonth() && d === today.getDate()) {
+        tr.classList.add('row-today');
       }
 
       // Resolve initials

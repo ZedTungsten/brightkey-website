@@ -185,11 +185,8 @@
     ];
 
     document.addEventListener("DOMContentLoaded", async () => {
-      setMonthBookingsLoading(true);
-      updateTabLinks();
+      const currentSubpage = getCurrentSubpage();
       renderCurrentSubpage();
-      const monthTitle = document.getElementById('calendar-month-title');
-      if (monthTitle) monthTitle.textContent = `${MONTH_NAMES[currentMonth]} ${currentYear}`;
       if (window.BKAuth) {
         const authInfo = await window.BKAuth.checkRoleGate(['Operations'], '/admin.html');
         if (!authInfo) return;
@@ -217,17 +214,20 @@
         return;
       }
 
-      if (getCurrentSubpage() === 'installer-accounts') {
-        setMonthBookingsLoading(false);
+      if (currentSubpage === 'installer-accounts') {
         await window.BKInstallerAccounts?.init({ sb, companyId: currentCompanyId });
         return;
       }
 
-      if (getCurrentSubpage() === 'installer-notes') {
-        setMonthBookingsLoading(false);
+      if (currentSubpage === 'installer-notes') {
         await window.BKInstallerNotes?.init({ sb, companyId: currentCompanyId });
         return;
       }
+
+      setMonthBookingsLoading(true);
+      updateTabLinks();
+      const monthTitle = document.getElementById('calendar-month-title');
+      if (monthTitle) monthTitle.textContent = `${MONTH_NAMES[currentMonth]} ${currentYear}`;
 
       const tbody = document.getElementById('all-bookings-tbody');
       if (tbody) {
