@@ -306,13 +306,21 @@
           'special_payout_state', 'commission_payout_state', 'prorated_salary_state',
           'installer_payout_settings', 'journal_account_employee_assignments'
         ];
-        let settingsByKey = {};
-        try {
-          const { data, error } = await sb.from('global_settings')
-            .select('key, value').eq('company_id', this.companyId).in('key', settingKeys);
-          if (error) throw error;
-          settingsByKey = Object.fromEntries((data || []).map(row => [row.key, row.value]));
-        } catch (error) { console.error('Error loading payout settings:', error); }
+        const settle = request => Promise.resolve(request).catch(error => ({ data: null, error }));
+        const [settingsResult, employeesResult, adjustmentsResult, commissionsResult, bookingsResult, accountsResult] = await Promise.all([
+          settle(sb.from('global_settings').select('key, value').eq('company_id', this.companyId).in('key', settingKeys)),
+          settle(sb.from('employees')
+            .select('id, first_name, middle_name, last_name, salary, employment_status, date_inactive, department, title, payout_details, payout_details_image, reporting_to, date_hired, shift_days, assignment')
+            .eq('company_id', this.companyId)
+            .limit(500)),
+          settle(sb.from('employee_adjustments').select('id, employee_id, amount, date, label, paid').eq('company_id', this.companyId)),
+          settle(sb.from('commission_assignments').select('employee_id, booking_id, product_index, amount, sku, rate_label').eq('company_id', this.companyId)),
+          settle(sb.from('installation_bookings').select('*').eq('company_id', this.companyId)),
+          settle(sb.from('journal_accounts').select('id, name').eq('company_id', this.companyId))
+        ]);
+
+        if (settingsResult.error) console.error('Error loading payout settings:', settingsResult.error);
+        const settingsByKey = Object.fromEntries((settingsResult.data || []).map(row => [row.key, row.value]));
 
         this.companyStructure = settingsByKey.company_structure || { departments: [] };
         this.buildReportingToMap();
@@ -327,47 +335,24 @@
         this.installerPayoutSettings = settingsByKey.installer_payout_settings || null;
         this.accountAssignments = settingsByKey.journal_account_employee_assignments?.assignments || {};
 
-        // Employees
-        try {
-          const { data, error } = await sb.from('employees')
-            .select('id, first_name, middle_name, last_name, salary, employment_status, date_inactive, department, title, payout_details, payout_details_image, reporting_to, date_hired, shift_days, assignment')
-            .eq('company_id', this.companyId)
-            .limit(500);
-          if (error) throw error;
-          this.employees = data || [];
-        } catch (e) { this.employees = []; console.error(e); }
+        if (employeesResult.error) console.error(employeesResult.error);
+        this.employees = employeesResult.data || [];
 
-        // Adjustments (all months — needed for per-schedule partitioning in summary)
-        try {
-          const { data } = await sb.from('employee_adjustments').select('id, employee_id, amount, date, label, paid').eq('company_id', this.companyId);
-          this.adjustmentsList = (data || []).map(a => ({ id: a.id, employeeId: a.employee_id, value: a.amount, date: a.date, label: a.label, paid: a.paid }));
-        } catch (e) { this.adjustmentsList = []; console.error(e); }
+        // Adjustments remain unbounded because all months are needed for per-schedule partitioning in the summary.
+        if (adjustmentsResult.error) console.error(adjustmentsResult.error);
+        this.adjustmentsList = (adjustmentsResult.data || []).map(adjustment => ({ id: adjustment.id, employeeId: adjustment.employee_id, value: adjustment.amount, date: adjustment.date, label: adjustment.label, paid: adjustment.paid }));
 
-        // Commission assignments
-        try {
-          const { data, error } = await sb.from('commission_assignments').select('employee_id, booking_id, product_index, amount, sku, rate_label').eq('company_id', this.companyId);
-          if (error) throw error;
-          this.commissionAssignments = data || [];
-        } catch (e) { this.commissionAssignments = []; console.error(e); }
+        if (commissionsResult.error) console.error(commissionsResult.error);
+        this.commissionAssignments = commissionsResult.data || [];
 
-        // Installation bookings
-        try {
-          const { data, error } = await sb.from('installation_bookings').select('*').eq('company_id', this.companyId);
-          if (error) throw error;
-          this.bookingsList = data || [];
-        } catch (e) { this.bookingsList = []; console.error(e); }
+        if (bookingsResult.error) console.error(bookingsResult.error);
+        this.bookingsList = bookingsResult.data || [];
 
-        // General Ledger Accounts Map
-        try {
-          const { data: glAccounts } = await sb.from('journal_accounts').select('id, name').eq('company_id', this.companyId);
-          this.glAccountsMap = {};
-          (glAccounts || []).forEach(a => {
-            this.glAccountsMap[a.id] = a.name.toLowerCase();
-          });
-        } catch (e) {
-          this.glAccountsMap = {};
-          console.error('Error loading journal accounts:', e);
-        }
+        if (accountsResult.error) console.error('Error loading journal accounts:', accountsResult.error);
+        this.glAccountsMap = {};
+        (accountsResult.data || []).forEach(account => {
+          this.glAccountsMap[account.id] = account.name.toLowerCase();
+        });
 
         await this.loadGeneralJournalEntries();
       },

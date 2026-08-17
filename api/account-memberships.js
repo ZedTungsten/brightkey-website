@@ -15,10 +15,15 @@ export default async function handler(req, res) {
     const email = String(user?.email || '').trim().toLowerCase();
     if (userError || !user || !email) return res.status(401).json({ error: 'Your session has expired. Sign in again.' });
 
+    const ownerRowsRequest = (async () => {
+      const exactResult = await supabase.from('tenants').select('id, owner_email').eq('owner_email', email).limit(50);
+      if (exactResult.error || exactResult.data?.length) return exactResult;
+      return supabase.from('tenants').select('id, owner_email').limit(50);
+    })();
     const [{ data: memberRows, error: memberError }, { data: ownerRows, error: ownerError }] = await Promise.all([
       supabase.from('tenant_members').select('tenant_id, role, accessible_modules, created_at')
         .eq('user_id', user.id).order('created_at', { ascending: true }).limit(50),
-      supabase.from('tenants').select('id, owner_email').limit(50)
+      ownerRowsRequest
     ]);
     if (memberError || ownerError) throw memberError || ownerError;
 

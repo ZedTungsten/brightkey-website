@@ -411,83 +411,59 @@
       async load() {
         document.getElementById('dir-tbody').innerHTML = '<tr><td colspan="28" class="tbl-state">Loading employees…</td></tr>';
         try {
-          if (this.companyId) {
-            try {
-              const { data: settings } = await getSb()
+          const settle = request => Promise.resolve(request).catch(error => ({ data: null, error }));
+          const structureRequest = this.companyId
+            ? settle(getSb()
                 .from('global_settings')
                 .select('value')
                 .eq('key', 'company_structure')
                 .eq('company_id', this.companyId)
-                .maybeSingle();
-              this.companyStructure = settings?.value || { departments: [] };
-            } catch (e) {
-              console.error('Failed to load company structure settings:', e);
-              this.companyStructure = { departments: [] };
-            }
-          } else {
-            this.companyStructure = { departments: [] };
-          }
+                .maybeSingle())
+            : Promise.resolve({ data: null, error: null });
+          const membersRequest = window.BKDirectoryAccess.loadDirectoryMembers(getSb(), this.tenantId)
+            .then(data => ({ data, error: null }))
+            .catch(error => ({ data: [], error }));
+          const invitationsRequest = settle(getSb().from('company_invitations').select('email').eq('tenant_id', this.tenantId));
+          const rolesRequest = settle(getSb().from('dashboard_roles').select('*').order('name', { ascending: true }));
+          const requestsRequest = settle(getSb().from('employee_update_requests')
+            .select('*, employees(first_name, last_name, email, picture_link)')
+            .eq('status', 'pending')
+            .order('created_at', { ascending: false }));
+          const employeesRequest = settle(sbGet().then(data => ({ data, error: null })));
+          const [structureResult, membersResult, invitationsResult, rolesResult, requestsResult, employeesResult] = await Promise.all([
+            structureRequest, membersRequest, invitationsRequest, rolesRequest, requestsRequest, employeesRequest
+          ]);
+
+          if (structureResult.error) console.error('Failed to load company structure settings:', structureResult.error);
+          this.companyStructure = structureResult.data?.value || { departments: [] };
           this.buildReportingToMap();
 
           this.activeUserEmails = new Set();
           this.invitedEmails = new Set();
-          try {
-            const tmData = await window.BKDirectoryAccess.loadDirectoryMembers(getSb(), this.tenantId);
-            if (tmData) {
-              tmData.forEach(m => {
-                if (m.user_email) this.activeUserEmails.add(m.user_email.toLowerCase().trim());
-              });
-            }
-          } catch (e) {
-            console.error('Failed to fetch active member emails:', e);
-          }
-
-          try {
-            const { data: invData } = await getSb()
-              .from('company_invitations')
-              .select('email')
-              .eq('tenant_id', this.tenantId);
-            if (invData) {
-              invData.forEach(i => {
-                if (i.email) this.invitedEmails.add(i.email.toLowerCase().trim());
-              });
-            }
-          } catch (e) {
-            console.error('Failed to fetch pending invitation emails:', e);
-          }
-
-          try {
-            const { data: dRoles } = await getSb()
-              .from('dashboard_roles')
-              .select('*')
-              .order('name', { ascending: true });
-            this.dynamicRoles = dRoles || [];
-          } catch (e) {
-            console.error('Failed to fetch dashboard roles:', e);
-            this.dynamicRoles = [];
-          }
+          if (membersResult.error) console.error('Failed to fetch active member emails:', membersResult.error);
+          (membersResult.data || []).forEach(member => {
+            if (member.user_email) this.activeUserEmails.add(member.user_email.toLowerCase().trim());
+          });
+          if (invitationsResult.error) console.error('Failed to fetch pending invitation emails:', invitationsResult.error);
+          (invitationsResult.data || []).forEach(invitation => {
+            if (invitation.email) this.invitedEmails.add(invitation.email.toLowerCase().trim());
+          });
+          if (rolesResult.error) console.error('Failed to fetch dashboard roles:', rolesResult.error);
+          this.dynamicRoles = rolesResult.data || [];
 
           // Fetch pending update requests
           this.pendingRequests = [];
           this.pendingRequestsByEmployee = {};
-          try {
-            const { data: reqs, error: reqsErr } = await getSb()
-              .from('employee_update_requests')
-              .select('*, employees(first_name, last_name, email, picture_link)')
-              .eq('status', 'pending')
-              .order('created_at', { ascending: false });
-            if (!reqsErr && reqs) {
-              this.pendingRequests = reqs;
-              reqs.forEach(r => {
-                this.pendingRequestsByEmployee[r.employee_id] = r;
-              });
-            }
-          } catch(e) {
-            console.error('Failed to fetch update requests:', e);
+          if (requestsResult.error) console.error('Failed to fetch update requests:', requestsResult.error);
+          if (!requestsResult.error && requestsResult.data) {
+            this.pendingRequests = requestsResult.data;
+            requestsResult.data.forEach(request => {
+              this.pendingRequestsByEmployee[request.employee_id] = request;
+            });
           }
 
-          const data = await sbGet();
-          this.allEmployees = data;
+          if (employeesResult.error) throw employeesResult.error;
+          this.allEmployees = employeesResult.data;
           this.dirty = {};
           this.pendingDeletes.clear();
           this.updateDeptFilter();
