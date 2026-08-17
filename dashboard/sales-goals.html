@@ -2335,7 +2335,7 @@
 
             const rateConfig = rates.find(r => r.label === rateLabel);
             const basePercent = rateConfig ? parseFloat(rateConfig.value) || 0 : 0;
-            const adjustment = getCommissionAdjustmentForBooking(b, rateLabel, productMap, config.adjustment_rules);
+            const adjustment = getCommissionAdjustmentForBooking(b, rateLabel, productMap, config.adjustment_rules, config.eligibility_rules);
             const percent = basePercent + adjustment;
 
             const activeRows = cellRows.filter(r => r.employee_id);
@@ -2631,13 +2631,14 @@
       return false;
     }
 
-    function getCommissionAdjustmentForBooking(b, rateLabel, productMap, adjustmentRules) {
+    function getCommissionAdjustmentForSku(b, sku, rateLabel, productMap, adjustmentRules) {
       if (!adjustmentRules || adjustmentRules.length === 0) return 0;
-      
+
       const bDate = b.scheduled_date ? b.scheduled_date.slice(0, 10) : '';
       if (!bDate) return 0;
 
-      const bookingSkus = (b.product_skus || '').split(' | ').map(s => s.trim().toLowerCase());
+      const normalizedSku = String(sku || '').trim().toLowerCase();
+      const product = productMap[normalizedSku] || {};
 
       let totalAdjustment = 0;
 
@@ -2653,23 +2654,19 @@
         // 3. Check scope match
         let isMatch = false;
         if (r.scope === 'businesses') {
-          const skuMatch = !r.sku || r.sku === 'all' || bookingSkus.includes(r.sku.toLowerCase());
-          const catMatch = !r.category || r.category === 'all' || bookingSkus.some(sku => {
-            const p = productMap[sku] || {};
-            return p.category && p.category.toLowerCase() === r.category.toLowerCase();
-          });
-          const bizMatch = !r.business || r.business === 'all' || bookingSkus.some(sku => {
-            const p = productMap[sku] || {};
-            return p.business && p.business.toLowerCase() === r.business.toLowerCase();
-          });
+          const skuMatch = !r.sku || r.sku === 'all' || normalizedSku === r.sku.toLowerCase();
+          const catMatch = !r.category || r.category === 'all' || (
+            product.category && product.category.toLowerCase() === r.category.toLowerCase()
+          );
+          const bizMatch = !r.business || r.business === 'all' || (
+            product.business && product.business.toLowerCase() === r.business.toLowerCase()
+          );
           if (skuMatch && catMatch && bizMatch) {
             isMatch = true;
           }
         } else if (r.scope === 'tags') {
-          const tagMatch = bookingSkus.some(sku => {
-            const p = productMap[sku] || {};
-            return p.tags && Array.isArray(p.tags) && p.tags.map(t => t.toLowerCase()).includes(r.tag.toLowerCase());
-          });
+          const tagMatch = product.tags && Array.isArray(product.tags)
+            && product.tags.map(t => t.toLowerCase()).includes(r.tag.toLowerCase());
           if (tagMatch) {
             isMatch = true;
           }
@@ -2687,6 +2684,28 @@
       });
 
       return totalAdjustment;
+    }
+
+    function getCommissionAdjustmentForBooking(b, rateLabel, productMap, adjustmentRules, eligibilityRules) {
+      const skus = (b.product_skus || '').split(' | ').map(s => s.trim());
+      const qtys = (b.product_qtys || '').split(' | ').map(s => s.trim());
+      const unitPrices = (b.product_unit_prices || '').split(' | ').map(s => s.trim());
+      let eligibleCentavos = 0;
+      let weightedAdjustment = 0;
+
+      skus.forEach((sku, index) => {
+        if (!sku) return;
+        const product = productMap[sku.toLowerCase()] || { sku, business: '', category: '', tags: [] };
+        if (!checkSkuEligibility(product, eligibilityRules)) return;
+        const quantity = parseInt(qtys[index], 10) || 1;
+        const unitPrice = parseFloat(unitPrices[index]) || 0;
+        const lineCentavos = Math.round(unitPrice * quantity * 100);
+        const adjustment = getCommissionAdjustmentForSku(b, sku, rateLabel, productMap, adjustmentRules);
+        eligibleCentavos += lineCentavos;
+        weightedAdjustment += lineCentavos * adjustment;
+      });
+
+      return eligibleCentavos > 0 ? weightedAdjustment / eligibleCentavos : 0;
     }
 
     function getBookingEligibleCentavos(b, productMap, eligibilityRules) {
