@@ -163,6 +163,8 @@
     }
 
     // Day events modal actions
+    let selectedDayEventToDelete = null;
+
     function toggleDayEventsModal(show) {
       document.getElementById('day-events-modal').classList.toggle('open', show);
       if (!show) {
@@ -231,10 +233,22 @@
           item.style.border = '1px solid rgba(239, 68, 68, 0.25)';
           item.style.borderRadius = '6px';
           item.style.background = 'rgba(239, 68, 68, 0.06)';
+          item.style.display = 'flex';
+          item.style.alignItems = 'center';
+          item.style.justifyContent = 'space-between';
+          item.style.gap = '1rem';
           item.innerHTML = `
-            <div style="font-weight: 600; color: #b91c1c;">Day off</div>
-            <div style="font-size: 0.75rem; color: var(--text-muted);">${timeLabel}${installerNames ? ` · ${escapeHtml(installerNames)}` : ''}</div>
+            <div style="min-width: 0;">
+              <div style="font-weight: 600; color: #b91c1c;">${escapeHtml(dayReminder.name || 'Day off')}</div>
+              <div style="font-size: 0.75rem; color: var(--text-muted);">${timeLabel}${installerNames ? ` · ${escapeHtml(installerNames)}` : ''}</div>
+            </div>
+            <button type="button" class="day-event-delete-btn" aria-label="Delete ${escapeHtml(dayReminder.name || 'event')}" title="Delete event">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6M14 11v6"></path><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>
+            </button>
           `;
+          item.querySelector('.day-event-delete-btn').addEventListener('click', () => {
+            openDeleteDayEventModal(dayReminder);
+          });
           listContainer.appendChild(item);
         });
       }
@@ -246,6 +260,69 @@
       populatePreviousCustomersDatalist();
       
       toggleDayEventsModal(true);
+    }
+
+    function openDeleteDayEventModal(dayEvent) {
+      selectedDayEventToDelete = dayEvent;
+      document.getElementById('delete-day-event-name').textContent = dayEvent.name || 'this event';
+      toggleDeleteDayEventModal(true);
+    }
+
+    function toggleDeleteDayEventModal(show) {
+      document.getElementById('delete-day-event-modal').classList.toggle('open', show);
+      if (!show) selectedDayEventToDelete = null;
+    }
+
+    function closeDeleteDayEventModal(e) {
+      if (e.target.id === 'delete-day-event-modal') toggleDeleteDayEventModal(false);
+    }
+
+    async function confirmDeleteDayEvent() {
+      const dayEvent = selectedDayEventToDelete;
+      if (!dayEvent?.id || !dayEvent.date) return;
+
+      const deleteButton = document.getElementById('btn-confirm-delete-day-event');
+      deleteButton.disabled = true;
+      deleteButton.textContent = 'Deleting...';
+
+      try {
+        const eventDate = new Date(`${dayEvent.date}T00:00:00`);
+        const settingKey = getDayEventSettingKey(eventDate.getFullYear(), eventDate.getMonth());
+        const { data: currentSetting, error: loadError } = await sb
+          .from('global_settings')
+          .select('value')
+          .eq('company_id', currentCompanyId)
+          .eq('key', settingKey)
+          .maybeSingle();
+
+        if (loadError) throw loadError;
+
+        const existingEvents = Array.isArray(currentSetting?.value) ? currentSetting.value : [];
+        const remainingEvents = existingEvents.filter(event => event?.id !== dayEvent.id);
+        if (remainingEvents.length === existingEvents.length) {
+          throw new Error('Event was not found in the current calendar data.');
+        }
+
+        const { error: updateError } = await sb.from('global_settings').upsert({
+          company_id: currentCompanyId,
+          key: settingKey,
+          value: remainingEvents,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'company_id,key' });
+
+        if (updateError) throw updateError;
+
+        toggleDeleteDayEventModal(false);
+        await loadMonthBookings();
+        handleDayClick(dayEvent.date);
+        showToast(`${dayEvent.name || 'Event'} deleted.`);
+      } catch (err) {
+        console.error('Failed to delete calendar event:', err);
+        showToast('The calendar event could not be deleted. Refresh the page and try again.', true);
+      } finally {
+        deleteButton.disabled = false;
+        deleteButton.textContent = 'Delete Event';
+      }
     }
 
     function populatePreviousCustomersDatalist() {
