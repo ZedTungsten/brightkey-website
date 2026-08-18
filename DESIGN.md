@@ -544,8 +544,11 @@ Rules:
 
 ## 19. Search Bar Standard
 
-All website and dashboard search fields must use the shared `.bk-search-field`
-component from `css/style.css`.
+All website and dashboard search fields must use a shared search component from
+`css/style.css`. Use `.bk-search-field` when the markup can contain a wrapper
+and inline SVG. Use `.bk-search-control` directly on compact toolbar, modal, or
+dynamically generated search inputs. Do not create page-specific search colors,
+corner radii, focus states, or icon implementations.
 
 - Use a white background.
 - Use a fully rounded pill shape (`border-radius: 999px`).
@@ -553,6 +556,10 @@ component from `css/style.css`.
 - Keep input text at normal font weight.
 - Preserve consistent icon spacing with left input padding.
 - Use the shared cyan focus border and focus ring.
+- Existing IDs, event handlers, filtering behavior, and accessible labels must
+  remain unchanged when adopting the shared style.
+- Search inputs must use `type="search"`; do not style an ordinary text input as
+  a search field.
 - Do not substitute emoji, text glyphs, or browser-specific search icons for the
   SVG.
 
@@ -564,6 +571,12 @@ component from `css/style.css`.
   </svg>
   <input type="search" placeholder="Search..." />
 </div>
+```
+
+For a compact or dynamically generated search input:
+
+```html
+<input class="bk-search-control" type="search" placeholder="Search..." />
 ```
 
 ---
@@ -628,3 +641,22 @@ Verification required before completion:
 Do not use `alert()`, `confirm()`, or `prompt()` for the custom Back/link flow.
 The native `beforeunload` dialog is the only exception because browser security
 rules do not permit replacing it with an application modal.
+
+---
+
+## 21. Desktop Dashboard Sidebar Behavior
+
+The dashboard sidebar is minimized by default on desktop and expands on pointer
+hover. Expansion must overlay the page rather than changing the dashboard grid
+or pushing page content horizontally.
+
+- Desktop layout always reserves a 64px sidebar column.
+- The expanded sidebar is 240px wide with a right-side shadow and higher
+  stacking order.
+- Pointer entry expands it; pointer exit minimizes it again.
+- Do not persist desktop minimized state in browser storage or database settings;
+  this is fixed navigation behavior, not a user preference.
+- Mobile remains a fully expanded off-canvas drawer and must not inherit desktop
+  minimized or hover-expanded classes.
+- Sidebar expansion must not change the main content width, table scroll
+  position, or page layout.

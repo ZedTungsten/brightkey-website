@@ -3,7 +3,6 @@
 let sb;
 let currentTenantId;
 let currentCompanyId;
-
 // File Explorer Navigation State
 let currentFolderId = null; 
 let allResources = [];
@@ -30,7 +29,7 @@ const FOLDER_COLORS = {
   mint: { background: '#ECFDF5', border: '#6EE7B7' },
   gray: { background: '#F8FAFC', border: '#CBD5E1' }
 };
-
+window.BKResourcesEditorContext = () => ({ resources: allResources, sb, companyId: currentCompanyId, canEdit: currentUserCanEdit, reload: loadResources });
 window.setResourceViewMode = function(mode) {
   explorerViewMode = mode;
   localStorage.setItem('bk_resources_view_mode', mode); // Save preference
@@ -337,6 +336,7 @@ function renderExplorer() {
           <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="2" fill="none"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
           Rename
         </div>
+        ${window.BKResourceEditor.menuItem(item)}
         <div class="card-dropdown-item" onclick="openEditTagsModal(event, '${item.id}')">
           <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="2" fill="none"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line></svg>
           Edit Tags

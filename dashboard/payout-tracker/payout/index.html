@@ -217,6 +217,7 @@
   <script src="/js/auth.js"></script>
   <script src="/js/sidebar.js"></script>
   <script src="/js/main.js?v=20260815-1"></script>
+  <script src="/js/payout-snapshots.js?v=20260818-1"></script>
   <script>
     'use strict';
 
@@ -265,6 +266,8 @@
       adjustmentsList: [],
       commissionAssignments: [],
       bookingsList: [],
+      payoutComponentCache: new Map(),
+      payoutSystemCache: new Map(),
 
       selectedYear: new Date().getFullYear(),
       selectedMonth: new Date().getMonth(),
@@ -355,6 +358,9 @@
         });
 
         await this.loadGeneralJournalEntries();
+        this.payoutComponentCache.clear();
+        this.payoutSystemCache.clear();
+        await this.captureLegacyPaidPayouts();
       },
 
       getGeneralJournalWindow() {
@@ -826,7 +832,8 @@
           return { value: regularValue, isProrated: false };
         }
 
-        const daysInMonth = new Date(this.selectedYear, this.selectedMonth + 1, 0).getDate();
+        const [periodYear, periodMonth] = String(monthKey).split('-').map(Number);
+        const daysInMonth = new Date(periodYear, periodMonth, 0).getDate();
         const periodEnd = cutoffIndex === sortedScheds.length - 1
           ? daysInMonth
           : Math.min(Number(cutoffDay), daysInMonth);
@@ -834,7 +841,7 @@
         let totalScheduledWorkdays = 0;
         let payableDays = 0;
         for (let day = 1; day <= daysInMonth; day++) {
-          const weekday = new Date(this.selectedYear, this.selectedMonth, day).getDay();
+          const weekday = new Date(periodYear, periodMonth - 1, day).getDay();
           if (!reportingDays.has(weekday)) continue;
           totalScheduledWorkdays++;
           if (day >= hireDay && day <= periodEnd) payableDays++;
@@ -914,6 +921,8 @@
           }, { onConflict: 'company_id,key' });
           if (error) throw error;
           document.getElementById('prorated-modal').classList.remove('open');
+          this.payoutComponentCache.clear();
+          this.payoutSystemCache.clear();
           this.render();
           toast('Prorated salary settings applied.');
         } catch (error) {
@@ -1061,6 +1070,83 @@
         return { monthKey: `${year}-${String(month).padStart(2, '0')}`, day: sorted[0] };
       },
 
+      getPayoutComponents(empId, schedDay, mk) {
+        const cacheKey = `${mk}|${empId}|${Number(schedDay)}`;
+        if (this.payoutComponentCache.has(cacheKey)) return this.payoutComponentCache.get(cacheKey);
+        const emp = this.employees.find(item => item.id === empId);
+        if (!emp) return { sourceValue: 0, displayedValue: 0 };
+        const schedules = [...(this.payoutSchedules.length ? this.payoutSchedules : [15, 30])]
+          .map(Number).sort((a, b) => a - b);
+        const isOwner = this.isOwnerEmployee(emp);
+        const commissionOnly = this.isCommissionOnlyEmployee(emp, mk);
+        const inactiveDate = commissionOnly || this.isActiveEmployee(emp) ? null : this.getInactiveDate(emp);
+        const eligible = commissionOnly
+          ? this._commsForSchedule(empId, schedDay, mk, schedules, null, null, inactiveDate) > 0
+          : this.isCutoffEligibleForEmployee(emp, schedDay, mk);
+        if (!eligible) {
+          const empty = { sourceValue: 0, displayedValue: 0 };
+          this.payoutComponentCache.set(cacheKey, empty);
+          return empty;
+        }
+
+        const salary = commissionOnly ? 0 : this.getProratedSalaryAllocation(emp, schedDay, schedules, mk).value;
+        const adjustments = commissionOnly ? 0 : this._adjsForSchedule(empId, schedDay, mk, schedules);
+        const commissions = isOwner ? 0 : this._commsForSchedule(empId, schedDay, mk, schedules, null, null, inactiveDate);
+        const installation = commissionOnly ? 0 : (this.calculateInstallerPayouts(empId, mk, schedules).cutoffPayouts[schedDay] || 0);
+        const glAdditions = commissionOnly ? 0 : this._glAdditionsForSchedule(empId, schedDay, mk, schedules);
+        const glDeductions = commissionOnly ? 0 : this._glDeductionsForSchedule(empId, schedDay, mk, schedules);
+        const sourceValue = salary + adjustments + commissions + installation;
+        const result = {
+          sourceValue,
+          displayedValue: sourceValue + glAdditions - glDeductions
+        };
+        this.payoutComponentCache.set(cacheKey, result);
+        return result;
+      },
+
+      getReconcilablePayoutCentavos(empId, mk, schedDay) {
+        return Math.round(this.getPayoutComponents(empId, schedDay, mk).sourceValue * 100);
+      },
+
+      getSystemAdjustment(empId, mk, schedDay) {
+        const cacheKey = `${mk}|${empId}|${Number(schedDay)}`;
+        if (!this.payoutSystemCache.has(cacheKey)) {
+          this.payoutSystemCache.set(
+            cacheKey,
+            window.BKPayoutSnapshots.systemAdjustment(this, empId, mk, schedDay)
+          );
+        }
+        return this.payoutSystemCache.get(cacheKey);
+      },
+
+      async captureLegacyPaidPayouts() {
+        const mk = this.monthKey();
+        const state = this.regularPayoutState[mk];
+        if (!state) return;
+        let changed = false;
+        Object.entries(state).forEach(([key, entry]) => {
+          if (entry !== true) return;
+          const separator = key.lastIndexOf('_');
+          const empId = key.slice(0, separator);
+          const day = Number(key.slice(separator + 1));
+          const values = this.getPayoutComponents(empId, day, mk);
+          state[key] = window.BKPayoutSnapshots.createSnapshot({
+            sourceValue: values.sourceValue,
+            paidValue: values.displayedValue,
+            systemSources: {}
+          });
+          changed = true;
+        });
+        if (!changed) return;
+        this.payoutSystemCache.clear();
+        const { error } = await getSb().from('global_settings').upsert({
+          key: 'regular_payout_state',
+          company_id: this.companyId,
+          value: this.regularPayoutState
+        }, { onConflict: 'company_id,key' });
+        if (error) throw error;
+      },
+
       // ── Render ──
       render() {
         const header = document.getElementById('summary-table-header');
@@ -1092,7 +1178,9 @@
         header.innerHTML = headerHtml;
 
         const payoutEmployees = this.employees.filter(emp =>
-          this.isRegularPayoutEmployee(emp, mk) || this.isCommissionOnlyEmployee(emp, mk)
+          this.isRegularPayoutEmployee(emp, mk)
+          || this.isCommissionOnlyEmployee(emp, mk)
+          || sortedScheds.some(day => this.getSystemAdjustment(emp.id, mk, day).value !== 0)
         );
         const { grouped, unassigned } = this.groupEmployees(payoutEmployees);
         let bodyHtml = '';
@@ -1112,7 +1200,9 @@
 
         const renderEmpRow = (emp) => {
           const isOwner = this.isOwnerEmployee(emp);
-          const commissionOnly = this.isCommissionOnlyEmployee(emp, mk);
+          const hasSystemOnlyPayout = !this.isRegularPayoutEmployee(emp, mk)
+            && sortedScheds.some(day => this.getSystemAdjustment(emp.id, mk, day).value !== 0);
+          const commissionOnly = this.isCommissionOnlyEmployee(emp, mk) || hasSystemOnlyPayout;
           const inactiveDate = commissionOnly || this.isActiveEmployee(emp) ? null : this.getInactiveDate(emp);
           const baseSalary    = commissionOnly ? 0 : (emp.salary || 0);
           const positionText  = emp.title || '';
@@ -1184,7 +1274,7 @@
             const salaryPortion = salaryAllocation.value;
             const adjsVal  = commissionOnly ? 0 : this._adjsForSchedule(emp.id, day, mk, sortedScheds);
             const commsVal  = isOwner ? 0 : this._commsForSchedule(emp.id, day, mk, sortedScheds, null, null, inactiveDate);
-            const isEligible = commissionOnly ? commsVal > 0 : regularCutoffEligible;
+            let isEligible = commissionOnly ? commsVal > 0 : regularCutoffEligible;
             const instPortion = commissionOnly ? 0 : (instPayouts.cutoffPayouts[day] || 0);
             const glAddVal = commissionOnly ? 0 : this._glAdditionsForSchedule(emp.id, day, mk, sortedScheds);
             const glDedVal = commissionOnly ? 0 : this._glDeductionsForSchedule(emp.id, day, mk, sortedScheds);
@@ -1194,11 +1284,24 @@
             const rolledGlAdd = commissionOnly ? 0 : this._glAdditionsForSchedule(emp.id, day, mk, sortedScheds, true);
             const rolledGlDed = commissionOnly ? 0 : this._glDeductionsForSchedule(emp.id, day, mk, sortedScheds, true);
             
-            const displayedSchedVal = salaryPortion + adjsVal + commsVal + instPortion + glAddVal - glDedVal;
+            const sourceSchedVal = salaryPortion + adjsVal + commsVal + instPortion;
+            const liveSchedVal = sourceSchedVal + glAddVal - glDedVal;
+            const payoutEntry = this.regularPayoutState[mk]?.[`${emp.id}_${day}`];
+            const isPaid = window.BKPayoutSnapshots.isPaid(payoutEntry);
+            const systemResult = isPaid && window.BKPayoutSnapshots.isSnapshot(payoutEntry)
+              ? {
+                  value: window.BKPayoutSnapshots.fromCents(
+                    Object.values(payoutEntry.system_sources || {}).reduce((sum, value) => sum + (Number(value) || 0), 0)
+                  )
+                }
+              : this.getSystemAdjustment(emp.id, mk, day);
+            if (commissionOnly && systemResult.value !== 0) isEligible = true;
+            const displayedSchedVal = isPaid && window.BKPayoutSnapshots.isSnapshot(payoutEntry)
+              ? window.BKPayoutSnapshots.fromCents(payoutEntry.paid_value_centavos)
+              : liveSchedVal + systemResult.value;
             const totalSchedVal = isEligible ? displayedSchedVal : 0;
             employeePayoutDaysTotal += totalSchedVal;
             sumPayoutDays[day] += totalSchedVal;
-            const isPaid = this.regularPayoutState[mk]?.[`${emp.id}_${day}`] || false;
             const isPast = this.isPastDay(day);
 
             const breakdownItems = [];
@@ -1214,6 +1317,7 @@
             if (rolledGlAdd > 0) breakdownItems.push(`Rol Reimb: ${php(rolledGlAdd)}`);
             if (glDedVal - rolledGlDed > 0) breakdownItems.push(`Cash Adv: -${php(glDedVal - rolledGlDed)}`);
             if (rolledGlDed > 0) breakdownItems.push(`Rol Cash Adv: -${php(rolledGlDed)}`);
+            if (systemResult.value !== 0) breakdownItems.push(`System: ${php(systemResult.value)}`);
             
             const breakdownHtml = breakdownItems.length > 0 
               ? `<div class="payout-breakdown" style="font-size:0.68rem; color:var(--text-muted); line-height:1.2; text-align:right; font-family:var(--font); width:100%; font-variant-numeric:tabular-nums;">${breakdownItems.join('<br>')}</div>` 
@@ -1438,12 +1542,19 @@
       togglePayoutCheck(empId, schedDay, checked) {
         const mk = this.monthKey();
         this.regularPayoutState[mk] = this.regularPayoutState[mk] || {};
-        this.regularPayoutState[mk][`${empId}_${schedDay}`] = checked;
-        const valEl = document.getElementById(`val-${empId}-${schedDay}`);
-        if (valEl) {
-          if (checked) { valEl.classList.remove('overdue'); valEl.style.textDecoration = 'line-through'; valEl.style.opacity = '0.5'; }
-          else { valEl.style.textDecoration = ''; valEl.style.opacity = ''; if (this.isPastDay(schedDay)) valEl.classList.add('overdue'); }
+        if (checked) {
+          const values = this.getPayoutComponents(empId, schedDay, mk);
+          const system = this.getSystemAdjustment(empId, mk, schedDay);
+          this.regularPayoutState[mk][`${empId}_${schedDay}`] = window.BKPayoutSnapshots.createSnapshot({
+            sourceValue: values.sourceValue,
+            paidValue: values.displayedValue + system.value,
+            systemSources: system.systemSources
+          });
+        } else {
+          this.regularPayoutState[mk][`${empId}_${schedDay}`] = false;
         }
+        this.payoutSystemCache.clear();
+        this.render();
         this.debouncedSave();
         this.syncPayslipRecord(empId);
       },
@@ -1471,11 +1582,13 @@
       async saveStateSilent() {
         try {
           const sb = getSb();
-          await Promise.all([
+          const results = await Promise.all([
             sb.from('global_settings').upsert({ key: 'regular_payout_state', company_id: this.companyId, value: this.regularPayoutState }),
             sb.from('global_settings').upsert({ key: 'special_payout_state', company_id: this.companyId, value: this.specialPayoutState }),
             sb.from('global_settings').upsert({ key: 'commission_payout_state', company_id: this.companyId, value: this.commissionPayoutState }),
           ]);
+          const failed = results.find(result => result.error);
+          if (failed) throw failed.error;
           const el = document.getElementById('save-status');
           if (el) { el.textContent = 'All changes saved'; setTimeout(() => { if (el.textContent === 'All changes saved') el.textContent = ''; }, 3000); }
         } catch (e) {
@@ -1492,11 +1605,17 @@
         const mk     = this.monthKey();
         const state  = this.regularPayoutState[mk];
         const scheds = this.payoutSchedules.length > 0 ? this.payoutSchedules : [15, 30];
-        const commissionOnly = this.isCommissionOnlyEmployee(emp, mk);
+        const hasSystemOnlyPayout = !this.isRegularPayoutEmployee(emp, mk)
+          && scheds.some(day => this.getSystemAdjustment(empId, mk, day).value !== 0);
+        const commissionOnly = this.isCommissionOnlyEmployee(emp, mk) || hasSystemOnlyPayout;
         const requiredDays = commissionOnly
-          ? scheds.filter(day => this._commsForSchedule(empId, day, mk, scheds) > 0)
+          ? scheds.filter(day => (
+              this._commsForSchedule(empId, day, mk, scheds) > 0
+              || this.getSystemAdjustment(empId, mk, day).value !== 0
+            ))
           : scheds;
-        const allChecked = requiredDays.length > 0 && state && requiredDays.every(day => state[`${empId}_${day}`] === true);
+        const allChecked = requiredDays.length > 0 && state
+          && requiredDays.every(day => window.BKPayoutSnapshots.isPaid(state[`${empId}_${day}`]));
 
         if (allChecked) {
           const isOwner = this.isOwnerEmployee(emp);
@@ -1509,6 +1628,19 @@
           const empSpecs     = isOwner || commissionOnly ? [] : window.BKSpecialPayoutHistory.forMonth(this.specialSchedules, mk).filter(s => s.employeeId === empId);
           const totalAdjs    = empAdjObjs.reduce((s, a) => s + (Number(a.value) || 0), 0);
           const totalSpecs   = empSpecs.reduce((s, x) => s + (Number(x.value) || 0), 0);
+          const lockedRegularTotal = requiredDays.reduce((sum, day) => {
+            const entry = state[`${empId}_${day}`];
+            return sum + (window.BKPayoutSnapshots.isSnapshot(entry)
+              ? window.BKPayoutSnapshots.fromCents(entry.paid_value_centavos)
+              : this.getPayoutComponents(empId, day, mk).displayedValue);
+          }, 0);
+          const systemAdjustmentTotal = requiredDays.reduce((sum, day) => {
+            const entry = state[`${empId}_${day}`];
+            if (!window.BKPayoutSnapshots.isSnapshot(entry)) return sum;
+            const cents = Object.values(entry.system_sources || {})
+              .reduce((total, value) => total + (Number(value) || 0), 0);
+            return sum + window.BKPayoutSnapshots.fromCents(cents);
+          }, 0);
 
           const instPayouts = isOwner || commissionOnly
             ? { thresholdEarnings: 0, serviceEarnings: 0 }
@@ -1533,6 +1665,15 @@
             });
             finalTotalAdjs += instPayouts.serviceEarnings;
           }
+          if (systemAdjustmentTotal !== 0) {
+            finalAdjObjs.push({
+              label: 'System',
+              value: systemAdjustmentTotal,
+              description: 'Automatic correction from a previously paid payout',
+              date: new Date().toISOString()
+            });
+            finalTotalAdjs += systemAdjustmentTotal;
+          }
 
           const empGlAdd = commissionOnly ? 0 : this._glAdditionsForEmpMonth(empId, mk);
           const empGlDed = commissionOnly ? 0 : this._glDeductionsForEmpMonth(empId, mk);
@@ -1552,7 +1693,7 @@
             finalTotalAdjs -= empGlDed;
           }
  
-          const grandTotal   = salaryPaid + empComms + finalTotalAdjs + totalSpecs + empGlAdd;
+          const grandTotal   = lockedRegularTotal + totalSpecs;
 
           let resolvedDeptName = emp.department || '—';
           const matchedDept = (this.companyStructure?.departments || []).find(d => d.managerId === empId || (d.subteams || []).some(s => s.managerId === empId || (s.colleagueIds || []).includes(empId)));

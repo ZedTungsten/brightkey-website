@@ -232,11 +232,7 @@
         <!-- Sidebar Search -->
         <div class="sidebar-search-container" style="padding: 0 0.5rem; margin-bottom: 0.75rem; position: relative;">
           <div style="position: relative; display: flex; align-items: center; width: 100%;">
-            <svg id="sidebar-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px; position: absolute; left: 12px; color: #9ca3af; pointer-events: none; transition: opacity 0.15s; z-index: 2;">
-              <circle cx="11" cy="11" r="8"></circle>
-              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-            </svg>
-            <input type="text" id="sidebar-search-input" placeholder="Search" style="width: 100%; height: 32px; background: #ffffff; border: 1px solid var(--border); border-radius: 16px; padding: 0 10px 0 32px; font-size: 0.8rem; color: #1f2937; outline: none; transition: all 0.15s; font-weight: 500;" />
+            <input type="search" class="bk-search-control" id="sidebar-search-input" placeholder="Search" style="height: 32px; font-size: 0.8rem;" />
           </div>
         </div>
 
@@ -328,10 +324,11 @@
       <div class="dash-nav-group" id="nav-group-customerservice" style="display: none;">
         <button class="dash-nav-parent" onclick="toggleSubmenu(this)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-          <span class="dash-nav-text">Customer Service</span>
+          <span class="dash-nav-text">CS</span>
           <svg class="dash-nav-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
         </button>
         <div class="dash-nav-children">
+          <a href="/dashboard/cs-customers" class="dash-nav-child" data-role="customer_service">Customers</a>
           <a href="/dashboard/support-inbox" class="dash-nav-child" data-role="customer_service">Inbox</a>
           <a href="/dashboard/product-reviews" class="dash-nav-child" data-role="customer_service">Reviews</a>
         </div>
@@ -452,7 +449,7 @@
 
         <div class="dash-user" style="cursor: pointer; transition: background 0.2s; border-radius: var(--radius-sm);" onclick="toggleUserMenu(event)">
           <div class="dash-user-avatar" id="user-avatar">?</div>
-          <div style="flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;">
+          <div class="dash-user-details" style="flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;">
             <div class="dash-user-name" id="user-name">Loading…</div>
             <div class="dash-user-role" id="user-role"></div>
             <div class="dash-user-email" id="user-email"></div>
@@ -481,17 +478,7 @@
 
     // Setup Search Bar event listeners
     const searchInput = document.getElementById('sidebar-search-input');
-    const searchIcon = document.getElementById('sidebar-search-icon');
-    if (searchInput && searchIcon) {
-      searchInput.addEventListener('input', () => {
-        if (searchInput.value.length > 0) {
-          searchIcon.style.opacity = '0';
-          searchInput.style.paddingLeft = '10px';
-        } else {
-          searchIcon.style.opacity = '1';
-          searchInput.style.paddingLeft = '32px';
-        }
-      });
+    if (searchInput) {
       searchInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
           const query = searchInput.value.trim();
@@ -505,8 +492,6 @@
       const searchVal = urlParams.get('search');
       if (searchVal) {
         searchInput.value = searchVal;
-        searchIcon.style.opacity = '0';
-        searchInput.style.paddingLeft = '10px';
       }
     }
 
@@ -596,22 +581,40 @@
 
     const sidebar = document.getElementById('dash-sidebar');
     const layout = document.querySelector('.dash-layout');
-    const toggleBtn = document.getElementById('sidebar-toggle');
-    
-    if (sidebar && layout && toggleBtn) {
-      const isMinimized = localStorage.getItem('sidebar-minimized') === 'true';
-      if (isMinimized) {
+
+    if (sidebar && layout) {
+      let desktopCollapseTimer = null;
+      const collapseDesktopSidebar = () => {
+        if (window.innerWidth <= 768) return;
+        if (desktopCollapseTimer) clearTimeout(desktopCollapseTimer); desktopCollapseTimer = null;
         sidebar.classList.add('minimized');
+        sidebar.classList.remove('sidebar-hover-expanded');
         layout.classList.add('sidebar-minimized');
-      }
-      
-      toggleBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        sidebar.classList.toggle('minimized');
-        layout.classList.toggle('sidebar-minimized');
-        const minimized = sidebar.classList.contains('minimized');
-        localStorage.setItem('sidebar-minimized', minimized);
-      });
+      };
+      const scheduleDesktopSidebarCollapse = () => {
+        if (window.innerWidth <= 768) return;
+        if (desktopCollapseTimer) clearTimeout(desktopCollapseTimer);
+        desktopCollapseTimer = setTimeout(collapseDesktopSidebar, 140);
+      };
+      const expandDesktopSidebar = () => {
+        if (window.innerWidth <= 768) return;
+        if (desktopCollapseTimer) clearTimeout(desktopCollapseTimer);
+        sidebar.classList.remove('minimized');
+        sidebar.classList.add('sidebar-hover-expanded');
+      };
+      const syncSidebarForViewport = () => {
+        if (window.innerWidth > 768) collapseDesktopSidebar();
+        else {
+          if (desktopCollapseTimer) clearTimeout(desktopCollapseTimer); desktopCollapseTimer = null;
+          sidebar.classList.remove('minimized', 'sidebar-hover-expanded');
+          layout.classList.remove('sidebar-minimized');
+        }
+      };
+
+      sidebar.addEventListener('mouseenter', expandDesktopSidebar);
+      sidebar.addEventListener('mouseleave', scheduleDesktopSidebarCollapse);
+      window.addEventListener('resize', syncSidebarForViewport);
+      syncSidebarForViewport();
     }
 
     // Resolve Active State based on current pathname
@@ -918,8 +921,8 @@
 
             if (empData?.id) {
               window.BKAuth.getEmployeeStatus(empData.id).then(currentStatus => {
-                const statusDot = document.getElementById('user-status-dot');
-                const statusText = document.getElementById('user-status-text');
+                const statusDot = document.getElementById('user-status-dot'), statusText = document.getElementById('user-status-text');
+                avatarEl?.style.setProperty('--presence-color', currentStatus === 'available' ? '#22c55e' : currentStatus === 'break' ? '#f97316' : '#9ca3af');
                 if (statusDot && statusText) {
                   if (currentStatus === 'available') {
                     statusDot.style.backgroundColor = '#22c55e'; // Green
@@ -1772,8 +1775,8 @@
 
               // Update user's sidebar status immediately if it is the current employee
               if (this.employeeId && newLog.employee_id === this.employeeId) {
-                const statusDot = document.getElementById('user-status-dot');
-                const statusText = document.getElementById('user-status-text');
+                const statusDot = document.getElementById('user-status-dot'), statusText = document.getElementById('user-status-text');
+                document.getElementById('user-avatar')?.style.setProperty('--presence-color', newLog.status === 'available' ? '#22c55e' : newLog.status === 'break' ? '#f97316' : '#9ca3af');
                 if (statusDot && statusText) {
                   if (newLog.status === 'available') {
                     statusDot.style.backgroundColor = '#22c55e'; // Green
