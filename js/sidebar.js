@@ -236,7 +236,6 @@
           </div>
         </div>
 
-      <!-- Home -->
       <div class="dash-nav-group" id="nav-group-home">
         <button class="dash-nav-parent" onclick="toggleSubmenu(this)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
@@ -246,6 +245,7 @@
         <div class="dash-nav-children">
           <a href="/dashboard" class="dash-nav-child" id="nav-item-home">Dashboard</a>
           <a href="/dashboard/team" class="dash-nav-child" id="nav-item-team">Tasks</a>
+          <a href="/dashboard/messages" class="dash-nav-child" id="nav-item-messages">Messages</a>
           <a href="/dashboard/attendance" class="dash-nav-child" id="nav-item-attendance">Attendance</a>
           <a href="/dashboard/payouts" class="dash-nav-child" id="nav-item-payouts">Payouts</a>
           <a href="/dashboard/organization" class="dash-nav-child" id="nav-item-organization">Organization</a>
@@ -989,10 +989,7 @@
     fab.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"></path><circle cx="8" cy="10" r="1.5" fill="currentColor" stroke="none"></circle><circle cx="12" cy="10" r="1.5" fill="currentColor" stroke="none"></circle><circle cx="16" cy="10" r="1.5" fill="currentColor" stroke="none"></circle></svg><span>Chat</span><span id="chat-fab-dot" style="display: none; width: 8px; height: 8px; border-radius: 50%; background-color: #ef4444;"></span>`;
     document.body.appendChild(fab);
 
-    // Setup event listener to build the window on first click
     fab.onclick = () => window.BKChat.toggleChat();
-
-    // 2. Initialize lightweight chat manager object
     window.BKChat = {
       currentUser: null,
       companyId: null,
@@ -1004,11 +1001,14 @@
       chatTone: null,
       chatToneUnlocked: false,
       messagesLimit: 25,
-      messagesOffset: 0,
+      messagesCursor: null,
       hasMoreMessages: true,
       isLoadingMore: false,
       unreadRequest: null,
       teammatesRequest: null,
+      cachedInbox: null,
+      cachedEmployees: null,
+      presenceMap: {},
       async init() {
         this.initChatTone();
         try {
@@ -1138,7 +1138,6 @@
           spinnerStyle.textContent = '@keyframes bkChatSpin { to { transform: rotate(360deg); } }';
           document.head.appendChild(spinnerStyle);
         }
-
         const win = document.createElement('div');
         win.id = 'chat-window';
         win.style.cssText = 'position: fixed; bottom: 42px; right: 2rem; width: 290px; height: 460px; background: var(--bg-surface, #ffffff); border: 1px solid var(--border, #e4e4e7); border-radius: 12px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1); z-index: 1000; display: flex; flex-direction: column; overflow: hidden; font-family: var(--font, sans-serif); opacity: 0; visibility: hidden; transform: translateY(20px) scale(0.95); transition: opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1), transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.25s; pointer-events: none;';
@@ -1147,6 +1146,7 @@
           <div id="chat-list-view" style="display: flex; flex-direction: column; height: 100%;">
             <div style="padding: 0.65rem 0.85rem; border-bottom: 1px solid var(--border, #e4e4e7); display: flex; justify-content: space-between; align-items: center; background: var(--bg-elevated, #f4f4f5);">
               <span style="font-size: 0.82rem; font-weight: 700; color: var(--text-primary, #09090b);">Team Members</span>
+              <a href="/dashboard/messages" aria-label="Open Messages" title="Open Messages" style="margin-left:auto;color:var(--cyan,#3ba0c2);display:flex;padding:.25rem"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg></a>
               <button id="chat-close-btn-1" style="background: none; border: none; cursor: pointer; padding: 0.25rem; color: var(--text-muted, #71717a); display: flex; align-items: center; justify-content: center; outline: none;">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                   <line x1="5" y1="12" x2="19" y2="12" />
@@ -1243,18 +1243,9 @@
         if (this.unreadRequest) return this.unreadRequest;
         this.unreadRequest = (async () => {
           try {
-            const { data, error } = await window.BKAuth.sb
-            .from('chat_thread_members')
-            .select('unread_count')
-            .eq('employee_id', this.employeeId);
-          if (error) throw error;
-
-          let totalUnread = 0;
-          if (data) {
-            data.forEach(row => {
-              totalUnread += row.unread_count || 0;
-            });
-          }
+            const { data, error } = await window.BKAuth.sb.rpc('get_employee_chat_unread_total');
+            if (error) throw error;
+            const totalUnread = Number(data) || 0;
 
           const fabDot = document.getElementById('chat-fab-dot');
           if (fabDot) {
@@ -1277,13 +1268,8 @@
         const container = document.getElementById('chat-members-container');
         if (!container) return;
 
-        const cacheKey = `chat_inbox_cache_${this.employeeId}`;
-        const cachedData = localStorage.getItem(cacheKey);
-        if (cachedData) {
-          try {
-            const parsed = JSON.parse(cachedData);
-            this.renderInbox(parsed.inbox || [], parsed.allEmployees || [], parsed.presenceMap || {});
-          } catch(e) {}
+        if (this.cachedInbox && this.cachedEmployees) {
+          this.renderInbox(this.cachedInbox, this.cachedEmployees, this.presenceMap);
         }
 
         try {
@@ -1293,30 +1279,38 @@
               .select('id, first_name, last_name, picture_link, status_text, department, reporting_to')
               .eq('company_id', this.companyId)
               .eq('employment_status', 'Active')
-              .neq('id', this.employeeId),
-            window.BKAuth.sb.from('employee_presence').select('employee_id, status')
+              .neq('id', this.employeeId)
           ]);
-          const [inboxRes, empsRes, presenceRes] = await this.teammatesRequest;
+          const [inboxRes, empsRes] = await this.teammatesRequest;
           if (inboxRes.error) throw inboxRes.error;
           if (empsRes.error) throw empsRes.error;
 
           const inbox = inboxRes.data || [];
           const allEmployees = empsRes.data || [];
-          const presenceMap = {};
-          if (presenceRes.data) {
-            presenceRes.data.forEach(p => {
-              presenceMap[p.employee_id] = p.status;
-            });
-          }
+          const visibleEmployeeIds = [...new Set([
+            ...allEmployees.map(employee => employee.id),
+            ...inbox.map(thread => thread.other_employee_id)
+          ].filter(Boolean))];
+          const presenceRes = visibleEmployeeIds.length
+            ? await window.BKAuth.sb.from('employee_presence')
+              .select('employee_id, status')
+              .in('employee_id', visibleEmployeeIds)
+            : { data: [], error: null };
+          if (presenceRes.error) console.warn('Chat presence unavailable:', presenceRes.error);
 
-          localStorage.setItem(cacheKey, JSON.stringify({ inbox, allEmployees, presenceMap }));
+          this.presenceMap = {};
+          (presenceRes.data || []).forEach(p => {
+            this.presenceMap[p.employee_id] = p.status;
+          });
+          this.cachedInbox = inbox;
+          this.cachedEmployees = allEmployees;
 
           this.inboxByEmployee = {};
           inbox.forEach(t => {
             this.inboxByEmployee[t.other_employee_id] = t;
           });
 
-          this.renderInbox(inbox, allEmployees, presenceMap);
+          this.renderInbox(inbox, allEmployees, this.presenceMap);
         } catch (e) {
           console.error(e);
           this.hideChatLoading();
@@ -1457,12 +1451,11 @@
         this.activeReceiver = teammate;
         this.activeReceiverStatus = status;
         this.messagesLimit = 25;
-        this.messagesOffset = 0;
+        this.messagesCursor = null;
         this.hasMoreMessages = true;
         this.isLoadingMore = false;
 
-        const cached = JSON.parse(localStorage.getItem(`chat_inbox_cache_${this.employeeId}`));
-        const foundThread = cached?.inbox?.find(t => t.other_employee_id === teammate.id);
+        const foundThread = this.inboxByEmployee[teammate.id];
         this.activeThreadId = foundThread?.thread_id || null;
 
         document.getElementById('chat-list-view').style.display = 'none';
@@ -1537,23 +1530,37 @@
           this.isLoadingMore = true;
           this.showScrollLoadingIndicator();
         } else {
-          this.messagesOffset = 0;
+          this.messagesCursor = null;
           this.hasMoreMessages = true;
         }
 
         try {
-          const { data, error } = await window.BKAuth.sb
+          let query = window.BKAuth.sb
             .from('employee_chats')
             .select('id, sender_id, receiver_id, message, created_at, thread_id')
-            .or(`and(sender_id.eq.${this.employeeId},receiver_id.eq.${this.activeReceiver.id}),and(sender_id.eq.${this.activeReceiver.id},receiver_id.eq.${this.employeeId})`)
             .order('created_at', { ascending: false })
-            .range(this.messagesOffset, this.messagesOffset + this.messagesLimit - 1);
+            .order('id', { ascending: false })
+            .limit(this.messagesLimit);
+
+          query = this.activeThreadId
+            ? query.eq('thread_id', this.activeThreadId)
+            : query.or(`and(sender_id.eq.${this.employeeId},receiver_id.eq.${this.activeReceiver.id}),and(sender_id.eq.${this.activeReceiver.id},receiver_id.eq.${this.employeeId})`);
+
+          if (loadMore && this.messagesCursor) {
+            query = query.or(`created_at.lt.${this.messagesCursor.createdAt},and(created_at.eq.${this.messagesCursor.createdAt},id.lt.${this.messagesCursor.id})`);
+          }
+
+          const { data, error } = await query;
 
           if (error) throw error;
 
           const fetchedCount = data?.length || 0;
           if (fetchedCount < this.messagesLimit) {
             this.hasMoreMessages = false;
+          }
+          if (fetchedCount) {
+            const oldest = data[data.length - 1];
+            this.messagesCursor = { createdAt: oldest.created_at, id: oldest.id };
           }
 
           this.removeScrollLoadingIndicator();
@@ -1614,7 +1621,6 @@
             container.scrollTop = container.scrollHeight;
           }
 
-          this.messagesOffset += fetchedCount;
           this.isLoadingMore = false;
 
         } catch (e) {
@@ -1638,6 +1644,7 @@
         // Optimistic append bubble
         const container = document.getElementById('chat-messages-container');
         let msgRow = null;
+        let pendingSeparator = null;
         if (container) {
           const renderedMessages = container.querySelectorAll('[data-msg-time]');
           const lastMessage = renderedMessages[renderedMessages.length - 1];
@@ -1648,8 +1655,8 @@
 
           if (this.shouldShowMessageTime(nowTime, lastMessageTime)) {
             this.appendMessageTimeSeparator(container, pendingTimeId, now);
+            pendingSeparator = container.querySelector(`[data-time-for="${pendingTimeId}"]`);
           }
-
           msgRow = document.createElement('div');
           msgRow.className = 'chat-pending-message';
           msgRow.setAttribute('data-msg-time', String(nowTime));
@@ -1671,9 +1678,15 @@
           });
           if (error) throw error;
 
-          // Remove optimistic bubble and refresh messages
           if (msgRow) msgRow.remove();
-          await this.fetchMessages();
+          if (pendingSeparator) pendingSeparator.remove();
+          const sentMessage = Array.isArray(data) ? data[0] : data;
+          if (sentMessage?.id) {
+            this.activeThreadId = sentMessage.thread_id || this.activeThreadId;
+            this.appendMessageBubbleDirectly(sentMessage);
+          } else {
+            await this.fetchMessages();
+          }
 
         } catch (e) {
           console.error('Error sending message:', e);
@@ -1687,6 +1700,7 @@
             retryLink.textContent = 'Try again.';
             retryLink.onclick = () => {
               msgRow.remove();
+              if (pendingSeparator) pendingSeparator.remove();
               this.sendChatMessage(null, text);
             };
             errorEl.appendChild(retryLink);
@@ -1694,10 +1708,10 @@
           }
         }
       },
-
       appendMessageBubbleDirectly(msg) {
         const container = document.getElementById('chat-messages-container');
         if (!container) return;
+        if (container.querySelector(`[data-msg-id="${msg.id}"]`)) return;
 
         const messageTime = new Date(msg.created_at).getTime();
         const renderedMessages = container.querySelectorAll('[data-msg-time]');
@@ -1727,91 +1741,77 @@
           bubble.style.borderBottomLeftRadius = '4px';
         }
         bubble.textContent = msg.message;
-
         msgRow.appendChild(bubble);
         container.appendChild(msgRow);
         container.scrollTop = container.scrollHeight;
-        this.messagesOffset += 1;
-      },      setupLightweightRealtime() {
+      },
+      updatePresenceFromBroadcast(newLog) {
+        if (!newLog?.employee_id) return;
+        this.presenceMap[newLog.employee_id] = newLog.status;
+
+        if (this.employeeId === newLog.employee_id) {
+          const statusDot = document.getElementById('user-status-dot');
+          const statusText = document.getElementById('user-status-text');
+          const color = newLog.status === 'available' ? '#22c55e' : newLog.status === 'break' ? '#f97316' : '#9ca3af';
+          document.getElementById('user-avatar')?.style.setProperty('--presence-color', color);
+          if (statusDot && statusText) {
+            statusDot.style.backgroundColor = color;
+            statusText.textContent = newLog.status === 'available' ? 'Time in' : newLog.status === 'break' ? 'Break' : 'Time out';
+            statusText.style.color = color;
+          }
+        }
+
+        const memberItem = document.querySelector(`.chat-member-item[data-id="${newLog.employee_id}"]`);
+        const dot = memberItem?.querySelector('.status-dot');
+        if (dot) dot.style.backgroundColor = newLog.status === 'available' ? '#22c55e' : newLog.status === 'break' ? '#f97316' : '#9ca3af';
+        if (this.activeReceiver?.id === newLog.employee_id) {
+          const dotEl = document.getElementById('chat-header-status-dot');
+          if (dotEl) dotEl.style.backgroundColor = newLog.status === 'available' ? '#22c55e' : newLog.status === 'break' ? '#f97316' : '#9ca3af';
+        }
+      },
+      async disposeRealtime() {
+        const channels = [this.lightweightChannel, this.presenceChannel].filter(Boolean);
+        this.lightweightChannel = null;
+        this.presenceChannel = null;
+        await Promise.all(channels.map(channel => window.BKAuth.sb.removeChannel(channel)));
+      },
+
+      async setupLightweightRealtime() {
         if (this.lightweightChannel) return;
         try {
+          await window.BKAuth.sb.realtime.setAuth();
           this.lightweightChannel = window.BKAuth.sb
-            .channel('public:chat_unread_presence')
-            .on('postgres_changes', { 
-              event: '*', 
-              schema: 'public', 
-              table: 'chat_thread_members', 
-              filter: `employee_id=eq.${this.employeeId}` 
-            }, payload => {
+            .channel(`employee:${this.employeeId}:chat`, { config: { private: true } })
+            .on('broadcast', { event: 'chat_message' }, payload => {
+              const newMsg = payload.payload;
+              if (!newMsg) return;
               this.updateUnreadIndicators();
+              if (newMsg.receiver_id === this.employeeId) this.playChatTone();
+              if (this.activeReceiver &&
+                  newMsg.thread_id === this.activeThreadId &&
+                  newMsg.sender_id === this.activeReceiver.id) {
+                this.appendMessageBubbleDirectly(newMsg);
+                window.BKAuth.sb.rpc('mark_chat_thread_read', { p_thread_id: newMsg.thread_id }).then(() => {
+                  this.updateUnreadIndicators();
+                });
+              }
               const chatWin = document.getElementById('chat-window');
               const isOpen = chatWin && chatWin.classList.contains('open');
               const listView = document.getElementById('chat-list-view');
               const isListOpen = isOpen && listView && listView.style.display !== 'none';
-              if (isListOpen) {
-                this.loadTeammates(true);
-              }
-            })
-            .on('postgres_changes', {
-              event: 'INSERT',
-              schema: 'public',
-              table: 'employee_chats',
-              filter: `receiver_id=eq.${this.employeeId}`
-            }, payload => {
-              this.playChatTone();
-              const newMsg = payload.new;
-              if (newMsg && this.activeReceiver && newMsg.sender_id === this.activeReceiver.id) {
-                this.appendMessageBubbleDirectly(newMsg);
-                if (newMsg.thread_id) {
-                  window.BKAuth.sb.rpc('mark_chat_thread_read', { p_thread_id: newMsg.thread_id }).then(() => {
-                    this.updateUnreadIndicators();
-                  });
-                }
-              }
-            })
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'attendance_logs' }, payload => {
-              const newLog = payload.new;
-              if (!newLog) return;
-
-              // Update user's sidebar status immediately if it is the current employee
-              if (this.employeeId && newLog.employee_id === this.employeeId) {
-                const statusDot = document.getElementById('user-status-dot'), statusText = document.getElementById('user-status-text');
-                document.getElementById('user-avatar')?.style.setProperty('--presence-color', newLog.status === 'available' ? '#22c55e' : newLog.status === 'break' ? '#f97316' : '#9ca3af');
-                if (statusDot && statusText) {
-                  if (newLog.status === 'available') {
-                    statusDot.style.backgroundColor = '#22c55e'; // Green
-                    statusText.textContent = 'Time in';
-                    statusText.style.color = '#22c55e';
-                  } else if (newLog.status === 'break') {
-                    statusDot.style.backgroundColor = '#f97316'; // Orange
-                    statusText.textContent = 'Break';
-                    statusText.style.color = '#f97316';
-                  } else {
-                    statusDot.style.backgroundColor = '#9ca3af'; // Gray
-                    statusText.textContent = 'Time out';
-                    statusText.style.color = '#9ca3af';
-                  }
-                }
-              }
-
-              const chatWin = document.getElementById('chat-window');
-              const isOpen = chatWin && chatWin.classList.contains('open');
-              if (isOpen) {
-                const memberItem = document.querySelector(`.chat-member-item[data-id="${newLog.employee_id}"]`);
-                if (memberItem) {
-                  const dot = memberItem.querySelector('.status-dot');
-                  const statusColor = newLog.status === 'available' ? '#22c55e' : newLog.status === 'break' ? '#f97316' : '#9ca3af';
-                  if (dot) dot.style.backgroundColor = statusColor;
-                }
-                if (this.activeReceiver && newLog.employee_id === this.activeReceiver.id) {
-                  const dotEl = document.getElementById('chat-header-status-dot');
-                  if (dotEl) {
-                    dotEl.style.backgroundColor = newLog.status === 'available' ? '#22c55e' : newLog.status === 'break' ? '#f97316' : '#9ca3af';
-                  }
-                }
-              }
+              if (isListOpen) this.loadTeammates(true);
             })
             .subscribe();
+
+          this.presenceChannel = window.BKAuth.sb
+            .channel(`company:${this.companyId}:chat`, { config: { private: true } })
+            .on('broadcast', { event: 'presence_changed' }, payload => {
+              this.updatePresenceFromBroadcast(payload.payload);
+            }).on('broadcast', { event: 'chat_inbox_changed' }, () => {
+              this.updateUnreadIndicators();
+              if (document.getElementById('chat-window')?.classList.contains('open')) this.loadTeammates(true);
+            }).subscribe();
+          window.addEventListener('pagehide', () => this.disposeRealtime(), { once: true });
         } catch (err) {
           console.warn('Lightweight realtime setup failed:', err);
         }
