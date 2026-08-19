@@ -269,8 +269,8 @@
       try { await navigator.clipboard.writeText(code); $('copy-status').textContent = 'Code copied.'; }
       catch { $('copy-status').textContent = 'Select and copy the code above.'; }
     });
-    const { data } = await sb.auth.getSession();
-    if (data?.session) await loadPortal(); else showLogin();
+    showLogin();
+    await sb.auth.signOut({ scope: 'local' });
   }
 
   document.addEventListener('DOMContentLoaded', init);
