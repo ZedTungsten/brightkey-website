@@ -1,4 +1,4 @@
-import { createAuthenticatedClient, getBearerToken, setApiCors } from '../lib/api/security.js';
+import { createAuthenticatedClient, getBearerToken, isCustomerPortalUser, setApiCors } from '../lib/api/security.js';
 
 export default async function handler(req, res) {
   setApiCors(req, res, 'GET, OPTIONS');
@@ -14,6 +14,9 @@ export default async function handler(req, res) {
     const user = userData?.user;
     const email = String(user?.email || '').trim().toLowerCase();
     if (userError || !user || !email) return res.status(401).json({ error: 'Your session has expired. Sign in again.' });
+    if (isCustomerPortalUser(user)) {
+      return res.status(403).json({ error: 'Customer accounts can only access the customer portal.' });
+    }
 
     const ownerRowsRequest = (async () => {
       const exactResult = await supabase.from('tenants').select('id, owner_email').eq('owner_email', email).limit(50);

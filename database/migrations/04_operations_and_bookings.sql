@@ -1205,3 +1205,230 @@ $$;
 
 REVOKE ALL ON FUNCTION public.create_installer_session(TEXT) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.create_installer_session(TEXT) TO anon;
+
+
+-- =========================================================================
+-- CONSOLIDATED SOURCE: 20260809_installer_notes.sql
+-- =========================================================================
+
+CREATE TABLE IF NOT EXISTS public.installer_notes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id UUID NOT NULL REFERENCES public.companies(id) ON DELETE CASCADE,
+  title TEXT NOT NULL CHECK (char_length(title) BETWEEN 1 AND 160),
+  content_html TEXT NOT NULL CHECK (char_length(content_html) BETWEEN 1 AND 100000),
+  created_by UUID DEFAULT auth.uid(),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+ALTER TABLE public.installer_notes ENABLE ROW LEVEL SECURITY;
+
+CREATE INDEX IF NOT EXISTS idx_installer_notes_company_updated
+  ON public.installer_notes (company_id, updated_at DESC);
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'installer_notes' AND policyname = 'Company members can read installer notes'
+  ) THEN
+    CREATE POLICY "Company members can read installer notes" ON public.installer_notes
+      FOR SELECT USING (
+        company_id IN (
+          SELECT company.id
+          FROM public.companies AS company
+          JOIN public.tenant_members AS member ON member.tenant_id = company.tenant_id
+          WHERE member.user_id = auth.uid()
+        )
+      );
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'installer_notes' AND policyname = 'Company members can create installer notes'
+  ) THEN
+    CREATE POLICY "Company members can create installer notes" ON public.installer_notes
+      FOR INSERT WITH CHECK (
+        company_id IN (
+          SELECT company.id
+          FROM public.companies AS company
+          JOIN public.tenant_members AS member ON member.tenant_id = company.tenant_id
+          WHERE member.user_id = auth.uid()
+        )
+        AND created_by = auth.uid()
+      );
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'installer_notes' AND policyname = 'Company members can update installer notes'
+  ) THEN
+    CREATE POLICY "Company members can update installer notes" ON public.installer_notes
+      FOR UPDATE USING (
+        company_id IN (
+          SELECT company.id
+          FROM public.companies AS company
+          JOIN public.tenant_members AS member ON member.tenant_id = company.tenant_id
+          WHERE member.user_id = auth.uid()
+        )
+      ) WITH CHECK (
+        company_id IN (
+          SELECT company.id
+          FROM public.companies AS company
+          JOIN public.tenant_members AS member ON member.tenant_id = company.tenant_id
+          WHERE member.user_id = auth.uid()
+        )
+      );
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'installer_notes' AND policyname = 'Company members can delete installer notes'
+  ) THEN
+    CREATE POLICY "Company members can delete installer notes" ON public.installer_notes
+      FOR DELETE USING (
+        company_id IN (
+          SELECT company.id
+          FROM public.companies AS company
+          JOIN public.tenant_members AS member ON member.tenant_id = company.tenant_id
+          WHERE member.user_id = auth.uid()
+        )
+      );
+  END IF;
+END
+$$;
+
+
+-- =========================================================================
+-- CONSOLIDATED SOURCE: 20260809_installer_notes_portal_access.sql
+-- =========================================================================
+
+CREATE OR REPLACE FUNCTION public.get_installer_notes(p_token UUID)
+RETURNS TABLE (
+  id UUID,
+  title TEXT,
+  content_html TEXT,
+  updated_at TIMESTAMPTZ
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT note.id, note.title, note.content_html, note.updated_at
+  FROM public.installer_sessions AS session
+  JOIN public.installer_notes AS note
+    ON note.company_id = session.company_id
+  WHERE session.token = p_token
+    AND session.expires_at > now()
+  ORDER BY note.updated_at DESC
+  LIMIT 100;
+$$;
+
+REVOKE ALL ON FUNCTION public.get_installer_notes(UUID) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.get_installer_notes(UUID) TO anon;
+
+
+-- =========================================================================
+-- CONSOLIDATED SOURCE: 20260813_logistics_calendar_warehouse_leaves.sql
+-- =========================================================================
+
+CREATE OR REPLACE FUNCTION public.get_warehouse_staff_approved_leaves(
+  p_company_id UUID,
+  p_start_date DATE,
+  p_end_date DATE
+)
+RETURNS TABLE (
+  employee_id UUID,
+  employee_name TEXT,
+  date_from DATE,
+  date_to DATE
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+BEGIN
+  IF p_company_id IS NULL OR p_start_date IS NULL OR p_end_date IS NULL OR p_start_date > p_end_date THEN
+    RETURN;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.companies company
+    JOIN public.tenant_members member
+      ON member.tenant_id = company.tenant_id
+    WHERE company.id = p_company_id
+      AND member.user_id = auth.uid()
+      AND (
+        lower(coalesce(member.role, '')) IN ('owner', 'admin')
+        OR EXISTS (
+          SELECT 1
+          FROM unnest(coalesce(member.accessible_modules, ARRAY[]::TEXT[])) access
+          WHERE lower(trim(access)) = 'logistics'
+             OR lower(trim(access)) LIKE 'logistics:%'
+        )
+      )
+  ) THEN
+    RETURN;
+  END IF;
+
+  RETURN QUERY
+  SELECT
+    employee.id,
+    trim(concat_ws(' ', employee.first_name, employee.last_name)),
+    request.date_from,
+    request.date_to
+  FROM public.leave_requests request
+  JOIN public.employees employee
+    ON employee.id = request.employee_id
+   AND employee.company_id = request.company_id
+  WHERE request.company_id = p_company_id
+    AND lower(request.status) = 'approved'
+    AND request.date_from <= p_end_date
+    AND request.date_to >= p_start_date
+    AND 'warehouse staff' = ANY (
+      regexp_split_to_array(lower(coalesce(employee.assignment, '')), '\s*,\s*')
+    )
+  ORDER BY request.date_from, employee.first_name, employee.last_name;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.get_warehouse_staff_approved_leaves(UUID, DATE, DATE) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.get_warehouse_staff_approved_leaves(UUID, DATE, DATE) TO authenticated;
+
+
+-- =========================================================================
+-- CONSOLIDATED SOURCE: 20260814_installer_service_catalog.sql
+-- =========================================================================
+
+-- Expose only the tenant's Service-category SKU labels to a valid installer
+-- session. This keeps product classification authoritative without granting the
+-- anonymous installer portal direct access to the full product catalog.
+CREATE OR REPLACE FUNCTION public.get_installer_service_catalog(p_token UUID)
+RETURNS TABLE (
+  sku TEXT,
+  title TEXT
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT
+    product.sku::TEXT,
+    product.title::TEXT
+  FROM public.installer_sessions AS session
+  JOIN public.products AS product
+    ON product.company_id = session.company_id
+  WHERE session.token = p_token
+    AND session.expires_at > now()
+    AND lower(trim(product.category)) = 'service'
+    AND product.sku IS NOT NULL
+    AND trim(product.sku) <> ''
+  ORDER BY product.sku
+  LIMIT 250;
+$$;
+
+REVOKE ALL ON FUNCTION public.get_installer_service_catalog(UUID) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.get_installer_service_catalog(UUID) TO anon;

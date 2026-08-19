@@ -47,7 +47,7 @@ test('subscription API retains validation, throttling, and server-side plan veri
 });
 
 test('subscription registration rejects duplicate normalized emails atomically', () => {
-  const migration = read('database/migrations/20260807_unique_subscription_email.sql');
+  const migration = read('database/migrations/01_core_tenancy.sql');
   assert.match(migration, /pg_advisory_xact_lock/);
   assert.match(migration, /LOWER\(TRIM\(owner_email\)\) = v_email/);
   assert.match(migration, /LOWER\(TRIM\(business_email\)\) = v_email/);

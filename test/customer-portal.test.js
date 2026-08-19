@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { normalizePhone, normalizeUsername } from '../api/customer-login.js';
-import { productItems, publicProduct } from '../api/customer-portal-data.js';
+import { productItems, productSpecifications, publicProduct } from '../api/customer-portal-data.js';
 
 test('customer credentials normalize exactly like the CS customer list', () => {
   assert.equal(normalizeUsername(' John-Taller '), 'johntaller');
@@ -25,4 +25,23 @@ test('public product payload exposes only portal catalog fields', () => {
   assert.equal(result.company_id, undefined);
   assert.equal(result.dealer_price, undefined);
   assert.deepEqual(result.features, { wifi: 'Yes' });
+});
+
+test('portal specifications follow product-page definitions and include column values', () => {
+  const product = {
+    show_specs: true,
+    spec_warranty: '1 year',
+    spec_material: 'Aluminum alloy',
+    specifications: { ingress_rating: 'IP66' }
+  };
+  const definitions = [
+    { label: 'Warranty', field: 'spec_warranty', source: 'column' },
+    { label: 'Material', field: 'spec_material', source: 'column' },
+    { label: 'Ingress Rating', field: 'ingress_rating', source: 'json' }
+  ];
+  assert.deepEqual(productSpecifications(product, definitions), {
+    Warranty: '1 year',
+    Material: 'Aluminum alloy',
+    'Ingress Rating': 'IP66'
+  });
 });

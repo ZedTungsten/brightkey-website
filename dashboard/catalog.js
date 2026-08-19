@@ -569,9 +569,9 @@
       const uploadedDate = p.created_at ? new Date(p.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
 
       return `<tr class="${isChild ? 'row-child' : ''} ${selectedProductIds.includes(p.id) ? 'row-selected' : ''}">
-        <td style="text-align: center; vertical-align: middle;"><input type="checkbox" class="row-checkbox" data-id="${p.id}" style="cursor: pointer;" ${selectedProductIds.includes(p.id) ? 'checked' : ''} /></td>
-        <td class="product-image-cell"><button type="button" class="product-image-trigger" aria-label="View ${esc(p.sku || 'product')} image" title="View image"><img class="product-main-thumb" src="${esc(mainImage)}" alt="${esc(p.sku || 'Product')} main image" loading="lazy" /></button></td>
-        <td class="cell-sku"><span class="sku-badge">${esc(p.sku || 'NO-SKU')}</span>${parentWarningHtml}</td>
+        <td class="catalog-sticky-col col-select" style="text-align: center; vertical-align: middle;"><input type="checkbox" class="row-checkbox" data-id="${p.id}" style="cursor: pointer;" ${selectedProductIds.includes(p.id) ? 'checked' : ''} /></td>
+        <td class="catalog-sticky-col col-image product-image-cell"><button type="button" class="product-image-trigger" aria-label="View ${esc(p.sku || 'product')} image" title="View image"><img class="product-main-thumb" src="${esc(mainImage)}" alt="${esc(p.sku || 'Product')} main image" loading="lazy" /></button></td>
+        <td class="catalog-sticky-col col-sku cell-sku"><span class="sku-badge" title="${esc(p.sku || 'NO-SKU')}">${esc(p.sku || 'NO-SKU')}</span>${parentWarningHtml}</td>
         <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${titleHtml}</td>
         <td>${esc(p.category || '—')}</td>
         <td class="price-col-dealer" style="text-align:right;font-variant-numeric:tabular-nums;${isQuickEditingPrices ? 'padding: 0.15rem 0.25rem;' : ''}">

@@ -6,9 +6,9 @@ const source = fs.readFileSync(new URL('../dashboard/payout-tracker/payout/index
 
 test('commission-only employees remain visible with no salary', () => {
   assert.match(source, /isCommissionOnlyEmployee\(emp, monthKey = this\.monthKey\(\)\)/);
-  assert.match(source, /this\.isRegularPayoutEmployee\(emp, mk\) \|\| this\.isCommissionOnlyEmployee\(emp, mk\)/);
+  assert.match(source, /this\.isRegularPayoutEmployee\(emp,\s*mk\)\s*\|\|\s*this\.isCommissionOnlyEmployee\(emp,\s*mk\)/);
   assert.match(source, /const baseSalary\s+= commissionOnly \? 0 : \(emp\.salary \|\| 0\)/);
-  assert.match(source, /const isEligible = commissionOnly \? commsVal > 0 : regularCutoffEligible/);
+  assert.match(source, /let isEligible = commissionOnly \? commsVal > 0 : regularCutoffEligible/);
   assert.match(source, /const requiredDays = commissionOnly/);
   assert.match(source, /commissionOnly \|\| this\.isActiveEmployee\(emp\) \? null : this\.getInactiveDate\(emp\)/);
 });

@@ -8,7 +8,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = relativePath => fs.readFileSync(path.join(root, relativePath), 'utf8');
 
 test('database migration enforces tenant storage and the 0.5 GB warning buffer', () => {
-  const sql = read('database/migrations/20260807_storage_quota_enforcement_and_notice.sql');
+  const sql = read('database/migrations/07_optimizations.sql');
   assert.match(sql, /BEFORE INSERT OR UPDATE[\s\S]*storage\.objects/);
   assert.match(sql, /enforce_company_storage_quota_trigger/);
   assert.match(sql, /track_company_storage_usage_trigger/);

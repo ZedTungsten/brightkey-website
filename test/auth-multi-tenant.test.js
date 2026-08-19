@@ -34,7 +34,7 @@ function loadAuth(activeTenantId = null) {
 
   const sb = {
     auth: {
-      getSession: async () => ({ data: { session: { user } } }),
+      getSession: async () => ({ data: { session: { user, access_token: 'test-token' } } }),
       updateUser: async payload => {
         updateCalls.push(payload);
         user = { ...user, user_metadata: { ...user.user_metadata, ...payload.data } };
@@ -52,6 +52,21 @@ function loadAuth(activeTenantId = null) {
     console,
     document: { readyState: 'loading', addEventListener() {} },
     Element: class Element {},
+    fetch: async () => ({
+      ok: true,
+      json: async () => ({
+        memberships: memberships.map(membership => {
+          const company = companies.find(item => item.tenant_id === membership.tenant_id);
+          return {
+            tenantId: membership.tenant_id,
+            role: membership.role,
+            modules: membership.accessible_modules,
+            companyId: company?.id || null,
+            companyName: company?.name || 'Company'
+          };
+        })
+      })
+    }),
     Headers,
     Map,
     MutationObserver: class MutationObserver {},

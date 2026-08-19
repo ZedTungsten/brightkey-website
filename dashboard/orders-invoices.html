@@ -1735,73 +1735,48 @@
       }
     }
 
-    // Automatically creates inventory transactions and updates inventory counts for newly added products.
+    // Atomically reserves inventory for products added after the booking was created.
     async function checkAndAddNewProducts(orderNo, newProducts) {
       if (!loadedBookingState || !loadedBookingState.products) return;
-      const oldSkus = loadedBookingState.products.filter(p => !p.cancelled).map(p => p.sku);
-      const newProductsToAdd = newProducts.filter(p => !p.cancelled && !oldSkus.includes(p.sku));
+      const oldSkus = new Set(loadedBookingState.products
+        .filter(p => !p.cancelled)
+        .map(p => String(p.sku || '').trim().toUpperCase()));
+      const newProductsToAdd = newProducts.filter(p => (
+        !p.cancelled && !oldSkus.has(String(p.sku || '').trim().toUpperCase())
+      ));
 
       if (newProductsToAdd.length > 0) {
-        try {
-          const customer = getInvoiceCustomerFields();
-          const city = customer.customer_city || 'N/A';
-          const customerName = customer.customer_name;
-          
-          for (const item of newProductsToAdd) {
-             // Create transaction record
-             const txPayload = {
-               sku: item.sku,
-               quantity: item.qty,
-               type: 'customer_order',
-               status: 'reserved',
-               reference_id: orderNo,
-               customer_name: customerName,
-               customer_city: city,
-               timestamp_reserved: new Date().toISOString(),
-               warehouse_id: item.warehouse_id || null
-             };
-             if (typeof currentCompanyId !== 'undefined' && currentCompanyId) {
-               txPayload.company_id = currentCompanyId;
-             }
-             
-             const { error: insTxErr } = await sb.from('inventory_transactions').insert([txPayload]);
-             if (insTxErr) {
-               console.error('Error inserting transaction for new product:', insTxErr);
-               continue;
-             }
- 
-             // Update inventory totals
-             let invQ = sb.from('inventory').select('*').eq('sku', item.sku);
-             if (item.warehouse_id) {
-               invQ = invQ.eq('warehouse_id', item.warehouse_id);
-             } else {
-               invQ = invQ.is('warehouse_id', null);
-             }
-             const { data: invRow, error: invErr } = await invQ;
-             if (invErr) {
-               console.error('Error querying inventory for SKU:', item.sku, invErr);
-               continue;
-             }
-             if (invRow && invRow.length > 0) {
-               const current = invRow[0];
-               const { error: updErr } = await sb.from('inventory').update({
-                 available: Math.max(0, (current.available || 0) - item.qty),
-                 reserved: (current.reserved || 0) + item.qty
-               }).eq('id', current.id);
-               if (updErr) console.error('Error updating inventory for added product:', updErr);
-             } else {
-               // Insert dynamic default row for inventory if it does not exist
-               const { error: insErr } = await sb.from('inventory').insert([{
-                 sku: item.sku,
-                 available: -item.qty,
-                 reserved: item.qty,
-                 warehouse_id: item.warehouse_id || null
-               }]);
-               if (insErr) console.error('Error inserting inventory row for added product:', insErr);
-             }
+        if (!currentCompanyId) {
+          throw new Error('Company information is unavailable. Refresh and try again.');
+        }
+
+        const customer = getInvoiceCustomerFields();
+        const warehouseItems = new Map();
+        newProductsToAdd.forEach(item => {
+          const sku = String(item.sku || '').trim();
+          const product = dbProducts.find(candidate => (
+            String(candidate.sku || '').trim().toUpperCase() === sku.toUpperCase()
+          ));
+          if (product?.count_inventory === false) return;
+          if (!item.warehouse_id) {
+            throw new Error(`Select a warehouse for ${sku} before saving.`);
           }
-        } catch (err) {
-          console.error('Error processing new products creation:', err);
+          if (!warehouseItems.has(item.warehouse_id)) warehouseItems.set(item.warehouse_id, []);
+          warehouseItems.get(item.warehouse_id).push({ sku, quantity: item.qty });
+        });
+
+        const reservedAt = new Date().toISOString();
+        for (const [warehouseId, items] of warehouseItems) {
+          const { error } = await sb.rpc('reserve_customer_order_inventory', {
+            p_company_id: currentCompanyId,
+            p_warehouse_id: warehouseId,
+            p_reference_id: orderNo,
+            p_customer_name: customer.customer_name,
+            p_customer_city: customer.customer_city || 'N/A',
+            p_reserved_at: reservedAt,
+            p_items: items
+          });
+          if (error) throw error;
         }
       }
     }
@@ -2072,6 +2047,7 @@
     // --- Unsaved Changes & Save Changes State Management ---
     let loadedBookingState = null;
     let hasUnsavedChanges = false;
+    let isSavingInvoiceChanges = false;
     let pendingNavigationUrl = null;
 
     window.checkChanges = function() {
@@ -2166,11 +2142,12 @@
     }
 
     window.saveInvoiceChanges = async function() {
-      if (!selectedBookingId) return;
+      if (!selectedBookingId || isSavingInvoiceChanges) return;
+      isSavingInvoiceChanges = true;
 
       const btn = document.getElementById('btn-save-changes');
       const originalText = btn.innerText;
-      btn.innerText = '⌛ Saving...';
+      btn.innerText = 'Saving...';
       btn.disabled = true;
 
       try {
@@ -2331,6 +2308,7 @@
         console.error('Error saving changes:', err);
         showNotification('Changes could not be saved. Please refresh and try again.', 'error');
       } finally {
+        isSavingInvoiceChanges = false;
         btn.innerText = originalText;
         btn.disabled = !hasUnsavedChanges;
       }

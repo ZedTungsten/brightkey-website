@@ -58,6 +58,17 @@
     return String(value || '').trim().replace(/\s*:\s*/, ':').toLowerCase();
   }
 
+  function isCustomerPortalUser(user) {
+    return user?.app_metadata?.portal_role === 'customer'
+      || Boolean(user?.app_metadata?.customer_account_id);
+  }
+
+  function redirectCustomerToPortal(user) {
+    if (!isCustomerPortalUser(user)) return false;
+    window.location.replace('/customer');
+    return true;
+  }
+
   function hasModuleAccessForPath(modules, moduleName, path = window.location.pathname) {
     const normalizedModule = String(moduleName || '').trim().toLowerCase();
     const normalizedModules = (Array.isArray(modules) ? modules : []).map(normalizeAccessToken);
@@ -217,6 +228,7 @@
       window.location.href = redirectTo;
       return null;
     }
+    if (redirectCustomerToPortal(user)) return null;
     return user;
   }
 
@@ -245,7 +257,9 @@
       })();
     }
     const user = await cachedUserPromise;
-    if (user) window.location.href = await getPostLoginDestination(to);
+    if (!user) return;
+    if (redirectCustomerToPortal(user)) return;
+    window.location.href = await getPostLoginDestination(to);
   }
 
   /**
@@ -306,6 +320,7 @@
       cachedMembershipsPromise = (async () => {
         const user = await getUser();
         if (!user) return [];
+        if (isCustomerPortalUser(user)) return [];
 
         const { data: sessionData } = await sb.auth.getSession();
         const accessToken = sessionData?.session?.access_token;
@@ -322,6 +337,8 @@
   }
 
   async function getPostLoginDestination(defaultDestination = '/dashboard') {
+    const user = await getUser();
+    if (isCustomerPortalUser(user)) return '/customer';
     const memberships = await getMemberships();
     return memberships.length > 1 ? '/admin?select_business=1' : defaultDestination;
   }
@@ -358,6 +375,7 @@
       cachedUserRolePromise = (async () => {
         const user = await getUser();
         if (!user) return null;
+        if (redirectCustomerToPortal(user)) return null;
 
         const memberships = await getMemberships();
         if (!memberships.length) return null;
@@ -606,6 +624,7 @@
     getEmployee,
     getEmployeeById,
     getEmployeeStatus,
+    isCustomerPortalUser,
     authenticatedFetch,
     checkStorageQuota,
     formatStorageBytes,

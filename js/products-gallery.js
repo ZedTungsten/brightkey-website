@@ -424,10 +424,11 @@
       const features = productFeatures(product);
       const matchesSearch = !state.query || product._search.includes(state.query);
       const matchesCategory = !state.category || category === state.category;
-      const matchesBusiness = !state.featureBusiness || product.business === state.featureBusiness;
+      const matchesFeatureBusiness = state.selectedFeatures.size === 0
+        || product.business === state.featureBusiness;
       const matchesPrice = product._price >= state.minPrice && product._price <= state.maxPrice;
       const matchesFeatures = [...state.selectedFeatures].every(feature => features.includes(feature));
-      return matchesSearch && matchesCategory && matchesBusiness && matchesPrice && matchesFeatures;
+      return matchesSearch && matchesCategory && matchesFeatureBusiness && matchesPrice && matchesFeatures;
     });
 
     state.filtered = sortProducts(filtered);

@@ -6,6 +6,23 @@ const FEATURE_TABLES = {
   cctv: 'cctv_features',
   fire_extinguisher: 'fireextinguisher_features'
 };
+const PRODUCT_PORTAL_FIELDS = [
+  'id', 'sku', 'title', 'slug', 'image_main', 'description', 'business',
+  'sale_price', 'discounted_price', 'show_specs', 'specifications',
+  'spec_model', 'spec_color', 'spec_weight', 'spec_operating_temperature',
+  'spec_warranty', 'spec_support', 'spec_material', 'spec_voltage', 'spec_dimension'
+].join(',');
+const DEFAULT_SPEC_DEFINITIONS = [
+  { label: 'Model', field: 'spec_model', source: 'column' },
+  { label: 'Color', field: 'spec_color', source: 'column' },
+  { label: 'Weight', field: 'spec_weight', source: 'column' },
+  { label: 'Operating Temperature', field: 'spec_operating_temperature', source: 'column' },
+  { label: 'Warranty', field: 'spec_warranty', source: 'column' },
+  { label: 'Technical Support', field: 'spec_support', source: 'column' },
+  { label: 'Material', field: 'spec_material', source: 'column' },
+  { label: 'Voltage', field: 'spec_voltage', source: 'column' },
+  { label: 'Dimension', field: 'spec_dimension', source: 'column' }
+];
 const splitPipe = value => String(value || '').split('|').map(item => item.trim()).filter(Boolean);
 
 function productItems(booking) {
@@ -14,7 +31,17 @@ function productItems(booking) {
   return skus.map((sku, index) => ({ sku, quantity: Number.parseInt(quantities[index], 10) || 1 }));
 }
 
-function publicProduct(product, features = {}) {
+function productSpecifications(product, definitions = DEFAULT_SPEC_DEFINITIONS) {
+  if (product.show_specs === false) return {};
+  return Object.fromEntries(definitions.map(definition => {
+    const value = definition.source === 'column'
+      ? product[definition.field]
+      : product.specifications?.[definition.field];
+    return [definition.label, value];
+  }).filter(([label, value]) => label && value !== null && value !== ''));
+}
+
+function publicProduct(product, features = {}, specDefinitions = DEFAULT_SPEC_DEFINITIONS) {
   return {
     id: product.id,
     sku: product.sku,
@@ -25,12 +52,12 @@ function publicProduct(product, features = {}) {
     business: product.business,
     sale_price: product.sale_price,
     discounted_price: product.discounted_price,
-    specifications: product.specifications || {},
+    specifications: productSpecifications(product, specDefinitions),
     features
   };
 }
 
-export { productItems, publicProduct };
+export { productItems, productSpecifications, publicProduct };
 
 export default async function handler(req, res) {
   setApiCors(req, res, 'GET, OPTIONS');
@@ -51,20 +78,32 @@ export default async function handler(req, res) {
       .maybeSingle();
     if (accountError || !account) return res.status(403).json({ error: 'This login is not linked to a customer portal.' });
 
-    const [{ data: orderLinks, error: linkError }, { data: catalog, error: catalogError }] = await Promise.all([
+    const [
+      { data: orderLinks, error: linkError },
+      { data: catalog, error: catalogError },
+      { data: specSetting, error: specSettingError }
+    ] = await Promise.all([
       admin.from('customer_portal_orders')
         .select('booking_id')
         .eq('account_id', account.id)
         .order('created_at', { ascending: false })
         .limit(50),
       admin.from('products')
-        .select('id,sku,title,slug,image_main,description,business,sale_price,discounted_price,specifications')
+        .select(PRODUCT_PORTAL_FIELDS)
         .eq('company_id', account.company_id)
         .eq('show_on_ecommerce', true)
         .order('title')
-        .limit(60)
+        .limit(60),
+      admin.from('global_settings')
+        .select('value')
+        .eq('company_id', account.company_id)
+        .eq('key', 'catalog_spec_definitions')
+        .maybeSingle()
     ]);
-    if (linkError || catalogError) throw linkError || catalogError;
+    if (linkError || catalogError || specSettingError) throw linkError || catalogError || specSettingError;
+    const specDefinitions = Array.isArray(specSetting?.value?.definitions)
+      ? specSetting.value.definitions
+      : DEFAULT_SPEC_DEFINITIONS;
 
     const bookingIds = (orderLinks || []).map(link => link.booking_id);
     let bookings = [];
@@ -83,7 +122,7 @@ export default async function handler(req, res) {
     let purchasedProducts = [];
     if (purchasedSkus.length) {
       const { data, error } = await admin.from('products')
-        .select('id,sku,title,slug,image_main,description,business,sale_price,discounted_price,specifications')
+        .select(PRODUCT_PORTAL_FIELDS)
         .eq('company_id', account.company_id)
         .in('sku', purchasedSkus.slice(0, 100));
       if (error) throw error;
@@ -104,7 +143,10 @@ export default async function handler(req, res) {
       });
     }));
 
-    const purchasedMap = Object.fromEntries(purchasedProducts.map(product => [product.sku, publicProduct(product, featuresByProduct[product.id])]));
+    const purchasedMap = Object.fromEntries(purchasedProducts.map(product => [
+      product.sku,
+      publicProduct(product, featuresByProduct[product.id], specDefinitions)
+    ]));
     return res.status(200).json({
       customer: {
         first_name: account.customer_first_name,
@@ -120,7 +162,7 @@ export default async function handler(req, res) {
         doors: booking.doors,
         items: productItems(booking).map(item => ({ ...item, product: purchasedMap[item.sku] || null }))
       })),
-      catalog: (catalog || []).map(product => publicProduct(product)),
+      catalog: (catalog || []).map(product => publicProduct(product, {}, specDefinitions)),
       vouchers: []
     });
   } catch (error) {

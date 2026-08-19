@@ -6,6 +6,16 @@
   const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
   const state = { data: null, loading: false };
   const $ = id => document.getElementById(id);
+  const FEATURE_LABELS = {
+    pan_tilt_zoom: 'Pan, Tilt & Zoom (PTZ)',
+    face_recognition_3d: '3D Face Recognition',
+    type_co2: 'CO₂ Gas Type',
+    type_abc: 'ABC Dry Chemical',
+    type_dry_chemical: 'Dry Chemical Powder',
+    type_foam: 'Foam Spray',
+    pressure_gauge: 'Pressure Gauge Indicator',
+    wifi_connect: 'WiFi Connectivity'
+  };
 
   function safeImage(value) {
     const source = String(value || '').trim();
@@ -21,7 +31,17 @@
   }
 
   function label(value) {
-    return String(value || '').replace(/_/g, ' ').replace(/\b\w/g, character => character.toUpperCase());
+    if (FEATURE_LABELS[value]) return FEATURE_LABELS[value];
+    return String(value || '')
+      .replace(/_/g, ' ')
+      .replace(/\b\w/g, character => character.toUpperCase())
+      .replace(/\bPin\b/g, 'PIN')
+      .replace(/\bRfid\b/g, 'RFID')
+      .replace(/\bUsb\b/g, 'USB')
+      .replace(/\b3d\b/gi, '3D')
+      .replace(/\bWifi\b/g, 'WiFi')
+      .replace(/\bPoe\b/g, 'PoE')
+      .replace(/\bAi\b/g, 'AI');
   }
 
   function status(booking) {
@@ -49,29 +69,115 @@
     return box;
   }
 
-  function details(product) {
-    const values = [
-      ...Object.entries(product?.specifications || {}),
-      ...Object.entries(product?.features || {})
-    ].filter(([, value]) => value !== null && value !== '' && value !== false);
-    if (!values.length) return null;
-    const disclosure = document.createElement('details');
-    disclosure.className = 'product-details';
-    const summary = document.createElement('summary');
-    summary.textContent = 'Specifications and features';
+  function populatedEntries(values) {
+    return Object.entries(values || {}).filter(([, value]) => value !== null && value !== '' && value !== false);
+  }
+
+  function readableValue(value) {
+    return typeof value === 'object' ? JSON.stringify(value) : String(value);
+  }
+
+  function checkIcon() {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('aria-hidden', 'true');
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', 'M20 6 9 17l-5-5');
+    svg.appendChild(path);
+    return svg;
+  }
+
+  function featureList(entries) {
+    const list = document.createElement('ul');
+    list.className = 'feature-list';
+    if (!entries.length) {
+      const empty = document.createElement('li');
+      empty.className = 'details-empty';
+      empty.textContent = 'No features available.';
+      list.appendChild(empty);
+      return list;
+    }
+    entries.forEach(([key, value]) => {
+      const item = document.createElement('li');
+      const valueText = readableValue(value).trim();
+      item.appendChild(checkIcon());
+      item.appendChild(document.createTextNode(
+        valueText.toLowerCase() === 'x' ? label(key) : `${label(key)} (${valueText})`
+      ));
+      list.appendChild(item);
+    });
+    return list;
+  }
+
+  function specsList(entries) {
     const grid = document.createElement('div');
     grid.className = 'details-grid';
-    values.slice(0, 20).forEach(([key, value]) => {
+    if (!entries.length) {
+      const empty = document.createElement('p');
+      empty.className = 'details-empty';
+      empty.textContent = 'No specifications available.';
+      grid.appendChild(empty);
+      return grid;
+    }
+    entries.forEach(([key, value]) => {
       const row = document.createElement('div');
       row.className = 'details-row';
       const name = document.createElement('span');
       const content = document.createElement('strong');
       name.textContent = label(key);
-      content.textContent = typeof value === 'object' ? JSON.stringify(value) : String(value);
+      content.textContent = readableValue(value);
       row.append(name, content);
       grid.appendChild(row);
     });
-    disclosure.append(summary, grid);
+    return grid;
+  }
+
+  function details(product) {
+    const features = populatedEntries(product?.features);
+    const specifications = populatedEntries(product?.specifications);
+    if (!features.length && !specifications.length) return null;
+    const disclosure = document.createElement('details');
+    disclosure.className = 'product-details';
+    const summary = document.createElement('summary');
+    summary.textContent = 'Features and specs';
+    const tabs = document.createElement('div');
+    tabs.className = 'drawer-tabs details-tabs';
+    tabs.setAttribute('role', 'tablist');
+    const panels = document.createElement('div');
+    panels.className = 'details-panels';
+    const availableTabs = [
+      { name: 'Features', entries: features, content: featureList },
+      { name: 'Specs', entries: specifications, content: specsList }
+    ];
+    const selectTab = selectedName => {
+      tabs.querySelectorAll('.tab-btn').forEach(button => {
+        const selected = button.dataset.tab === selectedName;
+        button.classList.toggle('active', selected);
+        button.setAttribute('aria-selected', String(selected));
+      });
+      panels.querySelectorAll('.details-panel').forEach(panel => {
+        panel.hidden = panel.dataset.panel !== selectedName;
+      });
+    };
+    availableTabs.forEach((tab, index) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = `tab-btn${index === 0 ? ' active' : ''}`;
+      button.dataset.tab = tab.name;
+      button.setAttribute('role', 'tab');
+      button.setAttribute('aria-selected', String(index === 0));
+      button.textContent = tab.name;
+      button.addEventListener('click', () => selectTab(tab.name));
+      const panel = document.createElement('div');
+      panel.className = 'details-panel';
+      panel.dataset.panel = tab.name;
+      panel.setAttribute('role', 'tabpanel');
+      panel.hidden = index !== 0;
+      panel.appendChild(tab.content(tab.entries));
+      tabs.appendChild(button);
+      panels.appendChild(panel);
+    });
+    disclosure.append(summary, tabs, panels);
     return disclosure;
   }
 

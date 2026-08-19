@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const sidebar = fs.readFileSync(path.join(root, 'js/sidebar.js'), 'utf8');
 const migration = fs.readFileSync(
-  path.join(root, 'database/migrations/20260819_chat_broadcast_scalability.sql'),
+  path.join(root, 'database/migrations/07_optimizations.sql'),
   'utf8'
 );
 

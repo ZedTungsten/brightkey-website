@@ -6,7 +6,7 @@ const root = new URL('../', import.meta.url);
 const read = path => readFile(new URL(path, root), 'utf8');
 
 test('chat migration generalizes threads without destructive data operations', async () => {
-  const sql = await read('database/migrations/20260819_generalize_chat_threads.sql');
+  const sql = await read('database/migrations/07_optimizations.sql');
   assert.match(sql, /thread_type IN \('direct', 'group', 'company'\)/);
   assert.match(sql, /CREATE OR REPLACE FUNCTION public\.get_chat_workspace_inbox/);
   assert.match(sql, /CREATE OR REPLACE FUNCTION public\.create_group_chat/);
@@ -37,7 +37,7 @@ test('messages route uses bounded cursor loading and private scoped channels', a
 
 test('chat images are private JPEG attachments with bounded client compression', async () => {
   const [sql, html, js] = await Promise.all([
-    read('database/migrations/20260819_chat_image_attachments.sql'),
+    read('database/migrations/07_optimizations.sql'),
     read('dashboard/messages.html'), read('dashboard/messages.js')
   ]);
   assert.match(sql, /'chat-media', 'chat-media', false, 5242880/);

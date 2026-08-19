@@ -2027,3 +2027,166 @@ CREATE INDEX IF NOT EXISTS subscription_requests_email_plan_created_idx
 
 CREATE INDEX IF NOT EXISTS subscription_requests_status_created_idx
   ON public.subscription_requests (status, created_at DESC);
+
+
+-- =========================================================================
+-- CONSOLIDATED SOURCE: 20260807_products_company_ownership.sql
+-- =========================================================================
+
+-- Ensure every product has explicit company ownership so catalog records can
+-- never appear through a legacy NULL-owner compatibility query.
+
+DO $$
+DECLARE
+  brightkey_company_id CONSTANT UUID := 'e6cf43ed-1f42-4aad-a6ed-470147a0489f';
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.companies
+    WHERE id = brightkey_company_id
+      AND name = 'BrightKey'
+  ) THEN
+    RAISE EXCEPTION 'Expected BrightKey company was not found; product ownership was not changed.';
+  END IF;
+
+  UPDATE public.products
+  SET company_id = brightkey_company_id
+  WHERE id IN (
+    '4b25f102-aa2b-477b-8dc0-065f787222ae',
+    'c2e6fd99-7fe7-49be-a879-824f16c51174'
+  )
+    AND sku IN ('OCULAR', 'ADD-ON LABOR')
+    AND company_id IS NULL;
+
+  IF EXISTS (SELECT 1 FROM public.products WHERE company_id IS NULL) THEN
+    RAISE EXCEPTION 'Products with missing company ownership remain; NOT NULL was not applied.';
+  END IF;
+END
+$$;
+
+ALTER TABLE public.products
+  ALTER COLUMN company_id SET NOT NULL;
+
+
+-- =========================================================================
+-- CONSOLIDATED SOURCE: 20260808_restore_brightkey_catalog_specifications.sql
+-- =========================================================================
+
+-- Restore the legacy BrightKey catalog specifications after specification
+-- definitions became company-scoped. Other tenants intentionally remain empty.
+
+DO $$
+DECLARE
+  brightkey_company_id CONSTANT UUID := 'e6cf43ed-1f42-4aad-a6ed-470147a0489f';
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.companies
+    WHERE id = brightkey_company_id
+      AND name = 'BrightKey'
+  ) THEN
+    RAISE EXCEPTION 'Expected BrightKey company was not found; catalog specifications were not restored.';
+  END IF;
+
+  INSERT INTO public.global_settings (company_id, key, value, updated_at)
+  VALUES (
+    brightkey_company_id,
+    'catalog_spec_definitions',
+    jsonb_build_object(
+      'definitions',
+      jsonb_build_array(
+        jsonb_build_object('id', 'model', 'label', 'Model', 'field', 'spec_model', 'source', 'column', 'placeholder', 'e.g. A04-TT'),
+        jsonb_build_object('id', 'color', 'label', 'Color', 'field', 'spec_color', 'source', 'column', 'placeholder', 'e.g. Matte Black, Silver'),
+        jsonb_build_object('id', 'weight', 'label', 'Weight', 'field', 'spec_weight', 'source', 'column', 'placeholder', 'e.g. 2.5 kg'),
+        jsonb_build_object('id', 'operating_temperature', 'label', 'Operating Temperature', 'field', 'spec_operating_temperature', 'source', 'column', 'placeholder', 'e.g. -20°C to 60°C'),
+        jsonb_build_object('id', 'warranty', 'label', 'Warranty', 'field', 'spec_warranty', 'source', 'column', 'placeholder', 'e.g. 1 Year'),
+        jsonb_build_object('id', 'support', 'label', 'Technical Support', 'field', 'spec_support', 'source', 'column', 'placeholder', 'e.g. Lifetime, 2 Years'),
+        jsonb_build_object('id', 'material', 'label', 'Material', 'field', 'spec_material', 'source', 'column', 'placeholder', 'e.g. Aluminum Alloy'),
+        jsonb_build_object('id', 'voltage', 'label', 'Voltage', 'field', 'spec_voltage', 'source', 'column', 'placeholder', 'e.g. DC 6V'),
+        jsonb_build_object('id', 'dimension', 'label', 'Dimension', 'field', 'spec_dimension', 'source', 'column', 'placeholder', 'e.g. 350 x 75 x 30 mm')
+      )
+    ),
+    NOW()
+  )
+  ON CONFLICT (key, company_id) DO UPDATE
+  SET value = EXCLUDED.value,
+      updated_at = NOW()
+  WHERE COALESCE(
+    jsonb_array_length(
+      CASE
+        WHEN jsonb_typeof(public.global_settings.value->'definitions') = 'array'
+          THEN public.global_settings.value->'definitions'
+        ELSE '[]'::jsonb
+      END
+    ),
+    0
+  ) = 0;
+END
+$$;
+
+
+-- =========================================================================
+-- CONSOLIDATED SOURCE: 20260808_supplier_additional_payment_methods.sql
+-- =========================================================================
+
+-- Allow each tenant-owned supplier to keep additional bank details and QR codes.
+
+ALTER TABLE public.suppliers
+  ADD COLUMN IF NOT EXISTS payment_methods JSONB NOT NULL DEFAULT '[]'::jsonb;
+
+ALTER TABLE public.suppliers
+  DROP CONSTRAINT IF EXISTS suppliers_payment_methods_is_array;
+
+ALTER TABLE public.suppliers
+  ADD CONSTRAINT suppliers_payment_methods_is_array
+  CHECK (jsonb_typeof(payment_methods) = 'array');
+
+COMMENT ON COLUMN public.suppliers.payment_methods IS
+  'Additional supplier payment entries. Each item is an info or qr record; ownership is inherited from the supplier company_id and protected by suppliers RLS.';
+
+
+-- =========================================================================
+-- CONSOLIDATED SOURCE: 20260813_allow_public_catalog_spec_definitions.sql
+-- =========================================================================
+
+-- Product cards need the company-scoped specification labels and preview-card
+-- selections. No other company setting is exposed by this policy change.
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'global_settings'
+      AND policyname = 'Allow public storefront settings read'
+  ) THEN
+    ALTER POLICY "Allow public storefront settings read"
+      ON public.global_settings
+      TO anon
+      USING (key IN (
+        'free_shipping',
+        'free_gifts',
+        'upsell_cross_sell',
+        'delivery_lead_time',
+        'promo_popup',
+        'invoice_template',
+        'catalog_spec_definitions'
+      ));
+  ELSE
+    CREATE POLICY "Allow public storefront settings read"
+      ON public.global_settings
+      FOR SELECT
+      TO anon
+      USING (key IN (
+        'free_shipping',
+        'free_gifts',
+        'upsell_cross_sell',
+        'delivery_lead_time',
+        'promo_popup',
+        'invoice_template',
+        'catalog_spec_definitions'
+      ));
+  END IF;
+END
+$$;

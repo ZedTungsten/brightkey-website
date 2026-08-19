@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import test from 'node:test';
 import {
   getBearerToken,
+  isCustomerPortalUser,
   isAllowedRedirectUrl,
   setApiCors
 } from '../lib/api/security.js';
@@ -22,6 +23,27 @@ test('bearer tokens are parsed strictly', () => {
   assert.equal(getBearerToken({ headers: { authorization: 'Bearer token-value' } }), 'token-value');
   assert.equal(getBearerToken({ headers: { authorization: 'Basic token-value' } }), null);
   assert.equal(getBearerToken({ headers: {} }), null);
+});
+
+test('customer portal identity is determined only from server-controlled app metadata', () => {
+  assert.equal(isCustomerPortalUser({ app_metadata: { portal_role: 'customer' } }), true);
+  assert.equal(isCustomerPortalUser({ app_metadata: { customer_account_id: 'account-id' } }), true);
+  assert.equal(isCustomerPortalUser({ user_metadata: { portal_role: 'customer' } }), false);
+  assert.equal(isCustomerPortalUser({ app_metadata: { portal_role: 'employee' } }), false);
+
+  const browserAuth = fs.readFileSync(new URL('../js/auth.js', import.meta.url), 'utf8');
+  const membershipsApi = fs.readFileSync(new URL('../api/account-memberships.js', import.meta.url), 'utf8');
+  assert.match(browserAuth, /redirectCustomerToPortal\(user\)/);
+  assert.match(browserAuth, /window\.location\.replace\('\/customer'\)/);
+  assert.match(membershipsApi, /isCustomerPortalUser\(user\)/);
+});
+
+test('local API clients load gitignored database credentials in development only', () => {
+  const source = fs.readFileSync(new URL('../lib/api/security.js', import.meta.url), 'utf8');
+  assert.match(source, /process\.env\.VERCEL_ENV === 'development'/);
+  assert.match(source, /dotenv\.config\(\{ path: '\.env\.local' \}\)/);
+  assert.match(source, /process\.env\.VERCEL_ENV === 'production'/);
+  assert.doesNotMatch(source, /SUPABASE_SERVICE_(?:ROLE_)?KEY\s*=\s*['"][^'"]+['"]/);
 });
 
 test('checkout redirects are restricted to approved application origins', () => {
@@ -59,7 +81,7 @@ test('checkout payload signatures reject altered totals and cart data', () => {
 });
 
 test('sensitive settings and journal rows are not anonymously readable', () => {
-  const migration = fs.readFileSync(new URL('../database/migrations/20260809_security_and_query_hardening.sql', import.meta.url), 'utf8');
+  const migration = fs.readFileSync(new URL('../database/migrations/07_optimizations.sql', import.meta.url), 'utf8');
   assert.match(migration, /Allow public storefront settings read/);
   assert.match(migration, /FOR SELECT\s+TO anon\s+USING \(key IN/);
   assert.match(migration, /ALTER TABLE public\.general_journal ENABLE ROW LEVEL SECURITY/);
@@ -271,7 +293,7 @@ test('contract snippets are company scoped, sanitized, and bounded', () => {
   assert.match(templates, /Loading a template will discard all current unsaved contract pages and blocks/);
   assert.match(templates, /Load Template/);
   assert.match(source, /<th>Job Title<\/th><th>Job Code<\/th><th>Last Changed<\/th><th>Pages<\/th><th>Actions<\/th>/);
-  assert.match(source, /<td>\$\{pages\.length \|\| '-'\}<\/td>/);
+  assert.match(source, /<td><span class="\$\{pages\.length \? 'contract-data-number' : 'contract-data-empty'\}">\$\{pages\.length \|\| '-'\}<\/span><\/td>/);
   assert.match(source, /payload\.startsWith\('clause:'\)/);
   assert.match(source, /if \(readOnly\) bodyPages = bodyPages\.filter\(page => !pageIsBlank\(page\)\)/);
   assert.match(source, /if \(state\.readOnly\) return window\.BKHiringContractTemplate\?\.personalizeHtml/);
@@ -297,7 +319,7 @@ test('free subscription owner invitations retain owner dashboard access', () => 
 
 test('platform tenant listing stays behind an exact owner check and server-side tenant reads', () => {
   const source = fs.readFileSync(new URL('../api/platform-tenants.js', import.meta.url), 'utf8');
-  const migration = fs.readFileSync(new URL('../database/migrations/20260807_platform_owner_tenant_listing.sql', import.meta.url), 'utf8');
+  const migration = fs.readFileSync(new URL('../database/migrations/01_core_tenancy.sql', import.meta.url), 'utf8');
   assert.match(source, /johnzeustaller@gmail\.com/);
   assert.match(source, /rpc\('get_platform_tenants'\)/);
   assert.match(migration, /SECURITY DEFINER/);
@@ -309,7 +331,7 @@ test('platform tenant listing stays behind an exact owner check and server-side 
 
 test('platform tenant deletion is ID-scoped, owner-gated, and protects the active owner workspace', () => {
   const api = fs.readFileSync(new URL('../api/platform-tenants.js', import.meta.url), 'utf8');
-  const migration = fs.readFileSync(new URL('../database/migrations/20260807_platform_tenant_deletion.sql', import.meta.url), 'utf8');
+  const migration = fs.readFileSync(new URL('../database/migrations/01_core_tenancy.sql', import.meta.url), 'utf8');
   const page = fs.readFileSync(new URL('../dashboard/master-settings.html', import.meta.url), 'utf8');
   assert.match(api, /\['GET', 'DELETE'\]/);
   assert.match(api, /UUID_PATTERN\.test\(tenantId\)/);
@@ -324,7 +346,7 @@ test('platform tenant deletion is ID-scoped, owner-gated, and protects the activ
 
 test('platform tenant deletion removes company-scoped Storage objects first', () => {
   const apiSource = fs.readFileSync(new URL('../api/platform-tenants.js', import.meta.url), 'utf8');
-  const migrationSource = fs.readFileSync(new URL('../database/migrations/20260813_platform_tenant_storage_deletion.sql', import.meta.url), 'utf8');
+  const migrationSource = fs.readFileSync(new URL('../database/migrations/01_core_tenancy.sql', import.meta.url), 'utf8');
 
   assert.match(apiSource, /TENANT_STORAGE_BUCKETS = \['brightkey-assets', 'brightkey-internal'\]/);
   assert.match(apiSource, /const prefix = `companies\/\$\{companyId\}`/);
@@ -338,7 +360,7 @@ test('platform tenant deletion removes company-scoped Storage objects first', ()
 
 test('platform signup email credentials stay owner-gated and feed subscription invitations', () => {
   const api = fs.readFileSync(new URL('../api/platform-email-integration.js', import.meta.url), 'utf8');
-  const migration = fs.readFileSync(new URL('../database/migrations/20260807_platform_email_integration.sql', import.meta.url), 'utf8');
+  const migration = fs.readFileSync(new URL('../database/migrations/01_core_tenancy.sql', import.meta.url), 'utf8');
   const subscription = fs.readFileSync(new URL('../api/subscription-requests.js', import.meta.url), 'utf8');
   assert.match(api, /johnzeustaller@gmail\.com/);
   assert.match(api, /platform_email_integrations/);
@@ -367,7 +389,7 @@ test('platform owner gate permits the designated dual-role account without affec
 test('login choices include authoritative tenant ownership without requiring tenant_members', () => {
   const apiSource = fs.readFileSync(new URL('../api/account-memberships.js', import.meta.url), 'utf8');
   const authSource = fs.readFileSync(new URL('../js/auth.js', import.meta.url), 'utf8');
-  const migrationSource = fs.readFileSync(new URL('../database/migrations/20260813_tenant_owner_access_without_membership.sql', import.meta.url), 'utf8');
+  const migrationSource = fs.readFileSync(new URL('../database/migrations/01_core_tenancy.sql', import.meta.url), 'utf8');
 
   assert.match(apiSource, /from\('tenant_members'\)/);
   assert.match(apiSource, /from\('tenants'\)/);
@@ -394,7 +416,7 @@ test('company API authorization accepts authoritative tenant owners without a me
 test('tenant owner authority is consistent across APIs, settings, and database helpers', () => {
   const financeSource = fs.readFileSync(new URL('../api/finance-cash-ledger.js', import.meta.url), 'utf8');
   const settingsSource = fs.readFileSync(new URL('../dashboard/settings/access.html', import.meta.url), 'utf8');
-  const migrationSource = fs.readFileSync(new URL('../database/migrations/20260813_authoritative_tenant_owner_authority.sql', import.meta.url), 'utf8');
+  const migrationSource = fs.readFileSync(new URL('../database/migrations/01_core_tenancy.sql', import.meta.url), 'utf8');
 
   assert.match(financeSource, /requireCompanyAccess\(req, admin, companyId/);
   assert.match(settingsSource, /currentActorRole = String\(currentRole \|\| ''\)/);
