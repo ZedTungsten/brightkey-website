@@ -2008,13 +2008,14 @@
       distBarsEl.innerHTML = weeksData.map((w, idx) => {
         const percent = Math.min(100, Math.round((w.revenue / maxWeeklyRev) * 100));
         const weekDatesLabel = getWeekDatesRangeLabel(currentSelectedMonth, idx);
+        const weekDayCount = getWeekDayCount(currentSelectedMonth, idx);
         const dailyOrderAverage = w.count / 7;
         const dailyRevenueAverage = w.revenue / 7;
 
         return `
           <div style="display: flex; flex-direction: column; gap: 0.25rem;">
             <div style="display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 0.35rem 1rem; font-size: 0.8rem; font-weight: 600;">
-              <span style="color: var(--text-primary);">${w.label} <span style="font-weight: 400; color: var(--text-muted); font-size: 0.75rem; margin-left: 4px;">(${weekDatesLabel})</span></span>
+              <span style="color: var(--text-primary);">${w.label} <span style="font-weight: 400; color: var(--text-muted); font-size: 0.75rem; margin-left: 4px;">(${weekDatesLabel}) ${weekDayCount} ${weekDayCount === 1 ? 'day' : 'days'}</span></span>
               <span style="color: var(--text-muted); text-align: right;">${w.count} ${w.count === 1 ? 'order' : 'orders'} • <span style="color: var(--cyan-light); font-weight: 700;">₱${w.revenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span> <span style="font-size: 0.72rem; font-weight: 500;">(${dailyOrderAverage.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} orders • ₱${dailyRevenueAverage.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/day)</span></span>
             </div>
             <div style="background: var(--border); height: 8px; border-radius: 4px; overflow: hidden;">
@@ -2090,6 +2091,18 @@
       }
 
       return `${monthShort} ${wkStartDay} - ${wkEndDay}`;
+    }
+
+    function getWeekDayCount(yearMonthStr, weekIdx) {
+      const [y, m] = yearMonthStr.split('-').map(Number);
+      const startOfMonth = new Date(y, m - 1, 1);
+      const lastDayOfMonth = new Date(y, m, 0).getDate();
+      const startDay = startOfMonth.getDay() || 7;
+      const firstSundayDate = 1 + (7 - startDay) % 7;
+      const weekStartDay = weekIdx === 0 ? 1 : firstSundayDate + 1 + (weekIdx - 1) * 7;
+      const weekEndDay = Math.min(weekStartDay + (weekIdx === 0 ? firstSundayDate - 1 : 6), lastDayOfMonth);
+
+      return weekStartDay > lastDayOfMonth ? 0 : weekEndDay - weekStartDay + 1;
     }
 
     function getMonthShort(monthNum) {
