@@ -40,6 +40,7 @@
     selectedFeatures: new Set(),
     featureBusiness: '',
     businessLabels: new Map(),
+    businessOrder: new Map(),
     specDefinitions: new Map(),
     query: '',
     category: '',
@@ -219,9 +220,9 @@
     ].join('&');
     const products = await fetchJson(`${SUPABASE_URL}/rest/v1/products?${query}`);
     const companyIds = [...new Set(products.map(product => product.company_id).filter(Boolean))];
-    const businessQuery = companyIds.length ? `company_id=in.(${companyIds.join(',')})&select=name` : '';
+    const businessQuery = companyIds.length ? `company_id=in.(${companyIds.join(',')})&select=id,name,company_id` : '';
     const settingsQuery = companyIds.length
-      ? `company_id=in.(${companyIds.join(',')})&key=eq.catalog_spec_definitions&select=company_id,value`
+      ? `company_id=in.(${companyIds.join(',')})&key=in.(catalog_spec_definitions,business_order)&select=company_id,key,value`
       : '';
     const [features, businesses, specificationSettings] = await Promise.all([
       loadFeatureData(products),
@@ -233,7 +234,13 @@
       }) : []
     ]);
     state.businessLabels = new Map((businesses || []).map(business => [businessKey(business.name), business.name]));
-    state.specDefinitions = new Map((specificationSettings || []).map(setting => {
+    const orderSettings = new Map((specificationSettings || []).filter(setting => setting.key === 'business_order').map(setting => [setting.company_id, Array.isArray(setting.value) ? setting.value : []]));
+    state.businessOrder = new Map();
+    (businesses || []).forEach(business => {
+      const order = orderSettings.get(business.company_id) || [];
+      state.businessOrder.set(businessKey(business.name), order.indexOf(business.id));
+    });
+    state.specDefinitions = new Map((specificationSettings || []).filter(setting => setting.key === 'catalog_spec_definitions').map(setting => {
       const definitions = Array.isArray(setting.value?.definitions) ? setting.value.definitions : [];
       const previewIds = Array.isArray(setting.value?.preview_card_ids)
         ? new Set(setting.value.preview_card_ids.map(String))
@@ -323,7 +330,11 @@
   function renderFeatureBusinesses() {
     const businesses = [...new Set(state.products.map(product => product.business)
       .filter(business => business && FEATURE_TABLES[business]))]
-      .sort((a, b) => businessLabel(a).localeCompare(businessLabel(b)));
+      .sort((a, b) => {
+        const rankA = state.businessOrder.get(businessKey(a));
+        const rankB = state.businessOrder.get(businessKey(b));
+        return (rankA < 0 ? Number.MAX_SAFE_INTEGER : rankA) - (rankB < 0 ? Number.MAX_SAFE_INTEGER : rankB) || businessLabel(a).localeCompare(businessLabel(b));
+      });
     if (!businesses.includes(state.featureBusiness)) state.featureBusiness = businesses[0] || '';
     dom.featureBusinesses.textContent = '';
     businesses.forEach((business, index) => {

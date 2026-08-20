@@ -48,11 +48,7 @@
           <div class="scroll-area">
             <!-- Installers Content -->
             <div class="tab-panel active">
-              <div class="panel-header">
-                <div class="panel-title">Installer Payout Configuration</div>
-                <button class="btn btn-primary" onclick="saveInstallerPayoutSettings()">Save Payout Settings</button>
-              </div>
-              <div class="table-scroll">
+              <div class="table-scroll installer-settings-layout">
                 
                 <div class="installer-settings-card installer-threshold-card">
                   <h3>Threshold Configuration</h3>
@@ -61,12 +57,6 @@
                     <label class="form-label" for="installations-threshold">Installations Threshold before Crediting</label>
                     <input type="number" id="installations-threshold" class="form-input" placeholder="e.g. 15" min="0" step="1" style="max-width: 150px;" required />
                     <span style="font-size: 0.72rem; color: var(--text-muted);">The number of installations required before installer credits are eligible for extra payout (e.g. 15 counts).</span>
-                  </div>
-
-                  <div class="form-group">
-                    <label class="form-label" for="ocular-repair-effective-from">Ocular &amp; Repair Rules Effective From</label>
-                    <input type="date" id="ocular-repair-effective-from" class="form-input" style="max-width: 220px;" required />
-                    <span style="font-size: 0.72rem; color: var(--text-muted);">Only completed assignments with an install date on or after this date use the Ocular and Repair credit and rate settings. Earlier assignments retain the previous zero-credit behavior.</span>
                   </div>
 
                 </div>
@@ -92,6 +82,7 @@
                   <section class="installer-rule-panel">
                     <div class="installer-settings-heading">
                       <div><h3>Credits &amp; Payout</h3><p>Set the credit and extra payout for each completed assignment. A value of 0 means none.</p></div>
+                      <button class="btn btn-primary" onclick="saveInstallerPayoutSettings()">Save Payout Settings</button>
                     </div>
                     <div class="installer-rules-wrap">
                       <table class="installer-rules-table">
@@ -101,6 +92,26 @@
                     </div>
                   </section>
                 </div>
+
+                <section class="installer-workflow-card">
+                  <div class="installer-settings-heading">
+                    <h3>Installer Checklist Builder</h3>
+                    <div id="autosave-status" class="installer-autosave-status">Saved</div>
+                  </div>
+                    <div style="font-size: 0.82rem; color: var(--text-secondary);">Define the installation checklist technicians complete before checking out of a job. Drag to reorder and use <strong>Sub-item</strong> for indentation. Changes save automatically.</div>
+                    <div id="booking-checklist-container" style="display: flex; flex-direction: column; gap: 0.75rem;"></div>
+                    <div><button type="button" class="btn btn-primary" onclick="addChecklistItem()">+ Add Item</button></div>
+                </section>
+
+                <section class="installer-workflow-card installer-media-card">
+                  <div class="installer-settings-heading">
+                    <h3>Fulfillment Media Requirements</h3>
+                    <div id="media-autosave-status" class="installer-autosave-status">Saved</div>
+                  </div>
+                    <div style="font-size: 0.82rem; color: var(--text-secondary);">Configure photo or video requirements technicians upload when completing an installation, with optional reference images. Changes save automatically.</div>
+                    <div id="booking-media-container" style="display: flex; flex-direction: column; gap: 0.75rem;"></div>
+                    <div><button type="button" class="btn btn-primary" onclick="addMediaRequirementItem()">+ Add Media Requirement</button></div>
+                </section>
 
               </div>
             </div>
@@ -115,6 +126,7 @@
   <script src="../../js/sidebar.js"></script>
   <script src="../../js/main.js"></script>
   <script src="shared.js"></script>
+  <script src="/dashboard/settings/installer-workflow-settings.js"></script>
   <script>
     'use strict';
 
@@ -140,7 +152,7 @@
       } catch (err) {
         console.error('Error fetching service products:', err);
       }
-      await Promise.all([loadInstallerPayoutSettings(), loadInstallerEventTypes()]);
+      await Promise.all([loadInstallerPayoutSettings(), loadInstallerEventTypes(), window.BKInstallerWorkflowSettings.init({ sb, companyId: currentCompanyId, showToast })]);
     };
 
     async function loadInstallerEventTypes() {
@@ -248,7 +260,6 @@
 
         installerPayoutSettings = data?.value && typeof data.value === 'object' ? data.value : {};
         document.getElementById('installations-threshold').value = installerPayoutSettings.installations_before_crediting ?? '';
-        document.getElementById('ocular-repair-effective-from').value = installerPayoutSettings.ocular_repair_effective_from || '';
         creditRules = readCreditRules(installerPayoutSettings);
         payoutRules = readPayoutRules(installerPayoutSettings);
         ensureAllServiceRules();
@@ -355,16 +366,10 @@
       return `${assignment}:${assignment === 'service' ? normalizeServiceSku(rule.sku) : ''}`;
     }
 
-    function currentMonthStart() {
-      const now = new Date();
-      return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
-    }
-
-    function versionRuleHistory(existingHistory, originalRules, nextRules, valueName) {
+    function versionRuleHistory(existingHistory, originalRules, nextRules, valueName, boundary) {
       const history = Array.isArray(existingHistory) ? existingHistory.map(rule => ({ ...rule })) : [];
       const originalByKey = new Map(originalRules.map(rule => [historyRuleKey(rule), rule]));
       const hasKey = key => history.some(rule => historyRuleKey(rule) === key);
-      const boundary = currentMonthStart();
       originalRules.forEach(rule => {
         const key = historyRuleKey(rule);
         if (!hasKey(key)) history.push({ assignment: rule.assignment, sku: rule.sku || null, [valueName]: Number(rule.value) || 0, effective_from: rule.effective_from || null });
@@ -374,20 +379,19 @@
         const original = originalByKey.get(key);
         const nextValue = Number(rule.value) || 0;
         if (original && (Number(original.value) || 0) === nextValue) return;
-        const sameMonth = history.find(item => historyRuleKey(item) === key && item.effective_from === boundary);
-        if (sameMonth) sameMonth[valueName] = nextValue;
+        const sameSave = history.find(item => historyRuleKey(item) === key && item.effective_from === boundary);
+        if (sameSave) sameSave[valueName] = nextValue;
         else history.push({ assignment: rule.assignment, sku: rule.sku || null, [valueName]: nextValue, effective_from: boundary });
       });
       return history;
     }
 
-    function versionThresholdHistory(existingHistory, originalValue, nextValue) {
+    function versionThresholdHistory(existingHistory, originalValue, nextValue, boundary) {
       const history = Array.isArray(existingHistory) ? existingHistory.map(item => ({ ...item })) : [];
       if (!history.length) history.push({ value: Number(originalValue) || 0, effective_from: null });
       if ((Number(originalValue) || 0) !== nextValue) {
-        const boundary = currentMonthStart();
-        const sameMonth = history.find(item => item.effective_from === boundary);
-        if (sameMonth) sameMonth.value = nextValue;
+        const sameSave = history.find(item => item.effective_from === boundary);
+        if (sameSave) sameSave.value = nextValue;
         else history.push({ value: nextValue, effective_from: boundary });
       }
       return history;
@@ -395,7 +399,7 @@
 
     window.saveInstallerPayoutSettings = async function() {
       const threshold = parseInt(document.getElementById('installations-threshold').value) || 0;
-      const ocularRepairEffectiveFrom = document.getElementById('ocular-repair-effective-from').value;
+      const versionBoundary = new Date().toISOString();
       const validationError = validateRules(creditRules, 'Credits') || validateRules(payoutRules, 'Extra Payout');
       if (validationError) return showToast(validationError, true);
       const today = new Date().toISOString().slice(0, 10);
@@ -415,7 +419,6 @@
       const value = {
         ...installerPayoutSettings,
         installations_before_crediting: threshold,
-        ocular_repair_effective_from: ocularRepairEffectiveFrom,
         lead_credit: leadCredit,
         assist_credit: assistCredit,
         ocular_credit: ocularCredit,
@@ -428,9 +431,10 @@
         extra_services: extraServices,
         credit_rules: creditRules.map(rule => ({ assignment: rule.assignment, sku: rule.sku || null, credit: rule.value, effective_from: rule.effective_from || null })),
         extra_payout_rules: payoutRules.map(rule => ({ assignment: rule.assignment, sku: rule.sku || null, amount: rule.value, effective_from: rule.effective_from || null })),
-        credit_rule_history: versionRuleHistory(installerPayoutSettings.credit_rule_history, originalCreditRules, creditRules, 'credit'),
-        payout_rule_history: versionRuleHistory(installerPayoutSettings.payout_rule_history, originalPayoutRules, payoutRules, 'amount'),
-        threshold_history: versionThresholdHistory(installerPayoutSettings.threshold_history, installerPayoutSettings.installations_before_crediting ?? 15, threshold)
+        credit_rule_history: versionRuleHistory(installerPayoutSettings.credit_rule_history, originalCreditRules, creditRules, 'credit', versionBoundary),
+        payout_rule_history: versionRuleHistory(installerPayoutSettings.payout_rule_history, originalPayoutRules, payoutRules, 'amount', versionBoundary),
+        threshold_history: versionThresholdHistory(installerPayoutSettings.threshold_history, installerPayoutSettings.installations_before_crediting ?? 15, threshold, versionBoundary),
+        rules_versioned_at: versionBoundary
       };
 
       try {

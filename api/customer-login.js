@@ -3,6 +3,7 @@ import { enforceRateLimit } from '../lib/api/rate-limit.js';
 
 const normalizeUsername = value => String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 const normalizePhone = value => String(value || '').replace(/[^0-9]/g, '');
+const INVALID_LOGIN_MESSAGE = 'Incorrect username and password. Please contact admin for assistance.';
 export { normalizePhone, normalizeUsername };
 
 async function signIn(publicClient, accountId, password) {
@@ -20,7 +21,7 @@ export default async function handler(req, res) {
   const username = normalizeUsername(req.body?.username);
   const password = normalizePhone(req.body?.password);
   if (!username || password.length < 7 || password.length > 15) {
-    return res.status(400).json({ error: 'Enter your username and registered phone number.' });
+    return res.status(400).json({ error: INVALID_LOGIN_MESSAGE });
   }
 
   try {
@@ -43,7 +44,7 @@ export default async function handler(req, res) {
       .limit(2);
     if (lookupError) throw lookupError;
     if (!matches || matches.length !== 1) {
-      return res.status(401).json({ error: 'The username or phone number is incorrect.' });
+      return res.status(401).json({ error: INVALID_LOGIN_MESSAGE });
     }
 
     const account = matches[0];
@@ -78,7 +79,7 @@ export default async function handler(req, res) {
     const { data: sessionData, error: signInError } = await signIn(publicClient, account.id, password);
     if (signInError || !sessionData?.session) {
       console.error('Customer portal sign-in failed:', signInError);
-      return res.status(401).json({ error: 'The username or phone number is incorrect.' });
+      return res.status(401).json({ error: INVALID_LOGIN_MESSAGE });
     }
     return res.status(200).json({
       access_token: sessionData.session.access_token,

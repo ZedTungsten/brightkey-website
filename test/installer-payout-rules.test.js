@@ -47,27 +47,27 @@ test('flat Service payouts match all configured SKUs on a Service assignment', (
   ]);
 });
 
-test('versioned rules preserve prior months and backfill the effective month', () => {
+test('versioned rules preserve assignments made before an exact internal change timestamp', () => {
   const settings = {
     credit_rule_history: [
       { assignment: 'Lead', credit: 1, effective_from: null },
-      { assignment: 'Lead', credit: 1.5, effective_from: '2026-08-01' }
+      { assignment: 'Lead', credit: 1.5, effective_from: '2026-08-19T10:30:00.000Z' }
     ],
     payout_rule_history: [
       { assignment: 'Lead', amount: 1000, effective_from: null },
-      { assignment: 'Lead', amount: 1250, effective_from: '2026-08-01' }
+      { assignment: 'Lead', amount: 1250, effective_from: '2026-08-19T10:30:00.000Z' }
     ],
     threshold_history: [
       { value: 15, effective_from: null },
       { value: 12, effective_from: '2026-08-01' }
     ]
   };
-  const julyJob = { roles: ['lead'], skus: [], workDate: '2026-07-31' };
-  const augustJob = { roles: ['lead'], skus: [], workDate: '2026-08-01' };
-  assert.equal(rules.creditForJob(settings, julyJob), 1);
-  assert.equal(rules.thresholdRateForJob(settings, julyJob), 1000);
-  assert.equal(rules.thresholdForDate(settings, julyJob.workDate), 15);
-  assert.equal(rules.creditForJob(settings, augustJob), 1.5);
-  assert.equal(rules.thresholdRateForJob(settings, augustJob), 1250);
-  assert.equal(rules.thresholdForDate(settings, augustJob.workDate), 12);
+  const priorAssignment = { roles: ['lead'], skus: [], assignmentDate: '2026-08-19T10:29:59.999Z', workDate: '2026-08-25' };
+  const futureAssignment = { roles: ['lead'], skus: [], assignmentDate: '2026-08-19T10:30:00.000Z', workDate: '2026-08-20' };
+  assert.equal(rules.creditForJob(settings, priorAssignment), 1);
+  assert.equal(rules.thresholdRateForJob(settings, priorAssignment), 1000);
+  assert.equal(rules.creditForJob(settings, futureAssignment), 1.5);
+  assert.equal(rules.thresholdRateForJob(settings, futureAssignment), 1250);
+  assert.equal(rules.thresholdForDate(settings, '2026-07-31'), 15);
+  assert.equal(rules.thresholdForDate(settings, '2026-08-01'), 12);
 });

@@ -520,7 +520,7 @@
         const dInstallers = d.installers || [];
         dInstallers.forEach(inst => {
           if (inst.id && !allInstallersMap.has(inst.id)) {
-            allInstallersMap.set(inst.id, { id: inst.id, name: inst.name, role: inst.role });
+            allInstallersMap.set(inst.id, { id: inst.id, name: inst.name, role: inst.role, assigned_at: inst.assigned_at || selectedBooking.created_at });
           }
         });
       });

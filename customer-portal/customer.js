@@ -347,9 +347,21 @@
   }
 
   async function logout() {
+    closeProfileMenu();
     await sb.auth.signOut();
     state.data = null;
     showLogin();
+  }
+
+  function closeProfileMenu() {
+    $('profile-dropdown').hidden = true;
+    $('profile-button').setAttribute('aria-expanded', 'false');
+  }
+
+  function toggleProfileMenu() {
+    const willOpen = $('profile-dropdown').hidden;
+    $('profile-dropdown').hidden = !willOpen;
+    $('profile-button').setAttribute('aria-expanded', String(willOpen));
   }
 
   function initNavigation() {
@@ -367,8 +379,20 @@
   async function init() {
     initNavigation();
     $('login-form').addEventListener('submit', login);
-    $('logout-button').addEventListener('click', logout);
-    $('mobile-logout').addEventListener('click', logout);
+    $('profile-button').addEventListener('click', event => {
+      event.stopPropagation();
+      toggleProfileMenu();
+    });
+    $('profile-logout').addEventListener('click', logout);
+    document.addEventListener('click', event => {
+      if (!event.target.closest('.profile-menu')) closeProfileMenu();
+    });
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape') {
+        closeProfileMenu();
+        $('profile-button').focus();
+      }
+    });
     $('retry-button').addEventListener('click', loadPortal);
     $('copy-affiliate').addEventListener('click', async () => {
       const code = $('affiliate-code').textContent;

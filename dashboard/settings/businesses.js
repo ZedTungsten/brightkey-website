@@ -1,6 +1,8 @@
 'use strict';
 
 let editingBusinessId = '';
+let orderedBusinesses = [];
+let draggedBusinessId = '';
 
 function formatBusinessDate(value) {
   if (!value) return '—';
@@ -22,7 +24,7 @@ function renderBusinesses(businesses, productCounts = new Map()) {
   if (businesses.length === 0) {
     const row = document.createElement('tr');
     const cell = document.createElement('td');
-    cell.colSpan = 5;
+    cell.colSpan = 6;
     cell.className = 'empty-state';
     cell.textContent = 'No businesses created yet.';
     row.appendChild(cell);
@@ -32,6 +34,9 @@ function renderBusinesses(businesses, productCounts = new Map()) {
 
   businesses.forEach((business) => {
     const row = document.createElement('tr');
+    row.draggable = true;
+    row.dataset.businessId = business.id;
+    const order = document.createElement('td');
     const name = document.createElement('td');
     const description = document.createElement('td');
     const products = document.createElement('td');
@@ -65,7 +70,7 @@ function renderBusinesses(businesses, productCounts = new Map()) {
 
     actions.append(edit, remove);
 
-    row.append(name, description, products, created, actions);
+    row.append(order, name, description, products, created, actions);
     tbody.appendChild(row);
   });
 }
@@ -76,7 +81,7 @@ async function loadBusinesses() {
     return;
   }
 
-  const [businessesResult, countsResult] = await Promise.all([
+  const [businessesResult, countsResult, orderResult] = await Promise.all([
     SettingsPage.sb
       .from('tenant_businesses')
       .select('id,name,description,created_at')
@@ -84,7 +89,8 @@ async function loadBusinesses() {
       .order('name'),
     SettingsPage.sb.rpc('get_business_product_counts', {
       p_company_id: SettingsPage.currentCompanyId
-    })
+    }),
+    SettingsPage.sb.from('global_settings').select('value').eq('company_id', SettingsPage.currentCompanyId).eq('key', 'business_order').maybeSingle()
   ]);
 
   if (businessesResult.error || countsResult.error) {
@@ -97,7 +103,16 @@ async function loadBusinesses() {
   const productCounts = new Map(
     (countsResult.data || []).map((row) => [row.business_key, Number(row.product_count) || 0])
   );
-  renderBusinesses(businessesResult.data || [], productCounts);
+  const priority = Array.isArray(orderResult.data?.value) ? orderResult.data.value : [];
+  const rank = new Map(priority.map((id, index) => [id, index]));
+  orderedBusinesses = [...(businessesResult.data || [])].sort((a, b) => (rank.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (rank.get(b.id) ?? Number.MAX_SAFE_INTEGER) || a.name.localeCompare(b.name));
+  renderBusinesses(orderedBusinesses, productCounts);
+}
+
+async function saveBusinessOrder() {
+  const { error } = await SettingsPage.sb.from('global_settings').upsert({ key: 'business_order', company_id: SettingsPage.currentCompanyId, value: orderedBusinesses.map(business => business.id) }, { onConflict: 'key, company_id' });
+  if (error) { console.error('Error saving business order:', error); SettingsPage.showToast('Business order could not be saved. Please try again.', true); return; }
+  SettingsPage.showToast('Business order saved.');
 }
 
 function updateCharacterCount(inputId, countId) {
@@ -197,3 +212,19 @@ document.getElementById('business-form').addEventListener('submit', async (event
 });
 
 window.initSettingsPage = loadBusinesses;
+    order.className = 'business-order-cell';
+    order.innerHTML = '<button type="button" class="business-drag-handle" aria-label="Drag to reorder business" title="Drag to reorder"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="5" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="9" cy="19" r="1.5"/><circle cx="15" cy="5" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="15" cy="19" r="1.5"/></svg></button>';
+    row.addEventListener('dragstart', () => { draggedBusinessId = business.id; row.classList.add('dragging'); });
+    row.addEventListener('dragend', () => { draggedBusinessId = ''; row.classList.remove('dragging'); });
+    row.addEventListener('dragover', event => { event.preventDefault(); row.classList.add('drag-over'); });
+    row.addEventListener('dragleave', () => row.classList.remove('drag-over'));
+    row.addEventListener('drop', async event => {
+      event.preventDefault(); row.classList.remove('drag-over');
+      if (!draggedBusinessId || draggedBusinessId === business.id) return;
+      const from = orderedBusinesses.findIndex(item => item.id === draggedBusinessId);
+      const to = orderedBusinesses.findIndex(item => item.id === business.id);
+      const [moved] = orderedBusinesses.splice(from, 1);
+      orderedBusinesses.splice(to, 0, moved);
+      renderBusinesses(orderedBusinesses, productCounts);
+      await saveBusinessOrder();
+    });

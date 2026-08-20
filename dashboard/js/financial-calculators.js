@@ -337,7 +337,6 @@ window.BKFinancialCalculators = {
     const assistRateVal = payoutSettings.assist_rate || 500;
     const ocularRateVal = payoutSettings.ocular_rate || 0;
     const repairRateVal = payoutSettings.repair_rate || 0;
-    const ocularRepairEffectiveFrom = String(payoutSettings.ocular_repair_effective_from || '');
     const extraServicesList = window.BKInstallerPayoutRules.serviceRules(payoutSettings);
 
     // 1. Process Bookings for Revenue & Supplier Cost
@@ -398,11 +397,10 @@ window.BKFinancialCalculators = {
           const isOcular = assignmentSkus.includes('ocular');
           const isRepair = assignmentSkus.includes('repair');
           if (isDayOff || isBackjob) return;
-          if ((isOcular || isRepair) && (!ocularRepairEffectiveFrom || b.scheduled_date < ocularRepairEffectiveFrom)) return;
 
           const assignedDoors = this.getAssignedDoorsForEmployee(b, emp.id);
           assignedDoors.forEach(d => {
-            if (d.completed) doorJobs.push({ ...d, roles: isOcular ? ['ocular'] : isRepair ? ['repair'] : d.roles });
+            if (d.completed) doorJobs.push({ ...d, roles: isOcular ? ['ocular'] : isRepair ? ['repair'] : d.roles, assignmentDate: d.assigned_at || b.created_at || b.scheduled_date });
           });
         });
 
@@ -413,7 +411,7 @@ window.BKFinancialCalculators = {
         let serviceEarnings = 0;
 
         doorJobs.forEach(job => {
-          const ruleJob = { roles: job.roles, skus: job.skus, workDate: job.scheduled_date };
+          const ruleJob = { roles: job.roles, skus: job.skus, assignmentDate: job.assignmentDate, workDate: job.scheduled_date };
           const weight = window.BKInstallerPayoutRules.creditForJob(payoutSettings, ruleJob);
           const jobRate = window.BKInstallerPayoutRules.thresholdRateForJob(payoutSettings, ruleJob);
 

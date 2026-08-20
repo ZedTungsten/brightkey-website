@@ -343,6 +343,8 @@
       if (!selectedBooking) return;
 
       const installersList = [];
+      const previousInstallers = Array.isArray(selectedBooking.installers) ? selectedBooking.installers : [];
+      const assignedAt = new Date().toISOString();
       [1, 2, 3].forEach(slot => {
         const sel = document.getElementById(`edit-inst-general-${index}-${slot}`);
         const wrapper = slot > 1 ? document.getElementById(`edit-inst-${slot}-wrapper-general-${index}`) : null;
@@ -352,7 +354,8 @@
         if (emp) {
           const lastName = emp.last_name ? ` ${emp.last_name.trim()}` : '';
           const role = sel.dataset.role || (slot === 1 ? 'lead' : 'assist');
-          installersList.push({ id: emp.id, name: `${emp.first_name}${lastName}`, role });
+          const previous = previousInstallers.find(installer => installer.id === emp.id && installer.role === role);
+          installersList.push({ id: emp.id, name: `${emp.first_name}${lastName}`, role, assigned_at: previous?.assigned_at || selectedBooking.created_at || assignedAt });
         }
       });
 
@@ -404,6 +407,8 @@
       if (!door) return;
 
       const doorInstallers = [];
+      const previousDoorInstallers = Array.isArray(door.installers) ? door.installers : [];
+      const assignedAt = new Date().toISOString();
       [1, 2, 3].forEach(slot => {
         const sel = document.getElementById(`edit-inst-${doorIndex}-${slot}`);
         const wrapper = slot > 1 ? document.getElementById(`edit-inst-${slot}-wrapper-${doorIndex}`) : null;
@@ -413,7 +418,8 @@
         if (emp) {
           const lastName = emp.last_name ? ` ${emp.last_name.trim()}` : '';
           const role = sel.dataset.role || (slot === 1 ? 'lead' : 'assist');
-          doorInstallers.push({ id: emp.id, name: `${emp.first_name}${lastName}`, role });
+          const previous = previousDoorInstallers.find(installer => installer.id === emp.id && installer.role === role);
+          doorInstallers.push({ id: emp.id, name: `${emp.first_name}${lastName}`, role, assigned_at: previous?.assigned_at || selectedBooking.created_at || assignedAt });
         }
       });
 
@@ -422,7 +428,8 @@
         const emp = dbEmployees.find(e => e.id === serviceSel.value);
         if (emp) {
           const lastName = emp.last_name ? ` ${emp.last_name.trim()}` : '';
-          doorInstallers.push({ id: emp.id, name: `${emp.first_name}${lastName}`, role: 'service' });
+          const previous = previousDoorInstallers.find(installer => installer.id === emp.id && installer.role === 'service');
+          doorInstallers.push({ id: emp.id, name: `${emp.first_name}${lastName}`, role: 'service', assigned_at: previous?.assigned_at || selectedBooking.created_at || assignedAt });
         }
       }
 
@@ -433,7 +440,7 @@
         const dInstallers = d.installers || [];
         dInstallers.forEach(inst => {
           if (inst.id && !allInstallersMap.has(inst.id)) {
-            allInstallersMap.set(inst.id, { id: inst.id, name: inst.name, role: inst.role });
+            allInstallersMap.set(inst.id, { id: inst.id, name: inst.name, role: inst.role, assigned_at: inst.assigned_at || selectedBooking.created_at || assignedAt });
           }
         });
       });

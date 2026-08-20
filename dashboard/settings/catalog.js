@@ -401,12 +401,13 @@ function renderBusinesses(businesses, features) {
 
 async function loadCatalogSettings() {
   try {
-    const { data: businesses, error: businessError } = await SettingsPage.sb
-      .from('tenant_businesses')
-      .select('id,name,company_id')
-      .eq('company_id', SettingsPage.currentCompanyId)
-      .order('name');
+    const [{ data: businesses, error: businessError }, { data: orderSetting }] = await Promise.all([
+      SettingsPage.sb.from('tenant_businesses').select('id,name,company_id').eq('company_id', SettingsPage.currentCompanyId),
+      SettingsPage.sb.from('global_settings').select('value').eq('company_id', SettingsPage.currentCompanyId).eq('key', 'business_order').maybeSingle()
+    ]);
     if (businessError) throw businessError;
+    const rank = new Map((Array.isArray(orderSetting?.value) ? orderSetting.value : []).map((id, index) => [id, index]));
+    businesses.sort((a, b) => (rank.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (rank.get(b.id) ?? Number.MAX_SAFE_INTEGER) || a.name.localeCompare(b.name));
 
     const businessIds = (businesses || []).map((business) => business.id);
     let features = [];

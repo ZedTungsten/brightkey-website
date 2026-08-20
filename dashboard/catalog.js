@@ -109,14 +109,6 @@
     if (!centavos) return '';
     return (centavos / 100).toFixed(2);
   }
-  function slugify(s) {
-    return s.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');
-  }
-
-  function productSlug(title, sku) {
-    const titleWithoutParentheses = String(title || '').replace(/[()]/g, ' ');
-    return slugify(`${titleWithoutParentheses} ${sku || ''}`.trim());
-  }
   function toast(msg, type='success') {
     if ((type === 'error' || type === 'danger') && window.BKFriendlyError) {
       msg = window.BKFriendlyError(msg);
@@ -752,6 +744,8 @@
     }
 
     const selectedProducts = allProducts.filter(p => selectedProductIds.includes(p.id));
+    const variantNameInput = document.getElementById('f-variant-name');
+    if (variantNameInput) window.BKCatalogVariants.configureBatchInput(variantNameInput, selectedProducts);
 
     const fields = [
       { id: 'f-title', key: 'title', type: 'text' },
@@ -990,24 +984,11 @@
   }
 
   function closeDrawer() {
-    if (isAutosaving) return;
-    const ts = document.querySelector('.table-responsive');
-    const savedScroll = ts ? ts.scrollTop : 0;
-    document.getElementById('product-drawer').classList.remove('open');
-    document.getElementById('drawer-overlay').classList.remove('open');
-    if (ts) requestAnimationFrame(() => { ts.scrollTop = savedScroll; });
+    window.BKCatalogVariants.closeDrawer(isAutosaving);
   }
 
   function updateStatusSelectStyle() {
-    const el = document.getElementById('f-status');
-    if (!el) return;
-    if (el.value === 'draft') {
-      el.classList.add('status-select-draft');
-      el.classList.remove('status-select-published');
-    } else {
-      el.classList.add('status-select-published');
-      el.classList.remove('status-select-draft');
-    }
+    window.BKCatalogVariants.updateStatusSelectStyle(document.getElementById('f-status'));
   }
 
   // ─────────────────────────────────────────────────────
@@ -1047,6 +1028,8 @@
       slugInp.readOnly = true;
       slugInp.placeholder = 'Generated automatically';
     }
+    const variantNameInput = document.getElementById('f-variant-name');
+    if (variantNameInput) window.BKCatalogVariants.resetInput(variantNameInput);
 
     document.querySelectorAll('#product-drawer input[type="checkbox"]').forEach(cb => {
       cb.checked = false;
@@ -1097,7 +1080,7 @@
   function fillForm(p) {
     const set = (id, val) => { const el = document.getElementById(id); if(el) el.value = val || ''; };
     set('f-sku', String(p.sku || '').toUpperCase());
-    set('f-slug', productSlug(p.title, p.sku));
+    set('f-slug', window.BKCatalogVariants.productSlug(p.title, p.sku));
     set('f-title', p.title);
     set('f-description', p.description);
     set('f-category', p.category);
@@ -1126,6 +1109,7 @@
     document.getElementById('f-show-features').checked = p.show_features !== false;
     document.getElementById('f-show-specs').checked = p.show_specs !== false;
     document.getElementById('f-business').value = p.business || ''; updateParentSkuDatalist();
+    syncVariantCategoryFromParent();
     document.getElementById('f-status').value = p.status || 'draft';
     updateStatusSelectStyle();
 
@@ -1196,7 +1180,7 @@
     const tagsRaw = g('f-tags');
     const tagsArr = tagsRaw ? tagsRaw.split(',').map(s=>s.trim().toLowerCase()).filter(Boolean) : [];
 
-    const slugVal = productSlug(g('f-title'), g('f-sku'));
+    const slugVal = window.BKCatalogVariants.productSlug(g('f-title'), g('f-sku'));
 
     // Collect checked promo tags
     const checkedTags = [];
@@ -1228,7 +1212,7 @@
       status:            document.getElementById('f-status').value,
       related_skus:      relatedArr,
       parent_sku:        g('f-parent-sku'),
-      variant_name:      g('f-variant-name'),
+      variant_name:      g('f-parent-sku') ? (window.BKCatalogVariants.parentFor(variantParentContext())?.variant_name || null) : g('f-variant-name'),
       variant_value:     g('f-variant-value'),
       sale_price:        parsePrice(document.getElementById('f-sale-price').value),
       discounted_price:  parsePrice(document.getElementById('f-discounted-price').value),
@@ -1258,6 +1242,21 @@
       tags:              tagsArr,
       company_id:        currentCompanyId
     };
+  }
+
+  function variantParentContext() {
+    return {
+      products: allProducts,
+      editingId,
+      business: document.getElementById('f-business')?.value,
+      parentSku: document.getElementById('f-parent-sku')?.value.trim()
+    };
+  }
+
+  function syncVariantCategoryFromParent() {
+    const input = document.getElementById('f-variant-name');
+    if (!input || isBatchEditing) return;
+    window.BKCatalogVariants.syncInput(input, variantParentContext());
   }
 
   function collectFeatures(business) {
@@ -1666,6 +1665,11 @@
         const { data, error } = await sbClient.from('products').insert(payload).select('id').single();
         if (error) throw error;
         productId = data.id;
+      }
+
+      if (!payload.parent_sku) {
+        const { error: childSyncError } = await window.BKCatalogVariants.syncChildren({ client: sbClient, companyId: currentCompanyId, business: payload.business, parentSku: payload.sku, variantName: payload.variant_name });
+        if (childSyncError) throw childSyncError;
       }
 
       // Save features
@@ -2095,9 +2099,11 @@
 
       // Dynamically load feature definitions from the database based on Tenants settings
       if (currentCompanyId) {
-        const { data: businesses } = await window.BKAuth.sb.from('tenant_businesses').select('id, name').eq('company_id', currentCompanyId).order('name');
-        tenantBusinesses = businesses || [];
-        const businessIds = (businesses || []).map(business => business.id);
+        const [{ data: businessRows }, { data: orderSetting }] = await Promise.all([
+          window.BKAuth.sb.from('tenant_businesses').select('id,name').eq('company_id', currentCompanyId), window.BKAuth.sb.from('global_settings').select('value').eq('company_id', currentCompanyId).eq('key', 'business_order').maybeSingle()
+        ]);
+        const rank = new Map((Array.isArray(orderSetting?.value) ? orderSetting.value : []).map((id, index) => [id, index])); const businesses = [...(businessRows || [])].sort((a, b) => (rank.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (rank.get(b.id) ?? Number.MAX_SAFE_INTEGER) || a.name.localeCompare(b.name));
+        tenantBusinesses = businesses; const businessIds = businesses.map(business => business.id);
         const { data: dbFeatures } = businessIds.length
           ? await window.BKAuth.sb
             .from('business_features').select('business_id, name, display_name, sort_order').in('business_id', businessIds)
@@ -2332,15 +2338,8 @@
     document.getElementById('f-status').addEventListener('change', updateStatusSelectStyle);
 
     document.getElementById('f-parent-sku').addEventListener('input', (e) => {
-      const val = e.target.value.trim();
-      const business = document.getElementById('f-business').value, exists = !val || allProducts.some(x => x.id !== editingId && x.business === business && x.sku && x.sku.toLowerCase() === val.toLowerCase());
-      if (exists) {
-        e.target.style.borderColor = '';
-        e.target.style.boxShadow = '';
-      } else {
-        e.target.style.borderColor = 'var(--danger)';
-        e.target.style.boxShadow = '0 0 0 3px rgba(220, 38, 38, 0.15)';
-      }
+      window.BKCatalogVariants.validateParentInput(e.target, variantParentContext());
+      syncVariantCategoryFromParent();
     });
 
     document.getElementById('drawer-prev').addEventListener('click', () => {
@@ -2624,7 +2623,7 @@
     // Slugs are always derived from Title + SKU and cannot be edited independently.
     const updateGeneratedSlug = () => {
       const slugEl = document.getElementById('f-slug');
-      slugEl.value = productSlug(
+      slugEl.value = window.BKCatalogVariants.productSlug(
         document.getElementById('f-title').value,
         document.getElementById('f-sku').value
       );
@@ -2636,6 +2635,7 @@
     document.getElementById('f-business').addEventListener('change', e => {
       renderFeaturesTab(e.target.value); updateParentSkuDatalist();
       document.getElementById('f-parent-sku').dispatchEvent(new Event('input'));
+      syncVariantCategoryFromParent();
     });
 
     // Price inputs → live preview
