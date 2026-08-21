@@ -2,6 +2,7 @@ import { createHash } from 'crypto';
 import { createServiceClient, setApiCors } from '../lib/api/security.js';
 import { enforceRateLimit } from '../lib/api/rate-limit.js';
 import { findAuthUserByEmail } from './register-employee.js';
+import { ensureOwnerEmployeeProfile } from './ensure-owner-employee.js';
 
 const PASSWORD_PATTERN = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/;
 
@@ -122,6 +123,22 @@ export default async function handler(req, res) {
       console.error('Contractor membership creation failed:', membershipError);
       if (createdAuthUser) await supabase.auth.admin.deleteUser(userId);
       return res.status(500).json({ error: 'Workspace access could not be created. Ask your administrator to check the invitation.' });
+    }
+
+    if (memberRole === 'owner') {
+      try {
+        await ensureOwnerEmployeeProfile({
+          supabase,
+          user: { id: userId, email: normalizedEmail, user_metadata: { full_name: fullName } },
+          tenantId: tenant_id,
+          companyId: company_id
+        });
+      } catch (ownerProfileError) {
+        console.error('Owner employee profile creation failed:', ownerProfileError);
+        await supabase.from('tenant_members').delete().eq('tenant_id', tenant_id).eq('user_id', userId);
+        if (createdAuthUser) await supabase.auth.admin.deleteUser(userId);
+        return res.status(503).json({ error: 'Your owner profile could not be created. Use the invitation again shortly.' });
+      }
     }
 
     const { error: invitationUpdateError } = await supabase

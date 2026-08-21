@@ -15,8 +15,28 @@ test('team leader authorization includes authoritative tenant owners', () => {
 
 test('Team page resolves employee identity by company and account email', () => {
   const source = fs.readFileSync(new URL('../dashboard/team.js', import.meta.url), 'utf8');
+  const resolver = fs.readFileSync(new URL('../dashboard/team-owner-profile.js', import.meta.url), 'utf8');
 
-  assert.match(source, /from\('employees'\)[\s\S]*\.eq\('company_id', this\.companyId\)[\s\S]*\.eq\('email', this\.currentUser\.email\)/);
+  assert.match(resolver, /from\('employees'\)[\s\S]*\.eq\('company_id', companyId\)[\s\S]*\.eq\('email', email\)/);
   assert.match(source, /const selfEmployeeId = this\.loggedInEmployee\?\.id/);
   assert.match(source, /select\.value = hasSelf \? selfEmployeeId : this\.subordinates\[0\]\.id/);
+  assert.match(source, /BKTeamOwnerProfile\.resolve/);
+  assert.match(source, /if \(!this\.selectedEmployeeId\)/);
+});
+
+test('owner employee provisioning is restricted to the authoritative tenant owner', () => {
+  const source = fs.readFileSync(new URL('../api/ensure-owner-employee.js', import.meta.url), 'utf8');
+
+  assert.match(source, /supabase\.auth\.getUser\(token\)/);
+  assert.match(source, /tenant\.owner_email/);
+  assert.match(source, /\.eq\('tenant_id', tenantId\)/);
+  assert.match(source, /next_company_employee_number/);
+  assert.match(source, /id: user\.id/);
+});
+
+test('owner account registration provisions its employee assignment identity', () => {
+  const source = fs.readFileSync(new URL('../api/register-account.js', import.meta.url), 'utf8');
+
+  assert.match(source, /if \(memberRole === 'owner'\)/);
+  assert.match(source, /ensureOwnerEmployeeProfile/);
 });

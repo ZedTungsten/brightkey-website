@@ -40,7 +40,7 @@
       memberRoles: {}, // user_id -> role
 
       // Current view states
-      activeMainTab: 'tasks', // 'tasks', 'milestones', 'projects'
+      activeMainTab: window.BKTeamRoutes.current(),
       tasks: [],
       milestones: [],
       projects: [],
@@ -75,10 +75,8 @@
           return;
         }
 
-        // Fetch logged-in employee record
         try {
-          const { data: emp } = await this.sb.from('employees').select('*').eq('company_id', this.companyId).eq('email', this.currentUser.email).limit(1).maybeSingle();
-          this.loggedInEmployee = emp;
+          this.loggedInEmployee = await window.BKTeamOwnerProfile.resolve({ sb: this.sb, companyId: this.companyId, tenantId: roleInfo.tenantId, user: this.currentUser, role: this.userRole });
         } catch(e) { this.loggedInEmployee = null; }
 
         if (!this.loggedInEmployee && !this.isOwnerOrAdmin) {
@@ -110,7 +108,9 @@
 
         // Load initially selected employee data
         this.selectedEmployeeId = document.getElementById('select-employee').value;
+        if (!this.selectedEmployeeId) { toast('No employee profile is available for task and milestone assignments. Refresh and try again.', 'error'); return; }
         await this.loadEmployeeData();
+        window.BKTeamRoutes.bind(this);
       },
 
       async loadCompanyStructure() {
@@ -733,19 +733,18 @@
         }
       },
 
-      switchMainTab(tab) {
+      switchMainTab(tab, updateUrl = true) {
         this.activeMainTab = tab;
+        if (updateUrl) window.BKTeamRoutes.navigate(tab);
         const nav = document.getElementById('btn-tab-tasks').parentElement;
         nav.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
         document.getElementById(`btn-tab-${tab}`).classList.add('active');
-        
         document.getElementById('panel-tasks').classList.remove('active');
         document.getElementById('panel-milestones').classList.remove('active');
         document.getElementById('panel-projects').classList.remove('active');
         document.getElementById('panel-management').classList.remove('active');
 
         document.getElementById(`panel-${tab}`).classList.add('active');
-
         if (tab === 'tasks') {
           document.querySelectorAll('#daily-tbody textarea, #weekly-tbody textarea, #monthly-tbody textarea').forEach(tx => {
             tx.style.height = 'auto';
@@ -902,7 +901,7 @@
         const deadline = document.getElementById('milestone-modal-deadline-input').value || null;
         const parent_id = document.getElementById('milestone-modal-parent-input').value || null;
 
-        if (!title) return;
+        if (!title || !this.selectedEmployeeId) return;
 
         const btn = document.getElementById('btn-submit-milestone');
         btn.disabled = true;
@@ -933,7 +932,8 @@
           this.closeMilestoneModal();
           await this.refreshTasksAndMilestones();
         } catch (err) {
-          toast('Error saving milestone: ' + err.message, 'error');
+          console.error('Milestone save failed:', err);
+          toast('The milestone could not be saved. Refresh the page and try again.', 'error');
         } finally {
           btn.disabled = false;
           btn.innerText = origText;
