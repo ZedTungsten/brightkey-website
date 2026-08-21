@@ -229,13 +229,6 @@
       <!-- Actual Sidebar Navigation Menu -->
       <div id="sidebar-nav-content" style="display: none; flex-direction: column; gap: 0.15rem;">
         
-        <!-- Sidebar Search -->
-        <div class="sidebar-search-container" style="padding: 0 0.5rem; margin-bottom: 0.75rem; position: relative;">
-          <div style="position: relative; display: flex; align-items: center; width: 100%;">
-            <input type="search" class="bk-search-control" id="sidebar-search-input" placeholder="Search" style="height: 32px; font-size: 0.8rem;" />
-          </div>
-        </div>
-
       <div class="dash-nav-group" id="nav-group-home">
         <button class="dash-nav-parent" onclick="toggleSubmenu(this)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
@@ -319,7 +312,6 @@
           <a href="/dashboard/sales-stocks" class="dash-nav-child" data-role="sales">Stocks</a>
         </div>
       </div>
-
       <!-- Customer Service -->
       <div class="dash-nav-group" id="nav-group-customerservice" style="display: none;">
         <button class="dash-nav-parent" onclick="toggleSubmenu(this)">
@@ -330,6 +322,7 @@
         <div class="dash-nav-children">
           <a href="/dashboard/cs-customers" class="dash-nav-child" data-role="customer_service">Customers</a>
           <a href="/dashboard/support-inbox" class="dash-nav-child" data-role="customer_service">Inbox</a>
+          <a href="/dashboard/cs-message-flow" class="dash-nav-child" data-role="customer_service">Message Flow</a>
           <a href="/dashboard/product-reviews" class="dash-nav-child" data-role="customer_service">Reviews</a>
         </div>
       </div>
@@ -386,7 +379,7 @@
       <!-- Finance -->
       <div class="dash-nav-group" id="nav-group-finance" style="display: none;">
         <button class="dash-nav-parent" onclick="toggleSubmenu(this)">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 0 0 0 4h4a2 2 0 0 1 0 4H8"/><path d="M12 18V6"/></svg>
           <span class="dash-nav-text">Finance</span>
           <svg class="dash-nav-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
         </button>
@@ -416,6 +409,13 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 10h18"/></svg>
         <span>Resources</span>
       </a>
+      </div>
+
+      <div class="sidebar-search-container">
+        <div class="sidebar-search-field">
+          <input type="search" class="bk-search-control" id="sidebar-search-input" placeholder="Search" aria-label="Search dashboard" style="height:32px; font-size:0.8rem;" />
+          <span class="sidebar-search-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m16.5 16.5 4.5 4.5"/></svg></span>
+        </div>
       </div>
 
       <div class="dash-sidebar-footer" style="position: relative;">

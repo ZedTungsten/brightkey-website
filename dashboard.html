@@ -7,6 +7,7 @@
   <link rel="preconnect" href="https://fonts.bunny.net" />
   <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="/css/dashboard-calendar-controls.css?v=20260821" />
   <link rel="icon" type="image/svg+xml" href="assets/favicon.svg?v=2" />
   <style>
     #dashboard-sticky-notes:empty::before {
@@ -230,10 +231,15 @@
       border: none;
       background: none;
       color: var(--text-muted);
-      cursor: default;
+      cursor: pointer;
       display: grid;
       place-items: center;
       padding: 0;
+      transition: color 0.15s, transform 0.15s;
+    }
+    .home-calendar-settings:hover {
+      color: var(--cyan-light);
+      transform: rotate(20deg);
     }
     .home-calendar-weekdays,
     .home-calendar-grid {
@@ -701,7 +707,7 @@
                     <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
                   </button>
                 </div>
-                <button type="button" class="home-calendar-settings" aria-label="Calendar settings" tabindex="-1">
+                <button type="button" class="home-calendar-settings" aria-label="Calendar visibility" title="Calendar visibility" onclick="App.openCalendarVisibilityModal()">
                   <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06A1.65 1.65 0 0 0 15 19.4a1.65 1.65 0 0 0-1 .6 1.65 1.65 0 0 0-.33 1.82V22a2 2 0 0 1-4 0v-.18A1.65 1.65 0 0 0 9 20.06a1.65 1.65 0 0 0-1-.6 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-.6-1 1.65 1.65 0 0 0-1.82-.33H2a2 2 0 0 1 0-4h.18A1.65 1.65 0 0 0 4 9a1.65 1.65 0 0 0 .6-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-.6 1.65 1.65 0 0 0 .33-1.82V2a2 2 0 0 1 4 0v.18A1.65 1.65 0 0 0 15 4a1.65 1.65 0 0 0 1 .6 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.24.28.45.6.6 1h.18a2 2 0 0 1 0 4H20c-.15.4-.36.72-.6 1z"/></svg>
                 </button>
               </div>
@@ -805,6 +811,18 @@
       <div class="modal-footer" style="padding: 1rem 1.5rem; border-top: 1px solid var(--border, #e4e4e7); background: var(--bg-elevated, #f4f4f5); display: flex; justify-content: flex-end;">
         <button class="btn btn-primary" onclick="App.closeCalendarDayModal()" style="background: var(--cyan, #06b6d4); color: #ffffff; border: none; padding: 0.5rem 1.25rem; border-radius: 6px; cursor: pointer; font-size: 0.82rem; font-weight: 600; outline: none;">Close</button>
       </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay calendar-visibility-overlay" id="calendar-visibility-modal" role="dialog" aria-modal="true" aria-labelledby="calendar-visibility-title">
+    <div class="modal-card calendar-visibility-card">
+      <div class="modal-header calendar-visibility-header">
+        <div class="modal-title" id="calendar-visibility-title">Visibility</div>
+        <button type="button" class="calendar-visibility-close" onclick="App.closeCalendarVisibilityModal()" aria-label="Close visibility settings" title="Close">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+      <div class="modal-body calendar-visibility-options" id="calendar-visibility-options"></div>
     </div>
   </div>
 
@@ -1063,13 +1081,17 @@
               clearTimeout(notesDebounceTimer);
               notesDebounceTimer = setTimeout(async () => {
                 try {
-                  const { error } = await BKAuth.sb
+                  const { data: savedEmployee, error } = await BKAuth.sb
                     .from('employees')
                     .update({ notes: notesTextarea.innerHTML })
-                    .eq('id', this.employeeId);
-                  if (error) throw error;
+                    .eq('id', this.employeeId)
+                    .eq('company_id', this.companyId)
+                    .select('id')
+                    .maybeSingle();
+                  if (error || !savedEmployee) throw error || new Error('Employee note update was not applied.');
                 } catch (dbErr) {
                   console.error('Failed to sync notes to database:', dbErr);
+                  toast('Your note could not be saved. Check your connection and try again.', 'error');
                 }
               }, 500);
             });
@@ -1334,19 +1356,12 @@
           const label = this.formatCalendarDate(date);
           
           const event = this.calendarEvents[key];
-          const hasEvent = !!event;
-          const eventColor = event?.color || '#e35d2f';
-          const birthdayDot = hasEvent ? `<div style="position: absolute; bottom: 2px; left: 20%; right: 20%; height: 3px; background: ${eventColor}; border-radius: 1px;"></div>` : '';
           const holidayEntries = this.calendarHolidays[key] || [];
           const holidayName = holidayEntries.map(holiday => holiday.name).join(', ');
-          const dateMarker = holidayEntries.length
-            ? '<div style="position:absolute;bottom:2px;left:20%;right:20%;height:3px;background:#eab308;border-radius:1px;"></div>'
-            : birthdayDot;
 
           days.push(`
-            <button type="button" class="home-calendar-day${mutedClass}${todayClass}" onclick="App.showCalendarDayModal('${key}')" aria-label="${esc(label)}${holidayEntries.length ? `, Holiday: ${esc(holidayName)}` : ''}">
+            <button type="button" class="home-calendar-day${mutedClass}${todayClass}" data-calendar-date="${key}" onclick="App.showCalendarDayModal('${key}')" aria-label="${esc(label)}${holidayEntries.length ? `, Holiday: ${esc(holidayName)}` : ''}">
               ${date.getDate()}
-              ${dateMarker}
             </button>
           `);
         }
@@ -1359,6 +1374,7 @@
           const { data, error } = await BKAuth.sb
             .from('employees')
             .select('first_name, last_name, date_of_birth')
+            .eq('company_id', this.companyId)
             .eq('employment_status', 'Active');
           
           if (error) throw error;
@@ -2677,6 +2693,10 @@
     };
 
     window.App = App;
+
+    </script>
+    <script src="/js/dashboard-calendar-controls.js?v=20260821"></script>
+    <script>
 
     document.addEventListener('DOMContentLoaded', () => {
       App.init();

@@ -208,6 +208,18 @@ window.WarehousePage = {
 
   // 10. Update Badge Counts
   updateBadgeCounts: async function() {
+    const allProds = this.allProducts || [];
+    const getDispatchCount = () => [...new Set(this.activeTransactions.filter(transaction => {
+      if (transaction.status !== 'packed' || !transaction.reference_id) return false;
+      if (window.isNonInventoryItem(transaction.sku, allProds.find(product => product.sku === transaction.sku))) return false;
+      const hasUnpacked = this.activeTransactions.some(other =>
+        other.reference_id === transaction.reference_id &&
+        ['reserved', 'inspect'].includes(other.status) &&
+        !window.isNonInventoryItem(other.sku, allProds.find(product => product.sku === other.sku))
+      );
+      return !hasUnpacked;
+    }).map(transaction => transaction.reference_id))].length;
+
     const renderBadges = (receive, inspect, pack, dispatch) => {
       const badges = [
         { id: 'badge-count-receive', count: receive },
@@ -250,11 +262,14 @@ window.WarehousePage = {
               )
             )).map(transaction => transaction.reference_id))].length
             : Number(row.inspect_count || 0);
+          const dispatchCount = document.getElementById('dispatch-list')
+            ? getDispatchCount()
+            : Number(row.dispatch_count || 0);
           renderBadges(
             Number(row.receive_count || 0),
             inspectCount,
             Number(row.pack_count || 0),
-            Number(row.dispatch_count || 0)
+            dispatchCount
           );
           return;
         }
@@ -264,7 +279,6 @@ window.WarehousePage = {
     }
 
     // Client-side fallback if RPC is pending migration
-    const allProds = this.allProducts || [];
     const receiveCount = this.activeTransactions.filter(t => {
       const matchesWarehouse = this.activeWarehouseId 
         ? t.warehouse_id === this.activeWarehouseId 
@@ -292,19 +306,7 @@ window.WarehousePage = {
       !window.isNonInventoryItem(t.sku, allProds.find(p => p.sku === t.sku))
     ).map(t => t.reference_id))].length;
     
-    const dispatchCount = this.activeTransactions.filter(t => {
-      if (t.status !== 'packed') return false;
-      if (window.isNonInventoryItem(t.sku, allProds.find(p => p.sku === t.sku))) return false;
-      if (t.reference_id) {
-        const hasUnpacked = this.activeTransactions.some(other => 
-          other.reference_id === t.reference_id && 
-          ['reserved', 'inspect'].includes(other.status) &&
-          !window.isNonInventoryItem(other.sku, allProds.find(p => p.sku === other.sku))
-        );
-        if (hasUnpacked) return false;
-      }
-      return true;
-    }).length;
+    const dispatchCount = getDispatchCount();
 
     renderBadges(receiveCount, inspectCount, packCount, dispatchCount);
   },

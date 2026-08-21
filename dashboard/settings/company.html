@@ -111,6 +111,17 @@
                           <input type="text" id="company-address-line2" class="form-input" placeholder="e.g. Quezon City, Metro Manila" />
                         </div>
                       </div>
+
+                      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem;">
+                        <div class="form-group">
+                          <label class="form-label" for="company-country">Country</label>
+                          <select id="company-country" class="form-select"><option value="" disabled hidden>Select country</option></select>
+                        </div>
+                        <div class="form-group">
+                          <label class="form-label" for="company-currency-symbol">Currency Symbol</label>
+                          <input type="text" id="company-currency-symbol" class="form-input" value="₱" maxlength="2" autocomplete="off" placeholder="₱" />
+                        </div>
+                      </div>
                       
                       <div class="form-group">
                         <label class="form-label" for="company-email">Email</label>
@@ -278,6 +289,20 @@
       secondary: '#0891B2',
       highlight: '#F59E0B'
     };
+    const COUNTRY_CODES = 'AF AL DZ AD AO AG AR AM AU AT AZ BS BH BD BB BY BE BZ BJ BT BO BA BW BR BN BG BF BI CV KH CM CA CF TD CL CN CO KM CG CD CR CI HR CU CY CZ DK DJ DM DO EC EG SV GQ ER EE SZ ET FJ FI FR GA GM GE DE GH GR GD GT GN GW GB GY HT HN HU IS IN ID IR IQ IE IL IT JM JP JO KZ KE KI KP KR KW KG LA LV LB LS LR LY LI LT LU MG MW MY MV ML MT MH MR MU MX FM MD MC MN ME MA MZ MM NA NR NP NL NZ NI NE NG MK NO OM PK PW PA PG PY PE PH PL PT QA RO RU RW KN LC VC WS SM ST SA SN RS SC SL SG SK SI SB SO ZA SS ES LK SD SR SE CH SY TW TJ TZ TH TL TG TO TT TN TR TM TV UG UA AE US UY UZ VU VA VE VN YE ZM ZW'.split(' ');
+
+    function populateCountries(selectedCountry = 'Philippines') {
+      const select = document.getElementById('company-country');
+      if (!select) return;
+      const names = typeof Intl.DisplayNames === 'function' ? new Intl.DisplayNames(['en'], { type: 'region' }) : null;
+      const countries = COUNTRY_CODES.map(code => names?.of(code) || code).sort((a, b) => a.localeCompare(b));
+      select.replaceChildren(new Option('Select country', '', true, false));
+      select.firstElementChild.disabled = true;
+      select.firstElementChild.hidden = true;
+      countries.forEach(country => select.add(new Option(country, country)));
+      if (selectedCountry && !countries.includes(selectedCountry)) select.add(new Option(selectedCountry, selectedCountry));
+      select.value = selectedCountry || '';
+    }
 
     function validHexColor(value) {
       return /^#[0-9A-F]{6}$/i.test(String(value || '').trim());
@@ -319,6 +344,7 @@
     };
 
     window.initSettingsPage = async function() {
+      populateCountries();
       await loadCompanySettings();
       
       // Populate social popover menu
@@ -446,6 +472,15 @@
       const businessCategory = document.getElementById('company-business-category')?.value.trim() || '';
       const address1 = document.getElementById('company-address-line1')?.value || '';
       const address2 = document.getElementById('company-address-line2')?.value || '';
+      const country = document.getElementById('company-country')?.value || '';
+      const currencySymbol = document.getElementById('company-currency-symbol')?.value.trim() || '';
+      if (!currencySymbol || Array.from(currencySymbol).length > 2) {
+        const currencyField = document.getElementById('company-currency-symbol');
+        if (currencyField) { currencyField.style.borderColor = 'var(--danger)'; currencyField.focus(); }
+        SettingsPage.showToast('Currency symbol is required and may contain up to two characters.', true);
+        return;
+      }
+      document.getElementById('company-currency-symbol').style.borderColor = '';
       const email = document.getElementById('company-email')?.value || '';
       const phone = document.getElementById('company-phone')?.value || '';
       const website = document.getElementById('company-website')?.value || '';
@@ -515,6 +550,8 @@
             businessCategory: businessCategory,
             companyAddressLine1: address1,
             companyAddressLine2: address2,
+            country: country,
+            currencySymbol: currencySymbol,
             email: email,
             phone: phone,
             website: website,
@@ -527,6 +564,7 @@
           }
         });
         if (error) throw error;
+        window.BKCurrency?.setConfig({ country, symbol: currencySymbol });
         SettingsPage.showToast('Company profile settings saved successfully.');
       } catch (err) {
         console.error(err);
@@ -560,6 +598,9 @@
         if (address1El) address1El.value = config.companyAddressLine1 || '';
         const address2El = document.getElementById('company-address-line2');
         if (address2El) address2El.value = config.companyAddressLine2 || '';
+        populateCountries(config.country || 'Philippines');
+        const currencySymbolEl = document.getElementById('company-currency-symbol');
+        if (currencySymbolEl) currencySymbolEl.value = config.currencySymbol || '₱';
         const emailEl = document.getElementById('company-email');
         if (emailEl) emailEl.value = config.email || '';
         const phoneEl = document.getElementById('company-phone');

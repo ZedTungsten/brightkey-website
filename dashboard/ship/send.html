@@ -1029,7 +1029,9 @@
           const skusHtml = group.items.map(t => `<code>${t.sku}</code>`).join('<br/>');
           const qtysHtml = group.items.map(t => `<strong>${t.quantity}</strong>`).join('<br/>');
           const latestStatus = this.latestOrderStatus(group.booking, group.items);
-          const statusLabel = String(latestStatus || 'scheduled').replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase());
+          const statusLabel = latestStatus === 'reserved'
+            ? 'For QA'
+            : String(latestStatus || 'scheduled').replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase());
           const hasDeliveryBooking = this.deliveryBookings.some(item => item.reference_id === group.reference_id);
           const statusColors = this.getCalendarStatusColors(latestStatus, hasDeliveryBooking);
           
@@ -1197,12 +1199,13 @@
         document.getElementById('delivery-photo-preview').style.display = 'none';
         document.getElementById('delivery-photo-preview').src = '';
         document.getElementById('upload-placeholder').style.display = 'flex';
+        document.getElementById('delivery-file-input').value = '';
         document.getElementById('base-fee').value = '';
         document.getElementById('tip-1').value = '';
         document.getElementById('tip-2').value = '';
         document.getElementById('toll').value = '';
 
-        document.getElementById('btn-confirm-booking').disabled = false;
+        document.getElementById('btn-confirm-booking').disabled = true;
         document.getElementById('upload-container').style.borderColor = 'var(--border)';
         document.getElementById('delivery-file-error').style.display = 'none';
 
@@ -2033,9 +2036,19 @@
     window.handleDeliveryFileSelect = function(e) {
       const file = e.target.files[0];
       if (!file) return;
+      if (!String(file.type || '').startsWith('image/')) {
+        DeliveryApp.deliveryPhotoBlob = null;
+        document.getElementById('btn-confirm-booking').disabled = true;
+        document.getElementById('delivery-file-error').textContent = 'Choose a valid image for the delivery information screenshot.';
+        document.getElementById('delivery-file-error').style.display = 'block';
+        e.target.value = '';
+        return;
+      }
       
       DeliveryApp.deliveryPhotoBlob = file;
+      document.getElementById('btn-confirm-booking').disabled = false;
       document.getElementById('upload-container').style.borderColor = 'var(--border)';
+      document.getElementById('delivery-file-error').textContent = 'Upload the delivery information screenshot before confirming the booking.';
       document.getElementById('delivery-file-error').style.display = 'none';
 
       const reader = new FileReader();

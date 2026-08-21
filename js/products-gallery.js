@@ -129,13 +129,12 @@
     return Math.max(0, cents / 100);
   }
 
-  function money(pesos) {
-    return new Intl.NumberFormat('en-PH', {
-      style: 'currency',
-      currency: 'PHP',
+  function money(pesos, companyId = state.products[0]?.company_id) {
+    const symbol = window.BKStorefrontCurrencies?.[companyId] || '₱';
+    return `${symbol}${new Intl.NumberFormat('en-PH', {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2
-    }).format(Number(pesos) || 0);
+    }).format(Number(pesos) || 0)}`;
   }
 
   function slugify(value) {
@@ -485,8 +484,8 @@
           <p class="product-card__sku">${esc(product.sku || 'Product')}</p>
           <h3>${esc(product.title || product.sku || 'Untitled product')}</h3>
           <div class="product-card__price-row">
-            ${hasCompare ? `<span class="product-card__compare">${money(compare)}</span>` : ''}
-            <span class="product-card__price">${money(price)}</span>
+            ${hasCompare ? `<span class="product-card__compare">${money(compare, product.company_id)}</span>` : ''}
+            <span class="product-card__price">${money(price, product.company_id)}</span>
           </div>
           <div class="product-card__section">
             <span class="product-card__label">Features</span>

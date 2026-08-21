@@ -9,6 +9,15 @@
 (function () {
   'use strict';
 
+  if (/^\/dashboard(?:\/|$)/.test(window.location.pathname)
+      && !document.getElementById('bk-page-freshness-script')) {
+    const freshnessScript = document.createElement('script');
+    freshnessScript.id = 'bk-page-freshness-script';
+    freshnessScript.src = '/js/page-freshness.js';
+    freshnessScript.defer = true;
+    document.head.appendChild(freshnessScript);
+  }
+
   var SUPABASE_URL  = 'https://ymjlosnxuhsybkzkoofq.supabase.co';
   var SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inltamxvc254dWhzeWJremtvb2ZxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ0MDY1MzYsImV4cCI6MjA4OTk4MjUzNn0.srhk9SVvFuZRcfeRGbVDGPr5pYrFhs8vzcOiMK3A91w';
 
@@ -632,3 +641,5 @@
   };
 
 }());
+
+if (!document.querySelector('script[data-bk-currency]')) { const script = document.createElement('script'); script.src = '/js/currency.js'; script.dataset.bkCurrency = ''; document.head.appendChild(script); }

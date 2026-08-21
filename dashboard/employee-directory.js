@@ -427,6 +427,7 @@
           const rolesRequest = settle(getSb().from('dashboard_roles').select('*').order('name', { ascending: true }));
           const requestsRequest = settle(getSb().from('employee_update_requests')
             .select('*, employees(first_name, last_name, email, picture_link)')
+            .eq('tenant_id', this.tenantId)
             .eq('status', 'pending')
             .order('created_at', { ascending: false }));
           const employeesRequest = settle(sbGet().then(data => ({ data, error: null })));
@@ -1648,7 +1649,8 @@
               rejected_reason: reason,
               updated_at: new Date().toISOString()
             })
-            .eq('id', req.id);
+            .eq('id', req.id)
+            .eq('tenant_id', this.tenantId);
 
           if (error) throw error;
 
@@ -1666,13 +1668,20 @@
 
         try {
           // 1. Update the employee's official record
-          const approvedData = { ...(req.requested_data || {}) };
-          delete approvedData.shift_time_2;
+          const allowedRequestFields = new Set([
+            'first_name', 'last_name', 'contact_number', 'date_of_birth', 'address',
+            'emergency_contact_number', 'tin', 'sss', 'philhealth', 'pagibig',
+            'payout_details', 'payout_details_image'
+          ]);
+          const approvedData = Object.fromEntries(
+            Object.entries(req.requested_data || {}).filter(([field]) => allowedRequestFields.has(field))
+          );
           if (Object.keys(approvedData).length > 0) {
             const { error: empError } = await getSb()
               .from('employees')
               .update(approvedData)
-              .eq('id', req.employee_id);
+              .eq('id', req.employee_id)
+              .eq('company_id', this.companyId);
 
             if (empError) throw empError;
           }
@@ -1684,7 +1693,8 @@
               status: 'approved',
               updated_at: new Date().toISOString()
             })
-            .eq('id', req.id);
+            .eq('id', req.id)
+            .eq('tenant_id', this.tenantId);
 
           if (reqError) throw reqError;
 

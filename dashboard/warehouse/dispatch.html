@@ -74,7 +74,8 @@
                 <table class="ledger-table">
                   <thead>
                     <tr>
-                      <th>Image</th>
+                      <th>Pack</th>
+                      <th>Info</th>
                       <th>Ref Order</th>
                       <th>Customer</th>
                       <th>City</th>
@@ -88,7 +89,7 @@
                     </tr>
                   </thead>
                   <tbody id="dispatch-list">
-                    <tr><td colspan="11" class="text-center text-muted" style="padding:2rem 0;">No items waiting to be dispatched.</td></tr>
+                    <tr><td colspan="12" class="text-center text-muted" style="padding:2rem 0;">No items waiting to be dispatched.</td></tr>
                   </tbody>
                 </table>
               </div>
@@ -873,7 +874,7 @@
       });
 
       if (dispatchQueue.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="11" class="text-center text-muted" style="padding:2rem 0;">No packed items ready to dispatch.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="12" class="text-center text-muted" style="padding:2rem 0;">No packed items ready to dispatch.</td></tr>`;
         return;
       }
 
@@ -901,7 +902,13 @@
       });
 
       const bookingByOrder = new Map(bookings.map(booking => [booking.order_no, booking]));
-      const deliveryByOrder = new Map(dbDeliveryBookings.map(booking => [booking.reference_id, booking]));
+      const deliveryByOrder = new Map();
+      dbDeliveryBookings.forEach(booking => {
+        const existing = deliveryByOrder.get(booking.reference_id);
+        if (!existing || (!existing.delivery_photo_url && booking.delivery_photo_url)) {
+          deliveryByOrder.set(booking.reference_id, booking);
+        }
+      });
       const installPeriodRank = (value) => {
         const normalized = String(value || '').toLowerCase();
         if (normalized.includes('morning') || normalized.includes('am')) return 0;
@@ -958,12 +965,16 @@
         const packedImageHtml = group.packed_photo_url
           ? `<img src="${escFulfillment(group.packed_photo_url)}" alt="Packed order ${escFulfillment(group.reference_id)}" style="width: 80px; height: 50px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-elevated); display: block; cursor: pointer;" onclick="maximizePhoto(this.src)" title="View packed image" />`
           : '<span style="color: var(--text-muted);">No image</span>';
+        const deliveryInfoImageHtml = delivery?.delivery_photo_url
+          ? `<img src="${escFulfillment(delivery.delivery_photo_url)}" alt="Delivery information for ${escFulfillment(group.reference_id)}" style="width: 80px; height: 50px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-elevated); display: block; cursor: pointer;" onclick="maximizePhoto(this.src)" title="View delivery information" />`
+          : '<span style="display:flex; width:50px; height:50px; align-items:center; justify-content:center; border-radius:6px; background:#9ca3af; color:#fff; font-size:0.65rem; font-weight:700; text-align:center;">No Info</span>';
 
         const notes = pickupSchedule.notes || '—';
 
         tbody.innerHTML += `
           <tr>
             <td>${packedImageHtml}</td>
+            <td>${deliveryInfoImageHtml}</td>
             <td><strong>${group.reference_id}</strong></td>
             <td>${escFulfillment(customerName)}</td>
             <td>${escFulfillment(customerCity)}</td>

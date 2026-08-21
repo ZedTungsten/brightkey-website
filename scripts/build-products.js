@@ -634,6 +634,12 @@ async function buildProducts() {
         companyProfiles[row.company_id] = row.value || {};
       });
 
+      const storefrontCurrencies = Object.fromEntries(companyIds.map(companyId => {
+        const configured = String(companyProfiles[companyId]?.currencySymbol || '₱').trim();
+        return [companyId, Array.from(configured).length <= 2 && configured ? configured : '₱'];
+      }));
+      await fs.writeFile(path.resolve('./js/storefront-currency.generated.js'), `window.BKStorefrontCurrencies = Object.freeze(${JSON.stringify(storefrontCurrencies)});\n`, 'utf8');
+
       const companyLogoDir = path.resolve('./assets/company-logos');
       await fs.mkdir(companyLogoDir, { recursive: true });
       await Promise.all(Object.entries(companyProfiles).map(async ([companyId, profile]) => {
@@ -829,6 +835,8 @@ async function buildProducts() {
 
     // The dark logo is intended for the light storefront header and footer.
     const companyProfile = companyProfiles[p.company_id] || {};
+    const currencySymbol = String(companyProfile.currencySymbol || '₱').trim() || '₱';
+    $('[data-template="currency-config"]').html(`window.BKStorefrontCurrencySymbol = ${JSON.stringify(currencySymbol)}; window.BKStorefrontCountry = ${JSON.stringify(companyProfile.country || 'Philippines')};`);
     const companyDarkLogo = companyProfile.darkLogoSource || companyProfile.logoDark || '../assets/logo.svg?v=2';
     const companyName = companyProfile.companyName || 'Brightkey';
     const savedBrandColors = companyProfile.brandColors || {};
@@ -1338,7 +1346,7 @@ async function buildProducts() {
 
     // Write the parent page and a real static alias for every public variant
     // slug so clean URLs continue to work when opened directly or refreshed.
-    const renderedHtml = $.html();
+    const renderedHtml = $.html().replaceAll('₱', currencySymbol);
     const outPath = path.join(outDir, `${p.slug}.html`);
     await fs.writeFile(outPath, renderedHtml, 'utf8');
     for (const variant of variants) {

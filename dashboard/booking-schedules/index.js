@@ -134,6 +134,7 @@
       const tabInstallerAccounts = document.getElementById('tab-installer-accounts');
       const tabInstallerNotes = document.getElementById('tab-installer-notes');
       const monthNavigator = document.getElementById('calendar-month-navigator');
+      const scrollContainer = document.querySelector('.scroll-container');
       const pageTitle = document.getElementById('booking-page-title');
       const isInstallerAssignments = currentSubpage === 'installer-assignments';
       const isInstallerAccounts = currentSubpage === 'installer-accounts';
@@ -146,13 +147,14 @@
       if (panelAllBookings) panelAllBookings.style.display = currentSubpage === 'all-bookings' ? 'block' : 'none';
       if (panelInstallers) panelInstallers.style.display = isInstallerAssignments ? 'block' : 'none';
       if (panelInstallerAccounts) panelInstallerAccounts.style.display = isInstallerAccounts ? 'block' : 'none';
-      if (panelInstallerNotes) panelInstallerNotes.style.display = isInstallerNotes ? 'block' : 'none';
+      if (panelInstallerNotes) panelInstallerNotes.style.display = isInstallerNotes ? 'flex' : 'none';
       if (scheduleTabs) scheduleTabs.style.display = isInstallersPage ? 'none' : 'flex';
       if (installerTabs) installerTabs.style.display = isInstallersPage ? 'flex' : 'none';
       if (tabInstallerAssignments) tabInstallerAssignments.classList.toggle('active', isInstallerAssignments);
       if (tabInstallerAccounts) tabInstallerAccounts.classList.toggle('active', isInstallerAccounts);
       if (tabInstallerNotes) tabInstallerNotes.classList.toggle('active', isInstallerNotes);
       if (monthNavigator) monthNavigator.style.display = (isInstallerAccounts || isInstallerNotes) ? 'none' : 'flex';
+      if (scrollContainer) scrollContainer.classList.toggle('installer-notes-active', isInstallerNotes);
       if (pageTitle) pageTitle.textContent = isInstallersPage ? 'Installers' : 'Installation Schedules';
       document.title = isInstallersPage
         ? 'Installers — Brightkey Admin'

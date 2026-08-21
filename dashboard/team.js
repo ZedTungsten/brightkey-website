@@ -77,7 +77,7 @@
 
         // Fetch logged-in employee record
         try {
-          const { data: emp } = await this.sb.from('employees').select('*').eq('id', this.currentUser.id).maybeSingle();
+          const { data: emp } = await this.sb.from('employees').select('*').eq('company_id', this.companyId).eq('email', this.currentUser.email).limit(1).maybeSingle();
           this.loggedInEmployee = emp;
         } catch(e) { this.loggedInEmployee = null; }
 
@@ -133,7 +133,7 @@
         // Fetch all active employees with details for cards
         let allEmployees = [];
         try {
-          const { data } = await this.sb.from('employees').select('id, first_name, last_name, employee_number, picture_link, cv_link, title, job_description, department').eq('employment_status', 'Active');
+          const { data } = await this.sb.from('employees').select('id, first_name, last_name, employee_number, picture_link, cv_link, title, job_description, department').eq('company_id', this.companyId).eq('employment_status', 'Active');
           allEmployees = data || [];
           this.allActiveEmployees = allEmployees;
         } catch (e) {
@@ -206,8 +206,8 @@
           }).join('');
           
           if (select.options.length > 0) {
-            const hasSelf = this.subordinates.some(emp => emp.id === this.currentUser.id);
-            select.value = hasSelf ? this.currentUser.id : this.subordinates[0].id;
+            const selfEmployeeId = this.loggedInEmployee?.id || null; const hasSelf = this.subordinates.some(emp => emp.id === selfEmployeeId);
+            select.value = hasSelf ? selfEmployeeId : this.subordinates[0].id;
           }
         } else {
           container.style.display = 'none';

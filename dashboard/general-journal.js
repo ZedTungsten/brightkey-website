@@ -53,6 +53,7 @@
     /* ── PHP formatter ── */
     function php(v) {
       if (v === null || v === undefined || v === '') return '—';
+      if (window.BKCurrency) return window.BKCurrency.format(Number(v));
       return '₱' + Number(v).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
 
@@ -1651,7 +1652,8 @@
         } else if (col === 'date') {
           html = `<input type="date" class="cell-edit-input" value="${esc(currentVal ?? '')}" />`;
         } else if (col === 'debit' || col === 'credit') {
-          const num = currentVal ? String(currentVal).replace(/[₱,]/g, '') : '';
+          const currencySymbol = window.BKCurrency?.symbol || '₱';
+          const num = currentVal ? String(currentVal).replace(currencySymbol, '').replace(/,/g, '') : '';
           html = `<input type="number" class="cell-edit-input" value="${num}" step="0.01" min="0" />`;
         } else if (col === 'entry_number') {
           const formatted = currentVal ? fmtEntry(currentVal) : '';

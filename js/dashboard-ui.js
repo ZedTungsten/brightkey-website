@@ -169,7 +169,9 @@ window.BKUI = {
   }
 
   function peso(value) {
-    return `₱${(Number(value) || 0).toLocaleString('en-PH', {
+    const amount = Number(value) || 0;
+    if (window.BKCurrency) return window.BKCurrency.format(amount);
+    return `₱${amount.toLocaleString('en-PH', {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2
     })}`;

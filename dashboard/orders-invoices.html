@@ -246,7 +246,7 @@
                   <div class="form-group">
                     <label class="form-label">Search / Load Order</label>
                     <select class="form-input" id="booking-selector" style="height: auto; padding: 0.75rem;" onchange="loadSelectedBooking()">
-                      <option value="">-- Choose Order / Last Name --</option>
+                      <option value="">-- Choose Order / First Name --</option>
                     </select>
                   </div>
                 </div>
@@ -757,7 +757,15 @@
         // Fetch products
         const { data: pData } = await sb.from('products')
           .select('id, sku, title, image_main, installation_price, count_inventory');
-        dbProducts = pData || [];
+        dbProducts = (pData || []).sort((a, b) => {
+          const skuOrder = (a.sku || '').localeCompare(b.sku || '', 'en', {
+            sensitivity: 'base',
+            numeric: true
+          });
+          if (skuOrder !== 0) return skuOrder;
+
+          return (a.title || '').localeCompare(b.title || '', 'en', { sensitivity: 'base' });
+        });
 
         // Fetch warehouses
         const { data: wData } = await sb.from('warehouses')
@@ -930,7 +938,7 @@
       toggleInvoiceCompanyFields();
     }
 
-    // Load bookings sorted by name and filtered by selected Month & Year of installation (scheduled_date)
+    // Load bookings sorted by first name and filtered by selected Month & Year of installation (scheduled_date)
     async function loadBookingsDropdown() {
       try {
         const filterMonthEl = document.getElementById('filter-booking-month');
@@ -943,7 +951,7 @@
         }
 
         let query = sb.from('installation_bookings')
-          .select('id, order_no, customer_name, customer_last_name, scheduled_date, status')
+          .select('id, order_no, customer_name, customer_first_name, customer_last_name, scheduled_date, status')
           .eq('company_id', currentCompanyId)
           .neq('status', 'cancelled');
 
@@ -965,12 +973,17 @@
 
         bookingsList = data || [];
         bookingsList.sort((a, b) => {
-          const nameA = (a.customer_last_name || a.customer_name || '').trim().toLowerCase();
-          const nameB = (b.customer_last_name || b.customer_name || '').trim().toLowerCase();
-          return nameA.localeCompare(nameB);
+          const firstNameA = (a.customer_first_name || a.customer_name || '').trim();
+          const firstNameB = (b.customer_first_name || b.customer_name || '').trim();
+          const firstNameOrder = firstNameA.localeCompare(firstNameB, 'en', { sensitivity: 'base' });
+          if (firstNameOrder !== 0) return firstNameOrder;
+
+          const fullNameA = (a.customer_name || '').trim();
+          const fullNameB = (b.customer_name || '').trim();
+          return fullNameA.localeCompare(fullNameB, 'en', { sensitivity: 'base' });
         });
         const selector = document.getElementById('booking-selector');
-        selector.replaceChildren(new Option('-- Choose Order / Last Name --', ''));
+        selector.replaceChildren(new Option('-- Choose Order / First Name --', ''));
         bookingsList.forEach(b => {
           const dateStr = b.scheduled_date 
             ? new Date(b.scheduled_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) 

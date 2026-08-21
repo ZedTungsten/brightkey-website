@@ -6,8 +6,9 @@
 
       const pipe = (str) => str ? str.split('|').map(s => s.trim()).filter(Boolean) : [];
       const esc  = (s) => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-      const fmtPHP = (v) => `₱ ${parseFloat(v||0).toLocaleString('en-PH',{minimumFractionDigits:2})}`;
-      const fmtCents = (c) => `₱ ${((c||0)/100).toLocaleString('en-PH',{minimumFractionDigits:2})}`;
+      const currencySymbol = window.BKCurrency?.symbol || '₱';
+      const fmtPHP = (v) => `${currencySymbol} ${parseFloat(v||0).toLocaleString('en-PH',{minimumFractionDigits:2})}`;
+      const fmtCents = (c) => `${currencySymbol} ${((c||0)/100).toLocaleString('en-PH',{minimumFractionDigits:2})}`;
 
       // Fetch company invoice_template config (single source of truth)
       let cfg = {};
@@ -63,7 +64,7 @@
         deductionsHtml = `<tr class="less-row">
           <td align="right" class="summary-label move-right">LESS:</td>
           <td class="summary-middle">${dLabels.map(esc).join('<br>')}</td>
-          <td align="right" class="summary-value">${dVals.map(v => `-₱ ${parseFloat(v).toLocaleString('en-PH',{minimumFractionDigits:2})}`).join('<br>')}</td>
+          <td align="right" class="summary-value">${dVals.map(v => `-${currencySymbol} ${parseFloat(v).toLocaleString('en-PH',{minimumFractionDigits:2})}`).join('<br>')}</td>
         </tr>`;
       }
 
@@ -109,6 +110,7 @@
         html = html.replace(/\{\{deduct\}\}/g,      deductionsHtml);
         html = html.replace(/\{\{grandtotall\}\}/g, fmtCents(b.grand_total));
         html = html.replace(/\{\{terms\}\}/g,       termsHtml);
+        html = html.replaceAll('₱', currencySymbol);
         // Inject html2pdf + action buttons before </body>
         const actionScript = `
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>

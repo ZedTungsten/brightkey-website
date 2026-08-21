@@ -946,7 +946,9 @@
           const formatPHP = (cents) => {
             if (cents === 0) return '—';
             const val = Math.abs(cents) / 100;
-            const formattedVal = `₱${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+            const formattedVal = window.BKCurrency
+              ? window.BKCurrency.format(val)
+              : `₱${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
             return cents < 0 ? `(${formattedVal})` : formattedVal;
           };
 
@@ -1160,9 +1162,12 @@
           const value = String(raw || '').trim();
           if (!value) return '—';
           if (value.includes('%')) return value.replace(/\s*(?:-|–|—|to)\s*/i, ' – ');
-          const parts = value.replace(/[₱,]/g, '').split(/\s*(?:-|–|—|to)\s*/i);
+          const currencySymbol = window.BKCurrency?.symbol || '₱';
+          const parts = value.replace(currencySymbol, '').replace(/,/g, '').split(/\s*(?:-|–|—|to)\s*/i);
           if (parts.length > 0 && parts.length <= 2 && parts.every(part => part !== '' && Number.isFinite(Number(part)))) {
-            return parts.map(part => `₱${Number(part).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`).join(' – ');
+            return parts.map(part => window.BKCurrency
+              ? window.BKCurrency.format(Number(part))
+              : `₱${Number(part).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`).join(' – ');
           }
           return value;
         },
@@ -1213,7 +1218,8 @@
           const value = String(raw || '').trim();
           if (!value) return null;
           const isPercent = value.includes('%');
-          const parts = value.replace(/[₱,%]/g, '').split(/\s*(?:-|–|—|to)\s*/i)
+          const currencySymbol = window.BKCurrency?.symbol || '₱';
+          const parts = value.replace(currencySymbol, '').replace(/[,%]/g, '').split(/\s*(?:-|–|—|to)\s*/i)
             .map(part => Number(part.trim()))
             .filter(Number.isFinite);
           if (!parts.length) return null;
@@ -1225,7 +1231,8 @@
         parseDisplayedMetric(cell) {
           const text = String(cell?.textContent || '').trim();
           if (!text || text === '—') return null;
-          const number = Number(text.replace(/[₱,%(),]/g, ''));
+          const currencySymbol = window.BKCurrency?.symbol || '₱';
+          const number = Number(text.replace(currencySymbol, '').replace(/[,%(),]/g, ''));
           if (!Number.isFinite(number)) return null;
           return text.startsWith('(') ? -number : number;
         },
