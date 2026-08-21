@@ -489,6 +489,7 @@ test('tenant owner authority is consistent across APIs, settings, and database h
 
 test('installer jobs cannot be completed before required media is saved', () => {
   const mediaSource = fs.readFileSync(new URL('../js/smartlock-calendar/media.js', import.meta.url), 'utf8');
+  const adminMediaSource = fs.readFileSync(new URL('../dashboard/booking-schedules/booking-media.js', import.meta.url), 'utf8');
   const detailsSource = fs.readFileSync(new URL('../js/smartlock-calendar/booking-details.js', import.meta.url), 'utf8');
   const checklistSource = fs.readFileSync(new URL('../js/smartlock-calendar/checklist.js', import.meta.url), 'utf8');
 
@@ -498,8 +499,29 @@ test('installer jobs cannot be completed before required media is saved', () => 
   assert.match(mediaSource, /\{ \.\.\.door\.required_media \}/);
   assert.match(detailsSource, /openChecklistWhenMediaReady\(\$\{i\}\)/);
   assert.match(checklistSource, /!window\.doorHasRequiredMedia\(door\)/);
+  for (const source of [mediaSource, adminMediaSource]) {
+    assert.match(source, /function getFinishedInstallationFolderName\(\)/);
+    assert.match(source, /return `\$\{lastName\}-\$\{code\}`/);
+    assert.match(source, /mediaSaveQueue = mediaSaveQueue\.catch/);
+    assert.match(source, /progress = 99/);
+    assert.match(source, /Saving\.\.\./);
+    assert.match(source, /savedOtherMedia\.filter/);
+  }
+  assert.match(mediaSource, /if \(!updated\) throw new Error/);
+  assert.match(adminMediaSource, /\.select\('id'\)[\s\S]*?\.single\(\)/);
   assert.ok(
     checklistSource.indexOf('!window.doorHasRequiredMedia(door)')
       < checklistSource.indexOf("door.completed = true", checklistSource.indexOf('window.submitChecklist'))
   );
+});
+
+test('authenticated app pages require refresh after one hour, including installer calendar', () => {
+  const authSource = fs.readFileSync(new URL('../js/auth.js', import.meta.url), 'utf8');
+  const freshnessSource = fs.readFileSync(new URL('../js/page-freshness.js', import.meta.url), 'utf8');
+
+  assert.match(authSource, /usesPageFreshnessGuard/);
+  assert.match(authSource, /smartlock-calendar/);
+  assert.match(freshnessSource, /const STALE_AFTER_MS = 60 \* 60 \* 1000/);
+  assert.match(freshnessSource, /isManagedAppRoute/);
+  assert.match(freshnessSource, /smartlock-calendar/);
 });

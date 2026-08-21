@@ -1,14 +1,16 @@
 /* ============================================================
-   BrightKey — dashboard page freshness guard
-   Requires a full page refresh after a dashboard tab is 30 minutes old.
+   BrightKey — authenticated app page freshness guard
+   Requires a full page refresh after an app tab is 1 hour old.
    ============================================================ */
 
 (function initDashboardPageFreshness() {
   'use strict';
 
-  if (!/^\/dashboard(?:\/|$)/.test(window.location.pathname)) return;
+  const isManagedAppRoute = /^\/dashboard(?:\/|$)/.test(window.location.pathname)
+    || /^\/smartlock-calendar(?:\.html)?\/?$/.test(window.location.pathname);
+  if (!isManagedAppRoute) return;
 
-  const STALE_AFTER_MS = 30 * 60 * 1000;
+  const STALE_AFTER_MS = 60 * 60 * 1000;
   const CHECK_INTERVAL_MS = 30 * 1000;
   const loadedAt = Date.now();
   let promptVisible = false;

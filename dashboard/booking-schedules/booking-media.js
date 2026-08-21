@@ -1,11 +1,29 @@
     'use strict';
 
+    let removedRequiredLabels = new Set();
+    let removedOtherUrls = new Set();
+    let mediaSaveQueue = Promise.resolve();
+
+    function getFinishedInstallationFolderName() {
+      const nameParts = String(selectedBooking?.customer_name || 'Customer').trim().split(/\s+/).filter(Boolean);
+      const lastName = (nameParts.at(-1) || 'Customer').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+      const code = String(selectedBooking?.order_no || selectedBooking?.id || 'JOB').replace(/[^a-zA-Z0-9-]/g, '-').toUpperCase();
+      return `${lastName}-${code}`;
+    }
+
+    function queueMediaStateSave() {
+      mediaSaveQueue = mediaSaveQueue.catch(() => {}).then(() => saveCurrentMediaState());
+      return mediaSaveQueue;
+    }
+
     // --- Installer Uploads Modal & Upload logic ---
     window.openUploadModal = function(doorIndex) {
       if (!selectedBooking) return;
       uploadDoorIndex = doorIndex;
       slotFiles = {};
       otherFiles = [];
+      removedRequiredLabels = new Set();
+      removedOtherUrls = new Set();
 
       let doorsArr = [];
       if (typeof selectedBooking.doors === 'string') {
@@ -170,7 +188,7 @@
                   <span style="font-size:0.72rem; font-weight:700; color:var(--text-primary); line-height:1.1; max-height:2.2em; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;">${escapeHtml(item.label)}</span>
                 </div>
                 <div style="display:flex; flex-direction:column; gap:0.25rem; align-items:center; justify-content:center; flex:1;">
-                  <span style="font-size:0.68rem; font-weight:700; color:var(--text-secondary);">${currentFile.progress}%</span>
+                  <span style="font-size:0.68rem; font-weight:700; color:var(--text-secondary);">${currentFile.progress === 99 ? 'Saving...' : `${currentFile.progress}%`}</span>
                   <div style="width:80%; height:4px; background:var(--border); border-radius:2px; overflow:hidden;">
                     <div style="width:${currentFile.progress}%; height:100%; background:var(--blue); transition:width 0.15s;"></div>
                   </div>
@@ -321,8 +339,7 @@
       if (!slot || !slot.file) return;
 
       const file = slot.file;
-      const cleanCustomerName = (selectedBooking.customer_name || 'Customer').replace(/[^a-zA-Z0-9]/g, '_');
-      const folderName = `${selectedBooking.id}_${cleanCustomerName}`;
+      const folderName = getFinishedInstallationFolderName();
       const ext = file.name.split('.').pop();
       const path = `companies/${currentCompanyId}/reviews/finished_installations/${folderName}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
 
@@ -350,23 +367,32 @@
 
         const { data: { publicUrl } } = sb.storage.from('brightkey-assets').getPublicUrl(path);
 
-        slotFiles[idx] = { url: publicUrl, progress: 100 };
+        slotFiles[idx] = { url: publicUrl, progress: 99 };
         renderRequiredMediaChecklist();
 
-        await saveCurrentMediaState();
+        await queueMediaStateSave();
+        if (slotFiles[idx]?.url === publicUrl) slotFiles[idx].progress = 100;
+        renderRequiredMediaChecklist();
+        validateAndToggleSubmit();
       } catch (err) {
         console.error(`Upload error for slot ${idx}:`, err);
-        showToast(`Upload failed for ${file.name}: ${err.message}`, true);
-        delete slotFiles[idx];
+        if (slotFiles[idx]?.url) {
+          slotFiles[idx].progress = 99;
+        } else {
+          showToast(`Upload failed for ${file.name}: ${err.message}`, true);
+          delete slotFiles[idx];
+        }
         renderRequiredMediaChecklist();
         validateAndToggleSubmit();
       }
     }
 
     window.removeSlotFile = async function(idx) {
+      const requirement = bookingMediaRequirements[idx];
+      if (requirement?.label) removedRequiredLabels.add(requirement.label);
       delete slotFiles[idx];
       renderRequiredMediaChecklist();
-      await saveCurrentMediaState();
+      await queueMediaStateSave();
     };
 
     function renderOtherMediaList() {
@@ -383,7 +409,7 @@
             <div style="position:relative; aspect-ratio:1; display:flex; flex-direction:column; justify-content:space-between; padding:0.5rem; border:1px solid var(--border); border-radius:4px; background:var(--bg-surface); overflow:hidden;">
               <div style="font-size:0.72rem; font-weight:700; color:var(--text-primary); line-height:1.1; max-height:2.2em; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;">${escapeHtml(file.name)}</div>
               <div style="display:flex; flex-direction:column; gap:0.25rem; align-items:center; justify-content:center; flex:1;">
-                <span style="font-size:0.68rem; font-weight:700; color:var(--text-secondary);">${file.progress}%</span>
+                <span style="font-size:0.68rem; font-weight:700; color:var(--text-secondary);">${file.progress === 99 ? 'Saving...' : `${file.progress}%`}</span>
                 <div style="width:80%; height:4px; background:var(--border); border-radius:2px; overflow:hidden;">
                   <div style="width:${file.progress}%; height:100%; background:var(--blue); transition:width 0.15s;"></div>
                 </div>
@@ -500,8 +526,7 @@
     };
 
     async function uploadOtherFile(file, otherIdx) {
-      const cleanCustomerName = (selectedBooking.customer_name || 'Customer').replace(/[^a-zA-Z0-9]/g, '_');
-      const folderName = `${selectedBooking.id}_${cleanCustomerName}`;
+      const folderName = getFinishedInstallationFolderName();
       const ext = file.name.split('.').pop();
       const path = `companies/${currentCompanyId}/reviews/finished_installations/${folderName}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
 
@@ -531,24 +556,32 @@
 
         if (otherFiles[otherIdx]) {
           otherFiles[otherIdx].url = publicUrl;
-          otherFiles[otherIdx].progress = 100;
+          otherFiles[otherIdx].progress = 99;
         }
         renderOtherMediaList();
 
-        await saveCurrentMediaState();
+        await queueMediaStateSave();
+        if (otherFiles[otherIdx]?.url === publicUrl) otherFiles[otherIdx].progress = 100;
+        renderOtherMediaList();
+        validateAndToggleSubmit();
       } catch (err) {
         console.error(`Upload error for other file ${otherIdx}:`, err);
-        showToast(`Upload failed for ${file.name}: ${err.message}`, true);
-        otherFiles.splice(otherIdx, 1);
+        if (otherFiles[otherIdx]?.url) {
+          otherFiles[otherIdx].progress = 99;
+        } else {
+          showToast(`Upload failed for ${file.name}: ${err.message}`, true);
+          otherFiles.splice(otherIdx, 1);
+        }
         renderOtherMediaList();
         validateAndToggleSubmit();
       }
     }
 
     window.removeOtherFile = async function(idx) {
+      if (otherFiles[idx]?.url) removedOtherUrls.add(otherFiles[idx].url);
       otherFiles.splice(idx, 1);
       renderOtherMediaList();
-      await saveCurrentMediaState();
+      await queueMediaStateSave();
     };
 
     function validateAndToggleSubmit() {
@@ -580,46 +613,60 @@
     async function saveCurrentMediaState() {
       if (!selectedBooking || uploadDoorIndex === null) return;
 
-      let doorsArr = [];
-      if (typeof selectedBooking.doors === 'string') {
-        try { doorsArr = JSON.parse(selectedBooking.doors); } catch(_) {}
-      } else if (Array.isArray(selectedBooking.doors)) {
-        doorsArr = selectedBooking.doors;
-      }
-
-      const door = doorsArr[uploadDoorIndex];
-      if (!door) return;
-
-      // 1. Build door.required_media
-      door.required_media = {};
-      bookingMediaRequirements.forEach((item, idx) => {
-        const slot = slotFiles[idx];
-        if (slot && slot.url) {
-          door.required_media[item.label] = slot.url;
-        }
-      });
-
-      // 2. Build door.other_media
-      door.other_media = [];
-      otherFiles.forEach(item => {
-        if (item && item.url) {
-          door.other_media.push(item.url);
-        }
-      });
-
-      // 3. Maintain flat door.media_urls for downstream views compatibility
-      door.media_urls = [
-        ...Object.values(door.required_media),
-        ...door.other_media
-      ];
-
       try {
-        const { error } = await sb
+        const { data: freshBooking, error: fetchError } = await sb
+          .from('installation_bookings')
+          .select('doors')
+          .eq('id', selectedBooking.id)
+          .eq('company_id', currentCompanyId)
+          .single();
+        if (fetchError) throw fetchError;
+
+        let doorsArr = [];
+        if (typeof freshBooking?.doors === 'string') {
+          try { doorsArr = JSON.parse(freshBooking.doors); } catch (_) {}
+        } else if (Array.isArray(freshBooking?.doors)) {
+          doorsArr = freshBooking.doors;
+        }
+
+        const door = doorsArr[uploadDoorIndex];
+        if (!door) throw new Error('The selected door could not be refreshed.');
+
+        const nextRequiredMedia = (
+          door.required_media && typeof door.required_media === 'object'
+            ? { ...door.required_media }
+            : {}
+        );
+        bookingMediaRequirements.forEach((item, idx) => {
+          const slot = slotFiles[idx];
+          if (slot?.url) {
+            nextRequiredMedia[item.label] = slot.url;
+          } else if (removedRequiredLabels.has(item.label)) {
+            delete nextRequiredMedia[item.label];
+          }
+        });
+        door.required_media = nextRequiredMedia;
+
+        const savedOtherMedia = Array.isArray(door.other_media) ? door.other_media : [];
+        door.other_media = [...new Set([
+          ...savedOtherMedia.filter(url => !removedOtherUrls.has(url)),
+          ...otherFiles.map(item => item?.url).filter(Boolean)
+        ])];
+        door.media_urls = [...new Set([
+          ...Object.values(door.required_media),
+          ...door.other_media
+        ])];
+
+        const { data: savedBooking, error } = await sb
           .from('installation_bookings')
           .update({ doors: doorsArr })
-          .eq('id', selectedBooking.id);
+          .eq('id', selectedBooking.id)
+          .eq('company_id', currentCompanyId)
+          .select('id')
+          .single();
 
         if (error) throw error;
+        if (!savedBooking?.id) throw new Error('The job update was not confirmed.');
 
         const idx = dbBookings.findIndex(b => b.id === selectedBooking.id);
         if (idx !== -1) {
@@ -631,6 +678,7 @@
         applyFilterAndRender();
       } catch (err) {
         console.error('Failed to save door media state:', err);
-        showToast('Failed to save media upload: ' + err.message, true);
+        showToast('The file reached storage but is not yet saved to this job. Keep this window open and try again.', true);
+        throw err;
       }
     }

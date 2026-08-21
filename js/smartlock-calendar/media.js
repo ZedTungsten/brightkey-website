@@ -4,6 +4,21 @@
 let uploadDoorIndex = null;
 let slotFiles = {}; // idx -> { file: File, url: string, progress: number }
 let otherFiles = []; // array of { name: string, url: string, progress: number }
+let removedRequiredLabels = new Set();
+let removedOtherUrls = new Set();
+let mediaSaveQueue = Promise.resolve();
+
+function getFinishedInstallationFolderName() {
+  const nameParts = String(selectedBooking?.customer_name || 'Customer').trim().split(/\s+/).filter(Boolean);
+  const lastName = (nameParts.at(-1) || 'Customer').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+  const code = String(selectedBooking?.order_no || selectedBooking?.id || 'JOB').replace(/[^a-zA-Z0-9-]/g, '-').toUpperCase();
+  return `${lastName}-${code}`;
+}
+
+function queueMediaStateSave() {
+  mediaSaveQueue = mediaSaveQueue.catch(() => {}).then(() => saveCurrentMediaState());
+  return mediaSaveQueue;
+}
 
 function getActiveReqs() {
   if (!selectedBooking) return [];
@@ -52,6 +67,8 @@ window.openUploadModal = function(doorIndex) {
   uploadDoorIndex = doorIndex;
   slotFiles = {};
   otherFiles = [];
+  removedRequiredLabels = new Set();
+  removedOtherUrls = new Set();
 
   let doorsArr = [];
   if (typeof selectedBooking.doors === 'string') {
@@ -148,7 +165,7 @@ function renderRequiredMediaChecklist() {
               <span style="font-size:0.72rem; font-weight:700; color:var(--text-primary); line-height:1.1; max-height:2.2em; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;">${escapeHtml(item.label)}</span>
             </div>
             <div style="display:flex; flex-direction:column; gap:0.25rem; align-items:center; justify-content:center; flex:1;">
-              <span style="font-size:0.68rem; font-weight:700; color:var(--text-secondary);">${currentFile.progress}%</span>
+              <span style="font-size:0.68rem; font-weight:700; color:var(--text-secondary);">${currentFile.progress === 99 ? 'Saving...' : `${currentFile.progress}%`}</span>
               <div style="width:80%; height:4px; background:var(--border); border-radius:2px; overflow:hidden;">
                 <div style="width:${currentFile.progress}%; height:100%; background:var(--cyan); transition:width 0.15s;"></div>
               </div>
@@ -264,8 +281,7 @@ async function uploadSlotFile(idx) {
   if (!slot || !slot.file) return;
 
   const file = slot.file;
-  const cleanCustomerName = (selectedBooking.customer_name || 'Customer').replace(/[^a-zA-Z0-9]/g, '_');
-  const folderName = `${selectedBooking.id}_${cleanCustomerName}`;
+  const folderName = getFinishedInstallationFolderName();
   const ext = file.name.split('.').pop();
   const path = `companies/${currentInstaller.company_id}/reviews/finished_installations/${folderName}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
 
@@ -292,23 +308,32 @@ async function uploadSlotFile(idx) {
 
     const { data: { publicUrl } } = sb.storage.from('brightkey-assets').getPublicUrl(path);
 
-    slotFiles[idx] = { url: publicUrl, progress: 100 };
+    slotFiles[idx] = { url: publicUrl, progress: 99 };
     renderRequiredMediaChecklist();
 
-    await saveCurrentMediaState();
+    await queueMediaStateSave();
+    if (slotFiles[idx]?.url === publicUrl) slotFiles[idx].progress = 100;
+    renderRequiredMediaChecklist();
+    validateAndToggleSubmit();
   } catch (err) {
     console.error(`Upload error for slot ${idx}:`, err);
-    showToast(`The file ${file.name} could not be uploaded. Please try again.`, true);
-    delete slotFiles[idx];
+    if (slotFiles[idx]?.url) {
+      slotFiles[idx].progress = 99;
+    } else {
+      showToast(`The file ${file.name} could not be uploaded. Please try again.`, true);
+      delete slotFiles[idx];
+    }
     renderRequiredMediaChecklist();
     validateAndToggleSubmit();
   }
 }
 
 window.removeSlotFile = async function(idx) {
+  const requirement = getActiveReqs()[idx];
+  if (requirement?.label) removedRequiredLabels.add(requirement.label);
   delete slotFiles[idx];
   renderRequiredMediaChecklist();
-  await saveCurrentMediaState();
+  await queueMediaStateSave();
 };
 
 function renderOtherMediaList() {
@@ -325,7 +350,7 @@ function renderOtherMediaList() {
         <div style="position:relative; aspect-ratio:1; display:flex; flex-direction:column; justify-content:space-between; padding:0.5rem; border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--bg-surface); overflow:hidden;">
           <div style="font-size:0.72rem; font-weight:700; color:var(--text-primary); line-height:1.1; max-height:2.2em; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;">${escapeHtml(file.name)}</div>
           <div style="display:flex; flex-direction:column; gap:0.25rem; align-items:center; justify-content:center; flex:1;">
-            <span style="font-size:0.68rem; font-weight:700; color:var(--text-secondary);">${file.progress}%</span>
+            <span style="font-size:0.68rem; font-weight:700; color:var(--text-secondary);">${file.progress === 99 ? 'Saving...' : `${file.progress}%`}</span>
             <div style="width:80%; height:4px; background:var(--border); border-radius:2px; overflow:hidden;">
               <div style="width:${file.progress}%; height:100%; background:var(--cyan); transition:width 0.15s;"></div>
             </div>
@@ -409,8 +434,7 @@ window.handleOtherMediaSelect = async function(event) {
 };
 
 async function uploadOtherFile(file, otherIdx) {
-  const cleanCustomerName = (selectedBooking.customer_name || 'Customer').replace(/[^a-zA-Z0-9]/g, '_');
-  const folderName = `${selectedBooking.id}_${cleanCustomerName}`;
+  const folderName = getFinishedInstallationFolderName();
   const ext = file.name.split('.').pop();
   const path = `companies/${currentInstaller.company_id}/reviews/finished_installations/${folderName}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
 
@@ -439,24 +463,32 @@ async function uploadOtherFile(file, otherIdx) {
 
     if (otherFiles[otherIdx]) {
       otherFiles[otherIdx].url = publicUrl;
-      otherFiles[otherIdx].progress = 100;
+      otherFiles[otherIdx].progress = 99;
     }
     renderOtherMediaList();
 
-    await saveCurrentMediaState();
+    await queueMediaStateSave();
+    if (otherFiles[otherIdx]?.url === publicUrl) otherFiles[otherIdx].progress = 100;
+    renderOtherMediaList();
+    validateAndToggleSubmit();
   } catch (err) {
     console.error(`Upload error for other file ${otherIdx}:`, err);
-    showToast(`The file ${file.name} could not be uploaded. Please try again.`, true);
-    otherFiles.splice(otherIdx, 1);
+    if (otherFiles[otherIdx]?.url) {
+      otherFiles[otherIdx].progress = 99;
+    } else {
+      showToast(`The file ${file.name} could not be uploaded. Please try again.`, true);
+      otherFiles.splice(otherIdx, 1);
+    }
     renderOtherMediaList();
     validateAndToggleSubmit();
   }
 }
 
 window.removeOtherFile = async function(idx) {
+  if (otherFiles[idx]?.url) removedOtherUrls.add(otherFiles[idx].url);
   otherFiles.splice(idx, 1);
   renderOtherMediaList();
-  await saveCurrentMediaState();
+  await queueMediaStateSave();
 };
 
 function validateAndToggleSubmit() {
@@ -494,7 +526,7 @@ async function saveCurrentMediaState() {
     }
 
     const door = doorsArr[uploadDoorIndex];
-    if (!door) return;
+    if (!door) throw new Error('The selected door could not be refreshed.');
 
     // 1. Update only the currently configured requirement keys. Preserve saved
     // media if the settings request was unavailable during this session.
@@ -508,19 +540,19 @@ async function saveCurrentMediaState() {
       const slot = slotFiles[idx];
       if (slot && slot.url) {
         nextRequiredMedia[item.label] = slot.url;
-      } else {
+      } else if (removedRequiredLabels.has(item.label)) {
         delete nextRequiredMedia[item.label];
       }
     });
     door.required_media = nextRequiredMedia;
 
-    // 2. Build door.other_media
-    door.other_media = [];
-    otherFiles.forEach(item => {
-      if (item && item.url) {
-        door.other_media.push(item.url);
-      }
-    });
+    // 2. Merge other media so image/video upload completion order cannot
+    // replace URLs already committed by an earlier save.
+    const savedOtherMedia = Array.isArray(door.other_media) ? door.other_media : [];
+    door.other_media = [...new Set([
+      ...savedOtherMedia.filter(url => !removedOtherUrls.has(url)),
+      ...otherFiles.map(item => item?.url).filter(Boolean)
+    ])];
 
     // 3. Maintain flat door.media_urls for downstream views compatibility
     door.media_urls = [
@@ -557,6 +589,7 @@ async function saveCurrentMediaState() {
     validateAndToggleSubmit();
   } catch (err) {
     console.error('Failed to auto-save media state to database:', err);
-    showToast('Your media changes could not be saved. Your previous data is still safe. Please try again.', true);
+    showToast('The file reached storage but is not yet saved to this job. Keep this window open and try again.', true);
+    throw err;
   }
 }

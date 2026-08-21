@@ -9,7 +9,10 @@
 (function () {
   'use strict';
 
-  if (/^\/dashboard(?:\/|$)/.test(window.location.pathname)
+  const usesPageFreshnessGuard = /^\/dashboard(?:\/|$)/.test(window.location.pathname)
+    || /^\/smartlock-calendar(?:\.html)?\/?$/.test(window.location.pathname);
+
+  if (usesPageFreshnessGuard
       && !document.getElementById('bk-page-freshness-script')) {
     const freshnessScript = document.createElement('script');
     freshnessScript.id = 'bk-page-freshness-script';
