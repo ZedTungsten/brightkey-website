@@ -209,9 +209,22 @@ test('all employee creation paths use the company-scoped employee number generat
 test('catalog feature database fields are readonly normalized display names', () => {
   const page = fs.readFileSync(new URL('../dashboard/settings/catalog.html', import.meta.url), 'utf8');
   const code = fs.readFileSync(new URL('../dashboard/settings/catalog.js', import.meta.url), 'utf8');
+  const ownerPolicy = fs.readFileSync(new URL('../database/migrations/20260821060000_allow_tenant_owners_manage_business_features.sql', import.meta.url), 'utf8');
   assert.match(page, /id="feature-name"[^>]*readonly/);
+  assert.match(page, /id="feature-name"[^>]*background:var\(--bg-elevated\)[^>]*cursor:not-allowed/);
   assert.match(code, /getElementById\('feature-display-name'\)\.addEventListener\('input'/);
   assert.match(code, /getElementById\('feature-name'\)\.value = normalizeFeatureKey\(event\.target\.value\)/);
+  assert.match(code, /Error adding catalog feature:[\s\S]*SettingsPage\.showToast\(error, true\)/);
+  assert.doesNotMatch(code, /This feature already exists or could not be saved/);
+  assert.match(ownerPolicy, /CREATE POLICY "Tenant owners manage business features"/);
+  assert.match(ownerPolicy, /business\.id = business_features\.business_id[\s\S]*is_company_owner\(business\.company_id\)/);
+});
+
+test('opening Logistics settings does not create a default warehouse', () => {
+  const logistics = fs.readFileSync(new URL('../dashboard/settings/logistics.html', import.meta.url), 'utf8');
+  assert.doesNotMatch(logistics, /name: 'Warehouse 1'/);
+  assert.doesNotMatch(logistics, /Default warehouse created/);
+  assert.match(logistics, /No warehouses yet\./);
 });
 
 test('all Directory employee forms require account details or a private payout QR', () => {

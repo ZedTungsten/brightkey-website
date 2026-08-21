@@ -514,7 +514,7 @@ document.getElementById('feature-form').addEventListener('submit', async (event)
     await loadCatalogSettings();
   } catch (error) {
     console.error('Error adding catalog feature:', error);
-    SettingsPage.showToast('This feature already exists or could not be saved.', true);
+    SettingsPage.showToast(error, true);
   } finally {
     button.disabled = false;
     button.textContent = isEditing ? 'Save Changes' : 'Add Feature';
