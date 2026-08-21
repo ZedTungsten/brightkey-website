@@ -206,6 +206,14 @@ test('all employee creation paths use the company-scoped employee number generat
   assert.doesNotMatch(access, /employeePrefix \+ '-'/);
 });
 
+test('catalog feature database fields are readonly normalized display names', () => {
+  const page = fs.readFileSync(new URL('../dashboard/settings/catalog.html', import.meta.url), 'utf8');
+  const code = fs.readFileSync(new URL('../dashboard/settings/catalog.js', import.meta.url), 'utf8');
+  assert.match(page, /id="feature-name"[^>]*readonly/);
+  assert.match(code, /getElementById\('feature-display-name'\)\.addEventListener\('input'/);
+  assert.match(code, /getElementById\('feature-name'\)\.value = normalizeFeatureKey\(event\.target\.value\)/);
+});
+
 test('all Directory employee forms require account details or a private payout QR', () => {
   const registration = fs.readFileSync(new URL('../employee-registration.html', import.meta.url), 'utf8');
   const directoryForm = fs.readFileSync(new URL('../dashboard/employee-directory.html', import.meta.url), 'utf8');
@@ -420,6 +428,9 @@ test('tenant owner authority is consistent across APIs, settings, and database h
 
   assert.match(financeSource, /requireCompanyAccess\(req, admin, companyId/);
   assert.match(settingsSource, /currentActorRole = String\(currentRole \|\| ''\)/);
+  assert.match(settingsSource, /from\('tenants'\)[\s\S]*select\('owner_email, owner_first_name, owner_last_name, created_at'\)/);
+  assert.match(settingsSource, /activeData\.push\([\s\S]*role: 'owner'/);
+  assert.match(settingsSource, /activeEmails[\s\S]*inviteData = inviteData\.filter/);
   assert.match(migrationSource, /CREATE OR REPLACE FUNCTION public\.get_user_tenants/);
   assert.match(migrationSource, /CREATE OR REPLACE FUNCTION public\.is_tenant_admin/);
   assert.match(migrationSource, /CREATE OR REPLACE FUNCTION public\.has_module_access/);

@@ -470,6 +470,11 @@ window.closeSpecificationModal = function() {
   selectedSpecificationId = '';
 };
 
+document.getElementById('feature-display-name').addEventListener('input', (event) => {
+  if (selectedFeatureId) return;
+  document.getElementById('feature-name').value = normalizeFeatureKey(event.target.value);
+});
+
 function confirmDeleteFeature(feature) {
   const displayName = feature.display_name || defaultFeatureDisplayName(feature.name);
   SettingsPage.showConfirmModal(`Delete the ${displayName} feature?`, async () => {

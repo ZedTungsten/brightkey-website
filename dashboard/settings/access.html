@@ -365,6 +365,34 @@
         }
       } catch (err) { console.error('tenant_members fetch failed:', err); }
 
+      // Tenant ownership is authoritative even when the original signup did not
+      // create a duplicate tenant_members row. Render that signed-up owner as an
+      // active member and let the normalized-email merge suppress stale invites.
+      try {
+        const { data: tenantOwner, error: ownerError } = await sb.from('tenants')
+          .select('owner_email, owner_first_name, owner_last_name, created_at')
+          .eq('id', currentTenantId)
+          .maybeSingle();
+        if (ownerError) throw ownerError;
+
+        const ownerEmail = String(tenantOwner?.owner_email || '').trim().toLowerCase();
+        const hasOwnerRow = activeData.some(row => String(row.user_email || '').trim().toLowerCase() === ownerEmail);
+        if (ownerEmail && !hasOwnerRow) {
+          const currentEmail = String(currentUser?.email || '').trim().toLowerCase();
+          activeData.push({
+            id: `tenant-owner:${currentTenantId}`,
+            user_email: ownerEmail,
+            full_name: [tenantOwner?.owner_first_name, tenantOwner?.owner_last_name].filter(Boolean).join(' ') || null,
+            role: 'owner',
+            user_id: currentEmail === ownerEmail ? currentUser.id : null,
+            created_at: tenantOwner?.created_at || null,
+            accessible_modules: []
+          });
+        }
+      } catch (err) {
+        console.error('Authoritative tenant owner could not be loaded:', err);
+      }
+
       const accessPriority = (role) => {
         const normalizedRole = String(role || '').toLowerCase();
         if (normalizedRole === 'owner') return 0;
