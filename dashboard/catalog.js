@@ -1714,10 +1714,10 @@
 
     } catch (err) {
       console.error(err);
-      statusEl.textContent = window.BKFriendlyError
-        ? window.BKFriendlyError(err, 'The products could not be imported. Check the file and try again.')
-        : 'The products could not be imported. Check the file and try again.';
-      toast(`Error: ${err.message}`, 'error');
+      const fallback = `The product could not be ${editingId ? 'updated' : 'created'}. Review the fields and try again.`;
+      const friendlyMessage = window.BKFriendlyError ? window.BKFriendlyError(err, fallback) : fallback;
+      statusEl.textContent = friendlyMessage;
+      toast(friendlyMessage, 'error');
     } finally {
       saveBtn.disabled = false;
       saveBtn.textContent = 'Save Product';

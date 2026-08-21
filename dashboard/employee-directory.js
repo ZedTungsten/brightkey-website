@@ -1752,8 +1752,13 @@
         if (!file) return;
         const label = input.closest('label');
         const targetInput = document.getElementById(targetInputId);
-        const origText = label ? label.innerHTML : '';
-        if (label) label.innerHTML = '<span style="font-size:0.75rem;">Uploading…</span>';
+        const statusLabel = label?.querySelector('[data-upload-label]');
+        const originalText = statusLabel?.textContent || '';
+        if (statusLabel) statusLabel.textContent = 'Uploading…';
+        if (label) {
+          label.setAttribute('aria-disabled', 'true');
+          label.style.pointerEvents = 'none';
+        }
         try {
           const base64 = await new Promise((res, rej) => {
             const reader = new FileReader();
@@ -1777,7 +1782,11 @@
         } catch(e) {
           toast('Upload error: ' + e.message, 'error');
         } finally {
-          if (label) label.innerHTML = origText;
+          if (statusLabel) statusLabel.textContent = originalText;
+          if (label) {
+            label.removeAttribute('aria-disabled');
+            label.style.pointerEvents = '';
+          }
           input.value = '';
         }
       },

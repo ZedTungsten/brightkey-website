@@ -295,8 +295,14 @@
       const qrWrap = document.getElementById('new-emp-payout-qr-wrap');
       const details = document.getElementById('new-emp-payout');
       const qrUrl = document.getElementById('new-emp-payout-image');
-      if (accountWrap) accountWrap.hidden = mode === 'qr';
-      if (qrWrap) qrWrap.hidden = mode !== 'qr';
+      if (accountWrap) {
+        accountWrap.hidden = mode === 'qr';
+        accountWrap.style.display = mode === 'qr' ? 'none' : '';
+      }
+      if (qrWrap) {
+        qrWrap.hidden = mode !== 'qr';
+        qrWrap.style.display = mode === 'qr' ? '' : 'none';
+      }
       if (details) details.required = mode === 'account';
       if (qrUrl) qrUrl.required = mode === 'qr';
     },

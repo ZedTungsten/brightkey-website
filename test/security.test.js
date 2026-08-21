@@ -220,6 +220,31 @@ test('catalog feature database fields are readonly normalized display names', ()
   assert.match(ownerPolicy, /business\.id = business_features\.business_id[\s\S]*is_company_owner\(business\.company_id\)/);
 });
 
+test('catalog products accept only businesses configured for their company', () => {
+  const catalog = fs.readFileSync(new URL('../dashboard/catalog.js', import.meta.url), 'utf8');
+  const migration = fs.readFileSync(new URL('../database/migrations/20260821070000_validate_products_against_tenant_businesses.sql', import.meta.url), 'utf8');
+  assert.match(catalog, /b\.name\.toLowerCase\(\)\.replace\(\/\[\\s_.-\]\+\/g, '_'\)/);
+  assert.match(catalog, /The product could not be \$\{editingId \? 'updated' : 'created'\}\. Review the fields and try again\./);
+  assert.match(catalog, /toast\(friendlyMessage, 'error'\)/);
+  assert.doesNotMatch(catalog, /toast\(`Error: \$\{err\.message\}`/);
+  assert.match(migration, /DROP CONSTRAINT IF EXISTS products_business_check/);
+  assert.match(migration, /business\.company_id = NEW\.company_id/);
+  assert.ok(migration.includes("lower(regexp_replace(business.name, '[[:space:]_.-]+', '_', 'g')) = NEW.business"));
+  assert.match(migration, /SECURITY INVOKER/);
+});
+
+test('marketing logs preserve fixed table columns with two-axis mobile scrolling', () => {
+  const page = fs.readFileSync(new URL('../dashboard/marketing-logs/index.html', import.meta.url), 'utf8');
+  const styles = fs.readFileSync(new URL('../dashboard/marketing-logs/marketing-logs.css', import.meta.url), 'utf8');
+  assert.match(page, /name="viewport" content="width=device-width, initial-scale=1\.0"/);
+  assert.match(styles, /@media \(max-width: 640px\)/);
+  assert.match(styles, /height: calc\(100dvh - 132px\)/);
+  assert.match(styles, /\.table-scroll \{[\s\S]*overflow: auto;[\s\S]*-webkit-overflow-scrolling: touch/);
+  assert.match(styles, /\.logs-table \{\s*width: 100%;\s*min-width: 1440px;/);
+  assert.match(page, /<th style="width: 260px;">Change<\/th>/);
+  assert.match(page, /<th style="width: 260px;">Reason<\/th>/);
+});
+
 test('opening Logistics settings does not create a default warehouse', () => {
   const logistics = fs.readFileSync(new URL('../dashboard/settings/logistics.html', import.meta.url), 'utf8');
   assert.doesNotMatch(logistics, /name: 'Warehouse 1'/);
@@ -231,6 +256,7 @@ test('all Directory employee forms require account details or a private payout Q
   const registration = fs.readFileSync(new URL('../employee-registration.html', import.meta.url), 'utf8');
   const directoryForm = fs.readFileSync(new URL('../dashboard/employee-directory.html', import.meta.url), 'utf8');
   const directoryCode = fs.readFileSync(new URL('../dashboard/employee-directory.js', import.meta.url), 'utf8');
+  const directoryAccess = fs.readFileSync(new URL('../dashboard/employee-directory-access.js', import.meta.url), 'utf8');
   const upload = fs.readFileSync(new URL('../api/upload.js', import.meta.url), 'utf8');
   [registration, directoryForm].forEach(source => {
     assert.match(source, /value="account"/);
@@ -238,6 +264,11 @@ test('all Directory employee forms require account details or a private payout Q
   });
   assert.match(registration, /payout_details_image/);
   assert.match(directoryCode, /payoutMode === 'qr'/);
+  assert.match(directoryAccess, /accountWrap\.style\.display = mode === 'qr' \? 'none' : ''/);
+  assert.match(directoryAccess, /qrWrap\.style\.display = mode === 'qr' \? '' : 'none'/);
+  assert.match(directoryForm, /<span data-upload-label>Upload QR<\/span>/);
+  assert.match(directoryForm, /id="new-emp-payout-file" accept="image\/jpeg,image\/png"/);
+  assert.match(directoryCode, /querySelector\('\[data-upload-label\]'\)/);
   assert.match(upload, /'payout', 'qr'/);
 });
 
