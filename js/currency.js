@@ -30,7 +30,10 @@
   function updateNode(root) {
     if (root.nodeType === Node.TEXT_NODE) {
       const parent = root.parentElement;
-      if (!parent?.matches('script, style') && root.data.includes(DEFAULT_SYMBOL)) root.data = replacePeso(root.data);
+      if (!parent?.matches('script, style') && root.data.includes(DEFAULT_SYMBOL)) {
+        const next = replacePeso(root.data);
+        if (next !== root.data) root.data = next;
+      }
       return;
     }
     if (!(root instanceof Element || root instanceof Document)) return;
