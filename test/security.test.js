@@ -245,6 +245,12 @@ test('marketing logs preserve fixed table columns with two-axis mobile scrolling
   assert.match(page, /<th style="width: 260px;">Reason<\/th>/);
 });
 
+test('payout sticky headers stay below the expanding sidebar', () => {
+  const payout = fs.readFileSync(new URL('../dashboard/payout-tracker/payout/index.html', import.meta.url), 'utf8');
+  assert.match(payout, /#summary-table-container \{\s*position: relative;\s*z-index: 0;\s*isolation: isolate;/);
+  assert.match(payout, /#summary-table thead th \{[\s\S]*position: sticky/);
+});
+
 test('opening Logistics settings does not create a default warehouse', () => {
   const logistics = fs.readFileSync(new URL('../dashboard/settings/logistics.html', import.meta.url), 'utf8');
   assert.doesNotMatch(logistics, /name: 'Warehouse 1'/);
@@ -479,4 +485,21 @@ test('tenant owner authority is consistent across APIs, settings, and database h
   assert.match(migrationSource, /CREATE OR REPLACE FUNCTION public\.is_tenant_admin/);
   assert.match(migrationSource, /CREATE OR REPLACE FUNCTION public\.has_module_access/);
   assert.match(migrationSource, /IF public\.is_tenant_admin\(p_user_id, v_tenant_id\) THEN RETURN true/);
+});
+
+test('installer jobs cannot be completed before required media is saved', () => {
+  const mediaSource = fs.readFileSync(new URL('../js/smartlock-calendar/media.js', import.meta.url), 'utf8');
+  const detailsSource = fs.readFileSync(new URL('../js/smartlock-calendar/booking-details.js', import.meta.url), 'utf8');
+  const checklistSource = fs.readFileSync(new URL('../js/smartlock-calendar/checklist.js', import.meta.url), 'utf8');
+
+  assert.match(mediaSource, /function doorHasRequiredMedia\(door\)/);
+  assert.match(mediaSource, /activeReqs\.every\(req/);
+  assert.match(mediaSource, /window\.openChecklistWhenMediaReady/);
+  assert.match(mediaSource, /\{ \.\.\.door\.required_media \}/);
+  assert.match(detailsSource, /openChecklistWhenMediaReady\(\$\{i\}\)/);
+  assert.match(checklistSource, /!window\.doorHasRequiredMedia\(door\)/);
+  assert.ok(
+    checklistSource.indexOf('!window.doorHasRequiredMedia(door)')
+      < checklistSource.indexOf("door.completed = true", checklistSource.indexOf('window.submitChecklist'))
+  );
 });

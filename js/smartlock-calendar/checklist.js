@@ -354,6 +354,19 @@ window.submitChecklist = async function() {
     const door = doorsArr[signatureIndex];
     if (!door) return;
 
+    if (typeof window.doorHasRequiredMedia === 'function' && !window.doorHasRequiredMedia(door)) {
+      selectedBooking.doors = doorsArr;
+      const bookingIdx = dbBookings.findIndex(b => b.id === selectedBooking.id);
+      if (bookingIdx !== -1) dbBookings[bookingIdx].doors = doorsArr;
+
+      submitBtn.disabled = false;
+      submitBtn.innerText = 'Submit';
+      showToast('Upload all required installation media before marking this job done.', true);
+      closeChecklistModal();
+      openUploadModal(signatureIndex);
+      return;
+    }
+
     const dataUrl = canvas.toDataURL('image/png');
 
     door.completed = true;

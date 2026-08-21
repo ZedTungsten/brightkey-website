@@ -14,6 +14,40 @@ function getActiveReqs() {
   });
 }
 
+function doorHasRequiredMedia(door) {
+  if (!door) return false;
+
+  const activeReqs = getActiveReqs();
+  if (activeReqs.length > 0) {
+    return activeReqs.every(req => (
+      typeof door.required_media?.[req.label] === 'string'
+      && door.required_media[req.label].trim()
+    ));
+  }
+
+  return Array.isArray(door.media_urls)
+    && door.media_urls.some(url => typeof url === 'string' && url.trim());
+}
+
+window.openChecklistWhenMediaReady = function(doorIndex) {
+  let doorsArr = [];
+  if (typeof selectedBooking?.doors === 'string') {
+    try { doorsArr = JSON.parse(selectedBooking.doors); } catch (_) {}
+  } else if (Array.isArray(selectedBooking?.doors)) {
+    doorsArr = selectedBooking.doors;
+  }
+
+  if (!doorHasRequiredMedia(doorsArr[doorIndex])) {
+    showToast('Upload all required installation media before marking this job done.', true);
+    openUploadModal(doorIndex);
+    return;
+  }
+
+  openChecklistModal(doorIndex);
+};
+
+window.doorHasRequiredMedia = doorHasRequiredMedia;
+
 window.openUploadModal = function(doorIndex) {
   uploadDoorIndex = doorIndex;
   slotFiles = {};
@@ -462,15 +496,23 @@ async function saveCurrentMediaState() {
     const door = doorsArr[uploadDoorIndex];
     if (!door) return;
 
-    // 1. Build door.required_media
+    // 1. Update only the currently configured requirement keys. Preserve saved
+    // media if the settings request was unavailable during this session.
     const activeReqs = getActiveReqs();
-    door.required_media = {};
+    const nextRequiredMedia = (
+      door.required_media && typeof door.required_media === 'object'
+        ? { ...door.required_media }
+        : {}
+    );
     activeReqs.forEach((item, idx) => {
       const slot = slotFiles[idx];
       if (slot && slot.url) {
-        door.required_media[item.label] = slot.url;
+        nextRequiredMedia[item.label] = slot.url;
+      } else {
+        delete nextRequiredMedia[item.label];
       }
     });
+    door.required_media = nextRequiredMedia;
 
     // 2. Build door.other_media
     door.other_media = [];
