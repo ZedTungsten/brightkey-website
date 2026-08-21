@@ -44,7 +44,6 @@
       tasks: [],
       milestones: [],
       projects: [],
-      managementDirections: [],
       allProjects: [],
       allProjectMembers: [],
       allActiveEmployees: [],
@@ -201,7 +200,7 @@
           mainTabsNav.style.display = 'none'; // No tabs needed for admin
           
           select.innerHTML = this.subordinates.map(emp => {
-            const label = `${emp.first_name} ${emp.last_name ? emp.last_name[0] + '.' : ''} (${emp.title || 'Specialist'})`;
+            const memberRole = String(this.memberRoles[emp.id] || '').toLowerCase(); const label = `${emp.first_name} ${emp.last_name ? emp.last_name[0] + '.' : ''} (${emp.title || (memberRole === 'owner' ? 'Tenant Owner' : memberRole === 'admin' ? 'Admin' : 'Employee')})`;
             return `<option value="${esc(emp.id)}">${esc(label)}</option>`;
           }).join('');
           
@@ -650,11 +649,6 @@
         this.determinePermissions();
         this.updateUIIndicators();
         
-        const btnTabManagement = document.getElementById('btn-tab-management');
-        if (btnTabManagement) {
-          btnTabManagement.style.display = this.isOwnerOrAdmin ? 'inline-flex' : 'none';
-        }
-        
         // Clear tasks tables
         document.getElementById('daily-tbody').innerHTML = '<tr><td colspan="4" class="empty-row">Loading daily tasks...</td></tr>';
         document.getElementById('weekly-tbody').innerHTML = '<tr><td colspan="4" class="empty-row">Loading weekly tasks...</td></tr>';
@@ -708,29 +702,10 @@
           this.projects = [];
         }
 
-        // Fetch management directions if Owner/Admin
-        if (this.isOwnerOrAdmin) {
-          try {
-            const { data: mData, error: mErr } = await this.sb
-              .from('management_directions')
-              .select('*')
-              .eq('company_id', this.companyId)
-              .order('created_at', { ascending: true });
-            if (mErr) throw mErr;
-            this.managementDirections = mData || [];
-          } catch(e) {
-            console.error('Error fetching management directions:', e);
-            this.managementDirections = [];
-          }
-        }
-
         // Render all
         this.renderTasks();
         this.renderMilestones();
         this.renderProjects();
-        if (this.isOwnerOrAdmin) {
-          this.renderManagementDirections();
-        }
       },
 
       switchMainTab(tab, updateUrl = true) {
@@ -742,7 +717,6 @@
         document.getElementById('panel-tasks').classList.remove('active');
         document.getElementById('panel-milestones').classList.remove('active');
         document.getElementById('panel-projects').classList.remove('active');
-        document.getElementById('panel-management').classList.remove('active');
 
         document.getElementById(`panel-${tab}`).classList.add('active');
         if (tab === 'tasks') {
@@ -1809,206 +1783,6 @@
         }
       },
 
-      openDirectionModal(id = null) {
-        document.getElementById('direction-modal-id').value = id || '';
-        const titleInput = document.getElementById('direction-modal-title-input');
-        const descInput = document.getElementById('direction-modal-desc-input');
-        const dateInput = document.getElementById('direction-modal-date-input');
-        const bucketSelect = document.getElementById('direction-modal-bucket-input');
-        const parentSelect = document.getElementById('direction-modal-parent-input');
-        const modalTitle = document.getElementById('direction-modal-title');
-
-        let parentHtml = '<option value="">(None - Main Direction)</option>';
-        const mainDirs = (this.managementDirections || []).filter(d => !d.parent_id && d.id !== id);
-        mainDirs.forEach(d => {
-          parentHtml += `<option value="${esc(d.id)}">${esc(d.title)}</option>`;
-        });
-        parentSelect.innerHTML = parentHtml;
-
-        if (id) {
-          modalTitle.textContent = 'Edit Direction';
-          const dir = this.managementDirections.find(x => x.id === id);
-          titleInput.value = dir?.title || '';
-          descInput.value = dir?.description || '';
-          dateInput.value = dir?.target_date || '';
-          bucketSelect.value = dir?.bucket || 'urgent_important';
-          parentSelect.value = dir?.parent_id || '';
-        } else {
-          modalTitle.textContent = 'Add New Direction';
-          titleInput.value = '';
-          descInput.value = '';
-          dateInput.value = '';
-          bucketSelect.value = 'urgent_important';
-          parentSelect.value = '';
-        }
-
-        document.getElementById('direction-modal').classList.add('open');
-      },
-
-      closeDirectionModal() {
-        document.getElementById('direction-modal').classList.remove('open');
-      },
-
-      async saveDirection(e) {
-        e.preventDefault();
-        const id = document.getElementById('direction-modal-id').value;
-        const title = document.getElementById('direction-modal-title-input').value.trim();
-        const description = document.getElementById('direction-modal-desc-input').value.trim();
-        const target_date = document.getElementById('direction-modal-date-input').value || null;
-        const bucket = document.getElementById('direction-modal-bucket-input').value;
-        const parent_id = document.getElementById('direction-modal-parent-input').value || null;
-
-        if (!title) return;
-
-        const btn = document.getElementById('btn-submit-direction');
-        btn.disabled = true;
-        btn.textContent = 'Saving...';
-
-        try {
-          if (id) {
-            const { error } = await this.sb
-              .from('management_directions')
-              .update({ title, description, target_date, bucket, parent_id, updated_at: new Date().toISOString() })
-              .eq('id', id);
-            if (error) throw error;
-            toast('Direction updated successfully!', 'success');
-          } else {
-            const { error } = await this.sb
-              .from('management_directions')
-              .insert([{
-                company_id: this.companyId,
-                title,
-                description,
-                target_date,
-                bucket,
-                parent_id
-              }]);
-            if (error) throw error;
-            toast('Direction created successfully!', 'success');
-          }
-          this.closeDirectionModal();
-          await this.loadEmployeeData();
-        } catch (err) {
-          console.error(err);
-          toast('Failed to save direction: ' + err.message, 'error');
-        } finally {
-          btn.disabled = false;
-          btn.textContent = 'Save Direction';
-        }
-      },
-
-      async deleteDirection(id) {
-        const ok = await BKDialog.ask({
-          title: 'Delete Direction',
-          message: 'Are you sure you want to delete this management direction and all its sub-directions?',
-          okText: 'Delete',
-          danger: true
-        });
-        if (!ok) return;
-
-        try {
-          const { error } = await this.sb.from('management_directions').delete().eq('id', id);
-          if (error) throw error;
-          toast('Direction deleted successfully.', 'success');
-          await this.loadEmployeeData();
-        } catch (err) {
-          toast('Error deleting direction: ' + err.message, 'error');
-        }
-      },
-
-      async toggleDirectionCompletion(id, isCompleted) {
-        try {
-          const completedAtVal = isCompleted ? new Date().toISOString() : null;
-          const { error } = await this.sb
-            .from('management_directions')
-            .update({ completed_at: completedAtVal })
-            .eq('id', id);
-          if (error) throw error;
-          
-          toast(isCompleted ? 'Direction completed' : 'Direction active', 'success');
-          await this.loadEmployeeData();
-        } catch (err) {
-          toast('Error updating direction status: ' + err.message, 'error');
-        }
-      },
-
-      renderManagementDirections() {
-        if (!this.isOwnerOrAdmin) return;
-
-        const buckets = ['urgent_important', 'not_urgent_important'];
-        
-        buckets.forEach(bucket => {
-          const listEl = document.getElementById(`mgmt-${bucket.replace('_', '-')}-list`);
-          if (!listEl) return;
-
-          const bucketDirs = (this.managementDirections || []).filter(d => d.bucket === bucket);
-          
-          if (bucketDirs.length === 0) {
-            listEl.innerHTML = `<div style="color: var(--text-muted); font-size: 0.82rem; font-style: italic;">No items in this bucket.</div>`;
-            return;
-          }
-
-          const mainDirs = bucketDirs.filter(d => !d.parent_id);
-          
-          let html = '';
-          mainDirs.forEach(mainDir => {
-            html += this.buildDirectionRowHtml(mainDir, 0);
-            
-            const subDirs = bucketDirs.filter(d => d.parent_id === mainDir.id);
-            subDirs.forEach(subDir => {
-              html += this.buildDirectionRowHtml(subDir, 1);
-            });
-          });
-
-          const orphanSubDirs = bucketDirs.filter(d => d.parent_id && !bucketDirs.some(p => p.id === d.parent_id));
-          orphanSubDirs.forEach(subDir => {
-            html += this.buildDirectionRowHtml(subDir, 1);
-          });
-
-          listEl.innerHTML = html;
-        });
-      },
-
-      buildDirectionRowHtml(dir, depth = 0) {
-        const isCompleted = dir.completed_at !== null;
-        const checkedAttr = isCompleted ? 'checked' : '';
-        const titleStyle = isCompleted ? 'text-decoration: line-through; color: var(--text-muted); font-weight: 600;' : 'font-weight: 600; color: var(--text-primary);';
-        const indentStyle = depth > 0 ? `margin-left: ${depth * 2}rem; border-left: 2px dashed var(--border); padding-left: 1rem;` : '';
-        
-        const descHtml = dir.description 
-          ? `<div style="font-size: 0.78rem; color: var(--text-secondary); margin-top: 0.2rem; word-break: break-all;">${esc(dir.description)}</div>` 
-          : '';
-        
-        const dateHtml = dir.target_date 
-          ? `<span style="font-size: 0.72rem; font-weight: 600; padding: 0.15rem 0.4rem; background: var(--bg-elevated); color: var(--text-muted); border: 1px solid var(--border); border-radius: 4px; display: inline-flex; align-items: center; gap: 0.25rem;">
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-              ${dir.target_date}
-             </span>` 
-          : '';
-
-        return `
-          <div class="mgmt-direction-item" style="display: flex; justify-content: space-between; align-items: flex-start; padding: 0.65rem 0.85rem; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px; gap: 1rem; box-sizing: border-box; ${indentStyle}">
-            <div style="display: flex; align-items: flex-start; gap: 0.75rem; flex: 1; min-width: 0;">
-              <input type="checkbox" ${checkedAttr} onchange="App.toggleDirectionCompletion('${esc(dir.id)}', this.checked)" style="width: 18px; height: 18px; cursor: pointer; flex-shrink: 0; margin-top: 0.15rem;" />
-              <div style="flex: 1; min-width: 0;">
-                <div style="font-size: 0.84rem; line-height: 1.4; ${titleStyle}">${esc(dir.title)}</div>
-                ${descHtml}
-                <div style="margin-top: 0.4rem; display: flex; align-items: center; gap: 0.5rem;">
-                  ${dateHtml}
-                </div>
-              </div>
-            </div>
-            <div style="display: flex; gap: 0.35rem; align-items: center; flex-shrink: 0;">
-              <button class="btn-edit-link" onclick="App.openDirectionModal('${esc(dir.id)}')" title="Edit Direction" style="padding: 0.25rem; background: none; border: none; cursor: pointer; color: var(--text-muted);">
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-              </button>
-              <button class="btn-danger-link" onclick="App.deleteDirection('${esc(dir.id)}')" title="Remove Direction" style="padding: 0.25rem; background: none; border: none; cursor: pointer; color: var(--danger);">
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
-              </button>
-            </div>
-          </div>
-        `;
-      }
     };
 
     document.addEventListener('DOMContentLoaded', () => {

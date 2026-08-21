@@ -23,9 +23,18 @@ export async function ensureOwnerEmployeeProfile({ supabase, user, tenantId, com
   }
 
   const { data: existing, error: existingError } = await supabase.from('employees')
-    .select('id').eq('company_id', companyId).ilike('email', email).limit(1).maybeSingle();
+    .select('id,title').eq('company_id', companyId).ilike('email', email).limit(1).maybeSingle();
   if (existingError) throw existingError;
-  if (existing) return { employee: existing, created: false };
+  if (existing) {
+    if (!String(existing.title || '').trim()) {
+      const { data: updated, error: updateError } = await supabase.from('employees')
+        .update({ title: 'Tenant Owner' }).eq('id', existing.id).eq('company_id', companyId)
+        .select('id,title').single();
+      if (updateError) throw updateError;
+      return { employee: updated, created: false };
+    }
+    return { employee: existing, created: false };
+  }
 
   const [{ data: request }, { data: employeeNumber, error: numberError }] = await Promise.all([
     supabase.from('subscription_requests')
@@ -44,7 +53,7 @@ export async function ensureOwnerEmployeeProfile({ supabase, user, tenantId, com
     last_name: request?.last_name || fallbackName.lastName,
     contact_number: request?.mobile_number || 'N/A', date_of_birth: '1970-01-01',
     address: address || 'N/A', emergency_contact_number: 'N/A',
-    employment_status: 'Active', assignment: 'Owner'
+    employment_status: 'Active', assignment: 'Owner', title: 'Tenant Owner'
   };
   const { data: created, error: insertError } = await supabase.from('employees')
     .insert(payload).select('id').single();

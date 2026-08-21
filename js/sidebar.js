@@ -254,7 +254,7 @@
           <svg class="dash-nav-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
         </button>
         <div class="dash-nav-children">
-          <a href="/dashboard/pricing-strategy/calculator" class="dash-nav-child" data-role="business">Pricing Strategy</a>
+          <a href="/dashboard/business/directions/planning" class="dash-nav-child" data-role="business">Directions</a><a href="/dashboard/pricing-strategy/calculator" class="dash-nav-child" data-role="business">Pricing Strategy</a>
         </div>
       </div>
 

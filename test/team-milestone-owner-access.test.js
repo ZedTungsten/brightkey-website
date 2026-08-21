@@ -32,6 +32,9 @@ test('owner employee provisioning is restricted to the authoritative tenant owne
   assert.match(source, /\.eq\('tenant_id', tenantId\)/);
   assert.match(source, /next_company_employee_number/);
   assert.match(source, /id: user\.id/);
+  assert.match(source, /assignment: 'Owner', title: 'Tenant Owner'/);
+  assert.match(source, /if \(!String\(existing\.title \|\| ''\)\.trim\(\)\)/);
+  assert.match(source, /update\(\{ title: 'Tenant Owner' \}\)/);
 });
 
 test('owner account registration provisions its employee assignment identity', () => {
