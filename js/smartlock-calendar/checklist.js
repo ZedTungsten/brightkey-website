@@ -354,24 +354,10 @@ window.submitChecklist = async function() {
     const door = doorsArr[signatureIndex];
     if (!door) return;
 
-    if (typeof window.doorHasRequiredMedia === 'function' && !window.doorHasRequiredMedia(door)) {
-      selectedBooking.doors = doorsArr;
-      const bookingIdx = dbBookings.findIndex(b => b.id === selectedBooking.id);
-      if (bookingIdx !== -1) dbBookings[bookingIdx].doors = doorsArr;
-
-      submitBtn.disabled = false;
-      submitBtn.innerText = 'Submit';
-      showToast('Upload all required installation media before marking this job done.', true);
-      closeChecklistModal();
-      openUploadModal(signatureIndex);
-      return;
-    }
-
     const dataUrl = canvas.toDataURL('image/png');
 
-    door.completed = true;
     door.signature = dataUrl;
-    door.completed_at = new Date().toISOString();
+    door.checklist_submitted_at = new Date().toISOString();
     door.checklist = Array.from(document.querySelectorAll('.checklist-item')).map((cb, idx) => {
       return {
         item: cb.nextElementSibling ? cb.nextElementSibling.innerText.trim() : '',
@@ -379,6 +365,8 @@ window.submitChecklist = async function() {
         indent: bookingChecklist[idx]?.indent || false
       };
     });
+    door.completed = typeof window.doorHasRequiredMedia === 'function' && window.doorHasRequiredMedia(door);
+    door.completed_at = door.completed ? new Date().toISOString() : null;
 
     const isDone = doorsArr.length > 0 && doorsArr.every(d => d.completed);
     const updatePayload = { doors: doorsArr };
@@ -414,7 +402,7 @@ window.submitChecklist = async function() {
     submitBtn.style.color = '#fff';
     submitBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><polyline points="20 6 9 17 4 12"></polyline></svg>Submitted`;
 
-    showToast('Installation verified and marked as done.');
+    showToast(door.completed ? 'Installation verified and marked as done.' : 'Checklist and signature saved. Upload the required media next.');
     
     setTimeout(() => {
       closeChecklistModal();

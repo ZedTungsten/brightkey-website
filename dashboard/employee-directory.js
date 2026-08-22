@@ -1520,7 +1520,7 @@
 
       renderRequestsTab() {
         const tbody = document.getElementById('requests-tbody');
-        const badge = document.getElementById('requests-count-badge');
+        const badge = document.getElementById('requests-count-badge'); window.BKSetEmployeeUpdateRequestCount?.(this.pendingRequests.length);
         
         if (this.pendingRequests.length === 0) {
           tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:2rem; color:var(--text-muted);">No pending requests.</td></tr>';

@@ -1,5 +1,5 @@
 (function() {
-  'use strict'; (function loadStorageNotice(attempt = 0) { if (window.BKStorageNotice || document.querySelector('script[data-bk-storage-notice]')) return; const script = document.createElement('script'); script.dataset.bkStorageNotice = 'true'; script.src = `/js/storage-notice.js?v=20260807-${attempt}`; script.onload = () => script.removeAttribute('data-bk-storage-notice'); script.onerror = () => { script.remove(); if (attempt < 2) setTimeout(() => loadStorageNotice(attempt + 1), 500); else console.error('Storage notice could not be loaded.'); }; document.head.appendChild(script); }());
+  'use strict'; (function loadStorageNotice(attempt = 0) { if (window.BKStorageNotice || document.querySelector('script[data-bk-storage-notice]')) return; const script = document.createElement('script'); script.dataset.bkStorageNotice = 'true'; script.src = `/js/storage-notice.js?v=20260807-${attempt}`; script.onload = () => script.removeAttribute('data-bk-storage-notice'); script.onerror = () => { script.remove(); if (attempt < 2) setTimeout(() => loadStorageNotice(attempt + 1), 500); else console.error('Storage notice could not be loaded.'); }; document.head.appendChild(script); }()); (function employeeRequestBadge() { let tenantId = null, pending = null; const set = count => { const dot = document.getElementById('directory-request-badge-dot'), total = Math.max(0, Number(count) || 0); if (!dot) return; dot.style.display = total ? 'inline-block' : 'none'; dot.setAttribute('aria-hidden', total ? 'false' : 'true'); dot.setAttribute('aria-label', total ? `${total} pending employee update request${total === 1 ? '' : 's'}` : ''); }; const refresh = async (nextTenantId = tenantId) => { if (!nextTenantId || !window.BKAuth?.sb) return; tenantId = nextTenantId; if (pending) return pending; pending = window.BKAuth.sb.from('employee_update_requests').select('id', { count: 'exact', head: true }).eq('tenant_id', tenantId).eq('status', 'pending').then(({ count, error }) => { if (error) console.error('Error checking employee update request badge:', error); else set(count); }).finally(() => { pending = null; }); return pending; }; window.BKSetEmployeeUpdateRequestCount = set; window.BKRefreshEmployeeUpdateRequestBadge = refresh; window.addEventListener('bk:company-ready', event => refresh(event.detail?.tenantId)); }());
 
   let activeCompanyId = null;
 
@@ -358,7 +358,7 @@
           <svg class="dash-nav-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
         </button>
         <div class="dash-nav-children">
-          <a href="/dashboard/employee-directory" class="dash-nav-child" data-role="hr">Directory</a>
+          <a href="/dashboard/employee-directory" class="dash-nav-child" data-role="hr" style="display:flex; align-items:center; justify-content:space-between;"><span>Directory</span><span id="directory-request-badge-dot" aria-hidden="true" style="display:none; width:6px; height:6px; border-radius:50%; background-color:#ef4444;"></span></a>
           <a href="/dashboard/organization-map.html" class="dash-nav-child" data-role="hr">Org Map</a>
           <a href="/dashboard/attendance-leaves" class="dash-nav-child" data-role="hr">Attendance & Leaves</a>
           <a href="/dashboard/events/company" class="dash-nav-child" data-role="hr">Events</a>
@@ -866,7 +866,7 @@
               const company = await window.BKAuth.getCompany(roleInfo.tenantId);
               activeCompanyId = company?.id || null;
               if (activeCompanyId) {
-                window.BKActiveCompanyId = activeCompanyId; window.dispatchEvent(new CustomEvent('bk:company-ready', { detail: { companyId: activeCompanyId } }));
+                window.BKActiveCompanyId = activeCompanyId; window.dispatchEvent(new CustomEvent('bk:company-ready', { detail: { companyId: activeCompanyId, tenantId: roleInfo.tenantId } }));
                 // Move expensive badge checks off the initial-load path (delay by 2s)
                 setTimeout(() => {
                   if (shouldCheckIncompleteCommissions()) {

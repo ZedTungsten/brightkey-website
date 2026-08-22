@@ -293,10 +293,12 @@ function openDetailsModal(bookingId) {
             </div>
           `;
         } else {
-          const clickAction = isEvent ? `markEventDoorDone(${i}, this)` : `openChecklistWhenMediaReady(${i})`;
+          const checklistSaved = !!door?.signature && Array.isArray(door?.checklist) && door.checklist.length > 0;
+          const clickAction = isEvent ? `markEventDoorDone(${i}, this)` : (checklistSaved ? `openUploadModal(${i})` : `openChecklistModal(${i})`);
+          const buttonLabel = checklistSaved ? 'Upload Media' : 'Done';
           doneButtonHtml = `
             <div style="position: absolute; top: 0.85rem; right: 1rem; display: flex; flex-direction: column; gap: 0.4rem; align-items: flex-end;">
-              <button type="button" class="btn btn-sm" style="width: auto; font-size: 0.83rem; padding: 0.3rem 0.7rem; border-radius: var(--radius-sm); background: var(--success); color: #fff; border: none; cursor: pointer;" onclick="${clickAction}">Done</button>
+              <button type="button" class="btn btn-sm" style="width: auto; font-size: 0.83rem; padding: 0.3rem 0.7rem; border-radius: var(--radius-sm); background: ${checklistSaved ? 'var(--cyan)' : 'var(--success)'}; color: #fff; border: none; cursor: pointer;" onclick="${clickAction}">${buttonLabel}</button>
             </div>
           `;
         }

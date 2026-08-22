@@ -100,7 +100,6 @@ window.openUploadModal = function(doorIndex) {
     });
   }
 
-  document.getElementById('other-media-input').value = '';
   document.getElementById('btn-submit-upload').disabled = true;
   document.getElementById('upload-progress-container').style.display = 'none';
 
@@ -559,6 +558,11 @@ async function saveCurrentMediaState() {
       ...Object.values(door.required_media),
       ...door.other_media
     ];
+
+    const checklistSaved = !!door.signature && Array.isArray(door.checklist) && door.checklist.length > 0
+      && door.checklist.every(item => item.checked);
+    door.completed = checklistSaved && doorHasRequiredMedia(door);
+    door.completed_at = door.completed ? (door.completed_at || new Date().toISOString()) : null;
 
     const isDone = doorsArr.length > 0 && doorsArr.every(d => d.completed);
     const updatePayload = { doors: doorsArr };

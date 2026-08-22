@@ -497,8 +497,8 @@ test('installer jobs cannot be completed before required media is saved', () => 
   assert.match(mediaSource, /activeReqs\.every\(req/);
   assert.match(mediaSource, /window\.openChecklistWhenMediaReady/);
   assert.match(mediaSource, /\{ \.\.\.door\.required_media \}/);
-  assert.match(detailsSource, /openChecklistWhenMediaReady\(\$\{i\}\)/);
-  assert.match(checklistSource, /!window\.doorHasRequiredMedia\(door\)/);
+  assert.match(detailsSource, /openChecklistModal\(\$\{i\}\)/);
+  assert.match(mediaSource, /door\.completed = checklistSaved && doorHasRequiredMedia\(door\)/);
   for (const source of [mediaSource, adminMediaSource]) {
     assert.match(source, /function getFinishedInstallationFolderName\(\)/);
     assert.match(source, /return `\$\{lastName\}-\$\{code\}`/);
@@ -509,10 +509,29 @@ test('installer jobs cannot be completed before required media is saved', () => 
   }
   assert.match(mediaSource, /if \(!updated\) throw new Error/);
   assert.match(adminMediaSource, /\.select\('id'\)[\s\S]*?\.single\(\)/);
-  assert.ok(
-    checklistSource.indexOf('!window.doorHasRequiredMedia(door)')
-      < checklistSource.indexOf("door.completed = true", checklistSource.indexOf('window.submitChecklist'))
-  );
+  assert.ok(mediaSource.indexOf('door.completed = checklistSaved && doorHasRequiredMedia(door)')
+    < mediaSource.indexOf("updatePayload.status = 'completed'"));
+});
+
+test('installer Done opens the completion checklist before required media', () => {
+  const details = fs.readFileSync(new URL('../js/smartlock-calendar/booking-details.js', import.meta.url), 'utf8');
+  const checklist = fs.readFileSync(new URL('../js/smartlock-calendar/checklist.js', import.meta.url), 'utf8');
+  assert.match(details, /checklistSaved \? `openUploadModal\(\$\{i\}\)` : `openChecklistModal\(\$\{i\}\)`/);
+  assert.match(details, /const buttonLabel = checklistSaved \? 'Upload Media' : 'Done'/);
+  assert.match(checklist, /door\.checklist_submitted_at = new Date\(\)\.toISOString\(\)/);
+  assert.doesNotMatch(checklist, /closeChecklistModal\(\);\s*openUploadModal\(signatureIndex\)/);
+});
+
+test('installer upload modal only accepts configured required media', () => {
+  const page = fs.readFileSync(new URL('../smartlock-calendar.html', import.meta.url), 'utf8');
+  const media = fs.readFileSync(new URL('../js/smartlock-calendar/media.js', import.meta.url), 'utf8');
+  const styles = fs.readFileSync(new URL('../css/smartlock-calendar.css', import.meta.url), 'utf8');
+  assert.match(page, /id="required-media-list"/);
+  assert.doesNotMatch(page, /id="other-media-input"|Browse Other Media|>Other Media</);
+  const openUpload = media.slice(media.indexOf('window.openUploadModal'), media.indexOf('window.closeUploadModal'));
+  assert.doesNotMatch(openUpload, /getElementById\('other-media-input'\)/);
+  assert.match(openUpload, /getElementById\('upload-modal'\)\.style\.display = 'flex'/);
+  assert.match(styles, /#required-media-list > :last-child:nth-child\(odd\)[\s\S]+grid-column: 1 \/ -1[\s\S]+aspect-ratio: 2 \/ 1/);
 });
 
 test('authenticated app pages require refresh after one hour, including installer calendar', () => {
@@ -579,4 +598,61 @@ test('employee hierarchy supports levels one through seven across dependent modu
   assert.match(attendance, /id="sl-limit-level-7"/);
   assert.match(commissions, /parseInt\(emp\.level, 10\) >= 5/);
   assert.match(migration, /visibility_level BETWEEN 1 AND 7/);
+});
+
+test('pending employee update requests show a tab count and Directory sidebar dot', () => {
+  const sidebar = fs.readFileSync(new URL('../js/sidebar.js', import.meta.url), 'utf8');
+  const directory = fs.readFileSync(new URL('../dashboard/employee-directory.js', import.meta.url), 'utf8');
+
+  assert.match(sidebar, /id="directory-request-badge-dot"/);
+  assert.match(sidebar, /tenantId: roleInfo\.tenantId/);
+  assert.match(sidebar, /select\('id', \{ count: 'exact', head: true \}\)/);
+  assert.match(sidebar, /\.eq\('tenant_id', tenantId\)/);
+  assert.match(sidebar, /\.eq\('status', 'pending'\)/);
+  assert.match(directory, /BKSetEmployeeUpdateRequestCount\?\.\(this\.pendingRequests\.length\)/);
+});
+
+test('message flow media cards keep only compact upload specs beside the title', () => {
+  const page = fs.readFileSync(new URL('../dashboard/cs-message-flow.html', import.meta.url), 'utf8');
+  const client = fs.readFileSync(new URL('../dashboard/cs-message-flow.js', import.meta.url), 'utf8');
+  const styles = fs.readFileSync(new URL('../dashboard/cs-message-flow.css', import.meta.url), 'utf8');
+
+  assert.doesNotMatch(client, /Instructions for the customer|Always compressed|Any image dimensions/);
+  assert.match(client, /\['15 MB maximum', 'Video: up to 10 seconds', 'Images: PNG, JPG or HEIC'\]/);
+  assert.match(client, /header\.insertBefore\(rules, header\.lastElementChild\)/);
+  assert.match(client, /instructions\.rows = 1/);
+  assert.match(client, /autoGrowMediaMessage\(event\.target\)/);
+  assert.match(styles, /\.flow-media-message[^}]+min-height: 30px/);
+  assert.match(styles, /justify-content: flex-end/);
+  assert.match(styles, /\.flow-choice-descendants \{ margin-top: \.15rem; padding-top: \.35rem; \}/);
+  assert.match(client, /questionLabel\.textContent = `Q\$\{questionIndex \+ 1\}`/);
+  assert.match(styles, /grid-template-columns: auto minmax\(0, 1fr\) 140px auto/);
+  assert.match(styles, /\.flow-answer-choices \{[^}]+grid-column: 2 \/ 4/);
+  assert.ok(page.indexOf('class="flow-product-step"') < page.indexOf('id="flow-tree"'));
+  assert.match(page, /Select the ordered product they need support with\./);
+});
+
+test('message flow customer preview is interactive but never submits or uploads', () => {
+  const page = fs.readFileSync(new URL('../dashboard/cs-message-flow.html', import.meta.url), 'utf8');
+  const client = fs.readFileSync(new URL('../dashboard/cs-message-flow.js', import.meta.url), 'utf8');
+
+  assert.ok(page.indexOf('id="preview-flow"') < page.indexOf('id="save-flow"'));
+  assert.match(page, /Customer Preview/);
+  assert.match(page, /Preview only — nothing is submitted or uploaded\./);
+  assert.match(client, /renderPreviewProductStep/);
+  assert.match(client, /renderPreviewCustomerPicker/);
+  assert.match(client, /\.from\('installation_bookings'\)[\s\S]+\.eq\('company_id', state\.companyId\)[\s\S]+\.limit\(250\)/);
+  assert.match(client, /\.from\('products'\)[\s\S]+\.eq\('company_id', state\.companyId\)[\s\S]+\.in\('sku', purchasedSkus\)/);
+  assert.doesNotMatch(client, /Sample order BK-/);
+  assert.match(page, /flow-preview-portal-header/);
+  assert.match(page, /flow-preview-mobile-nav/);
+  assert.match(client, /Type your answer\.\.\./);
+  assert.match(client, /input\.type = 'file'; input\.accept = 'image\/\*,video\/\*'/);
+  assert.match(client, /URL\.createObjectURL\(file\)/);
+  assert.match(client, /URL\.revokeObjectURL\(url\)/);
+  const uploadHandler = client.slice(
+    client.indexOf('function handlePreviewUpload'),
+    client.indexOf('async function save')
+  );
+  assert.doesNotMatch(uploadHandler, /authenticatedFetch|\bsb\s*\.\s*from\(|\.upsert\(|\.storage\b/);
 });
