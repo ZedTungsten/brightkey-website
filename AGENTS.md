@@ -448,7 +448,8 @@ existing pattern exactly.
 ## 16. Non-Destructive Database Migrations
 > [!CRITICAL]
 > **PRESERVE USER DATA IN MIGRATIONS**:
-> - **Apply SQL Through the Signed-In Supabase Browser**: Do not stop after creating a migration file. Apply every requested SQL migration through the browser-controlled, already authenticated Supabase SQL Editor, confirm that execution succeeds, and then verify the resulting schema or query behavior. Use the signed-in Chrome Supabase session when the in-app browser is not authenticated.
+> - **Signed-In Desktop Browser First**: Always prioritize the user's signed-in desktop browser for authenticated application testing, Supabase migrations, live schema/data verification, and end-to-end workflow validation. Do not try the in-app browser first when the connected desktop browser already has the required authenticated session. Use the in-app browser only when the desktop browser is unavailable or unsuitable.
+> - **Apply SQL Through the Signed-In Supabase Browser**: Do not stop after creating a migration file. Apply every requested SQL migration through the browser-controlled, already authenticated Supabase SQL Editor, confirm that execution succeeds, and then verify the resulting schema or query behavior. Prefer the signed-in desktop Chrome Supabase session.
 > Never use destructive `DROP TABLE IF EXISTS ... CASCADE;` statement patterns in migration files, especially for established dashboard tables (like `software_subscriptions`). 
 > - **Always Use Safe Alterations**: Use `CREATE TABLE IF NOT EXISTS`, and add new columns or attributes using `ALTER TABLE public.<table_name> ADD COLUMN IF NOT EXISTS <column_name> <type>;` statements to preserve existing records and test data.
 > - **Conditional Policy Updates**: Use `DO $$` PL/pgSQL blocks to conditionally check and create policies `IF NOT EXISTS` to prevent execution crashes when rerun.

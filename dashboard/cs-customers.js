@@ -2,7 +2,17 @@
 
 (function () {
   const PAGE_SIZE = 50;
-  const state = { sb: null, companyId: null, page: 0, total: 0, loading: false, query: '' };
+  const state = {
+    sb: null,
+    companyId: null,
+    page: 0,
+    total: 0,
+    loading: false,
+    query: '',
+    orders: [],
+    affiliateByPhone: new Map(),
+    editingAccountId: null
+  };
 
   const $ = id => document.getElementById(id);
   const esc = value => String(value ?? '').replace(/[&<>'"]/g, char => ({
@@ -79,6 +89,37 @@
     return `${first}${lastParts.at(-1) || ''}`.toLowerCase().replace(/[^a-z0-9]/g, '');
   }
 
+  function normalizedPhone(value) {
+    return String(value || '').replace(/\D/g, '');
+  }
+
+  async function apiRequest(method, body) {
+    const { data: sessionData } = await state.sb.auth.getSession();
+    const accessToken = sessionData?.session?.access_token;
+    if (!accessToken) throw new Error('Your session has expired. Sign in again and retry.');
+    const response = await fetch('/api/customer-affiliate-codes', {
+      method,
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ company_id: state.companyId, ...body })
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || 'Affiliate codes could not be updated right now.');
+    return payload;
+  }
+
+  async function loadAffiliateCodes(orders) {
+    const phones = [...new Set(orders.map(order => normalizedPhone(order.customer_phone)).filter(Boolean))];
+    state.affiliateByPhone = new Map();
+    if (!phones.length) return;
+    const payload = await apiRequest('POST', { phones });
+    (payload.accounts || []).forEach(account => {
+      state.affiliateByPhone.set(account.phone_normalized, account);
+    });
+  }
+
   function productLines(order) {
     const skus = String(order.product_skus || '').split('|').map(value => value.trim()).filter(Boolean);
     const quantities = String(order.product_qtys || '').split('|').map(value => value.trim());
@@ -122,10 +163,23 @@
     return fields.map(value => `<td class="customer-cell" rowspan="${rowspan}">${display(value)}</td>`).join('');
   }
 
+  function affiliateCell(order, rowspan) {
+    const account = state.affiliateByPhone.get(normalizedPhone(order.customer_phone));
+    const code = account?.affiliate_code || '';
+    return `<td class="credential-cell" rowspan="${rowspan}">
+      <span class="affiliate-code-wrap">
+        <span>${display(code)}</span>
+        <button class="affiliate-edit-button" type="button" data-edit-affiliate="${esc(account?.id || '')}" data-affiliate-code="${esc(code)}" aria-label="Edit affiliate code" title="Edit affiliate code"${account?.id ? '' : ' disabled'}>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4l11-11a2.8 2.8 0 0 0-4-4L4 16v4Z"></path><path d="m13.5 6.5 4 4"></path></svg>
+        </button>
+      </span>
+    </td>`;
+  }
+
   function render(orders) {
     const body = $('customer-orders-body');
     if (!orders.length) {
-      body.innerHTML = '<tr class="empty-row"><td colspan="16">No customer orders found.</td></tr>';
+      body.innerHTML = '<tr class="empty-row"><td colspan="17">No customer orders found.</td></tr>';
       return;
     }
 
@@ -145,8 +199,62 @@
         <td><span class="cs-status ${bookingStatus.toLowerCase()}">${bookingStatus}</span></td>
         <td class="credential-cell">${display(username(order))}</td>
         <td class="credential-cell">${display(order.customer_phone)}</td>
+        ${index === 0 ? affiliateCell(order, group.length) : ''}
       </tr>`;
-    }).join('')).join('') + '<tr class="table-spacer-row"><td colspan="16"></td></tr>';
+    }).join('')).join('') + '<tr class="table-spacer-row"><td colspan="17"></td></tr>';
+  }
+
+  function closeAffiliateModal() {
+    const modal = $('affiliate-modal');
+    modal.classList.remove('open');
+    modal.setAttribute('aria-hidden', 'true');
+    window.setTimeout(() => { modal.style.display = 'none'; }, 150);
+    state.editingAccountId = null;
+  }
+
+  function openAffiliateModal(accountId, code) {
+    if (!accountId) return;
+    state.editingAccountId = accountId;
+    $('affiliate-code-input').value = code;
+    $('affiliate-form-error').textContent = '';
+    const modal = $('affiliate-modal');
+    modal.style.display = 'flex';
+    void modal.offsetHeight;
+    modal.classList.add('open');
+    modal.setAttribute('aria-hidden', 'false');
+    $('affiliate-code-input').focus();
+    $('affiliate-code-input').select();
+  }
+
+  async function saveAffiliateCode() {
+    const input = $('affiliate-code-input');
+    const saveButton = $('affiliate-save');
+    const code = input.value.trim().toUpperCase().replace(/\s+/g, '');
+    $('affiliate-form-error').textContent = '';
+    input.style.borderColor = '';
+    if (!/^[A-Z0-9]{4,40}$/.test(code)) {
+      input.style.borderColor = 'var(--danger)';
+      $('affiliate-form-error').textContent = 'Use 4–40 uppercase letters or numbers.';
+      input.focus();
+      return;
+    }
+    saveButton.disabled = true;
+    saveButton.textContent = 'Saving...';
+    try {
+      const payload = await apiRequest('PATCH', {
+        account_id: state.editingAccountId,
+        affiliate_code: code
+      });
+      const account = payload.account;
+      state.affiliateByPhone.set(account.phone_normalized, account);
+      render(state.orders);
+      closeAffiliateModal();
+    } catch (error) {
+      $('affiliate-form-error').textContent = error.message;
+    } finally {
+      saveButton.disabled = false;
+      saveButton.textContent = 'Save Changes';
+    }
   }
 
   function updatePagination(rowCount) {
@@ -165,7 +273,7 @@
   async function load() {
     if (state.loading) return;
     state.loading = true;
-    $('customer-orders-body').innerHTML = '<tr><td colspan="16"><div class="loading-wrapper"><span class="spinner-cyan"></span><span>Loading customer orders...</span></div></td></tr>';
+    $('customer-orders-body').innerHTML = '<tr><td colspan="17"><div class="loading-wrapper"><span class="spinner-cyan"></span><span>Loading customer orders...</span></div></td></tr>';
     updatePagination(0);
 
     const from = state.page * PAGE_SIZE;
@@ -198,11 +306,17 @@
         .range(from, to);
       if (error) throw error;
       state.total = count || 0;
-      render(data || []);
-      updatePagination((data || []).length);
+      state.orders = data || [];
+      try {
+        await loadAffiliateCodes(state.orders);
+      } catch (affiliateError) {
+        console.error('Affiliate codes could not be loaded:', affiliateError);
+      }
+      render(state.orders);
+      updatePagination(state.orders.length);
     } catch (error) {
       console.error(error);
-      $('customer-orders-body').innerHTML = '<tr class="empty-row"><td colspan="16">Customer orders could not be loaded. Please refresh and try again.</td></tr>';
+      $('customer-orders-body').innerHTML = '<tr class="empty-row"><td colspan="17">Customer orders could not be loaded. Please refresh and try again.</td></tr>';
       $('record-count').textContent = 'Unable to load';
     } finally {
       state.loading = false;
@@ -217,7 +331,7 @@
     const { data: company, error } = await state.sb.from('companies')
       .select('id').eq('tenant_id', auth.tenantId).limit(1).maybeSingle();
     if (error || !company?.id) {
-      $('customer-orders-body').innerHTML = '<tr class="empty-row"><td colspan="16">Company access could not be verified.</td></tr>';
+      $('customer-orders-body').innerHTML = '<tr class="empty-row"><td colspan="17">Company access could not be verified.</td></tr>';
       return;
     }
     state.companyId = company.id;
@@ -238,6 +352,21 @@
     });
     $('previous-page').addEventListener('click', () => { if (state.page > 0) { state.page -= 1; load(); } });
     $('next-page').addEventListener('click', () => { if ((state.page + 1) * PAGE_SIZE < state.total) { state.page += 1; load(); } });
+    $('customer-orders-body').addEventListener('click', event => {
+      const button = event.target.closest('[data-edit-affiliate]');
+      if (button) openAffiliateModal(button.dataset.editAffiliate, button.dataset.affiliateCode);
+    });
+    $('affiliate-modal-close').addEventListener('click', closeAffiliateModal);
+    $('affiliate-cancel').addEventListener('click', closeAffiliateModal);
+    $('affiliate-save').addEventListener('click', saveAffiliateCode);
+    $('affiliate-code-input').addEventListener('input', event => {
+      event.target.value = event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+      event.target.style.borderColor = '';
+      $('affiliate-form-error').textContent = '';
+    });
+    $('affiliate-modal').addEventListener('click', event => {
+      if (event.target === $('affiliate-modal')) closeAffiliateModal();
+    });
     await load();
   }
 

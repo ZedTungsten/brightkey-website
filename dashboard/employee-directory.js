@@ -863,6 +863,11 @@
           </select></td>`;
         };
 
+        const levelCell = () => {
+          const raw = fmt(emp.level), labels = ['Staff / Entry level', 'Team Lead / Supervisor', 'Manager', 'Department Head', 'Director', 'Executive / C-Level', 'Owner / President'];
+          if (!isEdit) return raw ? `<td>${esc(labels[Number(raw) - 1] ? `${raw} - ${labels[Number(raw) - 1]}` : raw)}</td>` : '<td class="cell-empty">—</td>';
+          return `<td><select class="cell-input cell-select" data-id="${esc(id)}" data-field="level"><option value="" ${!raw ? 'selected' : ''}>Select Level</option>${labels.map((label, index) => `<option value="${index + 1}" ${raw === String(index + 1) ? 'selected' : ''}>${index + 1} - ${esc(label)}</option>`).join('')}</select></td>`;
+        };
         const departmentCell = () => {
           const deptName = (this.employeeDeptMap && this.employeeDeptMap[id]) || emp.department || '';
           return deptName
@@ -977,7 +982,7 @@
           ${cell(emp.title, 'title')}
           ${cell(emp.work_email, 'work_email')}
           ${reportingToCell()}
-          ${cell(emp.level, 'level')}
+          ${levelCell()}
           ${cell(emp.job_description, 'job_description')}
           ${cellDate(emp.date_hired, 'date_hired')}
           ${cellDate(emp.date_inactive, 'date_inactive')}

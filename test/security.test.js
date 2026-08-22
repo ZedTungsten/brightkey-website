@@ -525,3 +525,58 @@ test('authenticated app pages require refresh after one hour, including installe
   assert.match(freshnessSource, /isManagedAppRoute/);
   assert.match(freshnessSource, /smartlock-calendar/);
 });
+
+test('customer affiliate codes are company-scoped, generated, and explicitly editable', () => {
+  const api = fs.readFileSync(new URL('../api/customer-affiliate-codes.js', import.meta.url), 'utf8');
+  const page = fs.readFileSync(new URL('../dashboard/cs-customers.html', import.meta.url), 'utf8');
+  const client = fs.readFileSync(new URL('../dashboard/cs-customers.js', import.meta.url), 'utf8');
+  const migration = fs.readFileSync(new URL('../database/migrations/20260822010000_generate_customer_affiliate_codes.sql', import.meta.url), 'utf8');
+
+  assert.match(api, /requireCompanyAccess\(req, supabase, companyId/);
+  assert.match(api, /modules: \['Customer Service'\]/);
+  assert.match(api, /\.eq\('company_id', companyId\)/);
+  assert.match(api, /error\?\.code === '23505'/);
+  assert.match(page, /<th>Affiliate Code<\/th>/);
+  assert.match(client, /data-edit-affiliate/);
+  assert.match(client, /\/api\/customer-affiliate-codes/);
+  assert.match(migration, /base_code := 'LOOCK'/);
+  assert.match(migration, /suffix_number INTEGER := 0/);
+  assert.match(migration, /pg_advisory_xact_lock/);
+  assert.match(migration, /REVOKE ALL ON FUNCTION public\.set_generated_customer_affiliate_code\(\) FROM PUBLIC/);
+});
+
+test('employee profile shows the saved CV link directly below the ID link', () => {
+  const profile = fs.readFileSync(new URL('../dashboard/profile.html', import.meta.url), 'utf8');
+  assert.ok(profile.indexOf('id="emp-id-link-group"') < profile.indexOf('id="emp-cv-link-group"'));
+  assert.match(profile, /id="emp-cv-link-container"/);
+  assert.match(profile, /if \(emp\.cv_link\)/);
+  assert.match(profile, /cvLinkContainer\.replaceChildren\(cvLink\)/);
+  assert.match(profile, /cvLink\.rel = 'noopener noreferrer'/);
+});
+
+test('employee directory result count and pagination render below the table', () => {
+  const directory = fs.readFileSync(new URL('../dashboard/employee-directory.html', import.meta.url), 'utf8');
+  assert.ok(directory.indexOf('<!-- Close table-card -->') < directory.indexOf('id="footer-info"'));
+  assert.ok(directory.indexOf('id="footer-info"') < directory.indexOf('id="pagination"'));
+  assert.match(directory, /class="table-footer directory-table-footer"/);
+});
+
+test('employee hierarchy supports levels one through seven across dependent modules', () => {
+  const directory = fs.readFileSync(new URL('../dashboard/employee-directory.html', import.meta.url), 'utf8');
+  const directoryClient = fs.readFileSync(new URL('../dashboard/employee-directory.js', import.meta.url), 'utf8');
+  const hiring = fs.readFileSync(new URL('../dashboard/hiring/hiring.js', import.meta.url), 'utf8');
+  const events = fs.readFileSync(new URL('../dashboard/events/index.html', import.meta.url), 'utf8');
+  const attendance = fs.readFileSync(new URL('../dashboard/attendance-leaves.html', import.meta.url), 'utf8');
+  const commissions = fs.readFileSync(new URL('../dashboard/sales-commissions.html', import.meta.url), 'utf8');
+  const migration = fs.readFileSync(new URL('../database/migrations/20260822020000_expand_employee_levels_to_seven.sql', import.meta.url), 'utf8');
+
+  assert.match(directory, /id="new-emp-title"[^>]+required/);
+  assert.match(directory, /<option value="7">7 - Owner \/ President<\/option>/);
+  assert.match(directoryClient, /Owner \/ President/);
+  assert.match(hiring, /<option value="7">7 - Owner \/ President<\/option>/);
+  assert.match(events, /<option value="7">Level 7 — Owner \/ President<\/option>/);
+  assert.match(attendance, /id="vl-limit-level-7"/);
+  assert.match(attendance, /id="sl-limit-level-7"/);
+  assert.match(commissions, /parseInt\(emp\.level, 10\) >= 5/);
+  assert.match(migration, /visibility_level BETWEEN 1 AND 7/);
+});

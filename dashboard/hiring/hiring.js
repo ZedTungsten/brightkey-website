@@ -2190,10 +2190,9 @@ const HiringApp = {
                     <label for="job-level">Level <span class="field-hint">Optional</span></label>
                     <select id="job-level">
                       <option value="">No level</option>
-                      <option value="1">Level 1</option>
-                      <option value="2">Level 2</option>
-                      <option value="3">Level 3</option>
-                      <option value="4">Level 4</option>
+                      <option value="1">1 - Staff / Entry level</option><option value="2">2 - Team Lead / Supervisor</option>
+                      <option value="3">3 - Manager</option><option value="4">4 - Department Head</option>
+                      <option value="5">5 - Director</option><option value="6">6 - Executive / C-Level</option><option value="7">7 - Owner / President</option>
                     </select>
                   </div>
                   <div class="hiring-field conditional-section employment-dependent" hidden>

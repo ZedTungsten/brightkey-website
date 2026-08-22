@@ -15,7 +15,8 @@
     const managers = (employees || []).filter(employee => {
       const status = String(employee.employment_status || 'Active').trim().toLowerCase();
       const role = `${employee.title || ''} ${employee.level || ''}`.trim().toLowerCase();
-      return status === 'active' && /\b(manager|lead|director)\b/.test(role);
+      const level = Number.parseInt(employee.level, 10);
+      return status === 'active' && (/\b(manager|lead|supervisor|head|director|executive|owner|president)\b/.test(role) || level >= 2);
     }).sort((a, b) => employeeName(a).localeCompare(employeeName(b)));
 
     select.replaceChildren(new Option('No reporting manager', ''));
