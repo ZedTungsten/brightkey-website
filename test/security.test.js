@@ -534,15 +534,23 @@ test('installer upload modal only accepts configured required media', () => {
   assert.match(styles, /#required-media-list > :last-child:nth-child\(odd\)[\s\S]+grid-column: 1 \/ -1[\s\S]+aspect-ratio: 2 \/ 1/);
 });
 
+test('installer calendar header exposes refresh immediately left of menu', () => {
+  const page = fs.readFileSync(new URL('../smartlock-calendar.html', import.meta.url), 'utf8');
+  assert.ok(page.indexOf('aria-label="Refresh"') < page.indexOf('aria-label="Menu"'));
+  assert.match(page, /onclick="window\.location\.reload\(\)" aria-label="Refresh"/);
+});
+
 test('authenticated app pages require refresh after one hour, including installer calendar', () => {
   const authSource = fs.readFileSync(new URL('../js/auth.js', import.meta.url), 'utf8');
   const freshnessSource = fs.readFileSync(new URL('../js/page-freshness.js', import.meta.url), 'utf8');
+  const installerPage = fs.readFileSync(new URL('../smartlock-calendar.html', import.meta.url), 'utf8');
 
   assert.match(authSource, /usesPageFreshnessGuard/);
   assert.match(authSource, /smartlock-calendar/);
   assert.match(freshnessSource, /const STALE_AFTER_MS = 60 \* 60 \* 1000/);
   assert.match(freshnessSource, /isManagedAppRoute/);
   assert.match(freshnessSource, /smartlock-calendar/);
+  assert.match(installerPage, /<script src="\/js\/page-freshness\.js\?v=[^"]+"><\/script>/);
 });
 
 test('customer affiliate codes are company-scoped, generated, and explicitly editable', () => {
