@@ -1,5 +1,63 @@
 'use strict';
 
+function normalizeWorkflowSku(value) {
+  return String(value || '').trim().toUpperCase();
+}
+
+function applyInstallerWorkflowSetting(type, value) {
+  const sets = Array.isArray(value)
+    ? { lead: value }
+    : (value && typeof value === 'object' && value.sets && typeof value.sets === 'object' ? value.sets : {});
+  if (type === 'checklist') bookingChecklistSets = sets;
+  else bookingMediaRequirementSets = sets;
+}
+
+function getBookingProducts(booking) {
+  if (Array.isArray(booking?.products)) return booking.products;
+  if (typeof booking?.products === 'string') {
+    try { return JSON.parse(booking.products); } catch (_) {}
+  }
+  return String(booking?.product_skus || '').split(' | ').filter(Boolean).map(sku => ({ sku }));
+}
+
+function getDoorCompletionPolicy(booking, door) {
+  let bookingInstallers = [];
+  if (Array.isArray(booking?.installers)) bookingInstallers = booking.installers;
+  else if (typeof booking?.installers === 'string') {
+    try { bookingInstallers = JSON.parse(booking.installers); } catch (_) {}
+  }
+  const doorInstallers = Array.isArray(door?.installers) && door.installers.length ? door.installers : bookingInstallers;
+  let doors = [];
+  if (Array.isArray(booking?.doors)) doors = booking.doors;
+  else if (typeof booking?.doors === 'string') {
+    try { doors = JSON.parse(booking.doors); } catch (_) {}
+  }
+  const allInstallers = [...bookingInstallers, ...doors.flatMap(item => Array.isArray(item?.installers) ? item.installers : [])];
+  const installers = doorInstallers;
+  const normalized = installers.map((installer, index) => ({
+    ...installer,
+    role: String(installer?.role || (index === 0 ? 'lead' : 'assist')).trim().toLowerCase()
+  }));
+  const hasLead = allInstallers.some((installer, index) => String(installer?.role || (index === 0 ? 'lead' : 'assist')).trim().toLowerCase() === 'lead');
+  const mine = normalized.find(installer => installer.id === currentInstaller?.id);
+  if (!mine) return { allowed: false, key: null };
+  if (hasLead) return { allowed: mine.role === 'lead', key: 'lead' };
+  if (mine.role !== 'service') return { allowed: false, key: null };
+
+  const serviceSkus = new Set((installerServiceCatalog || []).map(product => normalizeWorkflowSku(product.sku)));
+  const attachedSkus = Array.isArray(door?.products) ? door.products.map(normalizeWorkflowSku) : [];
+  const bookingSkus = getBookingProducts(booking).filter(product => !product?.cancelled).map(product => normalizeWorkflowSku(product.sku));
+  const sku = [...attachedSkus, ...bookingSkus].find(value => serviceSkus.has(value));
+  return { allowed: true, key: `service:${sku || 'UNSPECIFIED'}` };
+}
+
+function useInstallerWorkflowForDoor(booking, door) {
+  const policy = getDoorCompletionPolicy(booking, door);
+  bookingChecklist = policy.key && Array.isArray(bookingChecklistSets[policy.key]) ? bookingChecklistSets[policy.key] : [];
+  bookingMediaRequirements = policy.key && Array.isArray(bookingMediaRequirementSets[policy.key]) ? bookingMediaRequirementSets[policy.key] : [];
+  return policy;
+}
+
 function getInstallerRoleForBooking(b, myId) {
   let isLead = false;
   let isAssist = false;

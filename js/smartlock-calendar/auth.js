@@ -60,7 +60,7 @@ async function handleLogin(e) {
   }
 }
 
-function handleLogout() {
+function handleLogout(reason = 'manual') {
   resetInstallerNotes();
   sessionStorage.removeItem('bk_installer_session');
   localStorage.removeItem('bk_active_installer');
@@ -70,6 +70,11 @@ function handleLogout() {
   document.getElementById('login-pass').value = '';
   document.getElementById('app-screen').style.display = 'none';
   document.getElementById('login-screen').style.display = 'flex';
+  const loginError = document.getElementById('login-error');
+  if (loginError) {
+    loginError.textContent = reason === 'expired' ? 'Automatically logged out. Log in again.' : '';
+    loginError.style.display = reason === 'expired' ? 'block' : 'none';
+  }
   
   // Reset view to Calendar
   const calendarTab = document.getElementById('calendar-view');
@@ -148,8 +153,49 @@ function populateProfile() {
   document.getElementById('profile-title').textContent = currentInstaller.title || currentInstaller.assignment || 'Installer';
   document.getElementById('profile-dept').textContent = currentInstaller.department || 'Operations';
   document.getElementById('profile-status').textContent = currentInstaller.employment_status || 'Active';
+  const hired = String(currentInstaller.date_hired || '').slice(0, 10);
+  document.getElementById('profile-date-hired').textContent = hired ? formatDateFriendly(hired) : '—';
   document.getElementById('profile-email').textContent = currentInstaller.email || '—';
   document.getElementById('profile-phone').textContent = currentInstaller.contact_number || '—';
+  const picture = document.getElementById('profile-picture');
+  const fallback = document.getElementById('profile-picture-fallback');
+  const headerPicture = document.getElementById('header-profile-picture');
+  const source = String(currentInstaller.profile_picture_url || currentInstaller.picture_link || '').trim();
+  const safeSource = /^https:\/\//i.test(source) || /^data:image\/(?:png|jpe?g|gif|webp);base64,[a-z0-9+/=\s]+$/i.test(source);
+  if (headerPicture && safeSource) {
+    headerPicture.onload = () => headerPicture.removeAttribute('hidden');
+    headerPicture.onerror = () => {
+      headerPicture.setAttribute('hidden', '');
+      headerPicture.removeAttribute('src');
+    };
+    headerPicture.src = source;
+    if (headerPicture.complete && headerPicture.naturalWidth > 0) {
+      headerPicture.removeAttribute('hidden');
+    }
+  } else if (headerPicture) {
+    headerPicture.setAttribute('hidden', '');
+    headerPicture.removeAttribute('src');
+  }
+  if (picture && fallback && safeSource) {
+    const showPicture = () => {
+      picture.removeAttribute('hidden');
+      fallback.setAttribute('hidden', '');
+    };
+    picture.onload = showPicture;
+    picture.onerror = () => {
+      picture.setAttribute('hidden', '');
+      fallback.removeAttribute('hidden');
+      picture.removeAttribute('src');
+    };
+    picture.src = source;
+    if (picture.complete && picture.naturalWidth > 0) {
+      showPicture();
+    }
+  } else if (picture && fallback) {
+    picture.setAttribute('hidden', '');
+    picture.removeAttribute('src');
+    fallback.removeAttribute('hidden');
+  }
 }
 
 let installerNotes = [];

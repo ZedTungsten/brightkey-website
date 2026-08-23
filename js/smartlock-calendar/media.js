@@ -40,8 +40,7 @@ function doorHasRequiredMedia(door) {
     ));
   }
 
-  return Array.isArray(door.media_urls)
-    && door.media_urls.some(url => typeof url === 'string' && url.trim());
+  return true;
 }
 
 window.openChecklistWhenMediaReady = function(doorIndex) {
@@ -78,6 +77,15 @@ window.openUploadModal = function(doorIndex) {
   }
   const door = doorsArr[doorIndex];
   if (!door) return;
+  const policy = useInstallerWorkflowForDoor(selectedBooking, door);
+  if (!policy.allowed) {
+    showToast('Only the Lead can upload completion media. Service can upload it only when no Lead is assigned.', true);
+    return;
+  }
+  if (getActiveReqs().length === 0) {
+    showToast('No media uploads are required for this assignment.', true);
+    return;
+  }
 
   // Populate existing required media from DB
   const activeReqs = getActiveReqs();

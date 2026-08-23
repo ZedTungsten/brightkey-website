@@ -226,3 +226,36 @@ deduplicated in transit. Verify it locally and through the deployed live endpoin
 > generated artifacts and exit safely instead of overwriting them with empty,
 > incomplete, default-branded, or RLS-filtered content. Fetch and validate all
 > required source data before replacing any generated file.
+
+---
+
+## 15. Missing Images: Verify the Complete Data Path
+> [!IMPORTANT]
+> When a saved profile picture, logo, document preview, or uploaded image shows
+> a placeholder, do not assume the Storage bucket or folder is private or that
+> the file is missing. First trace the complete data contract:
+>
+> 1. Confirm the upstream form writes the expected live-schema column (for
+>    employee profile pictures, this is `employees.picture_link`).
+> 2. Confirm the active page's query, RPC, or API actually selects and returns
+>    that column. A valid file cannot render when its URL is omitted from the
+>    session/profile payload.
+> 3. Confirm the returned field name matches the renderer's accepted aliases.
+> 4. Inspect browser console and network failures before changing Storage
+>    policies. A failed profile request and a denied image request are different
+>    problems.
+> 5. Verify the renderer supports every source shape written upstream: approved
+>    HTTPS URLs, allowed raster Base64 values, and the missing-image fallback.
+> 6. Handle cached images explicitly. Register `load` and `error` handlers before
+>    setting `src`, then also check `img.complete && img.naturalWidth > 0`.
+>    Toggle the image and SVG fallback with explicit `hidden` attributes because
+>    property-only toggles can be unreliable across element types.
+> 7. Test in the user's signed-in desktop Chrome session. Completion requires an
+>    actual non-empty source, `naturalWidth > 0`, the image visible, the fallback
+>    hidden, and no related console error.
+>
+> If an unauthenticated installer/customer page needs profile data protected by
+> RLS, expose only the minimum fields through a narrowly scoped server path or
+> RPC validated by the active, unexpired session token and tenant/company
+> relationship. Never weaken the table or Storage policy merely to make the
+> placeholder disappear.

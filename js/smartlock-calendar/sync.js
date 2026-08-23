@@ -19,14 +19,14 @@ function loadCachedBookings() {
   const cachedChecklist = localStorage.getItem(`bk_booking_checklist_${currentInstaller.company_id}`);
   if (cachedChecklist) {
     try {
-      bookingChecklist = JSON.parse(cachedChecklist);
+      applyInstallerWorkflowSetting('checklist', JSON.parse(cachedChecklist));
     } catch (_) {}
   }
 
   const cachedMediaReqs = localStorage.getItem(`bk_booking_media_requirements_${currentInstaller.company_id}`);
   if (cachedMediaReqs) {
     try {
-      bookingMediaRequirements = JSON.parse(cachedMediaReqs);
+      applyInstallerWorkflowSetting('media', JSON.parse(cachedMediaReqs));
     } catch (_) {}
   }
 
@@ -145,15 +145,22 @@ async function syncData() {
 
     if (payoutProfileError) throw payoutProfileError;
     if (!payoutProfile) {
-      handleLogout();
-      const loginError = document.getElementById('login-error');
-      loginError.textContent = 'Your employee account is not active. Please contact your administrator.';
-      loginError.style.display = 'block';
+      handleLogout('expired');
       return;
     }
 
     Object.assign(currentInstaller, payoutProfile);
+    try {
+      const { data: profileDetails, error: profileDetailsError } = await sb
+        .rpc('get_installer_profile_details', { p_token: getInstallerSessionToken() })
+        .maybeSingle();
+      if (profileDetailsError) throw profileDetailsError;
+      if (profileDetails) Object.assign(currentInstaller, profileDetails);
+    } catch (profileDetailsError) {
+      console.error('Installer profile details could not be synced:', profileDetailsError);
+    }
     localStorage.setItem('bk_active_installer', JSON.stringify(currentInstaller));
+    populateProfile();
 
     try {
       await loadInstallerDayEvents(currentYear, currentMonth);
@@ -169,12 +176,8 @@ async function syncData() {
       .eq('company_id', currentInstaller.company_id)
       .maybeSingle();
 
-    if (checklistRes && checklistRes.value && Array.isArray(checklistRes.value)) {
-      bookingChecklist = checklistRes.value;
-    } else {
-      bookingChecklist = [];
-    }
-    localStorage.setItem(`bk_booking_checklist_${currentInstaller.company_id}`, JSON.stringify(bookingChecklist));
+    applyInstallerWorkflowSetting('checklist', checklistRes?.value);
+    localStorage.setItem(`bk_booking_checklist_${currentInstaller.company_id}`, JSON.stringify(checklistRes?.value || []));
 
     // Fetch booking media requirements
     try {
@@ -185,12 +188,8 @@ async function syncData() {
         .eq('company_id', currentInstaller.company_id)
         .maybeSingle();
 
-      if (mediaReqsRes && mediaReqsRes.value && Array.isArray(mediaReqsRes.value)) {
-        bookingMediaRequirements = mediaReqsRes.value;
-      } else {
-        bookingMediaRequirements = [];
-      }
-      localStorage.setItem(`bk_booking_media_requirements_${currentInstaller.company_id}`, JSON.stringify(bookingMediaRequirements));
+      applyInstallerWorkflowSetting('media', mediaReqsRes?.value);
+      localStorage.setItem(`bk_booking_media_requirements_${currentInstaller.company_id}`, JSON.stringify(mediaReqsRes?.value || []));
     } catch (mediaErr) {
       console.error('Error syncing media requirements:', mediaErr);
     }
@@ -317,6 +316,24 @@ async function syncData() {
     updateSyncBanner(true);
   }
 }
+
+window.refreshInstallerCalendar = async function() {
+  const button = document.getElementById('installer-refresh-btn');
+  const overlay = document.getElementById('installer-refresh-overlay');
+  if (!currentInstaller || !button || button.disabled) return;
+  button.disabled = true;
+  button.setAttribute('aria-busy', 'true');
+  overlay?.classList.add('open');
+  overlay?.setAttribute('aria-hidden', 'false');
+  try {
+    await syncData();
+  } finally {
+    button.disabled = false;
+    button.removeAttribute('aria-busy');
+    overlay?.classList.remove('open');
+    overlay?.setAttribute('aria-hidden', 'true');
+  }
+};
 
 function updateSyncBanner(isOffline, timestamp = null) {
   const banner = document.getElementById('sync-status');

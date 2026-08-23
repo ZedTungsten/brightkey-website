@@ -17,6 +17,8 @@ let installerPayslipModel = null;
 
 let bookingChecklist = [];
 let bookingMediaRequirements = [];
+let bookingChecklistSets = {};
+let bookingMediaRequirementSets = {};
 
 function getInstallerSessionToken() {
   return sessionStorage.getItem('bk_installer_session');

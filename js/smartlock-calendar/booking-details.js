@@ -266,6 +266,7 @@ function openDetailsModal(bookingId) {
         if (cleanInstName && (cleanInstallerName.includes(cleanInstName) || cleanInstName.includes(cleanInstallerName))) return true;
         return false;
       });
+      const completionPolicy = useInstallerWorkflowForDoor(selectedBooking, door);
 
       // Check if this specific door has addon labor
       const doorHasAddonLabor = productsArr.some(p => p.sku === 'ADD-ON LABOR' && (p.doorIndex === i || (p.doorIndex === undefined && i === 0)));
@@ -283,22 +284,26 @@ function openDetailsModal(bookingId) {
             <span style="font-size: 0.83rem; font-weight: 700; background: var(--danger); color: #fff; padding: 0.3rem 0.7rem; border-radius: var(--radius-sm); text-transform: uppercase;">Cancelled</span>
           </div>
         `;
-      } else if (isAssignedToThisDoor) {
+      } else if (isAssignedToThisDoor && completionPolicy.allowed) {
         const isEvent = selectedBooking.product_skus === 'Backjob' || selectedBooking.product_skus === 'Ocular' || selectedBooking.product_skus === 'Day off';
         if (door?.completed) {
+          const uploadButton = bookingMediaRequirements.length > 0
+            ? `<button type="button" class="btn btn-sm" style="width: auto; font-size: 0.83rem; padding: 0.3rem 0.7rem; border-radius: var(--radius-sm); background: var(--cyan); color: #fff; border: none; cursor: pointer;" onclick="openUploadModal(${i})">Upload Media</button>`
+            : '';
           doneButtonHtml = `
             <div style="position: absolute; top: 0.85rem; right: 1rem; display: flex; flex-direction: column; gap: 0.4rem; align-items: flex-end;">
               <span style="font-size: 0.83rem; font-weight: 700; background: #6b7280; color: #fff; padding: 0.3rem 0.7rem; border-radius: var(--radius-sm); text-transform: uppercase; display:inline-flex; align-items:center; gap:0.25rem;"><svg aria-hidden="true" viewBox="0 0 24 24" style="width:1em;height:1em;display:block;fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;"><polyline points="20 6 9 17 4 12"/></svg>Completed</span>
-              <button type="button" class="btn btn-sm" style="width: auto; font-size: 0.83rem; padding: 0.3rem 0.7rem; border-radius: var(--radius-sm); background: var(--cyan); color: #fff; border: none; cursor: pointer;" onclick="openUploadModal(${i})">Upload Media</button>
+              ${uploadButton}
             </div>
           `;
         } else {
-          const checklistSaved = !!door?.signature && Array.isArray(door?.checklist) && door.checklist.length > 0;
-          const clickAction = isEvent ? `markEventDoorDone(${i}, this)` : (checklistSaved ? `openUploadModal(${i})` : `openChecklistModal(${i})`);
-          const buttonLabel = checklistSaved ? 'Upload Media' : 'Done';
+          const checklistSaved = !!door?.signature && Array.isArray(door?.checklist);
+          const needsMedia = !isEvent && checklistSaved;
+          const clickAction = isEvent ? `markEventDoorDone(${i}, this)` : (needsMedia ? `openUploadModal(${i})` : `openChecklistModal(${i})`);
+          const buttonLabel = needsMedia ? 'Upload Media' : 'Sign';
           doneButtonHtml = `
             <div style="position: absolute; top: 0.85rem; right: 1rem; display: flex; flex-direction: column; gap: 0.4rem; align-items: flex-end;">
-              <button type="button" class="btn btn-sm" style="width: auto; font-size: 0.83rem; padding: 0.3rem 0.7rem; border-radius: var(--radius-sm); background: ${checklistSaved ? 'var(--cyan)' : 'var(--success)'}; color: #fff; border: none; cursor: pointer;" onclick="${clickAction}">${buttonLabel}</button>
+              <button type="button" class="btn btn-sm" style="width: auto; font-size: 0.83rem; padding: 0.3rem 0.7rem; border-radius: var(--radius-sm); background: ${needsMedia ? 'var(--cyan)' : 'var(--success)'}; color: #fff; border: none; cursor: pointer;" onclick="${clickAction}">${buttonLabel}</button>
             </div>
           `;
         }

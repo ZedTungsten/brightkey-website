@@ -60,6 +60,8 @@
     let dbProductsBySku = new Map();
     let bookingMediaRequirements = [];
     let bookingChecklist = [];
+    let bookingMediaRequirementSets = {};
+    let bookingChecklistSets = {};
     let installerPayoutSettings = {};
     let filteredBookings = [];
     let filteredCalendarBookings = [];
@@ -293,12 +295,49 @@
         if (checklistRes.error) console.error('Error loading checklist:', checklistRes.error);
 
         installerPayoutSettings = payoutRes.data?.value || {};
-        bookingMediaRequirements = Array.isArray(mediaRes.data?.value) ? mediaRes.data.value : [];
-        bookingChecklist = Array.isArray(checklistRes.data?.value) ? checklistRes.data.value : [];
+        bookingMediaRequirementSets = parseInstallerWorkflowSets(mediaRes.data?.value);
+        bookingChecklistSets = parseInstallerWorkflowSets(checklistRes.data?.value);
+        bookingMediaRequirements = bookingMediaRequirementSets.lead || [];
+        bookingChecklist = bookingChecklistSets.lead || [];
       } catch (err) {
         console.error('Failed to load static data:', err);
         showToast('Failed to load configuration: ' + err.message, true);
       }
+    }
+
+    function parseInstallerWorkflowSets(value) {
+      if (Array.isArray(value)) return { lead: value };
+      return value && typeof value === 'object' && value.sets && typeof value.sets === 'object' ? value.sets : {};
+    }
+
+    function useBookingWorkflowForDoor(booking, door) {
+      let doors = [];
+      if (Array.isArray(booking?.doors)) doors = booking.doors;
+      else if (typeof booking?.doors === 'string') {
+        try { doors = JSON.parse(booking.doors); } catch (_) {}
+      }
+      let bookingInstallers = [];
+      if (Array.isArray(booking?.installers)) bookingInstallers = booking.installers;
+      else if (typeof booking?.installers === 'string') {
+        try { bookingInstallers = JSON.parse(booking.installers); } catch (_) {}
+      }
+      const allInstallers = [...bookingInstallers, ...doors.flatMap(item => Array.isArray(item?.installers) ? item.installers : [])];
+      const hasLead = allInstallers.some((installer, index) => String(installer?.role || (index === 0 ? 'lead' : 'assist')).toLowerCase() === 'lead');
+      let key = 'lead';
+      if (!hasLead) {
+        let products = [];
+        if (Array.isArray(booking?.products)) products = booking.products;
+        else if (typeof booking?.products === 'string') {
+          try { products = JSON.parse(booking.products); } catch (_) {}
+        }
+        const attached = Array.isArray(door?.products) ? door.products : [];
+        const candidates = [...attached, ...products.filter(product => !product?.cancelled).map(product => product?.sku)];
+        const serviceSku = candidates.map(value => String(value || '').trim().toUpperCase()).find(sku => dbProductsBySku.get(sku)?.category === 'Service');
+        key = `service:${serviceSku || 'UNSPECIFIED'}`;
+      }
+      bookingChecklist = Array.isArray(bookingChecklistSets[key]) ? bookingChecklistSets[key] : [];
+      bookingMediaRequirements = Array.isArray(bookingMediaRequirementSets[key]) ? bookingMediaRequirementSets[key] : [];
+      return key;
     }
 
     // Fetches the six-week calendar window so adjacent-month dates can be shown.

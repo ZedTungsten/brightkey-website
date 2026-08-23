@@ -33,6 +33,7 @@
       }
       const door = doorsArr[doorIndex];
       if (!door) return;
+      useBookingWorkflowForDoor(selectedBooking, door);
 
       // Populate existing required media from DB
       if (door.required_media) {
@@ -88,6 +89,7 @@
       
       const door = doorsArr[doorIndex];
       if (!door) return;
+      useBookingWorkflowForDoor(selectedBooking, door);
 
       const detModal = document.getElementById('details-modal');
       if (detModal) {

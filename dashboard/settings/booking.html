@@ -84,6 +84,8 @@
 
     let bookingChecklist = [];
     let bookingMediaRequirements = [];
+    let bookingChecklistSets = {};
+    let bookingMediaRequirementSets = {};
 
     const showToast = (msg, isError) => SettingsPage.showToast(msg, isError);
 
@@ -101,11 +103,8 @@
           .maybeSingle();
 
         if (error) throw error;
-        if (data && data.value && Array.isArray(data.value)) {
-          bookingChecklist = data.value;
-        } else {
-          bookingChecklist = [];
-        }
+        bookingChecklistSets = Array.isArray(data?.value) ? { lead: data.value } : (data?.value?.sets || {});
+        bookingChecklist = Array.isArray(bookingChecklistSets.lead) ? bookingChecklistSets.lead : [];
         renderBookingChecklist();
       } catch (err) {
         console.error('Error loading Booking settings:', err);
@@ -129,7 +128,7 @@
           const { error } = await sb.from('global_settings').upsert({
             key: 'booking_checklist',
             company_id: currentCompanyId,
-            value: validItems
+            value: { version: 2, sets: { ...bookingChecklistSets, lead: validItems } }
           }, { onConflict: 'key, company_id' });
 
           if (error) throw error;
@@ -279,11 +278,8 @@
           .maybeSingle();
 
         if (error) throw error;
-        if (data && data.value && Array.isArray(data.value)) {
-          bookingMediaRequirements = data.value;
-        } else {
-          bookingMediaRequirements = [];
-        }
+        bookingMediaRequirementSets = Array.isArray(data?.value) ? { lead: data.value } : (data?.value?.sets || {});
+        bookingMediaRequirements = Array.isArray(bookingMediaRequirementSets.lead) ? bookingMediaRequirementSets.lead : [];
         renderBookingMediaRequirements();
       } catch (err) {
         console.error('Error loading Booking media requirements:', err);
@@ -308,7 +304,7 @@
           const { error } = await sb.from('global_settings').upsert({
             key: 'booking_media_requirements',
             company_id: currentCompanyId,
-            value: validItems
+            value: { version: 2, sets: { ...bookingMediaRequirementSets, lead: validItems } }
           }, { onConflict: 'key, company_id' });
 
           if (error) throw error;

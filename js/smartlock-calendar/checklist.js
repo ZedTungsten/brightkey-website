@@ -218,6 +218,13 @@ window.openChecklistModal = function(doorIndex, isReadOnly = false) {
     }
   }
   const door = doorsArr[doorIndex];
+  if (!isReadOnly) {
+    const policy = useInstallerWorkflowForDoor(selectedBooking, door);
+    if (!policy.allowed) {
+      showToast('Only the Lead can complete this job. Service can complete it only when no Lead is assigned.', true);
+      return;
+    }
+  }
 
   if (custNameEl && selectedBooking) {
     custNameEl.innerText = selectedBooking.customer_name || 'N/A';

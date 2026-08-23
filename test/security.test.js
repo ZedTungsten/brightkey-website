@@ -513,11 +513,12 @@ test('installer jobs cannot be completed before required media is saved', () => 
     < mediaSource.indexOf("updatePayload.status = 'completed'"));
 });
 
-test('installer Done opens the completion checklist before required media', () => {
+test('installer Sign opens the completion checklist before required media', () => {
   const details = fs.readFileSync(new URL('../js/smartlock-calendar/booking-details.js', import.meta.url), 'utf8');
   const checklist = fs.readFileSync(new URL('../js/smartlock-calendar/checklist.js', import.meta.url), 'utf8');
-  assert.match(details, /checklistSaved \? `openUploadModal\(\$\{i\}\)` : `openChecklistModal\(\$\{i\}\)`/);
-  assert.match(details, /const buttonLabel = checklistSaved \? 'Upload Media' : 'Done'/);
+  assert.match(details, /const needsMedia = !isEvent && checklistSaved/);
+  assert.match(details, /needsMedia \? `openUploadModal\(\$\{i\}\)` : `openChecklistModal\(\$\{i\}\)`/);
+  assert.match(details, /const buttonLabel = needsMedia \? 'Upload Media' : 'Sign'/);
   assert.match(checklist, /door\.checklist_submitted_at = new Date\(\)\.toISOString\(\)/);
   assert.doesNotMatch(checklist, /closeChecklistModal\(\);\s*openUploadModal\(signatureIndex\)/);
 });
@@ -534,10 +535,60 @@ test('installer upload modal only accepts configured required media', () => {
   assert.match(styles, /#required-media-list > :last-child:nth-child\(odd\)[\s\S]+grid-column: 1 \/ -1[\s\S]+aspect-ratio: 2 \/ 1/);
 });
 
+test('installer completion requirements are assignment scoped with Lead precedence', () => {
+  const settings = fs.readFileSync(new URL('../dashboard/settings/installer-workflow-settings.js', import.meta.url), 'utf8');
+  const assignments = fs.readFileSync(new URL('../js/smartlock-calendar/assignments.js', import.meta.url), 'utf8');
+  const bookingDetails = fs.readFileSync(new URL('../js/smartlock-calendar/booking-details.js', import.meta.url), 'utf8');
+  const media = fs.readFileSync(new URL('../js/smartlock-calendar/media.js', import.meta.url), 'utf8');
+  const bookingCalendar = fs.readFileSync(new URL('../dashboard/booking-schedules/index.js', import.meta.url), 'utf8');
+  const bookingMedia = fs.readFileSync(new URL('../dashboard/booking-schedules/booking-media.js', import.meta.url), 'utf8');
+  const migration = fs.readFileSync(new URL('../database/migrations/20260823_installer_completion_owner.sql', import.meta.url), 'utf8');
+
+  assert.match(settings, /version:\s*2,\s*sets:\s*checklistSets/);
+  assert.match(settings, /Service - \$\{String\(product\.sku/);
+  assert.match(assignments, /precedence\.has_lead|hasLead/);
+  assert.match(assignments, /mine\.role !== 'service'/);
+  assert.match(bookingDetails, /completionPolicy\.allowed/);
+  assert.match(media, /No media uploads are required for this assignment/);
+  assert.match(bookingCalendar, /function useBookingWorkflowForDoor/);
+  assert.match(bookingCalendar, /bookingMediaRequirementSets\[key\]/);
+  assert.match(bookingMedia, /useBookingWorkflowForDoor\(selectedBooking, door\)/);
+  assert.match(migration, /installer_can_complete_booking/);
+  assert.match(migration, /NOT precedence\.has_lead AND assigned\.role = 'service'/);
+});
+
 test('installer calendar header exposes refresh immediately left of menu', () => {
   const page = fs.readFileSync(new URL('../smartlock-calendar.html', import.meta.url), 'utf8');
-  assert.ok(page.indexOf('aria-label="Refresh"') < page.indexOf('aria-label="Menu"'));
-  assert.match(page, /onclick="window\.location\.reload\(\)" aria-label="Refresh"/);
+  const sync = fs.readFileSync(new URL('../js/smartlock-calendar/sync.js', import.meta.url), 'utf8');
+  assert.ok(page.indexOf('aria-label="Refresh calendar"') < page.indexOf('aria-label="Menu"'));
+  assert.match(page, /onclick="refreshInstallerCalendar\(\)" aria-label="Refresh calendar"/);
+  assert.match(sync, /window\.refreshInstallerCalendar = async function/);
+  assert.match(sync, /await syncData\(\)/);
+  assert.match(page, /id="installer-refresh-overlay"[\s\S]*Refreshing your assignments\.\.\./);
+  assert.doesNotMatch(sync, /button\.classList\.add\('is-refreshing'\)/);
+});
+
+test('installer profile shows date hired and safely renders the employee profile picture', () => {
+  const page = fs.readFileSync(new URL('../smartlock-calendar.html', import.meta.url), 'utf8');
+  const auth = fs.readFileSync(new URL('../js/smartlock-calendar/auth.js', import.meta.url), 'utf8');
+  const sync = fs.readFileSync(new URL('../js/smartlock-calendar/sync.js', import.meta.url), 'utf8');
+  const migration = fs.readFileSync(new URL('../database/migrations/20260823_installer_profile_details.sql', import.meta.url), 'utf8');
+  assert.match(page, /id="profile-date-hired"/);
+  assert.match(page, /id="profile-picture"/);
+  assert.match(auth, /currentInstaller\.profile_picture_url/);
+  assert.match(auth, /\^https:\\\/\\\//);
+  assert.match(auth, /data:image\\\//);
+  assert.match(sync, /get_installer_profile_details/);
+  assert.match(sync, /localStorage\.setItem\('bk_active_installer'[\s\S]*populateProfile\(\)/);
+  assert.match(migration, /employee\.picture_link AS profile_picture_url/);
+});
+
+test('expired installer sessions show an automatic logout message', () => {
+  const auth = fs.readFileSync(new URL('../js/smartlock-calendar/auth.js', import.meta.url), 'utf8');
+  const sync = fs.readFileSync(new URL('../js/smartlock-calendar/sync.js', import.meta.url), 'utf8');
+  assert.match(sync, /if \(!payoutProfile\) \{\s*handleLogout\('expired'\)/);
+  assert.match(auth, /reason === 'expired' \? 'Automatically logged out\. Log in again\.'/);
+  assert.doesNotMatch(sync, /Your employee account is not active/);
 });
 
 test('authenticated app pages require refresh after one hour, including installer calendar', () => {
