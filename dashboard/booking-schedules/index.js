@@ -164,6 +164,7 @@
       const isInstallerAccounts = currentSubpage === 'installer-accounts';
       const isInstallerNotes = currentSubpage === 'installer-notes';
       const isInstallersPage = isInstallerAssignments || isInstallerAccounts || isInstallerNotes;
+      const showsBookingControls = currentSubpage === 'calendar' || currentSubpage === 'all-bookings';
 
       if (tabCalendar) tabCalendar.classList.toggle('active', currentSubpage === 'calendar');
       if (tabAllBookings) tabAllBookings.classList.toggle('active', currentSubpage === 'all-bookings');
@@ -173,15 +174,15 @@
       if (panelInstallerAccounts) panelInstallerAccounts.style.display = isInstallerAccounts ? 'block' : 'none';
       if (panelInstallerNotes) panelInstallerNotes.style.display = isInstallerNotes ? 'flex' : 'none';
       if (scheduleTabs) scheduleTabs.style.display = isInstallersPage ? 'none' : 'flex';
-      if (scheduleTabs) scheduleTabs.classList.toggle('all-bookings-active', currentSubpage === 'all-bookings');
+      if (scheduleTabs) scheduleTabs.classList.toggle('booking-controls-active', showsBookingControls);
       if (installerTabs) installerTabs.style.display = isInstallersPage ? 'flex' : 'none';
       if (tabInstallerAssignments) tabInstallerAssignments.classList.toggle('active', isInstallerAssignments);
       if (tabInstallerAccounts) tabInstallerAccounts.classList.toggle('active', isInstallerAccounts);
       if (tabInstallerNotes) tabInstallerNotes.classList.toggle('active', isInstallerNotes);
       if (monthNavigator) monthNavigator.style.display = (isInstallerAccounts || isInstallerNotes) ? 'none' : 'flex';
-      if (allBookingsSearch) allBookingsSearch.style.display = currentSubpage === 'all-bookings' ? 'flex' : 'none';
+      if (allBookingsSearch) allBookingsSearch.style.display = showsBookingControls ? 'flex' : 'none';
       if (scrollContainer) scrollContainer.classList.toggle('installer-notes-active', isInstallerNotes);
-      if (scrollContainer) scrollContainer.classList.toggle('all-bookings-active', currentSubpage === 'all-bookings');
+      if (scrollContainer) scrollContainer.classList.toggle('booking-controls-active', showsBookingControls);
       if (pageTitle) pageTitle.textContent = isInstallersPage ? 'Installers' : 'Installation Schedules';
       document.title = isInstallersPage
         ? 'Installers — Brightkey Admin'
@@ -570,6 +571,9 @@
     function getAllBookingsStatus(booking) {
       let doors = [];
       let products = [];
+      const bookingStatus = String(booking.status || '').toLowerCase();
+
+      if (['aborted', 'cancelled', 'canceled'].includes(bookingStatus)) return 'Aborted';
 
       if (Array.isArray(booking.doors)) doors = booking.doors;
       else if (typeof booking.doors === 'string') {
@@ -581,7 +585,7 @@
         try { products = JSON.parse(booking.products); } catch (_) {}
       }
 
-      const bookingMarkedDone = ['done', 'completed', 'finished'].includes(String(booking.status || '').toLowerCase());
+      const bookingMarkedDone = ['done', 'completed', 'finished'].includes(bookingStatus);
       const allDoorsMarkedDone = doors.length > 0 && doors.every((door, doorIndex) => (
         Boolean(door?.completed) || isDoorCancelledForCompletion(door, doorIndex, doors, products)
       ));
