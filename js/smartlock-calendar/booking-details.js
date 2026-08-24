@@ -1,5 +1,19 @@
 'use strict';
 
+function getSmartlockCustomerIdentity(record = {}) {
+  const text = value => String(value || '').trim();
+  const isCompany = record.customer_is_company === true;
+  const companyType = text(record.customer_company_type);
+  return {
+    isCompany,
+    primaryName: isCompany ? text(record.customer_company_name) || text(record.customer_name) : [text(record.customer_first_name), text(record.customer_last_name)].filter(Boolean).join(' ') || text(record.customer_name),
+    contactPerson: isCompany ? text(record.customer_contact_person) : '',
+    companyType: isCompany && companyType ? companyType.charAt(0).toUpperCase() + companyType.slice(1) : '',
+    social: text(record.customer_social),
+    email: text(record.customer_email)
+  };
+}
+
 function formatSmartlockProductLine(sku, title) {
   const normalizedSku = String(sku || '').trim();
   let description = String(title || '').trim();
@@ -30,7 +44,14 @@ function openDetailsModal(bookingId) {
 
   document.getElementById('det-date').innerText = b.scheduled_date ? formatDateFriendly(b.scheduled_date) : 'N/A';
   document.getElementById('det-time').innerText = b.scheduled_time || 'AM Slot';
-  document.getElementById('det-name').innerText = b.customer_name || 'N/A';
+  const customerIdentity = getSmartlockCustomerIdentity(b);
+  document.getElementById('det-name-label').innerText = customerIdentity.isCompany ? 'Company Name' : 'Customer Name';
+  document.getElementById('det-name').innerText = customerIdentity.primaryName || 'N/A';
+  document.getElementById('det-company-details').hidden = !customerIdentity.isCompany;
+  document.getElementById('det-company-contact').innerText = customerIdentity.contactPerson || 'N/A';
+  document.getElementById('det-company-type').innerText = customerIdentity.companyType || 'N/A';
+  document.getElementById('det-social').innerText = customerIdentity.social || 'N/A';
+  document.getElementById('det-email').innerText = customerIdentity.email || 'N/A';
   document.getElementById('det-phone-1').innerText = b.customer_phone || 'N/A';
   document.getElementById('det-phone-2').innerText = b.customer_phone_2 || 'N/A';
   
@@ -224,6 +245,7 @@ function openDetailsModal(bookingId) {
         titleHtml = `<div style="font-size:0.8rem; color:var(--text-secondary); margin-bottom:0.4rem;">${formatSmartlockProductLine(sku, currentTitle)}</div>`;
         isCancelled = hardwareProducts[i]?.cancelled || false;
       }
+      isCancelled = isDoorCancelledForCompletion(selectedBooking, door, i, doorsArr);
 
       const doorMaterial = formatMaterialLabel(door?.doorMaterial);
       const jambMaterial = formatMaterialLabel(door?.jambMaterial);
@@ -285,7 +307,6 @@ function openDetailsModal(bookingId) {
           </div>
         `;
       } else if (isAssignedToThisDoor && completionPolicy.allowed) {
-        const isEvent = selectedBooking.product_skus === 'Backjob' || selectedBooking.product_skus === 'Ocular' || selectedBooking.product_skus === 'Day off';
         if (door?.completed) {
           const uploadButton = bookingMediaRequirements.length > 0
             ? `<button type="button" class="btn btn-sm" style="width: auto; font-size: 0.83rem; padding: 0.3rem 0.7rem; border-radius: var(--radius-sm); background: var(--cyan); color: #fff; border: none; cursor: pointer;" onclick="openUploadModal(${i})">Upload Media</button>`
@@ -297,9 +318,10 @@ function openDetailsModal(bookingId) {
             </div>
           `;
         } else {
-          const checklistSaved = !!door?.signature && Array.isArray(door?.checklist);
-          const needsMedia = !isEvent && checklistSaved;
-          const clickAction = isEvent ? `markEventDoorDone(${i}, this)` : (needsMedia ? `openUploadModal(${i})` : `openChecklistModal(${i})`);
+          const checklistSaved = !!door?.signature && Array.isArray(door?.checklist)
+            && door.checklist.every(item => item.checked);
+          const needsMedia = checklistSaved && !doorHasRequiredMedia(door);
+          const clickAction = needsMedia ? `openUploadModal(${i})` : `openChecklistModal(${i})`;
           const buttonLabel = needsMedia ? 'Upload Media' : 'Sign';
           doneButtonHtml = `
             <div style="position: absolute; top: 0.85rem; right: 1rem; display: flex; flex-direction: column; gap: 0.4rem; align-items: flex-end;">

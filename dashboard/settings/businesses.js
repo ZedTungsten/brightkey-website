@@ -32,9 +32,8 @@ function renderBusinesses(businesses, productCounts = new Map()) {
     return;
   }
 
-  businesses.forEach((business) => {
+  businesses.forEach((business, index) => {
     const row = document.createElement('tr');
-    row.draggable = true;
     row.dataset.businessId = business.id;
     const order = document.createElement('td');
     const name = document.createElement('td');
@@ -42,6 +41,53 @@ function renderBusinesses(businesses, productCounts = new Map()) {
     const products = document.createElement('td');
     const created = document.createElement('td');
     const actions = document.createElement('td');
+
+    order.className = 'business-order-cell';
+    const priorityControl = document.createElement('div');
+    priorityControl.className = 'business-priority-control';
+    const priorityNumber = document.createElement('span');
+    priorityNumber.className = 'business-priority-number';
+    priorityNumber.textContent = String(index + 1);
+    const dragHandle = document.createElement('button');
+    dragHandle.type = 'button';
+    dragHandle.draggable = true;
+    dragHandle.className = 'business-drag-handle';
+    dragHandle.setAttribute('aria-label', `Drag priority ${index + 1}: ${business.name}`);
+    dragHandle.title = 'Drag to reorder';
+    dragHandle.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="5" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="9" cy="19" r="1.5"/><circle cx="15" cy="5" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="15" cy="19" r="1.5"/></svg>';
+    priorityControl.append(dragHandle, priorityNumber);
+    order.appendChild(priorityControl);
+
+    dragHandle.addEventListener('dragstart', event => {
+      draggedBusinessId = business.id;
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData('text/plain', business.id);
+      row.classList.add('dragging');
+    });
+    dragHandle.addEventListener('dragend', () => {
+      draggedBusinessId = '';
+      row.classList.remove('dragging');
+      document.querySelectorAll('#businesses-body tr.drag-over').forEach(item => item.classList.remove('drag-over'));
+    });
+    row.addEventListener('dragover', event => {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'move';
+      row.classList.add('drag-over');
+    });
+    row.addEventListener('dragleave', () => row.classList.remove('drag-over'));
+    row.addEventListener('drop', async event => {
+      event.preventDefault();
+      row.classList.remove('drag-over');
+      const sourceId = draggedBusinessId || event.dataTransfer.getData('text/plain');
+      if (!sourceId || sourceId === business.id) return;
+      const from = orderedBusinesses.findIndex(item => item.id === sourceId);
+      const to = orderedBusinesses.findIndex(item => item.id === business.id);
+      if (from < 0 || to < 0) return;
+      const [moved] = orderedBusinesses.splice(from, 1);
+      orderedBusinesses.splice(to, 0, moved);
+      renderBusinesses(orderedBusinesses, productCounts);
+      await saveBusinessOrder();
+    });
 
     name.className = 'business-name';
     name.textContent = business.name;
@@ -212,19 +258,3 @@ document.getElementById('business-form').addEventListener('submit', async (event
 });
 
 window.initSettingsPage = loadBusinesses;
-    order.className = 'business-order-cell';
-    order.innerHTML = '<button type="button" class="business-drag-handle" aria-label="Drag to reorder business" title="Drag to reorder"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="5" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="9" cy="19" r="1.5"/><circle cx="15" cy="5" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="15" cy="19" r="1.5"/></svg></button>';
-    row.addEventListener('dragstart', () => { draggedBusinessId = business.id; row.classList.add('dragging'); });
-    row.addEventListener('dragend', () => { draggedBusinessId = ''; row.classList.remove('dragging'); });
-    row.addEventListener('dragover', event => { event.preventDefault(); row.classList.add('drag-over'); });
-    row.addEventListener('dragleave', () => row.classList.remove('drag-over'));
-    row.addEventListener('drop', async event => {
-      event.preventDefault(); row.classList.remove('drag-over');
-      if (!draggedBusinessId || draggedBusinessId === business.id) return;
-      const from = orderedBusinesses.findIndex(item => item.id === draggedBusinessId);
-      const to = orderedBusinesses.findIndex(item => item.id === business.id);
-      const [moved] = orderedBusinesses.splice(from, 1);
-      orderedBusinesses.splice(to, 0, moved);
-      renderBusinesses(orderedBusinesses, productCounts);
-      await saveBusinessOrder();
-    });

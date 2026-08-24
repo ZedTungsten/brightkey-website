@@ -220,6 +220,17 @@ test('catalog feature database fields are readonly normalized display names', ()
   assert.match(ownerPolicy, /business\.id = business_features\.business_id[\s\S]*is_company_owner\(business\.company_id\)/);
 });
 
+test('business priorities render numbered six-dot handles and persist drag order', () => {
+  const page = fs.readFileSync(new URL('../dashboard/settings/businesses.html', import.meta.url), 'utf8');
+  const source = fs.readFileSync(new URL('../dashboard/settings/businesses.js', import.meta.url), 'utf8');
+  assert.match(page, />Priority<\/th>/);
+  assert.match(source, /priorityNumber\.textContent = String\(index \+ 1\)/);
+  assert.match(source, /dragHandle\.draggable = true/);
+  assert.match(source, /dragHandle\.innerHTML = '[^']*(?:<circle[^>]*>){6}/);
+  assert.match(source, /orderedBusinesses\.splice\(to, 0, moved\)/);
+  assert.match(source, /await saveBusinessOrder\(\)/);
+});
+
 test('catalog products accept only businesses configured for their company', () => {
   const catalog = fs.readFileSync(new URL('../dashboard/catalog.js', import.meta.url), 'utf8');
   const migration = fs.readFileSync(new URL('../database/migrations/20260821070000_validate_products_against_tenant_businesses.sql', import.meta.url), 'utf8');
@@ -498,6 +509,11 @@ test('installer jobs cannot be completed before required media is saved', () => 
   assert.match(mediaSource, /window\.openChecklistWhenMediaReady/);
   assert.match(mediaSource, /\{ \.\.\.door\.required_media \}/);
   assert.match(detailsSource, /openChecklistModal\(\$\{i\}\)/);
+  assert.match(detailsSource, /isDoorCancelledForCompletion\(selectedBooking, door, i, doorsArr\)/);
+  assert.match(mediaSource, /candidateDoor\.completed[\s\S]*?isDoorCancelledForCompletion\(selectedBooking, candidateDoor, candidateIndex, doorsArr\)/);
+  const calendarSource = fs.readFileSync(new URL('../js/smartlock-calendar/calendar.js', import.meta.url), 'utf8');
+  assert.match(calendarSource, /const activeDoors = doorsArr\.filter/);
+  assert.match(calendarSource, /isDoorCancelledForCompletion\(b, door, doorIndex, doorsArr\)/);
   assert.match(mediaSource, /door\.completed = checklistSaved && doorHasRequiredMedia\(door\)/);
   for (const source of [mediaSource, adminMediaSource]) {
     assert.match(source, /function getFinishedInstallationFolderName\(\)/);
@@ -516,8 +532,9 @@ test('installer jobs cannot be completed before required media is saved', () => 
 test('installer Sign opens the completion checklist before required media', () => {
   const details = fs.readFileSync(new URL('../js/smartlock-calendar/booking-details.js', import.meta.url), 'utf8');
   const checklist = fs.readFileSync(new URL('../js/smartlock-calendar/checklist.js', import.meta.url), 'utf8');
-  assert.match(details, /const needsMedia = !isEvent && checklistSaved/);
+  assert.match(details, /const needsMedia = checklistSaved && !doorHasRequiredMedia\(door\)/);
   assert.match(details, /needsMedia \? `openUploadModal\(\$\{i\}\)` : `openChecklistModal\(\$\{i\}\)`/);
+  assert.doesNotMatch(details, /markEventDoorDone\(\$\{i\}/);
   assert.match(details, /const buttonLabel = needsMedia \? 'Upload Media' : 'Sign'/);
   assert.match(checklist, /door\.checklist_submitted_at = new Date\(\)\.toISOString\(\)/);
   assert.doesNotMatch(checklist, /closeChecklistModal\(\);\s*openUploadModal\(signatureIndex\)/);
@@ -714,4 +731,26 @@ test('message flow customer preview is interactive but never submits or uploads'
     client.indexOf('async function save')
   );
   assert.doesNotMatch(uploadHandler, /authenticatedFetch|\bsb\s*\.\s*from\(|\.upsert\(|\.storage\b/);
+});
+
+test('Company and Office bookings preserve their identity across operational views', () => {
+  const booking = fs.readFileSync(new URL('../dashboard/booking.html', import.meta.url), 'utf8');
+  const bookingDetails = fs.readFileSync(new URL('../dashboard/booking-schedules/booking-details.js', import.meta.url), 'utf8');
+  const logistics = fs.readFileSync(new URL('../dashboard/logistics-calendar/calendar.html', import.meta.url), 'utf8');
+  const customers = fs.readFileSync(new URL('../dashboard/cs-customers.js', import.meta.url), 'utf8');
+  const smartlockDetails = fs.readFileSync(new URL('../js/smartlock-calendar/booking-details.js', import.meta.url), 'utf8');
+
+  assert.match(booking, /customer_is_company:\s*isCompany/);
+  assert.match(booking, /customer_company_name:\s*isCompany \? firstName : null/);
+  assert.match(booking, /customer_contact_person:\s*isCompany \? lastName : null/);
+  assert.match(booking, /customer_company_type:\s*isCompany \? companyType : null/);
+  assert.match(bookingDetails, /customer_company_name/);
+  assert.match(bookingDetails, /customer_contact_person/);
+  assert.match(smartlockDetails, /customer_company_name/);
+  assert.match(smartlockDetails, /customer_contact_person/);
+  assert.match(customers, /customer_is_company,customer_company_name,customer_contact_person,customer_company_type,customer_social,customer_phone,customer_phone_2/);
+  assert.match(customers, /customer_company_name\.ilike/);
+  assert.match(logistics, /\.eq\('company_id', this\.companyId\)\.eq\('order_no', refId\)/);
+  assert.match(logistics, /modal-company-contact/);
+  assert.match(logistics, /modal-company-type/);
 });

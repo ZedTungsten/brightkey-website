@@ -1,5 +1,19 @@
     'use strict';
 
+    function getBookingCustomerIdentity(record = {}) {
+      const text = value => String(value || '').trim();
+      const isCompany = record.customer_is_company === true;
+      const companyType = text(record.customer_company_type);
+      return {
+        isCompany,
+        primaryName: isCompany ? text(record.customer_company_name) || text(record.customer_name) : [text(record.customer_first_name), text(record.customer_last_name)].filter(Boolean).join(' ') || text(record.customer_name),
+        contactPerson: isCompany ? text(record.customer_contact_person) : '',
+        companyType: isCompany && companyType ? companyType.charAt(0).toUpperCase() + companyType.slice(1) : '',
+        social: text(record.customer_social),
+        email: text(record.customer_email)
+      };
+    }
+
     function getCityFromAddress(address) {
       if (!address) return 'N/A';
       const parts = address.split(',');
@@ -130,7 +144,15 @@
       document.getElementById('det-orderno').innerText = selectedBooking.order_no || 'N/A';
       document.getElementById('det-date').innerText = selectedBooking.scheduled_date ? formatDateFriendly(selectedBooking.scheduled_date) : 'Unscheduled';
       document.getElementById('det-time').innerText = selectedBooking.scheduled_time || 'AM Slot';
-      document.getElementById('det-name').innerText = selectedBooking.customer_name || 'N/A';
+      const customerIdentity = getBookingCustomerIdentity(selectedBooking);
+      document.getElementById('det-name-label').innerText = customerIdentity.isCompany ? 'Company Name' : 'Customer Name';
+      document.getElementById('det-name').innerText = customerIdentity.primaryName || 'N/A';
+      document.getElementById('det-company-contact-group').hidden = !customerIdentity.isCompany;
+      document.getElementById('det-company-type-group').hidden = !customerIdentity.isCompany;
+      document.getElementById('det-company-contact').innerText = customerIdentity.contactPerson || 'N/A';
+      document.getElementById('det-company-type').innerText = customerIdentity.companyType || 'N/A';
+      document.getElementById('det-social').innerText = customerIdentity.social || 'N/A';
+      document.getElementById('det-email').innerText = customerIdentity.email || 'N/A';
       document.getElementById('det-contact-1').innerText = selectedBooking.customer_phone || 'N/A';
       document.getElementById('det-contact-2').innerText = selectedBooking.customer_phone_2 || 'N/A';
       document.getElementById('det-booked-date').innerText = selectedBooking.created_at ? formatDateFriendly(selectedBooking.created_at) : 'N/A';

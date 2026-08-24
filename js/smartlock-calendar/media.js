@@ -22,8 +22,7 @@ function queueMediaStateSave() {
 
 function getActiveReqs() {
   if (!selectedBooking) return [];
-  const isEvent = selectedBooking.product_skus === 'Backjob' || selectedBooking.product_skus === 'Ocular' || selectedBooking.product_skus === 'Day off';
-  return (isEvent ? [] : bookingMediaRequirements).filter(req => {
+  return bookingMediaRequirements.filter(req => {
     if (req.label === 'Work Permit' && !selectedBooking.needs_work_permit) return false;
     return true;
   });
@@ -572,7 +571,10 @@ async function saveCurrentMediaState() {
     door.completed = checklistSaved && doorHasRequiredMedia(door);
     door.completed_at = door.completed ? (door.completed_at || new Date().toISOString()) : null;
 
-    const isDone = doorsArr.length > 0 && doorsArr.every(d => d.completed);
+    const isDone = doorsArr.length > 0 && doorsArr.every((candidateDoor, candidateIndex) => (
+      candidateDoor.completed
+      || isDoorCancelledForCompletion(selectedBooking, candidateDoor, candidateIndex, doorsArr)
+    ));
     const updatePayload = { doors: doorsArr };
     if (isDone) {
       updatePayload.status = 'completed';

@@ -324,9 +324,9 @@
           <a href="/dashboard/support-inbox" class="dash-nav-child" data-role="customer_service">Inbox</a>
           <a href="/dashboard/cs-message-flow" class="dash-nav-child" data-role="customer_service">Message Flow</a>
           <a href="/dashboard/product-reviews" class="dash-nav-child" data-role="customer_service">Reviews</a>
+          <a href="/dashboard/cs-resources" class="dash-nav-child" data-role="customer_service">Resources</a>
         </div>
       </div>
-
       <!-- Logistics -->
       <div class="dash-nav-group" id="nav-group-logistics" style="display: none;">
         <button class="dash-nav-parent" onclick="toggleSubmenu(this)">

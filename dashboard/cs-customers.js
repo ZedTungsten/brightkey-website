@@ -24,6 +24,18 @@
     return text && !/^(?:n\/?a|not applicable|none)$/i.test(text) ? esc(text) : '—';
   }
 
+  function customerIdentity(record = {}) {
+    const text = value => String(value || '').trim();
+    const isCompany = record.customer_is_company === true;
+    const companyType = text(record.customer_company_type);
+    return {
+      isCompany,
+      primaryName: isCompany ? text(record.customer_company_name) || text(record.customer_name) : [text(record.customer_first_name), text(record.customer_last_name)].filter(Boolean).join(' ') || text(record.customer_name),
+      contactPerson: isCompany ? text(record.customer_contact_person) : '',
+      companyType: isCompany && companyType ? companyType.charAt(0).toUpperCase() + companyType.slice(1) : ''
+    };
+  }
+
   function date(value) {
     if (!value) return '—';
     const parsed = new Date(`${String(value).slice(0, 10)}T00:00:00`);
@@ -67,6 +79,10 @@
   }
 
   function names(order) {
+    const identity = customerIdentity(order);
+    if (identity.isCompany) {
+      return { first: identity.primaryName, last: identity.contactPerson };
+    }
     const first = String(order.customer_first_name || '').trim();
     const last = String(order.customer_last_name || '').trim();
     if (first || last) return { first, last };
@@ -156,9 +172,11 @@
 
   function customerCells(order, rowspan) {
     const person = names(order);
+    const identity = customerIdentity(order);
     const fields = [
-      person.first, person.last, order.customer_address, order.customer_city,
-      order.customer_province, order.customer_phone, order.customer_email
+      person.first, person.last, identity.companyType, order.customer_address, order.customer_city,
+      order.customer_province, order.customer_phone, order.customer_phone_2,
+      order.customer_social, order.customer_email
     ];
     return fields.map(value => `<td class="customer-cell" rowspan="${rowspan}">${display(value)}</td>`).join('');
   }
@@ -179,7 +197,7 @@
   function render(orders) {
     const body = $('customer-orders-body');
     if (!orders.length) {
-      body.innerHTML = '<tr class="empty-row"><td colspan="17">No customer orders found.</td></tr>';
+      body.innerHTML = '<tr class="empty-row"><td colspan="20">No customer orders found.</td></tr>';
       return;
     }
 
@@ -201,7 +219,7 @@
         <td class="credential-cell">${display(order.customer_phone)}</td>
         ${index === 0 ? affiliateCell(order, group.length) : ''}
       </tr>`;
-    }).join('')).join('') + '<tr class="table-spacer-row"><td colspan="17"></td></tr>';
+    }).join('')).join('') + '<tr class="table-spacer-row"><td colspan="20"></td></tr>';
   }
 
   function closeAffiliateModal() {
@@ -273,14 +291,14 @@
   async function load() {
     if (state.loading) return;
     state.loading = true;
-    $('customer-orders-body').innerHTML = '<tr><td colspan="17"><div class="loading-wrapper"><span class="spinner-cyan"></span><span>Loading customer orders...</span></div></td></tr>';
+    $('customer-orders-body').innerHTML = '<tr><td colspan="20"><div class="loading-wrapper"><span class="spinner-cyan"></span><span>Loading customer orders...</span></div></td></tr>';
     updatePagination(0);
 
     const from = state.page * PAGE_SIZE;
     const to = from + PAGE_SIZE - 1;
     try {
       let request = state.sb.from('installation_bookings')
-        .select('id,order_no,customer_name,customer_first_name,customer_last_name,customer_phone,customer_email,customer_address,customer_city,customer_province,created_at,scheduled_date,product_skus,product_qtys,products,grand_total,balance_due,deposit_amount,deduction_labels,deduction_values,status,doors', { count: 'exact' })
+        .select('id,order_no,customer_name,customer_first_name,customer_last_name,customer_is_company,customer_company_name,customer_contact_person,customer_company_type,customer_social,customer_phone,customer_phone_2,customer_email,customer_address,customer_city,customer_province,created_at,scheduled_date,product_skus,product_qtys,products,grand_total,balance_due,deposit_amount,deduction_labels,deduction_values,status,doors', { count: 'exact' })
         .eq('company_id', state.companyId)
         .not('order_no', 'ilike', 'DO-%');
       if (state.query) {
@@ -291,7 +309,12 @@
             `customer_name.ilike.${pattern}`,
             `customer_first_name.ilike.${pattern}`,
             `customer_last_name.ilike.${pattern}`,
+            `customer_company_name.ilike.${pattern}`,
+            `customer_contact_person.ilike.${pattern}`,
+            `customer_company_type.ilike.${pattern}`,
             `customer_phone.ilike.${pattern}`,
+            `customer_phone_2.ilike.${pattern}`,
+            `customer_social.ilike.${pattern}`,
             `customer_email.ilike.${pattern}`,
             `customer_address.ilike.${pattern}`,
             `customer_city.ilike.${pattern}`,
@@ -316,7 +339,7 @@
       updatePagination(state.orders.length);
     } catch (error) {
       console.error(error);
-      $('customer-orders-body').innerHTML = '<tr class="empty-row"><td colspan="17">Customer orders could not be loaded. Please refresh and try again.</td></tr>';
+      $('customer-orders-body').innerHTML = '<tr class="empty-row"><td colspan="20">Customer orders could not be loaded. Please refresh and try again.</td></tr>';
       $('record-count').textContent = 'Unable to load';
     } finally {
       state.loading = false;
@@ -331,7 +354,7 @@
     const { data: company, error } = await state.sb.from('companies')
       .select('id').eq('tenant_id', auth.tenantId).limit(1).maybeSingle();
     if (error || !company?.id) {
-      $('customer-orders-body').innerHTML = '<tr class="empty-row"><td colspan="17">Company access could not be verified.</td></tr>';
+      $('customer-orders-body').innerHTML = '<tr class="empty-row"><td colspan="20">Company access could not be verified.</td></tr>';
       return;
     }
     state.companyId = company.id;

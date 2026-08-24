@@ -288,13 +288,22 @@
         showLoadingState();
         await loadCoreData();
 
-        // Load Businesses and Suppliers
-        const { data: bizData } = await sb.from('tenant_businesses').select('id, name').eq('company_id', companyId).order('name');
-        businessesList = bizData || [];
+        // Load businesses in the company-wide priority order and suppliers together.
+        const [businessResult, orderResult, supplierResult] = await Promise.all([
+          sb.from('tenant_businesses').select('id,name').eq('company_id', companyId),
+          sb.from('global_settings').select('value').eq('company_id', companyId).eq('key', 'business_order').maybeSingle(),
+          sb.from('suppliers').select('id,name,business_id').eq('company_id', companyId).order('name')
+        ]);
+        if (businessResult.error || orderResult.error || supplierResult.error) {
+          throw businessResult.error || orderResult.error || supplierResult.error;
+        }
+        const businessRank = new Map((Array.isArray(orderResult.data?.value) ? orderResult.data.value : [])
+          .map((id, index) => [id, index]));
+        businessesList = [...(businessResult.data || [])].sort((a, b) =>
+          (businessRank.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (businessRank.get(b.id) ?? Number.MAX_SAFE_INTEGER)
+          || a.name.localeCompare(b.name));
+        suppliersList = supplierResult.data || [];
         initializeReorderPanel(document.querySelector('.supplier-order-panel'));
-        
-        const { data: suppliersData } = await sb.from('suppliers').select('*').eq('company_id', companyId).order('name');
-        suppliersList = suppliersData || [];
 
         await refreshDashboard();
         await loadRecommendedOrderHandoff();

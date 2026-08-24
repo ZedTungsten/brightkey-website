@@ -454,8 +454,28 @@
               <span class="details-value" id="modal-order-no">—</span>
             </div>
             <div class="details-group">
-              <span class="details-label">Customer Name</span>
+              <span class="details-label" id="modal-customer-name-label">Customer Name</span>
               <span class="details-value" id="modal-customer-name">—</span>
+            </div>
+            <div class="details-group" id="modal-company-contact-group" hidden>
+              <span class="details-label">Contact Person</span>
+              <span class="details-value" id="modal-company-contact">—</span>
+            </div>
+            <div class="details-group" id="modal-company-type-group" hidden>
+              <span class="details-label">Company Type</span>
+              <span class="details-value" id="modal-company-type">—</span>
+            </div>
+            <div class="details-group">
+              <span class="details-label">Contact Numbers</span>
+              <span class="details-value" id="modal-contact-numbers">—</span>
+            </div>
+            <div class="details-group">
+              <span class="details-label">Email Address</span>
+              <span class="details-value" id="modal-email">—</span>
+            </div>
+            <div class="details-group">
+              <span class="details-label">Social Media Name</span>
+              <span class="details-value" id="modal-social">—</span>
             </div>
             <div class="details-group">
               <span class="details-label">City</span>
@@ -597,6 +617,20 @@
 
     function esc(s) {
       return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function getLogisticsCustomerIdentity(record = {}) {
+      const text = value => String(value || '').trim();
+      const isCompany = record.customer_is_company === true;
+      const companyType = text(record.customer_company_type);
+      return {
+        isCompany,
+        primaryName: isCompany ? text(record.customer_company_name) || text(record.customer_name) : [text(record.customer_first_name), text(record.customer_last_name)].filter(Boolean).join(' ') || text(record.customer_name),
+        contactPerson: isCompany ? text(record.customer_contact_person) : '',
+        companyType: isCompany && companyType ? companyType.charAt(0).toUpperCase() + companyType.slice(1) : '',
+        social: text(record.customer_social),
+        email: text(record.customer_email)
+      };
     }
 
     const MONTH_NAMES = [
@@ -933,9 +967,9 @@
         try {
           const sb = window.BKAuth.sb;
           const [liveTxsRes, liveDbRes, liveIbRes] = await Promise.all([
-            sb.from('inventory_transactions').select('*').eq('reference_id', refId).eq('type', 'customer_order'),
-            sb.from('delivery_bookings').select('*').eq('reference_id', refId).maybeSingle(),
-            sb.from('installation_bookings').select('*').eq('order_no', refId).maybeSingle()
+            sb.from('inventory_transactions').select('*').eq('company_id', this.companyId).eq('reference_id', refId).eq('type', 'customer_order'),
+            sb.from('delivery_bookings').select('*').eq('company_id', this.companyId).eq('reference_id', refId).maybeSingle(),
+            sb.from('installation_bookings').select('*').eq('company_id', this.companyId).eq('order_no', refId).maybeSingle()
           ]);
 
           if (liveTxsRes.data && liveTxsRes.data.length > 0) {
@@ -987,8 +1021,18 @@
         }
 
         // Set text content
+        const customerIdentity = getLogisticsCustomerIdentity(ib || {});
+        const contactNumbers = [ib?.customer_phone, ib?.customer_phone_2].filter(Boolean).join(' / ');
         document.getElementById('modal-order-no').textContent = refId;
-        document.getElementById('modal-customer-name').textContent = txs[0]?.customer_name || 'N/A';
+        document.getElementById('modal-customer-name-label').textContent = customerIdentity.isCompany ? 'Company Name' : 'Customer Name';
+        document.getElementById('modal-customer-name').textContent = customerIdentity.primaryName || txs[0]?.customer_name || 'N/A';
+        document.getElementById('modal-company-contact-group').hidden = !customerIdentity.isCompany;
+        document.getElementById('modal-company-type-group').hidden = !customerIdentity.isCompany;
+        document.getElementById('modal-company-contact').textContent = customerIdentity.contactPerson || 'N/A';
+        document.getElementById('modal-company-type').textContent = customerIdentity.companyType || 'N/A';
+        document.getElementById('modal-contact-numbers').textContent = contactNumbers || 'N/A';
+        document.getElementById('modal-email').textContent = customerIdentity.email || 'N/A';
+        document.getElementById('modal-social').textContent = customerIdentity.social || 'N/A';
         document.getElementById('modal-city').textContent = customerCity;
         document.getElementById('modal-address').textContent = customerAddress;
         document.getElementById('modal-booked-date').textContent = bookedDate;

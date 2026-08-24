@@ -174,6 +174,7 @@
           }
         }
         this.setTodayDate();
+        this.renderAttachmentPreviews();
         this.bindForm();
         this.bindCategoriesPanel();
         this.bindAccountsPanel();
@@ -324,21 +325,22 @@
           statusEl.textContent = `${this.stagedAttachments.length}/5 files selected`;
         }
 
-        this.stagedAttachments.forEach((item, idx) => {
-          const div = document.createElement('div');
-          div.setAttribute('style', 'position: relative; display: flex; align-items: center; gap: 0.5rem; background: #fff; color: var(--text-primary); border: 1px solid var(--border); padding: 0.4rem 0.6rem; border-radius: 4px; font-size: 0.78rem; max-width: 180px;');
-
+        container.innerHTML = Array.from({ length: 5 }, (_, idx) => {
+          const item = this.stagedAttachments[idx];
+          if (!item) {
+            return `<button type="button" class="attachment-slot" onclick="document.getElementById('f-attachments').click()" aria-label="Add receipt attachment ${idx + 1}"><svg aria-hidden="true" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>`;
+          }
           const icon = item.type.startsWith('image/')
-            ? '<svg aria-hidden="true" viewBox="0 0 24 24" style="width:1em;height:1em;display:block;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>'
-            : '<svg aria-hidden="true" viewBox="0 0 24 24" style="width:1em;height:1em;display:block;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>';
-
-          div.innerHTML = `
-            <span>${icon}</span>
-            <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;" title="${esc(item.name)}">${esc(item.name)}</span>
-            <button type="button" style="background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 1rem; line-height: 1; padding: 0 0.2rem; display: flex; align-items: center;" onclick="JournalApp.removeStagedAttachment(${idx})" title="Remove"><svg aria-hidden="true" viewBox="0 0 24 24" style="width:1em;height:1em;display:block;fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
-          `;
-          container.appendChild(div);
-        });
+            ? '<svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>'
+            : '<svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>';
+          return `<div class="attachment-slot">
+            <div class="attachment-slot__file" title="${esc(item.name)}">
+              ${icon}
+              <span class="attachment-slot__name">${esc(item.name)}</span>
+            </div>
+            <button type="button" class="attachment-slot__remove" onclick="JournalApp.removeStagedAttachment(${idx})" title="Remove attachment" aria-label="Remove ${esc(item.name)}"><svg aria-hidden="true" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+          </div>`;
+        }).join('');
       },
 
       /* ── Load accounts ── */
@@ -1466,7 +1468,7 @@
         const wrap = document.querySelector('.table-wrap');
         if (wrap) {
           const expectedHeight = (this.pageSize * 37.6) + 33;
-          wrap.style.minHeight = `${expectedHeight}px`;
+          wrap.style.minHeight = window.matchMedia('(min-width: 1100px)').matches ? '' : `${expectedHeight}px`;
         }
 
         // Render skeleton rows matching this.pageSize to keep the layout height stable
@@ -1527,7 +1529,7 @@
         const wrap = document.querySelector('.table-wrap');
         if (wrap) {
           const expectedHeight = (this.pageSize * 37.6) + 33;
-          wrap.style.minHeight = `${expectedHeight}px`;
+          wrap.style.minHeight = window.matchMedia('(min-width: 1100px)').matches ? '' : `${expectedHeight}px`;
         }
 
         if (!this.entries.length) {

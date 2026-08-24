@@ -67,8 +67,13 @@ function drawCalendar() {
         } else if (Array.isArray(b.doors)) {
           doorsArr = b.doors;
         }
-        const isDone = doorsArr.length > 0 && doorsArr.every(d => d.completed);
-        const hasUploadedMedia = doorsArr.length > 0 && doorsArr.every(d => d.media_urls && d.media_urls.length > 0);
+        const activeDoors = doorsArr.filter((door, doorIndex) => (
+          !isDoorCancelledForCompletion(b, door, doorIndex, doorsArr)
+        ));
+        const isDone = activeDoors.length > 0 && activeDoors.every(door => door.completed);
+        const hasUploadedMedia = activeDoors.length > 0 && activeDoors.every(door => (
+          Array.isArray(door.media_urls) && door.media_urls.length > 0
+        ));
         
         const isEvent = b.product_skus === 'Backjob' || b.product_skus === 'Ocular' || b.product_skus === 'Day off';
         let color = isAfternoon(b.scheduled_time) ? '#2563eb' : '#f97316'; // default blue/light orange

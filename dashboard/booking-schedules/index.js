@@ -69,6 +69,8 @@
     let selectedBooking = null;
     let selectedDayDate = '';
     let searchQuery = '';
+    let allBookingsSortKey = '';
+    let allBookingsSortDirection = 'asc';
     let slotFiles = {};
     let otherFiles = [];
     let uploadDoorIndex = null;
@@ -78,6 +80,25 @@
     const todayYear = today.getFullYear();
     const todayMonth = today.getMonth();
     const todayDay = today.getDate();
+
+    function isDoorCancelledForCompletion(door, doorIndex, doors, products) {
+      if (door?.cancelled === true || String(door?.status || '').toLowerCase() === 'cancelled') return true;
+      const hardwareProducts = products.filter(product => String(product?.sku || '').trim().toUpperCase() !== 'ADD-ON LABOR');
+      const hasAttachedProducts = doors.some(item => Array.isArray(item?.products) && item.products.length > 0);
+      if (hasAttachedProducts) {
+        const attachedSkus = Array.isArray(door?.products) ? door.products : [];
+        return attachedSkus.length > 0 && attachedSkus.every(sku => {
+          let matches = products.filter(product => product?.sku === sku);
+          const indexedMatches = matches.filter(product => Number(product?.doorIndex) === doorIndex);
+          if (indexedMatches.length > 0) matches = indexedMatches;
+          return matches.length > 0 && matches.every(product => product?.cancelled === true);
+        });
+      }
+      if (doors.length === 1) {
+        return hardwareProducts.length > 0 && hardwareProducts.every(product => product?.cancelled === true);
+      }
+      return hardwareProducts[doorIndex]?.cancelled === true;
+    }
 
     let currentYear = todayYear;
     let currentMonth = todayMonth;
@@ -136,6 +157,7 @@
       const tabInstallerAccounts = document.getElementById('tab-installer-accounts');
       const tabInstallerNotes = document.getElementById('tab-installer-notes');
       const monthNavigator = document.getElementById('calendar-month-navigator');
+      const allBookingsSearch = document.getElementById('all-bookings-search');
       const scrollContainer = document.querySelector('.scroll-container');
       const pageTitle = document.getElementById('booking-page-title');
       const isInstallerAssignments = currentSubpage === 'installer-assignments';
@@ -151,12 +173,15 @@
       if (panelInstallerAccounts) panelInstallerAccounts.style.display = isInstallerAccounts ? 'block' : 'none';
       if (panelInstallerNotes) panelInstallerNotes.style.display = isInstallerNotes ? 'flex' : 'none';
       if (scheduleTabs) scheduleTabs.style.display = isInstallersPage ? 'none' : 'flex';
+      if (scheduleTabs) scheduleTabs.classList.toggle('all-bookings-active', currentSubpage === 'all-bookings');
       if (installerTabs) installerTabs.style.display = isInstallersPage ? 'flex' : 'none';
       if (tabInstallerAssignments) tabInstallerAssignments.classList.toggle('active', isInstallerAssignments);
       if (tabInstallerAccounts) tabInstallerAccounts.classList.toggle('active', isInstallerAccounts);
       if (tabInstallerNotes) tabInstallerNotes.classList.toggle('active', isInstallerNotes);
       if (monthNavigator) monthNavigator.style.display = (isInstallerAccounts || isInstallerNotes) ? 'none' : 'flex';
+      if (allBookingsSearch) allBookingsSearch.style.display = currentSubpage === 'all-bookings' ? 'flex' : 'none';
       if (scrollContainer) scrollContainer.classList.toggle('installer-notes-active', isInstallerNotes);
+      if (scrollContainer) scrollContainer.classList.toggle('all-bookings-active', currentSubpage === 'all-bookings');
       if (pageTitle) pageTitle.textContent = isInstallersPage ? 'Installers' : 'Installation Schedules';
       document.title = isInstallersPage
         ? 'Installers — Brightkey Admin'
@@ -542,6 +567,28 @@
       loadMonthBookings();
     }
 
+    function getAllBookingsStatus(booking) {
+      let doors = [];
+      let products = [];
+
+      if (Array.isArray(booking.doors)) doors = booking.doors;
+      else if (typeof booking.doors === 'string') {
+        try { doors = JSON.parse(booking.doors); } catch (_) {}
+      }
+
+      if (Array.isArray(booking.products)) products = booking.products;
+      else if (typeof booking.products === 'string') {
+        try { products = JSON.parse(booking.products); } catch (_) {}
+      }
+
+      const bookingMarkedDone = ['done', 'completed', 'finished'].includes(String(booking.status || '').toLowerCase());
+      const allDoorsMarkedDone = doors.length > 0 && doors.every((door, doorIndex) => (
+        Boolean(door?.completed) || isDoorCancelledForCompletion(door, doorIndex, doors, products)
+      ));
+
+      return bookingMarkedDone || allDoorsMarkedDone ? 'Done' : 'Scheduled';
+    }
+
     function drawAllBookingsList() {
       const tbody = document.getElementById('all-bookings-tbody');
       if (!tbody) return;
@@ -552,8 +599,39 @@
 
       const bookingsInMonth = filteredBookings.filter(b => b.scheduled_date && b.scheduled_date.startsWith(prefix));
 
+      document.querySelectorAll('.booking-sort-btn').forEach(button => {
+        const active = button.dataset.sort === allBookingsSortKey;
+        if (active) button.dataset.direction = allBookingsSortDirection;
+        else delete button.dataset.direction;
+        button.setAttribute('aria-sort', active ? (allBookingsSortDirection === 'asc' ? 'ascending' : 'descending') : 'none');
+      });
+
+      if (allBookingsSortKey) {
+        const sortValue = (booking) => {
+          if (allBookingsSortKey === 'date') return booking.scheduled_date || '';
+          if (allBookingsSortKey === 'name') return booking.customer_name || '';
+          if (allBookingsSortKey === 'order') return booking.order_no || '';
+          if (allBookingsSortKey === 'city') {
+            const fallback = getCityFromAddress(booking.customer_address);
+            return String(booking.customer_city || '').trim() || (fallback === 'N/A' ? '' : fallback);
+          }
+          if (allBookingsSortKey === 'sku') return booking.product_skus || '';
+          if (allBookingsSortKey === 'qty') return String(booking.product_qtys || '').split('|').reduce((sum, qty) => sum + (Number(qty.trim()) || 0), 0);
+          if (allBookingsSortKey === 'status') return getAllBookingsStatus(booking);
+          return '';
+        };
+        bookingsInMonth.sort((a, b) => {
+          const left = sortValue(a);
+          const right = sortValue(b);
+          const result = typeof left === 'number' && typeof right === 'number'
+            ? left - right
+            : String(left).localeCompare(String(right), undefined, { numeric: true, sensitivity: 'base' });
+          return allBookingsSortDirection === 'asc' ? result : -result;
+        });
+      }
+
       if (bookingsInMonth.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted" style="padding: 2rem 0;">No bookings found for the selected month.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted" style="padding: 2rem 0;">No bookings found for the selected month.</td></tr>`;
         return;
       }
 
@@ -562,14 +640,9 @@
         const name = escapeHtml(b.customer_name || '—');
         const orderNo = escapeHtml(b.order_no || '—');
         
-        // City
-        const addressParts = (b.customer_address || '').split(',');
-        let city = '—';
-        if (addressParts.length >= 2) {
-          city = escapeHtml(addressParts[addressParts.length - 2].trim());
-        } else if (b.customer_address) {
-          city = escapeHtml(b.customer_address.trim());
-        }
+        // Prefer the dedicated city field; parse legacy comma-separated addresses only as a fallback.
+        const fallbackCity = getCityFromAddress(b.customer_address);
+        const city = escapeHtml(String(b.customer_city || '').trim() || (fallbackCity === 'N/A' ? '—' : fallbackCity));
 
         // Group SKUs under name
         let skus = [];
@@ -583,6 +656,8 @@
         
         const skuHtml = skus.map(s => `<div style="font-weight: 600;">${escapeHtml(s)}</div>`).join('');
         const qtyHtml = qtys.map(q => `<div>${escapeHtml(q)}</div>`).join('');
+        const status = getAllBookingsStatus(b);
+        const statusClass = status.toLowerCase();
 
         const deleteButton = `
           <button class="btn-minimal btn-danger btn-delete-booking" data-id="${b.id}" title="Delete Booking" style="display: inline-flex; align-items: center; justify-content: center; cursor: pointer;">
@@ -598,10 +673,17 @@
             <td>${city}</td>
             <td>${skuHtml}</td>
             <td style="text-align: center;">${qtyHtml}</td>
+            <td style="text-align: center;"><span class="installer-history-status-pill ${statusClass}">${status}</span></td>
             <td style="text-align: center;">${deleteButton}</td>
           </tr>
         `;
       }).join('');
+    }
+
+    function sortAllBookings(key) {
+      allBookingsSortDirection = allBookingsSortKey === key && allBookingsSortDirection === 'asc' ? 'desc' : 'asc';
+      allBookingsSortKey = key;
+      drawAllBookingsList();
     }
 
     window.deleteBookingFromDb = async function(id) {
@@ -721,27 +803,18 @@
                    !skuUpper.includes('KEY');
           });
 
-          const isDone = !hasUnallocatedActiveLocks && doorsArr.length > 0 && doorsArr.every(d => {
-            const attachedSkus = d.products || [];
-            const allProductsCancelled = attachedSkus.length > 0 && attachedSkus.every(sku => {
-              const matchedProd = productsArr.find(p => p.sku === sku);
-              return matchedProd ? !!matchedProd.cancelled : false;
-            });
-            return d.completed || allProductsCancelled;
-          });
+          const isDone = !hasUnallocatedActiveLocks && doorsArr.length > 0 && doorsArr.every((door, doorIndex) => (
+            door.completed || isDoorCancelledForCompletion(door, doorIndex, doorsArr, productsArr)
+          ));
 
           const todayStr = `${todayYear}-${String(todayMonth + 1).padStart(2, '0')}-${String(todayDay).padStart(2, '0')}`;
           const isDayOff = b.product_skus && b.product_skus.toLowerCase().includes('day off');
           const isDayOffPassed = isDayOff && (b.scheduled_date <= todayStr);
 
-          const hasMedia = !hasUnallocatedActiveLocks && (isDayOffPassed || (doorsArr.length > 0 && doorsArr.every(d => {
-            const attachedSkus = d.products || [];
-            const allProductsCancelled = attachedSkus.length > 0 && attachedSkus.every(sku => {
-              const matchedProd = productsArr.find(p => p.sku === sku);
-              return matchedProd ? !!matchedProd.cancelled : false;
-            });
-            return (d.media_urls && d.media_urls.length > 0) || allProductsCancelled;
-          })));
+          const hasMedia = !hasUnallocatedActiveLocks && (isDayOffPassed || (doorsArr.length > 0 && doorsArr.every((door, doorIndex) => (
+            (door.media_urls && door.media_urls.length > 0)
+            || isDoorCancelledForCompletion(door, doorIndex, doorsArr, productsArr)
+          ))));
 
           const noInstallers = !b.installer_id && (!b.installers || b.installers.length === 0);
           const noDoorsAssigned = doorsArr.length === 0 || doorsArr.every(d => {

@@ -6,6 +6,7 @@ const Forecast = {
   tenantId: '',
   warehouseId: '',
   days: 30,
+  showOnlyWithSales: false,
   visibleStatuses: new Set(['critical', 'soon', 'healthy']),
   products: [],
   businesses: [],
@@ -287,13 +288,14 @@ function renderForecast() {
     return { ...entity, available, reserved, onHand, incomingPo, futureAvailable, soldQuantity, average, daysLeft, leadTime, safety, recommendedReorder, demand, status, statusClass };
   });
 
-  const visibleRows = rows.filter(row => Forecast.visibleStatuses.has(row.statusClass));
+  const visibleRows = rows.filter(row => Forecast.visibleStatuses.has(row.statusClass)
+    && (!Forecast.showOnlyWithSales || row.soldQuantity > 0));
   Forecast.visibleForecastRows = visibleRows;
   const orderRecommendedButton = document.getElementById('order-recommended');
   if (orderRecommendedButton) orderRecommendedButton.disabled = !visibleRows.some(row => row.recommendedReorder > 0);
   const body = document.getElementById('forecast-body');
   if (!visibleRows.length) {
-    const message = rows.length ? 'No products match the selected statuses.' : 'No forecastable SKUs found.';
+    const message = rows.length ? 'No products match the selected filters.' : 'No forecastable SKUs found.';
     body.innerHTML = `<tr><td colspan="${columnCount}" class="empty-state">${message}</td></tr>`;
     return;
   }
@@ -672,6 +674,10 @@ function bindEvents() {
     if (event.target.checked) Forecast.visibleStatuses.add(event.target.value);
     else Forecast.visibleStatuses.delete(event.target.value);
     syncStatusFilters();
+    renderForecast();
+  });
+  document.getElementById('show-only-with-sales').addEventListener('change', event => {
+    Forecast.showOnlyWithSales = event.target.checked;
     renderForecast();
   });
   const recommendedStatusButton = document.getElementById('recommended-status-button');

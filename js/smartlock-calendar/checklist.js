@@ -157,7 +157,10 @@ window.markEventDoorDone = async function(doorIndex, buttonEl) {
     door.signature = null;
     door.checklist = [];
 
-    const isDone = doorsArr.length > 0 && doorsArr.every(d => d.completed);
+    const isDone = doorsArr.length > 0 && doorsArr.every((candidateDoor, candidateIndex) => (
+      candidateDoor.completed
+      || isDoorCancelledForCompletion(selectedBooking, candidateDoor, candidateIndex, doorsArr)
+    ));
     const updatePayload = { doors: doorsArr };
     if (isDone) {
       updatePayload.status = 'completed';
@@ -375,7 +378,10 @@ window.submitChecklist = async function() {
     door.completed = typeof window.doorHasRequiredMedia === 'function' && window.doorHasRequiredMedia(door);
     door.completed_at = door.completed ? new Date().toISOString() : null;
 
-    const isDone = doorsArr.length > 0 && doorsArr.every(d => d.completed);
+    const isDone = doorsArr.length > 0 && doorsArr.every((candidateDoor, candidateIndex) => (
+      candidateDoor.completed
+      || isDoorCancelledForCompletion(selectedBooking, candidateDoor, candidateIndex, doorsArr)
+    ));
     const updatePayload = { doors: doorsArr };
     if (isDone) {
       updatePayload.status = 'completed';

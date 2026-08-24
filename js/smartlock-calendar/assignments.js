@@ -20,6 +20,28 @@ function getBookingProducts(booking) {
   return String(booking?.product_skus || '').split(' | ').filter(Boolean).map(sku => ({ sku }));
 }
 
+function isDoorCancelledForCompletion(booking, door, doorIndex, doors = []) {
+  if (door?.cancelled === true || String(door?.status || '').toLowerCase() === 'cancelled') return true;
+  const products = getBookingProducts(booking);
+  const hardwareProducts = products.filter(product => normalizeWorkflowSku(product?.sku) !== 'ADD-ON LABOR');
+  const hasAttachedProducts = doors.some(item => Array.isArray(item?.products) && item.products.length > 0);
+
+  if (hasAttachedProducts) {
+    const attachedSkus = Array.isArray(door?.products) ? door.products : [];
+    return attachedSkus.length > 0 && attachedSkus.every(sku => {
+      let matches = products.filter(product => product?.sku === sku);
+      const indexedMatches = matches.filter(product => Number(product?.doorIndex) === doorIndex);
+      if (indexedMatches.length > 0) matches = indexedMatches;
+      return matches.length > 0 && matches.every(product => product?.cancelled === true);
+    });
+  }
+
+  if (doors.length === 1) {
+    return hardwareProducts.length > 0 && hardwareProducts.every(product => product?.cancelled === true);
+  }
+  return hardwareProducts[doorIndex]?.cancelled === true;
+}
+
 function getDoorCompletionPolicy(booking, door) {
   let bookingInstallers = [];
   if (Array.isArray(booking?.installers)) bookingInstallers = booking.installers;
@@ -289,6 +311,7 @@ function getInstallerAssignedDoorsForBooking(b, myId) {
   const anyDoorHasAttachedProducts = doorsArr.some(d => Array.isArray(d.products) && d.products.length > 0);
   const isSingleDoorGrouping = (doorsArr.length === 1 && productsArr.length > 0);
   doorsArr.forEach((door, index) => {
+    if (isDoorCancelledForCompletion(b, door, index, doorsArr)) return;
     let isAssignedToThisDoor = false;
     let roles = [];
 
