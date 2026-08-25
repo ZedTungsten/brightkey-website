@@ -181,7 +181,7 @@
     }
     if (state.visibility.events && event?.eventId) {
       const companyEvent = (App.companyEvents || []).find(item => item.id === event.eventId);
-      if (companyEvent) items.push({ type: 'events', title: companyEvent.title, meta: 'Company Event' });
+      if (companyEvent) items.push({ type: 'events', title: companyEvent.title, meta: 'Company Event', eventId: companyEvent.id });
     }
     if (state.visibility.leaves) {
       state.leaves.forEach(leave => {
@@ -250,8 +250,14 @@
     }
 
     upcoming.slice(0, 5).forEach(item => {
-      const row = document.createElement('div');
+      const row = document.createElement(item.eventId ? 'button' : 'div');
       row.className = 'home-calendar-upcoming-row';
+      if (item.eventId) {
+        row.type = 'button';
+        row.classList.add('is-clickable');
+        row.setAttribute('aria-label', `View company event: ${item.title}`);
+        row.addEventListener('click', () => App.openCorpEventModal(item.eventId, item.dateKey));
+      }
       const color = document.createElement('span');
       color.className = 'home-calendar-upcoming-color';
       color.style.backgroundColor = COLORS[item.type];
@@ -374,8 +380,17 @@
       name.appendChild(empty);
     } else {
       items.forEach(item => {
-        const row = document.createElement('div');
+        const row = document.createElement(item.eventId ? 'button' : 'div');
         row.className = 'calendar-day-item';
+        if (item.eventId) {
+          row.type = 'button';
+          row.classList.add('is-clickable');
+          row.setAttribute('aria-label', `View company event: ${item.title}`);
+          row.addEventListener('click', () => {
+            App.closeCalendarDayModal();
+            App.openCorpEventModal(item.eventId, dateKey);
+          });
+        }
         const color = document.createElement('span');
         color.className = 'calendar-day-item-color';
         color.style.backgroundColor = COLORS[item.type];

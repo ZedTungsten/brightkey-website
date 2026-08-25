@@ -202,7 +202,7 @@ Object.assign(window.EventsApp, {
 
         window.Toast?.success?.('Email scheduled successfully!');
         this.closeScheduleEmailModal();
-        this.closeEmailBuilder();
+        this.hideEmailBuilder();
         this.loadEvents();
 
       } else {
@@ -270,7 +270,7 @@ Object.assign(window.EventsApp, {
 
         window.Toast?.success?.('Invitation emails sent successfully!');
         this.closeScheduleEmailModal();
-        this.closeEmailBuilder();
+        this.hideEmailBuilder();
         this.loadEvents();
       }
 

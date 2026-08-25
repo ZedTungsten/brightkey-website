@@ -362,13 +362,14 @@ Object.assign(window.EventsApp, {
       // Overwrite mode
       nameLabel.textContent = selectedName;
       confirmDiv.style.display = 'block';
-      nameInput.value = '';
-      nameInput.disabled = true;
+      nameInput.disabled = false;
+      nameInput.placeholder = `Leave blank to retain ${selectedName}`;
       saveBtn.textContent = 'Overwrite';
     } else {
       // New template mode
       confirmDiv.style.display = 'none';
       nameInput.disabled = false;
+      nameInput.placeholder = 'e.g. HR Event Invitation';
       saveBtn.textContent = 'Save Template';
     }
   },
@@ -377,6 +378,8 @@ Object.assign(window.EventsApp, {
     const overwriteSelect = document.getElementById('template-overwrite-select');
     const overwriteId = overwriteSelect.value;
     const name = document.getElementById('template-name-input').value.trim();
+    const selectedName = overwriteSelect.options[overwriteSelect.selectedIndex]?.textContent?.trim() || '';
+    const templateName = overwriteId ? (name || selectedName) : name;
 
     if (!overwriteId && !name) {
       window.Toast?.error?.('Please enter a template name or select one to overwrite.');
@@ -408,10 +411,10 @@ Object.assign(window.EventsApp, {
 
     try {
       if (overwriteId) {
-        // Overwrite existing template
+        // Atomically replace the selected template content and optionally rename it.
         const { error } = await getSb()
           .from('email_templates')
-          .update({ subject, body_json: this.builderBlocks, settings })
+          .update({ name: templateName, subject, body_json: this.builderBlocks, settings })
           .eq('id', overwriteId)
           .eq('company_id', this.companyId);
         if (error) throw error;
@@ -420,7 +423,7 @@ Object.assign(window.EventsApp, {
         // Insert new template
         const payload = {
           company_id: this.companyId,
-          name,
+          name: templateName,
           category: 'HR',
           subject,
           body_json: this.builderBlocks,
@@ -433,7 +436,11 @@ Object.assign(window.EventsApp, {
       this.closeSaveTemplate();
     } catch (e) {
       console.error(e);
-      window.Toast?.error?.('Failed to save template: ' + e.message);
+      if (e?.code === '23505') {
+        window.Toast?.error?.('A template with that name already exists. Choose a different name.');
+      } else {
+        window.Toast?.error?.('The template could not be saved. Please try again.');
+      }
     }
   },
 
@@ -494,7 +501,7 @@ Object.assign(window.EventsApp, {
       if (!res.ok) throw new Error(data.error || 'Failed to send email.');
 
       window.Toast?.success?.(`Invitation dispatch triggered! Sent to ${data.count} staff members.`);
-      this.closeEmailBuilder();
+      this.hideEmailBuilder();
     } catch (e) {
       console.error(e);
       window.Toast?.error?.(e.message || 'Failed to dispatch invitation.');

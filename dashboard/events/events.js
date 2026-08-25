@@ -266,8 +266,11 @@ window.EventsApp = {
             <td>${toDate}</td>
             <td class="action-col">
               <div style="display:inline-flex;gap:0.3rem;">
-                <button class="action-btn" title="Send Email" onclick="EventsApp.openEmailBuilder('${esc(ev.id)}')">
-                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                <button class="action-btn" title="Preview Dashboard Event" onclick="EventsApp.previewDashboardEvent('${esc(ev.id)}')">
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
+                <button class="action-btn" title="Content Builder" onclick="EventsApp.openEmailBuilder('${esc(ev.id)}')">
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="17" y1="6" x2="3" y2="6"/><line x1="21" y1="10" x2="3" y2="10"/><line x1="17" y1="14" x2="3" y2="14"/><line x1="21" y1="18" x2="3" y2="18"/></svg>
                 </button>
                 <button class="action-btn" title="Attendees" onclick="EventsApp.openAttendeesModal('${esc(ev.id)}')">
                   <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -335,8 +338,11 @@ window.EventsApp = {
             <td>${esc(detailsText)}</td>
             <td class="action-col">
               <div style="display:inline-flex;gap:0.3rem;">
-                <button class="action-btn" title="Send Email" onclick="EventsApp.openEmailBuilder('${esc(ev.id)}')">
-                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                <button class="action-btn" title="Preview Dashboard Event" onclick="EventsApp.previewDashboardEvent('${esc(ev.id)}')">
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
+                <button class="action-btn" title="Content Builder" onclick="EventsApp.openEmailBuilder('${esc(ev.id)}')">
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="17" y1="6" x2="3" y2="6"/><line x1="21" y1="10" x2="3" y2="10"/><line x1="17" y1="14" x2="3" y2="14"/><line x1="21" y1="18" x2="3" y2="18"/></svg>
                 </button>
                 <button class="action-btn" title="Attendees" onclick="EventsApp.openAttendeesModal('${esc(ev.id)}')">
                   <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -879,10 +885,10 @@ let emailChunksPromise = null;
 function ensureEventEmailChunks() {
   if (!emailChunksPromise) {
     emailChunksPromise = Promise.all([
-      loadEventsChunk('/dashboard/events/events-email-builder.js?v=1.0.0'),
-      loadEventsChunk('/dashboard/events/events-email-templates.js?v=1.0.0'),
-      loadEventsChunk('/dashboard/events/events-email-helpers.js?v=1.0.0'),
-      loadEventsChunk('/dashboard/events/events-email-scheduler.js?v=1.0.0')
+      loadEventsChunk('/dashboard/events/events-email-builder.js?v=1.0.6'),
+      loadEventsChunk('/dashboard/events/events-email-templates.js?v=1.0.2'),
+      loadEventsChunk('/dashboard/events/events-email-helpers.js?v=1.0.1'),
+      loadEventsChunk('/dashboard/events/events-email-scheduler.js?v=1.0.1')
     ]);
   }
   return emailChunksPromise;
@@ -891,6 +897,81 @@ function ensureEventEmailChunks() {
 window.EventsApp.openEmailBuilder = async function openEmailBuilder(id) {
   await ensureEventEmailChunks();
   return window.EventsApp.openEmailBuilder(id);
+};
+
+window.EventsApp.previewDashboardEvent = async function previewDashboardEvent(id) {
+  const { data: ev } = await getSb().from('company_events').select('*').eq('id', id).maybeSingle();
+  if (!ev) {
+    window.Toast?.error?.('Event not found.');
+    return;
+  }
+
+  const renderRichText = (value) => esc(value || '')
+    .replace(/&lt;u&gt;/g, '<u>')
+    .replace(/&lt;\/u&gt;/g, '</u>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/_(.+?)_/g, '<em>$1</em>')
+    .replace(/\n/g, '<br>');
+  const formatLongDate = (value) => {
+    if (!value) return 'Date not set';
+    const [year, month, day] = value.split('-').map(Number);
+    return new Date(year, month - 1, day).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+  };
+  const formatTime = (value) => {
+    const [hour, minute] = value.split(':').map(Number);
+    return `${hour % 12 || 12}:${String(minute).padStart(2, '0')} ${hour >= 12 ? 'PM' : 'AM'}`;
+  };
+
+  document.getElementById('event-dashboard-preview-title').textContent = ev.title || 'Event';
+  document.getElementById('event-dashboard-preview-desc').innerHTML = renderRichText(ev.description || 'No description provided.');
+
+  let dateText = formatLongDate(ev.date_from);
+  if (!ev.is_recurring && ev.is_date_range && ev.date_to) dateText += ` to ${formatLongDate(ev.date_to)}`;
+  if (ev.is_whole_day) {
+    dateText += ' (Whole day)';
+  } else if (ev.time_start) {
+    dateText += ` — ${formatTime(ev.time_start)}`;
+    if (ev.time_end) dateText += ` to ${formatTime(ev.time_end)}`;
+  }
+  document.getElementById('event-dashboard-preview-datetime').textContent = dateText;
+
+  const emailWrap = document.getElementById('event-dashboard-preview-email-wrap');
+  const emailContent = document.getElementById('event-dashboard-preview-email-content');
+  let blocks = ev.email_body_json || [];
+  if (typeof blocks === 'string') {
+    try { blocks = JSON.parse(blocks); } catch (_) { blocks = []; }
+  }
+  emailContent.replaceChildren();
+  if (Array.isArray(blocks) && blocks.length) {
+    blocks.forEach(block => {
+      const element = document.createElement('div');
+      const styles = {
+        header: 'font-size:1.05rem;font-weight:700;color:var(--text-primary);margin-top:0.25rem;',
+        subheader: 'font-size:0.88rem;font-weight:600;color:var(--text-secondary);margin-bottom:0.25rem;',
+        body: 'font-size:0.82rem;color:var(--text-primary);white-space:pre-wrap;line-height:1.5;margin-bottom:0.25rem;',
+        signature: 'font-size:0.8rem;color:var(--text-muted);white-space:pre-wrap;margin-top:0.5rem;padding-top:0.5rem;font-style:italic;'
+      };
+      element.style.cssText = styles[block.type] || styles.body;
+      element.innerHTML = renderRichText(block.value);
+      emailContent.appendChild(element);
+    });
+    emailWrap.style.display = 'flex';
+  } else {
+    emailWrap.style.display = 'none';
+  }
+
+  document.getElementById('event-dashboard-preview-attendance').style.display = ev.email_attendee_response !== false ? 'flex' : 'none';
+  const modal = document.getElementById('event-dashboard-preview-modal');
+  modal.style.display = 'flex';
+  modal.offsetHeight;
+  modal.classList.add('open');
+};
+
+window.EventsApp.closeDashboardEventPreview = function closeDashboardEventPreview() {
+  const modal = document.getElementById('event-dashboard-preview-modal');
+  if (!modal) return;
+  modal.classList.remove('open');
+  window.setTimeout(() => { modal.style.display = 'none'; }, 150);
 };
 
 (async () => {

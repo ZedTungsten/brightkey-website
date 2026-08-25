@@ -401,6 +401,28 @@ For ordinary dashboard, JavaScript, CSS, migration, or non-product-page changes,
 
 ---
 
+## 11.1 Feature Preservation & Regression Protection
+> [!CRITICAL]
+> **EXISTING BEHAVIOR IS PART OF THE IMPLEMENTATION CONTRACT**:
+> Never remove, disable, replace, or narrow an existing feature unless the user
+> explicitly requests that behavioral change.
+> - Before overriding or replacing a function, trace every existing branch,
+>   click handler, navigation path, permission and visibility rule, side effect,
+>   and downstream caller. Preserve them unless the request explicitly changes
+>   their behavior.
+> - Rendering, refactoring, optimization, and shared-component changes must
+>   preserve all existing interaction paths, including behavior that is not
+>   immediately visible in the changed UI.
+> - Do not interpret a request to add or adjust one behavior as permission to
+>   remove another behavior.
+> - If the requested change conflicts with existing behavior, or it is unclear
+>   whether an existing feature should remain, stop and ask the user before
+>   editing.
+> - When practical test coverage exists, add or update a targeted regression test
+>   for the preserved behavior.
+
+---
+
 ## 12. Dashboard Modal Implementation Patterns
 Do not mix modal systems. `/dashboard/team` uses instant overlay display plus a
 card keyframe, so JS only toggles `.open`. The global `DESIGN.md` transition

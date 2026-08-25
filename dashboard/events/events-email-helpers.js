@@ -138,15 +138,8 @@ Object.assign(window.EventsApp, {
     }
   },
 
-  debouncedAutosave() {
-    if (this.autosaveTimeout) clearTimeout(this.autosaveTimeout);
-    this.autosaveTimeout = setTimeout(() => {
-      this.autosaveEmailConfig();
-    }, 1000);
-  },
-
-  async autosaveEmailConfig() {
-    if (!this.builderEventId) return;
+  async autosaveEmailConfig({ showToast = false } = {}) {
+    if (!this.builderEventId) return false;
 
     // Fetch values from DOM safely
     const senderNameEl = document.getElementById('builder-sender-name');
@@ -192,10 +185,12 @@ Object.assign(window.EventsApp, {
         .eq('id', this.builderEventId);
       if (error) throw error;
       console.log('Email configuration autosaved for event:', this.builderEventId);
-      window.Toast?.success?.('Email template autosaved.');
+      if (showToast) window.Toast?.success?.('Content autosaved.');
+      return true;
     } catch (e) {
       console.error('Autosave failed:', e);
-      window.Toast?.error?.('Autosave failed: ' + e.message);
+      window.Toast?.error?.('Content could not be saved. Please try again.');
+      return false;
     }
   },
 

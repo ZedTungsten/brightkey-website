@@ -251,9 +251,55 @@ Object.assign(window.EventsApp, {
 
     if (loader) loader.style.display = 'none';
     document.getElementById('email-builder-modal').classList.add('open');
+
+    if (!this.builderEscapeGuard) {
+      this.builderEscapeGuard = (event) => {
+        if (event.key !== 'Escape' || !document.getElementById('email-builder-modal')?.classList.contains('open')) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        this.openSaveChangesConfirm();
+      };
+      document.addEventListener('keydown', this.builderEscapeGuard, true);
+    }
   },
 
-  closeEmailBuilder() {
+  openSaveChangesConfirm() {
+    document.getElementById('content-builder-save-confirm-modal')?.classList.add('open');
+  },
+
+  closeSaveChangesConfirm() {
+    document.getElementById('content-builder-save-confirm-modal')?.classList.remove('open');
+  },
+
+  async confirmSaveBuilderChanges() {
+    this.closeSaveChangesConfirm();
+    await this.closeEmailBuilder();
+  },
+
+  discardBuilderChangesFromConfirm() {
+    this.closeSaveChangesConfirm();
+    this.discardEmailBuilder();
+  },
+
+  async closeEmailBuilder() {
+    if (this.autosaveTimeout) {
+      clearTimeout(this.autosaveTimeout);
+      this.autosaveTimeout = null;
+    }
+    const saved = await this.autosaveEmailConfig({ showToast: true });
+    if (saved) this.hideEmailBuilder();
+  },
+
+  discardEmailBuilder() {
+    if (this.autosaveTimeout) {
+      clearTimeout(this.autosaveTimeout);
+      this.autosaveTimeout = null;
+    }
+    this.hideEmailBuilder();
+  },
+
+  hideEmailBuilder() {
+    this.closeSaveChangesConfirm();
     document.getElementById('email-builder-modal').classList.remove('open');
     this.closeAutocomplete();
   },
@@ -335,9 +381,9 @@ Object.assign(window.EventsApp, {
       if (isRich) {
         formatToolbar = `
           <div style="display:inline-flex; gap:2px; margin-left:0.5rem;">
-            <button class="action-btn" style="width:22px;height:22px;font-weight:900;font-size:0.85rem;" onclick="EventsApp.applyFormat('${block.id}','${textareaId}','bold')" title="Bold">B</button>
-            <button class="action-btn" style="width:22px;height:22px;font-style:italic;font-weight:700;font-size:0.85rem;" onclick="EventsApp.applyFormat('${block.id}','${textareaId}','italic')" title="Italic">I</button>
-            <button class="action-btn" style="width:22px;height:22px;text-decoration:underline;font-weight:700;font-size:0.85rem;" onclick="EventsApp.applyFormat('${block.id}','${textareaId}','underline')" title="Underline">U</button>
+            <button type="button" class="action-btn format-btn" data-editor-id="${textareaId}" data-format="bold" style="width:22px;height:22px;font-weight:900;font-size:0.85rem;" onmousedown="event.preventDefault()" onclick="EventsApp.applyFormat('${block.id}','${textareaId}','bold')" title="Bold">B</button>
+            <button type="button" class="action-btn format-btn" data-editor-id="${textareaId}" data-format="italic" style="width:22px;height:22px;font-style:italic;font-weight:700;font-size:0.85rem;" onmousedown="event.preventDefault()" onclick="EventsApp.applyFormat('${block.id}','${textareaId}','italic')" title="Italic">I</button>
+            <button type="button" class="action-btn format-btn" data-editor-id="${textareaId}" data-format="underline" style="width:22px;height:22px;text-decoration:underline;font-weight:700;font-size:0.85rem;" onmousedown="event.preventDefault()" onclick="EventsApp.applyFormat('${block.id}','${textareaId}','underline')" title="Underline">U</button>
           </div>
         `;
       }
@@ -392,9 +438,13 @@ Object.assign(window.EventsApp, {
           </div>
         `;
       } else if (block.type === 'bullet-list' || block.type === 'num-list') {
-        inputHtml = `<textarea id="${textareaId}" class="form-input" style="font-size:0.85rem;" rows="3" placeholder="Enter list items (one per line)" oninput="EventsApp.updateBlockValue('${block.id}', this.value)">${esc(block.value)}</textarea>`;
+        const listTag = block.type === 'bullet-list' ? 'ul' : 'ol';
+        const items = String(block.value || '').split('\n').filter(item => item.trim() !== '');
+        const listItems = (items.length ? items : ['']).map(item => `<li>${this._renderRichText(item)}</li>`).join('');
+        inputHtml = `<div id="${textareaId}" class="form-input rich-block-editor rich-list-editor" contenteditable="true" role="textbox" aria-multiline="true" oninput="EventsApp.updateBlockRichValue('${block.id}', this)" onkeyup="EventsApp.updateFormatToolbar('${textareaId}')" onmouseup="EventsApp.updateFormatToolbar('${textareaId}')" onfocus="EventsApp.updateFormatToolbar('${textareaId}')"><${listTag}>${listItems}</${listTag}></div>`;
       } else if (isRich) {
-        inputHtml = `<textarea id="${textareaId}" class="form-input" style="font-size:0.85rem;" rows="3" placeholder="Enter paragraph text" oninput="EventsApp.updateBlockValue('${block.id}', this.value)">${esc(block.value)}</textarea>`;
+        const keydownHandler = block.type === 'signature' ? ' onkeydown="EventsApp.handleSignatureKeydown(event)"' : '';
+        inputHtml = `<div id="${textareaId}" class="form-input rich-block-editor" contenteditable="true" role="textbox" aria-multiline="true" data-placeholder="Enter paragraph text"${keydownHandler} oninput="EventsApp.updateBlockRichValue('${block.id}', this)" onkeyup="EventsApp.updateFormatToolbar('${textareaId}')" onmouseup="EventsApp.updateFormatToolbar('${textareaId}')" onfocus="EventsApp.updateFormatToolbar('${textareaId}')">${this._renderRichText(block.value)}</div>`;
       } else {
         inputHtml = `<input type="text" class="form-input" style="font-size:0.85rem;" placeholder="Enter header text" value="${esc(block.value)}" oninput="EventsApp.updateBlockValue('${block.id}', this.value)" />`;
       }
@@ -417,21 +467,55 @@ Object.assign(window.EventsApp, {
     });
   },
 
-  applyFormat(blockId, textareaId, format) {
-    const ta = document.getElementById(textareaId);
-    if (!ta) return;
-    const start = ta.selectionStart;
-    const end = ta.selectionEnd;
-    const selected = ta.value.substring(start, end);
-    let wrapped = selected;
-    if (format === 'bold')      wrapped = `**${selected}**`;
-    else if (format === 'italic')     wrapped = `_${selected}_`;
-    else if (format === 'underline')  wrapped = `<u>${selected}</u>`;
-    ta.value = ta.value.substring(0, start) + wrapped + ta.value.substring(end);
-    ta.selectionStart = start;
-    ta.selectionEnd = start + wrapped.length;
-    ta.focus();
-    this.updateBlockValue(blockId, ta.value);
+  applyFormat(blockId, editorId, format) {
+    const editor = document.getElementById(editorId);
+    if (!editor) return;
+    editor.focus();
+    document.execCommand('styleWithCSS', false, false);
+    document.execCommand(format, false, null);
+    this.updateBlockRichValue(blockId, editor);
+    this.updateFormatToolbar(editorId);
+  },
+
+  updateFormatToolbar(editorId) {
+    document.querySelectorAll('.format-btn').forEach(button => {
+      if (button.dataset.editorId !== editorId) return;
+      button.classList.toggle('active', document.queryCommandState(button.dataset.format));
+    });
+  },
+
+  handleSignatureKeydown(event) {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    const lineCount = (event.currentTarget.innerText || '').replace(/\r/g, '').split('\n').length;
+    if (lineCount >= 3) return;
+    document.execCommand('insertLineBreak', false, null);
+  },
+
+  updateBlockRichValue(id, editor) {
+    const wrapFormattedLines = (content, before, after) => content
+      .split('\n')
+      .map(line => line ? `${before}${line}${after}` : '')
+      .join('\n');
+    const serialize = (node) => {
+      if (node.nodeType === Node.TEXT_NODE) return node.nodeValue || '';
+      if (node.nodeType !== Node.ELEMENT_NODE) return '';
+      const tag = node.tagName.toLowerCase();
+      const content = Array.from(node.childNodes).map(serialize).join('');
+      if (tag === 'br') return '\n';
+      if (tag === 'strong' || tag === 'b') return wrapFormattedLines(content, '**', '**');
+      if (tag === 'em' || tag === 'i') return wrapFormattedLines(content, '_', '_');
+      if (tag === 'u') return wrapFormattedLines(content, '<u>', '</u>');
+      if (tag === 'li') return `${content}\n`;
+      if (tag === 'div' || tag === 'p') return `\n${content}\n`;
+      return content;
+    };
+    const value = Array.from(editor.childNodes).map(serialize).join('')
+      .replace(/\u00a0/g, ' ')
+      .replace(/\n{3,}/g, '\n\n')
+      .replace(/^\n+|\n+$/g, '');
+    this.updateBlockValue(id, value);
+    this.updateFormatToolbar(editor.id);
   },
 
   updateBlockValue(id, value) {
@@ -473,7 +557,6 @@ Object.assign(window.EventsApp, {
   toggleAttendeeResponse() {
     const checked = document.getElementById('builder-attendee-response').checked;
     document.getElementById('mockup-cta-container').style.display = checked ? 'flex' : 'none';
-    this.debouncedAutosave();
   },
 
   updatePreview() {
@@ -630,7 +713,6 @@ Object.assign(window.EventsApp, {
     if (btnAffirm) btnAffirm.style.backgroundColor = affirmColor;
     if (btnNeg) btnNeg.style.backgroundColor = negColor;
 
-    this.debouncedAutosave();
   },
 
   // Templates List Modal & Management Flow
