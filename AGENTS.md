@@ -399,6 +399,37 @@ For ordinary dashboard, JavaScript, CSS, migration, or non-product-page changes,
 > For invisible, misaligned, or unresponsive UI, validate DOM nesting and closing
 > tags first. Do not add CSS/reflow/transition workarounds before syntax is sound.
 
+### 11.1 Exact Visual Matching: Inspect Structure Before Styling
+> [!CRITICAL]
+> When the user asks to copy a reference "exactly," do not assume the current
+> markup can express the reference and do not repeatedly stack CSS overrides.
+> Inspect the authenticated live rendering first when the user identifies a
+> signed-in browser or when the mismatch depends on runtime-generated markup.
+
+Required process:
+
+1. Open the affected state in the user's requested browser and inspect the
+   visible DOM, generated markup, and relevant computed styles.
+2. Compare the rendered hierarchy with the reference hierarchy before editing.
+   Classify the mismatch as structure, content, styling, or a combination.
+3. Fix structure before styling. Labels and values that require independent
+   typography, spacing, alignment, or responsive behavior must be separate
+   semantic elements. Do not render them as one string separated by `<br>` tags,
+   punctuation, or inline-styled fragments.
+4. Preserve existing IDs, event handlers, data sources, permissions, historical
+   records, and edit/upload workflows while restructuring presentation.
+5. Apply one intentional component-level change. Remove or supersede obsolete
+   workarounds instead of adding increasingly specific selectors to compensate
+   for unsuitable markup.
+6. Cache-bust changed local assets when the route uses versioned CSS or scripts.
+7. Reopen the exact affected state in the same browser and verify the resulting
+   DOM and visual hierarchy before reporting an exact match.
+
+If the live output contradicts assumptions from source code or screenshots,
+the live DOM is the authoritative signal for diagnosing the presentation bug.
+Do not report completion after an approximation when the user requested an exact
+match.
+
 ---
 
 ## 11.1 Feature Preservation & Regression Protection

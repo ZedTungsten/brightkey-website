@@ -283,7 +283,7 @@ function renderSalaryAndAdjustments(monthKey) {
 
   const addRow = (label, amount, paid, day) => rows.push({ label, amount: Number(amount) || 0, paid: !!paid, day: Number(day) || 0 });
   schedules.forEach((day, index) => {
-    addRow(`Salary Cutoff — ${MONTH_NAMES[month - 1]} ${day}`, salaryAllocation(day, index), monthState[`${currentInstaller.id}_${day}`], day);
+    addRow('Salary', salaryAllocation(day, index), monthState[`${currentInstaller.id}_${day}`], day);
   });
 
   const monthSpecialSchedules = window.BKSpecialPayoutHistory?.forMonth(config.specialSchedules || [], monthKey) || config.specialSchedules || [];
@@ -300,20 +300,46 @@ function renderSalaryAndAdjustments(monthKey) {
   getInstallerReimbursements(monthKey).forEach(item => addRow(item.label || 'Reimbursement', item.amount, itemPaidState(item), new Date(`${item.date}T00:00:00`).getDate()));
   (payoutTrackerData.adjustments || []).filter(item => String(item.date || '').startsWith(monthKey)).forEach(item => addRow(item.label || 'Adjustment', item.amount, itemPaidState(item), new Date(`${item.date}T00:00:00`).getDate()));
 
+  const payoutModel = installerPayslipModel?.monthKey === monthKey ? installerPayslipModel : null;
+  schedules.forEach(day => {
+    const paid = !!monthState[`${currentInstaller.id}_${day}`];
+    const serviceAmount = Number(payoutModel?.cutoffServicePayouts?.[day]) || 0;
+    const rolloverAmount = Number(payoutModel?.cutoffRolloverPayouts?.[day]) || 0;
+    const installationAmount = Number(payoutModel?.cutoffInstallationPayouts?.[day]) || 0;
+    if (serviceAmount) addRow('Service Job', serviceAmount, paid, day);
+    if (rolloverAmount) addRow('Rollover Install', rolloverAmount, paid, day);
+    if (installationAmount) addRow('Installation Job', installationAmount, paid, day);
+  });
+
   rows.sort((a, b) => a.day - b.day);
 
   const peso = value => `₱${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  list.innerHTML = rows.length ? rows.map(row => `
-    <div style="display:grid; grid-template-columns:minmax(0,1fr) auto; gap:1rem; align-items:center;">
-      <div style="min-width:0;">
-        <div style="font-size:0.84rem; font-weight:700; color:var(--text-primary);">${escapeHtml(row.label)}</div>
-        <div style="font-size:0.78rem; color:var(--text-muted); margin-top:0.15rem;">${peso(row.amount)}</div>
+  const groupedRows = rows.reduce((groups, row) => {
+    if (!groups.has(row.day)) groups.set(row.day, []);
+    groups.get(row.day).push(row);
+    return groups;
+  }, new Map());
+  list.innerHTML = groupedRows.size ? [...groupedRows.entries()].map(([day, dayRows]) => {
+    const allPaid = dayRows.every(row => row.paid);
+    return `
+      <div style="display:flex; flex-direction:column; gap:0.45rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:1rem;">
+          <div style="font-size:0.86rem; font-weight:800; color:var(--text-primary);">${MONTH_NAMES[month - 1]} ${day}</div>
+          <span style="font-size:0.75rem; font-weight:700; color:${allPaid ? 'var(--success)' : 'var(--text-muted)'};">${allPaid ? 'Paid' : 'Unpaid'}</span>
+        </div>
+        ${dayRows.map(row => `
+          <div style="display:grid; grid-template-columns:minmax(0,1fr) auto; gap:1rem; align-items:baseline; padding-left:0.45rem;">
+            <span style="font-size:0.8rem; color:var(--text-secondary);">-${escapeHtml(row.label)}</span>
+            <span style="font-size:0.8rem; color:var(--text-secondary); font-variant-numeric:tabular-nums;">${peso(row.amount)}</span>
+          </div>
+        `).join('')}
       </div>
-      <span style="font-size:0.75rem; font-weight:700; color:${row.paid ? 'var(--success)' : 'var(--text-muted)'};">${row.paid ? 'Paid' : 'Unpaid'}</span>
-    </div>
-  `).join('') : '<div style="color:var(--text-muted); font-size:0.82rem;">No salary or adjustment entries for this month.</div>';
-  const salaryAndAdjustmentsTotal = rows.reduce((sum, row) => sum + row.amount, 0);
-  totalElement.textContent = peso(salaryAndAdjustmentsTotal);
+    `;
+  }).join('') : '<div style="color:var(--text-muted); font-size:0.82rem;">No salary or adjustment entries for this month.</div>';
+  const supplementalLabels = new Set(['Service Job', 'Rollover Install', 'Installation Job']);
+  const salaryAndAdjustmentsTotal = rows.reduce((sum, row) => sum + (supplementalLabels.has(row.label) ? 0 : row.amount), 0);
+  const itemizedTotal = rows.reduce((sum, row) => sum + row.amount, 0);
+  totalElement.textContent = peso(itemizedTotal);
   totalElement.dataset.total = String(salaryAndAdjustmentsTotal);
 }
 
@@ -569,7 +595,15 @@ function drawPayouts() {
   let thresholdEarnings = 0;
   const thresholdRolloverByMonth = {};
   const cutoffPayouts = {};
+  const cutoffServicePayouts = {};
+  const cutoffRolloverPayouts = {};
+  const cutoffInstallationPayouts = {};
   payoutSchedules.forEach(day => { cutoffPayouts[day] = 0; });
+  payoutSchedules.forEach(day => {
+    cutoffServicePayouts[day] = 0;
+    cutoffRolloverPayouts[day] = 0;
+    cutoffInstallationPayouts[day] = 0;
+  });
 
   doorJobs.forEach(job => {
     const ruleJob = { roles: job.roles, skus: job.skus, assignmentDate: job.assignmentDate, workDate: job.scheduled_date };
@@ -618,12 +652,18 @@ function drawPayouts() {
       servicePayForJob += service.amount;
     });
     cutoffPayouts[payoutBucket.day] = (cutoffPayouts[payoutBucket.day] || 0) + thresholdPayForJob + servicePayForJob;
+    cutoffServicePayouts[payoutBucket.day] = (cutoffServicePayouts[payoutBucket.day] || 0) + servicePayForJob;
+    if (sourceMonth !== targetMonthKey) {
+      cutoffRolloverPayouts[payoutBucket.day] = (cutoffRolloverPayouts[payoutBucket.day] || 0) + thresholdPayForJob;
+    } else {
+      cutoffInstallationPayouts[payoutBucket.day] = (cutoffInstallationPayouts[payoutBucket.day] || 0) + thresholdPayForJob;
+    }
   });
 
   const totalCredit = completedMonthCredit + creditRollover;
   
   // Update Threshold Progress
-  const thresholdSummary = `${totalCredit.toFixed(1)} / ${thresholdVal} Counts`;
+  const thresholdSummary = `${totalCredit.toFixed(1)} / ${thresholdVal}`;
   document.getElementById('payout-threshold-summary').textContent = thresholdSummary;
   document.getElementById('payout-lead-count').textContent = leadCredit.toFixed(1);
   document.getElementById('payout-assist-count').textContent = assistCredit.toFixed(1);
@@ -703,7 +743,7 @@ function drawPayouts() {
       const subtotal = count * rate;
       servicesDetailsHtml += `
         <div style="display:flex; justify-content:space-between;">
-          <span>${escapeHtml(sku)} (${count} x ₱${rate.toLocaleString()}):</span>
+          <span>${escapeHtml(sku)} (${count}):</span>
           <span>₱${subtotal.toLocaleString()}</span>
         </div>
       `;
@@ -728,8 +768,12 @@ function drawPayouts() {
       : `Threshold of ${thresholdVal} counts not reached`,
     serviceEarnings,
     serviceDescription: serviceDescription || 'No extra paid services recorded',
-    cutoffPayouts
+    cutoffPayouts,
+    cutoffServicePayouts,
+    cutoffRolloverPayouts,
+    cutoffInstallationPayouts
   };
+  renderSalaryAndAdjustments(targetMonthKey);
 
   // 4. Grand Total
   const grandTotal = thresholdEarnings + serviceEarnings;

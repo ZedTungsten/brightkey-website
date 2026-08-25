@@ -106,6 +106,89 @@
       }
     }
 
+    function ensureBookingDetailsStructure() {
+      const grid = document.querySelector('#details-modal .booking-details-summary-grid');
+      if (!grid || grid.dataset.structured === 'true') return;
+
+      const icon = paths => `<span class="booking-info-row-icon"><svg viewBox="0 0 24 24">${paths}</svg></span>`;
+      const createPanel = (title, headerPath, className) => {
+        const panel = document.createElement('section');
+        panel.className = `booking-info-panel ${className}`;
+        panel.innerHTML = `<h3 class="booking-info-panel-title"><span class="booking-details-section-icon"><svg viewBox="0 0 24 24">${headerPath}</svg></span>${title}</h3><div class="booking-info-panel-list"></div>`;
+        return panel;
+      };
+      const customer = createPanel('Customer Information', '<circle cx="12" cy="8" r="4"></circle><path d="M4 21a8 8 0 0 1 16 0"></path>', 'booking-info-customer');
+      const booking = createPanel('Booking & Location', '<rect x="3" y="5" width="18" height="16" rx="2"></rect><path d="M16 3v4M8 3v4M3 10h18"></path>', 'booking-info-location');
+      const secondary = document.createElement('div');
+      secondary.className = 'booking-info-secondary';
+      const customerList = customer.querySelector('.booking-info-panel-list');
+      const bookingList = booking.querySelector('.booking-info-panel-list');
+
+      const moveRow = (valueId, target, iconPath, extraClass = '') => {
+        const value = document.getElementById(valueId);
+        const group = value?.closest('.details-group');
+        if (!group) return;
+        group.classList.add('booking-info-row');
+        if (extraClass) group.classList.add(extraClass);
+        group.insertAdjacentHTML('afterbegin', icon(iconPath));
+        target.appendChild(group);
+      };
+
+      moveRow('det-name', customerList, '<circle cx="12" cy="8" r="4"></circle><path d="M5 21a7 7 0 0 1 14 0"></path>');
+      moveRow('det-company-contact', customerList, '<circle cx="12" cy="8" r="4"></circle><path d="M5 21a7 7 0 0 1 14 0"></path>');
+      moveRow('det-social', customerList, '<circle cx="12" cy="12" r="9"></circle><path d="m9 9 6 6M15 9l-6 6"></path>');
+      moveRow('det-email', customerList, '<rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="m3 7 9 6 9-6"></path>');
+      moveRow('det-contact-1', customerList, '<path d="M5 4h4l2 5-3 2a14 14 0 0 0 5 5l2-3 5 2v4c0 1-1 2-2 2A17 17 0 0 1 3 6c0-1 1-2 2-2Z"></path>');
+      moveRow('det-contact-2', customerList, '<path d="M5 4h4l2 5-3 2a14 14 0 0 0 5 5l2-3 5 2v4c0 1-1 2-2 2A17 17 0 0 1 3 6c0-1 1-2 2-2Z"></path>');
+
+      const installDateRow = document.createElement('div');
+      installDateRow.className = 'details-group booking-info-row';
+      installDateRow.innerHTML = `${icon('<rect x="3" y="5" width="18" height="16" rx="2"></rect><path d="M16 3v4M8 3v4M3 10h18"></path>')}<span class="details-label">Install Date</span><span class="details-value" id="det-date-details">-</span>`;
+      bookingList.appendChild(installDateRow);
+      moveRow('det-time', bookingList, '<circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path>');
+      moveRow('det-company-type', bookingList, '<path d="M4 21V5l8-3 8 3v16"></path><path d="M9 9h6M9 13h6M9 17h6"></path>');
+      moveRow('det-city', bookingList, '<path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"></path><circle cx="12" cy="10" r="2"></circle>', 'booking-info-divider');
+      moveRow('det-province', bookingList, '<path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"></path><circle cx="12" cy="10" r="2"></circle>');
+      moveRow('det-address', bookingList, '<path d="m12 3 8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7l8-4Z"></path><path d="M9 11h6v6H9z"></path>');
+      const makeSecondaryPanel = (title, path, className) => {
+        const panel = document.createElement('section');
+        panel.className = `booking-info-secondary-panel ${className}`;
+        panel.innerHTML = `<h3 class="booking-info-panel-title"><span class="booking-details-section-icon"><svg viewBox="0 0 24 24">${path}</svg></span>${title}</h3><div class="booking-info-secondary-content"></div>`;
+        secondary.appendChild(panel);
+        return panel.querySelector('.booking-info-secondary-content');
+      };
+
+      const locationContent = makeSecondaryPanel('Location', '<path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"></path><circle cx="12" cy="10" r="2"></circle>', 'booking-location-panel');
+      const notesContent = makeSecondaryPanel('Notes', '<path d="M5 3h11l3 3v15H5V3Z"></path><path d="M9 11h6M9 15h6M14 3v4h5"></path>', 'booking-notes-panel');
+      moveRow('det-map-pin', locationContent, '');
+      moveRow('det-notes', notesContent, '');
+      locationContent.querySelector('.booking-info-row-icon')?.remove();
+      notesContent.querySelector('.booking-info-row-icon')?.remove();
+      const mapPreview = document.createElement('div');
+      mapPreview.id = 'det-map-preview';
+      mapPreview.className = 'booking-location-map';
+      locationContent.appendChild(mapPreview);
+
+      const attachmentsPanel = document.querySelector('.booking-attachments-panel');
+      if (attachmentsPanel) {
+        attachmentsPanel.classList.remove('booking-details-panel');
+        attachmentsPanel.classList.add('booking-info-secondary-panel');
+        const heading = attachmentsPanel.querySelector('.booking-details-section-title');
+        if (heading) {
+          heading.className = 'booking-info-panel-title';
+          heading.lastChild.textContent = 'Files & Contracts';
+        }
+        attachmentsPanel.querySelectorAll('button').forEach(button => {
+          if (button.textContent.trim() === 'Upload File') button.remove();
+        });
+        secondary.appendChild(attachmentsPanel);
+      }
+
+      grid.replaceChildren(customer, booking);
+      grid.insertAdjacentElement('afterend', secondary);
+      grid.dataset.structured = 'true';
+    }
+
     async function showBookingDetails(id) {
       // Installer updates can happen after this dashboard page was loaded.
       // Refresh the selected booking so media, signatures, and completion state are current.
@@ -131,6 +214,16 @@
       selectedBooking = dbBookings.find(b => b.id === id);
       if (!selectedBooking) return;
 
+      ensureBookingDetailsStructure();
+
+      const companyTypeValue = String(selectedBooking.company_type || '').trim();
+      const isCompanyCustomer = Boolean(companyTypeValue)
+        && !/^(?:n\/?a|none|individual|personal|normal customer)$/i.test(companyTypeValue);
+      ['det-company-contact', 'det-company-type'].forEach(id => {
+        const row = document.getElementById(id)?.closest('.booking-info-row');
+        if (row) row.hidden = !isCompanyCustomer;
+      });
+
       toggleEditField('map-pin', false);
       toggleEditField('notes', false);
 
@@ -141,8 +234,9 @@
       if (abortBtn) abortBtn.style.display = isAborted ? 'none' : '';
       if (reschedBtn) reschedBtn.disabled = isAborted;
 
-      document.getElementById('det-orderno').innerText = selectedBooking.order_no || 'N/A';
+      document.getElementById('details-modal-title').innerText = selectedBooking.order_no || 'Order Number';
       document.getElementById('det-date').innerText = selectedBooking.scheduled_date ? formatDateFriendly(selectedBooking.scheduled_date) : 'Unscheduled';
+      document.getElementById('det-date-details').innerText = selectedBooking.scheduled_date ? formatDateFriendly(selectedBooking.scheduled_date) : 'Unscheduled';
       document.getElementById('det-time').innerText = selectedBooking.scheduled_time || 'AM Slot';
       const customerIdentity = getBookingCustomerIdentity(selectedBooking);
       document.getElementById('det-name-label').innerText = customerIdentity.isCompany ? 'Company Name' : 'Customer Name';
@@ -185,6 +279,26 @@
       // Google Map Pin
       const mapPinEl = document.getElementById('det-map-pin');
       renderMapPinLink(mapPinEl, selectedBooking.google_map_pin_url);
+      const mapPreviewEl = document.getElementById('det-map-preview');
+      if (mapPreviewEl) {
+        const mapQuery = [
+          document.getElementById('det-address')?.textContent,
+          document.getElementById('det-city')?.textContent,
+          document.getElementById('det-province')?.textContent
+        ].map(value => String(value || '').trim()).filter(value => value && value !== '-' && value.toUpperCase() !== 'N/A').join(', ');
+        if (mapQuery) {
+          const iframe = document.createElement('iframe');
+          iframe.title = 'Booking location map';
+          iframe.loading = 'lazy';
+          iframe.referrerPolicy = 'no-referrer-when-downgrade';
+          iframe.src = `https://www.google.com/maps?q=${encodeURIComponent(mapQuery)}&output=embed`;
+          mapPreviewEl.replaceChildren(iframe);
+          mapPreviewEl.hidden = false;
+        } else {
+          mapPreviewEl.replaceChildren();
+          mapPreviewEl.hidden = true;
+        }
+      }
 
       // Notes
       document.getElementById('det-notes').innerText = selectedBooking.notes || 'No notes';
@@ -308,7 +422,7 @@
             && doorProducts.some(product => !product.cancelled)
             && !doorHasCompletionAssignment(door, selectedBooking, doorsArr);
           const completionActionHtml = door?.completed
-            ? '<span style="font-size:0.68rem;font-weight:700;color:var(--success);text-transform:uppercase;">Completed</span>'
+            ? '<span style="font-size:0.68rem;font-weight:700;color:var(--success);text-transform:uppercase;">Installed</span>'
             : (canCompleteWithoutSignature ? `
               <button type="button" class="btn btn-sm" id="btn-door-done-${i}" title="Mark done and upload completion proof" style="width:auto;height:28px;padding:0.25rem 0.65rem;background:var(--success);border-color:var(--success);color:#fff;" onclick="openDoorCompletionProofModal(${i})">Done</button>
             ` : '');
@@ -329,13 +443,22 @@
               const title = p.name || p.title || p.sku || 'N/A';
               const description = getBookingProductDescription(p.sku, title);
               const isExcess = excessProductInstances[`${i}-${pIdx}`];
+              const catalogProduct = dbProductsBySku.get(String(p.sku || '').toUpperCase());
+              const rawImageUrl = String(catalogProduct?.image_main || p.image_main || '').trim();
+              const safeImageUrl = /^(https?:\/\/|data:image\/(?:png|jpeg|gif|webp);base64,)/i.test(rawImageUrl)
+                ? rawImageUrl
+                : '';
+              const productImageHtml = safeImageUrl
+                ? `<img class="booking-product-image" src="${escapeHtml(safeImageUrl)}" alt="${escapeHtml(title)}" onerror="this.hidden=true;this.nextElementSibling.hidden=false;" /><span class="booking-product-image-fallback" hidden>${escapeHtml(String(p.sku || '').slice(0, 2))}</span>`
+                : `<span class="booking-product-image-fallback">${escapeHtml(String(p.sku || '').slice(0, 2))}</span>`;
               const mismatchBadge = isExcess
                 ? '<span style="background: rgba(239, 68, 68, 0.1); color: #EF4444; font-size: 0.65rem; font-weight: 700; padding: 2px 6px; border-radius: 9999px; margin-left: 0.35rem; text-transform: uppercase;">AR mismatch</span>'
                 : '';
               return `
-                <div style="margin-bottom: 0.25rem; ${isCancelled ? 'opacity: 0.55; text-decoration: line-through;' : ''} ${isExcess ? 'color: var(--danger);' : ''}">
-                  <strong>${escapeHtml(p.sku)}</strong>${description ? ` - <span style="${isExcess ? 'color: var(--danger);' : 'color: var(--text-secondary);'}">${escapeHtml(description)}</span>` : ''}${mismatchBadge}
-                  ${isCancelled ? '<span style="color:var(--danger);font-size:0.7rem;font-weight:700;text-transform:uppercase;margin-left:0.3rem;text-decoration:none;display:inline-block;">Cancelled</span>' : ''}
+                <div class="booking-product-summary" style="${isCancelled ? 'opacity: 0.55; text-decoration: line-through;' : ''} ${isExcess ? 'color: var(--danger);' : ''}">
+                  <span class="booking-product-image-wrap">${productImageHtml}</span>
+                  <span><strong>${escapeHtml(p.sku)}</strong>${description ? ` - <span style="${isExcess ? 'color: var(--danger);' : 'color: var(--text-secondary);'}">${escapeHtml(description)}</span>` : ''}${mismatchBadge}
+                  ${isCancelled ? '<span style="color:var(--danger);font-size:0.7rem;font-weight:700;text-transform:uppercase;margin-left:0.3rem;text-decoration:none;display:inline-block;">Cancelled</span>' : ''}</span>
                 </div>
               `;
             }).join('');
@@ -369,7 +492,7 @@
           }).join('');
 
           const installerMediaStripHtml = `
-            <div style="margin-top: 0.5rem; display: flex; flex-direction: column; gap: 0.15rem;">
+            <div class="booking-installer-uploads" style="margin-top: 0.5rem; display: flex; flex-direction: column; gap: 0.15rem;">
               <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.2rem;">
                 <span style="font-size: 0.65rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Installer Uploads</span>
                 <button type="button" class="btn-minimal" onclick="openUploadModal(${i})" title="Edit Installer Uploads">
@@ -383,7 +506,7 @@
 
           if (door && door.signature) {
             const signatureHtml = `
-              <div style="margin-top: 0.6rem; display: flex; flex-direction: column; gap: 0.15rem;">
+              <div class="booking-customer-signature" style="margin-top: 0.6rem; display: flex; flex-direction: column; gap: 0.15rem;">
                 <span style="font-size: 0.65rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Customer Signature</span>
                 <img src="${door.signature}" alt="Customer Signature" style="max-height: 40px; width: auto; align-self: flex-start; background: #fff; border: 1px solid var(--border); border-radius: var(--radius-sm); cursor: pointer;" onclick="openChecklistModal(${i})" />
               </div>
@@ -399,9 +522,20 @@
             swing = swing.replace(/swing/gi, '').trim();
           }
           const cap = (s) => s ? s.charAt(0).toUpperCase() + s.slice(1) : 'N/A';
-          const doorTypeHtml = (doorMaterial !== 'N/A' || jambMaterial !== 'N/A') ? 
-            `Door: ${escapeHtml(cap(doorMaterial))}<br/>Jamb: ${escapeHtml(cap(jambMaterial))}<br/><span style="color:var(--text-muted);font-size:0.75rem;">Swing: ${escapeHtml(cap(swing))}</span>` 
-            : 'N/A';
+          const doorTypeHtml = (doorMaterial !== 'N/A' || jambMaterial !== 'N/A') ? `
+            <div class="booking-door-spec">
+              <span class="booking-door-spec-label">Door Type</span>
+              <span class="booking-door-spec-value">${escapeHtml(cap(doorMaterial))}</span>
+            </div>
+            <div class="booking-door-spec">
+              <span class="booking-door-spec-label">Jamb Type</span>
+              <span class="booking-door-spec-value">${escapeHtml(cap(jambMaterial))}</span>
+            </div>
+            <div class="booking-door-spec">
+              <span class="booking-door-spec-label">Swing</span>
+              <span class="booking-door-spec-value">${escapeHtml(cap(swing))}</span>
+            </div>
+          ` : 'N/A';
 
           // Door photos thumbnails
           const photos = (door?.photos || []).filter(url => (
@@ -434,9 +568,10 @@
             if (door.installers.length > 0) {
                installersHtml = door.installers.map(inst => {
                  const roleText = inst.role ? inst.role.charAt(0).toUpperCase() + inst.role.slice(1) : '';
-                 const role = roleText ? `<span style="font-size:0.65rem;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-right:0.2rem;">${escapeHtml(roleText)}:</span>` : '';
-                 return role + escapeHtml(formatInstallerName(inst.name));
-               }).join(', ');
+                 const roleKey = String(inst.role || '').toLowerCase();
+                 const roleLabel = roleKey.includes('assist') ? 'Assistant Installer' : roleKey.includes('lead') ? 'Lead Installer' : roleText ? `${roleText} Installer` : 'Installer';
+                 return `<div class="booking-installer-assignment"><span class="booking-installer-label">${escapeHtml(roleLabel)}</span><span class="booking-installer-value">${escapeHtml(formatInstallerName(inst.name))}</span></div>`;
+               }).join('');
             } else {
               installersHtml = 'None Assigned';
             }
@@ -449,12 +584,14 @@
             }
             if (list.length > 0) {
               installersHtml = list.map(inst => {
-                const role = inst.role ? `<span style="font-size:0.65rem;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-right:0.2rem;">${escapeHtml(inst.role)}:</span>` : '';
-                return role + escapeHtml(formatInstallerName(inst.name));
-              }).join(', ');
+                const roleText = inst.role ? inst.role.charAt(0).toUpperCase() + inst.role.slice(1) : '';
+                const roleKey = String(inst.role || '').toLowerCase();
+                const roleLabel = roleKey.includes('assist') ? 'Assistant Installer' : roleKey.includes('lead') ? 'Lead Installer' : roleText ? `${roleText} Installer` : 'Installer';
+                return `<div class="booking-installer-assignment"><span class="booking-installer-label">${escapeHtml(roleLabel)}</span><span class="booking-installer-value">${escapeHtml(formatInstallerName(inst.name))}</span></div>`;
+              }).join('');
             }
           } else if (selectedBooking.installer_name) {
-            installersHtml = escapeHtml(formatInstallerName(selectedBooking.installer_name));
+            installersHtml = `<div class="booking-installer-assignment"><span class="booking-installer-label">Lead Installer</span><span class="booking-installer-value">${escapeHtml(formatInstallerName(selectedBooking.installer_name))}</span></div>`;
           }
 
           const trStyle = allProductsCancelled ? 'style="opacity: 0.55; background-color: rgba(244, 244, 245, 0.4);"' : '';
@@ -467,7 +604,7 @@
               <td>
                 <div id="door-inst-container-${i}">
                   <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;">
-                    <span id="door-inst-text-${i}">${installersHtml}</span>
+                    <div id="door-inst-text-${i}" class="booking-installer-list">${installersHtml}</div>
                     ${allProductsCancelled ? '' : `
                     <button type="button" class="btn-minimal" onclick="editDoorInstallers(${i})" title="Edit Installers">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>

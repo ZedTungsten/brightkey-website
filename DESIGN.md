@@ -2,6 +2,32 @@
 
 Guidelines for styling, icons, modal alerts, and loading components to maintain visual consistency and performance.
 
+## Exact Reference Reproduction Workflow
+
+When a supplied UI reference must be matched exactly, visual similarity is not
+enough. Reproduce both its component hierarchy and its styling contract.
+
+1. Inspect the actual rendered state in the browser, including dynamically
+   generated content, before choosing selectors or changing CSS.
+2. Map the reference into explicit regions: section header, card boundary,
+   columns, field groups, labels, values, actions, media, and responsive states.
+3. Ensure each independently styled item has its own element and class. Never
+   combine label/value pairs into strings such as `Door: Wood<br>Jamb: Wood` when
+   the reference displays labels and values with different typography or gaps.
+4. Correct HTML or renderer structure first, then apply component-scoped CSS.
+   Avoid inline-style escalation, broad `!important` patches, and chains of
+   increasingly specific overrides.
+5. Preserve behavior while changing presentation. Existing controls, IDs,
+   uploads, editing, authorization, and persisted data remain part of the design
+   contract unless the user explicitly removes them.
+6. Verify the same record and modal state in the user's requested signed-in
+   browser. Compare hierarchy, spacing, typography, alignment, borders, media,
+   and actions against the reference before declaring completion.
+
+If repeated CSS adjustments do not close the visual gap, stop and inspect the
+rendered markup. This is usually evidence of a structural mismatch, not a need
+for another override.
+
 ---
 
 ## 1. UI Alerts & Confirmation Dialogs
