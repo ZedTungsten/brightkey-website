@@ -8,6 +8,10 @@ let removedRequiredLabels = new Set();
 let removedOtherUrls = new Set();
 let mediaSaveQueue = Promise.resolve();
 
+function releaseSlotPreview(slot) {
+  if (slot?.previewUrl?.startsWith('blob:')) URL.revokeObjectURL(slot.previewUrl);
+}
+
 function getFinishedInstallationFolderName() {
   const nameParts = String(selectedBooking?.customer_name || 'Customer').trim().split(/\s+/).filter(Boolean);
   const lastName = (nameParts.at(-1) || 'Customer').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
@@ -63,6 +67,7 @@ window.doorHasRequiredMedia = doorHasRequiredMedia;
 
 window.openUploadModal = function(doorIndex) {
   uploadDoorIndex = doorIndex;
+  Object.values(slotFiles).forEach(releaseSlotPreview);
   slotFiles = {};
   otherFiles = [];
   removedRequiredLabels = new Set();
@@ -88,16 +93,34 @@ window.openUploadModal = function(doorIndex) {
 
   // Populate existing required media from DB
   const activeReqs = getActiveReqs();
+  const assignedRequiredUrls = new Set();
   if (door.required_media) {
     if (activeReqs && activeReqs.length > 0) {
       activeReqs.forEach((item, idx) => {
         const savedUrl = door.required_media[item.label];
         if (savedUrl) {
-          slotFiles[idx] = { url: savedUrl, progress: 100 };
+          slotFiles[idx] = { url: savedUrl, progress: 100, mediaType: item.type };
+          assignedRequiredUrls.add(savedUrl);
         }
       });
     }
   }
+
+  // Historical jobs stored completion uploads only as a flat media_urls array.
+  // Preserve exact labeled matches above, then fill missing requirement slots in
+  // the legacy saved order without modifying the booking record.
+  const legacyRequiredUrls = Array.isArray(door.media_urls)
+    ? door.media_urls.filter(url => typeof url === 'string' && url.trim() && !assignedRequiredUrls.has(url))
+    : [];
+  activeReqs.forEach((item, idx) => {
+    if (slotFiles[idx] || legacyRequiredUrls.length === 0) return;
+    slotFiles[idx] = {
+      url: legacyRequiredUrls.shift(),
+      progress: 100,
+      mediaType: item.type,
+      legacyFallback: true
+    };
+  });
 
   // Populate existing other media from DB
   if (door.other_media && Array.isArray(door.other_media)) {
@@ -165,8 +188,11 @@ function renderRequiredMediaChecklist() {
     if (currentFile) {
       if (currentFile.progress < 100) {
         // Uploading state
+        const previewStyle = currentFile.mediaType === 'image' && currentFile.previewUrl
+          ? `background: linear-gradient(rgba(255,255,255,0.25), rgba(255,255,255,0.55)), url('${currentFile.previewUrl}') no-repeat center; background-size: cover;`
+          : 'background:var(--bg-surface);';
         itemRow.innerHTML = `
-          <div style="position:relative; aspect-ratio:1; display:flex; flex-direction:column; justify-content:space-between; padding:0.5rem; border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--bg-surface); overflow:hidden;">
+          <div style="position:relative; aspect-ratio:1; display:flex; flex-direction:column; justify-content:space-between; padding:0.5rem; border:1px solid var(--border); border-radius:var(--radius-sm); ${previewStyle} overflow:hidden;">
             <div style="display:flex; justify-content:space-between; gap:0.25rem; align-items:flex-start;">
               <span style="font-size:0.72rem; font-weight:700; color:var(--text-primary); line-height:1.1; max-height:2.2em; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;">${escapeHtml(item.label)}</span>
             </div>
@@ -180,7 +206,8 @@ function renderRequiredMediaChecklist() {
         `;
       } else {
         // Uploaded state
-        const isImg = /\.(png|jpg|jpeg|gif|webp|heif|heic)(\?|$)/i.test(currentFile.url);
+        const isImg = currentFile.mediaType === 'image'
+          || /\.(png|jpg|jpeg|gif|webp|heif|heic)(\?|$)/i.test(currentFile.url);
         const bgStyle = isImg 
           ? `background: linear-gradient(rgba(0,0,0,0.2), rgba(0,0,0,0.6)), url('${currentFile.url}') no-repeat center; background-size: cover;` 
           : `background: linear-gradient(rgba(0,0,0,0.3), rgba(0,0,0,0.7)), #111;`;
@@ -274,7 +301,12 @@ window.handleSlotFileSelect = async function(event, idx) {
   }
 
   // Create local slot info and render progress immediately
-  slotFiles[idx] = { file: file, progress: 0 };
+  slotFiles[idx] = {
+    file,
+    progress: 0,
+    mediaType: requirement.type,
+    previewUrl: requirement.type === 'image' ? URL.createObjectURL(file) : ''
+  };
   renderRequiredMediaChecklist();
   validateAndToggleSubmit();
 
@@ -314,7 +346,8 @@ async function uploadSlotFile(idx) {
 
     const { data: { publicUrl } } = sb.storage.from('brightkey-assets').getPublicUrl(path);
 
-    slotFiles[idx] = { url: publicUrl, progress: 99 };
+    releaseSlotPreview(slot);
+    slotFiles[idx] = { url: publicUrl, progress: 99, mediaType: slot.mediaType };
     renderRequiredMediaChecklist();
 
     await queueMediaStateSave();
@@ -337,6 +370,7 @@ async function uploadSlotFile(idx) {
 window.removeSlotFile = async function(idx) {
   const requirement = getActiveReqs()[idx];
   if (requirement?.label) removedRequiredLabels.add(requirement.label);
+  releaseSlotPreview(slotFiles[idx]);
   delete slotFiles[idx];
   renderRequiredMediaChecklist();
   await queueMediaStateSave();

@@ -313,7 +313,7 @@ function openDetailsModal(bookingId) {
             : '';
           doneButtonHtml = `
             <div style="position: absolute; top: 0.85rem; right: 1rem; display: flex; flex-direction: column; gap: 0.4rem; align-items: flex-end;">
-              <span style="font-size: 0.83rem; font-weight: 700; background: #6b7280; color: #fff; padding: 0.3rem 0.7rem; border-radius: var(--radius-sm); text-transform: uppercase; display:inline-flex; align-items:center; gap:0.25rem;"><svg aria-hidden="true" viewBox="0 0 24 24" style="width:1em;height:1em;display:block;fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;"><polyline points="20 6 9 17 4 12"/></svg>Completed</span>
+              <span style="font-size: 0.83rem; font-weight: 700; background: #6b7280; color: #fff; padding: 0.3rem 0.7rem; border-radius: var(--radius-sm); display:inline-flex; align-items:center; gap:0.25rem;"><svg aria-hidden="true" viewBox="0 0 24 24" style="width:1em;height:1em;display:block;fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;"><polyline points="20 6 9 17 4 12"/></svg>Signed</span>
               ${uploadButton}
             </div>
           `;
