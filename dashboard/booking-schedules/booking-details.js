@@ -189,6 +189,41 @@
       grid.dataset.structured = 'true';
     }
 
+    function installerAvatarMarkup(installer) {
+      const rawName = String(installer?.name || 'Installer').trim();
+      const initials = rawName.split(/\s+/).filter(Boolean).map(part => part[0]).join('').slice(0, 2).toUpperCase() || '?';
+      const employeeId = installer?.employee_id || installer?.id || '';
+      return `<span class="booking-installer-avatar" data-employee-id="${escapeHtml(String(employeeId))}" data-installer-name="${escapeHtml(rawName)}"><span>${escapeHtml(initials)}</span></span>`;
+    }
+
+    function hydrateInstallerAvatars(root) {
+      const employees = typeof dbEmployees !== 'undefined' && Array.isArray(dbEmployees) ? dbEmployees : [];
+      const normalize = value => String(value || '').trim().toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ');
+      const isSafeProfileImage = value => /^(?:https?:\/\/|data:image\/(?:png|jpeg|jpg|gif|webp);base64,)/i.test(String(value || '').trim());
+      root.querySelectorAll('.booking-installer-avatar').forEach(avatar => {
+        const employeeId = avatar.dataset.employeeId;
+        const installerName = normalize(avatar.dataset.installerName);
+        const installerParts = installerName.split(' ').filter(Boolean);
+        const employee = employees.find(item => {
+          const itemId = String(item.id || item.employee_id || '');
+          if (employeeId && itemId === employeeId) return true;
+          const fullName = normalize(item.name || `${item.first_name || ''} ${item.last_name || ''}`);
+          if (!fullName || !installerName) return false;
+          if (fullName === installerName) return true;
+          const fullParts = fullName.split(' ').filter(Boolean);
+          return fullParts[0] === installerParts[0]
+            && (!installerParts[1] || fullParts.at(-1)?.startsWith(installerParts.at(-1)?.[0] || ''));
+        });
+        const pictureLink = employee?.picture_link;
+        if (!isSafeProfileImage(pictureLink)) return;
+        const image = document.createElement('img');
+        image.src = pictureLink;
+        image.alt = `${avatar.dataset.installerName || 'Installer'} profile picture`;
+        image.addEventListener('error', () => image.remove(), { once: true });
+        avatar.prepend(image);
+      });
+    }
+
     async function showBookingDetails(id) {
       // Installer updates can happen after this dashboard page was loaded.
       // Refresh the selected booking so media, signatures, and completion state are current.
@@ -570,7 +605,7 @@
                  const roleText = inst.role ? inst.role.charAt(0).toUpperCase() + inst.role.slice(1) : '';
                  const roleKey = String(inst.role || '').toLowerCase();
                  const roleLabel = roleKey.includes('assist') ? 'Assistant Installer' : roleKey.includes('lead') ? 'Lead Installer' : roleText ? `${roleText} Installer` : 'Installer';
-                 return `<div class="booking-installer-assignment"><span class="booking-installer-label">${escapeHtml(roleLabel)}</span><span class="booking-installer-value">${escapeHtml(formatInstallerName(inst.name))}</span></div>`;
+                 return `<div class="booking-installer-assignment">${installerAvatarMarkup(inst)}<span class="booking-installer-copy"><span class="booking-installer-label">${escapeHtml(roleLabel)}</span><span class="booking-installer-value">${escapeHtml(formatInstallerName(inst.name))}</span></span></div>`;
                }).join('');
             } else {
               installersHtml = 'None Assigned';
@@ -587,11 +622,11 @@
                 const roleText = inst.role ? inst.role.charAt(0).toUpperCase() + inst.role.slice(1) : '';
                 const roleKey = String(inst.role || '').toLowerCase();
                 const roleLabel = roleKey.includes('assist') ? 'Assistant Installer' : roleKey.includes('lead') ? 'Lead Installer' : roleText ? `${roleText} Installer` : 'Installer';
-                return `<div class="booking-installer-assignment"><span class="booking-installer-label">${escapeHtml(roleLabel)}</span><span class="booking-installer-value">${escapeHtml(formatInstallerName(inst.name))}</span></div>`;
+                return `<div class="booking-installer-assignment">${installerAvatarMarkup(inst)}<span class="booking-installer-copy"><span class="booking-installer-label">${escapeHtml(roleLabel)}</span><span class="booking-installer-value">${escapeHtml(formatInstallerName(inst.name))}</span></span></div>`;
               }).join('');
             }
           } else if (selectedBooking.installer_name) {
-            installersHtml = `<div class="booking-installer-assignment"><span class="booking-installer-label">Lead Installer</span><span class="booking-installer-value">${escapeHtml(formatInstallerName(selectedBooking.installer_name))}</span></div>`;
+            installersHtml = `<div class="booking-installer-assignment">${installerAvatarMarkup({ name: selectedBooking.installer_name })}<span class="booking-installer-copy"><span class="booking-installer-label">Lead Installer</span><span class="booking-installer-value">${escapeHtml(formatInstallerName(selectedBooking.installer_name))}</span></span></div>`;
           }
 
           const trStyle = allProductsCancelled ? 'style="opacity: 0.55; background-color: rgba(244, 244, 245, 0.4);"' : '';
@@ -615,6 +650,7 @@
               </td>
             </tr>
           `);
+          hydrateInstallerAvatars(tbody);
         }
 
         // Step 2: Render remaining/unattached products (accessories, add-on labor, etc.)
