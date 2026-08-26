@@ -103,7 +103,10 @@ function getDoorCompletionPolicy(booking, door) {
 
 function useInstallerWorkflowForDoor(booking, door) {
   const policy = getDoorCompletionPolicy(booking, door);
-  bookingChecklist = policy.key && Array.isArray(bookingChecklistSets[policy.key]) ? bookingChecklistSets[policy.key] : [];
+  const assignmentChecklist = policy.key && Array.isArray(bookingChecklistSets[policy.key])
+    ? bookingChecklistSets[policy.key]
+    : null;
+  bookingChecklist = assignmentChecklist || (Array.isArray(bookingChecklistSets.lead) ? bookingChecklistSets.lead : []);
   bookingMediaRequirements = policy.key && Array.isArray(bookingMediaRequirementSets[policy.key]) ? bookingMediaRequirementSets[policy.key] : [];
   return policy;
 }
