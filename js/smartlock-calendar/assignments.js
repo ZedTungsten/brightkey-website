@@ -4,6 +4,14 @@ function normalizeWorkflowSku(value) {
   return String(value || '').trim().toUpperCase();
 }
 
+function getSpecialServiceWorkflowSku(booking) {
+  const orderNo = normalizeWorkflowSku(booking?.order_no);
+  const bookingSkus = getBookingProducts(booking).map(product => normalizeWorkflowSku(product?.sku));
+  if (bookingSkus.includes('BACKJOB') || orderNo.startsWith('BJ-')) return 'BACKJOB';
+  if (bookingSkus.includes('OCULAR') || orderNo.startsWith('OC-')) return 'OCULAR';
+  return '';
+}
+
 function applyInstallerWorkflowSetting(type, value) {
   const sets = Array.isArray(value)
     ? { lead: value }
@@ -96,9 +104,16 @@ function getDoorCompletionPolicy(booking, door) {
     ...installer,
     role: String(installer?.role || (index === 0 ? 'lead' : 'assist')).trim().toLowerCase()
   }));
-  const allRoles = allInstallers.map((installer, index) => (
+  let allRoles = allInstallers.map((installer, index) => (
     String(installer?.role || (index === 0 ? 'lead' : 'assist')).trim().toLowerCase()
   ));
+  const specialServiceSku = getSpecialServiceWorkflowSku(booking);
+  if (specialServiceSku && !allRoles.includes('service')) {
+    allRoles = allRoles.map(role => role === 'lead' ? 'service' : role);
+    normalized.forEach(installer => {
+      if (installer.role === 'lead') installer.role = 'service';
+    });
+  }
   const completionRole = allRoles.includes('lead')
     ? 'lead'
     : (allRoles.includes('service') ? 'service' : null);
@@ -110,7 +125,7 @@ function getDoorCompletionPolicy(booking, door) {
   const serviceSkus = new Set((installerServiceCatalog || []).map(product => normalizeWorkflowSku(product.sku)));
   const attachedSkus = Array.isArray(door?.products) ? door.products.map(normalizeWorkflowSku) : [];
   const bookingSkus = getBookingProducts(booking).filter(product => !product?.cancelled).map(product => normalizeWorkflowSku(product.sku));
-  const sku = [...attachedSkus, ...bookingSkus].find(value => serviceSkus.has(value));
+  const sku = specialServiceSku || [...attachedSkus, ...bookingSkus].find(value => serviceSkus.has(value));
   return { allowed: true, key: `service:${sku || 'UNSPECIFIED'}`, ownerRole: completionRole };
 }
 

@@ -45,15 +45,13 @@ function openDetailsModal(bookingId) {
   document.getElementById('det-date').innerText = b.scheduled_date ? formatDateFriendly(b.scheduled_date) : 'N/A';
   document.getElementById('det-time').innerText = b.scheduled_time || 'AM Slot';
   const customerIdentity = getSmartlockCustomerIdentity(b);
-  document.getElementById('det-name-label').innerText = customerIdentity.isCompany ? 'Company Name' : 'Customer Name';
-  document.getElementById('det-name').innerText = customerIdentity.primaryName || 'N/A';
   document.getElementById('det-company-details').hidden = !customerIdentity.isCompany;
   document.getElementById('det-company-contact').innerText = customerIdentity.contactPerson || 'N/A';
   document.getElementById('det-company-type').innerText = customerIdentity.companyType || 'N/A';
-  document.getElementById('det-social').innerText = customerIdentity.social || 'N/A';
-  document.getElementById('det-email').innerText = customerIdentity.email || 'N/A';
-  document.getElementById('det-phone-1').innerText = b.customer_phone || 'N/A';
-  document.getElementById('det-phone-2').innerText = b.customer_phone_2 || 'N/A';
+  document.getElementById('det-phones').innerText = [b.customer_phone, b.customer_phone_2]
+    .map(value => String(value || '').trim())
+    .filter(Boolean)
+    .join(' / ') || 'N/A';
   
   const addressParts = (b.customer_address || '').split(',').map(p => p.trim()).filter(Boolean);
   const explicitCity = String(b.customer_city || '').trim();
@@ -111,45 +109,6 @@ function openDetailsModal(bookingId) {
     } else {
       collectTotalGroup.style.display = 'none';
     }
-  }
-
-  // Attachments frontage & map
-  const attachmentsGroup = document.getElementById('det-attachments-group');
-  const frontageCard = document.getElementById('det-frontage-card');
-  const frontageImg = document.getElementById('det-frontage-img');
-  const mapCard = document.getElementById('det-map-card');
-  const mapImg = document.getElementById('det-map-img');
-  const permitCard = document.getElementById('det-permit-card');
-  const permitImg = document.getElementById('det-permit-img');
-
-  let hasAttachments = false;
-
-  if (b.frontage_image_url) {
-    frontageCard.style.display = 'flex';
-    frontageImg.src = b.frontage_image_url;
-    hasAttachments = true;
-  } else {
-    frontageCard.style.display = 'none';
-  }
-
-  if (b.map_image_url) {
-    mapCard.style.display = 'flex';
-    mapImg.src = b.map_image_url;
-    hasAttachments = true;
-  } else {
-    mapCard.style.display = 'none';
-  }
-
-  if (b.work_permit_image_url) {
-    permitCard.style.display = 'flex';
-    permitImg.src = b.work_permit_image_url;
-    hasAttachments = true;
-  } else {
-    permitCard.style.display = 'none';
-  }
-
-  if (attachmentsGroup) {
-    attachmentsGroup.style.display = hasAttachments ? 'flex' : 'none';
   }
 
   // Parse doors specifications
@@ -302,9 +261,7 @@ function openDetailsModal(bookingId) {
       let doneButtonHtml = '';
       if (isCancelled) {
         doneButtonHtml = `
-          <div style="position: absolute; top: 0.85rem; right: 1rem; display: flex; flex-direction: column; gap: 0.4rem; align-items: flex-end;">
-            <span style="font-size: 0.83rem; font-weight: 700; background: var(--danger); color: #fff; padding: 0.3rem 0.7rem; border-radius: var(--radius-sm); text-transform: uppercase;">Cancelled</span>
-          </div>
+          <span style="font-size: 0.83rem; font-weight: 700; background: var(--danger); color: #fff; padding: 0.3rem 0.7rem; border-radius: var(--radius-sm); text-transform: uppercase;">Cancelled</span>
         `;
       } else if (isAssignedToThisDoor && completionPolicy.allowed) {
         if (door?.completed) {
@@ -312,10 +269,8 @@ function openDetailsModal(bookingId) {
             ? `<button type="button" class="btn btn-sm" style="width: auto; font-size: 0.83rem; padding: 0.3rem 0.7rem; border-radius: var(--radius-sm); background: var(--cyan); color: #fff; border: none; cursor: pointer;" onclick="openUploadModal(${i})">Upload Media</button>`
             : '';
           doneButtonHtml = `
-            <div style="position: absolute; top: 0.85rem; right: 1rem; display: flex; flex-direction: column; gap: 0.4rem; align-items: flex-end;">
-              <span style="font-size: 0.83rem; font-weight: 700; background: #6b7280; color: #fff; padding: 0.3rem 0.7rem; border-radius: var(--radius-sm); display:inline-flex; align-items:center; gap:0.25rem;"><svg aria-hidden="true" viewBox="0 0 24 24" style="width:1em;height:1em;display:block;fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;"><polyline points="20 6 9 17 4 12"/></svg>Signed</span>
-              ${uploadButton}
-            </div>
+            <span style="font-size: 0.83rem; font-weight: 700; background: #6b7280; color: #fff; padding: 0.3rem 0.7rem; border-radius: var(--radius-sm); display:inline-flex; align-items:center; gap:0.25rem;"><svg aria-hidden="true" viewBox="0 0 24 24" style="width:1em;height:1em;display:block;fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;"><polyline points="20 6 9 17 4 12"/></svg>Signed</span>
+            ${uploadButton}
           `;
         } else {
           const checklistSaved = !!door?.signature && Array.isArray(door?.checklist)
@@ -324,9 +279,7 @@ function openDetailsModal(bookingId) {
           const clickAction = needsMedia ? `openUploadModal(${i})` : `openChecklistModal(${i})`;
           const buttonLabel = needsMedia ? 'Upload Media' : 'Sign';
           doneButtonHtml = `
-            <div style="position: absolute; top: 0.85rem; right: 1rem; display: flex; flex-direction: column; gap: 0.4rem; align-items: flex-end;">
-              <button type="button" class="btn btn-sm" style="width: auto; font-size: 0.83rem; padding: 0.3rem 0.7rem; border-radius: var(--radius-sm); background: ${needsMedia ? 'var(--cyan)' : 'var(--success)'}; color: #fff; border: none; cursor: pointer;" onclick="${clickAction}">${buttonLabel}</button>
-            </div>
+            <button type="button" class="btn btn-sm" style="width: auto; font-size: 0.83rem; padding: 0.3rem 0.7rem; border-radius: var(--radius-sm); background: ${needsMedia ? 'var(--cyan)' : 'var(--success)'}; color: #fff; border: none; cursor: pointer;" onclick="${clickAction}">${buttonLabel}</button>
           `;
         }
       }
@@ -334,17 +287,13 @@ function openDetailsModal(bookingId) {
       let addonLaborBottomHtml = '';
       if (doorHasAddonLabor) {
         addonLaborBottomHtml = `
-          <div style="margin-top: 0.5rem; display: flex; justify-content: flex-end; align-items: center;">
-            <span style="font-size: 0.68rem; font-weight: 700; background: #FEF08A; color: #854D0E; padding: 0.25rem 0.5rem; border-radius: var(--radius-sm); text-transform: uppercase; letter-spacing: 0.05em; display: inline-flex; align-items: center;">
-              Added Labor
-            </span>
-          </div>
+          <span style="font-size: 0.68rem; font-weight: 700; background: #FEF08A; color: #854D0E; padding: 0.25rem 0.5rem; border-radius: var(--radius-sm); text-transform: uppercase; letter-spacing: 0.05em; display: inline-flex; align-items: center;">
+            Added Labor
+          </span>
         `;
       } else if (isAssignedToThisDoor && !isCancelled) {
         addonLaborBottomHtml = `
-          <div style="margin-top: 0.5rem; display: flex; justify-content: flex-end; align-items: center;">
-            <button type="button" class="btn btn-sm" style="width: auto; font-size: 0.83rem; padding: 0.3rem 0.7rem; border-radius: var(--radius-sm); background: var(--cyan-light); color: #fff; border: none; cursor: pointer;" onclick="promptAddLabor(${i})">Add Labor</button>
-          </div>
+          <button type="button" class="btn btn-sm" style="width: auto; font-size: 0.83rem; padding: 0.3rem 0.7rem; border-radius: var(--radius-sm); background: var(--cyan-light); color: #fff; border: none; cursor: pointer;" onclick="promptAddLabor(${i})">Add Labor</button>
         `;
       }
 
@@ -391,7 +340,6 @@ function openDetailsModal(bookingId) {
 
       doorsContainer.insertAdjacentHTML('beforeend', `
         <div class="${doorCardClass}" style="${cardStyle}">
-          ${doneButtonHtml}
           <div style="font-size: 0.68rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.25rem; letter-spacing: 0.05em;">
             ${escapeHtml(assignedText)}
           </div>
@@ -414,7 +362,12 @@ function openDetailsModal(bookingId) {
           ${photosHtml}
           ${signatureHtml}
           ${finishedMediaHtml}
-          ${addonLaborBottomHtml}
+          ${(doneButtonHtml || addonLaborBottomHtml) ? `
+            <div style="margin-top:0.65rem; display:flex; justify-content:flex-end; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+              ${doneButtonHtml}
+              ${addonLaborBottomHtml}
+            </div>
+          ` : ''}
         </div>
       `);
     }
