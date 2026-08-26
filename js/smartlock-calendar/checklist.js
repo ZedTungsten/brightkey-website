@@ -249,27 +249,32 @@ window.openChecklistModal = async function(doorIndex, isReadOnly = false) {
     }
   }
   const door = doorsArr[doorIndex];
+  let workflowPolicy = null;
   if (!isReadOnly) {
-    const policy = useInstallerWorkflowForDoor(selectedBooking, door);
-    if (!policy.allowed) {
+    workflowPolicy = useInstallerWorkflowForDoor(selectedBooking, door);
+    if (!workflowPolicy.allowed) {
       showToast('Only the Lead can complete this job. Service can complete it only when no Lead is assigned.', true);
       return;
     }
-    if (bookingChecklist.length === 0) {
+    if (bookingChecklist.length === 0 && !workflowPolicy.signatureOnly) {
       try {
         await ensureInstallerChecklistLoaded(true);
-        useInstallerWorkflowForDoor(selectedBooking, door);
+        workflowPolicy = useInstallerWorkflowForDoor(selectedBooking, door);
       } catch (error) {
         console.error('Checklist settings could not be refreshed:', error);
         showToast(getSignChecklistLoadDiagnostic(error, 'FORCED_REFRESH'), true, 9000);
         return;
       }
-      if (bookingChecklist.length === 0) {
-        showToast(getSignChecklistEmptyDiagnostic(policy), true, 9000);
+      if (bookingChecklist.length === 0 && !workflowPolicy.signatureOnly) {
+        showToast(getSignChecklistEmptyDiagnostic(workflowPolicy), true, 9000);
         return;
       }
     }
   }
+
+  const signatureOnly = isReadOnly
+    ? Boolean(door && Array.isArray(door.checklist) && door.checklist.length === 0)
+    : Boolean(workflowPolicy?.signatureOnly);
 
   signatureIndex = doorIndex;
 
@@ -294,7 +299,12 @@ window.openChecklistModal = async function(doorIndex, isReadOnly = false) {
   }
 
   const checklistContainer = document.getElementById('checklist-items-container');
+  const checklistConfirmation = document.getElementById('checklist-confirmation');
+  const checklistTitle = document.getElementById('checklist-modal-title');
+  if (checklistTitle) checklistTitle.textContent = signatureOnly ? 'Customer Signature' : 'Verification Checklist';
+  if (checklistConfirmation) checklistConfirmation.style.display = signatureOnly ? 'none' : 'block';
   if (checklistContainer) {
+    checklistContainer.style.display = signatureOnly ? 'none' : 'flex';
     if (isReadOnly && door && Array.isArray(door.checklist)) {
       checklistContainer.innerHTML = door.checklist.map(ch => {
         return `

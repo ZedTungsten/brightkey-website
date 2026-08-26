@@ -336,7 +336,9 @@
       }
 
       // Notes
-      document.getElementById('det-notes').innerText = selectedBooking.notes || 'No notes';
+      const notesDisplay = document.getElementById('det-notes');
+      notesDisplay.innerText = selectedBooking.notes || 'No notes';
+      notesDisplay.classList.toggle('booking-notes-empty', !String(selectedBooking.notes || '').trim());
 
       // Products & Doors parsing
       const tbody = document.getElementById('det-products-tbody');
@@ -547,6 +549,13 @@
               </div>
             `;
             productCellHtml += signatureHtml;
+          } else {
+            productCellHtml += `
+              <div class="booking-customer-signature" style="display:flex;flex-direction:column;gap:0.15rem;">
+                <span style="font-size:0.65rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;">Customer Signature</span>
+                <div class="booking-signature-placeholder">Not signed</div>
+              </div>
+            `;
           }
 
           // Door type html
@@ -585,7 +594,7 @@
           const photosHtml = `
             <div id="door-pics-container-${i}">
               <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; min-width: 110px;">
-                <div id="door-pics-list-${i}" style="display: grid; grid-template-columns: repeat(2, 44px); gap: 4px; align-items: center;">${thumbs}</div>
+                <div id="door-pics-list-${i}" style="display: grid; grid-template-columns: repeat(2, 44px); gap: 4px; align-items: center;">${thumbs || `<button type="button" class="booking-door-image-placeholder" onclick="editDoorPics(${i})" aria-label="Add door image" title="Add Door Image"><svg viewBox="0 0 24 24" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg></button>`}</div>
                 <button type="button" class="btn-minimal" onclick="editDoorPics(${i})" title="Edit Door Pics" style="margin-left: auto;">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
                 </button>
@@ -887,7 +896,9 @@
           const mapPinEl = document.getElementById('det-map-pin');
           renderMapPinLink(mapPinEl, newValue);
         } else if (field === 'notes') {
-          document.getElementById('det-notes').innerText = newValue || 'No notes';
+          const notesDisplay = document.getElementById('det-notes');
+          notesDisplay.innerText = newValue || 'No notes';
+          notesDisplay.classList.toggle('booking-notes-empty', !String(newValue || '').trim());
         }
 
         toggleEditField(field, false);

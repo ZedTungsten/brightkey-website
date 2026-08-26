@@ -96,17 +96,22 @@ function getDoorCompletionPolicy(booking, door) {
     ...installer,
     role: String(installer?.role || (index === 0 ? 'lead' : 'assist')).trim().toLowerCase()
   }));
-  const hasLead = allInstallers.some((installer, index) => String(installer?.role || (index === 0 ? 'lead' : 'assist')).trim().toLowerCase() === 'lead');
+  const allRoles = allInstallers.map((installer, index) => (
+    String(installer?.role || (index === 0 ? 'lead' : 'assist')).trim().toLowerCase()
+  ));
+  const completionRole = allRoles.includes('lead')
+    ? 'lead'
+    : (allRoles.includes('service') ? 'service' : null);
   const mine = normalized.find(installer => installer.id === currentInstaller?.id);
-  if (!mine) return { allowed: false, key: null };
-  if (hasLead) return { allowed: mine.role === 'lead', key: 'lead' };
-  if (mine.role !== 'service') return { allowed: false, key: null };
+  if (!mine || !completionRole) return { allowed: false, key: null, ownerRole: completionRole };
+  if (mine.role !== completionRole) return { allowed: false, key: null, ownerRole: completionRole };
+  if (completionRole === 'lead') return { allowed: true, key: 'lead', ownerRole: completionRole };
 
   const serviceSkus = new Set((installerServiceCatalog || []).map(product => normalizeWorkflowSku(product.sku)));
   const attachedSkus = Array.isArray(door?.products) ? door.products.map(normalizeWorkflowSku) : [];
   const bookingSkus = getBookingProducts(booking).filter(product => !product?.cancelled).map(product => normalizeWorkflowSku(product.sku));
   const sku = [...attachedSkus, ...bookingSkus].find(value => serviceSkus.has(value));
-  return { allowed: true, key: `service:${sku || 'UNSPECIFIED'}` };
+  return { allowed: true, key: `service:${sku || 'UNSPECIFIED'}`, ownerRole: completionRole };
 }
 
 function useInstallerWorkflowForDoor(booking, door) {
@@ -114,7 +119,11 @@ function useInstallerWorkflowForDoor(booking, door) {
   const assignmentChecklist = policy.key && Array.isArray(bookingChecklistSets[policy.key])
     ? bookingChecklistSets[policy.key]
     : null;
-  bookingChecklist = assignmentChecklist || (Array.isArray(bookingChecklistSets.lead) ? bookingChecklistSets.lead : []);
+  const isServiceAssignment = String(policy.key || '').startsWith('service:');
+  bookingChecklist = isServiceAssignment
+    ? (assignmentChecklist || [])
+    : (assignmentChecklist || (Array.isArray(bookingChecklistSets.lead) ? bookingChecklistSets.lead : []));
+  policy.signatureOnly = isServiceAssignment && bookingChecklist.length === 0;
   bookingMediaRequirements = policy.key && Array.isArray(bookingMediaRequirementSets[policy.key]) ? bookingMediaRequirementSets[policy.key] : [];
   return policy;
 }
