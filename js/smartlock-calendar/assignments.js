@@ -13,23 +13,31 @@ function applyInstallerWorkflowSetting(type, value) {
 }
 
 async function ensureInstallerChecklistLoaded(forceRefresh = false) {
-  if (!currentInstaller?.company_id || !sb) return false;
+  if (!sb) return false;
   if (installerChecklistLoaded && !forceRefresh) return true;
   if (installerChecklistLoadPromise) return installerChecklistLoadPromise;
 
   installerChecklistLoadPromise = (async () => {
+    const sessionToken = getInstallerSessionToken();
+    if (!sessionToken) throw new Error('Installer session is unavailable');
+
     const { data, error } = await sb
-      .from('global_settings')
-      .select('value')
-      .eq('key', 'booking_checklist')
-      .eq('company_id', currentInstaller.company_id)
+      .rpc('get_installer_workflow_settings', { p_token: sessionToken })
       .maybeSingle();
     if (error) throw error;
+    if (!data?.company_id) throw new Error('Installer session expired');
 
-    applyInstallerWorkflowSetting('checklist', data?.value);
+    currentInstaller.company_id = data.company_id;
+    localStorage.setItem('bk_active_installer', JSON.stringify(currentInstaller));
+    applyInstallerWorkflowSetting('checklist', data.booking_checklist);
+    applyInstallerWorkflowSetting('media', data.booking_media_requirements);
     localStorage.setItem(
       `bk_booking_checklist_${currentInstaller.company_id}`,
-      JSON.stringify(data?.value || [])
+      JSON.stringify(data.booking_checklist || [])
+    );
+    localStorage.setItem(
+      `bk_booking_media_requirements_${currentInstaller.company_id}`,
+      JSON.stringify(data.booking_media_requirements || [])
     );
     installerChecklistLoaded = true;
     return true;

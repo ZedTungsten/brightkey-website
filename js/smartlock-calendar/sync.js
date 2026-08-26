@@ -176,21 +176,6 @@ async function syncData() {
       console.error('Error syncing booking checklist:', checklistError);
     }
 
-    // Fetch booking media requirements
-    try {
-      const { data: mediaReqsRes } = await sb
-        .from('global_settings')
-        .select('value')
-        .eq('key', 'booking_media_requirements')
-        .eq('company_id', currentInstaller.company_id)
-        .maybeSingle();
-
-      applyInstallerWorkflowSetting('media', mediaReqsRes?.value);
-      localStorage.setItem(`bk_booking_media_requirements_${currentInstaller.company_id}`, JSON.stringify(mediaReqsRes?.value || []));
-    } catch (mediaErr) {
-      console.error('Error syncing media requirements:', mediaErr);
-    }
-
     // Fetch installer payout settings
     try {
       const { data: payoutSettingsRes } = await sb
