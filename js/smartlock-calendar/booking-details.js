@@ -266,7 +266,7 @@ function openDetailsModal(bookingId) {
       } else if (isAssignedToThisDoor && completionPolicy.allowed) {
         if (door?.completed) {
           const uploadButton = bookingMediaRequirements.length > 0
-            ? `<button type="button" class="btn btn-sm" style="width: auto; font-size: 0.83rem; padding: 0.3rem 0.7rem; border-radius: var(--radius-sm); background: var(--cyan); color: #fff; border: none; cursor: pointer;" onclick="openUploadModal(${i})">Upload Media</button>`
+            ? `<button type="button" class="btn btn-sm" style="width: auto; font-size: 0.83rem; padding: 0.3rem 0.7rem; border-radius: var(--radius-sm); background: #7C3AED; color: #fff; border: none; cursor: pointer;" onclick="openUploadModal(${i})">Upload Media</button>`
             : '';
           doneButtonHtml = `
             <span style="font-size: 0.83rem; font-weight: 700; background: #6b7280; color: #fff; padding: 0.3rem 0.7rem; border-radius: var(--radius-sm); display:inline-flex; align-items:center; gap:0.25rem;"><svg aria-hidden="true" viewBox="0 0 24 24" style="width:1em;height:1em;display:block;fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;"><polyline points="20 6 9 17 4 12"/></svg>Signed</span>
@@ -279,7 +279,7 @@ function openDetailsModal(bookingId) {
           const clickAction = needsMedia ? `openUploadModal(${i})` : `openChecklistModal(${i})`;
           const buttonLabel = needsMedia ? 'Upload Media' : 'Sign';
           doneButtonHtml = `
-            <button type="button" class="btn btn-sm" style="width: auto; font-size: 0.83rem; padding: 0.3rem 0.7rem; border-radius: var(--radius-sm); background: ${needsMedia ? 'var(--cyan)' : 'var(--success)'}; color: #fff; border: none; cursor: pointer;" onclick="${clickAction}">${buttonLabel}</button>
+            <button type="button" class="btn btn-sm" style="width: auto; font-size: 0.83rem; padding: 0.3rem 0.7rem; border-radius: var(--radius-sm); background: ${needsMedia ? '#7C3AED' : 'var(--success)'}; color: #fff; border: none; cursor: pointer;" onclick="${clickAction}">${buttonLabel}</button>
           `;
         }
       }
