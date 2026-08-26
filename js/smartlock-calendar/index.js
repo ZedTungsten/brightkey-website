@@ -19,6 +19,8 @@ let bookingChecklist = [];
 let bookingMediaRequirements = [];
 let bookingChecklistSets = {};
 let bookingMediaRequirementSets = {};
+let installerChecklistLoaded = false;
+let installerChecklistLoadPromise = null;
 
 function getInstallerSessionToken() {
   return sessionStorage.getItem('bk_installer_session');

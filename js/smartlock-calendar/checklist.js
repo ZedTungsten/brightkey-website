@@ -199,13 +199,15 @@ window.markEventDoorDone = async function(doorIndex, buttonEl) {
   }
 };
 
-window.openChecklistModal = function(doorIndex, isReadOnly = false) {
-  signatureIndex = doorIndex;
-
-  // Add stacked-under visual effect to details modal
-  const detModal = document.getElementById('details-modal');
-  if (detModal) {
-    detModal.classList.add('stacked-under');
+window.openChecklistModal = async function(doorIndex, isReadOnly = false) {
+  if (!isReadOnly) {
+    try {
+      await ensureInstallerChecklistLoaded();
+    } catch (error) {
+      console.error('Checklist settings could not be loaded:', error);
+      showToast('The verification checklist could not be loaded. Check your connection and try again.', true);
+      return;
+    }
   }
 
   // Populate customer name and installation date
@@ -227,6 +229,18 @@ window.openChecklistModal = function(doorIndex, isReadOnly = false) {
       showToast('Only the Lead can complete this job. Service can complete it only when no Lead is assigned.', true);
       return;
     }
+    if (bookingChecklist.length === 0) {
+      showToast('No verification checklist is configured for this assignment.', true);
+      return;
+    }
+  }
+
+  signatureIndex = doorIndex;
+
+  // Stack the details modal only after the checklist is ready to open.
+  const detModal = document.getElementById('details-modal');
+  if (detModal) {
+    detModal.classList.add('stacked-under');
   }
 
   if (custNameEl && selectedBooking) {

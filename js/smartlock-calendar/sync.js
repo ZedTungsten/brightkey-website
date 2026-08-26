@@ -20,6 +20,7 @@ function loadCachedBookings() {
   if (cachedChecklist) {
     try {
       applyInstallerWorkflowSetting('checklist', JSON.parse(cachedChecklist));
+      installerChecklistLoaded = true;
     } catch (_) {}
   }
 
@@ -168,16 +169,12 @@ async function syncData() {
       console.error('Calendar events could not be synced:', dayEventError);
     }
 
-    // Fetch booking checklist
-    const { data: checklistRes } = await sb
-      .from('global_settings')
-      .select('value')
-      .eq('key', 'booking_checklist')
-      .eq('company_id', currentInstaller.company_id)
-      .maybeSingle();
-
-    applyInstallerWorkflowSetting('checklist', checklistRes?.value);
-    localStorage.setItem(`bk_booking_checklist_${currentInstaller.company_id}`, JSON.stringify(checklistRes?.value || []));
+    // Refresh the checklist while sharing any in-flight request from the Sign action.
+    try {
+      await ensureInstallerChecklistLoaded(true);
+    } catch (checklistError) {
+      console.error('Error syncing booking checklist:', checklistError);
+    }
 
     // Fetch booking media requirements
     try {

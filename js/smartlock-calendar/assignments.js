@@ -12,6 +12,34 @@ function applyInstallerWorkflowSetting(type, value) {
   else bookingMediaRequirementSets = sets;
 }
 
+async function ensureInstallerChecklistLoaded(forceRefresh = false) {
+  if (!currentInstaller?.company_id || !sb) return false;
+  if (installerChecklistLoaded && !forceRefresh) return true;
+  if (installerChecklistLoadPromise) return installerChecklistLoadPromise;
+
+  installerChecklistLoadPromise = (async () => {
+    const { data, error } = await sb
+      .from('global_settings')
+      .select('value')
+      .eq('key', 'booking_checklist')
+      .eq('company_id', currentInstaller.company_id)
+      .maybeSingle();
+    if (error) throw error;
+
+    applyInstallerWorkflowSetting('checklist', data?.value);
+    localStorage.setItem(
+      `bk_booking_checklist_${currentInstaller.company_id}`,
+      JSON.stringify(data?.value || [])
+    );
+    installerChecklistLoaded = true;
+    return true;
+  })().finally(() => {
+    installerChecklistLoadPromise = null;
+  });
+
+  return installerChecklistLoadPromise;
+}
+
 function getBookingProducts(booking) {
   if (Array.isArray(booking?.products)) return booking.products;
   if (typeof booking?.products === 'string') {
