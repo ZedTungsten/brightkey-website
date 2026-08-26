@@ -230,8 +230,18 @@ window.openChecklistModal = async function(doorIndex, isReadOnly = false) {
       return;
     }
     if (bookingChecklist.length === 0) {
-      showToast('No verification checklist is configured for this assignment.', true);
-      return;
+      try {
+        await ensureInstallerChecklistLoaded(true);
+        useInstallerWorkflowForDoor(selectedBooking, door);
+      } catch (error) {
+        console.error('Checklist settings could not be refreshed:', error);
+        showToast('The verification checklist could not be loaded. Check your connection and try again.', true);
+        return;
+      }
+      if (bookingChecklist.length === 0) {
+        showToast('No verification checklist is configured for this assignment.', true);
+        return;
+      }
     }
   }
 
