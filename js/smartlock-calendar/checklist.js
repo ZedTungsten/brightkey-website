@@ -199,13 +199,39 @@ window.markEventDoorDone = async function(doorIndex, buttonEl) {
   }
 };
 
+function getSignChecklistLoadDiagnostic(error, stage) {
+  const errorCode = String(error?.code || '').trim().toUpperCase();
+  const message = String(error?.message || '').toLowerCase();
+  let cause = 'The workflow settings request was rejected before the checklist could be selected.';
+
+  if (errorCode === 'PGRST202' || errorCode === '42883') {
+    cause = 'The installer workflow endpoint is unavailable or has not finished deploying.';
+  } else if (errorCode === 'PGRST301' || errorCode === '401' || errorCode === '403' || message.includes('session expired')) {
+    cause = 'The installer session is expired or was rejected. Sign out, then sign in again.';
+  } else if (message.includes('session is unavailable')) {
+    cause = 'No installer session token was found. Sign out, then sign in again.';
+  } else if (message.includes('fetch') || message.includes('network')) {
+    cause = 'The phone could not reach the workflow settings endpoint. Check the connection and retry.';
+  }
+
+  const diagnosticCode = errorCode || 'NO_ERROR_CODE';
+  return `Sign diagnostic [${stage}/${diagnosticCode}]: ${cause}`;
+}
+
+function getSignChecklistEmptyDiagnostic(policy) {
+  const assignmentKey = policy?.key || 'none';
+  const configuredKeys = Object.keys(bookingChecklistSets || {});
+  const leadCount = Array.isArray(bookingChecklistSets?.lead) ? bookingChecklistSets.lead.length : 0;
+  return `Sign diagnostic [CHECKLIST_EMPTY]: assignment=${assignmentKey}; configured sets=${configuredKeys.join(', ') || 'none'}; lead items=${leadCount}; selected items=${bookingChecklist.length}.`;
+}
+
 window.openChecklistModal = async function(doorIndex, isReadOnly = false) {
   if (!isReadOnly) {
     try {
       await ensureInstallerChecklistLoaded();
     } catch (error) {
       console.error('Checklist settings could not be loaded:', error);
-      showToast('The verification checklist could not be loaded. Check your connection and try again.', true);
+      showToast(getSignChecklistLoadDiagnostic(error, 'INITIAL_LOAD'), true, 9000);
       return;
     }
   }
@@ -235,11 +261,11 @@ window.openChecklistModal = async function(doorIndex, isReadOnly = false) {
         useInstallerWorkflowForDoor(selectedBooking, door);
       } catch (error) {
         console.error('Checklist settings could not be refreshed:', error);
-        showToast('The verification checklist could not be loaded. Check your connection and try again.', true);
+        showToast(getSignChecklistLoadDiagnostic(error, 'FORCED_REFRESH'), true, 9000);
         return;
       }
       if (bookingChecklist.length === 0) {
-        showToast('No verification checklist is configured for this assignment.', true);
+        showToast(getSignChecklistEmptyDiagnostic(policy), true, 9000);
         return;
       }
     }
@@ -459,7 +485,7 @@ window.submitChecklist = async function() {
   }
 };
 
-function showToast(msg, isError = false) {
+function showToast(msg, isError = false, durationMs = 3500) {
   let c = document.getElementById('toast-container');
   if (!c) {
     c = document.createElement('div');
@@ -470,5 +496,5 @@ function showToast(msg, isError = false) {
   el.className = 'toast toast-' + (isError ? 'error' : 'success');
   el.textContent = msg;
   c.appendChild(el);
-  setTimeout(() => el.remove(), 3500);
+  setTimeout(() => el.remove(), durationMs);
 }
