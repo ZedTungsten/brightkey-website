@@ -10,7 +10,7 @@
   <link rel="icon" type="image/svg+xml" href="../../assets/favicon.svg?v=2" />
 
   <link rel="stylesheet" href="shared.css">
-  <link rel="stylesheet" href="/dashboard/settings/installers.css?v=1">
+  <link rel="stylesheet" href="/dashboard/settings/installers.css?v=2">
 </head>
 <body>
 
@@ -86,7 +86,7 @@
                     </div>
                     <div class="installer-rules-wrap">
                       <table class="installer-rules-table">
-                        <thead><tr><th>Assignment</th><th>Service SKU</th><th>Credit</th><th>Payout</th></tr></thead>
+                        <thead><tr><th>Assignment</th><th>Service SKU</th><th>Past Threshold for Payout</th><th>Credit</th><th>Payout</th></tr></thead>
                         <tbody id="installer-rules-body"></tbody>
                       </table>
                     </div>
@@ -309,16 +309,16 @@
 
     function readPayoutRules(settings) {
       if (Array.isArray(settings.extra_payout_rules) && settings.extra_payout_rules.length) {
-        return settings.extra_payout_rules.map(rule => { const assignment = ['lead', 'assist'].includes(String(rule.assignment).toLowerCase()) ? `${String(rule.assignment)[0].toUpperCase()}${String(rule.assignment).slice(1).toLowerCase()}` : 'Service'; return { id: ruleId(), assignment, sku: normalizeServiceSku(rule.sku), value: Number(rule.amount ?? rule.rate ?? rule.value) || 0, effective_from: rule.effective_from || '', fixed: assignment !== 'Service' || ['OCULAR', 'REPAIR'].includes(normalizeServiceSku(rule.sku)) }; });
+        return settings.extra_payout_rules.map(rule => { const assignment = ['lead', 'assist'].includes(String(rule.assignment).toLowerCase()) ? `${String(rule.assignment)[0].toUpperCase()}${String(rule.assignment).slice(1).toLowerCase()}` : 'Service'; return { id: ruleId(), assignment, sku: normalizeServiceSku(rule.sku), value: Number(rule.amount ?? rule.rate ?? rule.value) || 0, past_threshold_for_payout: assignment !== 'Service' || rule.past_threshold_for_payout === true, effective_from: rule.effective_from || '', fixed: assignment !== 'Service' || ['OCULAR', 'REPAIR'].includes(normalizeServiceSku(rule.sku)) }; });
       }
       const effectiveFrom = settings.ocular_repair_effective_from || '';
       const extraServices = Array.isArray(settings.extra_services) ? settings.extra_services : [];
       return [
-        fixedRule('Lead', '', settings.lead_rate ?? 0),
-        fixedRule('Assist', '', settings.assist_rate ?? 0),
-        fixedRule('Service', 'OCULAR', settings.ocular_rate ?? 0, effectiveFrom),
-        fixedRule('Service', 'REPAIR', settings.repair_rate ?? 0, effectiveFrom),
-        ...extraServices.filter(rule => !['OCULAR', 'REPAIR'].includes(normalizeServiceSku(rule.sku || rule.name))).map(rule => ({ id: ruleId(), assignment: 'Service', sku: normalizeServiceSku(rule.sku || rule.name), value: Number(rule.rate) || 0, effective_from: rule.effective_from || '', fixed: false }))
+        { ...fixedRule('Lead', '', settings.lead_rate ?? 0), past_threshold_for_payout: true },
+        { ...fixedRule('Assist', '', settings.assist_rate ?? 0), past_threshold_for_payout: true },
+        { ...fixedRule('Service', 'OCULAR', settings.ocular_rate ?? 0, effectiveFrom), past_threshold_for_payout: false },
+        { ...fixedRule('Service', 'REPAIR', settings.repair_rate ?? 0, effectiveFrom), past_threshold_for_payout: false },
+        ...extraServices.filter(rule => !['OCULAR', 'REPAIR'].includes(normalizeServiceSku(rule.sku || rule.name))).map(rule => ({ id: ruleId(), assignment: 'Service', sku: normalizeServiceSku(rule.sku || rule.name), value: Number(rule.rate) || 0, past_threshold_for_payout: rule.past_threshold_for_payout === true, effective_from: rule.effective_from || '', fixed: false }))
       ];
     }
 
@@ -343,7 +343,7 @@
           creditRules.push({ id: ruleId(), assignment: 'Service', sku, value: 0, effective_from: today, fixed: true, isNew: true });
         }
         if (!payoutRules.some(rule => rule.assignment === 'Service' && normalizeServiceSku(rule.sku) === sku)) {
-          payoutRules.push({ id: ruleId(), assignment: 'Service', sku, value: 0, effective_from: today, fixed: true, isNew: true });
+          payoutRules.push({ id: ruleId(), assignment: 'Service', sku, value: 0, past_threshold_for_payout: false, effective_from: today, fixed: true, isNew: true });
         }
       });
       const byServiceSku = (a, b) => {
@@ -361,10 +361,14 @@
         const product = serviceProducts.find(item => normalizeServiceSku(item.sku) === normalizeServiceSku(creditRule.sku));
         const serviceLabel = product ? `${normalizeServiceSku(product.sku)} — ${product.title}` : normalizeServiceSku(creditRule.sku);
         const payoutRule = payoutRules.find(rule => historyRuleKey(rule) === historyRuleKey(creditRule));
-        return `<tr><td><span class="installer-rule-type">${escapeHtml(creditRule.assignment)}</span></td><td>${service ? `<span class="installer-rule-service">${escapeHtml(serviceLabel)}</span>` : '—'}</td><td><div class="installer-rule-value-wrap"><input class="installer-rule-value" type="number" min="0" step="0.05" value="${escapeHtml(creditRule.value)}" oninput="updateInstallerRuleValue('credit','${creditRule.id}',this.value)" aria-label="${escapeHtml(creditRule.assignment)} ${service ? escapeHtml(creditRule.sku) + ' ' : ''}credit value"></div></td><td><div class="installer-rule-value-wrap"><span class="installer-rule-currency">₱</span><input class="installer-rule-value is-currency" type="number" min="0" step="1" value="${escapeHtml(payoutRule?.value || 0)}" oninput="updateInstallerRuleValue('payout','${payoutRule?.id || ''}',this.value)" aria-label="${escapeHtml(creditRule.assignment)} ${service ? escapeHtml(creditRule.sku) + ' ' : ''}payout value"></div></td></tr>`;
+        const thresholdControl = service
+          ? `<input class="installer-rule-threshold-checkbox" type="checkbox" ${payoutRule?.past_threshold_for_payout ? 'checked' : ''} onchange="updateInstallerRuleThreshold('${payoutRule?.id || ''}',this.checked)" aria-label="Pay ${escapeHtml(creditRule.sku)} only past threshold">`
+          : `<input class="installer-rule-threshold-checkbox" type="checkbox" checked disabled aria-label="${escapeHtml(creditRule.assignment)} payout is threshold-based">`;
+        return `<tr><td><span class="installer-rule-type">${escapeHtml(creditRule.assignment)}</span></td><td>${service ? `<span class="installer-rule-service">${escapeHtml(serviceLabel)}</span>` : '—'}</td><td class="installer-rule-threshold-cell">${thresholdControl}</td><td><div class="installer-rule-value-wrap"><input class="installer-rule-value" type="number" min="0" step="0.05" value="${escapeHtml(creditRule.value)}" oninput="updateInstallerRuleValue('credit','${creditRule.id}',this.value)" aria-label="${escapeHtml(creditRule.assignment)} ${service ? escapeHtml(creditRule.sku) + ' ' : ''}credit value"></div></td><td><div class="installer-rule-value-wrap"><span class="installer-rule-currency">₱</span><input class="installer-rule-value is-currency" type="number" min="0" step="1" value="${escapeHtml(payoutRule?.value || 0)}" oninput="updateInstallerRuleValue('payout','${payoutRule?.id || ''}',this.value)" aria-label="${escapeHtml(creditRule.assignment)} ${service ? escapeHtml(creditRule.sku) + ' ' : ''}payout value"></div></td></tr>`;
       }).join('');
     }
     window.updateInstallerRuleValue = function(kind, id, value) { const rule = (kind === 'credit' ? creditRules : payoutRules).find(item => item.id === id); if (rule) rule.value = Math.max(0, Number(value) || 0); };
+    window.updateInstallerRuleThreshold = function(id, checked) { const rule = payoutRules.find(item => item.id === id); if (rule?.assignment === 'Service') rule.past_threshold_for_payout = checked === true; };
 
     function findRule(rules, assignment, sku = '') { return rules.find(rule => rule.assignment === assignment && normalizeServiceSku(rule.sku) === normalizeServiceSku(sku)); }
     function validateRules(rules, label) {
@@ -379,22 +383,25 @@
       return `${assignment}:${assignment === 'service' ? normalizeServiceSku(rule.sku) : ''}`;
     }
 
-    function versionRuleHistory(existingHistory, originalRules, nextRules, valueName, boundary) {
+    function versionRuleHistory(existingHistory, originalRules, nextRules, valueName, boundary, includeThresholdMode = false) {
       const history = Array.isArray(existingHistory) ? existingHistory.map(rule => ({ ...rule })) : [];
       const originalByKey = new Map(originalRules.map(rule => [historyRuleKey(rule), rule]));
       const hasKey = key => history.some(rule => historyRuleKey(rule) === key);
       originalRules.forEach(rule => {
         const key = historyRuleKey(rule);
-        if (!hasKey(key)) history.push({ assignment: rule.assignment, sku: rule.sku || null, [valueName]: Number(rule.value) || 0, effective_from: rule.effective_from || null });
+        if (!hasKey(key)) history.push({ assignment: rule.assignment, sku: rule.sku || null, [valueName]: Number(rule.value) || 0, ...(includeThresholdMode ? { past_threshold_for_payout: rule.past_threshold_for_payout === true } : {}), effective_from: rule.effective_from || null });
       });
       nextRules.forEach(rule => {
         const key = historyRuleKey(rule);
         const original = originalByKey.get(key);
         const nextValue = Number(rule.value) || 0;
-        if (original && (Number(original.value) || 0) === nextValue) return;
+        const modeChanged = includeThresholdMode && Boolean(original?.past_threshold_for_payout) !== Boolean(rule.past_threshold_for_payout);
+        if (original && (Number(original.value) || 0) === nextValue && !modeChanged) return;
         const sameSave = history.find(item => historyRuleKey(item) === key && item.effective_from === boundary);
-        if (sameSave) sameSave[valueName] = nextValue;
-        else history.push({ assignment: rule.assignment, sku: rule.sku || null, [valueName]: nextValue, effective_from: boundary });
+        if (sameSave) {
+          sameSave[valueName] = nextValue;
+          if (includeThresholdMode) sameSave.past_threshold_for_payout = rule.past_threshold_for_payout === true;
+        } else history.push({ assignment: rule.assignment, sku: rule.sku || null, [valueName]: nextValue, ...(includeThresholdMode ? { past_threshold_for_payout: rule.past_threshold_for_payout === true } : {}), effective_from: boundary });
       });
       return history;
     }
@@ -426,7 +433,7 @@
       const ocularRate = findRule(payoutRules, 'Service', 'OCULAR')?.value || 0;
       const repairRate = findRule(payoutRules, 'Service', 'REPAIR')?.value || 0;
       const serviceCreditRules = creditRules.filter(rule => rule.assignment === 'Service' && !['OCULAR', 'REPAIR'].includes(rule.sku)).map(rule => ({ sku: rule.sku, credit: rule.value, effective_from: rule.effective_from }));
-      const extraServices = payoutRules.filter(rule => rule.assignment === 'Service' && !['OCULAR', 'REPAIR'].includes(rule.sku)).map(rule => ({ sku: rule.sku, rate: rule.value, effective_from: rule.effective_from }));
+      const extraServices = payoutRules.filter(rule => rule.assignment === 'Service' && !['OCULAR', 'REPAIR'].includes(rule.sku)).map(rule => ({ sku: rule.sku, rate: rule.value, past_threshold_for_payout: rule.past_threshold_for_payout === true, effective_from: rule.effective_from }));
       const originalCreditRules = readCreditRules(installerPayoutSettings);
       const originalPayoutRules = readPayoutRules(installerPayoutSettings);
       const value = {
@@ -443,9 +450,9 @@
         service_credit_rules: serviceCreditRules,
         extra_services: extraServices,
         credit_rules: creditRules.map(rule => ({ assignment: rule.assignment, sku: rule.sku || null, credit: rule.value, effective_from: rule.effective_from || null })),
-        extra_payout_rules: payoutRules.map(rule => ({ assignment: rule.assignment, sku: rule.sku || null, amount: rule.value, effective_from: rule.effective_from || null })),
+        extra_payout_rules: payoutRules.map(rule => ({ assignment: rule.assignment, sku: rule.sku || null, amount: rule.value, past_threshold_for_payout: rule.assignment !== 'Service' || rule.past_threshold_for_payout === true, effective_from: rule.effective_from || null })),
         credit_rule_history: versionRuleHistory(installerPayoutSettings.credit_rule_history, originalCreditRules, creditRules, 'credit', versionBoundary),
-        payout_rule_history: versionRuleHistory(installerPayoutSettings.payout_rule_history, originalPayoutRules, payoutRules, 'amount', versionBoundary),
+        payout_rule_history: versionRuleHistory(installerPayoutSettings.payout_rule_history, originalPayoutRules, payoutRules, 'amount', versionBoundary, true),
         threshold_history: versionThresholdHistory(installerPayoutSettings.threshold_history, installerPayoutSettings.installations_before_crediting ?? 15, threshold, versionBoundary),
         rules_versioned_at: versionBoundary
       };

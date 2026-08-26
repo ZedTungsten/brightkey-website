@@ -1310,29 +1310,32 @@
             const isPast = this.isPastDay(day);
 
             const breakdownItems = [];
-            if (salaryAllocation.isProrated) breakdownItems.push(`Pro Sal: ${salaryPortion === 0 ? '₱0.00' : php(salaryPortion)}`);
-            else if (salaryPortion > 0) breakdownItems.push(`Sal: ${php(salaryPortion)}`);
-            if (commsVal - rolledComms > 0) breakdownItems.push(`Com: ${php(commsVal - rolledComms)}`);
-            if (rolledComms > 0) breakdownItems.push(`Rol Com: ${php(rolledComms)}`);
-            if (instPortion - rolledInst > 0) breakdownItems.push(`Inst: ${php(instPortion - rolledInst)}`);
-            if (rolledInst > 0) breakdownItems.push(`Rol Inst: ${php(rolledInst)}`);
-            if (adjsVal - rolledAdjs !== 0) breakdownItems.push(`Adj: ${php(adjsVal - rolledAdjs)}`);
-            if (rolledAdjs !== 0) breakdownItems.push(`Rol Adj: ${php(rolledAdjs)}`);
-            if (glAddVal - rolledGlAdd > 0) breakdownItems.push(`Reimb: ${php(glAddVal - rolledGlAdd)}`);
-            if (rolledGlAdd > 0) breakdownItems.push(`Rol Reimb: ${php(rolledGlAdd)}`);
-            if (glDedVal - rolledGlDed > 0) breakdownItems.push(`Cash Adv: -${php(glDedVal - rolledGlDed)}`);
-            if (rolledGlDed > 0) breakdownItems.push(`Rol Cash Adv: -${php(rolledGlDed)}`);
-            if (systemResult.value !== 0) breakdownItems.push(`System: ${php(systemResult.value)}`);
+            const addBreakdownItem = (text, value) => breakdownItems.push({ text, isNegative: value < 0 });
+            if (salaryAllocation.isProrated) addBreakdownItem(`Pro Sal: ${salaryPortion === 0 ? '₱0.00' : php(salaryPortion)}`, salaryPortion);
+            else if (salaryPortion > 0) addBreakdownItem(`Sal: ${php(salaryPortion)}`, salaryPortion);
+            if (commsVal - rolledComms > 0) addBreakdownItem(`Com: ${php(commsVal - rolledComms)}`, commsVal - rolledComms);
+            if (rolledComms > 0) addBreakdownItem(`Rol Com: ${php(rolledComms)}`, rolledComms);
+            if (instPortion - rolledInst > 0) addBreakdownItem(`Inst: ${php(instPortion - rolledInst)}`, instPortion - rolledInst);
+            if (rolledInst > 0) addBreakdownItem(`Rol Inst: ${php(rolledInst)}`, rolledInst);
+            if (adjsVal - rolledAdjs !== 0) addBreakdownItem(`Adj: ${php(adjsVal - rolledAdjs)}`, adjsVal - rolledAdjs);
+            if (rolledAdjs !== 0) addBreakdownItem(`Rol Adj: ${php(rolledAdjs)}`, rolledAdjs);
+            if (glAddVal - rolledGlAdd > 0) addBreakdownItem(`Reimb: ${php(glAddVal - rolledGlAdd)}`, glAddVal - rolledGlAdd);
+            if (rolledGlAdd > 0) addBreakdownItem(`Rol Reimb: ${php(rolledGlAdd)}`, rolledGlAdd);
+            if (glDedVal - rolledGlDed > 0) addBreakdownItem(`Cash Adv: -${php(glDedVal - rolledGlDed)}`, -(glDedVal - rolledGlDed));
+            if (rolledGlDed > 0) addBreakdownItem(`Rol Cash Adv: -${php(rolledGlDed)}`, -rolledGlDed);
+            if (systemResult.value !== 0) addBreakdownItem(`System: ${php(systemResult.value)}`, systemResult.value);
+
+            const breakdownText = breakdownItems.map((item) => item.text);
             
             const breakdownHtml = breakdownItems.length > 0 
-              ? `<div class="payout-breakdown" style="font-size:0.68rem; color:var(--text-muted); line-height:1.2; text-align:right; font-family:var(--font); width:100%; font-variant-numeric:tabular-nums;">${breakdownItems.join('<br>')}</div>` 
+              ? `<div class="payout-breakdown" style="font-size:0.68rem; color:var(--text-muted); line-height:1.2; text-align:right; font-family:var(--font); width:100%; font-variant-numeric:tabular-nums;">${breakdownItems.map((item) => item.isNegative ? `<span style="color:var(--danger);">${esc(item.text)}</span>` : esc(item.text)).join('<br>')}</div>`
               : '';
 
             payoutCellsHtml += `<td style="text-align:right;">
               <div class="payout-cell-container${isEligible ? '' : ' grayed-out'}" style="display:flex; flex-direction:column; align-items:flex-end; gap:0.15rem; min-width:90px; padding:0.25rem 0; width:100%;">
                 <div style="display:inline-flex; align-items:center; justify-content:flex-end; gap:0.4rem; width:100%;">
                   ${isEligible ? `<input type="checkbox" class="payout-checkbox" ${isPaid ? 'checked' : ''} onchange="App.togglePayoutCheck('${emp.id}',${day},this.checked)">` : ''}
-                  <span class="payout-val ${isEligible && isPast && !isPaid ? 'overdue' : ''}" id="val-${emp.id}-${day}" style="font-variant-numeric:tabular-nums; ${isPaid ? 'text-decoration:line-through;opacity:0.5;' : ''}" title="${esc(breakdownItems.join('\n'))}">${esc(php(displayedSchedVal))}</span>
+                  <span class="payout-val ${isEligible && isPast && !isPaid ? 'overdue' : ''}" id="val-${emp.id}-${day}" style="font-variant-numeric:tabular-nums; ${isPaid ? 'text-decoration:line-through;opacity:0.5;' : ''}" title="${esc(breakdownText.join('\n'))}">${esc(php(displayedSchedVal))}</span>
                 </div>
                 ${breakdownHtml}
               </div>

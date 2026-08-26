@@ -68,7 +68,7 @@
   root.BKInstallerPayoutRules = Object.freeze({
     serviceRules(settings = {}) {
       const skus = [...new Set(payoutRules(settings).filter(rule => String(rule.assignment).toLowerCase() === 'service').map(rule => normalizeSku(rule.sku)))];
-      return skus.map(sku => latestEffectiveRule(payoutRules(settings), { assignment: 'Service', sku }, new Date().toISOString())).filter(Boolean).map(rule => ({ sku: normalizeSku(rule.sku), rate: Number(rule.amount ?? rule.rate ?? rule.value) || 0, effective_from: rule.effective_from || null }));
+      return skus.map(sku => latestEffectiveRule(payoutRules(settings), { assignment: 'Service', sku }, new Date().toISOString())).filter(Boolean).map(rule => ({ sku: normalizeSku(rule.sku), rate: Number(rule.amount ?? rule.rate ?? rule.value) || 0, past_threshold_for_payout: rule.past_threshold_for_payout === true, effective_from: rule.effective_from || null }));
     },
     creditForJob(settings = {}, job = {}) {
       const target = assignmentFor(job.roles, job.skus);
@@ -84,12 +84,14 @@
       const candidates = target.assignment === 'Service'
         ? (target.skus || [target.sku]).map(sku => latestEffectiveRule(payoutRules(settings), { assignment: 'Service', sku }, ruleDate)).filter(Boolean)
         : [latestEffectiveRule(payoutRules(settings), target, ruleDate)].filter(Boolean);
-      return Number(candidates[0]?.amount ?? candidates[0]?.rate ?? candidates[0]?.value) || 0;
+      const rule = candidates[0];
+      if (target.assignment === 'Service' && rule?.past_threshold_for_payout !== true) return 0;
+      return Number(rule?.amount ?? rule?.rate ?? rule?.value) || 0;
     },
     servicePayoutsForJob(settings = {}, job = {}) {
       if (!(job.roles || []).some(role => String(role).toLowerCase() === 'service')) return [];
       const ruleDate = job.assignmentDate || job.workDate;
-      return (job.skus || []).map(normalizeSku).map(sku => latestEffectiveRule(payoutRules(settings), { assignment: 'Service', sku }, ruleDate)).filter(Boolean).map(rule => ({ sku: normalizeSku(rule.sku), amount: Number(rule.amount ?? rule.rate ?? rule.value) || 0 }));
+      return (job.skus || []).map(normalizeSku).map(sku => latestEffectiveRule(payoutRules(settings), { assignment: 'Service', sku }, ruleDate)).filter(rule => rule && rule.past_threshold_for_payout !== true).map(rule => ({ sku: normalizeSku(rule.sku), amount: Number(rule.amount ?? rule.rate ?? rule.value) || 0 }));
     },
     thresholdForDate(settings = {}, workDate) {
       const history = Array.isArray(settings.threshold_history) ? settings.threshold_history : [];

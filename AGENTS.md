@@ -463,6 +463,65 @@ existing pattern exactly.
 
 ---
 
+## 12.1 Android Chrome Compatibility & Regression Prevention
+> [!CRITICAL]
+> **AN IOS OR DESKTOP SUCCESS DOES NOT PROVE MOBILE COMPATIBILITY**:
+> Any workflow used on phones must behave consistently on current Chrome for
+> Android as well as iOS Safari/Chrome and desktop Chromium. Never dismiss an
+> Android-only failure as browser cache or work around it with user-agent-specific
+> business logic.
+
+- **Separate data failures from rendering failures first**: Inspect the resolved
+  tenant, company, assignment role, service SKU, configuration key, selected
+  checklist/media set, and final item count before changing CSS. A missing
+  checklist can mean either that no items were selected or that selected items
+  exist but are invisible; prove which condition is occurring.
+- **Resolve configuration deterministically**: Await all auth, company, job,
+  assignment, and `global_settings` reads before deciding whether a checklist is
+  empty. Normalize service identifiers once (trim/case/SKU rules), apply one
+  documented precedence order, and do not let request timing, object iteration,
+  stale browser storage, or device-dependent state choose the configuration.
+- **Empty configuration has explicit semantics**: When the applicable checklist
+  contains zero enabled items, render the signature-only workflow. Do not borrow
+  another service's checklist, show a misleading “not configured” error, or
+  block signing unless the business rule explicitly requires it.
+- **Do not rely on native form-control appearance**: Android Chrome and WebView
+  can render or suppress native checkboxes, selects, date inputs, and buttons
+  differently. For required controls, define explicit dimensions, border,
+  background, checked/focus/disabled states, `accent-color` where appropriate,
+  and a visible SVG/CSS check indicator. Keep the native input accessible; do
+  not replace it with an unlabelled decorative element.
+- **Protect mobile modal content**: Use `100dvh`, a bounded modal/card height,
+  one intentional vertical scroll container, safe-area-aware bottom spacing,
+  and controls that cannot shrink to zero. Check ancestor `overflow`, flex/grid
+  sizing, stacking contexts, transforms, and fixed positioning before adding
+  overrides.
+- **Avoid browser sniffing**: Fix standards, layout, async ordering, and data
+  contracts for every browser. Use feature detection only when a real API or CSS
+  capability differs. Any Android-specific fallback requires a documented,
+  reproduced platform limitation and must preserve identical business rules.
+- **Make deployed assets unambiguous**: Cache-bust every changed versioned CSS or
+  JavaScript reference and confirm the Android device loaded the new asset. Do
+  not treat closing Chrome, clearing storage, or reinstalling the app as the fix.
+- **Diagnostics must be scoped and safe**: Temporary diagnostics for the affected
+  action may report friendly stage codes and non-sensitive identifiers, but must
+  never expose tokens, raw database errors, customer data, or stack traces.
+  Remove temporary verbose toasts after the root cause is verified, or gate them
+  behind an explicit development/debug setting.
+- **Required Android regression test**: Reproduce the exact authenticated job and
+  role on a real Android Chrome device or an Android Chromium/WebView environment.
+  Verify populated checklist, empty-checklist signature-only mode, scrolling,
+  checkbox visibility and touch behavior, signature capture, upload, submit,
+  reopen, and refresh. Also retest iOS and desktop so the Android fix does not
+  narrow permissions or change configuration selection elsewhere.
+
+An Android compatibility fix is complete only when the same server-backed record
+and role produce the same selected configuration and workflow across platforms,
+the required controls are visibly operable by touch, and a normal reload uses the
+correct deployed assets without manual cache clearing.
+
+---
+
 ## 13. Strict Database Schema Validation (Anti-Hallucination Policy)
 > [!CRITICAL]
 > **VERIFY DATABASE SCHEMA BEFORE CODING**:
