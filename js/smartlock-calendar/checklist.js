@@ -201,7 +201,7 @@ window.markEventDoorDone = async function(doorIndex, buttonEl) {
 
 window.openChecklistModal = function(doorIndex, isReadOnly = false) {
   signatureIndex = doorIndex;
-  
+
   // Add stacked-under visual effect to details modal
   const detModal = document.getElementById('details-modal');
   if (detModal) {
@@ -249,7 +249,8 @@ window.openChecklistModal = function(doorIndex, isReadOnly = false) {
       checklistContainer.innerHTML = door.checklist.map(ch => {
         return `
           <label style="display:flex; align-items:flex-start; gap:0.55rem; cursor:pointer;${ch.indent ? ' margin-left:1.2rem;' : ''}">
-            <input type="checkbox" class="checklist-item" style="margin-top:0.15rem;" ${ch.checked ? 'checked' : ''} disabled />
+            <input type="checkbox" class="checklist-item" ${ch.checked ? 'checked' : ''} disabled />
+            <span class="checklist-box" aria-hidden="true"></span>
             <span>${escapeHtml(ch.item || '')}</span>
           </label>
         `;
@@ -258,7 +259,8 @@ window.openChecklistModal = function(doorIndex, isReadOnly = false) {
       checklistContainer.innerHTML = bookingChecklist.map((ch, idx) => {
         return `
           <label style="display:flex; align-items:flex-start; gap:0.55rem; cursor:pointer;${ch.indent ? ' margin-left:1.2rem;' : ''}">
-            <input type="checkbox" class="checklist-item" style="margin-top:0.15rem;" onchange="validateChecklist()" />
+            <input type="checkbox" class="checklist-item" onchange="validateChecklist()" />
+            <span class="checklist-box" aria-hidden="true"></span>
             <span>${escapeHtml(ch.text || '')}</span>
           </label>
         `;
@@ -370,7 +372,7 @@ window.submitChecklist = async function() {
     door.checklist_submitted_at = new Date().toISOString();
     door.checklist = Array.from(document.querySelectorAll('.checklist-item')).map((cb, idx) => {
       return {
-        item: cb.nextElementSibling ? cb.nextElementSibling.innerText.trim() : '',
+        item: cb.nextElementSibling?.nextElementSibling?.innerText.trim() || '',
         checked: cb.checked,
         indent: bookingChecklist[idx]?.indent || false
       };
