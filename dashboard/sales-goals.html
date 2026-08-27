@@ -1044,6 +1044,11 @@
     let currentTenantId;
     let currentCompanyId;
 
+    function getCommissionBasisBooking(booking) {
+      const snapshot = booking?.commission_basis_snapshot;
+      return snapshot && typeof snapshot === 'object' ? { ...booking, ...snapshot } : booking;
+    }
+
     // State Variables
     let globalGoals = []; // Array of { amount: 500000, reward: 'Team outing' }
     const defaultStatsTargets = Object.freeze({
@@ -1922,7 +1927,7 @@
 
         const { data: bookings, error } = await sb
           .from('installation_bookings')
-          .select('created_at, customer_name, customer_city, product_skus, product_qtys, charge_labels, charge_values, deduction_labels, deduction_values, grand_total, balance_due, deposit_amount, status, order_no, scheduled_date')
+          .select('created_at, customer_name, customer_city, product_skus, product_qtys, product_unit_prices, charge_labels, charge_values, deduction_labels, deduction_values, grand_total, balance_due, deposit_amount, commission_basis_snapshot, status, order_no, scheduled_date')
           .eq('company_id', currentCompanyId)
           .neq('status', 'cancelled')
           .gte('scheduled_date', startDate)
@@ -2693,6 +2698,7 @@
     }
 
     function getCommissionAdjustmentForSku(b, sku, rateLabel, productMap, adjustmentRules) {
+      b = getCommissionBasisBooking(b);
       if (!adjustmentRules || adjustmentRules.length === 0) return 0;
 
       const bDate = b.scheduled_date ? b.scheduled_date.slice(0, 10) : '';
@@ -2748,6 +2754,7 @@
     }
 
     function getCommissionAdjustmentForBooking(b, rateLabel, productMap, adjustmentRules, eligibilityRules) {
+      b = getCommissionBasisBooking(b);
       const skus = (b.product_skus || '').split(' | ').map(s => s.trim());
       const qtys = (b.product_qtys || '').split(' | ').map(s => s.trim());
       const unitPrices = (b.product_unit_prices || '').split(' | ').map(s => s.trim());
@@ -2770,6 +2777,7 @@
     }
 
     function getBookingEligibleCentavos(b, productMap, eligibilityRules) {
+      b = getCommissionBasisBooking(b);
       const skus = (b.product_skus || '').split(' | ').map(s => s.trim());
       const qtys = (b.product_qtys || '').split(' | ').map(s => s.trim());
       const unitPrices = (b.product_unit_prices || '').split(' | ').map(s => s.trim());
@@ -2793,9 +2801,7 @@
       }
 
       let depositCentavos = Math.round(Math.abs(parseInt(b.deposit_amount) || 0));
-      let discountCentavos = 0;
-      let freebiesCentavos = 0;
-      let customCentavos = 0;
+      let deductionCentavos = depositCentavos;
 
       if (b.deduction_labels && b.deduction_values) {
         const labels = b.deduction_labels.split('|').map(s => s.trim().toLowerCase());
@@ -2803,13 +2809,8 @@
         labels.forEach((label, idx) => {
           const valPHP = parseFloat(values[idx]) || 0;
           const valCentavos = Math.round(Math.abs(valPHP) * 100);
-          if (label.includes('discount')) {
-            discountCentavos += valCentavos;
-          } else if (label.includes('freebie')) {
-            freebiesCentavos += valCentavos;
-          } else if (label.includes('custom')) {
-            customCentavos += valCentavos;
-          } else if (label.includes('deposit')) {
+          deductionCentavos += valCentavos;
+          if (label.includes('deposit')) {
             depositCentavos += valCentavos;
           }
         });
@@ -2828,7 +2829,7 @@
         });
       }
 
-      const finalEligibleCentavos = Math.max(0, skuSumCentavos - discountCentavos);
+      const finalEligibleCentavos = Math.max(0, skuSumCentavos - deductionCentavos + depositCentavos);
       const grandTotal = parseInt(b.grand_total) || 0;
       const balanceDue = parseInt(b.balance_due) || 0;
       const orderGrandTotal = grandTotal > 0 ? grandTotal : (balanceDue + depositCentavos);

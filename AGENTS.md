@@ -574,6 +574,14 @@ correct deployed assets without manual cache clearing.
 > - **Identify Overflow Constraints**: Shared card modules (e.g., `.wh-card`) or layouts often declare `overflow: hidden;` or `overflow: auto;`. This clips absolute-positioned child elements that expand beyond the parent container boundaries.
 > - **Apply Local Overrides**: Always explicitly declare `overflow: visible;` (or `overflow: visible !important;`) on the card or parent box wrapper hosting the interactive toggle trigger and popup component. This ensures flyout selections pop outside layout boundaries without being clipped.
 
+### 17.1 Select Placeholders Are Prompts, Not Choices
+> [!IMPORTANT]
+> Placeholder text such as “Select installer”, “Select warehouse”, or “Select SKU” may appear as the initial prompt in a native `<select>`, but it must not appear as a selectable dropdown item. Define placeholder options with an empty value and `disabled selected hidden`, including options created dynamically in JavaScript:
+> ```html
+> <option value="" disabled selected hidden>Select installer</option>
+> ```
+> Keep the `<select>` required when a real choice is mandatory. Never allow users to return to or submit the placeholder as if it were a valid selection.
+
 ---
 
 ## 18. Clean URLs and Asset Path Resolving

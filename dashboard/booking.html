@@ -2553,6 +2553,13 @@
 
       const savedBooking = await saveBookingToSupabase(supabasePayload);
       if (savedBooking) {
+        const { error: commissionBasisError } = await window.BKAuth.sb.rpc('lock_commission_basis_for_ar', {
+          p_booking_id: savedBooking.id
+        });
+        if (commissionBasisError) {
+          console.error('Commission basis lock failed:', commissionBasisError);
+          throw new Error('The booking was saved, but the receipt was not produced because its commission price basis could not be locked. Do not create another booking; retry opening its receipt.');
+        }
         orderData.supabaseId = savedBooking.id;
         localStorage.setItem('latest_installation_order', JSON.stringify(orderData));
       }

@@ -882,11 +882,16 @@ function loadEventsChunk(src) {
 }
 
 let emailChunksPromise = null;
+let attendeesChunkPromise = null;
+function ensureEventAttendeesChunk() {
+  attendeesChunkPromise ||= loadEventsChunk('/dashboard/events/events-email-templates.js?v=1.0.3');
+  return attendeesChunkPromise;
+}
 function ensureEventEmailChunks() {
   if (!emailChunksPromise) {
     emailChunksPromise = Promise.all([
       loadEventsChunk('/dashboard/events/events-email-builder.js?v=1.0.6'),
-      loadEventsChunk('/dashboard/events/events-email-templates.js?v=1.0.2'),
+      ensureEventAttendeesChunk(),
       loadEventsChunk('/dashboard/events/events-email-helpers.js?v=1.0.1'),
       loadEventsChunk('/dashboard/events/events-email-scheduler.js?v=1.0.1')
     ]);
@@ -897,6 +902,10 @@ function ensureEventEmailChunks() {
 window.EventsApp.openEmailBuilder = async function openEmailBuilder(id) {
   await ensureEventEmailChunks();
   return window.EventsApp.openEmailBuilder(id);
+};
+window.EventsApp.openAttendeesModal = async function openAttendeesModal(id) {
+  await ensureEventAttendeesChunk();
+  return window.EventsApp.openAttendeesModal(id);
 };
 
 window.EventsApp.previewDashboardEvent = async function previewDashboardEvent(id) {

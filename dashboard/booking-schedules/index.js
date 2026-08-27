@@ -128,6 +128,7 @@
       if (path.endsWith('/all-bookings')) return 'all-bookings';
       if (path.endsWith('/installers/accounts')) return 'installer-accounts';
       if (path.endsWith('/installers/notes')) return 'installer-notes';
+      if (path.endsWith('/installers/tools')) return 'installer-tools';
       if (path.endsWith('/installers/assignments') || path.endsWith('/installers')) return 'installer-assignments';
       return 'calendar';
     }
@@ -151,19 +152,23 @@
       const panelInstallers = document.getElementById('tab-panel-installers');
       const panelInstallerAccounts = document.getElementById('tab-panel-installer-accounts');
       const panelInstallerNotes = document.getElementById('tab-panel-installer-notes');
+      const panelInstallerTools = document.getElementById('tab-panel-installer-tools');
       const scheduleTabs = document.getElementById('booking-schedule-tabs');
       const installerTabs = document.getElementById('installer-tabs');
       const tabInstallerAssignments = document.getElementById('tab-installer-assignments');
       const tabInstallerAccounts = document.getElementById('tab-installer-accounts');
       const tabInstallerNotes = document.getElementById('tab-installer-notes');
+      const tabInstallerTools = document.getElementById('tab-installer-tools');
       const monthNavigator = document.getElementById('calendar-month-navigator');
       const allBookingsSearch = document.getElementById('all-bookings-search');
       const scrollContainer = document.querySelector('.scroll-container');
       const pageTitle = document.getElementById('booking-page-title');
+      const issueToolButton = document.getElementById('issue-tool-button');
       const isInstallerAssignments = currentSubpage === 'installer-assignments';
       const isInstallerAccounts = currentSubpage === 'installer-accounts';
       const isInstallerNotes = currentSubpage === 'installer-notes';
-      const isInstallersPage = isInstallerAssignments || isInstallerAccounts || isInstallerNotes;
+      const isInstallerTools = currentSubpage === 'installer-tools';
+      const isInstallersPage = isInstallerAssignments || isInstallerAccounts || isInstallerNotes || isInstallerTools;
       const showsBookingControls = currentSubpage === 'calendar' || currentSubpage === 'all-bookings';
 
       if (tabCalendar) tabCalendar.classList.toggle('active', currentSubpage === 'calendar');
@@ -173,17 +178,20 @@
       if (panelInstallers) panelInstallers.style.display = isInstallerAssignments ? 'block' : 'none';
       if (panelInstallerAccounts) panelInstallerAccounts.style.display = isInstallerAccounts ? 'block' : 'none';
       if (panelInstallerNotes) panelInstallerNotes.style.display = isInstallerNotes ? 'flex' : 'none';
+      if (panelInstallerTools) panelInstallerTools.style.display = isInstallerTools ? 'block' : 'none';
       if (scheduleTabs) scheduleTabs.style.display = isInstallersPage ? 'none' : 'flex';
       if (scheduleTabs) scheduleTabs.classList.toggle('booking-controls-active', showsBookingControls);
       if (installerTabs) installerTabs.style.display = isInstallersPage ? 'flex' : 'none';
       if (tabInstallerAssignments) tabInstallerAssignments.classList.toggle('active', isInstallerAssignments);
       if (tabInstallerAccounts) tabInstallerAccounts.classList.toggle('active', isInstallerAccounts);
       if (tabInstallerNotes) tabInstallerNotes.classList.toggle('active', isInstallerNotes);
-      if (monthNavigator) monthNavigator.style.display = (isInstallerAccounts || isInstallerNotes) ? 'none' : 'flex';
+      if (tabInstallerTools) tabInstallerTools.classList.toggle('active', isInstallerTools);
+      if (monthNavigator) monthNavigator.style.display = (isInstallerAccounts || isInstallerNotes || isInstallerTools) ? 'none' : 'flex';
       if (allBookingsSearch) allBookingsSearch.style.display = showsBookingControls ? 'flex' : 'none';
       if (scrollContainer) scrollContainer.classList.toggle('installer-notes-active', isInstallerNotes);
       if (scrollContainer) scrollContainer.classList.toggle('booking-controls-active', showsBookingControls);
       if (pageTitle) pageTitle.textContent = isInstallersPage ? 'Installers' : 'Installation Schedules';
+      if (issueToolButton) issueToolButton.style.display = isInstallerTools ? 'inline-flex' : 'none';
       document.title = isInstallersPage
         ? 'Installers — Brightkey Admin'
         : 'Installation Schedules — Brightkey Admin';
@@ -251,6 +259,11 @@
 
       if (currentSubpage === 'installer-notes') {
         await window.BKInstallerNotes?.init({ sb, companyId: currentCompanyId });
+        return;
+      }
+
+      if (currentSubpage === 'installer-tools') {
+        await window.BKInstallerTools?.init({ sb, companyId: currentCompanyId });
         return;
       }
 

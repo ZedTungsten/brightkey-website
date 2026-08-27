@@ -233,10 +233,14 @@ function drawAgenda() {
           }).join(', ')
         : 'Unassigned';
 
-      const doorDone = door?.completed || false;
-      const statusIcon = doorDone 
-        ? `<svg viewBox="0 0 24 24" style="width: 0.85em; height: 0.85em; fill: none; stroke: var(--success); stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; display: inline-block; vertical-align: middle; margin-right: 0.25rem;"><polyline points="20 6 9 17 4 12"/></svg>`
-        : `<span style="color: var(--text-muted); margin-right: 0.35rem; font-weight: 700; display: inline-block; vertical-align: middle;">—</span>`;
+      const doorSigned = Boolean(door?.signature);
+      const doorHasMedia = Array.isArray(door?.media_urls) && door.media_urls.length > 0;
+      const checkSvg = '<svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>';
+      const statusIcon = doorHasMedia
+        ? `<span class="door-progress-check media-uploaded" title="Media uploaded" aria-label="Media uploaded">${checkSvg}</span>`
+        : (doorSigned
+          ? `<span class="door-progress-check signed" title="Signed" aria-label="Signed">${checkSvg}</span>`
+          : '<span class="door-progress-pending" aria-hidden="true">—</span>');
 
       lines.push(`
         <div style="display: flex; align-items: center; margin-bottom: 0.15rem; line-height: 1.25;">

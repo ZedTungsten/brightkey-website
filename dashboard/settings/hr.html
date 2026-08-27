@@ -48,11 +48,11 @@
             <!-- HR Content -->
             <div class="tab-panel active">
               <div class="panel-header">
-                <div class="panel-title">HR Prefix Setup</div>
+                <div class="panel-title">HR Setup</div>
                 <button class="btn btn-primary" onclick="saveHRSettings()">Save HR Settings</button>
               </div>
               <div class="table-scroll">
-                <div class="wh-card" style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1.25rem; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px; max-width: 500px;">
+                <div class="wh-card" style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1.25rem; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px; max-width: 680px;">
                   <h3 style="font-size: 0.95rem; font-weight: 700; color: var(--text-primary); border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; margin-bottom: 0.5rem;">Employee &amp; Contractor Prefixes</h3>
                   
                   <div class="form-group">
@@ -65,6 +65,12 @@
                     <label class="form-label" for="hr-contractor-prefix">Contractor ID Prefix</label>
                     <input type="text" id="hr-contractor-prefix" class="form-input" placeholder="e.g. ID" style="max-width: 150px;" required />
                     <span style="font-size: 0.72rem; color: var(--text-muted);">Used for auto-generating contractor numbers. Maximum 3 capital letters.</span>
+                  </div>
+
+                  <div style="border-top:1px solid var(--border); padding-top:1.25rem;">
+                    <h3 style="font-size:0.95rem; font-weight:700; color:var(--text-primary); margin:0 0 0.35rem;">Employee Levels</h3>
+                    <p style="font-size:0.75rem; color:var(--text-muted); margin:0 0 1rem;">Levels 1–3 are required. Levels 4–7 can be enabled when your organization uses them.</p>
+                    <div id="employee-level-settings" style="display:flex; flex-direction:column; gap:0.65rem;"></div>
                   </div>
                 </div>
               </div>
@@ -84,11 +90,94 @@
     'use strict';
 
     let employeePrefix = 'ID';
+    let hrConfigValue = {};
+    const DEFAULT_EMPLOYEE_LEVELS = [
+      'Staff / Entry level',
+      'Team Lead / Supervisor',
+      'Manager',
+      'Department Head',
+      'Director',
+      'Executive / C-Level',
+      'Owner / President'
+    ].map((name, index) => ({ level: index + 1, name, enabled: true }));
     const showToast = (msg, isError) => SettingsPage.showToast(msg, isError);
 
     window.initSettingsPage = async function() {
       await loadHRSettings();
     };
+
+    function normalizeEmployeeLevels(savedLevels) {
+      let optionalLevelsEnabled = true;
+      return DEFAULT_EMPLOYEE_LEVELS.map(defaultLevel => {
+        const saved = Array.isArray(savedLevels)
+          ? savedLevels.find(item => Number(item?.level) === defaultLevel.level)
+          : null;
+        const enabled = defaultLevel.level <= 3
+          ? true
+          : optionalLevelsEnabled && saved?.enabled !== false;
+        if (defaultLevel.level >= 4) optionalLevelsEnabled = enabled;
+        return {
+          level: defaultLevel.level,
+          name: String(saved?.name || defaultLevel.name).trim(),
+          enabled
+        };
+      });
+    }
+
+    function syncOptionalEmployeeLevels(changedLevel = null) {
+      const checkboxes = Array.from(document.querySelectorAll('.employee-level-enabled'))
+        .sort((a, b) => Number(a.dataset.level) - Number(b.dataset.level));
+      const changed = checkboxes.find(input => Number(input.dataset.level) === changedLevel);
+      if (changed && !changed.checked) {
+        checkboxes.forEach(input => {
+          if (Number(input.dataset.level) > changedLevel) input.checked = false;
+        });
+      }
+
+      let previousEnabled = true;
+      checkboxes.forEach(input => {
+        const level = Number(input.dataset.level);
+        if (level <= 3) return;
+        input.disabled = !previousEnabled;
+        previousEnabled = previousEnabled && input.checked;
+      });
+    }
+
+    function renderEmployeeLevels(levels) {
+      const container = document.getElementById('employee-level-settings');
+      container.replaceChildren();
+      levels.forEach(item => {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:grid;grid-template-columns:72px minmax(0,1fr) 86px;gap:0.75rem;align-items:center;';
+
+        const level = document.createElement('span');
+        level.textContent = `Level ${item.level}`;
+        level.style.cssText = 'font-size:0.8rem;font-weight:700;color:var(--text-secondary);';
+
+        const name = document.createElement('input');
+        name.type = 'text';
+        name.className = 'form-input employee-level-name';
+        name.dataset.level = String(item.level);
+        name.value = item.name;
+        name.maxLength = 60;
+        name.setAttribute('aria-label', `Level ${item.level} name`);
+
+        const enabledLabel = document.createElement('label');
+        enabledLabel.style.cssText = 'display:inline-flex;align-items:center;gap:0.4rem;font-size:0.76rem;font-weight:600;color:var(--text-secondary);cursor:pointer;';
+        const enabled = document.createElement('input');
+        enabled.type = 'checkbox';
+        enabled.className = 'employee-level-enabled';
+        enabled.dataset.level = String(item.level);
+        enabled.checked = item.enabled;
+        enabled.disabled = item.level <= 3;
+        enabled.style.cssText = 'width:1rem;height:1rem;accent-color:var(--cyan);flex:0 0 auto;';
+        if (item.level >= 4) enabled.addEventListener('change', () => syncOptionalEmployeeLevels(item.level));
+        enabledLabel.append(enabled, document.createTextNode('Enabled'));
+        row.append(level, name, enabledLabel);
+        container.appendChild(row);
+      });
+      syncOptionalEmployeeLevels();
+    }
 
     async function loadHRSettings() {
       try {
@@ -101,22 +190,32 @@
 
         if (error) throw error;
         if (data && data.value) {
+          hrConfigValue = data.value;
           employeePrefix = data.value.employee_prefix || 'ID';
           document.getElementById('hr-employee-prefix').value = employeePrefix;
           document.getElementById('hr-contractor-prefix').value = data.value.contractor_prefix || 'ID';
+          renderEmployeeLevels(normalizeEmployeeLevels(data.value.employee_levels));
         } else {
+          hrConfigValue = {};
           employeePrefix = 'ID';
           document.getElementById('hr-employee-prefix').value = 'ID';
           document.getElementById('hr-contractor-prefix').value = 'ID';
+          renderEmployeeLevels(normalizeEmployeeLevels(null));
         }
       } catch (err) {
         console.error('Error loading HR settings:', err);
+        renderEmployeeLevels(normalizeEmployeeLevels(null));
       }
     }
 
     window.saveHRSettings = async function() {
       const empPrefix = document.getElementById('hr-employee-prefix').value.trim().toUpperCase();
       const conPrefix = document.getElementById('hr-contractor-prefix').value.trim().toUpperCase();
+      const employeeLevels = Array.from(document.querySelectorAll('.employee-level-name')).map(input => {
+        const level = Number(input.dataset.level);
+        const enabled = document.querySelector(`.employee-level-enabled[data-level="${level}"]`);
+        return { level, name: input.value.trim(), enabled: level <= 3 || Boolean(enabled?.checked) };
+      });
 
       if (empPrefix.length < 1 || empPrefix.length > 3) {
         showToast('Employee prefix must be 1 to 3 letters.', true);
@@ -126,18 +225,25 @@
         showToast('Contractor prefix must be 1 to 3 letters.', true);
         return;
       }
+      if (employeeLevels.some(item => !item.name)) {
+        showToast('Each employee level must have a name.', true);
+        return;
+      }
 
       try {
         const { error } = await sb.from('global_settings').upsert({
           key: 'hr_config',
           company_id: currentCompanyId,
           value: {
+            ...hrConfigValue,
             employee_prefix: empPrefix,
-            contractor_prefix: conPrefix
+            contractor_prefix: conPrefix,
+            employee_levels: employeeLevels
           }
         });
         if (error) throw error;
         employeePrefix = empPrefix;
+        hrConfigValue = { ...hrConfigValue, employee_prefix: empPrefix, contractor_prefix: conPrefix, employee_levels: employeeLevels };
 
         // Backfill employee numbers for existing employees with new prefix
         try {

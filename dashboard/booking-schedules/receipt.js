@@ -4,6 +4,16 @@
     async function openBookingReceipt(b, receiptSb, receiptCompanyId, targetWindow) {
       if (!b || !receiptSb || !receiptCompanyId) return;
 
+      const { data: lockedBasis, error: lockError } = await receiptSb.rpc('lock_commission_basis_for_ar', {
+        p_booking_id: b.id
+      });
+      if (lockError) {
+        throw new Error('The receipt could not be produced because its commission price basis was not locked. Please try again.');
+      }
+      if (lockedBasis && typeof lockedBasis === 'object') {
+        b = { ...b, ...lockedBasis, commission_basis_snapshot: lockedBasis };
+      }
+
       const pipe = (str) => str ? str.split('|').map(s => s.trim()).filter(Boolean) : [];
       const esc  = (s) => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
       const currencySymbol = window.BKCurrency?.symbol || '₱';

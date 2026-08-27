@@ -635,7 +635,7 @@ window.navigateToFolder = function(id) {
   const path = folder?.folder_code
     ? `/dashboard/resources/folders/${folder.folder_code}`
     : '/dashboard/resources';
-  window.history.pushState({}, '', path);
+  window.BKResourcesNavigation.push(path);
   renderExplorer();
 };
 
@@ -652,8 +652,8 @@ function openFolderFromUrl() {
   }
 }
 
-window.addEventListener('popstate', () => {
-  currentFolderId = null;
+window.addEventListener('popstate', (event) => {
+  window.BKResourcesNavigation.sync(event.state); currentFolderId = null;
   openFolderFromUrl();
   renderExplorer();
 });

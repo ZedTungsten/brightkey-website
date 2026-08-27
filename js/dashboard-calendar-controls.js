@@ -41,6 +41,47 @@
     leaves: []
   };
 
+  function visibilitySettingsKey() {
+    return `dashboard_calendar_visibility_${App.employeeId}`;
+  }
+
+  async function loadVisibilityPreferences() {
+    if (!App.companyId || !App.employeeId) return;
+    try {
+      const { data, error } = await window.BKAuth.sb.from('global_settings')
+        .select('value')
+        .eq('company_id', App.companyId)
+        .eq('key', visibilitySettingsKey())
+        .maybeSingle();
+      if (error) throw error;
+      const saved = data?.value;
+      if (!saved || typeof saved !== 'object') return;
+      Object.keys(LABELS).forEach(type => {
+        if (typeof saved.visibility?.[type] === 'boolean') state.visibility[type] = saved.visibility[type];
+      });
+      if (saved.leaveScope === 'team' || saved.leaveScope === 'company') state.leaveScope = saved.leaveScope;
+    } catch (error) {
+      console.error('Dashboard calendar visibility could not be loaded:', error);
+    }
+  }
+
+  let visibilitySavePromise = Promise.resolve();
+  function saveVisibilityPreferences() {
+    const value = { visibility: { ...state.visibility }, leaveScope: state.leaveScope };
+    visibilitySavePromise = visibilitySavePromise.catch(() => {}).then(async () => {
+      const { error } = await window.BKAuth.sb.from('global_settings').upsert({
+        company_id: App.companyId,
+        key: visibilitySettingsKey(),
+        value
+      }, { onConflict: 'company_id,key' });
+      if (error) throw error;
+    }).catch(error => {
+      console.error('Dashboard calendar visibility could not be saved:', error);
+      window.toast?.('Your calendar visibility could not be saved. Please try again.', 'error');
+    });
+    return visibilitySavePromise;
+  }
+
   function calendarRange() {
     const year = App.calendarDate.getFullYear();
     const month = App.calendarDate.getMonth();
@@ -292,6 +333,7 @@
         }
         decorateCalendar();
         renderUpcoming();
+        saveVisibilityPreferences();
       });
       const text = document.createElement('span');
       text.textContent = LABELS[type];
@@ -320,6 +362,7 @@
             state.leaveScope = option.value;
             decorateCalendar();
             renderUpcoming();
+            saveVisibilityPreferences();
           });
           const scopeText = document.createElement('span');
           scopeText.textContent = option.label;
@@ -415,6 +458,7 @@
   const originalInit = App.init.bind(App);
   App.init = async function initWithCalendarSources() {
     await originalInit();
+    await loadVisibilityPreferences();
     await loadOperationalSources();
     App.renderCalendar();
     renderUpcoming();

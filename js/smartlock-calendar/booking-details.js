@@ -264,7 +264,7 @@ function openDetailsModal(bookingId) {
           <span style="font-size: 0.83rem; font-weight: 700; background: var(--danger); color: #fff; padding: 0.3rem 0.7rem; border-radius: var(--radius-sm); text-transform: uppercase;">Cancelled</span>
         `;
       } else if (isAssignedToThisDoor && completionPolicy.allowed) {
-        if (door?.completed) {
+        if (door?.signature || door?.completed) {
           const uploadButton = bookingMediaRequirements.length > 0
             ? `<button type="button" class="btn btn-sm" style="width: auto; font-size: 0.83rem; padding: 0.3rem 0.7rem; border-radius: var(--radius-sm); background: #7C3AED; color: #fff; border: none; cursor: pointer;" onclick="openUploadModal(${i})">Upload Media</button>`
             : '';
@@ -298,7 +298,7 @@ function openDetailsModal(bookingId) {
       }
 
       let signatureHtml = '';
-      if (door?.completed && door.signature) {
+      if (door?.signature) {
         signatureHtml = `
           <div style="margin-top: 0.5rem; display: flex; flex-direction: column; gap: 0.2rem;">
             <span class="info-lbl" style="font-size:0.6rem;">Customer Signature Logged</span>
