@@ -294,6 +294,70 @@ Instead of scrolling the whole panel, restrict vertical and horizontal scrolling
 </div>
 ```
 
+### CS Customers-Style Tables Must Stay Within the Viewport
+
+The CS Customers table pattern is a short, viewport-contained panel. The page
+header and toolbar remain visible while only the table wrapper scrolls. Do not
+allow the table rows to increase the document height.
+
+Setting `overflow: auto` on the table wrapper is not enough. Flex children use
+`min-height: auto` by default, so an unconstrained ancestor refuses to shrink
+below the table's content height. This makes the panel and page grow with every
+row instead of creating an internal scrollbar.
+
+Constrain the complete height chain:
+
+```css
+.dashboard-page,
+.dash-main {
+  height: 100vh; /* fallback */
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.content-area,
+.main-panel,
+.page-content,
+.table-panel {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.table-toolbar,
+.panel-header {
+  flex-shrink: 0;
+}
+
+.table-responsive {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+```
+
+Required behavior:
+
+1. The root dashboard layout has a fixed viewport height, not only
+   `min-height: 100dvh`.
+2. Every flex ancestor between the viewport and table wrapper has
+   `min-height: 0`.
+3. Page-level ancestors use `overflow: hidden`; the table wrapper is the only
+   vertical scrolling region.
+4. Headers and toolbars use `flex-shrink: 0` so the table receives only the
+   remaining height.
+5. Verify with enough rows to overflow: the page must remain stationary, the
+   panel bottom must stay visible, and scrolling over the rows must move only
+   the table contents.
+
+If the table still grows beyond the viewport, inspect the ancestor chain first.
+Do not compensate with a guessed pixel `max-height`; a missing `min-height: 0`
+or fixed viewport height is usually the cause.
+
 ### Sticky Headers Must Use Opaque Backgrounds
 
 **Rule:** Every sticky table header cell must have a fully opaque background color. Never use `rgba(...)`, `hsla(...)`, `opacity`, or another translucent background on a `position: sticky` header cell.
