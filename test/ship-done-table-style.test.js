@@ -43,3 +43,17 @@ test('Ship Done totals every delivery fee column for the visible rows', () => {
   assert.match(source, /totalRow\.className = 'done-total-row'/);
   assert.match(source, /formatFeeTotal\(feeTotals\.total\)/);
 });
+
+test('Ship Done shows filtered order, unit, and expense summary cards beside search', () => {
+  const toolbar = source.match(/<div class="done-toolbar">([\s\S]*?)\n\s*<\/div>\n\n\s*<div class="panel">/)?.[1] || '';
+  assert.ok(toolbar.indexOf('bk-search-field done-search') < toolbar.indexOf('done-summary-cards'));
+  assert.ok(toolbar.indexOf('done-summary-cards') < toolbar.indexOf('month-nav-container'));
+  assert.match(source, /id="done-summary-orders"/);
+  assert.match(source, /id="done-summary-units"/);
+  assert.match(source, /id="done-summary-expenses"/);
+  assert.match(source, />Total Orders<\/span>/);
+  assert.match(source, />Total Units<\/span>/);
+  assert.match(source, />Total Expenses<\/span>/);
+  assert.match(source, /const totalUnits = this\.consolidatedOrders\.reduce/);
+  assert.match(source, /this\.updateDoneSummary\(this\.consolidatedOrders\.length, totalUnits, feeTotals\.total\)/);
+});

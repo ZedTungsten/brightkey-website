@@ -270,6 +270,42 @@
     .done-toolbar .month-nav-container {
       margin-left: auto;
     }
+    .done-summary-cards {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(96px, 1fr)) minmax(130px, 1.2fr);
+      gap: 0.6rem;
+      flex: 0 1 360px;
+    }
+    .done-summary-card {
+      min-width: 0;
+      padding: 0.5rem 0.65rem;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--bg-surface);
+      box-shadow: var(--shadow-sm);
+    }
+    .done-summary-label {
+      display: block;
+      overflow: hidden;
+      color: var(--text-muted);
+      font-size: 0.62rem;
+      font-weight: 700;
+      letter-spacing: 0.035em;
+      text-overflow: ellipsis;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+    .done-summary-value {
+      display: block;
+      margin-top: 0.15rem;
+      overflow: hidden;
+      color: var(--text-primary);
+      font-size: 0.9rem;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
 
     /* ── Form Inputs ── */
     .form-group {
@@ -421,6 +457,20 @@
                       <line x1="16.5" y1="16.5" x2="21" y2="21"></line>
                     </svg>
                     <input type="search" id="search-done" oninput="DeliveryApp.renderDoneQueue()" placeholder="Search name or order" aria-label="Search name or order" autocomplete="off" />
+                  </div>
+                  <div class="done-summary-cards" aria-label="Delivery summary">
+                    <div class="done-summary-card">
+                      <span class="done-summary-label">Total Orders</span>
+                      <strong class="done-summary-value" id="done-summary-orders">0</strong>
+                    </div>
+                    <div class="done-summary-card">
+                      <span class="done-summary-label">Total Units</span>
+                      <strong class="done-summary-value" id="done-summary-units">0</strong>
+                    </div>
+                    <div class="done-summary-card">
+                      <span class="done-summary-label">Total Expenses</span>
+                      <strong class="done-summary-value" id="done-summary-expenses">₱0.00</strong>
+                    </div>
                   </div>
                   <div class="month-nav-container">
                     <button onclick="DeliveryApp.changeMonth(-1)" class="month-nav-btn" aria-label="Previous month">
@@ -892,6 +942,15 @@
         }
       },
 
+      updateDoneSummary(orderCount, unitCount, expenseCentavos) {
+        const orders = document.getElementById('done-summary-orders');
+        const units = document.getElementById('done-summary-units');
+        const expenses = document.getElementById('done-summary-expenses');
+        if (orders) orders.textContent = Number(orderCount || 0).toLocaleString();
+        if (units) units.textContent = Number(unitCount || 0).toLocaleString();
+        if (expenses) expenses.textContent = `₱${((Number(expenseCentavos) || 0) / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      },
+
       renderDoneQueue() {
         const tbody = document.getElementById('done-list');
         if (!tbody) return;
@@ -986,11 +1045,6 @@
         // Sort consolidated orders by dispatch date (descending)
         this.consolidatedOrders.sort((a, b) => new Date(b.dateDispatched || 0) - new Date(a.dateDispatched || 0));
 
-        if (this.consolidatedOrders.length === 0) {
-          tbody.innerHTML = `<tr><td colspan="14" style="text-align:center; padding:3rem; color:var(--text-muted);">No completed or picked up orders for this month.</td></tr>`;
-          return;
-        }
-
         const feeTotals = this.consolidatedOrders.reduce((totals, order) => {
           totals.base += Number(order.db?.base_fee) || 0;
           totals.tip1 += Number(order.db?.tip_1) || 0;
@@ -999,6 +1053,17 @@
           return totals;
         }, { base: 0, tip1: 0, tip2: 0, toll: 0 });
         feeTotals.total = feeTotals.base + feeTotals.tip1 + feeTotals.tip2 + feeTotals.toll;
+        const totalUnits = this.consolidatedOrders.reduce(
+          (sum, order) => sum + order.txs.reduce((orderSum, transaction) => orderSum + (Number(transaction.quantity) || 0), 0),
+          0
+        );
+        this.updateDoneSummary(this.consolidatedOrders.length, totalUnits, feeTotals.total);
+
+        if (this.consolidatedOrders.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="14" style="text-align:center; padding:3rem; color:var(--text-muted);">No completed or picked up orders for this month.</td></tr>`;
+          return;
+        }
+
         const formatFeeTotal = centavos => `₱${(centavos / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
         this.consolidatedOrders.forEach(order => {
