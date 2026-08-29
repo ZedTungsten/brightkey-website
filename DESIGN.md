@@ -338,6 +338,11 @@ Constrain the complete height chain:
   overflow: auto;
   overscroll-behavior: contain;
 }
+
+/* Reserve space outside the panel for the persistent Chat tab. */
+.table-page-content {
+  padding-bottom: 4rem;
+}
 ```
 
 Required behavior:
@@ -350,9 +355,14 @@ Required behavior:
    vertical scrolling region.
 4. Headers and toolbars use `flex-shrink: 0` so the table receives only the
    remaining height.
-5. Verify with enough rows to overflow: the page must remain stationary, the
+5. Reserve at least `4rem` of bottom padding outside the table panel when the
+   page includes the persistent Chat tab or another floating bottom action.
+   The widget must occupy this clearance instead of covering the table border,
+   scrollbar, or final visible row.
+6. Verify with enough rows to overflow: the page must remain stationary, the
    panel bottom must stay visible, and scrolling over the rows must move only
-   the table contents.
+   the table contents. Confirm that the floating Chat tab does not overlap the
+   table at the bottom of the viewport.
 
 If the table still grows beyond the viewport, inspect the ancestor chain first.
 Do not compensate with a guessed pixel `max-height`; a missing `min-height: 0`

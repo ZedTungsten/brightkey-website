@@ -33,3 +33,13 @@ test('Ship Done positions date navigation right and Bulk Edit across from the pa
   assert.match(source, /<div class="top-bar">[\s\S]*?<span class="top-bar-title">Logistics Ship<\/span>[\s\S]*?<div class="top-bar-actions">[\s\S]*?id="btn-bulk-fees"/);
   assert.doesNotMatch(source, /panel-header-actions/);
 });
+
+test('Ship Done totals every delivery fee column for the visible rows', () => {
+  assert.match(source, /const feeTotals = this\.consolidatedOrders\.reduce/);
+  assert.match(source, /totals\.base \+= Number\(order\.db\?\.base_fee\)/);
+  assert.match(source, /totals\.tip1 \+= Number\(order\.db\?\.tip_1\)/);
+  assert.match(source, /totals\.tip2 \+= Number\(order\.db\?\.tip_2\)/);
+  assert.match(source, /totals\.toll \+= Number\(order\.db\?\.toll\)/);
+  assert.match(source, /totalRow\.className = 'done-total-row'/);
+  assert.match(source, /formatFeeTotal\(feeTotals\.total\)/);
+});

@@ -174,7 +174,7 @@
       if (tabCalendar) tabCalendar.classList.toggle('active', currentSubpage === 'calendar');
       if (tabAllBookings) tabAllBookings.classList.toggle('active', currentSubpage === 'all-bookings');
       if (panelCalendar) panelCalendar.style.display = currentSubpage === 'calendar' ? 'block' : 'none';
-      if (panelAllBookings) panelAllBookings.style.display = currentSubpage === 'all-bookings' ? 'block' : 'none';
+      if (panelAllBookings) panelAllBookings.style.display = currentSubpage === 'all-bookings' ? 'flex' : 'none';
       if (panelInstallers) panelInstallers.style.display = isInstallerAssignments ? 'block' : 'none';
       if (panelInstallerAccounts) panelInstallerAccounts.style.display = isInstallerAccounts ? 'block' : 'none';
       if (panelInstallerNotes) panelInstallerNotes.style.display = isInstallerNotes ? 'flex' : 'none';
@@ -192,6 +192,7 @@
       if (scrollContainer) scrollContainer.classList.toggle('booking-controls-active', showsBookingControls);
       if (pageTitle) pageTitle.textContent = isInstallersPage ? 'Installers' : 'Installation Schedules';
       if (issueToolButton) issueToolButton.style.display = isInstallerTools ? 'inline-flex' : 'none';
+      document.body.classList.toggle('booking-all-bookings-page', currentSubpage === 'all-bookings');
       document.title = isInstallersPage
         ? 'Installers — Brightkey Admin'
         : 'Installation Schedules — Brightkey Admin';
@@ -693,7 +694,7 @@
             <td style="text-align: center;">${deleteButton}</td>
           </tr>
         `;
-      }).join('');
+      }).join('') + '<tr class="table-spacer-row"><td colspan="8"></td></tr>';
     }
 
     function sortAllBookings(key) {

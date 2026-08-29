@@ -205,6 +205,15 @@
     }
     .done-status.dispatched { background: #ECFEFF; color: #0891B2; }
     .done-status.received { background: #F0FDF4; color: #16A34A; }
+    .done-total-row td,
+    .done-total-row:hover td,
+    .done-total-row .done-col-ref,
+    .done-total-row .done-col-name {
+      border-top: 2px solid var(--border-hover);
+      background: #F4F4F5;
+      color: var(--text-primary);
+      font-weight: 800;
+    }
     .loading-wrapper {
       display: flex;
       align-items: center;
@@ -982,6 +991,16 @@
           return;
         }
 
+        const feeTotals = this.consolidatedOrders.reduce((totals, order) => {
+          totals.base += Number(order.db?.base_fee) || 0;
+          totals.tip1 += Number(order.db?.tip_1) || 0;
+          totals.tip2 += Number(order.db?.tip_2) || 0;
+          totals.toll += Number(order.db?.toll) || 0;
+          return totals;
+        }, { base: 0, tip1: 0, tip2: 0, toll: 0 });
+        feeTotals.total = feeTotals.base + feeTotals.tip1 + feeTotals.tip2 + feeTotals.toll;
+        const formatFeeTotal = centavos => `₱${(centavos / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
         this.consolidatedOrders.forEach(order => {
           const db = order.db;
           const skusHtml = order.txs.length
@@ -1049,6 +1068,26 @@
         spacer.className = 'table-spacer-row';
         spacer.innerHTML = '<td colspan="14"></td>';
         tbody.appendChild(spacer);
+
+        const totalRow = document.createElement('tr');
+        totalRow.className = 'done-total-row';
+        totalRow.innerHTML = `
+          <td class="done-col-ref">Total</td>
+          <td class="done-col-name"></td>
+          <td></td>
+          <td></td>
+          <td></td>
+          <td class="done-money-column">${formatFeeTotal(feeTotals.base)}</td>
+          <td class="done-money-column">${formatFeeTotal(feeTotals.tip1)}</td>
+          <td class="done-money-column">${formatFeeTotal(feeTotals.tip2)}</td>
+          <td class="done-money-column">${formatFeeTotal(feeTotals.toll)}</td>
+          <td class="done-money-column">${formatFeeTotal(feeTotals.total)}</td>
+          <td></td>
+          <td></td>
+          <td></td>
+          <td></td>
+        `;
+        tbody.appendChild(totalRow);
 
       },
 
