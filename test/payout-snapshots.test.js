@@ -8,7 +8,7 @@ const snapshots = globalThis.window.BKPayoutSnapshots;
 const employeeId = 'employee-1';
 const originKey = `2026-08|${employeeId}|15`;
 
-test('a changed paid cutoff becomes a System adjustment on the next payout', () => {
+test('a lower recalculated paid cutoff does not reduce the next payout', () => {
   const app = {
     regularPayoutState: {
       '2026-08': {
@@ -19,8 +19,23 @@ test('a changed paid cutoff becomes a System adjustment on the next payout', () 
   };
 
   const result = snapshots.systemAdjustment(app, employeeId, '2026-08', 30);
-  assert.equal(result.value, -3);
-  assert.deepEqual(result.systemSources, { [originKey]: -300 });
+  assert.equal(result.value, 0);
+  assert.deepEqual(result.systemSources, {});
+});
+
+test('a positive late backfill is still added to the next payout', () => {
+  const app = {
+    regularPayoutState: {
+      '2026-08': {
+        [`${employeeId}_15`]: snapshots.createSnapshot({ sourceValue: 100, paidValue: 100 })
+      }
+    },
+    getReconcilablePayoutCentavos: () => 12500
+  };
+
+  const result = snapshots.systemAdjustment(app, employeeId, '2026-08', 30);
+  assert.equal(result.value, 25);
+  assert.deepEqual(result.systemSources, { [originKey]: 2500 });
 });
 
 test('a System correction is not repeated after a later payout carries it', () => {
@@ -49,4 +64,13 @@ test('legacy checked values remain recognized as paid', () => {
   assert.equal(snapshots.isPaid(true), true);
   assert.equal(snapshots.isPaid(false), false);
   assert.equal(snapshots.isPaid({ checked: true }), true);
+});
+
+test('a correction from a paid commission cutoff is labeled System Comm', () => {
+  const result = {
+    systemSources: { [originKey]: 25000 }
+  };
+
+  assert.equal(snapshots.systemAdjustmentLabel(result, key => key === originKey), 'System Comm');
+  assert.equal(snapshots.systemAdjustmentLabel(result, () => false), 'System');
 });

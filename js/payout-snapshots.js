@@ -41,7 +41,9 @@
         });
 
         const outstanding = currentSource - Number(origin.source_value_centavos) - alreadyCarried;
-        if (outstanding === 0) return;
+        // Automatic reconciliation may add missed earnings, but it must not
+        // reduce a later payout while historical-source migrations are being reviewed.
+        if (outstanding <= 0) return;
         systemSources[originKey] = outstanding;
         totalCentavos += outstanding;
       });
@@ -60,11 +62,18 @@
     };
   }
 
+  function systemAdjustmentLabel(systemResult, hasCommissionAtSource) {
+    const sourceKeys = Object.keys(systemResult?.systemSources || {});
+    if (!sourceKeys.length || typeof hasCommissionAtSource !== 'function') return 'System';
+    return sourceKeys.every(sourceKey => hasCommissionAtSource(sourceKey)) ? 'System Comm' : 'System';
+  }
+
   window.BKPayoutSnapshots = {
     createSnapshot,
     fromCents,
     isPaid,
     isSnapshot,
-    systemAdjustment
+    systemAdjustment,
+    systemAdjustmentLabel
   };
 })();
