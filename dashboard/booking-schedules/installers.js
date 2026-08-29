@@ -43,6 +43,41 @@
       return String(employee?.employment_status || 'Active').trim().toLowerCase() === 'active';
     }
 
+    function isInstallerSummaryDoorCancelled(booking, door, doorIndex, doors) {
+      if (door?.cancelled === true || String(door?.status || '').toLowerCase() === 'cancelled') return true;
+
+      let products = [];
+      if (Array.isArray(booking?.products)) products = booking.products;
+      else if (typeof booking?.products === 'string') {
+        try {
+          const parsed = JSON.parse(booking.products);
+          products = Array.isArray(parsed) ? parsed : [];
+        } catch (_) {}
+      }
+      if (!products.length) {
+        products = String(booking?.product_skus || '').split(' | ').filter(Boolean).map(sku => ({ sku }));
+      }
+
+      const normalizeSku = value => String(value || '').trim().toUpperCase();
+      const hardwareProducts = products.filter(product => normalizeSku(product?.sku) !== 'ADD-ON LABOR');
+      const hasAttachedProducts = doors.some(item => Array.isArray(item?.products) && item.products.length > 0);
+
+      if (hasAttachedProducts) {
+        const attachedSkus = Array.isArray(door?.products) ? door.products : [];
+        return attachedSkus.length > 0 && attachedSkus.every(sku => {
+          let matches = products.filter(product => product?.sku === sku);
+          const indexedMatches = matches.filter(product => Number(product?.doorIndex) === doorIndex);
+          if (indexedMatches.length > 0) matches = indexedMatches;
+          return matches.length > 0 && matches.every(product => product?.cancelled === true);
+        });
+      }
+
+      if (doors.length === 1) {
+        return hardwareProducts.length > 0 && hardwareProducts.every(product => product?.cancelled === true);
+      }
+      return hardwareProducts[doorIndex]?.cancelled === true;
+    }
+
     // Build <option> HTML for door installer dropdowns
     function buildDoorInstallerOptions(selectedId = '') {
       const installerNames = window._installerAssignmentNames || [];
@@ -147,21 +182,9 @@
 
       const roleLabel = (text) => `<span style="font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text-muted);letter-spacing:0.04em;">${text}</span>`;
       const roleRowStyle = 'display:grid;grid-template-columns:48px minmax(0,1fr) 28px;gap:0.35rem;align-items:center;';
+      const serviceInstallerId = serviceInst?.id || (hasServiceProduct ? inst1Id : '');
 
-      const serviceHtml = hasServiceProduct ? `
-          <div style="${roleRowStyle}">
-            ${roleLabel('Service')}
-            <select class="form-input" style="height:auto; padding:0.35rem; font-size:0.8rem; flex:1;" id="edit-inst-${doorIndex}-service" data-role="service">
-              ${buildDoorInstallerOptions(serviceInst?.id || '')}
-            </select>
-            <button type="button" class="btn-minimal btn-danger" onclick="clearDoorInstallerEdit(${doorIndex}, 'service')" title="Remove service assignment">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-            </button>
-          </div>
-      ` : '';
-
-      container.innerHTML = `
-        <div style="display: flex; flex-direction: column; gap: 0.4rem;">
+      const leadHtml = hasServiceProduct ? '' : `
           <div style="${roleRowStyle}">
             ${roleLabel('Lead')}
             <select class="form-input" style="height:auto; padding:0.35rem; font-size:0.8rem; flex:1;" id="edit-inst-${doorIndex}-1" data-role="lead">
@@ -171,6 +194,24 @@
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
             </button>
           </div>
+      `;
+
+      const serviceHtml = hasServiceProduct ? `
+          <div style="${roleRowStyle}">
+            ${roleLabel('Service')}
+            <select class="form-input" style="height:auto; padding:0.35rem; font-size:0.8rem; flex:1;" id="edit-inst-${doorIndex}-service" data-role="service">
+              ${buildDoorInstallerOptions(serviceInstallerId)}
+            </select>
+            <button type="button" class="btn-minimal btn-danger" onclick="clearDoorInstallerEdit(${doorIndex}, 'service')" title="Remove service assignment">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+          </div>
+      ` : '';
+
+      container.innerHTML = `
+        <div style="display: flex; flex-direction: column; gap: 0.4rem;">
+          ${leadHtml}
+          ${serviceHtml}
           <div id="edit-inst-2-wrapper-${doorIndex}" style="${roleRowStyle}display:${hasAssist2 ? 'grid' : 'none'};">
             ${roleLabel('Assist')}
             <select class="form-input" style="height:auto; padding:0.35rem; font-size:0.8rem; flex:1;" id="edit-inst-${doorIndex}-2" data-role="assist">
@@ -185,7 +226,6 @@
             </select>
             <button type="button" class="btn-minimal btn-danger" onclick="removeAssistInstallerEdit(${doorIndex}, 3)" title="Remove"><svg viewBox="0 0 24 24" style="width:14px;height:14px;display:block;fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
           </div>
-          ${serviceHtml}
           <button type="button" class="btn btn-outline btn-sm" id="btn-add-inst-edit-${doorIndex}"
             style="display: ${(hasAssist2 && hasAssist3) ? 'none' : 'inline-flex'}; font-size: 0.72rem; padding: 0.2rem 0.5rem;"
             onclick="addAssistInstallerEdit(${doorIndex})">+ Add Assist</button>
@@ -503,11 +543,12 @@
         return [...new Set(roles)];
       };
       const bookingCompleted = ['done', 'completed', 'finished'].includes(String(booking.status || '').toLowerCase());
-      if (!doors.length) return bookingAssigned ? [{ roles: getRoles(bookingMatches), completed: bookingCompleted, door: null }] : [];
-      return doors.flatMap(door => {
+      if (!doors.length) return bookingAssigned ? [{ roles: getRoles(bookingMatches), completed: bookingCompleted, door: null, doorIndex: null }] : [];
+      return doors.flatMap((door, doorIndex) => {
+        if (isInstallerSummaryDoorCancelled(booking, door, doorIndex, doors)) return [];
         const matches = (Array.isArray(door?.installers) ? door.installers : []).filter(installer => installer?.id === employeeId);
         if (!matches.length && (hasDoorAssignments || !bookingAssigned)) return [];
-        return [{ roles: getRoles(matches.length ? matches : bookingMatches), completed: Boolean(door?.completed) || bookingCompleted, door }];
+        return [{ roles: getRoles(matches.length ? matches : bookingMatches), completed: Boolean(door?.completed) || bookingCompleted, door, doorIndex }];
       });
     }
 
@@ -539,7 +580,7 @@
       const leadWeight = Number(installerPayoutSettings?.lead_credit ?? 1);
       const assistWeight = Number(installerPayoutSettings?.assist_credit ?? 0.5);
       const summaries = installers.map(employee => {
-        const summary = { employee, lead: 0, scheduledLead: 0, assist: 0, scheduledAssist: 0, serviceJobs: 0, scheduledService: 0, ocular: 0, scheduledOcular: 0, backjobs: 0, scheduledBackjobs: 0, credit: 0, service: 0, lastAssigned: '' };
+        const summary = { employee, lead: 0, scheduledLead: 0, assist: 0, scheduledAssist: 0, allService: 0, scheduledAllService: 0, ocular: 0, scheduledOcular: 0, backjobs: 0, scheduledBackjobs: 0, credit: 0, service: 0, lastAssigned: '' };
         dbBookings.forEach(booking => {
           if (String(booking.status || '').toLowerCase() === 'cancelled') return;
           const type = String(booking.product_skus || '').trim().toLowerCase();
@@ -553,9 +594,9 @@
           }
           assignedJobs.forEach(job => {
             if (dayOff) return;
-            if (job.roles.includes('service')) {
-              summary.serviceJobs++;
-              if (!job.completed) summary.scheduledService++;
+            if (job.roles.includes('service') || ocular || backjob) {
+              summary.allService++;
+              if (!job.completed) summary.scheduledAllService++;
             }
             if (ocular) {
               summary.ocular++;
@@ -583,30 +624,39 @@
         return summary;
       });
       if (!summaries.length) {
-      assignmentBody.innerHTML = '<tr><td colspan="11" class="installer-summary-empty">No employees with the Installer assignment were found.</td></tr>';
+      assignmentBody.innerHTML = '<tr><td colspan="9" class="installer-summary-empty">No employees with the Installer assignment were found.</td></tr>';
         return;
       }
       const formatDate = value => value ? new Date(`${value}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : '—';
       const metric = (done, scheduled) => `${done}<span class="installer-scheduled-count"> (${scheduled})</span>`;
-      assignmentBody.innerHTML = summaries.map(s => `<tr><td>${installerSummaryPerson(s.employee)}</td><td>${escapeHtml(s.employee.city || '—')}</td><td>${formatDate(s.lastAssigned)}</td><td class="installer-metric-lead">${metric(s.lead - s.scheduledLead, s.scheduledLead)}</td><td class="installer-metric-assist">${metric(s.assist - s.scheduledAssist, s.scheduledAssist)}</td><td class="installer-summary-row-total">${metric(s.installationDone, s.installationScheduled)}</td><td class="installer-metric-service">${metric(s.serviceJobs - s.scheduledService, s.scheduledService)}</td><td class="installer-metric-ocular">${metric(s.ocular - s.scheduledOcular, s.scheduledOcular)}</td><td class="installer-metric-backjob">${metric(s.backjobs - s.scheduledBackjobs, s.scheduledBackjobs)}</td><td class="installer-summary-row-total">${s.total}</td><td><span class="installer-metric-lead">${formatInstallerSummaryCredit(s.credit)}</span><span class="installer-threshold-limit">/${formatInstallerSummaryCredit(threshold)}</span></td></tr>`).join('');
-      const totals = summaries.reduce((a, s) => ({ lead:a.lead+s.lead, scheduledLead:a.scheduledLead+s.scheduledLead, assist:a.assist+s.assist, scheduledAssist:a.scheduledAssist+s.scheduledAssist, installationDone:a.installationDone+s.installationDone, installationScheduled:a.installationScheduled+s.installationScheduled, serviceJobs:a.serviceJobs+s.serviceJobs, scheduledService:a.scheduledService+s.scheduledService, ocular:a.ocular+s.ocular, scheduledOcular:a.scheduledOcular+s.scheduledOcular, backjobs:a.backjobs+s.backjobs, scheduledBackjobs:a.scheduledBackjobs+s.scheduledBackjobs, total:a.total+s.total, credit:a.credit+s.credit, service:a.service+s.service, extra:a.extra+s.extra }), { lead:0, scheduledLead:0, assist:0, scheduledAssist:0, installationDone:0, installationScheduled:0, serviceJobs:0, scheduledService:0, ocular:0, scheduledOcular:0, backjobs:0, scheduledBackjobs:0, total:0, credit:0, service:0, extra:0 });
-      document.getElementById('installer-assignment-tfoot').innerHTML = `<tr><td colspan="3">Total</td><td class="installer-metric-lead">${metric(totals.lead - totals.scheduledLead, totals.scheduledLead)}</td><td class="installer-metric-assist">${metric(totals.assist - totals.scheduledAssist, totals.scheduledAssist)}</td><td>${metric(totals.installationDone, totals.installationScheduled)}</td><td class="installer-metric-service">${metric(totals.serviceJobs - totals.scheduledService, totals.scheduledService)}</td><td class="installer-metric-ocular">${metric(totals.ocular - totals.scheduledOcular, totals.scheduledOcular)}</td><td class="installer-metric-backjob">${metric(totals.backjobs - totals.scheduledBackjobs, totals.scheduledBackjobs)}</td><td>${totals.total}</td><td>—</td></tr>`;
+      assignmentBody.innerHTML = summaries.map(s => `<tr><td>${installerSummaryPerson(s.employee)}</td><td>${escapeHtml(s.employee.city || '—')}</td><td>${formatDate(s.lastAssigned)}</td><td class="installer-metric-lead">${metric(s.lead - s.scheduledLead, s.scheduledLead)}</td><td class="installer-metric-assist">${metric(s.assist - s.scheduledAssist, s.scheduledAssist)}</td><td class="installer-summary-row-total">${metric(s.installationDone, s.installationScheduled)}</td><td class="installer-metric-service">${metric(s.allService - s.scheduledAllService, s.scheduledAllService)}</td><td class="installer-summary-row-total">${s.total}</td><td><span class="installer-metric-lead">${formatInstallerSummaryCredit(s.credit)}</span><span class="installer-threshold-limit">/${formatInstallerSummaryCredit(threshold)}</span></td></tr>`).join('');
+      const totals = summaries.reduce((a, s) => ({ lead:a.lead+s.lead, scheduledLead:a.scheduledLead+s.scheduledLead, assist:a.assist+s.assist, scheduledAssist:a.scheduledAssist+s.scheduledAssist, installationDone:a.installationDone+s.installationDone, installationScheduled:a.installationScheduled+s.installationScheduled, allService:a.allService+s.allService, scheduledAllService:a.scheduledAllService+s.scheduledAllService, total:a.total+s.total, credit:a.credit+s.credit }), { lead:0, scheduledLead:0, assist:0, scheduledAssist:0, installationDone:0, installationScheduled:0, allService:0, scheduledAllService:0, total:0, credit:0 });
+      document.getElementById('installer-assignment-tfoot').innerHTML = `<tr><td colspan="3">Total</td><td class="installer-metric-lead">${metric(totals.lead - totals.scheduledLead, totals.scheduledLead)}</td><td class="installer-metric-assist">${metric(totals.assist - totals.scheduledAssist, totals.scheduledAssist)}</td><td>${metric(totals.installationDone, totals.installationScheduled)}</td><td class="installer-metric-service">${metric(totals.allService - totals.scheduledAllService, totals.scheduledAllService)}</td><td>${totals.total}</td><td>—</td></tr>`;
       window.drawInstallerAssignmentHistory();
     };
 
     let installerHistorySelectedIds = null;
 
     function getInstallerHistorySkus(booking, job) {
+      const products = Array.isArray(booking.products) ? booking.products : (() => {
+        try { const parsed = JSON.parse(booking.products || '[]'); return Array.isArray(parsed) ? parsed : []; } catch (_) { return []; }
+      })();
       const doorProducts = Array.isArray(job?.door?.products) ? job.door.products : [];
-      let values = doorProducts.map(product => typeof product === 'string' ? product : product?.sku).filter(Boolean);
+      let values = doorProducts.map(product => typeof product === 'string' ? product : product?.sku).filter(Boolean).map(sku => {
+        let matches = products.filter(product => product?.sku === sku);
+        if (job?.doorIndex !== null && job?.doorIndex !== undefined) {
+          const indexedMatches = matches.filter(product => Number(product?.doorIndex) === job.doorIndex);
+          if (indexedMatches.length) matches = indexedMatches;
+        }
+        return { sku, cancelled: matches.length > 0 && matches.every(product => product?.cancelled === true) };
+      });
       if (!values.length) {
-        const products = Array.isArray(booking.products) ? booking.products : (() => {
-          try { const parsed = JSON.parse(booking.products || '[]'); return Array.isArray(parsed) ? parsed : []; } catch (_) { return []; }
-        })();
-        values = products.map(product => typeof product === 'string' ? product : product?.sku).filter(Boolean);
+        values = products.map(product => typeof product === 'string'
+          ? { sku: product, cancelled: false }
+          : { sku: product?.sku, cancelled: product?.cancelled === true }).filter(product => product.sku);
       }
-      if (!values.length) values = String(booking.product_skus || '').split(/\s*\|\s*|\s*,\s*/).filter(Boolean);
-      return [...new Set(values)].join(', ') || '—';
+      if (!values.length) values = String(booking.product_skus || '').split(/\s*\|\s*|\s*,\s*/).filter(Boolean).map(sku => ({ sku, cancelled: false }));
+      return [...new Map(values.map(product => [product.sku, product])).values()];
     }
 
     window.drawInstallerAssignmentHistory = function() {
@@ -627,12 +677,23 @@
 
       options.innerHTML = installers.map(employee => {
         const name = `${employee.first_name || ''} ${employee.last_name || ''}`.trim() || 'Unnamed installer';
-        return `<label class="installer-filter-option"><input type="checkbox" value="${escapeHtml(employee.id)}" ${installerHistorySelectedIds.has(employee.id) ? 'checked' : ''}><span>${escapeHtml(name)}</span></label>`;
+        return `<div class="installer-filter-option"><label class="installer-filter-option-label"><input type="checkbox" value="${escapeHtml(employee.id)}" ${installerHistorySelectedIds.has(employee.id) ? 'checked' : ''}><span>${escapeHtml(name)}</span></label><button type="button" class="installer-filter-only" data-installer-id="${escapeHtml(employee.id)}" aria-label="Show only ${escapeHtml(name)}">only</button></div>`;
       }).join('');
       options.querySelectorAll('input[type="checkbox"]').forEach(input => {
         input.addEventListener('change', () => {
           if (input.checked) installerHistorySelectedIds.add(input.value);
           else installerHistorySelectedIds.delete(input.value);
+          renderInstallerHistoryRows(installers);
+        });
+      });
+      options.querySelectorAll('.installer-filter-only').forEach(button => {
+        button.addEventListener('click', event => {
+          event.preventDefault();
+          event.stopPropagation();
+          installerHistorySelectedIds = new Set([button.dataset.installerId]);
+          options.querySelectorAll('input[type="checkbox"]').forEach(input => {
+            input.checked = input.value === button.dataset.installerId;
+          });
           renderInstallerHistoryRows(installers);
         });
       });
@@ -665,7 +726,10 @@
         return;
       }
       const formatDate = value => value ? new Date(`${value}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : '—';
-      tbody.innerHTML = rows.map(row => `<tr><td>${installerSummaryPerson(row.employee)}</td><td>${formatDate(row.date)}</td><td><span class="installer-history-status-pill ${row.completed ? 'done' : 'scheduled'}">${row.completed ? 'Done' : 'Scheduled'}</span></td><td>${escapeHtml(row.customer)}</td><td class="installer-history-sku">${escapeHtml(row.sku)}</td><td>${escapeHtml(row.assignment)}</td></tr>`).join('');
+      const renderSkus = products => products.length
+        ? products.map(product => `<span class="${product.cancelled ? 'installer-history-sku-cancelled' : ''}">${escapeHtml(product.sku)}</span>`).join(', ')
+        : '—';
+      tbody.innerHTML = rows.map(row => `<tr><td>${installerSummaryPerson(row.employee)}</td><td>${formatDate(row.date)}</td><td><span class="installer-history-status-pill ${row.completed ? 'done' : 'scheduled'}">${row.completed ? 'Done' : 'Scheduled'}</span></td><td>${escapeHtml(row.customer)}</td><td class="installer-history-sku">${renderSkus(row.sku)}</td><td>${escapeHtml(row.assignment)}</td></tr>`).join('');
     }
 
 (() => {

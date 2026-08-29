@@ -291,6 +291,7 @@ function renderSalaryAndAdjustments(monthKey) {
   const [year, month] = monthKey.split('-').map(Number);
   const selectedForProration = (payoutTrackerData.proratedState?.[monthKey] || []).includes(currentInstaller.id);
   const hiredDate = String(currentInstaller.date_hired || '').slice(0, 10);
+  const lockedCutoffDays = new Set();
 
   const salaryAllocation = (cutoffDay, cutoffIndex) => {
     const regularValue = salary / (schedules.length || 1);
@@ -318,7 +319,13 @@ function renderSalaryAndAdjustments(monthKey) {
 
   const addRow = (label, amount, paid, day) => rows.push({ label, amount: Number(amount) || 0, paid: !!paid, day: Number(day) || 0 });
   schedules.forEach((day, index) => {
-    addRow('Salary', salaryAllocation(day, index), monthState[`${currentInstaller.id}_${day}`], day);
+    const payoutEntry = monthState[`${currentInstaller.id}_${day}`];
+    if (window.BKPayoutSnapshots?.isSnapshot(payoutEntry)) {
+      lockedCutoffDays.add(day);
+      addRow('Payout Tracker', window.BKPayoutSnapshots.fromCents(payoutEntry.paid_value_centavos), true, day);
+      return;
+    }
+    addRow('Salary', salaryAllocation(day, index), window.BKPayoutSnapshots?.isPaid(payoutEntry) || payoutEntry, day);
   });
 
   const monthSpecialSchedules = getSpecialPayoutSchedulesForMonth(config.specialSchedules || [], monthKey);
@@ -330,14 +337,23 @@ function renderSalaryAndAdjustments(monthKey) {
     if (item.paid) return true;
     const itemDay = new Date(`${item.date}T00:00:00`).getDate();
     const cutoff = schedules.find(day => itemDay <= day) || schedules[schedules.length - 1];
-    return !!monthState[`${currentInstaller.id}_${cutoff}`];
+    return window.BKPayoutSnapshots?.isPaid(monthState[`${currentInstaller.id}_${cutoff}`]) || false;
   };
-  getInstallerReimbursements(monthKey).forEach(item => addRow(item.label || 'Reimbursement', item.amount, itemPaidState(item), new Date(`${item.date}T00:00:00`).getDate()));
-  (payoutTrackerData.adjustments || []).filter(item => String(item.date || '').startsWith(monthKey)).forEach(item => addRow(item.label || 'Adjustment', item.amount, itemPaidState(item), new Date(`${item.date}T00:00:00`).getDate()));
+  getInstallerReimbursements(monthKey).forEach(item => {
+    const itemDay = new Date(`${item.date}T00:00:00`).getDate();
+    const cutoff = schedules.find(day => itemDay <= day) || schedules[schedules.length - 1];
+    if (!lockedCutoffDays.has(cutoff)) addRow(item.label || 'Reimbursement', item.amount, itemPaidState(item), itemDay);
+  });
+  (payoutTrackerData.adjustments || []).filter(item => String(item.date || '').startsWith(monthKey)).forEach(item => {
+    const itemDay = new Date(`${item.date}T00:00:00`).getDate();
+    const cutoff = schedules.find(day => itemDay <= day) || schedules[schedules.length - 1];
+    if (!lockedCutoffDays.has(cutoff)) addRow(item.label || 'Adjustment', item.amount, itemPaidState(item), itemDay);
+  });
 
   const payoutModel = installerPayslipModel?.monthKey === monthKey ? installerPayslipModel : null;
   schedules.forEach(day => {
     const paid = !!monthState[`${currentInstaller.id}_${day}`];
+    if (lockedCutoffDays.has(day)) return;
     const serviceAmount = Number(payoutModel?.cutoffServicePayouts?.[day]) || 0;
     const rolloverAmount = Number(payoutModel?.cutoffRolloverPayouts?.[day]) || 0;
     const installationAmount = Number(payoutModel?.cutoffInstallationPayouts?.[day]) || 0;
@@ -372,7 +388,11 @@ function renderSalaryAndAdjustments(monthKey) {
     `;
   }).join('') : '<div style="color:var(--text-muted); font-size:0.82rem;">No salary or adjustment entries for this month.</div>';
   const supplementalLabels = new Set(['Service Job', 'Rollover Install', 'Installation Job']);
-  const salaryAndAdjustmentsTotal = rows.reduce((sum, row) => sum + (supplementalLabels.has(row.label) ? 0 : row.amount), 0);
+  const lockedSupplementalTotal = [...lockedCutoffDays].reduce(
+    (sum, day) => sum + (Number(payoutModel?.cutoffPayouts?.[day]) || 0),
+    0
+  );
+  const salaryAndAdjustmentsTotal = rows.reduce((sum, row) => sum + (supplementalLabels.has(row.label) ? 0 : row.amount), 0) - lockedSupplementalTotal;
   const itemizedTotal = rows.reduce((sum, row) => sum + row.amount, 0);
   totalElement.textContent = peso(itemizedTotal);
   totalElement.dataset.total = String(salaryAndAdjustmentsTotal);
@@ -383,7 +403,7 @@ function getReadyPayslipRecord(monthKey) {
   if (!record || !currentInstaller) return null;
   const schedules = payoutTrackerData.config?.payoutSchedules || [15, 30];
   const regularState = payoutTrackerData.regularState?.[monthKey] || {};
-  const allSalaryPaid = schedules.every(day => regularState[`${currentInstaller.id}_${Number(day)}`] === true);
+  const allSalaryPaid = schedules.every(day => window.BKPayoutSnapshots?.isPaid(regularState[`${currentInstaller.id}_${Number(day)}`]));
   const configuredSpecials = payoutTrackerData.config?.specialSchedules || [];
   const monthSpecials = getSpecialPayoutSchedulesForMonth(configuredSpecials, monthKey);
   const employeeSpecials = isOwnerInstaller() ? [] : monthSpecials.filter(item => item.employeeId === currentInstaller.id);
@@ -554,8 +574,6 @@ function drawPayouts() {
     .map(Number)
     .filter(Boolean)
     .sort((a, b) => a - b);
-  const extraServicesList = window.BKInstallerPayoutRules.serviceRules(config);
-
   // Update threshold settings labels in UI
 
   // Keep all Done work available so threshold eligibility can be calculated in
@@ -601,6 +619,7 @@ function drawPayouts() {
   let creditedServiceCredit = 0;
   let serviceEarnings = 0;
   const serviceCounts = {};
+  const serviceEarningsBySku = {};
 
   let completedMonthCredit = 0;
   const settledCreditBySourceMonth = {};
@@ -683,6 +702,7 @@ function drawPayouts() {
     let servicePayForJob = 0;
     if (!isOwner) window.BKInstallerPayoutRules.servicePayoutsForJob(config, ruleJob).forEach(service => {
       serviceCounts[service.sku] = (serviceCounts[service.sku] || 0) + 1;
+      serviceEarningsBySku[service.sku] = (serviceEarningsBySku[service.sku] || 0) + service.amount;
       serviceEarnings += service.amount;
       servicePayForJob += service.amount;
     });
@@ -771,11 +791,10 @@ function drawPayouts() {
 
   // 3. Render flat services payout
   let servicesDetailsHtml = '';
-  if (Object.keys(serviceCounts).length > 0) {
-    Object.entries(serviceCounts).forEach(([sku, count]) => {
-      const matched = extraServicesList.find(es => es.sku === sku);
-      const rate = matched ? matched.rate : 0;
-      const subtotal = count * rate;
+  const payableServiceEntries = Object.entries(serviceCounts).filter(([sku]) => (serviceEarningsBySku[sku] || 0) > 0);
+  if (payableServiceEntries.length > 0) {
+    payableServiceEntries.forEach(([sku, count]) => {
+      const subtotal = serviceEarningsBySku[sku];
       servicesDetailsHtml += `
         <div style="display:flex; justify-content:space-between;">
           <span>${escapeHtml(sku)} (${count}):</span>
@@ -791,9 +810,9 @@ function drawPayouts() {
   document.getElementById('payout-services-total').dataset.total = String(serviceEarnings);
   document.getElementById('payout-services-details').innerHTML = servicesDetailsHtml;
 
-  const serviceDescription = Object.entries(serviceCounts).map(([sku]) => {
-    const matched = extraServicesList.find(item => item.sku === sku);
-    return `₱${Number(matched?.rate || 0).toLocaleString()} per ${sku}`;
+  const serviceDescription = payableServiceEntries.map(([sku, count]) => {
+    const earnedRate = serviceEarningsBySku[sku] / count;
+    return `₱${earnedRate.toLocaleString()} per ${sku}`;
   }).join('\n');
   installerPayslipModel = {
     monthKey: targetMonthKey,

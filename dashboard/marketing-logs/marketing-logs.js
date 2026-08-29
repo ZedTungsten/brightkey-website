@@ -178,8 +178,8 @@
     for (let d = 1; d <= daysInMonth; d++) {
       const dateString = `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
       
-      // Check if we have an existing log record for this date
-      const log = logsList.find(l => l.date === dateString) || {
+      const dateLogs = logsList.filter(log => log.date === dateString);
+      const rowsForDate = dateLogs.length ? dateLogs : [{
         id: null,
         date: dateString,
         item: '',
@@ -187,47 +187,49 @@
         reason: '',
         learning: '',
         starred: false
-      };
+      }];
 
-      const tr = document.createElement('tr');
-      if (log.starred) {
-        tr.classList.add('row-starred');
-      }
-      if (y === today.getFullYear() && m === today.getMonth() && d === today.getDate()) {
-        tr.classList.add('row-today');
-      }
+      rowsForDate.forEach(log => {
+        const tr = document.createElement('tr');
+        if (log.starred) tr.classList.add('row-starred');
+        if (y === today.getFullYear() && m === today.getMonth() && d === today.getDate()) tr.classList.add('row-today');
 
-      // Resolve initials
-      let initials = '';
-      if (log.employees) {
-        initials = ((log.employees.first_name || '').charAt(0) + (log.employees.last_name || '').charAt(0)).toUpperCase();
-      }
+        let initials = '';
+        if (log.employees) {
+          initials = ((log.employees.first_name || '').charAt(0) + (log.employees.last_name || '').charAt(0)).toUpperCase();
+        }
+        const logId = log.id || '';
+        const badgeKey = log.id || `new-${dateString}`;
 
-      tr.innerHTML = `
+        tr.innerHTML = `
         <td class="cell-date">${formatLogDate(dateString)}</td>
-        <td class="cell-user"><div class="user-badge" id="user-badge-${dateString}" style="${initials ? '' : 'display: none;'}">${initials}</div></td>
+        <td class="cell-user"><div class="user-badge" data-log-key="${badgeKey}" style="${initials ? '' : 'display: none;'}">${initials}</div></td>
         <td>
-          <textarea rows="1" class="cell-textarea" onblur="saveCell('${dateString}', 'item', this.value)" oninput="autoResizeTextarea(this)">${esc(log.item)}</textarea>
+          <textarea rows="1" class="cell-textarea" onblur="saveCell('${dateString}', '${logId}', 'item', this.value)" oninput="autoResizeTextarea(this)">${esc(log.item)}</textarea>
         </td>
         <td>
-          <textarea rows="1" class="cell-textarea" onblur="saveCell('${dateString}', 'change_desc', this.value)" oninput="autoResizeTextarea(this)">${esc(log.change_desc)}</textarea>
+          <textarea rows="1" class="cell-textarea" onblur="saveCell('${dateString}', '${logId}', 'change_desc', this.value)" oninput="autoResizeTextarea(this)">${esc(log.change_desc)}</textarea>
         </td>
         <td>
-          <textarea rows="1" class="cell-textarea" onblur="saveCell('${dateString}', 'reason', this.value)" oninput="autoResizeTextarea(this)">${esc(log.reason)}</textarea>
+          <textarea rows="1" class="cell-textarea" onblur="saveCell('${dateString}', '${logId}', 'reason', this.value)" oninput="autoResizeTextarea(this)">${esc(log.reason)}</textarea>
         </td>
         <td class="cell-learning">
-          <textarea rows="1" class="cell-textarea" onblur="saveCell('${dateString}', 'learning', this.value)" oninput="autoResizeTextarea(this)">${esc(log.learning)}</textarea>
+          <textarea rows="1" class="cell-textarea" onblur="saveCell('${dateString}', '${logId}', 'learning', this.value)" oninput="autoResizeTextarea(this)">${esc(log.learning)}</textarea>
         </td>
         <td>
           <div class="action-btn-group">
-            <button class="action-icon-btn star-btn ${log.starred ? 'active' : ''}" onclick="toggleStarRow(event, '${dateString}', ${log.starred})" title="Star Highlight">
+            <button type="button" class="action-icon-btn add-row-btn" onclick="addMarketingLogRow(event, '${dateString}')" title="Add another item for this date" aria-label="Add another item for this date">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            </button>
+            <button type="button" class="action-icon-btn star-btn ${log.starred ? 'active' : ''}" onclick="toggleStarRow(event, '${dateString}', '${logId}', ${log.starred})" title="Star Highlight" aria-label="Star highlight">
               <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="${log.starred ? 'currentColor' : 'none'}"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
             </button>
           </div>
         </td>
       `;
 
-      tbody.appendChild(tr);
+        tbody.appendChild(tr);
+      });
     }
 
     // Append auto-height spacer row to prevent browser stretching rows to fill 100% min-height
@@ -247,8 +249,8 @@
     }, 50);
   }
 
-  window.saveCell = async function(dateString, field, value) {
-    const existing = logsList.find(l => l.date === dateString);
+  window.saveCell = async function(dateString, logId, field, value) {
+    const existing = logId ? logsList.find(log => log.id === logId) : null;
     const prevVal = existing ? existing[field] : '';
     const newVal = value.trim();
 
@@ -314,8 +316,7 @@
         logsList.push(data);
       }
 
-      // Sync user badges UI instantly without database race conditions
-      updateUserBadges();
+      await loadMarketingLogs();
     } catch (err) {
       console.error(err);
       showToast('Save failed: ' + err.message, true);
@@ -331,7 +332,7 @@
 
     // Update active User badges initials from logsList
     logsList.forEach(log => {
-      const badge = document.getElementById(`user-badge-${log.date}`);
+      const badge = document.querySelector(`.user-badge[data-log-key="${log.id}"]`);
       if (badge) {
         let initials = '';
         if (log.employees) {
@@ -347,10 +348,10 @@
     });
   }
 
-  window.toggleStarRow = async function(e, dateString, currentStarredState) {
+  window.toggleStarRow = async function(e, dateString, logId, currentStarredState) {
     e.stopPropagation();
     const newStarred = !currentStarredState;
-    const existing = logsList.find(l => l.date === dateString);
+    const existing = logId ? logsList.find(log => log.id === logId) : null;
 
     try {
       if (existing) {
@@ -378,6 +379,29 @@
     } catch (err) {
       console.error(err);
       showToast('Failed to toggle highlight: ' + err.message, true);
+    }
+  };
+
+  window.addMarketingLogRow = async function(e, dateString) {
+    e.stopPropagation();
+    try {
+      const payload = {
+        company_id: companyId,
+        date: dateString,
+        item: '',
+        change_desc: '',
+        reason: '',
+        learning: '',
+        starred: false,
+        employee_id: currentEmployee?.id || null
+      };
+      const { error } = await sb.from('marketing_logs').insert([payload]);
+      if (error) throw error;
+      showToast('Another item was added for the same date.');
+      await loadMarketingLogs();
+    } catch (err) {
+      console.error(err);
+      showToast('Could not add another item for this date.', true);
     }
   };
 

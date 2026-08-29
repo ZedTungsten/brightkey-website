@@ -1496,24 +1496,24 @@
         if (Array.isArray(booking?.doors)) return booking.doors;
         try { return JSON.parse(booking?.doors || '[]'); } catch (_) { return []; }
       };
-      const isSmartlockCalendarDone = booking => {
+      const isCommissionReady = booking => {
         if (!booking || String(booking.status || '').toLowerCase() === 'cancelled') return false;
         const status = String(booking.status || '').toLowerCase();
         const doors = parseBookingDoors(booking);
         return ['done', 'completed', 'finished'].includes(status)
-          || (doors.length > 0 && doors.every(door => Boolean(door?.completed)));
+          || (doors.length > 0 && doors.every(door => Boolean(door?.completed || door?.signature)));
       };
 
-      // Commission rows use only the selected install month and the Smartlock
-      // Calendar completion flag. Media upload state is intentionally ignored.
+      // Commission eligibility is established by the customer's signature and
+      // does not wait for the separate installer-media completion workflow.
       const filteredBookings = dbBookings.filter(booking => {
         if (!booking.scheduled_date || !selectedMonth) return false;
         return String(booking.scheduled_date).slice(0, 7) === selectedMonth
-          && isSmartlockCalendarDone(booking);
+          && isCommissionReady(booking);
       });
 
       if (filteredBookings.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="${10 + rates.length}" style="padding: 3rem; text-align: center; color: var(--text-muted);">No completed installation jobs found for the selected month.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="${10 + rates.length}" style="padding: 3rem; text-align: center; color: var(--text-muted);">No signed installation jobs found for the selected month.</td></tr>`;
         renderMonthlyCommissionSummary([], {}, rates);
         return;
       }

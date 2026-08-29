@@ -61,3 +61,19 @@ test('SmartLock threshold card totals lead and assist credits and colors service
   assert.match(payoutsSource, /leadCredit\.toFixed\(1\)/);
   assert.match(payoutsSource, /assistCredit\.toFixed\(1\)/);
 });
+
+test('SmartLock uses locked Payout Tracker snapshots instead of recalculating paid cutoffs', () => {
+  const pageSource = fs.readFileSync(new URL('../smartlock-calendar.html', import.meta.url), 'utf8');
+  assert.match(pageSource, /\/js\/payout-snapshots\.js/);
+  assert.match(payoutsSource, /BKPayoutSnapshots\?\.isSnapshot\(payoutEntry\)/);
+  assert.match(payoutsSource, /BKPayoutSnapshots\.fromCents\(payoutEntry\.paid_value_centavos\)/);
+  assert.match(payoutsSource, /lockedCutoffDays\.has\(day\)/);
+  assert.match(payoutsSource, /lockedSupplementalTotal/);
+});
+
+test('SmartLock hides service detail rows that produced no payable earnings', () => {
+  assert.match(payoutsSource, /serviceEarningsBySku\[service\.sku\].*\+ service\.amount/);
+  assert.match(payoutsSource, /payableServiceEntries.*serviceEarningsBySku\[sku\].*> 0/);
+  assert.match(payoutsSource, /const subtotal = serviceEarningsBySku\[sku\]/);
+  assert.doesNotMatch(payoutsSource, /const subtotal = count \* rate/);
+});

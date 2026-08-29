@@ -86,8 +86,8 @@
         } else if (Array.isArray(b.doors)) {
           doorsArr = b.doors;
         }
-        const isBookingDone = ['done', 'completed', 'finished'].includes(b.status) || (doorsArr.length > 0 && doorsArr.every(d => d.completed));
-        if (!isBookingDone) continue;
+        const isCommissionReady = ['done', 'completed', 'finished'].includes(String(b.status || '').toLowerCase()) || (doorsArr.length > 0 && doorsArr.every(door => Boolean(door?.completed || door?.signature)));
+        if (!isCommissionReady) continue;
 
         const skus = (b.product_skus || '').split(' | ');
         const qtys = (b.product_qtys || '').split(' | ');

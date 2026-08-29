@@ -528,21 +528,20 @@
         filteredCalendarDayEvents = [...calendarDayEvents];
       } else {
         const matchesSearch = b => {
+          const orderNo = (b.order_no || '').toLowerCase();
           const name = (b.customer_name || '').toLowerCase();
           const address = (b.customer_address || '').toLowerCase();
-          const installer = (b.installer_name || '').toLowerCase();
           const skus = (b.product_skus || '').toLowerCase();
-          return name.includes(searchQuery)
+          return orderNo.includes(searchQuery)
+            || name.includes(searchQuery)
             || address.includes(searchQuery)
-            || installer.includes(searchQuery)
             || skus.includes(searchQuery);
         };
         filteredBookings = dbBookings.filter(matchesSearch);
         filteredCalendarBookings = calendarBookings.filter(matchesSearch);
         filteredCalendarDayEvents = calendarDayEvents.filter(event => {
           const type = String(event.type || '').toLowerCase();
-          const installers = (event.installers || []).map(installer => installer.name || '').join(' ').toLowerCase();
-          return type.includes(searchQuery) || installers.includes(searchQuery);
+          return type.includes(searchQuery);
         });
       }
 

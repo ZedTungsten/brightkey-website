@@ -269,11 +269,12 @@
       if (abortBtn) abortBtn.style.display = isAborted ? 'none' : '';
       if (reschedBtn) reschedBtn.disabled = isAborted;
 
+      const customerIdentity = getBookingCustomerIdentity(selectedBooking);
       document.getElementById('details-modal-title').innerText = selectedBooking.order_no || 'Order Number';
+      document.getElementById('details-modal-customer').innerText = customerIdentity.primaryName || 'N/A';
       document.getElementById('det-date').innerText = selectedBooking.scheduled_date ? formatDateFriendly(selectedBooking.scheduled_date) : 'Unscheduled';
       document.getElementById('det-date-details').innerText = selectedBooking.scheduled_date ? formatDateFriendly(selectedBooking.scheduled_date) : 'Unscheduled';
       document.getElementById('det-time').innerText = selectedBooking.scheduled_time || 'AM Slot';
-      const customerIdentity = getBookingCustomerIdentity(selectedBooking);
       document.getElementById('det-name-label').innerText = customerIdentity.isCompany ? 'Company Name' : 'Customer Name';
       document.getElementById('det-name').innerText = customerIdentity.primaryName || 'N/A';
       document.getElementById('det-company-contact-group').hidden = !customerIdentity.isCompany;
