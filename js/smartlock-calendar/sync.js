@@ -124,7 +124,7 @@ async function syncData() {
 
   try {
     try {
-      const { data: serviceCatalog, error: serviceCatalogError } = await sb.rpc('get_installer_service_catalog', {
+      const { data: serviceCatalog, error: serviceCatalogError } = await sb.rpc('get_installer_service_catalog_v2', {
         p_token: getInstallerSessionToken()
       });
       if (serviceCatalogError) throw serviceCatalogError;

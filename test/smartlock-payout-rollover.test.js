@@ -1,8 +1,22 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
+import vm from 'node:vm';
 
 const payoutsSource = fs.readFileSync(new URL('../js/smartlock-calendar/payouts.js', import.meta.url), 'utf8');
+
+test('SmartLock excludes expired special payouts from later months without the shared dashboard helper', () => {
+  const start = payoutsSource.indexOf('function getSpecialPayoutSchedulesForMonth');
+  const end = payoutsSource.indexOf('function getInstallerPayoutCutoffBucket');
+  const context = { window: {} };
+  vm.runInNewContext(`${payoutsSource.slice(start, end)};globalThis.forMonth = getSpecialPayoutSchedulesForMonth;`, context);
+  const schedules = [
+    { id: 'old', value: 2000, effectiveTo: '2026-07' },
+    { id: 'day-15', value: 1000, effectiveFrom: '2026-08' },
+    { id: 'day-30', value: 1000, effectiveFrom: '2026-08' }
+  ];
+  assert.deepEqual(Array.from(context.forMonth(schedules, '2026-08'), item => item.id), ['day-15', 'day-30']);
+});
 
 test('SmartLock payout summary identifies prior-month threshold rollover without changing the total', () => {
   assert.match(payoutsSource, /if \(sourceMonth !== targetMonthKey\)/);

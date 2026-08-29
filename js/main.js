@@ -140,13 +140,23 @@
 
   function ruleKey(rule) {
     const assignment = String(rule?.assignment || '').toLowerCase();
-    return `${assignment}:${assignment === 'service' ? normalizeSku(rule?.sku) : ''}`;
+    return `${assignment}:${assignment === 'service' ? (String(rule?.product_id || '').trim() || normalizeSku(rule?.sku)) : ''}`;
+  }
+
+  function ruleMatchesTarget(rule, target) {
+    const assignment = String(rule?.assignment || '').toLowerCase();
+    if (assignment !== String(target?.assignment || '').toLowerCase()) return false;
+    if (assignment !== 'service') return true;
+    const ruleProductId = String(rule?.product_id || '').trim();
+    const targetProductId = String(target?.product_id || '').trim();
+    if (ruleProductId && targetProductId && ruleProductId === targetProductId) return true;
+    const targetSku = normalizeSku(target?.sku);
+    return [rule?.sku, ...(Array.isArray(rule?.sku_aliases) ? rule.sku_aliases : [])].map(normalizeSku).includes(targetSku);
   }
 
   function latestEffectiveRule(rules, target, workDate) {
-    const targetKey = ruleKey(target);
     return rules
-      .filter(rule => ruleKey(rule) === targetKey && isEffective(rule, workDate))
+      .filter(rule => ruleMatchesTarget(rule, target) && isEffective(rule, workDate))
       .sort((a, b) => String(b.effective_from || '').localeCompare(String(a.effective_from || '')))[0] || null;
   }
 
@@ -176,14 +186,14 @@
     ];
   }
 
-  function assignmentFor(roles, skus) {
+  function assignmentFor(roles, skus, productIds) {
     const normalizedRoles = (roles || []).map(role => String(role).toLowerCase());
     const normalizedSkus = (skus || []).map(normalizeSku);
     if (normalizedRoles.includes('ocular') || normalizedSkus.includes('OCULAR')) return { assignment: 'Service', sku: 'OCULAR' };
     if (normalizedRoles.includes('repair') || normalizedSkus.includes('REPAIR')) return { assignment: 'Service', sku: 'REPAIR' };
     if (normalizedRoles.includes('lead')) return { assignment: 'Lead', sku: '' };
     if (normalizedRoles.includes('assist')) return { assignment: 'Assist', sku: '' };
-    if (normalizedRoles.includes('service')) return { assignment: 'Service', sku: normalizedSkus[0] || '', skus: normalizedSkus };
+    if (normalizedRoles.includes('service')) return { assignment: 'Service', sku: normalizedSkus[0] || '', skus: normalizedSkus, product_ids: productIds || [] };
     return { assignment: '', sku: '', skus: normalizedSkus };
   }
 
@@ -193,19 +203,19 @@
       return skus.map(sku => latestEffectiveRule(payoutRules(settings), { assignment: 'Service', sku }, new Date().toISOString())).filter(Boolean).map(rule => ({ sku: normalizeSku(rule.sku), rate: Number(rule.amount ?? rule.rate ?? rule.value) || 0, past_threshold_for_payout: rule.past_threshold_for_payout === true, effective_from: rule.effective_from || null }));
     },
     creditForJob(settings = {}, job = {}) {
-      const target = assignmentFor(job.roles, job.skus);
+      const target = assignmentFor(job.roles, job.skus, job.product_ids);
       const ruleDate = job.assignmentDate || job.workDate;
       const candidates = target.assignment === 'Service'
-        ? (target.skus || [target.sku]).map(sku => latestEffectiveRule(creditRules(settings), { assignment: 'Service', sku }, ruleDate)).filter(Boolean)
+        ? (target.skus || [target.sku]).map((sku, index) => latestEffectiveRule(creditRules(settings), { assignment: 'Service', sku, product_id: target.product_ids?.[index] }, ruleDate)).filter(Boolean)
         : [latestEffectiveRule(creditRules(settings), target, ruleDate)].filter(Boolean);
       const rule = candidates[0];
       return Number(rule?.credit ?? rule?.value) || 0;
     },
     thresholdRateForJob(settings = {}, job = {}) {
-      const target = assignmentFor(job.roles, job.skus);
+      const target = assignmentFor(job.roles, job.skus, job.product_ids);
       const ruleDate = job.assignmentDate || job.workDate;
       const candidates = target.assignment === 'Service'
-        ? (target.skus || [target.sku]).map(sku => latestEffectiveRule(payoutRules(settings), { assignment: 'Service', sku }, ruleDate)).filter(Boolean)
+        ? (target.skus || [target.sku]).map((sku, index) => latestEffectiveRule(payoutRules(settings), { assignment: 'Service', sku, product_id: target.product_ids?.[index] }, ruleDate)).filter(Boolean)
         : [latestEffectiveRule(payoutRules(settings), target, ruleDate)].filter(Boolean);
       const rule = candidates[0];
       if (target.assignment === 'Service' && rule?.past_threshold_for_payout !== true) return 0;
@@ -215,7 +225,7 @@
       if (!(job.roles || []).some(role => String(role).toLowerCase() === 'service')) return [];
       const skus = (job.skus || []).map(normalizeSku);
       const ruleDate = job.assignmentDate || job.workDate;
-      return skus.map(sku => latestEffectiveRule(payoutRules(settings), { assignment: 'Service', sku }, ruleDate)).filter(rule => rule && rule.past_threshold_for_payout !== true).map(rule => ({ sku: normalizeSku(rule.sku), amount: Number(rule.amount ?? rule.rate ?? rule.value) || 0 }));
+      return skus.map((sku, index) => latestEffectiveRule(payoutRules(settings), { assignment: 'Service', sku, product_id: job.product_ids?.[index] }, ruleDate)).filter(rule => rule && rule.past_threshold_for_payout !== true).map(rule => ({ sku: normalizeSku(rule.sku), amount: Number(rule.amount ?? rule.rate ?? rule.value) || 0 }));
     },
     thresholdForDate(settings = {}, workDate) {
       const history = Array.isArray(settings.threshold_history) ? settings.threshold_history : [];

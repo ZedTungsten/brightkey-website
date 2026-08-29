@@ -156,7 +156,7 @@
       try {
         const { data, error } = await sb
           .from('products')
-          .select('sku, title, category')
+          .select('id, sku, title, category')
           .eq('category', 'Service')
           .eq('company_id', currentCompanyId);
         if (!error && data) {
@@ -290,12 +290,31 @@
       return sku.toUpperCase();
     }
 
+    function serviceProductForRule(rule) {
+      const productId = String(rule?.product_id || '').trim();
+      if (productId) {
+        const byId = serviceProducts.find(product => product.id === productId);
+        if (byId) return byId;
+      }
+      const sku = normalizeServiceSku(rule?.sku);
+      return serviceProducts.find(product => normalizeServiceSku(product.sku) === sku) || null;
+    }
+
+    function bindRuleToCatalog(rule) {
+      const product = serviceProductForRule(rule);
+      if (!product || String(rule.assignment).toLowerCase() !== 'service') return rule;
+      const previousSku = normalizeServiceSku(rule.sku);
+      const currentSku = normalizeServiceSku(product.sku);
+      const aliases = [...new Set([...(Array.isArray(rule.sku_aliases) ? rule.sku_aliases : []), ...(previousSku && previousSku !== currentSku ? [previousSku] : [])].map(normalizeServiceSku).filter(Boolean))];
+      return { ...rule, product_id: product.id, sku: currentSku, ...(aliases.length ? { sku_aliases: aliases } : {}) };
+    }
+
     function ruleId() { return crypto.randomUUID?.() || `rule-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`; }
     function fixedRule(assignment, sku, value, effectiveFrom = '') { return { id: ruleId(), assignment, sku, value: Number(value) || 0, effective_from: effectiveFrom, fixed: true }; }
 
     function readCreditRules(settings) {
       if (Array.isArray(settings.credit_rules) && settings.credit_rules.length) {
-        return settings.credit_rules.map(rule => { const assignment = ['lead', 'assist'].includes(String(rule.assignment).toLowerCase()) ? `${String(rule.assignment)[0].toUpperCase()}${String(rule.assignment).slice(1).toLowerCase()}` : 'Service'; return { id: ruleId(), assignment, sku: normalizeServiceSku(rule.sku), value: Number(rule.credit ?? rule.value) || 0, effective_from: rule.effective_from || '', fixed: assignment !== 'Service' || ['OCULAR', 'REPAIR'].includes(normalizeServiceSku(rule.sku)) }; });
+        return settings.credit_rules.map(rule => bindRuleToCatalog({ ...rule, id: ruleId(), assignment: ['lead', 'assist'].includes(String(rule.assignment).toLowerCase()) ? `${String(rule.assignment)[0].toUpperCase()}${String(rule.assignment).slice(1).toLowerCase()}` : 'Service', sku: normalizeServiceSku(rule.sku), value: Number(rule.credit ?? rule.value) || 0, effective_from: rule.effective_from || '', fixed: String(rule.assignment).toLowerCase() !== 'service' || ['OCULAR', 'REPAIR'].includes(normalizeServiceSku(rule.sku)) }));
       }
       const effectiveFrom = settings.ocular_repair_effective_from || '';
       return [
@@ -304,12 +323,12 @@
         fixedRule('Service', 'OCULAR', settings.ocular_credit ?? 0, effectiveFrom),
         fixedRule('Service', 'REPAIR', settings.repair_credit ?? 0, effectiveFrom),
         ...(Array.isArray(settings.service_credit_rules) ? settings.service_credit_rules : []).filter(rule => !['OCULAR', 'REPAIR'].includes(normalizeServiceSku(rule.sku))).map(rule => ({ id: ruleId(), assignment: 'Service', sku: normalizeServiceSku(rule.sku), value: Number(rule.credit ?? rule.value) || 0, effective_from: rule.effective_from || '', fixed: false }))
-      ];
+      ].map(bindRuleToCatalog);
     }
 
     function readPayoutRules(settings) {
       if (Array.isArray(settings.extra_payout_rules) && settings.extra_payout_rules.length) {
-        return settings.extra_payout_rules.map(rule => { const assignment = ['lead', 'assist'].includes(String(rule.assignment).toLowerCase()) ? `${String(rule.assignment)[0].toUpperCase()}${String(rule.assignment).slice(1).toLowerCase()}` : 'Service'; return { id: ruleId(), assignment, sku: normalizeServiceSku(rule.sku), value: Number(rule.amount ?? rule.rate ?? rule.value) || 0, past_threshold_for_payout: assignment !== 'Service' || rule.past_threshold_for_payout === true, effective_from: rule.effective_from || '', fixed: assignment !== 'Service' || ['OCULAR', 'REPAIR'].includes(normalizeServiceSku(rule.sku)) }; });
+        return settings.extra_payout_rules.map(rule => bindRuleToCatalog({ ...rule, id: ruleId(), assignment: ['lead', 'assist'].includes(String(rule.assignment).toLowerCase()) ? `${String(rule.assignment)[0].toUpperCase()}${String(rule.assignment).slice(1).toLowerCase()}` : 'Service', sku: normalizeServiceSku(rule.sku), value: Number(rule.amount ?? rule.rate ?? rule.value) || 0, past_threshold_for_payout: String(rule.assignment).toLowerCase() !== 'service' || rule.past_threshold_for_payout === true, effective_from: rule.effective_from || '', fixed: String(rule.assignment).toLowerCase() !== 'service' || ['OCULAR', 'REPAIR'].includes(normalizeServiceSku(rule.sku)) }));
       }
       const effectiveFrom = settings.ocular_repair_effective_from || '';
       const extraServices = Array.isArray(settings.extra_services) ? settings.extra_services : [];
@@ -319,7 +338,7 @@
         { ...fixedRule('Service', 'OCULAR', settings.ocular_rate ?? 0, effectiveFrom), past_threshold_for_payout: false },
         { ...fixedRule('Service', 'REPAIR', settings.repair_rate ?? 0, effectiveFrom), past_threshold_for_payout: false },
         ...extraServices.filter(rule => !['OCULAR', 'REPAIR'].includes(normalizeServiceSku(rule.sku || rule.name))).map(rule => ({ id: ruleId(), assignment: 'Service', sku: normalizeServiceSku(rule.sku || rule.name), value: Number(rule.rate) || 0, past_threshold_for_payout: rule.past_threshold_for_payout === true, effective_from: rule.effective_from || '', fixed: false }))
-      ];
+      ].map(bindRuleToCatalog);
     }
 
     function serviceOptions(selectedSku) {
@@ -339,11 +358,11 @@
       const today = new Date().toISOString().slice(0, 10);
       serviceProducts.forEach(product => {
         const sku = normalizeServiceSku(product.sku);
-        if (!creditRules.some(rule => rule.assignment === 'Service' && normalizeServiceSku(rule.sku) === sku)) {
-          creditRules.push({ id: ruleId(), assignment: 'Service', sku, value: 0, effective_from: today, fixed: true, isNew: true });
+        if (!creditRules.some(rule => rule.assignment === 'Service' && (rule.product_id === product.id || normalizeServiceSku(rule.sku) === sku))) {
+          creditRules.push({ id: ruleId(), assignment: 'Service', product_id: product.id, sku, value: 0, effective_from: today, fixed: true, isNew: true });
         }
-        if (!payoutRules.some(rule => rule.assignment === 'Service' && normalizeServiceSku(rule.sku) === sku)) {
-          payoutRules.push({ id: ruleId(), assignment: 'Service', sku, value: 0, past_threshold_for_payout: false, effective_from: today, fixed: true, isNew: true });
+        if (!payoutRules.some(rule => rule.assignment === 'Service' && (rule.product_id === product.id || normalizeServiceSku(rule.sku) === sku))) {
+          payoutRules.push({ id: ruleId(), assignment: 'Service', product_id: product.id, sku, value: 0, past_threshold_for_payout: false, effective_from: today, fixed: true, isNew: true });
         }
       });
       const byServiceSku = (a, b) => {
@@ -358,7 +377,7 @@
       const body = document.getElementById('installer-rules-body');
       body.innerHTML = creditRules.map(creditRule => {
         const service = creditRule.assignment === 'Service';
-        const product = serviceProducts.find(item => normalizeServiceSku(item.sku) === normalizeServiceSku(creditRule.sku));
+        const product = serviceProductForRule(creditRule);
         const serviceLabel = product ? `${normalizeServiceSku(product.sku)} — ${product.title}` : normalizeServiceSku(creditRule.sku);
         const payoutRule = payoutRules.find(rule => historyRuleKey(rule) === historyRuleKey(creditRule));
         const thresholdControl = service
@@ -380,7 +399,7 @@
 
     function historyRuleKey(rule) {
       const assignment = String(rule.assignment || '').toLowerCase();
-      return `${assignment}:${assignment === 'service' ? normalizeServiceSku(rule.sku) : ''}`;
+      return `${assignment}:${assignment === 'service' ? (String(rule.product_id || '').trim() || normalizeServiceSku(rule.sku)) : ''}`;
     }
 
     function versionRuleHistory(existingHistory, originalRules, nextRules, valueName, boundary, includeThresholdMode = false) {
@@ -389,7 +408,7 @@
       const hasKey = key => history.some(rule => historyRuleKey(rule) === key);
       originalRules.forEach(rule => {
         const key = historyRuleKey(rule);
-        if (!hasKey(key)) history.push({ assignment: rule.assignment, sku: rule.sku || null, [valueName]: Number(rule.value) || 0, ...(includeThresholdMode ? { past_threshold_for_payout: rule.past_threshold_for_payout === true } : {}), effective_from: rule.effective_from || null });
+        if (!hasKey(key)) history.push({ assignment: rule.assignment, product_id: rule.product_id || null, sku: rule.sku || null, sku_aliases: rule.sku_aliases || [], [valueName]: Number(rule.value) || 0, ...(includeThresholdMode ? { past_threshold_for_payout: rule.past_threshold_for_payout === true } : {}), effective_from: rule.effective_from || null });
       });
       nextRules.forEach(rule => {
         const key = historyRuleKey(rule);
@@ -401,7 +420,7 @@
         if (sameSave) {
           sameSave[valueName] = nextValue;
           if (includeThresholdMode) sameSave.past_threshold_for_payout = rule.past_threshold_for_payout === true;
-        } else history.push({ assignment: rule.assignment, sku: rule.sku || null, [valueName]: nextValue, ...(includeThresholdMode ? { past_threshold_for_payout: rule.past_threshold_for_payout === true } : {}), effective_from: boundary });
+        } else history.push({ assignment: rule.assignment, product_id: rule.product_id || null, sku: rule.sku || null, sku_aliases: rule.sku_aliases || [], [valueName]: nextValue, ...(includeThresholdMode ? { past_threshold_for_payout: rule.past_threshold_for_payout === true } : {}), effective_from: boundary });
       });
       return history;
     }
@@ -432,8 +451,8 @@
       const assistRate = findRule(payoutRules, 'Assist')?.value || 0;
       const ocularRate = findRule(payoutRules, 'Service', 'OCULAR')?.value || 0;
       const repairRate = findRule(payoutRules, 'Service', 'REPAIR')?.value || 0;
-      const serviceCreditRules = creditRules.filter(rule => rule.assignment === 'Service' && !['OCULAR', 'REPAIR'].includes(rule.sku)).map(rule => ({ sku: rule.sku, credit: rule.value, effective_from: rule.effective_from }));
-      const extraServices = payoutRules.filter(rule => rule.assignment === 'Service' && !['OCULAR', 'REPAIR'].includes(rule.sku)).map(rule => ({ sku: rule.sku, rate: rule.value, past_threshold_for_payout: rule.past_threshold_for_payout === true, effective_from: rule.effective_from }));
+      const serviceCreditRules = creditRules.filter(rule => rule.assignment === 'Service' && !['OCULAR', 'REPAIR'].includes(rule.sku)).map(rule => ({ product_id: rule.product_id || null, sku: rule.sku, sku_aliases: rule.sku_aliases || [], credit: rule.value, effective_from: rule.effective_from }));
+      const extraServices = payoutRules.filter(rule => rule.assignment === 'Service' && !['OCULAR', 'REPAIR'].includes(rule.sku)).map(rule => ({ product_id: rule.product_id || null, sku: rule.sku, sku_aliases: rule.sku_aliases || [], rate: rule.value, past_threshold_for_payout: rule.past_threshold_for_payout === true, effective_from: rule.effective_from }));
       const originalCreditRules = readCreditRules(installerPayoutSettings);
       const originalPayoutRules = readPayoutRules(installerPayoutSettings);
       const value = {
@@ -449,8 +468,8 @@
         repair_rate: repairRate,
         service_credit_rules: serviceCreditRules,
         extra_services: extraServices,
-        credit_rules: creditRules.map(rule => ({ assignment: rule.assignment, sku: rule.sku || null, credit: rule.value, effective_from: rule.effective_from || null })),
-        extra_payout_rules: payoutRules.map(rule => ({ assignment: rule.assignment, sku: rule.sku || null, amount: rule.value, past_threshold_for_payout: rule.assignment !== 'Service' || rule.past_threshold_for_payout === true, effective_from: rule.effective_from || null })),
+        credit_rules: creditRules.map(rule => ({ assignment: rule.assignment, product_id: rule.product_id || null, sku: rule.sku || null, sku_aliases: rule.sku_aliases || [], credit: rule.value, effective_from: rule.effective_from || null })),
+        extra_payout_rules: payoutRules.map(rule => ({ assignment: rule.assignment, product_id: rule.product_id || null, sku: rule.sku || null, sku_aliases: rule.sku_aliases || [], amount: rule.value, past_threshold_for_payout: rule.assignment !== 'Service' || rule.past_threshold_for_payout === true, effective_from: rule.effective_from || null })),
         credit_rule_history: versionRuleHistory(installerPayoutSettings.credit_rule_history, originalCreditRules, creditRules, 'credit', versionBoundary),
         payout_rule_history: versionRuleHistory(installerPayoutSettings.payout_rule_history, originalPayoutRules, payoutRules, 'amount', versionBoundary, true),
         threshold_history: versionThresholdHistory(installerPayoutSettings.threshold_history, installerPayoutSettings.installations_before_crediting ?? 15, threshold, versionBoundary),

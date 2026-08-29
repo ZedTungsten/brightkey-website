@@ -45,7 +45,13 @@ function openDetailsModal(bookingId) {
   document.getElementById('det-date').innerText = b.scheduled_date ? formatDateFriendly(b.scheduled_date) : 'N/A';
   document.getElementById('det-time').innerText = b.scheduled_time || 'AM Slot';
   const customerIdentity = getSmartlockCustomerIdentity(b);
-  document.getElementById('det-company-details').hidden = !customerIdentity.isCompany;
+  const customerNameGroup = document.getElementById('det-customer-name-group');
+  const companyDetails = document.getElementById('det-company-details');
+  customerNameGroup.hidden = customerIdentity.isCompany;
+  customerNameGroup.style.display = customerIdentity.isCompany ? 'none' : '';
+  companyDetails.hidden = !customerIdentity.isCompany;
+  companyDetails.style.display = customerIdentity.isCompany ? 'grid' : 'none';
+  document.getElementById('det-customer-name').innerText = customerIdentity.primaryName || 'N/A';
   document.getElementById('det-company-contact').innerText = customerIdentity.contactPerson || 'N/A';
   document.getElementById('det-company-type').innerText = customerIdentity.companyType || 'N/A';
   document.getElementById('det-phones').innerText = [b.customer_phone, b.customer_phone_2]

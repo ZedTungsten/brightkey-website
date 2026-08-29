@@ -23,7 +23,7 @@ test('legacy Lead and Assist settings retain their existing values', () => {
 test('new Service rules apply by SKU only from their effective date', () => {
   const settings = {
     credit_rules: [{ assignment: 'Service', sku: 'OCULAR', credit: 0.75, effective_from: '2026-08-14' }],
-    extra_payout_rules: [{ assignment: 'Service', sku: 'OCULAR', amount: 350, effective_from: '2026-08-14' }]
+    extra_payout_rules: [{ assignment: 'Service', sku: 'OCULAR', amount: 350, past_threshold_for_payout: true, effective_from: '2026-08-14' }]
   };
   const oldJob = { roles: ['service'], skus: ['OCULAR'], workDate: '2026-08-13' };
   const newJob = { roles: ['service'], skus: ['OCULAR'], workDate: '2026-08-14' };
@@ -36,14 +36,39 @@ test('new Service rules apply by SKU only from their effective date', () => {
 test('flat Service payouts match all configured SKUs on a Service assignment', () => {
   const settings = {
     extra_payout_rules: [
-      { assignment: 'Service', sku: 'REPAIR', amount: 250 },
-      { assignment: 'Service', sku: 'BASEPLATE-M', amount: 700 }
+      { assignment: 'Service', sku: 'REPAIR', amount: 250, past_threshold_for_payout: false },
+      { assignment: 'Service', sku: 'BASEPLATE-M', amount: 700, past_threshold_for_payout: false }
     ]
   };
   const payouts = rules.servicePayoutsForJob(settings, { roles: ['service'], skus: ['REPAIR', 'BASEPLATE-M'], workDate: '2026-08-14' });
   assert.deepEqual(Array.from(payouts, item => ({ ...item })), [
     { sku: 'REPAIR', amount: 250 },
     { sku: 'BASEPLATE-M', amount: 700 }
+  ]);
+});
+
+test('Service rules follow a stable product ID after the catalog SKU is renamed', () => {
+  const productId = '7db84450-340f-4fea-b1db-b3890f54e830';
+  const settings = {
+    credit_rules: [{ assignment: 'Service', product_id: productId, sku: 'OLD-SKU', credit: 0.5 }],
+    extra_payout_rules: [{ assignment: 'Service', product_id: productId, sku: 'OLD-SKU', amount: 350, past_threshold_for_payout: false }]
+  };
+  const renamedJob = { roles: ['service'], product_ids: [productId], skus: ['NEW-SKU'], workDate: '2026-08-29' };
+  assert.equal(rules.creditForJob(settings, renamedJob), 0.5);
+  assert.deepEqual(Array.from(rules.servicePayoutsForJob(settings, renamedJob), item => ({ ...item })), [
+    { sku: 'OLD-SKU', amount: 350 }
+  ]);
+});
+
+test('legacy Service rules still match SKU snapshots without product IDs', () => {
+  const settings = {
+    credit_rules: [{ assignment: 'Service', sku: 'LEGACY-SKU', credit: 0.25 }],
+    extra_payout_rules: [{ assignment: 'Service', sku: 'LEGACY-SKU', amount: 200, past_threshold_for_payout: false }]
+  };
+  const legacyJob = { roles: ['service'], skus: ['LEGACY-SKU'], workDate: '2026-08-29' };
+  assert.equal(rules.creditForJob(settings, legacyJob), 0.25);
+  assert.deepEqual(Array.from(rules.servicePayoutsForJob(settings, legacyJob), item => ({ ...item })), [
+    { sku: 'LEGACY-SKU', amount: 200 }
   ]);
 });
 

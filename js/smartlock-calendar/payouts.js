@@ -18,13 +18,23 @@
 
   function ruleKey(rule) {
     const assignment = String(rule?.assignment || '').toLowerCase();
-    return `${assignment}:${assignment === 'service' ? normalizeSku(rule?.sku) : ''}`;
+    return `${assignment}:${assignment === 'service' ? (String(rule?.product_id || '').trim() || normalizeSku(rule?.sku)) : ''}`;
+  }
+
+  function ruleMatchesTarget(rule, target) {
+    const assignment = String(rule?.assignment || '').toLowerCase();
+    if (assignment !== String(target?.assignment || '').toLowerCase()) return false;
+    if (assignment !== 'service') return true;
+    const ruleProductId = String(rule?.product_id || '').trim();
+    const targetProductId = String(target?.product_id || '').trim();
+    if (ruleProductId && targetProductId && ruleProductId === targetProductId) return true;
+    const targetSku = normalizeSku(target?.sku);
+    return [rule?.sku, ...(Array.isArray(rule?.sku_aliases) ? rule.sku_aliases : [])].map(normalizeSku).includes(targetSku);
   }
 
   function latestEffectiveRule(rules, target, workDate) {
-    const targetKey = ruleKey(target);
     return rules
-      .filter(rule => ruleKey(rule) === targetKey && isEffective(rule, workDate))
+      .filter(rule => ruleMatchesTarget(rule, target) && isEffective(rule, workDate))
       .sort((a, b) => String(b.effective_from || '').localeCompare(String(a.effective_from || '')))[0] || null;
   }
 
@@ -54,14 +64,14 @@
     ];
   }
 
-  function assignmentFor(roles, skus) {
+  function assignmentFor(roles, skus, productIds) {
     const normalizedRoles = (roles || []).map(role => String(role).toLowerCase());
     const normalizedSkus = (skus || []).map(normalizeSku);
     if (normalizedRoles.includes('ocular') || normalizedSkus.includes('OCULAR')) return { assignment: 'Service', sku: 'OCULAR' };
     if (normalizedRoles.includes('repair') || normalizedSkus.includes('REPAIR')) return { assignment: 'Service', sku: 'REPAIR' };
     if (normalizedRoles.includes('lead')) return { assignment: 'Lead', sku: '' };
     if (normalizedRoles.includes('assist')) return { assignment: 'Assist', sku: '' };
-    if (normalizedRoles.includes('service')) return { assignment: 'Service', sku: normalizedSkus[0] || '', skus: normalizedSkus };
+    if (normalizedRoles.includes('service')) return { assignment: 'Service', sku: normalizedSkus[0] || '', skus: normalizedSkus, product_ids: productIds || [] };
     return { assignment: '', sku: '', skus: normalizedSkus };
   }
 
@@ -71,18 +81,18 @@
       return skus.map(sku => latestEffectiveRule(payoutRules(settings), { assignment: 'Service', sku }, new Date().toISOString())).filter(Boolean).map(rule => ({ sku: normalizeSku(rule.sku), rate: Number(rule.amount ?? rule.rate ?? rule.value) || 0, past_threshold_for_payout: rule.past_threshold_for_payout === true, effective_from: rule.effective_from || null }));
     },
     creditForJob(settings = {}, job = {}) {
-      const target = assignmentFor(job.roles, job.skus);
+      const target = assignmentFor(job.roles, job.skus, job.product_ids);
       const ruleDate = job.assignmentDate || job.workDate;
       const candidates = target.assignment === 'Service'
-        ? (target.skus || [target.sku]).map(sku => latestEffectiveRule(creditRules(settings), { assignment: 'Service', sku }, ruleDate)).filter(Boolean)
+        ? (target.skus || [target.sku]).map((sku, index) => latestEffectiveRule(creditRules(settings), { assignment: 'Service', sku, product_id: target.product_ids?.[index] }, ruleDate)).filter(Boolean)
         : [latestEffectiveRule(creditRules(settings), target, ruleDate)].filter(Boolean);
       return Number(candidates[0]?.credit ?? candidates[0]?.value) || 0;
     },
     thresholdRateForJob(settings = {}, job = {}) {
-      const target = assignmentFor(job.roles, job.skus);
+      const target = assignmentFor(job.roles, job.skus, job.product_ids);
       const ruleDate = job.assignmentDate || job.workDate;
       const candidates = target.assignment === 'Service'
-        ? (target.skus || [target.sku]).map(sku => latestEffectiveRule(payoutRules(settings), { assignment: 'Service', sku }, ruleDate)).filter(Boolean)
+        ? (target.skus || [target.sku]).map((sku, index) => latestEffectiveRule(payoutRules(settings), { assignment: 'Service', sku, product_id: target.product_ids?.[index] }, ruleDate)).filter(Boolean)
         : [latestEffectiveRule(payoutRules(settings), target, ruleDate)].filter(Boolean);
       const rule = candidates[0];
       if (target.assignment === 'Service' && rule?.past_threshold_for_payout !== true) return 0;
@@ -91,7 +101,7 @@
     servicePayoutsForJob(settings = {}, job = {}) {
       if (!(job.roles || []).some(role => String(role).toLowerCase() === 'service')) return [];
       const ruleDate = job.assignmentDate || job.workDate;
-      return (job.skus || []).map(normalizeSku).map(sku => latestEffectiveRule(payoutRules(settings), { assignment: 'Service', sku }, ruleDate)).filter(rule => rule && rule.past_threshold_for_payout !== true).map(rule => ({ sku: normalizeSku(rule.sku), amount: Number(rule.amount ?? rule.rate ?? rule.value) || 0 }));
+      return (job.skus || []).map(normalizeSku).map((sku, index) => latestEffectiveRule(payoutRules(settings), { assignment: 'Service', sku, product_id: job.product_ids?.[index] }, ruleDate)).filter(rule => rule && rule.past_threshold_for_payout !== true).map(rule => ({ sku: normalizeSku(rule.sku), amount: Number(rule.amount ?? rule.rate ?? rule.value) || 0 }));
     },
     thresholdForDate(settings = {}, workDate) {
       const history = Array.isArray(settings.threshold_history) ? settings.threshold_history : [];
@@ -103,6 +113,29 @@
 
 function isOwnerInstaller() {
   return String(currentInstaller?.assignment || '').split(',').some(value => value.trim().toLowerCase() === 'owner');
+}
+
+function installerPayoutRuleJob(job) {
+  const skus = Array.isArray(job?.skus) ? job.skus : [];
+  const catalogBySku = new Map((installerServiceCatalog || []).map(product => [normalizeWorkflowSku(product?.sku), product]));
+  return {
+    roles: job?.roles || [],
+    skus,
+    product_ids: skus.map(sku => catalogBySku.get(normalizeWorkflowSku(sku))?.product_id || null),
+    assignmentDate: job?.assignmentDate,
+    workDate: job?.scheduled_date || job?.workDate
+  };
+}
+
+function getSpecialPayoutSchedulesForMonth(schedules, monthKey) {
+  if (window.BKSpecialPayoutHistory?.forMonth) {
+    return window.BKSpecialPayoutHistory.forMonth(schedules || [], monthKey);
+  }
+  return (schedules || []).filter(schedule => {
+    const effectiveFrom = /^\d{4}-\d{2}$/.test(String(schedule?.effectiveFrom || '')) ? schedule.effectiveFrom : '';
+    const effectiveTo = /^\d{4}-\d{2}$/.test(String(schedule?.effectiveTo || '')) ? schedule.effectiveTo : '';
+    return (!effectiveFrom || effectiveFrom <= monthKey) && (!effectiveTo || effectiveTo >= monthKey);
+  });
 }
 
 function getInstallerPayoutCutoffBucket(dateValue, schedules) {
@@ -288,7 +321,7 @@ function renderSalaryAndAdjustments(monthKey) {
     addRow('Salary', salaryAllocation(day, index), monthState[`${currentInstaller.id}_${day}`], day);
   });
 
-  const monthSpecialSchedules = window.BKSpecialPayoutHistory?.forMonth(config.specialSchedules || [], monthKey) || config.specialSchedules || [];
+  const monthSpecialSchedules = getSpecialPayoutSchedulesForMonth(config.specialSchedules || [], monthKey);
   (isOwnerInstaller() ? [] : monthSpecialSchedules.filter(item => item.employeeId === currentInstaller.id)).forEach(item => {
     addRow(item.label || `Special Payout — Day ${item.day}`, item.value, specialState[`${currentInstaller.id}_${Number(item.day)}`], item.day);
   });
@@ -352,7 +385,7 @@ function getReadyPayslipRecord(monthKey) {
   const regularState = payoutTrackerData.regularState?.[monthKey] || {};
   const allSalaryPaid = schedules.every(day => regularState[`${currentInstaller.id}_${Number(day)}`] === true);
   const configuredSpecials = payoutTrackerData.config?.specialSchedules || [];
-  const monthSpecials = window.BKSpecialPayoutHistory?.forMonth(configuredSpecials, monthKey) || configuredSpecials;
+  const monthSpecials = getSpecialPayoutSchedulesForMonth(configuredSpecials, monthKey);
   const employeeSpecials = isOwnerInstaller() ? [] : monthSpecials.filter(item => item.employeeId === currentInstaller.id);
   const specialState = payoutTrackerData.specialState?.[monthKey] || {};
   const allSpecialsPaid = employeeSpecials.every(item => specialState[`${currentInstaller.id}_${Number(item.day)}`] === true);
@@ -394,7 +427,7 @@ async function downloadInstallerPayslip() {
     return `<tr><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;font-weight:600;vertical-align:top;">${escapeHtml(type)}</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;color:#4b5563;line-height:1.5;vertical-align:top;">${escapeHtml(description)}</td><td style="padding:0.75rem;border-bottom:1px solid #e5e7eb;text-align:right;font-variant-numeric:tabular-nums;width:120px;vertical-align:top;">${pesoValue}</td></tr>`;
   });
   const configuredSpecials = payoutTrackerData.config?.specialSchedules || [];
-  const monthSpecials = window.BKSpecialPayoutHistory?.forMonth(configuredSpecials, monthKey) || configuredSpecials;
+  const monthSpecials = getSpecialPayoutSchedulesForMonth(configuredSpecials, monthKey);
   const specialSchedules = isOwnerInstaller() ? [] : monthSpecials.filter(item => item.employeeId === currentInstaller.id);
   const adjustments = (payoutTrackerData.adjustments || []).filter(item => String(item.date || '').startsWith(monthKey));
   const reimbursements = getInstallerReimbursements(monthKey);
@@ -576,7 +609,7 @@ function drawPayouts() {
     if (!sourceMonth) return;
     const payoutBucket = getInstallerPayoutCutoffBucket(job.scheduled_date, payoutSchedules);
     if (payoutBucket?.monthKey !== sourceMonth) return;
-    const weight = window.BKInstallerPayoutRules.creditForJob(config, { roles: job.roles, skus: job.skus, assignmentDate: job.assignmentDate, workDate: job.scheduled_date });
+    const weight = window.BKInstallerPayoutRules.creditForJob(config, installerPayoutRuleJob(job));
     settledCreditBySourceMonth[sourceMonth] = (settledCreditBySourceMonth[sourceMonth] || 0) + weight;
   });
 
@@ -587,7 +620,7 @@ function drawPayouts() {
     const payoutBucket = getInstallerPayoutCutoffBucket(job.scheduled_date, payoutSchedules);
     const threshold = window.BKInstallerPayoutRules.thresholdForDate(config, job.scheduled_date);
     if (!sourceMonth || sourceMonth === targetMonthKey || payoutBucket?.monthKey !== targetMonthKey || (settledCreditBySourceMonth[sourceMonth] || 0) >= threshold) return;
-    const weight = window.BKInstallerPayoutRules.creditForJob(config, { roles: job.roles, skus: job.skus, assignmentDate: job.assignmentDate, workDate: job.scheduled_date });
+    const weight = window.BKInstallerPayoutRules.creditForJob(config, installerPayoutRuleJob(job));
     creditRollover += weight;
     creditRolloverByMonth[sourceMonth] = (creditRolloverByMonth[sourceMonth] || 0) + weight;
   });
@@ -608,7 +641,7 @@ function drawPayouts() {
   });
 
   doorJobs.forEach(job => {
-    const ruleJob = { roles: job.roles, skus: job.skus, assignmentDate: job.assignmentDate, workDate: job.scheduled_date };
+    const ruleJob = installerPayoutRuleJob(job);
     const weight = window.BKInstallerPayoutRules.creditForJob(config, ruleJob);
     const jobRate = window.BKInstallerPayoutRules.thresholdRateForJob(config, ruleJob);
 
