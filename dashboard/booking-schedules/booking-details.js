@@ -567,20 +567,45 @@
             swing = swing.replace(/swing/gi, '').trim();
           }
           const cap = (s) => s ? s.charAt(0).toUpperCase() + s.slice(1) : 'N/A';
-          const doorTypeHtml = (doorMaterial !== 'N/A' || jambMaterial !== 'N/A') ? `
-            <div class="booking-door-spec">
-              <span class="booking-door-spec-label">Door Type</span>
-              <span class="booking-door-spec-value">${escapeHtml(cap(doorMaterial))}</span>
+          const doorTypeHtml = `
+            <div class="booking-door-spec-section">
+              <button type="button" class="btn-minimal booking-door-spec-edit-button" id="door-spec-edit-button-${i}" onclick="toggleDoorSpecificationsEdit(${i}, true)" aria-label="Edit door specifications" title="Edit door specifications">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+              </button>
+              <div class="booking-door-spec-view" id="door-spec-view-${i}">
+                <div class="booking-door-spec">
+                  <span class="booking-door-spec-label">Door Type</span>
+                  <span class="booking-door-spec-value">${escapeHtml(cap(doorMaterial))}</span>
+                </div>
+                <div class="booking-door-spec">
+                  <span class="booking-door-spec-label">Jamb Type</span>
+                  <span class="booking-door-spec-value">${escapeHtml(cap(jambMaterial))}</span>
+                </div>
+                <div class="booking-door-spec">
+                  <span class="booking-door-spec-label">Swing</span>
+                  <span class="booking-door-spec-value">${escapeHtml(cap(swing))}</span>
+                </div>
+              </div>
+              <div class="booking-door-spec-editor" id="door-spec-edit-${i}" hidden>
+                <label class="booking-door-spec-field">
+                  <span class="booking-door-spec-label">Door Type</span>
+                  <select class="form-input" data-door-spec="doorMaterial">${window.bookingDoorSelectOptions(['wood', 'PVC', 'metal', 'glass', 'gate', 'concrete'], doorMaterial)}</select>
+                </label>
+                <label class="booking-door-spec-field">
+                  <span class="booking-door-spec-label">Jamb Type</span>
+                  <select class="form-input" data-door-spec="jambMaterial">${window.bookingDoorSelectOptions(['wood', 'PVC', 'metal', 'glass', 'gate', 'concrete'], jambMaterial)}</select>
+                </label>
+                <label class="booking-door-spec-field">
+                  <span class="booking-door-spec-label">Swing</span>
+                  <select class="form-input" data-door-spec="swing">${window.bookingDoorSelectOptions(['Left swing', 'Right swing', 'Sliding', 'Barn Door'], door?.swing || 'N/A')}</select>
+                </label>
+                <div class="booking-door-spec-actions">
+                  <button type="button" class="btn btn-success btn-sm" onclick="saveDoorSpecifications(${i}, this)">Save</button>
+                  <button type="button" class="btn btn-outline btn-sm" onclick="toggleDoorSpecificationsEdit(${i}, false)">Cancel</button>
+                </div>
+              </div>
             </div>
-            <div class="booking-door-spec">
-              <span class="booking-door-spec-label">Jamb Type</span>
-              <span class="booking-door-spec-value">${escapeHtml(cap(jambMaterial))}</span>
-            </div>
-            <div class="booking-door-spec">
-              <span class="booking-door-spec-label">Swing</span>
-              <span class="booking-door-spec-value">${escapeHtml(cap(swing))}</span>
-            </div>
-          ` : 'N/A';
+          `;
 
           // Door photos thumbnails
           const photos = (door?.photos || []).filter(url => (
