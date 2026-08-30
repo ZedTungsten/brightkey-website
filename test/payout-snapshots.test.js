@@ -74,3 +74,72 @@ test('a correction from a paid commission cutoff is labeled System Comm', () => 
   assert.equal(snapshots.systemAdjustmentLabel(result, key => key === originKey), 'System Comm');
   assert.equal(snapshots.systemAdjustmentLabel(result, () => false), 'System');
 });
+
+test('late additions to a locked cutoff roll by component into the next cutoff', () => {
+  const origin = snapshots.createSnapshot({
+    sourceValue: 100,
+    paidValue: 100,
+    sourceComponents: { installation: 20, commission: 30, adjustment: 10, reimbursement: 5 }
+  });
+  const app = {
+    regularPayoutState: { '2026-08': { [`${employeeId}_15`]: origin } },
+    getReconcilablePayoutComponentsCentavos: () => ({
+      installation: 2500,
+      commission: 4200,
+      adjustment: 1300,
+      reimbursement: 900
+    })
+  };
+
+  const result = snapshots.systemAdjustment(app, employeeId, '2026-08', 30);
+  assert.deepEqual(result.rollovers, {
+    installation: 5,
+    commission: 12,
+    adjustment: 3,
+    reimbursement: 4
+  });
+  assert.equal(result.value, 24);
+  assert.deepEqual(result.rolloverSources[originKey], {
+    installation: 500,
+    commission: 1200,
+    adjustment: 300,
+    reimbursement: 400
+  });
+});
+
+test('component rollover is not repeated after the next cutoff is locked', () => {
+  const first = snapshots.createSnapshot({
+    sourceValue: 100,
+    paidValue: 100,
+    sourceComponents: { commission: 30 }
+  });
+  const carried = snapshots.createSnapshot({
+    sourceValue: 200,
+    paidValue: 212,
+    sourceComponents: { commission: 50 },
+    systemSources: { [originKey]: 1200 },
+    rolloverSources: { [originKey]: { commission: 1200 } }
+  });
+  const app = {
+    regularPayoutState: {
+      '2026-08': {
+        [`${employeeId}_15`]: first,
+        [`${employeeId}_30`]: carried
+      }
+    },
+    getReconcilablePayoutComponentsCentavos: (_id, _month, cutoff) => (
+      cutoff === 15
+        ? { installation: 0, commission: 4200, adjustment: 0, reimbursement: 0 }
+        : { installation: 0, commission: 5000, adjustment: 0, reimbursement: 0 }
+    )
+  };
+
+  const result = snapshots.systemAdjustment(app, employeeId, '2026-09', 15);
+  assert.equal(result.value, 0);
+  assert.deepEqual(result.rollovers, {
+    installation: 0,
+    commission: 0,
+    adjustment: 0,
+    reimbursement: 0
+  });
+});

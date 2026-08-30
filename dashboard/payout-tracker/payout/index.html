@@ -44,6 +44,7 @@
     #summary-table tr.employee-row:hover td.col-sticky-2,
     #summary-table tr.employee-row:hover td.col-sticky-3 { background: var(--bg-elevated); }
     #summary-table tr.inactive-employee-row td.col-name { color: var(--text-muted); }
+    #summary-table .payout-rollover { color: #1e3a5f; }
 
     #summary-table tr.dept-header-row td { background: #f4fcfd !important; }
     #summary-table tr.team-header-row td { background: #f8fafc !important; }
@@ -404,12 +405,11 @@
         const finalCutoff = cutoffs[cutoffs.length - 1] || 30;
         const priorMonth = this.selectedMonth === 0 ? 11 : this.selectedMonth - 1;
         const priorYear = this.selectedMonth === 0 ? this.selectedYear - 1 : this.selectedYear;
-        const priorDays = new Date(priorYear, priorMonth + 1, 0).getDate();
         const currentDays = new Date(this.selectedYear, this.selectedMonth + 1, 0).getDate();
         const pad = value => String(value).padStart(2, '0');
-        const start = finalCutoff < priorDays
-          ? `${priorYear}-${pad(priorMonth + 1)}-${pad(finalCutoff + 1)}`
-          : `${this.selectedYear}-${pad(this.selectedMonth + 1)}-01`;
+        // Include the full prior month so a source added after a locked prior
+        // cutoff can be reconciled into this month's first payout.
+        const start = `${priorYear}-${pad(priorMonth + 1)}-01`;
         let endYear = this.selectedYear, endMonth = this.selectedMonth + 1, endDay = finalCutoff + 1;
         if (finalCutoff >= currentDays) { endMonth += 1; endDay = 1; if (endMonth > 12) { endMonth = 1; endYear += 1; } }
         return { start, end: `${endYear}-${pad(endMonth)}-${pad(endDay)}` };
@@ -1149,7 +1149,13 @@
         const sourceValue = salary + adjustments + commissions + installation;
         const result = {
           sourceValue,
-          displayedValue: sourceValue + glAdditions - glDeductions
+          displayedValue: sourceValue + glAdditions - glDeductions,
+          sourceComponents: {
+            installation,
+            commission: commissions,
+            adjustment: adjustments,
+            reimbursement: glAdditions
+          }
         };
         this.payoutComponentCache.set(cacheKey, result);
         return result;
@@ -1157,6 +1163,11 @@
 
       getReconcilablePayoutCentavos(empId, mk, schedDay) {
         return Math.round(this.getPayoutComponents(empId, schedDay, mk).sourceValue * 100);
+      },
+
+      getReconcilablePayoutComponentsCentavos(empId, mk, schedDay) {
+        const components = this.getPayoutComponents(empId, schedDay, mk).sourceComponents || {};
+        return Object.fromEntries(Object.entries(components).map(([key, value]) => [key, Math.round((Number(value) || 0) * 100)]));
       },
 
       getSystemAdjustment(empId, mk, schedDay) {
@@ -1187,15 +1198,30 @@
         if (!state) return;
         let changed = false;
         Object.entries(state).forEach(([key, entry]) => {
-          if (entry !== true) return;
           const separator = key.lastIndexOf('_');
           const empId = key.slice(0, separator);
           const day = Number(key.slice(separator + 1));
           const values = this.getPayoutComponents(empId, day, mk);
+          if (window.BKPayoutSnapshots.isSnapshot(entry)) {
+            if (entry.source_components_centavos) return;
+            entry.legacy_outstanding_centavos = Math.max(
+              0,
+              this.getReconcilablePayoutCentavos(empId, mk, day) - Number(entry.source_value_centavos)
+            );
+            entry.source_components_centavos = Object.fromEntries(
+              Object.entries(values.sourceComponents || {}).map(([component, value]) => [component, Math.round((Number(value) || 0) * 100)])
+            );
+            entry.rollover_sources = entry.rollover_sources || {};
+            changed = true;
+            return;
+          }
+          if (entry !== true) return;
           state[key] = window.BKPayoutSnapshots.createSnapshot({
             sourceValue: values.sourceValue,
             paidValue: values.displayedValue,
-            systemSources: {}
+            systemSources: {},
+            sourceComponents: values.sourceComponents,
+            rolloverSources: {}
           });
           changed = true;
         });
@@ -1355,7 +1381,9 @@
                   value: window.BKPayoutSnapshots.fromCents(
                     Object.values(payoutEntry.system_sources || {}).reduce((sum, value) => sum + (Number(value) || 0), 0)
                   ),
-                  systemSources: payoutEntry.system_sources || {}
+                  systemSources: payoutEntry.system_sources || {},
+                  rolloverSources: payoutEntry.rollover_sources || {},
+                  rollovers: window.BKPayoutSnapshots.rolloversFromSources(payoutEntry.rollover_sources)
                 }
               : this.getSystemAdjustment(emp.id, mk, day);
             if (commissionOnly && systemResult.value !== 0) isEligible = true;
@@ -1368,28 +1396,35 @@
             const isPast = this.isPastDay(day);
 
             const breakdownItems = [];
-            const addBreakdownItem = (text, value) => breakdownItems.push({ text, isNegative: value < 0 });
+            const addBreakdownItem = (text, value, isRollover = false) => breakdownItems.push({ text, isNegative: value < 0, isRollover });
             if (salaryAllocation.isProrated) addBreakdownItem(`Pro Sal: ${salaryPortion === 0 ? '₱0.00' : php(salaryPortion)}`, salaryPortion);
             else if (salaryPortion > 0) addBreakdownItem(`Sal: ${php(salaryPortion)}`, salaryPortion);
             if (commsVal - rolledComms > 0) addBreakdownItem(`Com: ${php(commsVal - rolledComms)}`, commsVal - rolledComms);
-            if (rolledComms > 0) addBreakdownItem(`Rol Com: ${php(rolledComms)}`, rolledComms);
+            if (rolledComms > 0) addBreakdownItem(`Roll Com: ${php(rolledComms)}`, rolledComms, true);
             if (instPortion - rolledInst > 0) addBreakdownItem(`Inst: ${php(instPortion - rolledInst)}`, instPortion - rolledInst);
-            if (rolledInst > 0) addBreakdownItem(`Rol Inst: ${php(rolledInst)}`, rolledInst);
+            if (rolledInst > 0) addBreakdownItem(`Roll Inst: ${php(rolledInst)}`, rolledInst, true);
             if (adjsVal - rolledAdjs !== 0) addBreakdownItem(`Adj: ${php(adjsVal - rolledAdjs)}`, adjsVal - rolledAdjs);
-            if (rolledAdjs !== 0) addBreakdownItem(`Rol Adj: ${php(rolledAdjs)}`, rolledAdjs);
+            if (rolledAdjs !== 0) addBreakdownItem(`Roll Adj: ${php(rolledAdjs)}`, rolledAdjs, true);
             if (glAddVal - rolledGlAdd > 0) addBreakdownItem(`Reimb: ${php(glAddVal - rolledGlAdd)}`, glAddVal - rolledGlAdd);
-            if (rolledGlAdd > 0) addBreakdownItem(`Rol Reimb: ${php(rolledGlAdd)}`, rolledGlAdd);
+            if (rolledGlAdd > 0) addBreakdownItem(`Roll Reimb: ${php(rolledGlAdd)}`, rolledGlAdd, true);
             if (glDedVal - rolledGlDed > 0) addBreakdownItem(`Cash Adv: -${php(glDedVal - rolledGlDed)}`, -(glDedVal - rolledGlDed));
-            if (rolledGlDed > 0) addBreakdownItem(`Rol Cash Adv: -${php(rolledGlDed)}`, -rolledGlDed);
-            if (systemResult.value !== 0) {
+            if (rolledGlDed > 0) addBreakdownItem(`Roll Cash Adv: -${php(rolledGlDed)}`, -rolledGlDed, true);
+            const automaticRollovers = systemResult.rollovers || {};
+            if (automaticRollovers.installation > 0) addBreakdownItem(`Roll Inst: ${php(automaticRollovers.installation)}`, automaticRollovers.installation, true);
+            if (automaticRollovers.commission > 0) addBreakdownItem(`Roll Com: ${php(automaticRollovers.commission)}`, automaticRollovers.commission, true);
+            if (automaticRollovers.adjustment > 0) addBreakdownItem(`Roll Adj: ${php(automaticRollovers.adjustment)}`, automaticRollovers.adjustment, true);
+            if (automaticRollovers.reimbursement > 0) addBreakdownItem(`Roll Reimb: ${php(automaticRollovers.reimbursement)}`, automaticRollovers.reimbursement, true);
+            const categorizedRollover = Object.values(automaticRollovers).reduce((sum, value) => sum + (Number(value) || 0), 0);
+            const genericRollover = systemResult.value - categorizedRollover;
+            if (genericRollover > 0) {
               const systemLabel = this.getSystemAdjustmentLabel(emp.id, systemResult);
-              addBreakdownItem(`${systemLabel}: ${php(systemResult.value)}`, systemResult.value);
+              addBreakdownItem(`${systemLabel}: ${php(genericRollover)}`, genericRollover);
             }
 
             const breakdownText = breakdownItems.map((item) => item.text);
             
             const breakdownHtml = breakdownItems.length > 0 
-              ? `<div class="payout-breakdown" style="font-size:0.68rem; color:var(--text-muted); line-height:1.2; text-align:right; font-family:var(--font); width:100%; font-variant-numeric:tabular-nums;">${breakdownItems.map((item) => item.isNegative ? `<span style="color:var(--danger);">${esc(item.text)}</span>` : esc(item.text)).join('<br>')}</div>`
+              ? `<div class="payout-breakdown" style="font-size:0.68rem; color:var(--text-muted); line-height:1.2; text-align:right; font-family:var(--font); width:100%; font-variant-numeric:tabular-nums;">${breakdownItems.map((item) => item.isRollover ? `<span class="payout-rollover">${esc(item.text)}</span>` : item.isNegative ? `<span style="color:var(--danger);">${esc(item.text)}</span>` : esc(item.text)).join('<br>')}</div>`
               : '';
 
             payoutCellsHtml += `<td style="text-align:right;">
@@ -1446,7 +1481,7 @@
         });
 
         if (unassigned.length > 0) {
-          bodyHtml += `<tr class="dept-header-row"><td colspan="${colspan}">Unassigned Department / Pool</td></tr>`;
+          bodyHtml += `<tr class="dept-header-row"><td colspan="${colspan}"><div class="dept-header-sticky">Unassigned Department / Pool</div></td></tr>`;
           unassigned.forEach(emp => { bodyHtml += renderEmpRow(emp); });
         }
 
@@ -1625,7 +1660,9 @@
           this.regularPayoutState[mk][`${empId}_${schedDay}`] = window.BKPayoutSnapshots.createSnapshot({
             sourceValue: values.sourceValue,
             paidValue: values.displayedValue + system.value,
-            systemSources: system.systemSources
+            systemSources: system.systemSources,
+            sourceComponents: values.sourceComponents,
+            rolloverSources: system.rolloverSources
           });
         } else {
           this.regularPayoutState[mk][`${empId}_${schedDay}`] = false;
@@ -1801,15 +1838,8 @@
       },
 
       // ── Shortcut PDF save from summary row ──
-      shortcutSavePayslip(empId) {
-        const emp = this.employees.find(e => e.id === empId);
-        if (!emp) return;
-        const params = new URLSearchParams({
-          employee: empId,
-          month: this.monthKey(),
-          download: '1'
-        });
-        window.location.href = `/dashboard/payout-tracker/payslip?${params.toString()}`;
+      async shortcutSavePayslip(empId) {
+        await this.downloadPayslipDirect(empId);
       },
 
       async downloadPayslipDirect(empId) {
@@ -1833,7 +1863,7 @@
         const installationPayouts = isOwner || commissionOnly
           ? { thresholdEarnings: 0, thresholdDescription: '', serviceEarnings: 0, serviceDescription: '', cutoffPayouts: {} }
           : this.calculateInstallerPayouts(empId, mk, schedules);
-        const glReimbursement = commissionOnly ? 0 : this._glAdditionsForEmpMonth(empId, mk);
+        const glReimbursement = isOwner || commissionOnly ? 0 : this._glAdditionsForEmpMonth(empId, mk);
         const adjustmentsTotal = adjustments.reduce((sum, item) => sum + (Number(item.value) || 0), 0);
         const specialTotal = specialSchedules.reduce((sum, item) => sum + (Number(item.value) || 0), 0);
         const totalPayout = salaryPaid + commissions + adjustmentsTotal + specialTotal

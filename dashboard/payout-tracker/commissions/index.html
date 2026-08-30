@@ -63,6 +63,7 @@
   <script src="/js/auth.js"></script>
   <script src="/js/sidebar.js"></script>
   <script src="/js/main.js"></script>
+  <script src="/js/sales-commission-calculator.js?v=20260829-1"></script>
   <script>
     'use strict';
 
@@ -98,6 +99,8 @@
       employees: [],
       commissionSchedules: [],
       commissionAssignments: [],
+      commissionProducts: [],
+      commissionsConfig: {},
       bookingsList: [],
       commissionPayoutState: {},
       selectedYear: new Date().getFullYear(),
@@ -128,7 +131,7 @@
         // Employee names
         try {
           const { data, error } = await sb.from('employees')
-            .select('id, first_name, last_name, employment_status')
+            .select('id, first_name, last_name, employment_status, assignment')
             .eq('company_id', this.companyId);
           if (error) throw error;
           this.employees = data || [];
@@ -137,7 +140,7 @@
         // Commission schedules
         try {
           const { data } = await sb.from('global_settings').select('value').eq('key', 'salary_tracker_config').eq('company_id', this.companyId).maybeSingle();
-          this.commissionSchedules = data?.value?.commissionSchedules || [15, 30];
+          this.commissionSchedules = data?.value?.payoutSchedules || [15, 30];
         } catch (_) { this.commissionSchedules = [15, 30]; }
 
         // Commission assignments
@@ -149,14 +152,29 @@
           this.commissionAssignments = data || [];
         } catch (e) { this.commissionAssignments = []; console.error(e); }
 
-        // Installation bookings only determine Done eligibility and cutoff date.
+        // Sales Goals booking data is the commission calculation basis.
         try {
           const { data, error } = await sb.from('installation_bookings')
-            .select('id, scheduled_date, status, doors')
+            .select('*')
             .eq('company_id', this.companyId);
           if (error) throw error;
           this.bookingsList = data || [];
         } catch (e) { this.bookingsList = []; console.error(e); }
+
+        try {
+          const [{ data: products, error: productsError }, { data: config, error: configError }] = await Promise.all([
+            sb.from('products').select('id, sku, business, category, tags').or(`company_id.eq.${this.companyId},company_id.is.null`),
+            sb.from('global_settings').select('value').eq('key', 'commissions_config').eq('company_id', this.companyId).maybeSingle()
+          ]);
+          if (productsError) throw productsError;
+          if (configError) throw configError;
+          this.commissionProducts = products || [];
+          this.commissionsConfig = config?.value || {};
+        } catch (e) {
+          this.commissionProducts = [];
+          this.commissionsConfig = {};
+          console.error(e);
+        }
 
         // Commission payout state
         try {
@@ -167,21 +185,6 @@
 
       monthKey() {
         return `${this.selectedYear}-${String(this.selectedMonth + 1).padStart(2, '0')}`;
-      },
-
-      getCutoffBucket(dateValue, schedules = this.commissionSchedules) {
-        const match = String(dateValue || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
-        if (!match) return null;
-        let year = Number(match[1]);
-        let month = Number(match[2]);
-        const day = Number(match[3]);
-        const sorted = [...schedules].map(Number).filter(Boolean).sort((a, b) => a - b);
-        if (!sorted.length) sorted.push(30);
-        const cutoffDay = sorted.find(cutoff => day <= cutoff);
-        if (cutoffDay) return { monthKey: `${year}-${String(month).padStart(2, '0')}`, day: cutoffDay };
-        month += 1;
-        if (month > 12) { month = 1; year += 1; }
-        return { monthKey: `${year}-${String(month).padStart(2, '0')}`, day: sorted[0] };
       },
 
       updateMonthDisplay() {
@@ -205,18 +208,32 @@
         document.getElementById('btn-next-month').addEventListener('click', () => this.changeMonth(1));
       },
 
-      _parseDoors(b) {
-        if (!b) return [];
-        if (Array.isArray(b.doors)) return b.doors;
-        try { return JSON.parse(b.doors); } catch (_) { return []; }
-      },
+      getCommissionPayoutBucket(dateValue, targetMonthKey, schedules) {
+        const datePart = String(dateValue || '').slice(0, 10);
+        const match = datePart.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (!match) return null;
 
-      isCommissionEligibleBooking(booking) {
-        if (!booking || String(booking.status || '').toLowerCase() === 'cancelled') return false;
-        const doors = this._parseDoors(booking);
-        const status = String(booking.status || '').toLowerCase();
-        return ['done', 'completed', 'finished'].includes(status)
-          || (doors.length > 0 && doors.every(door => Boolean(door?.completed)));
+        const sourceYear = Number(match[1]);
+        const sourceMonth = Number(match[2]);
+        const sourceDay = Number(match[3]);
+        const sourceMonthKey = `${sourceYear}-${String(sourceMonth).padStart(2, '0')}`;
+        const sortedSchedules = [...schedules].sort((a, b) => a - b);
+        const firstCutoff = sortedSchedules[0];
+        const finalCutoff = sortedSchedules[sortedSchedules.length - 1];
+
+        if (sourceMonthKey === targetMonthKey) {
+          return {
+            day: sortedSchedules.find(day => sourceDay <= day) || finalCutoff,
+            rollover: false
+          };
+        }
+
+        // Work completed after the prior month's last nominal cutoff rolls into
+        // this month's first payout. Current month-end work remains in its final cutoff.
+        if (sourceDay <= finalCutoff) return null;
+        const rolloverDate = new Date(Date.UTC(sourceYear, sourceMonth, 1));
+        const rolloverMonthKey = `${rolloverDate.getUTCFullYear()}-${String(rolloverDate.getUTCMonth() + 1).padStart(2, '0')}`;
+        return rolloverMonthKey === targetMonthKey ? { day: firstCutoff, rollover: true } : null;
       },
 
       render() {
@@ -227,48 +244,52 @@
         const mk       = this.monthKey();
         const scheds   = [...this.commissionSchedules].sort((a, b) => a - b);
         const schedDays = scheds.length > 0 ? scheds : [30];
+        const bookingsById = new Map(this.bookingsList.map(booking => [booking.id, booking]));
+        const includedAssignments = [];
+        const assignmentsByDay = new Map(schedDays.map(day => [day, []]));
+        const rolloverAssignmentsByDay = new Map(schedDays.map(day => [day, []]));
 
-        // Sales Commissions owns the amount. Payout Tracker only applies
-        // Done eligibility and installation-date cutoff placement.
-        const monthAssignments = this.commissionAssignments.filter(a => {
-          const b = this.bookingsList.find(x => x.id === a.booking_id);
-          if (!this.isCommissionEligibleBooking(b)) return false;
-          const installDate = b?.scheduled_date;
-          if (!installDate) return false;
-          return this.getCutoffBucket(installDate, schedDays)?.monthKey === mk;
+        this.commissionAssignments.forEach(assignment => {
+          const booking = bookingsById.get(assignment.booking_id);
+          const bucket = this.getCommissionPayoutBucket(booking?.scheduled_date || booking?.created_at, mk, schedDays);
+          if (!bucket) return;
+          includedAssignments.push(assignment);
+          assignmentsByDay.get(bucket.day).push(assignment);
+          if (bucket.rollover) rolloverAssignmentsByDay.get(bucket.day).push(assignment);
         });
 
-        // Group the stored commission amounts by payout cutoff.
-        const empCommissions = {};
-        const empRolloverCommissions = {};
-        const empDoneDates   = {};
-        monthAssignments.forEach(a => {
-          if (!a.employee_id) return;
-          const b = this.bookingsList.find(x => x.id === a.booking_id);
-          if (!b) return;
-          const installDate = b.scheduled_date;
-          const schedDay = this.getCutoffBucket(installDate, schedDays)?.day;
-          if (!schedDay) return;
+        const calculateTotals = assignments => {
+          const bookingIds = new Set(assignments.map(assignment => assignment.booking_id));
+          return window.BKSalesCommissionCalculator.amountsByEmployee({
+            assignments,
+            bookings: this.bookingsList.filter(booking => bookingIds.has(booking.id)),
+            products: this.commissionProducts,
+            config: this.commissionsConfig
+          });
+        };
+        const totalsByDay = new Map(schedDays.map(day => [day, calculateTotals(assignmentsByDay.get(day))]));
+        const rolloverTotalsByDay = new Map(schedDays.map(day => [day, calculateTotals(rolloverAssignmentsByDay.get(day))]));
 
-          const storedAmountCentavos = Number(a.amount) || 0;
-          if (!storedAmountCentavos) return;
-
-          empCommissions[a.employee_id] = empCommissions[a.employee_id] || {};
-          empCommissions[a.employee_id][schedDay] = (empCommissions[a.employee_id][schedDay] || 0) + storedAmountCentavos;
-          if (String(installDate).slice(0, 7) !== mk) {
-            empRolloverCommissions[a.employee_id] = empRolloverCommissions[a.employee_id] || {};
-            empRolloverCommissions[a.employee_id][schedDay] = (empRolloverCommissions[a.employee_id][schedDay] || 0) + storedAmountCentavos;
-          }
-
-          if (installDate) {
-            const label = new Date(`${String(installDate).slice(0, 10)}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-            empDoneDates[a.employee_id] = empDoneDates[a.employee_id] || {};
-            empDoneDates[a.employee_id][schedDay] = empDoneDates[a.employee_id][schedDay] || [];
-            if (!empDoneDates[a.employee_id][schedDay].includes(label)) empDoneDates[a.employee_id][schedDay].push(label);
-          }
+        const empDoneDates = {};
+        includedAssignments.forEach(assignment => {
+          if (!assignment.employee_id) return;
+          const b = bookingsById.get(assignment.booking_id);
+          const installDate = b?.scheduled_date || b?.created_at;
+          if (!installDate) return;
+          const label = new Date(`${String(installDate).slice(0, 10)}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+          empDoneDates[assignment.employee_id] = empDoneDates[assignment.employee_id] || [];
+          if (!empDoneDates[assignment.employee_id].includes(label)) empDoneDates[assignment.employee_id].push(label);
         });
 
-        const activeEmpIds = Object.keys(empCommissions);
+        const employeeTotals = new Map();
+        totalsByDay.forEach(totals => totals.forEach((amount, empId) => {
+          employeeTotals.set(empId, (employeeTotals.get(empId) || 0) + amount);
+        }));
+        const activeEmpIds = [...employeeTotals.entries()].filter(([empId, amount]) => {
+          const employee = this.employees.find(item => item.id === empId);
+          const isOwner = String(employee?.assignment || '').split(',').some(value => value.trim().toLowerCase() === 'owner');
+          return amount > 0 && !isOwner;
+        }).map(([empId]) => empId);
 
         // Header
         let headerHtml = `<tr><th style="padding-left:1.5rem;">Employee Name</th><th>Install Date</th>`;
@@ -287,15 +308,13 @@
           const fullName = emp ? [emp.first_name, emp.last_name].filter(Boolean).join(' ') : 'Unknown Employee';
 
           const allDates = [];
-          schedDays.forEach(day => { (empDoneDates[empId]?.[day] || []).forEach(d => { if (!allDates.includes(d)) allDates.push(d); }); });
+          (empDoneDates[empId] || []).forEach(date => { if (!allDates.includes(date)) allDates.push(date); });
 
           let cells = '';
           schedDays.forEach(day => {
-            const amount = empCommissions[empId]?.[day] || 0;
-            const rolled = empRolloverCommissions[empId]?.[day] || 0;
-            cells += `<td style="font-weight:700;font-variant-numeric:tabular-nums;">${esc(php(amount / 100))}
-              ${rolled ? `<div style="margin-top:0.15rem;font-size:0.68rem;font-weight:600;color:var(--text-muted);">Rol Com: ${esc(php(rolled / 100))}</div>` : ''}
-            </td>`;
+            const amount = totalsByDay.get(day)?.get(empId) || 0;
+            const rolloverAmount = rolloverTotalsByDay.get(day)?.get(empId) || 0;
+            cells += `<td style="font-weight:700;font-variant-numeric:tabular-nums;">${esc(php(amount / 100))}${rolloverAmount > 0 ? `<div style="margin-top:0.25rem;font-size:0.72rem;font-weight:500;color:var(--text-muted);">Roll Com: ${esc(php(rolloverAmount / 100))}</div>` : ''}</td>`;
           });
 
           bodyHtml += `<tr class="employee-row" data-emp-id="${esc(empId)}">

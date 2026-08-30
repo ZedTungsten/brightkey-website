@@ -711,7 +711,7 @@
 
       /* ── Filters ── */
       bindFilters() {
-        const apply = () => { this.page = 1; this.loadEntries(); };
+        const apply = () => { this.page = 1; window.JournalUrlState?.sync(this); this.loadEntries(); };
         const today = new Date().toISOString().slice(0, 10);
         const addDays = (dateStr, n) => {
           const d = new Date(dateStr); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10);
@@ -732,7 +732,7 @@
         };
 
         // Auto-select default 45-day range on load
-        resetDates();
+        resetDates(); window.JournalUrlState?.restore(this, { fromEl, toEl, lastValid });
 
         const bindDate = (el, key, syncLimits) => {
           el.addEventListener('change', () => {
@@ -783,7 +783,7 @@
       bindAccountFilter() {
         const btn   = document.getElementById('acct-filter-btn');
         const panel = document.getElementById('acct-filter-panel');
-        const apply = () => { this.page = 1; this.loadEntries(); };
+        const apply = () => { this.page = 1; window.JournalUrlState?.sync(this); this.loadEntries(); };
 
         btn.addEventListener('click', e => {
           e.stopPropagation();
@@ -826,7 +826,7 @@
         const list = document.getElementById('acct-filter-list');
         if (!list) return;
         if (!this.selectedAccounts) this.selectedAccounts = new Set(); // safety guard
-        const apply = () => { this.page = 1; this.loadEntries(); };
+        const apply = () => { this.page = 1; window.JournalUrlState?.sync(this); this.loadEntries(); };
         // Group by category (only include visible accounts in checkbox filter)
         const groups = {};
         this.accounts.forEach(a => {
@@ -900,6 +900,7 @@
           else if (this.selectedAccounts.has('__NONE__')) count.textContent = '0 selected';
           else count.textContent = `${this.selectedAccounts.size} selected`;
         }
+        this.updateAccountFilterBtn();
       },
 
       updateGroupCheckboxes() {
@@ -1613,7 +1614,7 @@
             <td style="text-align:center;">${docsHtml || '—'}</td>
             ${delCell}
           </tr>`;
-        }).join('');
+        }).join('') + `<tr class="table-spacer-row"><td colspan="${cols}"></td></tr>`;
 
         if (this.editMode) {
           tbody.querySelectorAll('td[data-col]').forEach(td => {

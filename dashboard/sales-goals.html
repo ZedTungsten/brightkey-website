@@ -176,6 +176,19 @@
       box-sizing: border-box;
     }
 
+    .progress-bar-fill.is-complete {
+      background: linear-gradient(
+        135deg,
+        #d97706,
+        #f59e0b,
+        #fde68a,
+        #f59e0b,
+        #d97706
+      );
+      background-size: 400% 400%;
+      box-shadow: 0 0 15px rgba(245, 158, 11, 0.5);
+    }
+
     /* Moving shimmer overlay */
     .progress-bar-fill::after {
       content: '';
@@ -1167,9 +1180,41 @@
     let productDetailsMap = {}; // SKU -> product details
     let currentSelectedMonth = '';
     let monthsList = [];
+    const celebratedGoalsThisVisit = new Set();
+    let confettiLoaderPromise = null;
     
     let allEmployees = []; // List of all employees to populate dropdowns
     let isGoalSettingsChangeAllowed = true;
+
+    async function celebrateCompletedGoal(goalKey) {
+      if (celebratedGoalsThisVisit.has(goalKey)) return;
+      celebratedGoalsThisVisit.add(goalKey);
+
+      try {
+        if (!window.confetti) {
+          confettiLoaderPromise ||= new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = 'https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js';
+            script.onload = resolve;
+            script.onerror = () => reject(new Error('Confetti failed to load'));
+            document.head.appendChild(script);
+          });
+          await confettiLoaderPromise;
+        }
+
+        if (!window.confetti) return;
+        window.confetti({
+          particleCount: 90,
+          spread: 70,
+          startVelocity: 35,
+          origin: { x: 0.5, y: 0.3 },
+          colors: ['#d97706', '#f59e0b', '#fbbf24', '#fde68a', '#ffffff'],
+          zIndex: 99999
+        });
+      } catch (error) {
+        console.warn('Goal celebration unavailable:', error);
+      }
+    }
 
     function getRequestedSalesGoalsTab() {
       const pathTab = window.location.pathname.split('/').filter(Boolean).pop();
@@ -1707,6 +1752,7 @@
 
       // Show skeletal loading state or reset bars
       document.getElementById('goal-progress-fill').style.width = '0%';
+      document.getElementById('goal-progress-fill').classList.remove('is-complete');
       document.getElementById('goal-progress-txt').textContent = '0%';
       document.getElementById('txt-percent-complete').textContent = '0% left';
       document.getElementById('txt-mtd-revenue').textContent = '₱0.00';
@@ -1771,15 +1817,9 @@
           .filter(g => g.amount > 0)
           .sort((a, b) => a.amount - b.amount);
 
-        let activeGoalObj = sortedGoals[sortedGoals.length - 1] || { amount: 500000, reward: 'Milestone bonus!' };
-        let allReached = false;
-
-        const immediateGoal = sortedGoals.find(g => totalRevenue < g.amount);
-        if (immediateGoal) {
-          activeGoalObj = immediateGoal;
-        } else if (sortedGoals.length > 0) {
-          allReached = true;
-        }
+        // Keep the first configured goal active, even after it is reached. Removing
+        // that goal from Settings advances the dashboard to the next milestone.
+        const activeGoalObj = sortedGoals[0] || { amount: 500000, reward: 'Milestone bonus!' };
 
         const activeGoalAmount = activeGoalObj.amount;
         document.getElementById('txt-goal-revenue').textContent = formatCurrency(activeGoalAmount);
@@ -1794,14 +1834,16 @@
 
         const remaining = Math.max(0, activeGoalAmount - totalRevenue);
         const fillPercent = Math.min(percent, 100);
+        const goalReached = fillPercent >= 100;
         const fillBar = document.getElementById('goal-progress-fill');
         fillBar.style.width = `${fillPercent}%`;
-        document.getElementById('goal-progress-txt').textContent = `${percent}%`;
+        fillBar.classList.toggle('is-complete', goalReached);
+        document.getElementById('goal-progress-txt').textContent = `${fillPercent}%`;
         
-        if (allReached) {
-          document.getElementById('txt-percent-complete').textContent = 'All Goals Reached!';
+        if (goalReached) {
+          document.getElementById('txt-percent-complete').textContent = 'Goal Reached!';
         } else {
-          document.getElementById('txt-percent-complete').textContent = remaining <= 0 ? 'Goal Reached!' : `${formatCurrency(remaining)} left`;
+          document.getElementById('txt-percent-complete').textContent = `${formatCurrency(remaining)} left`;
         }
 
         // Calculate Customers MTD and Est. Customers to Reach Goal
@@ -1821,7 +1863,7 @@
         if (activeGoalObj.reward) {
           rewardBanner.style.display = 'flex';
           document.getElementById('txt-reward-desc').textContent = activeGoalObj.reward;
-          if (allReached) {
+          if (goalReached) {
             rewardBanner.style.background = 'rgba(16,185,129,0.12)';
             rewardBanner.style.borderColor = 'rgba(16,185,129,0.3)';
           } else {
@@ -1831,6 +1873,10 @@
         }
 
         setPanelLoading('sales-goal-panel', false);
+
+        if (goalReached && sortedGoals.length > 0) {
+          void celebrateCompletedGoal(`${currentSelectedMonth}:${activeGoalAmount}`);
+        }
 
         // Load each independent container concurrently with its own loading state.
         await Promise.all([

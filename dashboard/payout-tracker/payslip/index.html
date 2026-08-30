@@ -112,6 +112,10 @@
                   <img id="payslip-signature-img" src="" alt="Signature" style="max-height:60px;max-width:100%;object-fit:contain;border:1px solid var(--border);border-radius:4px;padding:4px;" />
                 </div>
               </div>
+              <div class="form-group" style="margin-bottom:0.75rem;">
+                <label class="form-label" for="payslip-footer-note">Payslip Note</label>
+                <textarea id="payslip-footer-note" class="form-input" rows="4" onchange="App.handleTemplateInput()" style="resize:vertical;line-height:1.4;"></textarea>
+              </div>
               <button type="submit" class="btn btn-outline btn-sm" style="width:100%;">Save Template</button>
             </form>
           </div>
@@ -178,7 +182,12 @@
       payoutSchedules: [],
       specialSchedules: [],
       proratedSalaryState: {},
-      payslipConfig: { logoStyle: 'light', signatoryName: 'Authorized Signatory', signatureUrl: '' },
+      payslipConfig: {
+        logoStyle: 'light',
+        signatoryName: 'Authorized Signatory',
+        signatureUrl: '',
+        footerNote: 'This payslip is generated through Brightkey ERP and serves as an official payroll record. Any concerns regarding computation should be reported within seven (7) days of issuance.'
+      },
       companyProfileConfig: {},
       accountAssignments: {},
       glAccountsMap: {},
@@ -265,10 +274,12 @@
         // Restore template UI fields
         const logoSel  = document.getElementById('payslip-logo-style');
         const sigInput = document.getElementById('payslip-signatory-name');
+        const noteInput = document.getElementById('payslip-footer-note');
         const sigImgEl = document.getElementById('payslip-signature-img');
         const sigPrev  = document.getElementById('payslip-signature-preview');
         if (logoSel)  logoSel.value  = this.payslipConfig.logoStyle || 'light';
         if (sigInput) sigInput.value = this.payslipConfig.signatoryName || '';
+        if (noteInput) noteInput.value = this.payslipConfig.footerNote || '';
         if (this.payslipConfig.signatureUrl && sigImgEl) {
           sigImgEl.src = this.payslipConfig.signatureUrl;
           if (sigPrev) sigPrev.style.display = 'block';
@@ -790,6 +801,7 @@
       handleTemplateInput() {
         this.payslipConfig.logoStyle      = document.getElementById('payslip-logo-style')?.value || 'light';
         this.payslipConfig.signatoryName  = document.getElementById('payslip-signatory-name')?.value || '';
+        this.payslipConfig.footerNote     = document.getElementById('payslip-footer-note')?.value || '';
         if (document.getElementById('payslip-canvas-wrapper').style.display !== 'none') this.generatePreview();
       },
 
@@ -812,6 +824,7 @@
         if (event) event.preventDefault();
         this.payslipConfig.logoStyle     = document.getElementById('payslip-logo-style')?.value || 'light';
         this.payslipConfig.signatoryName = document.getElementById('payslip-signatory-name')?.value || '';
+        this.payslipConfig.footerNote    = document.getElementById('payslip-footer-note')?.value || '';
         try {
           const { error } = await getSb().from('global_settings').upsert({ key: 'payslip_template_config', company_id: this.companyId, value: this.payslipConfig });
           if (error) throw error;
@@ -927,6 +940,7 @@
         if (isOwner) {
           empComms = 0;
           parsedCommAssignments = [];
+          glReimbursements = [];
         }
 
         const totalAdjs   = adjs.reduce((s, a) => s + (Number(a.amount) || 0), 0);
@@ -1009,10 +1023,10 @@
             label: `Cutoff Payout (Day ${day})`,
             value: sp + (av - rolledAdj) + (cv - rolledCom) + (instPortion - rolledInst) + (glReimbursement - rolledReimb)
           });
-          if (rolledCom) scheduleRows.push({ day, order: 2, label: 'Rol Com', value: rolledCom });
-          if (rolledInst) scheduleRows.push({ day, order: 3, label: 'Rol Inst', value: rolledInst });
-          if (rolledAdj) scheduleRows.push({ day, order: 4, label: 'Rol Adj', value: rolledAdj });
-          if (rolledReimb) scheduleRows.push({ day, order: 5, label: 'Rol Reimb', value: rolledReimb });
+          if (rolledCom) scheduleRows.push({ day, order: 2, label: 'Roll Com', value: rolledCom });
+          if (rolledInst) scheduleRows.push({ day, order: 3, label: 'Roll Inst', value: rolledInst });
+          if (rolledAdj) scheduleRows.push({ day, order: 4, label: 'Roll Adj', value: rolledAdj });
+          if (rolledReimb) scheduleRows.push({ day, order: 5, label: 'Roll Reimb', value: rolledReimb });
         });
         const cutoffHtml = scheduleRows
           .sort((a, b) => a.day - b.day || a.order - b.order)
@@ -1026,6 +1040,7 @@
         const compAddr    = [this.companyProfileConfig.companyAddressLine1, this.companyProfileConfig.companyAddressLine2].filter(Boolean).join('<br>') || '';
         const compContact = [this.companyProfileConfig.email, this.companyProfileConfig.phone].filter(Boolean).join('<br>');
         const sigName     = this.payslipConfig.signatoryName || 'Authorized Signatory';
+        const footerNote  = this.payslipConfig.footerNote || '';
         const sigImg      = this.payslipConfig.signatureUrl ? `<img src="${this.payslipConfig.signatureUrl}" alt="Signature" style="max-height:100px;max-width:170px;object-fit:contain;display:block;">` : `<div style="height:100px;width:150px;"></div>`;
         const logoImg     = logoUrl ? `<img src="${esc(logoUrl)}" alt="Logo" style="max-height:48px;max-width:150px;display:block;margin-bottom:0.5rem;filter:grayscale(1);">` : '';
         const empFullName = [emp.first_name, emp.last_name].filter(Boolean).join(' ');
@@ -1054,7 +1069,7 @@
               <div style="margin-bottom:2rem;max-width:400px;margin-left:auto;"><div style="font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:0.5rem;border-bottom:1px solid #111827;padding-bottom:0.25rem;">Payout Schedule Allocation</div>${cutoffHtml}<div style="display:flex;justify-content:space-between;padding:0.75rem 0;font-size:1rem;font-weight:800;border-top:2px solid #111827;"><span>TOTAL PAYOUT</span><span style="font-variant-numeric:tabular-nums;margin-right:12px;">${php(verifiedTotal)}</span></div></div>
             </div>
             <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:auto;padding-top:2rem;">
-              <div style="font-size:0.72rem;color:#6b7280;max-width:320px;line-height:1.2;">This payslip is generated through Brightkey ERP and serves as an official payroll record. Any concerns regarding computation should be reported within seven (7) days of issuance.</div>
+              <div style="font-size:0.72rem;color:#6b7280;max-width:320px;line-height:1.2;white-space:pre-line;">${esc(footerNote)}</div>
               <div style="display:flex;flex-direction:column;align-items:center;width:180px;"><div style="height:105px;display:flex;align-items:center;justify-content:center;width:100%;">${sigImg}</div><div style="font-size:0.85rem;font-weight:700;border-top:1px solid #111827;width:100%;text-align:center;padding-top:0.25rem;margin-top:0.25rem;">${esc(sigName)}</div><div style="font-size:0.72rem;color:#6b7280;width:100%;text-align:center;">Authorized Signatory</div></div>
             </div>
           </div>`;

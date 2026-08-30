@@ -21,3 +21,9 @@ test('commission controls follow the requested header and table-toolbar order', 
   assert.ok(tableToolbar.indexOf('id="sales-name-filter"') < tableToolbar.indexOf('class="month-nav-container"'));
   assert.doesNotMatch(tableToolbar, /id="bulk-edit-container"/);
 });
+
+test('the commissions table omits the redundant eligible status column', () => {
+  assert.doesNotMatch(source, /<th>Status<\/th>/);
+  assert.doesNotMatch(source, /const statusHtml/);
+  assert.match(source, /const totalColumns = 9 \+ rates\.length \+ \(currentUserCanLock \? 1 : 0\)/);
+});
