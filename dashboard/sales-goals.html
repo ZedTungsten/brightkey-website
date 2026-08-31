@@ -555,6 +555,7 @@
     .goal-settings-table .goal-column { width: 27%; }
     .goal-settings-table .reward-column { width: 39%; }
     .goal-settings-table .achieved-column { width: 20%; white-space: nowrap; }
+    .goal-settings-table td.achieved-column { font-size: 0.85rem; }
     .goal-settings-table .actions-column { width: 14%; white-space: nowrap; }
 
     .goal-table-input {
@@ -583,6 +584,9 @@
       display: inline-flex;
       align-items: center;
       justify-content: center;
+      width: 28px;
+      height: 28px;
+      flex: 0 0 28px;
       padding: 0;
       border: 0;
       background: transparent;
@@ -591,6 +595,12 @@
     }
 
     .goal-row-action:hover { color: var(--cyan-light); }
+    .goal-row-action.skip.active {
+      border-radius: 50%;
+      background: var(--cyan);
+      color: #fff;
+    }
+    .goal-row-action.skip.active:hover { background: var(--cyan-light); color: #fff; }
     .goal-row-action.delete { color: var(--danger); }
     .goal-row-action svg { width: 18px; height: 18px; }
 
@@ -600,14 +610,20 @@
       text-align: center !important;
     }
 
-    .settings-save-row {
-      display: flex;
-      justify-content: flex-end;
-      margin-top: 1.5rem;
+    .stats-target-grid {
+      display: grid;
+      grid-template-columns: minmax(150px, 0.75fr) minmax(220px, 1.25fr);
+      gap: 0.75rem;
+      margin-top: 0.5rem;
     }
+    .stats-target-grid > :nth-child(2) .form-label { white-space: nowrap; }
 
     @media (max-width: 1100px) {
       .settings-layout { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 520px) {
+      .stats-target-grid { grid-template-columns: 1fr; }
     }
 
     .form-group {
@@ -850,6 +866,8 @@
       color: var(--cyan-light);
       border-bottom-color: var(--cyan);
     }
+    #btn-save-goal-settings { display: none; margin-left: auto; }
+    html[data-sales-goals-tab="settings"] #btn-save-goal-settings { display: inline-flex; }
 
     /* ── Month Navigation ── */
     .month-nav-container {
@@ -894,6 +912,9 @@
         <!-- Top Bar -->
         <div class="top-bar">
           <span class="top-bar-title">Sales Goals</span>
+          <button id="btn-save-goal-settings" class="btn btn-primary" onclick="saveGoalSettings()" style="height: 38px;">
+            Save Goal Settings
+          </button>
         </div>
 
         <!-- Navigation Tabs -->
@@ -1141,7 +1162,7 @@
                 <div class="settings-form">
                   <div class="form-group" style="border-bottom:1px solid var(--border); padding-bottom:1.5rem;">
                     <label class="form-label">Statistics Targets</label>
-                    <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:0.75rem; margin-top:0.5rem;">
+                    <div class="stats-target-grid">
                       <label class="form-group">
                         <span class="form-label">Total Orders</span>
                         <input id="settings-target-total-orders" class="form-input" type="number" min="0.1" step="0.1" />
@@ -1206,12 +1227,6 @@
                   Add Goals
                 </button>
               </div>
-            </div>
-
-            <div class="settings-save-row">
-              <button class="btn btn-primary" onclick="saveGoalSettings()" style="height: 38px;">
-                Save Goal Settings
-              </button>
             </div>
 
           </div>
@@ -1590,6 +1605,9 @@
             <td class="achieved-column">${escapeHtml(achievedDate)}</td>
             <td>
               <div class="goal-row-actions">
+                <button type="button" class="goal-row-action skip${g.skipped ? ' active' : ''}" onclick="toggleGoalSkipped(${idx})" aria-label="${g.skipped ? 'Include goal' : 'Skip goal'}" title="${g.skipped ? 'Include goal' : 'Skip goal'}" aria-pressed="${g.skipped ? 'true' : 'false'}">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" y1="5" x2="19" y2="19"></line></svg>
+                </button>
                 <button type="button" class="goal-row-action" onclick="editGoalRow(${idx})" aria-label="Edit goal" title="Edit goal">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"></path></svg>
                 </button>
@@ -1670,7 +1688,7 @@
 
     window.addNewGoalRow = function() {
       readGoalRowsFromInputs();
-      globalGoals.push({ amount: '', reward: '', achieved_date: null });
+      globalGoals.push({ amount: '', reward: '', achieved_date: null, skipped: false });
       editingGoalIndex = globalGoals.length - 1;
       renderSettingsGoalRows();
       document.querySelector(`[data-goal-index="${editingGoalIndex}"] .goal-amount-input`)?.focus();
@@ -1686,6 +1704,14 @@
     window.removeGoalRow = function(index) {
       readGoalRowsFromInputs();
       globalGoals.splice(index, 1);
+      editingGoalIndex = -1;
+      renderSettingsGoalRows();
+    };
+
+    window.toggleGoalSkipped = function(index) {
+      readGoalRowsFromInputs();
+      if (!globalGoals[index]) return;
+      globalGoals[index].skipped = !globalGoals[index].skipped;
       editingGoalIndex = -1;
       renderSettingsGoalRows();
     };
@@ -1711,7 +1737,8 @@
         tempGoals.push({
           amount: amt,
           reward,
-          achieved_date: Number(sourceGoal.amount) === amt ? (sourceGoal.achieved_date || null) : null
+          achieved_date: Number(sourceGoal.amount) === amt ? (sourceGoal.achieved_date || null) : null,
+          skipped: sourceGoal.skipped === true
         });
       });
       globalGoals = tempGoals;
@@ -1932,7 +1959,7 @@
 
         // 1. Resolve Current Goal and Reward Milestones
         const sortedGoals = [...globalGoals]
-          .filter(g => g.amount > 0)
+          .filter(g => g.amount > 0 && g.skipped !== true)
           .sort((a, b) => a.amount - b.amount);
 
         // Keep the first configured goal active, even after it is reached. Removing

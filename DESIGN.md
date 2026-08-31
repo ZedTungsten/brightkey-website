@@ -760,3 +760,16 @@ or pushing page content horizontally.
   minimized or hover-expanded classes.
 - Sidebar expansion must not change the main content width, table scroll
   position, or page layout.
+
+---
+
+## 22. Page Header Tab Terminology
+
+When a request refers to the **Page Header Tab**, it means the topmost
+application header row containing the page name, such as `Sales Goals`. It does
+not mean the content heading, the drawer/navigation tabs below the header, or a
+section toolbar.
+
+Actions requested for the right side of the Page Header Tab belong in that
+topmost header row, aligned opposite the page name. Route-specific actions must
+remain hidden on sibling routes that share the same HTML shell.

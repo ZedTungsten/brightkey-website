@@ -589,7 +589,7 @@
               <div class="booking-door-spec-editor" id="door-spec-edit-${i}" hidden>
                 <label class="booking-door-spec-field">
                   <span class="booking-door-spec-label">Door Type</span>
-                  <select class="form-input" data-door-spec="doorMaterial">${window.bookingDoorSelectOptions(['wood', 'PVC', 'metal', 'glass', 'gate', 'concrete'], doorMaterial)}</select>
+                  <select class="form-input" data-door-spec="doorMaterial">${window.bookingDoorSelectOptions(['wood', 'PVC', 'metal', 'aluminum', 'glass', 'gate', 'concrete'], doorMaterial)}</select>
                 </label>
                 <label class="booking-door-spec-field">
                   <span class="booking-door-spec-label">Jamb Type</span>

@@ -62,6 +62,19 @@
       border-color: var(--cyan);
       background: var(--cyan-dim);
     }
+    .saved-order-modal { position:fixed; inset:0; z-index:2000; display:none; align-items:center; justify-content:center; padding:1rem; background:rgba(9,9,11,.45); opacity:0; pointer-events:none; transition:opacity .15s; }
+    .saved-order-modal.open { opacity:1; pointer-events:auto; }
+    .saved-order-card { width:min(620px,100%); max-height:calc(100dvh - 2rem); display:flex; flex-direction:column; background:var(--bg-surface); border:1px solid var(--border); border-radius:var(--radius-md); box-shadow:var(--shadow-lg); }
+    .saved-order-header,.saved-order-footer { display:flex; align-items:center; justify-content:space-between; gap:.75rem; padding:1rem 1.25rem; }
+    .saved-order-header { border-bottom:1px solid var(--border); }.saved-order-footer { justify-content:flex-end; border-top:1px solid var(--border); }
+    .saved-order-header h2 { margin:0; font-size:1rem; }.saved-order-body { padding:1.25rem; overflow:auto; }
+    .saved-order-close { width:34px; height:34px; display:grid; place-items:center; padding:0; border:1px solid var(--border); border-radius:6px; background:var(--bg-surface); color:var(--text-secondary); cursor:pointer; }
+    .saved-order-close:hover { background:var(--bg-elevated); color:var(--text-primary); }.saved-order-close svg { width:17px; height:17px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; }
+    .saved-order-delete { margin-right:auto; color:var(--danger); border-color:var(--danger); }
+    #btn-save-order[hidden] { display:none; }
+    .saved-order-field { display:flex; flex-direction:column; gap:.4rem; margin-bottom:1rem; font-size:.75rem; font-weight:700; color:var(--text-secondary); }
+    .saved-order-field input,.saved-order-field select { height:40px; border:1px solid var(--border); border-radius:6px; padding:0 .75rem; background:#fff; font:inherit; color:var(--text-primary); }
+    .saved-order-list { width:100%; border-collapse:collapse; font-size:.8rem; }.saved-order-list th,.saved-order-list td { padding:.65rem .75rem; text-align:left; border-bottom:1px solid var(--border); }.saved-order-list th:last-child,.saved-order-list td:last-child { text-align:right; }
   </style>
 </head>
 <body>
@@ -85,7 +98,8 @@
               <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none" style="vertical-align: -2px; margin-right: 6px;"><path d="M3 7v6h6M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg>Undo
             </button>
             <select id="wh-select-dropdown" class="wh-select-dropdown" style="display:none;" onchange="switchWarehouse(this.value)"></select>
-            
+            <button id="btn-save-order" class="btn btn-outline" type="button" onclick="openSaveOrderModal()" hidden>Save Order</button>
+            <button id="btn-load-order" class="btn btn-outline" type="button" onclick="openLoadOrderModal()" disabled>Load Order</button>
             <button id="btn-all-supplier-orders" class="btn btn-primary" onclick="submitAllSupplierOrders(this)" disabled>
               Request Order
             </button>
@@ -212,6 +226,21 @@
     </div>
   </div>
 
+  <div class="saved-order-modal" id="save-order-modal" aria-hidden="true">
+    <section class="saved-order-card" role="dialog" aria-modal="true" aria-labelledby="save-order-title">
+      <header class="saved-order-header"><h2 id="save-order-title">Save Order</h2><button class="saved-order-close" type="button" onclick="closeSavedOrderModal('save-order-modal')" aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button></header>
+      <div class="saved-order-body"><label class="saved-order-field">Order Name<input id="saved-order-name" type="text" maxlength="80" placeholder="Enter order name" /></label><table class="saved-order-list"><thead><tr><th>SKU</th><th>Quantity</th></tr></thead><tbody id="save-order-items"></tbody></table></div>
+      <footer class="saved-order-footer"><button class="btn btn-outline" type="button" onclick="closeSavedOrderModal('save-order-modal')">Cancel</button><button class="btn btn-primary" type="button" onclick="saveCurrentOrder(this)">Save Order</button></footer>
+    </section>
+  </div>
+  <div class="saved-order-modal" id="load-order-modal" aria-hidden="true">
+    <section class="saved-order-card" role="dialog" aria-modal="true" aria-labelledby="load-order-title">
+      <header class="saved-order-header"><h2 id="load-order-title">Load Order</h2><button class="saved-order-close" type="button" onclick="closeSavedOrderModal('load-order-modal')" aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button></header>
+      <div class="saved-order-body"><label class="saved-order-field">Saved Order<select id="saved-order-select" onchange="renderSelectedSavedOrder()"></select></label><table class="saved-order-list"><thead><tr><th>SKU</th><th>Quantity</th></tr></thead><tbody id="load-order-items"></tbody></table></div>
+      <footer class="saved-order-footer"><button class="btn btn-outline saved-order-delete" id="delete-saved-order" type="button" onclick="deleteSelectedSavedOrder(this)">Delete</button><button class="btn btn-outline" type="button" onclick="closeSavedOrderModal('load-order-modal')">Cancel</button><button class="btn btn-primary" id="confirm-load-order" type="button" onclick="loadSelectedOrder()">Load Order</button></footer>
+    </section>
+  </div>
+
   <script src="/js/auth.js"></script>
   <script src="/js/sidebar.js"></script>
   <script src="/js/main.js"></script>
@@ -253,10 +282,12 @@
     const supplierOrderPageSize = 10;
     let suppliersList = [];
     let businessesList = [];
+    let savedOrders = [];
+    let requestedOrders = [];
     const reorderPanelStates = new WeakMap();
 
     function createReorderState() {
-      return { search: '', page: 1, quantities: {}, posting: false, businessId: '', supplierId: '' };
+      return { search: '', page: 1, quantities: {}, posting: false, businessId: '', supplierId: '', requestReference: '' };
     }
 
     function getReorderPanel(source) {
@@ -307,6 +338,7 @@
 
         await refreshDashboard();
         await loadRecommendedOrderHandoff();
+        document.getElementById('btn-load-order').disabled = false;
         runAutoSyncInBackground();
 
         
@@ -1128,8 +1160,50 @@
         const state = getReorderState(panel);
         return Boolean(state.supplierId) && getPanelOrderItems(panel).length > 0;
       });
+      const isOverwrite = panels.some(panel => Boolean(getReorderState(panel).requestReference));
+      button.textContent = isOverwrite ? 'Overwrite Order' : 'Request Order';
       button.disabled = !hasOrders || panels.some(panel => getReorderState(panel).posting);
+      const saveButton = document.getElementById('btn-save-order');
+      if (saveButton) saveButton.hidden = !hasOrders;
     }
+
+    function currentSavedOrderGroups() {
+      return [...document.querySelectorAll('.supplier-order-panel')].map(panel => {
+        const state = getReorderState(panel);
+        return { business_id: state.businessId, supplier_id: state.supplierId, items: getPanelOrderItems(panel) };
+      }).filter(group => group.supplier_id && group.items.length);
+    }
+
+    function setSavedOrderModal(id, open) {
+      const modal = document.getElementById(id); if (!modal) return;
+      if (open) { modal.style.display = 'flex'; modal.offsetHeight; modal.classList.add('open'); }
+      else { modal.classList.remove('open'); setTimeout(() => { if (!modal.classList.contains('open')) modal.style.display = 'none'; }, 150); }
+      modal.setAttribute('aria-hidden', String(!open));
+    }
+    window.closeSavedOrderModal = id => setSavedOrderModal(id, false);
+    function renderSavedItems(tbodyId, groups) {
+      const body = document.getElementById(tbodyId);
+      const items = (groups || []).flatMap(group => group.items || []);
+      body.innerHTML = items.length ? items.map(item => `<tr><td><code>${escapeHtml(item.sku)}</code></td><td>${Number(item.qty) || 0}</td></tr>`).join('') : '<tr><td colspan="2" style="text-align:center;color:var(--text-muted);">No SKUs saved.</td></tr>';
+    }
+    window.openSaveOrderModal = function() { const groups=currentSavedOrderGroups(); if(!groups.length)return; document.getElementById('saved-order-name').value=''; renderSavedItems('save-order-items',groups); setSavedOrderModal('save-order-modal',true); };
+    window.saveCurrentOrder = async function(button) {
+      const name=document.getElementById('saved-order-name').value.trim(); const groups=currentSavedOrderGroups();
+      if(!name){ showToast('Enter an order name.',true); return; }
+      button.disabled=true;
+      try { savedOrders.unshift({ id:crypto.randomUUID(), name, saved_at:new Date().toISOString(), groups }); savedOrders=savedOrders.slice(0,100); const {error}=await sb.from('global_settings').upsert({company_id:companyId,key:'inventory_saved_orders',value:{orders:savedOrders}},{onConflict:'company_id,key'}); if(error)throw error; setSavedOrderModal('save-order-modal',false); showToast('Order saved.'); }
+      catch(error){ console.error(error); showToast('The order could not be saved. Try again.',true); }
+      finally { button.disabled=false; }
+    };
+    async function fetchSavedOrders(){ const {data,error}=await sb.from('global_settings').select('value').eq('company_id',companyId).eq('key','inventory_saved_orders').maybeSingle(); if(error)throw error; savedOrders=Array.isArray(data?.value?.orders)?data.value.orders:[]; }
+    async function fetchRequestedOrders(){const {data,error}=await sb.from('inventory_transactions').select('id,reference_id,sku,quantity,status,customer_name,timestamp_ordered').eq('company_id',companyId).eq('type','supplier_order').eq('status','ordered').order('timestamp_ordered',{ascending:false}).range(0,499);if(error)throw error;const groups=new Map();(data||[]).forEach(row=>{if(!groups.has(row.reference_id))groups.set(row.reference_id,[]);groups.get(row.reference_id).push(row);});requestedOrders=[...groups.entries()].map(([reference_id,rows])=>({reference_id,rows,saved_at:rows[0]?.timestamp_ordered,groups:requestedRowsToGroups(rows)}));}
+    function requestedRowsToGroups(rows){const supplier=suppliersList.find(item=>item.name===rows[0]?.customer_name);const businessId=supplier?.business_id||businessesList.find(business=>rows.some(row=>(allProducts.find(product=>product.sku===row.sku)?.business||'').toLowerCase().replace(/_/g,' ')===business.name.toLowerCase()))?.id||'';return [{business_id:businessId,supplier_id:supplier?.id||'',items:rows.map(row=>({sku:row.sku,qty:row.quantity}))}];}
+    window.openLoadOrderModal = async function(){if(!companyId||companyId==='null'){showToast('Order data is still loading. Try again in a moment.',true);return;}try{await Promise.all([fetchSavedOrders(),fetchRequestedOrders()]);renderSavedOrderOptions();setSavedOrderModal('load-order-modal',true);}catch(error){console.error(error);showToast('Orders could not be loaded. Try again.',true);} };
+    function renderSavedOrderOptions(){const select=document.getElementById('saved-order-select');const options=[];savedOrders.forEach(order=>options.push({value:`saved:${order.id}`,label:`Saved: ${order.name} — ${new Date(order.saved_at).toLocaleString()}`,savedAt:order.saved_at}));requestedOrders.forEach(order=>options.push({value:`requested:${order.reference_id}`,label:`Requested: ${order.reference_id} — ${new Date(order.saved_at).toLocaleString()}`,savedAt:order.saved_at}));options.sort((a,b)=>Date.parse(b.savedAt||0)-Date.parse(a.savedAt||0));select.replaceChildren(...options.map(item=>{const option=document.createElement('option');option.value=item.value;option.textContent=item.label;return option;}));const empty=!options.length;document.getElementById('confirm-load-order').disabled=empty;document.getElementById('delete-saved-order').disabled=empty||!select.value.startsWith('saved:');renderSelectedSavedOrder();}
+    function selectedLoadOrder(){const value=document.getElementById('saved-order-select').value;if(value.startsWith('saved:'))return {kind:'saved',order:savedOrders.find(item=>item.id===value.slice(6))};if(value.startsWith('requested:'))return {kind:'requested',order:requestedOrders.find(item=>item.reference_id===value.slice(10))};return null;}
+    window.renderSelectedSavedOrder = function(){const selected=selectedLoadOrder();renderSavedItems('load-order-items',selected?.order?.groups||[]);document.getElementById('delete-saved-order').disabled=selected?.kind!=='saved';};
+    window.deleteSelectedSavedOrder = async function(button){const selected=selectedLoadOrder();if(selected?.kind!=='saved')return;button.disabled=true;try{const nextOrders=savedOrders.filter(order=>order.id!==selected.order.id);const {error}=await sb.from('global_settings').upsert({company_id:companyId,key:'inventory_saved_orders',value:{orders:nextOrders}},{onConflict:'company_id,key'});if(error)throw error;savedOrders=nextOrders;renderSavedOrderOptions();showToast('Saved order deleted.');}catch(error){console.error(error);showToast('The saved order could not be deleted. Try again.',true);}finally{button.disabled=!savedOrders.length;} };
+    window.loadSelectedOrder = function(){const selected=selectedLoadOrder();const order=selected?.order;if(!order)return;const row=document.getElementById('reorder-row');const panels=[...row.querySelectorAll('.supplier-order-panel')];panels.slice(1).forEach(panel=>panel.remove());const first=panels[0];initializeReorderPanel(first);(order.groups||[]).forEach((group,index)=>{const panel=index===0?first:addReorderPanel(false);const business=panelRole(panel,'business-select');business.value=group.business_id;handleBusinessSelect(business);const supplier=panelRole(panel,'supplier-select');supplier.value=group.supplier_id;handleSupplierSelect(supplier);const state=getReorderState(panel);state.quantities=Object.fromEntries((group.items||[]).map(item=>[item.sku,Number(item.qty)||0]));state.requestReference=selected.kind==='requested'?order.reference_id:'';renderSupplierOrderTab(panel);});updateAllOrdersButton();setSavedOrderModal('load-order-modal',false);showToast(selected.kind==='requested'?'Requested order loaded for editing.':'Saved order loaded.');};
 
     async function submitReorderPanel(panel) {
       const state = getReorderState(panel);
@@ -1141,7 +1215,7 @@
       const mm = String(today.getMonth() + 1).padStart(2, '0');
       const dd = String(today.getDate()).padStart(2, '0');
       const random = Math.floor(100 + Math.random() * 900);
-      const refOrder = `SUP-${yyyy}${mm}${dd}-${random}`;
+      const refOrder = state.requestReference || `SUP-${yyyy}${mm}${dd}-${random}`;
 
       const selectedSup = suppliersList.find(supplier => supplier.id === state.supplierId);
       const supplierName = selectedSup ? selectedSup.name : 'Supplier';
@@ -1158,8 +1232,22 @@
         warehouse_id: activeWarehouseId || null
       }));
 
-      const { error: txErr } = await sb.from('inventory_transactions').insert(payloads);
-      if (txErr) throw txErr;
+      if (state.requestReference) {
+        const {data: existing,error: existingError}=await sb.from('inventory_transactions').select('id,sku,status').eq('company_id',companyId).eq('type','supplier_order').eq('reference_id',refOrder);
+        if(existingError)throw existingError;
+        if((existing||[]).some(row=>row.status!=='ordered'))throw new Error('This request has already shipped and can no longer be edited.');
+        const itemBySku=new Map(items.map(item=>[item.sku,item]));
+        const updates=await Promise.all((existing||[]).map(row=>itemBySku.has(row.sku)
+          ? sb.from('inventory_transactions').update({quantity:itemBySku.get(row.sku).qty}).eq('id',row.id).eq('company_id',companyId).eq('status','ordered').select('id')
+          : sb.from('inventory_transactions').delete().eq('id',row.id).eq('company_id',companyId).eq('status','ordered').select('id')));
+        const failed=updates.find(result=>result.error||!result.data?.length);if(failed)throw failed.error||new Error('This request changed while it was being edited.');
+        const existingSkus=new Set((existing||[]).map(row=>row.sku));
+        const additions=payloads.filter(payload=>!existingSkus.has(payload.sku));
+        if(additions.length){const {error}=await sb.from('inventory_transactions').insert(additions);if(error)throw error;}
+      } else {
+        const { error: txErr } = await sb.from('inventory_transactions').insert(payloads);
+        if (txErr) throw txErr;
+      }
 
       const uniqueSkus = [...new Set(items.map(item => item.sku))];
       let existQ = sb.from('inventory').select('sku').or(`company_id.eq.${companyId},company_id.is.null`).in('sku', uniqueSkus);
@@ -1179,6 +1267,7 @@
       }
 
       state.quantities = {};
+      state.requestReference = '';
       state.search = '';
       state.posting = false;
       const searchInput = panelRole(panel, 'supplier-search');

@@ -46,6 +46,25 @@
     .tab-btn:hover:not(.active) {
       color: var(--text-secondary);
     }
+    .attendance-member-filter {
+      display: flex;
+      align-items: center;
+      margin-left: auto;
+      padding-left: 1rem;
+    }
+    .attendance-member-filter[hidden] { display: none; }
+    .attendance-member-filter select {
+      width: min(280px, 32vw);
+      height: 34px;
+      padding: 0 2rem 0 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: var(--bg-surface);
+      color: var(--text-primary);
+      font: inherit;
+      font-size: 0.82rem;
+      font-weight: 600;
+    }
 
     .tab-content {
       display: none;
@@ -59,38 +78,52 @@
     /* ── Month Selector ── */
     .month-selector {
       display: flex;
-      align-items: center;
+      align-items: flex-start;
+      justify-content: space-between;
       gap: 1rem;
       margin-bottom: 1.5rem;
     }
-    .month-btn {
-      background: var(--bg-surface);
+    .month-picker {
+      display: flex;
+      align-items: center;
+      margin-left: auto;
       border: 1px solid var(--border);
-      color: var(--text-primary);
-      width: 32px;
-      height: 32px;
-      border-radius: 50%;
+      border-radius: var(--radius-md);
+      background: var(--bg-surface);
+      box-shadow: var(--shadow-sm);
+    }
+    .month-picker button {
+      width: 42px;
+      height: 42px;
       display: grid;
       place-items: center;
+      border: 0;
+      background: none;
+      color: var(--text-secondary);
       cursor: pointer;
-      font-weight: 600;
-      transition: all 0.15s;
     }
-    .month-btn:hover {
-      border-color: var(--border-hover);
+    .month-picker button:hover {
+      color: var(--cyan-light);
       background: var(--bg-elevated);
     }
+    .month-picker svg {
+      width: 18px;
+      height: 18px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+    }
     .month-title-display {
-      font-size: 1.1rem;
-      font-weight: 800;
-      color: var(--text-primary);
-      min-width: 150px;
+      min-width: 130px;
       text-align: center;
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+      font-weight: 700;
     }
 
     /* ── Shift Badge ── */
     .shift-badge-wrap {
-      margin-left: auto;
+      margin-right: auto;
       display: flex;
       align-items: center;
       gap: 0.5rem;
@@ -373,21 +406,27 @@
         padding: 0.7rem 0.9rem;
         font-size: 0.75rem;
       }
+      .attendance-member-filter {
+        padding-left: 0.5rem;
+      }
+      .attendance-member-filter select {
+        width: min(190px, 46vw);
+      }
       .scroll-area { padding: 0.75rem 0.75rem 5rem; }
       .att-container { gap: 0.75rem; }
       .month-selector {
-        display: grid;
-        grid-template-columns: 32px minmax(0, 1fr) 32px;
-        gap: 0.5rem;
+        flex-direction: column;
+        gap: 0.75rem;
         margin-bottom: 0.75rem;
       }
-      .month-title-display {
-        min-width: 0;
-        font-size: 0.98rem;
+      .month-picker {
+        order: -1;
+        align-self: stretch;
+        justify-content: space-between;
+        margin-left: 0;
       }
       .shift-badge-wrap {
-        grid-column: 1 / -1;
-        margin-left: 0;
+        margin-right: 0;
         justify-content: center;
         min-width: 0;
       }
@@ -515,6 +554,9 @@
         <span class="top-bar-title">Attendance & Leaves</span>
         <div style="flex:1;"></div>
         <span id="topbar-date" style="font-size: 0.85rem; font-weight: 500; color: var(--text-secondary);"></span>
+        <div class="attendance-member-filter" id="attendance-member-filter" hidden>
+          <select id="attendance-member-select" aria-label="Show attendance for" onchange="AttendanceApp.onAttendanceEmployeeChange(this.value)"></select>
+        </div>
       </div>
 
       <div class="content-area">
@@ -533,9 +575,6 @@
               <div class="tab-content active" id="tab-content-logs">
                 <!-- Month Selector -->
                 <div class="month-selector">
-                  <button class="month-btn" onclick="AttendanceApp.changeMonth(-1)">&lt;</button>
-                  <span class="month-title-display" id="month-display">Loading…</span>
-                  <button class="month-btn" onclick="AttendanceApp.changeMonth(1)">&gt;</button>
                   <!-- Shift Badge -->
                   <div class="shift-badge-wrap" id="shift-badge-wrap" style="display:none;">
                     <span class="shift-badge-label">Shift</span>
@@ -543,6 +582,15 @@
                       <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="2.5" fill="none"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                       <span id="shift-badge-inner">—</span>
                     </span>
+                  </div>
+                  <div class="month-picker" id="attendance-month-navigator" aria-label="Attendance month">
+                    <button type="button" onclick="AttendanceApp.changeMonth(-1)" aria-label="Previous month">
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"></path></svg>
+                    </button>
+                    <span class="month-title-display" id="month-display">Loading…</span>
+                    <button type="button" onclick="AttendanceApp.changeMonth(1)" aria-label="Next month">
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg>
+                    </button>
                   </div>
                 </div>
 
@@ -712,6 +760,10 @@
       currentUser: null,
       companyId: null,
       employee: null,
+      userRole: null,
+      attendanceEmployees: [],
+      selectedAttendanceEmployee: null,
+      canSelectAttendanceEmployee: false,
       managerScope: null,
       leaveRestrictions: {
         sl_shift_cutoff_enabled: true,
@@ -746,10 +798,12 @@
         }
 
         this.currentUser = user;
+        this.userRole = roleInfo.role;
         this.companyId = await this.getCompanyId(roleInfo.tenantId);
         
         if (this.companyId) {
           await this.loadEmployeeProfile();
+          await this.loadAttendanceMemberAccess();
           await this.loadLeaveRestrictions();
           await this.configureManagerRequestsAccess();
         }
@@ -781,7 +835,7 @@
         try {
           const sb = window.BKAuth.sb;
           const { data } = await sb.from('employees')
-            .select('id, company_id, first_name, last_name, email, shift_time_1, employment_status, vl_load, sl_load')
+            .select('id, company_id, first_name, last_name, email, shift_time_1, shift_days, employment_status, vl_load, sl_load')
             .eq('company_id', this.companyId)
             .eq('email', this.currentUser.email)
             .limit(1)
@@ -790,6 +844,91 @@
         } catch (err) {
           console.error(err);
         }
+      },
+
+      async loadAttendanceMemberAccess() {
+        if (!this.companyId) return;
+
+        const sb = window.BKAuth.sb;
+        try {
+          const [employeesResult, structureResult] = await Promise.all([
+            sb.from('employees')
+              .select('id, first_name, last_name, email, shift_time_1, shift_days, employment_status, reporting_to')
+              .eq('company_id', this.companyId)
+              .order('first_name', { ascending: true })
+              .limit(500),
+            sb.from('global_settings')
+              .select('value')
+              .eq('company_id', this.companyId)
+              .eq('key', 'company_structure')
+              .maybeSingle()
+          ]);
+          if (employeesResult.error) throw employeesResult.error;
+          if (structureResult.error) throw structureResult.error;
+
+          const allEmployees = employeesResult.data || [];
+          const structure = structureResult.data?.value || { departments: [] };
+          const isOwner = this.userRole === 'owner';
+          if (!this.employee && !isOwner) return;
+          const visibleIds = new Set(this.employee?.id ? [this.employee.id] : []);
+
+          if (isOwner) {
+            allEmployees.forEach(member => visibleIds.add(member.id));
+          } else {
+            (structure.departments || []).forEach(department => {
+              if (department?.managerId === this.employee?.id) {
+                (department.subteams || []).forEach(team => {
+                  if (team?.managerId) visibleIds.add(team.managerId);
+                  (team?.colleagueIds || []).forEach(id => visibleIds.add(id));
+                });
+                return;
+              }
+
+              (department?.subteams || []).forEach(team => {
+                if (team?.managerId === this.employee?.id) {
+                  (team.colleagueIds || []).forEach(id => visibleIds.add(id));
+                }
+              });
+            });
+          }
+
+          this.attendanceEmployees = allEmployees.filter(member => visibleIds.has(member.id));
+          const currentProfile = this.attendanceEmployees.find(member => member.id === this.employee?.id)
+            || this.attendanceEmployees[0]
+            || this.employee;
+          this.selectedAttendanceEmployee = currentProfile;
+          this.canSelectAttendanceEmployee = isOwner || this.attendanceEmployees.length > 1;
+          this.renderAttendanceMemberSelect();
+        } catch (err) {
+          console.error('Could not load attendance member access:', err);
+          this.attendanceEmployees = [this.employee];
+          this.selectedAttendanceEmployee = this.employee;
+          this.canSelectAttendanceEmployee = false;
+          this.renderAttendanceMemberSelect();
+        }
+      },
+
+      renderAttendanceMemberSelect() {
+        const wrap = document.getElementById('attendance-member-filter');
+        const select = document.getElementById('attendance-member-select');
+        if (!wrap || !select) return;
+
+        wrap.hidden = !this.canSelectAttendanceEmployee || this.selectedTab !== 'logs';
+        select.replaceChildren(...this.attendanceEmployees.map(member => {
+          const option = document.createElement('option');
+          option.value = member.id;
+          const name = [member.first_name, member.last_name].filter(Boolean).join(' ') || member.email || 'Unnamed member';
+          option.textContent = member.id === this.employee?.id ? `${name} (Me)` : name;
+          option.selected = member.id === this.selectedAttendanceEmployee?.id;
+          return option;
+        }));
+      },
+
+      onAttendanceEmployeeChange(employeeId) {
+        const selected = this.attendanceEmployees.find(member => member.id === employeeId);
+        if (!selected) return;
+        this.selectedAttendanceEmployee = selected;
+        this.loadLogs();
       },
 
       async loadLeaveRestrictions() {
@@ -899,6 +1038,7 @@
         
         document.getElementById(`tab-btn-${tab}`).classList.add('active');
         document.getElementById(`tab-content-${tab}`).classList.add('active');
+        this.renderAttendanceMemberSelect();
         if (tab === 'leaves' && !this.leavesLoaded) {
           this.loadLeavesData();
         } else if (tab === 'requests') {
@@ -966,12 +1106,13 @@
 
       async loadLogs() {
         const container = document.getElementById('logs-container');
+        const viewingEmployee = this.selectedAttendanceEmployee || this.employee;
         document.getElementById('month-display').textContent = `${this.MONTH_NAMES[this.selectedMonth]} ${this.selectedYear}`;
         
         container.innerHTML = '<div style="text-align:center; padding:3rem; color:var(--text-muted);"><div class="bk-spinner" style="margin: 0 auto 1rem;"></div>Loading shift logs…</div>';
 
         let logs = [];
-        if (this.employee) {
+        if (viewingEmployee) {
           try {
             const sb = window.BKAuth.sb;
             const startOfMonth = new Date(this.selectedYear, this.selectedMonth, 1).toISOString();
@@ -980,7 +1121,7 @@
             const { data, error } = await sb.from('attendance_logs')
               .select('created_at, status')
               .eq('company_id', this.companyId)
-              .eq('employee_id', this.employee.id)
+              .eq('employee_id', viewingEmployee.id)
               .gte('created_at', startOfMonth)
               .lt('created_at', endOfMonth)
               .order('created_at', { ascending: true });
@@ -1034,16 +1175,16 @@
           let shift1Start = { hour: 9, minute: 0 };
           let shift1End = { hour: 18, minute: 0 };
 
-          if (this.employee) {
-            if (this.employee.shift_time_1) {
-              const parts = this.employee.shift_time_1.split('-');
+          if (viewingEmployee) {
+            if (viewingEmployee.shift_time_1) {
+              const parts = viewingEmployee.shift_time_1.split('-');
               if (parts.length === 2) {
                 const start = parseTimeStr(parts[0]);
                 const end = parseTimeStr(parts[1]);
                 if (start) shift1Start = start;
                 if (end) shift1End = end;
               } else {
-                const start = parseTimeStr(this.employee.shift_time_1);
+                const start = parseTimeStr(viewingEmployee.shift_time_1);
                 if (start) shift1Start = start;
               }
             }
@@ -1114,7 +1255,7 @@
           const shiftBadgeWrap = document.getElementById('shift-badge-wrap');
           const shiftBadgeInner = document.getElementById('shift-badge-inner');
           if (shiftBadgeWrap && shiftBadgeInner) {
-            if (this.employee && (this.employee.shift_time_1 || this.employee.shift_days)) {
+            if (viewingEmployee && (viewingEmployee.shift_time_1 || viewingEmployee.shift_days)) {
               // Format time from parsed hours
               const fmtH = (h, m) => {
                 const ampm = h >= 12 ? 'PM' : 'AM';
@@ -1124,7 +1265,7 @@
 
               // Format shift days (e.g. "Mon,Tue,Wed,Thu,Fri" → "Mon – Fri")
               let daysStr = '';
-              if (this.employee.shift_days) {
+              if (viewingEmployee.shift_days) {
                 const dayMap = {
                   'M': 'Mon', 'Mo': 'Mon', 'Mon': 'Mon',
                   'T': 'Tue', 'Tu': 'Tue', 'Tue': 'Tue',
@@ -1134,7 +1275,7 @@
                   'S': 'Sat', 'Sa': 'Sat', 'Sat': 'Sat',
                   'Su': 'Sun', 'Sun': 'Sun'
                 };
-                const mappedDays = this.employee.shift_days.split(',').map(d => {
+                const mappedDays = viewingEmployee.shift_days.split(',').map(d => {
                   const trimmed = d.trim();
                   return dayMap[trimmed] || trimmed;
                 });

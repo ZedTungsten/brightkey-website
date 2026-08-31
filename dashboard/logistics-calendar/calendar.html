@@ -50,7 +50,7 @@
       color: var(--text-secondary);
       letter-spacing: -0.01em;
     }
-    .scroll-container { flex: 1; overflow: auto; padding: 2rem; display: flex; flex-direction: column; gap: 1.5rem; }
+    .scroll-container { flex: 1; overflow: auto; padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem; }
 
     /* ── Tab Container Bar ── */
     .drawer-tabs {
@@ -88,18 +88,88 @@
     }
 
     /* ── Month Navigation ── */
-    .month-nav {
+    .calendar-controls-row {
       display: flex;
       align-items: center;
-      gap: 0.75rem;
-      margin-bottom: 0.5rem;
+      gap: 1rem;
+      padding-block: 0.4rem;
     }
-    .month-title {
-      font-size: 1.1rem;
-      font-weight: 800;
+    .search-wrapper {
+      position: relative;
+      display: flex;
+      align-items: center;
+      width: 100%;
+      max-width: 640px;
+      min-width: 320px;
+      flex: 1 1 640px;
+    }
+    .search-input {
+      width: 100%;
+      height: 34px;
+      min-height: 34px;
+      padding: 0.25rem 1rem 0.25rem 2.2rem;
+      border: 1px solid var(--border);
+      border-radius: 9999px;
+      font-size: 0.85rem;
+      outline: none;
+      background: var(--bg-surface);
       color: var(--text-primary);
-      min-width: 140px;
+      transition: all 0.15s;
+    }
+    .search-input:focus {
+      border-color: var(--blue, #2563EB);
+      background: var(--bg-surface);
+      box-shadow: 0 0 0 2px var(--blue-dim, rgba(37, 99, 235, 0.08));
+    }
+    .month-picker {
+      display: flex;
+      align-items: center;
+      margin-left: auto;
+      flex-shrink: 0;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      background: var(--bg-surface);
+      box-shadow: var(--shadow-sm);
+    }
+    .month-picker button {
+      width: 42px;
+      height: 42px;
+      display: grid;
+      place-items: center;
+      border: 0;
+      background: none;
+      color: var(--text-secondary);
+      cursor: pointer;
+    }
+    .month-picker button:hover {
+      color: var(--cyan-light);
+      background: var(--bg-elevated);
+    }
+    .month-picker svg {
+      width: 18px;
+      height: 18px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+    }
+    .month-picker span {
+      min-width: 130px;
       text-align: center;
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+      font-weight: 700;
+    }
+    @media (max-width: 700px) {
+      .calendar-controls-row { flex-wrap: wrap; }
+      .search-wrapper {
+        min-width: 0;
+        flex-basis: 100%;
+      }
+      .month-picker {
+        width: 100%;
+        justify-content: space-between;
+        margin-left: 0;
+      }
     }
 
     /* ── Calendar Grid ── */
@@ -402,11 +472,20 @@
           </div>
           <div class="scroll-container">
             
-            <!-- Calendar Month Navigator -->
-            <div class="month-nav" id="calendar-month-navigator">
-              <button class="btn btn-outline btn-sm" onclick="DeliveryCalendar.changeMonth(-1)">◀</button>
-              <span class="month-title" id="calendar-month-title"></span>
-              <button class="btn btn-outline btn-sm" onclick="DeliveryCalendar.changeMonth(1)">▶</button>
+            <!-- Search and Calendar Month Navigator -->
+            <div class="calendar-controls-row">
+              <div class="search-wrapper">
+                <input type="search" id="calendar-search-input" class="search-input bk-search-control" placeholder="Search order number, name, location, SKU..." oninput="DeliveryCalendar.handleSearch(this.value)" />
+              </div>
+              <div class="month-picker" id="calendar-month-navigator" aria-label="Delivery month">
+                <button type="button" onclick="DeliveryCalendar.changeMonth(-1)" aria-label="Previous month">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"></path></svg>
+                </button>
+                <span id="calendar-month-title"></span>
+                <button type="button" onclick="DeliveryCalendar.changeMonth(1)" aria-label="Next month">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg>
+                </button>
+              </div>
             </div>
 
             <!-- Calendar Grid -->
@@ -647,6 +726,7 @@
       installationBookings: [],
       warehouseStaffLeaves: [],
       products: [],
+      searchQuery: '',
       currentDate: new Date(),
 
       async init() {
@@ -818,6 +898,25 @@
         await this.loadData();
       },
 
+      handleSearch(value) {
+        this.searchQuery = String(value || '').toLowerCase().trim();
+        this.renderCalendar();
+      },
+
+      scheduleMatchesSearch(refId, txs) {
+        if (!this.searchQuery) return true;
+        const installationBooking = this.installationBookings.find(booking => booking.order_no === refId);
+        const searchableValues = [
+          refId,
+          installationBooking?.customer_address,
+          ...txs.flatMap(transaction => {
+            const product = this.products.find(item => item.sku === transaction.sku);
+            return [transaction.customer_name, transaction.customer_city, transaction.sku, product?.title];
+          })
+        ];
+        return searchableValues.some(value => String(value || '').toLowerCase().includes(this.searchQuery));
+      },
+
       getOrderStatus(refId, txs, deliveryBooking) {
         if (!txs || txs.length === 0) return 'For QA';
         
@@ -899,12 +998,14 @@
 
           this.warehouseStaffLeaves
             .filter(leave => leave.date_from <= dateStr && leave.date_to >= dateStr)
+            .filter(leave => !this.searchQuery || String(leave.employee_name || '').toLowerCase().includes(this.searchQuery))
             .forEach(leave => {
               amHtml += `<div class="calendar-slot leave"><div style="font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; width:100%;">${esc(leave.employee_name)}</div><span class="leave-pill">Leave</span></div>`;
             });
 
           matches.forEach(([refId, sched]) => {
             const txs = this.activeTransactions.filter(t => t.reference_id === refId);
+            if (!this.scheduleMatchesSearch(refId, txs)) return;
             const customerName = txs[0]?.customer_name || 'N/A';
             
             let city = 'N/A';
